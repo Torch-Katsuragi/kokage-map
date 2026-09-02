@@ -70,6 +70,12 @@ class ChangelogService {
     final hash = await _getMasterHash();
     final prefs = await SharedPreferences.getInstance();
     final lastReadHash = prefs.getString(_kLastReadHashKey);
+    // 初回インストールは「更新」ではない。ハッシュが無いときは現在の内容を
+    // 既読として記録し、新規ユーザーに「アプリが更新されました」を出さない
+    if (lastReadHash == null) {
+      await prefs.setString(_kLastReadHashKey, hash);
+      return false;
+    }
     return lastReadHash != hash;
   }
 

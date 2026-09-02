@@ -26,8 +26,8 @@ class MainActivity : FlutterActivity() {
         // Android 8.0以降で通知チャンネルを作成
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channelId = "k_maps_foreground_channel"
-            val channelName = "RootMap GIS フォアグラウンドサービス"
-            val channelDescription = "RootMap GISアプリのフォアグラウンドサービス通知"
+            val channelName = "こかげマップ フォアグラウンドサービス"
+            val channelDescription = "こかげマップのフォアグラウンドサービス通知"
             val importance = NotificationManager.IMPORTANCE_LOW
             
             val channel = NotificationChannel(channelId, channelName, importance).apply {

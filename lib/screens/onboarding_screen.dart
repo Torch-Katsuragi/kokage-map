@@ -137,6 +137,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       final status = await Permission.location.request();
       AppLogger.debug('[Onboarding] Location permission result: $status');
 
+      // Android 13+ は通知権限が無いと前景サービスの常時通知が表示されない。
+      // 位置情報が許可された流れで続けて要求する（GPS記録・位置共有の実行中表示）。
+      if (status.isGranted) {
+        final notif = await Permission.notification.request();
+        AppLogger.debug('[Onboarding] Notification permission result: $notif');
+      }
+
       if (mounted) {
         setState(() {
           _locationGranted = status.isGranted;

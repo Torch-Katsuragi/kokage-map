@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### 🔔 The ongoing notification now appears while recording GPS / sharing location (Android 13+)
+
+- The app never asked for the notification permission, so on Android 13+ the
+  "GPS active" / "sharing location" ongoing notification was never shown.
+- The notification permission is now requested right after the location permission.
+
+### 🧹 Startup fixes (Android)
+
+- The app no longer asks for the "Nearby devices" permission on every launch
+  (it is requested when you connect an external device / GNSS receiver).
+- Fixed the "app updated" banner appearing right after a fresh install.
+- Fixed the old app name (RootMap GIS) lingering in the notification channel name.
+
 ### 🗾 The default basemap is now GSI (standard map)
 
 - Fixed OpenStreetMap tiles all turning into "Access blocked" images

@@ -303,8 +303,16 @@
         撮影は `adb` 自動操作（`.temp/play-demo/take.sh` + `ui.py`）、編集は `edit.py`（ffmpeg）。
         ⚠ 地図画面のタップは座標決め打ちでは通らない（ドロワの自動オープン・ツリー展開が不定）→
         `uiautomator dump` で Flutter の semantics からテキスト検索してタップする
-  - [ ] Google Sign-In → Drive同期の操作フロー（OAuth検証用）。**web版で別撮り・同意画面を English に**
-        （ネイティブは Play開発者サービスのダイアログでスコープ一覧が出ない）
+  - [x] **OAuthデモ（Google Sign-In → Drive スコープ同意 → Driveクローン/同期）を撮影・編集済み**（2026-09-03）
+        成果物 `.temp/play-demo/kokage-map_oauth-demo.mp4`（167秒・1080x2342・英語字幕）。
+        Pixel 11 Pro Fold の実機・端末言語 English・未同意アカウントで撮った（未同意なら Play開発者サービスでも
+        スコープ同意画面は出る。9/1の「出ない」は既同意アカウントで見た誤り）。
+        ⚠ 同意画面のアプリ名が **「ねむりぎ工房」**（GCP nemurigi-kobo の OAuth 同意画面設定）。検証申請前に
+        Kokage Map へ変えるか説明するか決める
+  - [ ] 🐛 **初回起動時、オンボーディングより前に Google の「Sign in with Google / Choose an account」シートが出る**
+        （2026-09-03 Fold で確認。Credential Manager の起動時サインイン要求。Google アカウント0件の端末では出ない）。
+        審査官の端末では出るので、Drive設定を開くまで出さないようにする
+  - [ ] 🌐 `drive_url_input_dialog` の「Driveフォルダを追加」「URL入力」「QRスキャン」が未翻訳（英語UIで日本語のまま）
   - [ ] ~~カメラ: 写真マーカー撮影、QRコードスキャン~~ → 宣言フォーム対象外なので撮らない
   - [ ] ~~Bluetooth: TruPulse測量機器との接続・データ取得~~ → **撮らない**（2026-09-01）
         「近くのデバイス」（`BLUETOOTH_SCAN`/`_CONNECT`/`_ADVERTISE`）は制限付き権限ではなく、

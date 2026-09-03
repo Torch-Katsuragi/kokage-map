@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy – Kokage Map / こかげマップ プライバシーポリシー</title>
+<style>
+  body{font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans JP","Hiragino Sans",sans-serif;max-width:760px;margin:0 auto;padding:24px 20px 64px;line-height:1.7;color:#222;background:#fff}
+  h1{font-size:1.6rem;border-bottom:2px solid #1e88e5;padding-bottom:.3em}
+  h2{font-size:1.2rem;margin-top:2em;border-left:4px solid #1e88e5;padding-left:.5em}
+  h3{font-size:1.05rem;margin-top:1.4em}
+  hr{border:0;border-top:1px solid #ddd;margin:3em 0}
+  .lang{font-size:.9rem;color:#555}
+  code{background:#f3f4f6;padding:.1em .35em;border-radius:3px}
+  footer{margin-top:3em;font-size:.9rem;color:#555}
+</style>
+</head>
+<body>
+<p class="lang"><a href="#ja">日本語</a> · <a href="#en">English</a> · <a href="/about/">About Kokage Map</a></p>
+
+<section id="en" lang="en">
+<h1>Privacy Policy – Kokage Map</h1>
+<p>Kokage Map (the "App") is an open-source field GIS application for Android and the web, published by Nemurigi Kobo (Japan). This policy explains what data the App handles and how.</p>
+
+<h2>1. Summary</h2>
+<ul>
+  <li>The developer does not operate a server that collects your data. Your project files stay on your device and, only if you choose, in your own Google Drive.</li>
+  <li>The App contains no advertising and no analytics/tracking SDK.</li>
+  <li>Location is shared with other people only while you are in a "location-sharing party" that you joined or created, and only with the members of that party.</li>
+</ul>
+
+<h2>2. Data handled by the App and why</h2>
+<h3>2.1 Files (All files access)</h3>
+<p>The App opens, edits, creates and saves GeoPackage (<code>.gpkg</code>) spatial databases and related files in the folders you choose on the device, and shares those files with external GIS tools (for example QGIS). On Android the App requests "All files access" because these SQLite databases and their sidecar files must be read and written in place, by path, inside user-organized folders. The App reads only the folders you select. File contents are never sent to the developer.</p>
+
+<h3>2.2 Location</h3>
+<p>Location is used to show your position on the map, for GPS surveying, to record GPS tracks into your own project files, and for the location-sharing party. Location is used only while the App is in use or while a foreground service you started (track recording or location sharing) is running with a visible notification. The App does not request background location.</p>
+
+<h3>2.3 Location-sharing party (rooms)</h3>
+<p>When you create or join a party, your current position, battery level and the display name you enter are sent to Firebase Realtime Database (Google LLC) and shown to the other members of that party. Track points recorded while you were offline are sent when connectivity returns. Party data is deleted automatically about 24 hours after the party ends. Nobody outside the party can see it. Firebase App Check and anonymous Firebase Authentication are used to protect this service; they do not identify you personally.</p>
+
+<h3>2.4 Google Drive (Google account)</h3>
+<p>If you sign in with Google, the App requests access to Google Drive (scope <code>https://www.googleapis.com/auth/drive</code>) in order to clone, synchronize, upload and download the project folders you choose. The App accesses only the Drive folders you explicitly select or create through the App. Your name, e-mail address and profile picture are used only to show which account is signed in. OAuth tokens are stored on your device and are never transmitted to the developer.</p>
+<p>Kokage Map's use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+<h3>2.5 Photos and camera</h3>
+<p>Photos you attach to the map, and photos taken with the camera, are stored in your project folder. QR-code scanning uses the camera only to read invite codes.</p>
+
+<h3>2.6 Nearby devices (Bluetooth)</h3>
+<p>Bluetooth is used only to connect external laser rangefinders and GNSS receivers that you pair. No device data is sent anywhere.</p>
+
+<h3>2.7 Notifications</h3>
+<p>Notifications are used to show that GPS recording or location sharing is running, and for in-app status messages.</p>
+
+<h2>3. Third-party services</h2>
+<ul>
+  <li>Map tiles are downloaded from the Geospatial Information Authority of Japan (GSI) and, if you choose, OpenStreetMap. These servers receive the usual HTTP request data (IP address, requested tiles).</li>
+  <li>Firebase (Google LLC) for location-sharing parties, as described in 2.3.</li>
+  <li>Google Drive / Google Sign-In (Google LLC) as described in 2.4.</li>
+</ul>
+<p>No other third party receives your data. The developer does not sell data.</p>
+
+<h2>4. Data retention and deletion</h2>
+<p>Everything in your project folders is under your control: delete the files, or uninstall the App, to remove it. Drive data can be removed from your Google Drive. Party data expires automatically (see 2.3). You can revoke the App's access to your Google account at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
+
+<h2>5. Children</h2>
+<p>The App is not directed at children under 13.</p>
+
+<h2>6. Changes and contact</h2>
+<p>This policy may be updated when features change; the current version is always published at this URL. Questions: <a href="https://github.com/Torch-Katsuragi/kokage-map/issues">GitHub Issues</a>.</p>
+<p>First published: 9 April 2026. Last updated: 3 September 2026.</p>
+</section>
+
+<hr>
+
+<section id="ja" lang="ja">
+<h1>プライバシーポリシー – こかげマップ</h1>
+<p>こかげマップ（以下「本アプリ」）は、ねむりぎ工房が公開するオープンソースの現場向けGISアプリ（Android・web）です。本ポリシーは、本アプリが扱うデータとその扱い方を説明します。</p>
+
+<h2>1. 要点</h2>
+<ul>
+  <li>開発者はユーザーのデータを集めるサーバを運営していません。プロジェクトのファイルは端末内と、ユーザーが選んだ場合に限りユーザー自身の Google Drive にだけ保存されます。</li>
+  <li>本アプリに広告や解析・トラッキングのSDKは含まれていません。</li>
+  <li>位置情報が他人と共有されるのは、ユーザーが自分で作成または参加した「位置共有パーティ」の間だけで、相手はそのパーティのメンバーに限られます。</li>
+</ul>
+
+<h2>2. 本アプリが扱うデータと目的</h2>
+<h3>2.1 ファイル（すべてのファイルへのアクセス）</h3>
+<p>本アプリは、ユーザーが端末上で選んだフォルダにある GeoPackage（<code>.gpkg</code>）などのファイルを開き、編集・作成・保存し、QGIS 等の外部GISツールと同じファイルを共有します。Android で「すべてのファイルへのアクセス」を求めるのは、これらの SQLite データベースと付随ファイルを、ユーザーが整理した任意のフォルダ内でパス指定によりその場で読み書きする必要があるためです。本アプリが読むのはユーザーが選んだフォルダだけで、ファイルの内容が開発者に送られることはありません。</p>
+
+<h3>2.2 位置情報</h3>
+<p>位置情報は、地図上への現在地表示、GPS測量、GPS軌跡のプロジェクトファイルへの記録、位置共有パーティに使います。利用は、アプリの使用中、またはユーザーが開始した前景サービス（軌跡記録・位置共有）が通知を表示しながら動作している間に限られます。バックグラウンド位置情報の権限は要求しません。</p>
+
+<h3>2.3 位置共有パーティ（ルーム）</h3>
+<p>パーティを作成または参加すると、現在地・バッテリー残量・入力した表示名が Firebase Realtime Database（Google LLC）に送られ、そのパーティのメンバーに表示されます。圏外の間に記録した軌跡は通信復帰時に送られます。パーティのデータは終了後およそ24時間で自動的に削除されます。パーティ外の人には見えません。この機能の保護に Firebase App Check と匿名の Firebase Authentication を使いますが、これらは個人を特定しません。</p>
+
+<h3>2.4 Google Drive（Googleアカウント）</h3>
+<p>Google でサインインすると、本アプリはユーザーが選んだプロジェクトフォルダのクローン・同期・アップロード・ダウンロードのために Google Drive へのアクセス（スコープ <code>https://www.googleapis.com/auth/drive</code>）を求めます。本アプリがアクセスするのは、ユーザーがアプリ内で明示的に選択または作成した Drive フォルダだけです。氏名・メールアドレス・プロフィール画像は、サインイン中のアカウントを表示するためにのみ使います。OAuth トークンは端末内に保存され、開発者に送信されることはありません。</p>
+<p>こかげマップによる Google API から取得した情報の利用は、<a href="https://developers.google.com/terms/api-services-user-data-policy">Google API サービスのユーザーデータに関するポリシー</a>（限定使用の要件を含む）に従います。</p>
+
+<h3>2.5 写真とカメラ</h3>
+<p>地図に添付した写真やカメラで撮影した写真はプロジェクトフォルダに保存されます。QRコードの読み取りでは、招待コードを読むためだけにカメラを使います。</p>
+
+<h3>2.6 付近のデバイス（Bluetooth）</h3>
+<p>Bluetooth は、ユーザーがペアリングしたレーザー距離計や GNSS 受信機との接続にのみ使います。機器のデータが外部に送られることはありません。</p>
+
+<h3>2.7 通知</h3>
+<p>通知は、GPS記録や位置共有が動作中であることの表示と、アプリ内の状態表示に使います。</p>
+
+<h2>3. 第三者のサービス</h2>
+<ul>
+  <li>地図タイルは国土地理院から、ユーザーが選んだ場合は OpenStreetMap から取得します。これらのサーバには通常のHTTPリクエスト情報（IPアドレス、要求したタイル）が渡ります。</li>
+  <li>位置共有パーティのための Firebase（Google LLC）。2.3 のとおり。</li>
+  <li>Google Drive / Google サインイン（Google LLC）。2.4 のとおり。</li>
+</ul>
+<p>これ以外の第三者にデータが渡ることはありません。開発者がデータを販売することもありません。</p>
+
+<h2>4. 保存期間と削除</h2>
+<p>プロジェクトフォルダの中身はすべてユーザーの管理下にあり、ファイルの削除やアプリのアンインストールで消せます。Drive 上のデータはご自身の Google Drive から削除できます。パーティのデータは自動的に消えます（2.3）。本アプリの Google アカウントへのアクセスは <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> からいつでも取り消せます。</p>
+
+<h2>5. 子ども</h2>
+<p>本アプリは13歳未満の子どもを対象としていません。</p>
+
+<h2>6. 改定とお問い合わせ</h2>
+<p>機能の変更に伴い本ポリシーを改定することがあります。最新版は常にこのURLで公開します。お問い合わせは <a href="https://github.com/Torch-Katsuragi/kokage-map/issues">GitHub Issues</a> へ。</p>
+<p>初版制定日: 2026年4月9日。最終更新: 2026年9月3日。</p>
+</section>
+
+<footer>© Nemurigi Kobo / ねむりぎ工房 · <a href="https://github.com/Torch-Katsuragi/kokage-map">Source code</a></footer>
+</body>
+</html>

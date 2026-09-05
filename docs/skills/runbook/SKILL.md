@@ -19,7 +19,7 @@ description: 定型作業（ランブック・手順書）を自動実行する�
 
 | キーワード | 手順書ファイルパス | 概要 |
 | --- | --- | --- |
-| `内部テストリリース` | `c:\Users\mtmtk\Github\k-rootmap\.agent\skills\runbook\procedures\internal_test_release.md` | Google Play Consoleへの内部テストリリースの準備を行う |
+| `内部テストリリース` `クローズドテストリリース` `Playにアップ` | `.claude/skills/runbook/procedures/internal_test_release.md` | AAB を Play Developer API でアップロードしトラックに割り当てる（内部/クローズド共通） |
 
 ---
 

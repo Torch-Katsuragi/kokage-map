@@ -1,41 +1,65 @@
-# 内部テストリリース手順 (Internal Test Release)
+# テストリリース手順（内部テスト / クローズドテスト）
 
-内部テストリリース（Internal Test Release）の際に実行する規定のワークフローです。
-エージェントは以下の手順を上から順に実行してください。
+AAB のアップロードとトラックへの割り当ては **Android Publisher API**（`tool/play/play.py`）で行う。
+Play Console の画面を触るのは API に無い項目だけ。
 
-## ステップ1: AABの出力
-- ターミナル（`run_command`）でコマンドを実行し、AAB(Android App Bundle)を出力します。
-  - コマンド: `flutter build appbundle`
-- ビルドが完了し、出力結果からファイルの保存先パスを把握します。
+## ステップ1: バージョンを上げる
 
-## ステップ2: リリースノートの作成
-- 直近の変更内容（`TODO.md`の完了タスクや最近のコミット、更新された`CHANGELOG`など）を確認・要約し、今回のリリースノートを作成します。
-- **日本語**と**英語**の両方で作成し、出力結果として整理しておきます。
+- `pubspec.yaml` の `version: X.Y.Z+N` の **N（versionCode）は Play に一度上げた値を再利用できない**。
+  既に使った値は `python tool/play/play.py status` の `bundles:` に出る。
+- `assets/changelog/ja.md` / `en.md` の先頭エントリを今回の内容にする（ここがそのままリリースノートになる。500字まで）。
 
-## ステップ3: Google Play Consoleリリース作成
-- `browser_subagent` ツールを使用して Google Play Console の操作を試みます。
-  - タスク: 「Google Play Consoleで 'こかげマップ' アプリを開き、内部テストの新しいリリースを作成する画面まで進む。作成したリリースノート（日本語・英語）を入力する」
-- ※認証やブラウザ環境の問題でエディタ等への直接入力が困難な場合は、ブラウザでの操作を保留して問題ありません。
+## ステップ2: AAB の出力
 
-## ステップ4: ユーザーへアップロード交代
-- AABファイルの出力先パスと、ステップ2で作成したリリースノートの内容をユーザーに提示します。
-- 「AABファイルのアップロードおよびリリースの最終作成は手動で行ってください」と伝え、作業のターンをユーザーに交代（終了）します。
+```powershell
+flutter build appbundle --release
+```
+
+出力: `build/app/outputs/bundle/release/app-release.aab`（署名は `android/key.properties`）。
+
+## ステップ3: アップロードとトラック割り当て
+
+```bash
+# dry-run（edit を作って最後まで通し、commit 前に捨てる）
+python tool/play/play.py upload build/app/outputs/bundle/release/app-release.aab \
+    --track alpha --name 0.6.1+18 --notes-ja assets/changelog/ja.md --notes-en assets/changelog/en.md
+
+# 本番。commit = 審査に送信
+python tool/play/play.py upload ... --apply
+# 保存だけして送信は Play Console の「公開の概要」から本人が押す場合
+python tool/play/play.py upload ... --apply --hold
+```
+
+- `--track`: `internal`（内部テスト）/ `alpha`（クローズドテスト）/ `beta` / `production`
+- 国の指定（countryTargeting）は同じトラックの直前リリースから引き継ぐ
+- 結果は `python tool/play/play.py status` で確認する
+
+## ステップ4: Play Console でしかできないこと
+
+以下は API に無い。`claude-in-chrome` で Play Console を開いて行う（本人のクリックが必要な操作は交代する）。
+
+- 「アプリのコンテンツ」の宣言（権限宣言・データセーフティ・プライバシーポリシーURL・対象ユーザー）
+- テスターのメーリングリスト編集・オプトイン状況の確認（API で扱えるのは Google グループだけ）
+- 本番環境へのアクセス申請
+- 深いURLは `.../app/<appId>/tracks/<trackId>` `.../app-content/overview` `.../publishing` なら直接開ける
 
 ---
 
-## 掲載情報をCLIから変える
-
-ストアの掲載名・説明は Android Publisher API から変えられる。
+## 掲載情報・スクリーンショットも API から
 
 ```bash
-python tool/play/listing.py          # 読むだけ
-python tool/play/listing.py --apply  # 実際に変えて commit
+python tool/play/play.py status                                    # トラック・掲載・画像枚数
+python tool/play/play.py listing --lang ja-JP --short "..." --full desc.txt --apply
+python tool/play/play.py images phoneScreenshots --lang ja-JP --replace --add a.png b.png --apply
+python tool/play/play.py images sevenInchScreenshots --lang ja-JP --add t1.png --apply
 ```
 
-⚠ **APIを有効にしただけでは 403 になる。** Play Console 側で
-`play-console@nemurigi-kobo.iam.gserviceaccount.com` を招待し、
-このアプリへのアクセスと「ストアの掲載情報の編集」権限を与えること。
-自分で自分に付けられないので、そこだけ画面での操作になる。
+- スクショの要件: JPEG/24bit PNG、320〜3840px、縦横比 16:9〜2:1、1言語あたり最大8枚
+- 掲載名の変更は審査に入る。アプリ内の表示名（`android:label`）とは別物
 
-⚠ 掲載名の変更は審査に入る。アプリ内の表示名（`android:label`）とは別物で、
-そちらは次のリリースを上げた時点で切り替わる。
+## サービスアカウント
+
+- `play-console@nemurigi-kobo.iam.gserviceaccount.com`。鍵は `~/.gcp-keys/nemurigi-play-console.json`（Drive外・リポジトリ外）
+- Play Console → ユーザーと権限 で招待し、アプリ `com.k_root.k_maps` に
+  **「テスト版トラックとしてのアプリのリリース」**（commit に必要）と「ストアでの表示の管理」を付ける。
+  API を有効化しただけでは 403、「ストアでの表示の管理」だけでは commit が 403 になる（2026-08-28 に踏んだ）

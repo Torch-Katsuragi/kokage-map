@@ -21,6 +21,11 @@
 // そこで file_picker の identifier (content URI) を MethodChannel 経由で
 // Kotlin 側に渡し、MediaStore から実ファイルパスを解決して直接コピーすることで
 // EXIF メタデータを完全保持する。
+//
+// ⚠ 原本が読めるのは「全ファイルアクセス」か「ACCESS_MEDIA_LOCATION」を持っているときだけ。
+// どちらも無いと Android はリダクション済み（GPSゼロ埋め）のバイトしか渡さない。
+// ネイティブ側は掴んだバイトの素性（original / maybe_redacted）を返すので、
+// 位置情報が取れなかった写真があればユーザーに知らせる。
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -29,6 +34,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+import 'package:permission_handler/permission_handler.dart';
+import '../i18n/strings.g.dart';
 import '../models/nodes/folder_node.dart';
 import '../core/platform_capabilities.dart';
 import '../models/nodes/image_node.dart';
@@ -36,6 +43,18 @@ import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
 import '../utils/app_logger.dart';
 import '../utils/exif_parser.dart';
+
+/// コピーしたバイトの素性（ネイティブ側の戻り値に対応）
+enum _CopyResult {
+  /// 位置情報を含む原本
+  original,
+
+  /// 権限不足でリダクション済み（GPSゼロ埋め）の複製を掴んだ可能性がある
+  maybeRedacted,
+
+  /// コピー失敗
+  failed,
+}
 
 /// ギャラリーからプロジェクトフォルダに写真をインポートするユーティリティ
 class GalleryImporter {
@@ -49,6 +68,8 @@ class GalleryImporter {
     FolderNode targetFolder, {
     WidgetRef? ref,
   }) async {
+    await _ensureMediaLocationPermission();
+
     final result = await FilePicker.pickFiles(
       type: FileType.image,
       allowMultiple: true,
@@ -59,7 +80,7 @@ class GalleryImporter {
     if (folderPath == null) {
       if (ref != null) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: 'Failed to resolve folder path',
+          title: t.galleryImport.folderPathFailed,
           level: NotificationLevel.error,
         );
       }
@@ -67,6 +88,8 @@ class GalleryImporter {
     }
 
     int imported = 0;
+    // リダクションされた可能性があり、実際に位置情報が取れなかった枚数
+    int strippedLocation = 0;
     for (final file in result.files) {
       try {
         // Photo Picker は表示名がメディアID（例: "20.jpg"）になるので、
@@ -82,13 +105,20 @@ class GalleryImporter {
 
         // Android: content URI からネイティブ側で実ファイルを直接コピー（EXIF 保持）
         // 非 Android: 従来の File.copy フォールバック
-        final copied = await _copyFile(file, destPath);
-        if (!copied) {
+        final copy = await _copyFile(file, destPath);
+        if (copy == _CopyResult.failed) {
           AppLogger.debug('[GalleryImport] Failed to copy ${file.name}');
           continue;
         }
 
         final node = await _createImageNode(destPath, targetFolder);
+        if (copy == _CopyResult.maybeRedacted && !node.hasLocation) {
+          strippedLocation++;
+        }
+        AppLogger.debug(
+          '[GalleryImport] ${p.basename(destPath)}: copy=${copy.name} '
+          'location=${node.hasLocation}',
+        );
         targetFolder.addChild(node);
         imported++;
       } catch (e) {
@@ -96,13 +126,41 @@ class GalleryImporter {
       }
     }
 
-    if (imported > 0 && ref != null) {
-      ref.read(notificationCenterProvider.notifier).add(
-        title: 'Imported $imported photo${imported != 1 ? 's' : ''}',
-        level: NotificationLevel.success,
-      );
+    if (ref != null) {
+      final notifier = ref.read(notificationCenterProvider.notifier);
+      if (imported > 0) {
+        notifier.add(
+          title: t.galleryImport.imported(count: imported),
+          level: NotificationLevel.success,
+        );
+      }
+      if (strippedLocation > 0) {
+        notifier.add(
+          title: t.galleryImport.locationMayBeStripped(count: strippedLocation),
+          detail: t.galleryImport.locationMayBeStrippedHint,
+          level: NotificationLevel.warning,
+        );
+      }
     }
     return imported > 0;
+  }
+
+  /// 位置情報つきで原本を読むための権限を確保する（Android のみ）。
+  ///
+  /// 全ファイルアクセスがあれば実パス直読みで足りる。無い端末では
+  /// READ_MEDIA_IMAGES + ACCESS_MEDIA_LOCATION を求め、ネイティブ側の
+  /// `MediaStore.setRequireOriginal` 経路を通せるようにする。
+  /// ACCESS_MEDIA_LOCATION 自体はダイアログ無しで付く。
+  static Future<void> _ensureMediaLocationPermission() async {
+    if (!PlatformCapabilities.supportsNativeGalleryCopy) return;
+    try {
+      if (await Permission.manageExternalStorage.isGranted) return;
+      final statuses =
+          await [Permission.photos, Permission.accessMediaLocation].request();
+      AppLogger.debug('[GalleryImport] media permissions: $statuses');
+    } catch (e) {
+      AppLogger.debug('[GalleryImport] permission request failed: $e');
+    }
   }
 
   /// 元のファイル名を解決する（Android のみ MediaStore へ問い合わせ）。
@@ -125,26 +183,36 @@ class GalleryImporter {
   /// Android では MethodChannel 経由で content URI から実ファイルを直接コピーし、
   /// EXIF メタデータを完全保持する。
   /// 非 Android や identifier が無い場合は File.copy でフォールバック。
-  static Future<bool> _copyFile(PlatformFile file, String destPath) async {
+  static Future<_CopyResult> _copyFile(PlatformFile file, String destPath) async {
     // Android: content URI が取れればネイティブ側で実ファイルコピー
     if (PlatformCapabilities.supportsNativeGalleryCopy &&
         file.identifier != null) {
       try {
-        final success = await _channel.invokeMethod<bool>('copyOriginal', {
+        final mode = await _channel.invokeMethod<String>('copyOriginal', {
           'uri': file.identifier,
           'destPath': destPath,
         });
-        if (success == true) return true;
+        switch (mode) {
+          case 'original':
+            return _CopyResult.original;
+          case 'maybe_redacted':
+            return _CopyResult.maybeRedacted;
+          default:
+            break; // null = ネイティブ側で失敗 → フォールバックへ
+        }
       } catch (e) {
         AppLogger.debug('[GalleryImport] Native copy failed, falling back: $e');
       }
     }
 
     // フォールバック: file_picker のキャッシュパスからコピー
+    // ⚠ Android ではこのキャッシュはピッカーが渡したリダクション済みの複製
     final srcPath = file.path;
-    if (srcPath == null) return false;
+    if (srcPath == null) return _CopyResult.failed;
     await File(srcPath).copy(destPath);
-    return true;
+    return PlatformCapabilities.supportsNativeGalleryCopy
+        ? _CopyResult.maybeRedacted
+        : _CopyResult.original;
   }
 
   /// EXIF から位置情報・メタデータを読み取って ImageNode を生成

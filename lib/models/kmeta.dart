@@ -534,6 +534,18 @@ class KMetaSync {
   /// 親設定とマージ（同期設定は継承しない = 各フォルダ独立）
   KMetaSync mergeWith(KMetaSync? parent) => this;
 
+  /// 共有ファイルに書くぶん（リンク情報だけ）。帳簿は [SyncLedger] へ
+  KMetaSync linkOnly() => KMetaSync(
+    driveId: driveId,
+    driveFolderName: driveFolderName,
+    driveUrl: driveUrl,
+    isReadOnly: isReadOnly,
+  );
+
+  /// 帳簿（端末ごとの状態）を含んでいるか
+  bool get hasBookkeeping =>
+      lastSynced != null || driveRevisionId != null || deviceId != null || files.isNotEmpty;
+
   /// 空かどうか
   bool get isEmpty =>
       driveId == null &&

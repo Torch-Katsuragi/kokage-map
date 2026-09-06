@@ -23,8 +23,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../core/platform_capabilities.dart';
 import '../../../providers/party_providers.dart';
-import '../../../providers/ui_state_providers.dart';
-import '../../../services/qgis/qgs_export_action.dart';
 import '../../level_screen.dart';
 import '../../settings_screen.dart';
 import 'party_controls.dart';
@@ -38,8 +36,6 @@ class MapMenuButton extends ConsumerWidget {
 
   static const String _party = 'party';
   static const String _level = 'level';
-  static const String _exportQgis = 'export_qgis';
-  static const String _importQgis = 'import_qgis';
   static const String _settings = 'settings';
 
   @override
@@ -69,10 +65,6 @@ class MapMenuButton extends ConsumerWidget {
               context,
               MaterialPageRoute(builder: (_) => const LevelScreen()),
             );
-          case _exportQgis:
-            exportQgsProject(ref, ref.read(folderTreeProvider));
-          case _importQgis:
-            importQgsProject(ref, ref.read(folderTreeProvider));
           case _settings:
             Navigator.push(
               context,
@@ -98,17 +90,6 @@ class MapMenuButton extends ConsumerWidget {
         PopupMenuItem<String>(
           value: _level,
           child: _MenuRow(icon: Icons.explore, label: t.level.tooltip),
-        ),
-        PopupMenuItem<String>(
-          value: _exportQgis,
-          child: _MenuRow(icon: Icons.map_outlined, label: t.qgis.exportProject),
-        ),
-        PopupMenuItem<String>(
-          value: _importQgis,
-          child: _MenuRow(
-            icon: Icons.file_download_outlined,
-            label: t.qgis.importProject,
-          ),
         ),
         PopupMenuItem<String>(
           value: _settings,

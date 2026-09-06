@@ -12,6 +12,21 @@ tags: [technical, geopackage, qgis, interop]
 ここは「編集中には邪魔だが QGIS 側では必要」というものの面倒を見る仕組み。
 実装は `lib/models/geopackage/qgis_interop.dart`、テストは `test/qgis_interop_test.dart`。
 
+## `.qgs` はいつ書かれるか（2026-09-06）
+
+- `.kmeta.json` が保存されるたび（可視性・スタイル・View・並び順の変更）、3秒のデバウンス後に
+  root の `<dir名>.qgs` を `QgsAutoRefresh` が DOM 保持型で更新する
+- Drive push の直前に `flushNow()` で待ちを消化する
+- プロジェクトを開いたとき `.qgs` が無ければ、その場で最初の1本を作る（`QgsReadBack.run` が schedule する）
+- 手動の「QGISプロジェクトを書き出す／取り込む」メニューは 2026-09-06 に撤去した（自動追従と読み戻しで不要）
+- 失敗は logcat の `[QgsAutoRefresh]` に出るだけで通知しない（手動書き出しで再現できる）
+- **逆方向**: プロジェクトを開いたとき `QgsReadBack` が root と子 dir の `.qgs` を見て、印（`kokage/savedAt`）と
+  root の `saveDateTime` が食い違えば（＝QGIS が後から保存した）寛容インポータで View・スタイル・可視性を
+  取り込み、続く自動更新で正規化＋印つきに書き戻す。ログは `[QgsReadBack]`
+- **子 dir**: 自分の `.kmeta.json` を持つ子 dir は `<子dir名>.qgs` を持ち、親の `.qgs` には
+  `layer-tree-group embedded="1" embedded_project="./子/子.qgs"` と `<maplayer embedded="1">` スタブで載る
+  （`QgsProjectBuilder.writeTo` が子から先に書く）。QGIS 側では埋め込みグループは読み取り専用
+
 ## いつ走るか
 
 `GeoPackageFile.dispose()` の中、**全ての書き込みが終わったあと・DBを閉じる直前**。
@@ -39,7 +54,17 @@ dispose()
 QgsProjectBuilder   ツリーを辿って QgsProject を組み立てる（DB・FSに触る）
 QgsProject / QgsLayer / QgsGroup   XMLと切り離した表現
 QgsWriter           XMLにする（純粋関数。DBもFSも要らないのでテストしやすい）
+QgsDocument         既存の .qgs を読み、自分の管轄だけ差し替えて書き戻す（DOM 保持型・2026-09-06）
 ```
+
+> [!IMPORTANT] 書き出しは「上書き」ではなく「更新」（2026-09-06）
+> `<dir名>.qgs` が既にあれば `QgsDocument.apply()` で読み込み、レイヤツリー・maplayer の参照と
+> フィルタ・単一シンボルの色と太さ・`<layerorder>` だけを差し替える。QGIS 側で足した
+> 印刷レイアウト・フィールド設定・単一シンボルの細部（破線・オフセット等）はそのまま残る。
+> 単一シンボル以外のレンダラは触らず、件数を通知する。プロジェクトに無くなったレイヤは外して名前を通知する。
+> `properties/kokage/` に印（`schemaVersion` `app` `savedAt` `dirName`）を書き、root の
+> `saveDateTime` を同じ値にする。両者が一致していれば「最後に書いたのはこかげマップ」、
+> 違えば QGIS が後から保存した、と読める。テストは `test/qgs_document_test.dart`。
 
 対応:
 
@@ -53,13 +78,18 @@ QgsWriter           XMLにする（純粋関数。DBもFSも要らないので�
 View だけがレイヤになるので **1:1 対応**が成立する。View のフィルタは OGR の
 データソースURIに `|subset=` として載る（QGIS が subset string を書く場所と同じ）。
 
-出力先は `<dir>/project.qgs`。**連携dirごとに1本**置く。パスは相対
+出力先は `<dir>/<dir名>.qgs`（2026-09-06 に `project.qgs` から改名。旧名が残っていれば
+新名に改名して引き継ぐ）。**連携dirごとに1本**置く。パスは相対
 （`<Absolute type="bool">false</Absolute>`）なので、そのdirを丸ごと渡された人が
 そのdirだけで開ける。
 
 > [!IMPORTANT] レイヤIDは決定的に作る
 > 生成のたびに変わると `.qgs` の差分が毎回出て、Drive同期が無駄に動く。
 > View のキーをサニタイズしたものに、キーのハッシュを添えている。
+> ⚠ ハッシュは `stableHashHex()`（MD5）。以前の `String.hashCode` は VM と dart2js で値が違い、
+> **web と Android で同じ View に別の id が付いていた**（2026-09-06 修正）。
+> ⚠ `viewKey` は dir を含まないので、同名 gpkg が root とサブ dir にあると衝突する。
+> ハッシュには gpkg の相対 dir を混ぜている（同日修正。QGIS は同じ id のレイヤを1つに畳む）。
 
 > [!NOTE] QGIS 3.44.12 で実開封を確認済み（2026-08-26）
 > ```

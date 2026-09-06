@@ -49,11 +49,42 @@ class QgsGroup extends QgsTreeNode {
     required this.name,
     required this.children,
     this.visible = true,
+    this.expanded = true,
   });
 
   final String name;
   final List<QgsTreeNode> children;
   final bool visible;
+
+  /// レイヤパネルで開いているか（こかげマップ の dir の展開状態）
+  final bool expanded;
+}
+
+/// 別プロジェクト（子 dir の `.qgs`）を埋め込むグループ。
+///
+/// QGIS の「他プロジェクトのレイヤ／グループを埋め込む」機能そのもの
+/// （`layer-tree-group embedded="1" embedded_project="./写真/写真.qgs"`）。
+/// 子要素は書かない。QGIS が読込時に子プロジェクトから再構成する。
+/// `<projectlayers>` には `<maplayer embedded="1" project=... id=.../>` のスタブが要る。
+class QgsEmbeddedGroup extends QgsTreeNode {
+  const QgsEmbeddedGroup({
+    required this.name,
+    required this.projectPath,
+    required this.layerIds,
+    this.visible = true,
+    this.expanded = true,
+  });
+
+  final String name;
+
+  /// 親の `.qgs` から見た子 `.qgs` の相対パス（`./写真/写真.qgs`）
+  final String projectPath;
+
+  /// 子プロジェクトのレイヤ id（スタブに書く）
+  final List<String> layerIds;
+
+  final bool visible;
+  final bool expanded;
 }
 
 /// QGIS のレイヤ（こかげマップ の View）
@@ -151,7 +182,22 @@ class QgsStyle {
     this.strokeColor,
     this.strokeWidthPx,
     this.strokeOpacity,
+    this.labelEnabled,
+    this.labelField,
+    this.labelFontSizePt,
+    this.labelColor,
+    this.labelHaloColor,
   });
+
+  /// 簡易ラベル（QGIS の `labeling type="simple"`）。
+  /// [labelEnabled] が true で [labelField] があるときだけ書く
+  final bool? labelEnabled;
+  final String? labelField;
+  final double? labelFontSizePt;
+  final Color? labelColor;
+  final Color? labelHaloColor;
+
+  bool get hasLabel => labelEnabled == true && (labelField?.isNotEmpty ?? false);
 
   final Color? pointColor;
   final double? pointSizePx;
@@ -197,6 +243,26 @@ class QgsProject {
   /// > 呼び出し側は必ずユーザーに見せること。
   final List<String> skipped;
 
+  /// 埋め込みグループを深さ優先で集める（スタブと layerorder に使う）
+  List<QgsEmbeddedGroup> get embeddedGroups {
+    final result = <QgsEmbeddedGroup>[];
+    void walk(List<QgsTreeNode> nodes) {
+      for (final node in nodes) {
+        switch (node) {
+          case QgsGroup(:final children):
+            walk(children);
+          case QgsEmbeddedGroup():
+            result.add(node);
+          case QgsLayer():
+            break;
+        }
+      }
+    }
+
+    walk(root);
+    return result;
+  }
+
   /// ツリーを深さ優先で辿って、レイヤだけを順に返す。
   ///
   /// QGIS の `<projectlayers>` と `<layerorder>` はこの順で並べる。
@@ -209,6 +275,8 @@ class QgsProject {
             walk(children);
           case QgsLayer():
             result.add(node);
+          case QgsEmbeddedGroup():
+            break; // 子プロジェクトのもの。自分のレイヤではない
         }
       }
     }

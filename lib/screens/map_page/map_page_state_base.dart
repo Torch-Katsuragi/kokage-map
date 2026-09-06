@@ -78,6 +78,11 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 地図の回転角（bearing）— MapEventMoveCamera で毎フレーム更新
   final ValueNotifier<double> mapBearingNotifier = ValueNotifier<double>(0.0);
 
+  /// カメラが動いた回数。MapEventMoveCamera / Idle ごとに増える。
+  /// 画面座標に依存するオーバーレイ（画面外の現在位置インジケータ等）が
+  /// ページ全体を再ビルドせずに追従するための通知用。
+  final ValueNotifier<int> cameraTickNotifier = ValueNotifier<int>(0);
+
   /// コンパスヘディングの前回スムーズ値（ローパスフィルタ用）
   double? lastSmoothedHeading;
 

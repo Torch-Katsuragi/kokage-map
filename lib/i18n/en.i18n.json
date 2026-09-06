@@ -552,6 +552,10 @@
       "select": "Select",
       "gpsTool": "GPS Tool",
       "overlayTransform": "Overlay Transform"
+    },
+    "jump": {
+      "noLocation": "Current location is not available yet",
+      "toCurrentLocation": "Go to current location"
     }
   },
   "importExport": {
@@ -1104,19 +1108,8 @@
     "secAgo": "${sec}s ago"
   },
   "qgis": {
-    "exportProject": "Export QGIS project",
-    "writing": "Writing the QGIS project...",
-    "written": "Wrote project.qgs ($count layers)",
-    "writeFailed": "Couldn't write the QGIS project",
-    "skipped": "$count item(s) were left out: $names",
-    "noProject": "No project is open",
-    "importProject": "Import QGIS project",
-    "importing": "Reading the QGIS project...",
-    "imported": "Created $count view(s) from $file",
-    "importedNothing": "No usable layers in $file",
-    "notFound": "No .qgs file in this folder",
     "discarded": "$count item(s) were not imported: $names",
-    "importFailed": "Couldn't read the QGIS project"
+    "readBack": "Loaded changes made in QGIS from $file ($count views)"
   },
   "driveQr": {
     "menu": "Share via QR code",
@@ -1125,5 +1118,15 @@
     "copyUrl": "Copy URL",
     "copied": "URL copied",
     "noUrl": "This folder has no Drive URL"
+  },
+  "galleryImport": {
+    "imported": "Imported $count photo(s)",
+    "folderPathFailed": "Failed to resolve folder path",
+    "locationMayBeStripped": "$count photo(s) came in without location info",
+    "locationMayBeStrippedHint": "Android strips GPS data from photos handed over by the picker. Allow \"All files access\" for Kokage Map to keep it."
+  },
+  "globalFolder": {
+    "migrated": "Moved the global folder ($count files) to shared storage. It now survives uninstalling the app.",
+    "fallback": "Shared storage is not available; using the app's internal storage for the global folder"
   }
 }

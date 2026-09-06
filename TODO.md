@@ -18,6 +18,60 @@
 - [ ] 上流に issue/PR（josxha/flutter-maplibre）は**出さない**（AIが人間のコミュニティに投稿しない方針）。
       踏んだバグは手元の回避策とコメントに残してある
 
+## 正典を `.qgs` に移す（2026-09-06・設計済み・未着手）
+
+> 設計は [[docs/technical/project-format-design#正典を `.qgs` に移す（2026-09-06 決定・設計）]]。
+> `.kmeta.json` をやめ、dir ごとの `<dir名>.qgs` を正典にする。子 dir は QGIS の
+> 埋め込み（`embedded_project`）で親に載せ、統合版は派生物としてだけ書き出す。
+
+- [x] 🐛 **段0: `.qgs` のレイヤ id が web と native で一致しない**（2026-09-06 修正）。
+      `stableHashHex()`（`lib/utils/stable_hash.dart`・MD5）に替えた。⚠ 既に書き出した `.qgs` の id は変わる
+      （次の書き出しで旧 id のレイヤは「無くなったレイヤ」として外され、新 id で足し直される）
+- [x] 🐛 **段0: 同名 gpkg が root とサブ dir にあるとレイヤ id が衝突**（2026-09-06 実機のデモデータで発見）。
+      `viewKey` に dir が無いのが原因。id のハッシュに gpkg の相対 dir を混ぜた（`layerIdForViewKey(dirPath:)`）。
+      衝突版が書いた `.qgs`（同じ id の maplayer が2つ）は、次の更新で `QgsDocument` が2つ目以降を畳む
+- [x] 段0-b（2026-09-06）: 同期の帳簿（`files` / `lastSynced` / `driveRevisionId` / `deviceId`）を
+      `SyncLedger`（SharedPreferences・キーは driveId かパスのハッシュ）へ。共有ファイルにはリンク情報4項目だけ。
+      旧版が書いた帳簿は初回ロードで引き取って共有ファイルから剥がす。継承チェーンは廃止
+      （`getMergedMeta` は自フォルダの生メタデータを返す。引数は互換のため残置）
+      - [ ] ⚠ Drive 同期の通し確認は未実施（本セッションは Drive にサインインしていない）
+- [x] 段1: DOM 保持型 `QgsDocument`（2026-09-06）。`lib/services/qgis/qgs_document.dart`。
+      QGIS 3.44 のフィクスチャで往復テスト 13 件（`test/qgs_document_test.dart`）:
+      未知の最上位要素・maplayer 内要素・ツリーの customproperties が残る／参照とフィルタは直る／
+      単一シンボルは色だけ差し替え／単一シンボル以外は触らず報告／無いレイヤは外して報告／
+      埋め込み（`embedded="1"`）は残す／印の往復と「最後に書いたのは自分か」
+  - [x] **書き出しを DOM 保持型の更新に切り替え**、ファイル名を `<dir名>.qgs` に
+        （`project.qgs` が残っていれば改名して引き継ぐ）。印を書く。
+        手動の書き出し／取り込みメニューはその後撤去（`qgs_export_action.dart` 削除）
+  - [x] **自動更新**（2026-09-06）: `.kmeta.json` が保存されるたびに root の `<dir名>.qgs` を
+        3秒デバウンスで DOM 保持型更新する（`QgsAutoRefresh`）。Drive push と手動書き出しの前に flush。
+        `.kmeta.json` が正典のまま、QGIS から見える状態を常に最新にする途中経過
+  - [ ] ⚠ QGIS での実開封は未確認（開発機に QGIS 無し）。確認手順は [[docs/technical/qgis-interop]]。
+        特に「QGIS で保存 → アプリで書き出し → QGIS で開き直して設定が残っているか」
+- [ ] 段2: `KMetaService` の裏を `QgsDocument` に差し替え（`KMeta` モデルは残す。35ファイルの呼び出し側を動かさない）
+- [/] 段2（実用形・2026-09-06）: **QGIS 側で保存された `.qgs` をプロジェクトを開いたときに読み戻す**
+      （`QgsReadBack`。印と `saveDateTime` の不一致で判定 → 寛容インポータで View・スタイル・可視性を取り込み →
+      自動更新で正規化＋印つきに書き戻す）。`.kmeta.json` は残しているが、書きは自動更新・読みは読み戻しで
+      両方向が繋がったので、利用者から見れば `.qgs` が正典。`KMetaService` の裏を差し替える完全形は未着手
+  - [x] 実機（Fold）で確認: QGIS 保存を模した `.qgs`（`saveDateTime` を進め、レイヤを Unchecked）を置いて
+        開き直す → `[QgsReadBack] ... 取り込む` → View 3 件取り込み → 印つきで再生成。
+        可視性の読み戻しは2点直した: ①既定 View 1枚のレイヤは可視性をレイヤ側に持つのに
+        インポータが View 側にしか書いていなかった ②QGIS でグループごと消灯した場合に備え、
+        祖先グループの checked を AND で畳む
+- [/] 段3（2026-09-06）: 展開状態（`layer-tree-group@expanded`）と簡易ラベル（`labeling type="simple"`・
+      `labelsEnabled`）を出力。DOM 更新では `text-style` の管轄属性だけ差し替え、ルールベースは触らない
+  - [ ] ラスタ化オーバーレイ（GeoTIFF を `maplayer type="raster"` で）は未着手
+- [x] 段4（2026-09-06）: 自分の `.kmeta.json` を持つ子 dir は独立した `<dir名>.qgs` を持ち、親には
+      `embedded="1" embedded_project` のグループと `<maplayer embedded="1">` スタブで載せる。
+      読み戻しは子 dir も辿る。インポータは埋め込みスタブを飛ばす
+  - [ ] 平坦化版（1枚に展開した派生物）の書き出しは未着手
+- [/] 段5（2026-09-06）: `*.qgs` を Drive 同期の対象に追加（既存の「新しい方が勝つ／衝突コピー」で扱う）
+  - [ ] レイヤ単位の 3-way マージは未着手
+- [/] 段6（2026-09-06）: `.qgz` 読み（`archive`）・壊れた `.qgs` の `.bak` 退避・外したレイヤの報告
+  - [ ] `.kmeta.json` → `.migrated` の移行は、段2 の完全形と一緒に
+- [ ] 段7: 「QGIS で設定されたスタイル」の読み取り専用 UI（未着手。いまは分類レンダラを触らないだけ）
+- [ ] 未決: dir 改名が Drive 越しに届いたときの追従／埋め込み3階層以上の実測／web の `.qgs~` リネーム
+
 ## プロジェクト形式の設計（2026-08-21・設計のみ）
 
 > 設計は [[docs/technical/project-format-design|プロジェクト形式の設計]] に集約。
@@ -49,6 +103,26 @@
           描画側の取りこぼしではない。犯人は children が減っていないこと
         - 見るべきログ: hide をタップした瞬間の `[Features] P:.. L:.. Pg:..` の件数と、
           `updateChildren already in progress` が出ているかどうか
+  - [/] **グローバルフォルダを共有ストレージへ（2026-09-06）**。アンインストールで GPS 軌跡が消える
+        （debug/release の行き来のたびに失う）のを止めるため、Android の既定を
+        `Documents/KokageMap/Global` に変更。`GlobalFolderLocator.resolve()` が
+        場所決め・書込プローブ・旧 `k_maps_global` からの移行（コピー→旧を `.migrated` に改名）を担う。
+        共有ストレージが使えなければ内部領域へ退避して警告。カスタムパス設定はそのまま優先
+        - 不採用: `applicationIdSuffix` での debug/release 共存（Firebase・OAuth・ディープリンクが割れる）、Auto Backup
+        - [x] 実機で移行を確認（2026-09-06、Pixel 11 Pro Fold・release 0.6.0+16 → 0.6.1+18 上書き）。
+              `gps_history.gpkg` ほか2ファイルが `Documents/KokageMap/Global` へ移り、GPS記録もそこで再開。
+              2回目起動では移行が走らない（旧側は `.migrated` に改名済み）ことも確認
+  - [x] **画面外の現在位置を指す矢印**（2026-09-05）。現在位置が見えないとき、地図の縁に
+        方向を示す三角矢印を出す。タップで現在位置へジャンプ。ドロワーに隠れた範囲は
+        「見えていない」扱い（`OffscreenLocationIndicator` / 幾何は `edge_indicator_geometry.dart`、
+        ユニットテストあり）。ジャンプ処理は `MapJumpMixin.jumpTo()` に集約し、起動時の
+        現在位置ジャンプ・ドロワー/属性テーブルからの移動も同じ経路に載せた
+        - [x] 実機確認（2026-09-06、Pixel 11 Pro Fold）。見つけて直した2件:
+              ①ドロワーを開いたまま矢印をタップすると**ドロワーの真下に着地して矢印が消えない**
+              → `jumpTo()` が `jumpObscuredInsets`（ドロワー幅）を除いた見える範囲の中心に寄せるようにした
+              （投影で画面座標をずらす。ズーム変更時は 2^(from-to) で画素換算）。起動時の現在位置ジャンプにも効く
+              ②矢印が下端に出ると**左下の LeftBottomFab に潜ってタップが取られる**
+              → 縁インジケータの見える範囲から下 96px を除外（`_bottomButtonsInset`）
   - [ ] 🐛 **自己位置マーカーが点・短いラインを隠す**（2026-09-01 実機で確認）
         重なるとフィーチャが見えなくなる。マーカーを半透明にする（不透明度を落とす）方針
   - [ ] 🐛 **レイヤにズームする導線が無い**（2026-09-01）。地図は現在地に開くので、遠方のデータを
@@ -58,12 +132,14 @@
   - [ ] 選択モードで地図をタップすると**フィーチャ情報のポップアップが画面に居座る**（2026-09-02 撮影中に確認）。
         地図を動かしても消えず、複数重なる。閉じる操作か自動消去が要る
 - [/] **`.qgs` ライター** — dir/gpkg/layer をレイヤグループ、View をレイヤとして出力
-  - [x] 実装（`lib/services/qgis/`）。書き出し導線は 地図の ≡ メニュー と
-        フォルダのメニュー（共有の単位が dir なので両方から）
+  - [x] 実装（`lib/services/qgis/`）。~~書き出し導線は 地図の ≡ メニュー と
+        フォルダのメニュー~~ → 2026-09-06 に手動メニューを撤去。自動追従（`QgsAutoRefresh`）と
+        開いたときの読み戻し（`QgsReadBack`）だけ
   - [x] **QGIS 3.44.12 で実開封を確認**（2026-08-26）。相対パス解決・subset適用
         （12→6）・レンダラ読み取り・グループ構造すべて意図どおり。
         手順は [[docs/technical/qgis-interop]]、確認スクリプトは `tool/qgis/`
-  - [ ] Drive push の直前に自動生成する（いまは手動のみ）
+  - [x] Drive push の直前に自動生成する → `QgsAutoRefresh.flushNow()`（2026-09-06）。
+        それ以前にメタデータ保存のたびに追従しているので、push 時は待ちの消化だけ
   - [ ] 画像・オーバーレイをラスタレイヤとして書く（いまは除外して報告するだけ）
 - [x] `.qgs` インポータ（root外参照を破棄・グループはdir構造に置換・捨てたものを必ず報告）
   - 2026-08-26 実装。こかげマップ → `.qgs` → こかげマップ の往復を web で確認済み
@@ -223,6 +299,28 @@
     リダクション済みで取り込まれる（「位置情報なし」表示で見分けられる）
   - ℹ 端末の Photo Picker ⋮ メニューに「位置情報を含める」は未搭載だった
     （2026年8月の mainline 更新で入る見込みの機能。入ればユーザー側でも回避可能になる）
+  - [/] **追加修正（2026-09-05）: 「座標が消える」が再発した報告を受けて**
+    - 上の修正は **全ファイルアクセスが許可されている前提**だった。無いと実パスは
+      「読める」がFUSEでリダクションされ、それを成功扱いして黙って位置情報が消える。
+      再インストール直後（debug/release の行き来）で権限が未許可のときに当たりやすい
+    - `copyOriginal` の戻りを `"original"` / `"maybe_redacted"` / null に変え、
+      第2経路として `ACCESS_MEDIA_LOCATION` + `MediaStore.setRequireOriginal()` を追加。
+      取り込み前に全ファイルアクセスが無ければ `photos` + `accessMediaLocation` を要求
+    - `maybe_redacted` かつ位置情報が取れなかった写真があれば通知で枚数と対処を出す
+      （ログは `[GalleryImport] <file>: copy=... location=...` と logcat `MediaCopy`）
+    - [x] 実機確認（2026-09-06、Pixel 11 Pro Fold・Android 17）: 全ファイルアクセスONで
+          Photo Picker 経由の取り込み → `copy=original location=true`、コピー先の EXIF に GPS が残っている
+          （`PXL_20260811_082358800.jpg`）
+    - ℹ **「全ファイルアクセスOFF」の経路は Android 11+ では実質到達できない**。appops で権限を
+          落とすとアプリが即 kill され、再起動後はホーム画面の権限ゲートでプロジェクトを開けない。
+          第2経路（ACCESS_MEDIA_LOCATION）と警告通知は、クラウド専用写真など「原本が読めない」
+          ケースの保険として残す
+    - [ ] 🔴 **再現条件が未確定**。今回の端末では消えなかったので、報告された「座標が消える」は
+          ①別の操作（写真→オーバーレイ変換は地図中心に置く仕様）②クラウド専用写真
+          ③Android のバージョン差 のどれか。次に再現したら logcat の `MediaCopy` と
+          `[GalleryImport] <file>: copy=... location=...` を控える
+    - [ ] 「地図に追加」がギャラリー取り込み以外の操作（写真→オーバーレイ変換など）なら別件。
+          オーバーレイ変換は仕様として地図中心に置いている（`photo_tile.dart`）
 
 ### 段1 の積み残し（2026-08-26 に全て解消）
 

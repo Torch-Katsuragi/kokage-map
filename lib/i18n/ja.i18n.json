@@ -552,6 +552,10 @@
       "select": "選択",
       "gpsTool": "GPSツール",
       "overlayTransform": "オーバーレイ変換"
+    },
+    "jump": {
+      "noLocation": "現在位置をまだ取得できていません",
+      "toCurrentLocation": "現在位置へ移動"
     }
   },
   "importExport": {
@@ -1104,19 +1108,8 @@
     "secAgo": "${sec}秒前"
   },
   "qgis": {
-    "exportProject": "QGISプロジェクトを書き出す",
-    "writing": "QGISプロジェクトを書き出しています...",
-    "written": "project.qgs を書き出しました（$count レイヤ）",
-    "writeFailed": "QGISプロジェクトを書き出せませんでした",
-    "skipped": "$count 件は書き出していません: $names",
-    "noProject": "プロジェクトが開かれていません",
-    "importProject": "QGISプロジェクトを読み込む",
-    "importing": "QGISプロジェクトを読み込んでいます...",
-    "imported": "$file から View を $count 個作りました",
-    "importedNothing": "$file から取り込めるレイヤがありませんでした",
-    "notFound": "このフォルダに .qgs がありません",
     "discarded": "$count 件は取り込んでいません: $names",
-    "importFailed": "QGISプロジェクトを読み込めませんでした"
+    "readBack": "QGIS 側で編集された $file を読み込みました（View $count 件）"
   },
   "driveQr": {
     "menu": "QRコードで渡す",
@@ -1125,5 +1118,15 @@
     "copyUrl": "URLをコピー",
     "copied": "URLをコピーしました",
     "noUrl": "このフォルダにはDriveのURLがありません"
+  },
+  "galleryImport": {
+    "imported": "写真を $count 枚取り込みました",
+    "folderPathFailed": "フォルダのパスを解決できませんでした",
+    "locationMayBeStripped": "位置情報なしで取り込まれた写真が $count 枚あります",
+    "locationMayBeStrippedHint": "Androidはピッカー経由の写真から位置情報を削ることがあります。こかげマップに「すべてのファイルへのアクセス」を許可すると保持できます。"
+  },
+  "globalFolder": {
+    "migrated": "グローバルフォルダ（$count ファイル）を共有ストレージへ移しました。アプリを削除しても残ります",
+    "fallback": "共有ストレージが使えないため、グローバルフォルダはアプリ内部に置きます"
   }
 }

@@ -36,8 +36,17 @@ import 'qgs_model.dart';
 /// QGIS はこれより新しければ普通に開く。古いQGISで開くと警告が出るが読める。
 const String kQgsVersion = '3.34.0-Prizren';
 
-/// 既定のファイル名。連携dirごとに1本置く。
-const String kQgsFileName = 'project.qgs';
+/// 旧・既定のファイル名（2026-09-06 まで）。
+///
+/// いまは `<dir名>.qgs`（[qgsFileNameFor]）。これが残っていたら新名に改名して引き継ぐ。
+const String kLegacyQgsFileName = 'project.qgs';
+
+/// dir ごとの `.qgs` のファイル名。`<dir名>.qgs`。
+///
+/// QGIS ユーザーがファイル一覧で「どの現場のプロジェクトか」を名前で分かるようにする。
+/// dir 改名との追従は印（`kokage/dirName`）で判定する
+/// （[[docs/technical/project-format-design#正典を `.qgs` に移す（2026-09-06 決定・設計）]]）。
+String qgsFileNameFor(String dirName) => '$dirName.qgs';
 
 /// px → mm（QGISのシンボル単位はMM）。96dpi 相当。
 ///
@@ -47,6 +56,50 @@ const double _kPxToMm = 25.4 / 96;
 
 class QgsWriter {
   const QgsWriter();
+
+  // =============================================
+  // 断片（DOM 保持型の更新で使う）
+  // =============================================
+  //
+  // [QgsDocument] は既存の `.qgs` を読んで自分の管轄のノードだけ差し替える。
+  // 「無かったから足す」ときの要素はここで作る。組み立てのルールを1箇所に保つため、
+  // 中身は下の private 関数と共通。
+
+  /// `<maplayer>` 1本ぶんの要素
+  XmlElement mapLayerElement(QgsLayer layer) =>
+      _fragment((b) => _writeMapLayer(b, layer));
+
+  /// `<renderer-v2>`。スタイルが無ければ null
+  XmlElement? rendererElement(QgsLayer layer) {
+    if (layer.style == null || layer.style!.isEmpty) return null;
+    return _fragment((b) => _writeRenderer(b, layer));
+  }
+
+  /// `<layer-tree-layer>`
+  XmlElement treeLayerElement(QgsLayer layer) =>
+      _fragment((b) => _writeTreeNode(b, layer));
+
+  /// 子を持たない `<layer-tree-group>`
+  XmlElement treeGroupElement(String name, {bool visible = true}) => _fragment(
+    (b) => _writeTreeNode(b, QgsGroup(name: name, children: const [], visible: visible)),
+  );
+
+  XmlElement _fragment(void Function(XmlBuilder) write) {
+    final b = XmlBuilder();
+    write(b);
+    // fragment が親になっているので、別の文書に足せるよう切り離す
+    return b.buildFragment().childElements.first.copy();
+  }
+
+  /// QGIS の色表記 `R,G,B,A`（各0-255）
+  static String formatColor(Color color, {double? opacity}) =>
+      const QgsWriter()._color(color, opacity: opacity);
+
+  /// px → QGIS のシンボル単位（MM）
+  static String formatMm(double px) => const QgsWriter()._mm(px);
+
+  /// 可視性属性の値
+  static String checkedValue(bool visible) => const QgsWriter()._checked(visible);
 
   /// `.qgs` の中身を作る。
   String build(QgsProject project) {
@@ -110,12 +163,12 @@ class QgsWriter {
 
   void _writeTreeNode(XmlBuilder builder, QgsTreeNode node) {
     switch (node) {
-      case QgsGroup(:final name, :final children, :final visible):
+      case QgsGroup(:final name, :final children, :final visible, :final expanded):
         builder.element(
           'layer-tree-group',
           attributes: {
             'name': name,
-            'expanded': '1',
+            'expanded': expanded ? '1' : '0',
             'checked': _checked(visible),
           },
           nest: () {
@@ -123,6 +176,17 @@ class QgsWriter {
             for (final child in children) {
               _writeTreeNode(builder, child);
             }
+          },
+        );
+      case QgsEmbeddedGroup(:final name, :final projectPath, :final visible, :final expanded):
+        builder.element(
+          'layer-tree-group',
+          attributes: {
+            'name': name,
+            'expanded': expanded ? '1' : '0',
+            'checked': _checked(visible),
+            'embedded': '1',
+            'embedded_project': projectPath,
           },
         );
       case QgsLayer():
@@ -158,9 +222,30 @@ class QgsWriter {
         for (final layer in layers) {
           _writeMapLayer(builder, layer);
         }
+        for (final group in project.embeddedGroups) {
+          for (final id in group.layerIds) {
+            _writeEmbeddedStub(builder, group.projectPath, id);
+          }
+        }
       },
     );
   }
+
+  /// 埋め込みレイヤのスタブ。QGIS は読込時に子プロジェクトから本体を取る
+  void _writeEmbeddedStub(XmlBuilder builder, String projectPath, String id) {
+    builder.element(
+      'maplayer',
+      attributes: {'embedded': '1', 'project': projectPath, 'id': id},
+    );
+  }
+
+  /// 埋め込みスタブの断片
+  XmlElement embeddedStubElement(String projectPath, String id) =>
+      _fragment((b) => _writeEmbeddedStub(b, projectPath, id));
+
+  /// 埋め込みグループの断片
+  XmlElement embeddedGroupElement(QgsEmbeddedGroup group) =>
+      _fragment((b) => _writeTreeNode(b, group));
 
   void _writeMapLayer(XmlBuilder builder, QgsLayer layer) {
     builder.element(
@@ -175,6 +260,7 @@ class QgsWriter {
         'refreshOnNotifyEnabled': '0',
         'autoRefreshMode': 'Disabled',
         'styleCategories': 'AllStyleCategories',
+        'labelsEnabled': (layer.style?.hasLabel ?? false) ? '1' : '0',
       },
       nest: () {
         builder.element('id', nest: layer.id);
@@ -187,6 +273,7 @@ class QgsWriter {
         );
         builder.element('srs', nest: () => _writeCrs(builder, layer.crs));
         _writeRenderer(builder, layer);
+        _writeLabeling(builder, layer);
         // レイヤ名の表示に使う。空でよいが、無いと警告を出すQGISがある。
         builder.element('previewExpression', nest: '');
       },
@@ -203,6 +290,11 @@ class QgsWriter {
       nest: () {
         for (final layer in project.layers) {
           builder.element('layer', attributes: {'id': layer.id});
+        }
+        for (final group in project.embeddedGroups) {
+          for (final id in group.layerIds) {
+            builder.element('layer', attributes: {'id': id});
+          }
         }
       },
     );
@@ -274,6 +366,59 @@ class QgsWriter {
         );
       },
     );
+  }
+
+  /// 簡易ラベル。
+  ///
+  /// QGIS の `QgsPalLayerSettings::readXml` は無い属性を既定値で埋めるので、
+  /// フィールド名・フォントサイズ・文字色・縁取りだけ書く。
+  void _writeLabeling(XmlBuilder builder, QgsLayer layer) {
+    final style = layer.style;
+    if (style == null || !style.hasLabel) return;
+    builder.element(
+      'labeling',
+      attributes: {'type': 'simple'},
+      nest: () {
+        builder.element(
+          'settings',
+          attributes: {'calloutType': 'simple'},
+          nest: () {
+            builder.element(
+              'text-style',
+              attributes: labelTextStyleAttributes(style),
+              nest: () {
+                builder.element(
+                  'text-buffer',
+                  attributes: {
+                    'bufferDraw': '1',
+                    'bufferSize': '1',
+                    'bufferSizeUnits': 'MM',
+                    'bufferColor': _color(style.labelHaloColor ?? Colors.white),
+                  },
+                );
+              },
+            );
+            builder.element('placement', attributes: {'placement': '0'});
+            builder.element('rendering', attributes: {'drawLabels': '1'});
+          },
+        );
+      },
+    );
+  }
+
+  /// `text-style` の、こかげマップ が管轄する属性
+  static Map<String, String> labelTextStyleAttributes(QgsStyle style) => {
+    'fieldName': style.labelField ?? '',
+    'isExpression': '0',
+    'fontSize': (style.labelFontSizePt ?? 10).toStringAsFixed(1),
+    'fontSizeUnit': 'Point',
+    'textColor': const QgsWriter()._color(style.labelColor ?? Colors.black),
+  };
+
+  /// `<labeling>` の断片
+  XmlElement? labelingElement(QgsLayer layer) {
+    if (!(layer.style?.hasLabel ?? false)) return null;
+    return _fragment((b) => _writeLabeling(b, layer));
   }
 
   void _writeSymbol(

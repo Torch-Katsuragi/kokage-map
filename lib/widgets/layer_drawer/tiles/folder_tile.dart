@@ -25,7 +25,6 @@ import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/drive_folder_node.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../presentation/node_presenter.dart';
-import '../../../services/qgis/qgs_export_action.dart';
 import '../../dialogs/drive_qr_dialog.dart';
 import '../common_dialogs.dart';
 import '../sync_merge_dialog.dart';
@@ -115,26 +114,12 @@ class FolderTile extends ConsumerWidget {
         switch (value) {
           case 'rename':
             onRename?.call();
-          case 'export_qgis':
-            await exportQgsProject(ref, node);
-          case 'import_qgis':
-            await importQgsProject(ref, node);
           case 'delete':
             await _handleDelete(context, ref);
         }
       },
       itemBuilder: (_) => [
         PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.folder.rename)),
-        // 共有の単位は dir。フォルダ単位で書けることに意味がある
-        // （このdirを丸ごと渡された人が、そのdirだけでQGISを開ける）
-        PopupMenuItem(
-          value: 'export_qgis',
-          child: Text(t.qgis.exportProject),
-        ),
-        PopupMenuItem(
-          value: 'import_qgis',
-          child: Text(t.qgis.importProject),
-        ),
         PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.folder.delete)),
       ],
     );

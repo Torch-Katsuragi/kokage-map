@@ -32,6 +32,8 @@ import 'services/google_drive/index.dart';
 import 'widgets/debug_log_overlay.dart';
 import 'providers/project_providers.dart';
 import 'providers/ui_state_providers.dart';
+import 'services/kmeta_service.dart';
+import 'services/qgis/qgs_auto_refresh.dart';
 import 'providers/selection_providers.dart';
 import 'providers/service_providers.dart';
 import 'providers/drawing_provider.dart';
@@ -174,6 +176,9 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     GlobalPathResolver.instance.setRootPathGetter(
       () => ref.read(globalFolderPathProvider),
     );
+    // メタデータが変わるたびに root の `<dir名>.qgs` を追従させる
+    QgsAutoRefresh.instance.rootGetter = () => ref.read(folderTreeProvider);
+    KMetaService.instance.onSaved = QgsAutoRefresh.instance.schedule;
     FeatureNode.setOnDisposeCallback((node) {
       final features = ref.read(selectedFeaturesProvider);
       if (features.contains(node)) {

@@ -108,6 +108,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     with
         TickerProviderStateMixin,
         MapPageStateBase,
+        MapJumpMixin,
         MapInitializationMixin,
         MapGpsTrackingMixin,
         MapGpsSurveyMixin,
@@ -265,7 +266,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       AppLogger.debug('[MAP] 属性テーブルでフィーチャ選択: ${feature.rowId}');
       ref.read(selectedFeaturesProvider.notifier).set([feature]);
       triggerSetState(() {});
-      mapController.move(feature.centroid, mapController.camera.zoom);
+      jumpTo(feature.centroid);
     } catch (e) {
       AppLogger.debug('[MAP] フィーチャ選択処理エラー: $e');
     }
@@ -426,6 +427,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                         _buildMapLibreMap(isPanTool),
                         _buildGestureLayer(),
                         _buildDrawingPreviewInfo(),
+                        _buildOffscreenLocationIndicator(),
                       ],
                     ),
                   ),
@@ -722,9 +724,11 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       if (b != mapBearingNotifier.value) {
         mapBearingNotifier.value = b;
       }
+      cameraTickNotifier.value++;
     }
     // カメラ停止: クラスタ再計算
     if (event is ml.MapEventCameraIdle || event is ml.MapEventIdle) {
+      cameraTickNotifier.value++;
       _refreshPointClusters();
     }
   }
@@ -1783,6 +1787,41 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   /// > 合成バグではなくこの指定が原因だった。Android でも同じに見えていたはず）
   static const _panelBackgroundColor = Colors.white;
 
+  /// ジャンプの着地点をドロワーの手前（見える範囲の中心）に寄せる
+  @override
+  EdgeInsets get jumpObscuredInsets => EdgeInsets.only(right: _effectiveDrawerWidth);
+
+  /// ドロワーが実際に占めている幅（閉じていれば 0）
+  double get _effectiveDrawerWidth {
+    if (!drawerOpen) return 0;
+    final maxWidth = MediaQuery.of(context).size.width * 0.67;
+    return drawerWidth.clamp(minDrawerWidth, maxWidth);
+  }
+
+  /// 左下のフローティングボタン列（GPS測量ボタン・LeftBottomFab）が占める高さ。
+  /// 矢印がこの下に潜るとタップがボタンに取られる（2026-09-06 実機で確認）ので、
+  /// 縁インジケータの「見える範囲」からは除外する
+  static const double _bottomButtonsInset = 96;
+
+  /// 画面外にある現在位置の方向を示す矢印（タップで現在位置へ）
+  ///
+  /// ドロワーに隠れている部分は「見えていない」扱いにして、矢印はドロワーの手前に出す。
+  Widget _buildOffscreenLocationIndicator() {
+    return Positioned.fill(
+      child: OffscreenLocationIndicator(
+        location: currentLocation,
+        mapController: mapController,
+        repaint: cameraTickNotifier,
+        obscured: EdgeInsets.only(
+          right: _effectiveDrawerWidth,
+          bottom: _bottomButtonsInset,
+        ),
+        semanticsLabel: t.map.jump.toCurrentLocation,
+        onTap: () => jumpToCurrentLocation(),
+      ),
+    );
+  }
+
   /// レイヤードロワーパネル構築
   Widget _buildLayerDrawerPanel() {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -1815,9 +1854,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
               currentNode = node;
             });
           },
-          onJumpTo: (latLng) {
-            mapController.move(latLng, mapController.camera.zoom);
-          },
+          onJumpTo: (latLng) => jumpTo(latLng),
           onStartAppendMode: (feature) {
             startAppendMode(feature);
           },

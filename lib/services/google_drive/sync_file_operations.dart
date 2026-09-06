@@ -33,6 +33,7 @@ class SyncFileOperations {
   static const List<String> syncPatterns = [
     '*.gpkg',
     '*.kmeta.json',
+    '*.qgs', // dir ごとの QGIS プロジェクト（2026-09-06〜。共有 dir を QGIS でも開けるように）
     '*.jpg',
     '*.jpeg',
     '*.png',

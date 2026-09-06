@@ -21,11 +21,10 @@ import '../main.dart' show kAppLocaleKey;
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/global_folder_locator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'basemap_settings_screen.dart';
 import 'device_settings_screen.dart';
 import 'gps_settings_screen.dart';
@@ -513,8 +512,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
     // ⚠ web に `getApplicationDocumentsDirectory()` は無く、呼ぶと例外が飛ぶ。
     // 待ち続けて画面がぐるぐるのまま止まるので、ここで分ける。
     if (_hasGlobalFolder) {
-      final appDir = await getApplicationDocumentsDirectory();
-      _defaultPath = p.join(appDir.path, 'k_maps_global');
+      _defaultPath = await GlobalFolderLocator.defaultPath();
       _customPath = prefs.getString(kGlobalFolderCustomPathKey);
     }
     if (_isMobileDevice) {

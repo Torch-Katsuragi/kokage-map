@@ -39,6 +39,9 @@
     
     <!-- Android 13以降のメディア読み取り権限（gallery_media_picker / photo_manager用） -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- 写真取り込みで位置情報（GPS EXIF）を保持するため。全ファイルアクセスが無い端末向けの第2経路
+         （MediaStore.setRequireOriginal）。許可ダイアログは出ず、メディア読み取り権限に付随して付く -->
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
     
     <!-- Bluetooth機能要求 -->
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />

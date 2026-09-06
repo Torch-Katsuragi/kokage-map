@@ -30,6 +30,9 @@
 /// 4. **捨てたものは必ず報告する**
 library;
 
+import 'dart:convert';
+
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart' show Color;
 import 'package:path/path.dart' as p;
@@ -127,7 +130,7 @@ class QgsImporter {
 
     final String raw;
     try {
-      raw = await fs.readAsString(qgsPath);
+      raw = await readQgsText(qgsPath);
     } catch (e) {
       AppLogger.debug('[QgsImporter] 読めない: $e');
       return QgsImportResult(
@@ -151,11 +154,22 @@ class QgsImporter {
     final gpkgIndex = _indexGeoPackages(root);
 
     // ツリーの表示状態（checked）はレイヤツリー側にある。IDで引けるようにする。
-    final checkedById = <String, bool>{
-      for (final e in doc.rootElement.findAllElements('layer-tree-layer'))
-        if (e.getAttribute('id') != null)
-          e.getAttribute('id')!: e.getAttribute('checked') != 'Qt::Unchecked',
-    };
+    // QGIS は親グループが Unchecked なら子も描かないので、祖先の checked を AND で畳む
+    // （QGIS ユーザーがグループごと消灯した場合も読み戻せるように）
+    final checkedById = <String, bool>{};
+    void walkTree(XmlElement node, bool parentChecked) {
+      for (final child in node.childElements) {
+        final checked = parentChecked && child.getAttribute('checked') != 'Qt::Unchecked';
+        if (child.name.local == 'layer-tree-group') {
+          walkTree(child, checked);
+        } else if (child.name.local == 'layer-tree-layer') {
+          final id = child.getAttribute('id');
+          if (id != null) checkedById[id] = checked;
+        }
+      }
+    }
+    final treeRoot = doc.rootElement.findElements('layer-tree-group').firstOrNull;
+    if (treeRoot != null) walkTree(treeRoot, true);
 
     // 取り込み対象になったレイヤ。ここに入ったものだけ View を差し替える
     final touched = <LayerNode, List<ViewNode>>{};
@@ -167,6 +181,9 @@ class QgsImporter {
         doc.rootElement.findElements('projectlayers').firstOrNull;
     for (final maplayer in projectLayers?.findElements('maplayer') ??
         const <XmlElement>[]) {
+      // 埋め込みスタブ（子 dir の `.qgs` の管轄）。ここでは扱わない
+      if (maplayer.getAttribute('embedded') == '1') continue;
+
       final name = _text(maplayer, 'layername') ?? '(名前なし)';
       final provider = _text(maplayer, 'provider')?.toLowerCase();
 
@@ -228,7 +245,19 @@ class QgsImporter {
         ..clear()
         ..addAll(entry.value);
       await layer.persistViews();
-      viewsByLayer[layer.layerKey] = [for (final v in entry.value) v.name];
+      // 可視性は View 定義とは別の場所に持つ。
+      // 既定 View 1枚だけのレイヤは View ではなく**レイヤの可視性**で表す
+      // （暗黙の既定 View は `.kmeta.json` に書かれず、可視性も読まれないため）
+      final views = entry.value;
+      if (views.length == 1 && views.first.isDefaultView) {
+        layer.visible = views.first.visible;
+        await layer.persistVisibility();
+      } else {
+        for (final v in views) {
+          await v.persistVisibility();
+        }
+      }
+      viewsByLayer[layer.layerKey] = [for (final v in views) v.name];
     }
 
     AppLogger.debug(
@@ -241,6 +270,24 @@ class QgsImporter {
   // =============================================
   // 部品
   // =============================================
+
+  /// `.qgs` ならそのまま、`.qgz`（zip）なら中の `.qgs` を取り出して返す。
+  ///
+  /// QGIS の既定保存形式は `.qgz`。中に `.qgs`（本体）と `.qgd`（補助 DB）が入る。
+  /// 読むだけで、書くときは常に `.qgs`。
+  static Future<String> readQgsText(String path) async {
+    if (!path.toLowerCase().endsWith('.qgz')) {
+      return fs.readAsString(path);
+    }
+    final bytes = await fs.readAsBytes(path);
+    final archive = ZipDecoder().decodeBytes(bytes);
+    for (final file in archive.files) {
+      if (file.isFile && file.name.toLowerCase().endsWith('.qgs')) {
+        return utf8.decode(file.content as List<int>);
+      }
+    }
+    throw const FormatException('.qgz の中に .qgs がありません');
+  }
 
   String? _text(XmlElement parent, String tag) {
     final e = parent.findElements(tag).firstOrNull;

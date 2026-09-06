@@ -27,6 +27,7 @@ import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
 import '../kmeta_service.dart';
+import '../qgis/qgs_auto_refresh.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
@@ -61,6 +62,9 @@ class SyncPushHandler {
     }
 
     try {
+      // デバウンス待ちの `.qgs` を書き切ってから上げる（古い版を飛ばさない）
+      await QgsAutoRefresh.instance.flushNow();
+
       final previousMeta = await _kmetaService.getMergedMeta(projectPath);
       final previousSyncedFiles = previousMeta.sync.files;
 

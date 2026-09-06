@@ -33,13 +33,18 @@ import '../../../services/google_drive/auto_sync_service.dart';
 import '../../../services/tile_server.dart';
 import '../../../services/basemap_style_json.dart';
 import '../map_page_state_base.dart';
+import 'map_jump_mixin.dart';
+import '../../../services/qgis/qgs_read_back.dart';
+import '../../../i18n/strings.g.dart';
+import '../../../models/app_notification.dart';
+import '../../../providers/notification_providers.dart';
 import '../../../utils/geo_converter.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
 
 /// 初期化処理Mixin
 /// プロジェクトツリー、GPS、背景地図、コンパスの初期化を担当
 mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
-    on MapPageStateBase<T> {
+    on MapPageStateBase<T>, MapJumpMixin<T> {
   // =============================================
   // 初期化処理
   // =============================================
@@ -94,6 +99,34 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         await updateNodeRecursively(rootNode);
       } catch (e) {
         AppLogger.debug('[Init] projectTree error (部分的に初期化): $e');
+      }
+
+      // QGIS 側で `.qgs` が保存されていれば、View・スタイル・可視性を読み戻す
+      if (rootNode is FolderNode) {
+        try {
+          final readBack = await const QgsReadBack().run(rootNode);
+          if (readBack != null) {
+            final notifier = ref.read(notificationCenterProvider.notifier);
+            notifier.add(
+              title: t.qgis.readBack(
+                file: readBack.fileName,
+                count: readBack.importedViewCount,
+              ),
+              level: NotificationLevel.info,
+            );
+            if (readBack.discarded.isNotEmpty) {
+              notifier.add(
+                title: t.qgis.discarded(
+                  count: readBack.discarded.length,
+                  names: readBack.discarded.join(' / '),
+                ),
+                level: NotificationLevel.warning,
+              );
+            }
+          }
+        } catch (e) {
+          AppLogger.debug('[Init] QGIS 読み戻しに失敗: $e');
+        }
       }
 
       // ツリー構造が揃った時点でDrawerに反映（フィーチャ読込を待たない）
@@ -263,13 +296,18 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
             currentLocation = LatLng(record.latitude, record.longitude);
             if (!movedToCurrentLocationOnce && currentLocation != null) {
               // 地図の生成より先にGPSの初回フィックスが届くことがある。
-              // その場合 move() は false を返して保留され、
+              // その場合 jumpTo() は false を返して保留され、
               // onMapCreated（attach）の時点で実行される。
-              final applied = mapController.move(currentLocation!, 16.0);
               movedToCurrentLocationOnce = true;
-              if (!applied) {
-                AppLogger.debug('[GPS] 地図が未生成のため初回ジャンプを保留（attach後に実行）');
-              }
+              jumpTo(
+                currentLocation!,
+                zoom: MapJumpMixin.defaultJumpZoom,
+                animate: false,
+              ).then((applied) {
+                if (!applied) {
+                  AppLogger.debug('[GPS] 地図が未生成のため初回ジャンプを保留（attach後に実行）');
+                }
+              });
             }
           });
         },
@@ -391,6 +429,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     compassSubscription?.cancel();
     headingNotifier.dispose();
     mapBearingNotifier.dispose();
+    cameraTickNotifier.dispose();
     longPressCountUpdateTimer?.cancel();
   }
 

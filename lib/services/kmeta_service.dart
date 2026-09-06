@@ -16,11 +16,11 @@
 // Root Maps: フォルダメタデータサービス
 // 継承チェーン解決・保存処理を担当
 
-import 'package:path/path.dart' as p;
 import '../core/fs/k_file_system.dart';
 import '../models/kmeta.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../utils/app_logger.dart';
+import 'sync_ledger.dart';
 
 /// フォルダメタデータサービス
 /// 継承チェーンを解決し、マージ済みメタデータを提供
@@ -56,33 +56,57 @@ class KMetaService {
       return _rawCache[folderPath];
     }
 
-    final meta = await KMeta.loadFromFile(folderPath);
-    if (meta == null) return null;
+    final loaded = await KMeta.loadFromFile(folderPath);
+    if (loaded == null) return null;
 
     // バージョンゲート: 旧バージョンはsyncのみ保持して再保存
-    if (meta.version < kMetaSchemaVersion) {
+    if (loaded.version < kMetaSchemaVersion) {
       AppLogger.debug(
-        '[KMetaService] 旧バージョン(v${meta.version})検出、マイグレーション実行: $folderPath',
+        '[KMetaService] 旧バージョン(v${loaded.version})検出、マイグレーション実行: $folderPath',
       );
-      final migrated = KMeta(sync: meta.sync);
+      final migrated = KMeta(sync: loaded.sync);
       await saveMeta(folderPath, migrated);
       _rawCache[folderPath] = migrated;
       return migrated;
     }
 
+    // 帳簿（端末ごとの同期状態）はアプリ私有領域から重ねる。
+    // 旧版が共有ファイルに書いた帳簿が残っていれば、それを引き取って共有ファイルから剥がす
+    final key = SyncLedger.keyFor(driveId: loaded.sync.driveId, folderPath: folderPath);
+    var ledger = await SyncLedger.instance.read(key);
+    var needsStrip = false;
+    if (ledger == null && loaded.sync.hasBookkeeping) {
+      ledger = SyncLedgerEntry.fromSync(loaded.sync);
+      await SyncLedger.instance.write(key, ledger);
+      needsStrip = true;
+    }
+    final meta = ledger == null
+        ? loaded.copyWith(sync: loaded.sync.linkOnly())
+        : loaded.copyWith(sync: ledger.applyTo(loaded.sync));
+
     _rawCache[folderPath] = meta;
+    if (needsStrip) {
+      AppLogger.debug('[KMetaService] 共有ファイルから同期帳簿を剥がす: $folderPath');
+      await saveMeta(folderPath, meta);
+    }
     return meta;
   }
 
-  /// フォルダのマージ済みメタデータを取得（継承チェーン解決済み）
+  /// フォルダのメタデータを取得。
+  ///
+  /// > [!IMPORTANT] 継承チェーンは 2026-09-06 に廃止した
+  /// > 以前は root からこの dir までの親の `visibility` / `styles.defaultStyle` / `layout` を
+  /// > マージしていた。子 dir の見た目が親のファイルに依存すると、サブ dir 単体を持ち出した
+  /// > ときに QGIS で見え方が変わる（`.qgs` 正典化と正面から矛盾する）。
+  /// > いまは自フォルダの生メタデータそのもの。[projectRootDir] は互換のため残してある。
   Future<KMeta> getMergedMeta(String folderPath, {String? projectRootDir}) async {
     if (_mergedCache.containsKey(folderPath)) {
       return _mergedCache[folderPath]!;
     }
 
-    final mergedMeta = await _resolveInheritanceChain(folderPath, projectRootDir: projectRootDir);
-    _mergedCache[folderPath] = mergedMeta;
-    return mergedMeta;
+    final meta = await getRawMeta(folderPath) ?? KMeta.empty;
+    _mergedCache[folderPath] = meta;
+    return meta;
   }
 
   /// LayerTreeNodeからマージ済みメタデータを取得
@@ -94,56 +118,31 @@ class KMetaService {
     return getMergedMeta(folderPath, projectRootDir: projectRootDir);
   }
 
-  /// 継承チェーンを解決してマージ
-  Future<KMeta> _resolveInheritanceChain(String folderPath, {String? projectRootDir}) async {
-    if (projectRootDir == null) {
-      return await getRawMeta(folderPath) ?? KMeta.empty;
-    }
-
-    // 正規化されたパス
-    final normalizedPath = p.normalize(folderPath);
-    final normalizedRoot = p.normalize(projectRootDir);
-
-    // ルートからこのフォルダまでのパスを構築
-    final ancestorPaths = <String>[];
-    String currentPath = normalizedPath;
-
-    while (currentPath.length >= normalizedRoot.length) {
-      ancestorPaths.insert(0, currentPath);
-      final parentPath = p.dirname(currentPath);
-      if (parentPath == currentPath) break; // ルートに到達
-      currentPath = parentPath;
-    }
-
-    // ルートから順にマージ
-    KMeta? mergedMeta;
-    for (final ancestorPath in ancestorPaths) {
-      final rawMeta = await getRawMeta(ancestorPath);
-      if (rawMeta != null) {
-        mergedMeta = rawMeta.mergeWith(mergedMeta);
-      } else if (mergedMeta != null) {
-        // このフォルダにはメタデータがないが、親からの継承は維持
-        mergedMeta = mergedMeta;
-      }
-    }
-
-    return mergedMeta ?? KMeta.empty;
-  }
+  /// 保存後に呼ばれる（`.qgs` の自動更新など）。アプリ起動時に配線する
+  void Function(String folderPath)? onSaved;
 
   /// メタデータを保存
   /// キャッシュを先に更新し、並行 read-modify-write の変更消失を防止
+  ///
+  /// 共有ファイルにはリンク情報だけを書き、帳簿（`files` / `lastSynced` /
+  /// `driveRevisionId` / `deviceId`）は [SyncLedger] に書く。
   Future<bool> saveMeta(String folderPath, KMeta meta) async {
     final prevRaw = _rawCache[folderPath];
     _rawCache[folderPath] = meta;
     _mergedCache.removeWhere((key, _) => key.startsWith(folderPath));
 
-    final success = await meta.saveToFile(folderPath);
+    final key = SyncLedger.keyFor(driveId: meta.sync.driveId, folderPath: folderPath);
+    await SyncLedger.instance.write(key, SyncLedgerEntry.fromSync(meta.sync));
+
+    final success = await meta.copyWith(sync: meta.sync.linkOnly()).saveToFile(folderPath);
     if (!success) {
       if (prevRaw != null) {
         _rawCache[folderPath] = prevRaw;
       } else {
         _rawCache.remove(folderPath);
       }
+    } else {
+      onSaved?.call(folderPath);
     }
     return success;
   }

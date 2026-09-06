@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.6.0+17
+version: 0.6.1+18
 
 environment:
   sdk: ^3.7.2
@@ -44,6 +44,7 @@ dependencies:
   sqflite_common_ffi_web: ^1.1.1     # web版: sqlite3 WASM でGeoPackageを開く
   path: ^1.8.3 # パス操作用
   xml: ^6.6.1 # .qgs（QGISプロジェクト）の組み立て用
+  archive: ^4.0.9 # .qgz（zip 形式の QGIS プロジェクト）の読み取り用
   nmea: ^3.3.3
   proj4dart: ^2.1.0  # 座標変換用（geobase ^1.5.0 が ^2.0.0 を要求するため据え置き）
   desktop_drop: ^0.7.0  # デスクトップでのファイルドラッグ&ドロップ用

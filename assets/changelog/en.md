@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+### 🗺 Exporting a QGIS project no longer discards settings made in QGIS
+
+- The file is now named `<folder name>.qgs` instead of `project.qgs` (old files are renamed automatically).
+- Exporting again updates the existing file in place. Print layouts, field settings and symbol
+  details set in QGIS are kept. Categorized and rule-based styles are left untouched.
+- You are notified when layers that no longer exist in the folder are removed, or when a style was left as is.
+- `<folder name>.qgs` now follows your changes automatically (visibility, styles, views, order),
+  and is created when a project is opened if it does not exist yet. The manual
+  "Export / Import QGIS project" menu items were removed.
+- When you save the `.qgs` in QGIS, the app loads those changes (views, styles, visibility)
+  the next time the project is opened, and tells you so.
+- Subfolders that carry their own settings (e.g. Drive-linked ones) get their own `.qgs`,
+  embedded into the parent project. A subfolder handed over on its own opens in QGIS.
+- Label settings and folder expansion state are written too. QGIS `.qgz` files can be read.
+- `.qgs` files are now included in Drive sync.
+- Internal: sync bookkeeping moved out of the shared files into the device. Folder settings are
+  no longer inherited from parent folders; each folder is self-contained.
+- ⚠ Layer IDs are now generated in a platform-independent way, so a previously exported file
+  gets its layers replaced once.
+
+### 💾 GPS tracks now survive uninstalling the app (Android)
+
+- The global folder (GPS tracks, shared GeoPackages, photos) moved from the app's
+  private storage to shared storage at `Documents/KokageMap/Global`. It is visible
+  in the Files app.
+- Existing data is moved automatically on first launch (a notification tells you).
+  The old folder is kept as `k_maps_global.migrated`; it is safe to delete.
+- If you set a custom global folder in Settings, that setting still wins.
+
+### 🧭 An arrow now points toward your location when it is off screen
+
+- If you pan far away and lose track of where you are, a small blue arrow on the
+  edge of the map shows which way to pan to get back.
+- Tap the arrow to jump straight to your current location.
+- Jumps land in the visible part of the map, not underneath the open layer panel.
+- "Go here" from the layer list and the attribute table now animates instead of snapping.
+
+### 📷 Follow-up fix for photos losing their location (Android)
+
+- On devices without "All files access" granted, the previous fix did not apply and
+  the location was silently dropped.
+- Added a second path that uses the media location permission (ACCESS_MEDIA_LOCATION).
+- When some photos still come in without location, a notification tells you how many
+  and what to do (allow "All files access").
+
 ### 🔔 The ongoing notification now appears while recording GPS / sharing location (Android 13+)
 
 - The app never asked for the notification permission, so on Android 13+ the

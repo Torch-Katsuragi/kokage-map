@@ -1,11 +1,14 @@
 package com.k_root.k_maps
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ContentUris
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.util.Log
@@ -54,8 +57,8 @@ class MainActivity : FlutterActivity() {
                             return@setMethodCallHandler
                         }
                         try {
-                            val success = copyOriginalFile(uriStr, destPath)
-                            result.success(success)
+                            // 戻り値は "original" / "maybe_redacted" / null（失敗）
+                            result.success(copyOriginalFile(uriStr, destPath))
                         } catch (e: Exception) {
                             result.error("COPY_ERROR", e.message, null)
                         }
@@ -82,35 +85,89 @@ class MainActivity : FlutterActivity() {
     /**
      * content URI から元ファイルをバイトコピーする。
      *
-     * 1. MediaStore で実パスを解決 → MANAGE_EXTERNAL_STORAGE で直接コピー（EXIF完全保持）
-     * 2. 実パスが取れない場合は ContentResolver の InputStream からバイトコピー（フォールバック）
+     * 戻り値はコピーしたバイトの素性:
+     * - "original"       位置情報を含む原本（実パス直読み、または setRequireOriginal の原本ストリーム）
+     * - "maybe_redacted" 権限が足りず、GPS をゼロ埋めした複製を掴んだ可能性がある
+     * - null             コピー失敗
+     *
+     * 1. 全ファイルアクセス（MANAGE_EXTERNAL_STORAGE）あり → 実パス直読み。FUSE のリダクション対象外
+     * 2. ACCESS_MEDIA_LOCATION あり → MediaStore.setRequireOriginal() で原本ストリームを開く
+     *    （READ_MEDIA_IMAGES / READ_EXTERNAL_STORAGE も要る。無ければ SecurityException → 次へ）
+     * 3. どちらも無い → 実パスが読めればそれ、無ければ ContentResolver のストリーム。
+     *    ⚠ 全ファイルアクセス無しの実パス読みは「読める」が FUSE でリダクションされる。
+     *    以前はここを成功扱いしていたため、権限を許可し忘れた端末で
+     *    位置情報が黙って消えていた。
      */
-    private fun copyOriginalFile(uriStr: String, destPath: String): Boolean {
+    private fun copyOriginalFile(uriStr: String, destPath: String): String? {
         val uri = Uri.parse(uriStr)
         val dest = File(destPath)
-        Log.d("MediaCopy", "copyOriginal uri=$uri")
-
-        // 方法1: MediaStore から実ファイルパスを取得して直接コピー
         val realPath = resolveRealPath(uri)
-        Log.d("MediaCopy", "resolved realPath=$realPath")
-        if (realPath != null) {
-            val src = File(realPath)
-            if (src.exists() && src.canRead()) {
-                src.copyTo(dest, overwrite = true)
-                return true
-            }
-            Log.d("MediaCopy", "realPath not readable: exists=${src.exists()}")
+        val hasAllFiles = hasAllFilesAccess()
+        val hasMediaLocation = hasAccessMediaLocation()
+        Log.d(
+            "MediaCopy",
+            "copyOriginal uri=$uri realPath=$realPath allFiles=$hasAllFiles mediaLocation=$hasMediaLocation",
+        )
+
+        // 1. 全ファイルアクセス + 実パス → 原本
+        if (hasAllFiles && realPath != null) {
+            if (copyFromPath(realPath, dest)) return "original"
         }
 
-        // 方法2: ContentResolver の InputStream からバイトコピー（フォールバック）
-        contentResolver.openInputStream(uri)?.use { input ->
-            dest.outputStream().use { output ->
-                input.copyTo(output)
+        // 2. ACCESS_MEDIA_LOCATION + MediaStore の実体 URI → 原本ストリーム
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && hasMediaLocation) {
+            val mediaUri = mediaUriOf(uri)
+            if (mediaUri != null) {
+                try {
+                    val original = MediaStore.setRequireOriginal(mediaUri)
+                    contentResolver.openInputStream(original)?.use { input ->
+                        dest.outputStream().use { output -> input.copyTo(output) }
+                        Log.d("MediaCopy", "copied via setRequireOriginal")
+                        return "original"
+                    }
+                } catch (e: Exception) {
+                    Log.d("MediaCopy", "setRequireOriginal failed: $e")
+                }
             }
+        }
+
+        // 3. リダクションされうる経路
+        if (realPath != null && copyFromPath(realPath, dest)) return "maybe_redacted"
+        contentResolver.openInputStream(uri)?.use { input ->
+            dest.outputStream().use { output -> input.copyTo(output) }
+            return "maybe_redacted"
+        }
+
+        return null
+    }
+
+    /** 実パスからコピーする。読めなければ false */
+    private fun copyFromPath(path: String, dest: File): Boolean {
+        val src = File(path)
+        if (src.exists() && src.canRead()) {
+            src.copyTo(dest, overwrite = true)
             return true
         }
-
+        Log.d("MediaCopy", "realPath not readable: exists=${src.exists()}")
         return false
+    }
+
+    /** 全ファイルアクセス（Android 11+ の MANAGE_EXTERNAL_STORAGE）を持っているか */
+    private fun hasAllFilesAccess(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
+
+    /** ACCESS_MEDIA_LOCATION（Android 10+）を持っているか */
+    private fun hasAccessMediaLocation(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    /** ピッカー系 URI を MediaStore.Images の実体 URI に。もとから MediaStore の URI ならそのまま */
+    private fun mediaUriOf(uri: Uri): Uri? {
+        extractMediaId(uri)?.let { id ->
+            return ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+        }
+        return if (uri.authority == MediaStore.AUTHORITY) uri else null
     }
 
     /**

@@ -23,8 +23,6 @@ import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/launch_options.dart';
 import '../core/fs/project_folder_picker.dart';
@@ -44,6 +42,7 @@ import 'map_page/map_page.dart';
 
 import 'onboarding_screen.dart';
 import 'settings_screen.dart' show kGlobalFolderCustomPathKey;
+import '../services/global_folder_locator.dart';
 
 /// ホーム画面（最小構成）
 class HomeScreen extends ConsumerStatefulWidget {
@@ -353,6 +352,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   /// グローバルフォルダの初期化
   /// SharedPreferencesにカスタムパスがあればそちらを使用、なければデフォルト
+  /// （Android の既定は共有ストレージ。場所決めと旧場所からの移行は
+  /// `GlobalFolderLocator` に集約）
   Future<void> _initializeGlobalFolder() async {
     // ⚠ グローバルフォルダは「アプリのドキュメント領域」に置く仕組みで、
     // web にはその概念が無い（path_provider が未対応）。
@@ -365,17 +366,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       final prefs = await SharedPreferences.getInstance();
       final customPath = prefs.getString(kGlobalFolderCustomPathKey);
 
-      final String globalPath;
-      if (customPath != null) {
-        globalPath = customPath;
-      } else {
-        final appDir = await getApplicationDocumentsDirectory();
-        globalPath = p.join(appDir.path, 'k_maps_global');
-      }
+      final resolution = await GlobalFolderLocator.resolve(customPath: customPath);
+      final globalPath = resolution.path;
 
       // グローバルフォルダパスを保存
       ref.read(globalFolderPathProvider.notifier).set(globalPath);
       AppLogger.debug('[HomeScreen] グローバルフォルダパス: $globalPath');
+
+      final notifier = ref.read(notificationCenterProvider.notifier);
+      if (resolution.migrated) {
+        notifier.add(
+          title: t.globalFolder.migrated(count: resolution.migratedFiles),
+          detail: globalPath,
+          level: NotificationLevel.info,
+        );
+      }
+      if (resolution.fellBack) {
+        notifier.add(
+          title: t.globalFolder.fallback,
+          detail: resolution.fallbackReason,
+          level: NotificationLevel.warning,
+        );
+      }
 
       // 含有関係チェック（プロジェクトフォルダとの重複警告）
       final projectDir = ref.read(projectRootDirProvider);

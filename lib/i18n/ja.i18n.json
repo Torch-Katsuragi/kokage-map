@@ -556,6 +556,10 @@
     "jump": {
       "noLocation": "現在位置をまだ取得できていません",
       "toCurrentLocation": "現在位置へ移動"
+    },
+    "eraser": {
+      "confirm": "$n 件を削除",
+      "cancel": "消しゴムの候補を取り消す"
     }
   },
   "importExport": {
@@ -1130,5 +1134,16 @@
   "globalFolder": {
     "migrated": "グローバルフォルダ（$count ファイル）を共有ストレージへ移しました。アプリを削除しても残ります",
     "fallback": "共有ストレージが使えないため、グローバルフォルダはアプリ内部に置きます"
+  },
+  "featureSet": {
+    "title": "$n 件を選択中",
+    "points": "点",
+    "lines": "線",
+    "polygons": "面",
+    "photos": "写真",
+    "centroid": "点の重心",
+    "clearSelection": "選択解除",
+    "deleteAll": "$n 件を削除（長押し）",
+    "deleted": "$n 件を削除しました"
   }
 }

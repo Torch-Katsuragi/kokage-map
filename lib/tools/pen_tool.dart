@@ -74,22 +74,13 @@ class PenTool extends MapTool {
   void onTap(TapUpDetails details, IMapState mapState) {
     AppLogger.debug('[DEBUG] PenTool.onTap: タップイベント開始');
 
-    // フロートボタン押下時は消しゴム動作
+    // フロートボタン押下時は消しゴム動作: タップで候補の出し入れ
     if (_ref.read(isFabActiveProvider)) {
       final latlng = mapState.offsetToLatLng(details.localPosition);
-      AppLogger.debug(
-        '[DEBUG] PenTool.onTap: eraser mode - selecting feature at $latlng',
-      );
-
-      SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState, ref: _ref);
-      AppLogger.debug(
-        '[DEBUG] PenTool.onTap: selected features count: ${_ref.read(selectedFeaturesProvider).length}',
-      );
-
-      if (_ref.read(selectedFeaturesProvider).isNotEmpty) {
-        _disposeSelectedFeatures(mapState);
-      } else {
-        AppLogger.debug('[DEBUG] PenTool.onTap: no features selected for deletion');
+      final hit = _eraserTarget(latlng, mapState);
+      if (hit != null) {
+        _ref.read(selectedFeaturesProvider.notifier).toggle(hit);
+        _ref.read(featureRefreshTriggerProvider.notifier).trigger();
       }
       return;
     }
@@ -243,24 +234,15 @@ class PenTool extends MapTool {
     // 1本指の場合のみレイヤー選択チェック
     if (selected == null || !selected.isVisibleRecursive()) return;
     if (_pointerCount == 1) {
-      // フロートボタン押下時は消しゴム動作
+      // フロートボタン押下時は消しゴム動作: ドラッグ軌跡に触れたものを候補に足す。
+      // ⚠ ここでは消さない。候補は選択として光らせ、右下の「削除」で確定する
+      //   （線をタップで描くときと同じ、集めてから確定の流れ）
       if (_ref.read(isFabActiveProvider)) {
         final latlng = mapState.offsetToLatLng(details.localFocalPoint);
-        AppLogger.debug(
-          '[DEBUG] PenTool.onScaleUpdate: eraser mode - selecting feature at $latlng',
-        );
-
-        SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState, ref: _ref);
-        AppLogger.debug(
-          '[DEBUG] PenTool.onScaleUpdate: selected features count: ${_ref.read(selectedFeaturesProvider).length}',
-        );
-
-        if (_ref.read(selectedFeaturesProvider).isNotEmpty) {
-          _disposeSelectedFeatures(mapState);
-        } else {
-          AppLogger.debug(
-            '[DEBUG] PenTool.onScaleUpdate: no features selected for deletion',
-          );
+        final hit = _eraserTarget(latlng, mapState);
+        if (hit != null && !_ref.read(selectedFeaturesProvider).contains(hit)) {
+          _ref.read(selectedFeaturesProvider.notifier).add(hit);
+          _ref.read(featureRefreshTriggerProvider.notifier).trigger();
         }
         return;
       }
@@ -343,11 +325,15 @@ class PenTool extends MapTool {
     _uiUpdateTimer = null;
   }
 
-  /// 選択されたフィーチャーを削除（GlobalConfig統一処理を使用）
-  void _disposeSelectedFeatures(IMapState mapState) async {
-    AppLogger.debug('[DEBUG] PenTool._disposeSelectedFeatures: using SelectedFeatures provider deletion');
-    
-    await _ref.read(selectedFeaturesProvider.notifier).disposeSelectedFeatures();
+  /// 消しゴムの当たり判定。選択ツールと同じ半径・同じ優先順位で、
+  /// 全可視レイヤーのフィーチャだけを対象にする（写真・オーバーレイは消さない）
+  FeatureNode? _eraserTarget(LatLng latlng, IMapState mapState) {
+    final candidates = SelectTool.candidatesAt(
+      latlng,
+      mapState,
+      SelectTool.selectRangeFor(mapState),
+    );
+    return candidates.whereType<FeatureNode>().firstOrNull;
   }
 
   /// マウスホイールスクロールイベント（ズーム機能）

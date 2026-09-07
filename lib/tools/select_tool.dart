@@ -24,7 +24,6 @@ import 'package:latlong2/latlong.dart';
 
 import '../interfaces/map_state_interface.dart';
 import '../models/nodes/feature_node.dart';
-import '../models/nodes/layer_node.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
@@ -58,8 +57,20 @@ class SelectTool extends MapTool {
     }
   }
 
+  /// タップ位置の選択半径 [m]（ズームに応じて画面上でほぼ一定になる）
+  static double selectRangeFor(IMapState mapState) => _calcSelectRange(mapState);
+
   /// 全可視レイヤー+ImageNodeからタップ範囲内の候補を優先度順にリストアップ
   /// 優先度: 0=Point+Image, 1=Line, 2=Polygon（同グループ内は距離順）
+  ///
+  /// 消しゴム（PenTool）も同じ当たり判定を使う
+  static List<LayerTreeNode> candidatesAt(
+    LatLng tapLatLng,
+    IMapState mapState,
+    double selectRange,
+  ) =>
+      _buildCandidates(tapLatLng, mapState, selectRange);
+
   static List<LayerTreeNode> _buildCandidates(
     LatLng tapLatLng,
     IMapState mapState,
@@ -150,6 +161,18 @@ class SelectTool extends MapTool {
     final selectRange = _calcSelectRange(mapState);
     final candidates = _buildCandidates(tapLatLng, mapState, selectRange);
 
+    // 左下ボタンが有効なら複数選択モード: レイヤをまたいで足し引きする
+    if (_ref.read(isFabActiveProvider)) {
+      if (candidates.isEmpty) return;
+      final node = candidates.first;
+      _ref.read(selectedFeaturesProvider.notifier).toggle(node);
+      if (node is FeatureNode) {
+        _ref.read(selectedLayerNodeProvider.notifier).select(node.parent);
+      }
+      _ref.read(featureRefreshTriggerProvider.notifier).trigger();
+      return;
+    }
+
     if (candidates.isEmpty) {
       _applySelection(null);
       return;
@@ -174,61 +197,6 @@ class SelectTool extends MapTool {
       // 末尾を超えた → 選択クリア
       _applySelection(null);
     }
-  }
-
-  /// selectedLayerNode内のfeatureを選択（PenTool消しゴム等の互換用）
-  static Future<void> selectFeatureAtLatLng({
-    required LatLng tapLatLng,
-    required IMapState mapState,
-    required Ref ref,
-    double? range,
-  }) async {
-    final layer = ref.read(selectedLayerNodeProvider);
-    if (layer == null) return;
-
-    String featureType;
-    if (layer is PointLayerNode) {
-      featureType = 'point';
-    } else if (layer is LineLayerNode) {
-      featureType = 'line';
-    } else if (layer is PolygonLayerNode) {
-      featureType = 'polygon';
-    } else {
-      return;
-    }
-
-    final layerFeatures = layer.children.whereType<FeatureNode>().toList();
-    List<FeatureNode> features;
-
-    if (layerFeatures.isNotEmpty) {
-      features = layerFeatures;
-    } else {
-      final dbFeatures = layer.features;
-      features = dbFeatures.whereType<FeatureNode>().toList();
-      for (final feature in features) {
-        layer.addChild(feature);
-      }
-    }
-
-    if (features.isEmpty) {
-      ref.read(selectedFeaturesProvider.notifier).set([]);
-      ref.read(featureRefreshTriggerProvider.notifier).trigger();
-      return;
-    }
-
-    final double selectRange =
-        range ?? SelectTool._calcSelectRange(mapState) * 3;
-
-    final result = FeatureSearch.findNearestFeature(
-      tapLatLng, features, featureType, selectRange,
-    );
-
-    if (result == null) {
-      ref.read(selectedFeaturesProvider.notifier).set([]);
-    } else {
-      ref.read(selectedFeaturesProvider.notifier).set([result.key]);
-    }
-    ref.read(featureRefreshTriggerProvider.notifier).trigger();
   }
 
   /// スケール開始イベント
@@ -281,11 +249,19 @@ class SelectTool extends MapTool {
       if (lassoPolygonLatLng.first != lassoPolygonLatLng.last) {
         lassoPolygonLatLng.add(lassoPolygonLatLng.first);
       }
+      // 左下ボタンが有効なら全可視レイヤーが対象で、既存の選択に足す。
+      // 無効なら従来どおり選択中レイヤーだけを対象に置き換える
+      final multi = _ref.read(isFabActiveProvider);
       final layer = _ref.read(selectedLayerNodeProvider);
-      if (layer != null) {
+      List<FeatureNode>? features;
+      if (multi) {
+        features = [
+          ...mapState.pointFeatures,
+          ...mapState.lineFeatures,
+          ...mapState.polygonFeatures,
+        ];
+      } else if (layer != null) {
         final layerFeatures = layer.children.whereType<FeatureNode>().toList();
-        List<FeatureNode> features;
-
         if (layerFeatures.isNotEmpty) {
           features = layerFeatures;
         } else {
@@ -295,7 +271,8 @@ class SelectTool extends MapTool {
             layer.addChild(feature);
           }
         }
-
+      }
+      if (features != null) {
         final selected =
             features.where((f) {
               if (f is PointFeatureNode) {
@@ -332,7 +309,12 @@ class SelectTool extends MapTool {
               }
               return false;
             }).toList();
-        _ref.read(selectedFeaturesProvider.notifier).set(selected);
+        final notifier = _ref.read(selectedFeaturesProvider.notifier);
+        if (multi) {
+          notifier.set({..._ref.read(selectedFeaturesProvider), ...selected}.toList());
+        } else {
+          notifier.set(selected);
+        }
       }
       _lassoPoints.clear();
       mapState.setState(() {});

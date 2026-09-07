@@ -16,11 +16,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../i18n/strings.g.dart';
 import '../../../models/app_notification.dart';
+import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
+import '../../../providers/ui_state_providers.dart';
 import '../../../tools/gps_tool.dart';
 import '../../../tools/pen_tool.dart';
 import '../../../utils/global_drawing_state.dart';
@@ -47,6 +50,12 @@ class DrawingActionButtons extends ConsumerWidget {
     final drawingState = GlobalDrawingState.instance;
     final gpsTool = currentTool is GpsTool ? currentTool : null;
 
+    // 消しゴム: 集めた候補（＝選択）を確定するまで消さない
+    final eraserCandidates =
+        currentTool is PenTool && ref.watch(isFabActiveProvider)
+            ? ref.watch(selectedFeaturesProvider).whereType<FeatureNode>().length
+            : 0;
+
     final isGpsSurveyLine =
         selected is LineLayerNode &&
         gpsTool != null &&
@@ -65,12 +74,38 @@ class DrawingActionButtons extends ConsumerWidget {
         currentTool is PenTool &&
         drawingState.drawingPolygon.isNotEmpty;
 
-    if (isGpsSurveyLine || isGpsSurveyPolygon) {
+    if (eraserCandidates > 0) {
+      return _buildEraserButtons(ref, eraserCandidates);
+    } else if (isGpsSurveyLine || isGpsSurveyPolygon) {
       return _buildGpsSurveyButtons(ref, gpsTool, drawingState);
     } else if (isLineDrawing || isPolygonDrawing) {
       return _buildDrawingButtons(drawingState, isLineDrawing);
     }
     return const SizedBox.shrink();
+  }
+
+  Widget _buildEraserButtons(WidgetRef ref, int count) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FloatingActionButton(
+          heroTag: 'eraser_cancel',
+          onPressed: () => ref.read(selectedFeaturesProvider.notifier).clear(),
+          tooltip: t.map.eraser.cancel,
+          child: const Icon(Icons.clear),
+        ),
+        const SizedBox(width: 12),
+        FloatingActionButton.extended(
+          heroTag: 'eraser_confirm',
+          backgroundColor: Colors.red.shade600,
+          foregroundColor: Colors.white,
+          onPressed: () =>
+              ref.read(selectedFeaturesProvider.notifier).disposeSelectedFeatures(),
+          icon: const Icon(Icons.delete_outline),
+          label: Text(t.map.eraser.confirm(n: count)),
+        ),
+      ],
+    );
   }
 
   Widget _buildGpsSurveyButtons(

@@ -556,6 +556,10 @@
     "jump": {
       "noLocation": "Current location is not available yet",
       "toCurrentLocation": "Go to current location"
+    },
+    "eraser": {
+      "confirm": "Delete $n",
+      "cancel": "Discard eraser candidates"
     }
   },
   "importExport": {
@@ -1130,5 +1134,16 @@
   "globalFolder": {
     "migrated": "Moved the global folder ($count files) to shared storage. It now survives uninstalling the app.",
     "fallback": "Shared storage is not available; using the app's internal storage for the global folder"
+  },
+  "featureSet": {
+    "title": "$n selected",
+    "points": "Points",
+    "lines": "Lines",
+    "polygons": "Polygons",
+    "photos": "Photos",
+    "centroid": "Centroid of points",
+    "clearSelection": "Clear selection",
+    "deleteAll": "Delete $n (hold)",
+    "deleted": "Deleted $n"
   }
 }

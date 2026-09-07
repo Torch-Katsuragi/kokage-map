@@ -51,6 +51,7 @@ import '../../utils/keyboard_handler.dart';
 import '../../widgets/attribute_table/attribute_table_widget.dart';
 import '../../widgets/compass_fan_painter.dart';
 import '../../widgets/feature_detail_panel.dart';
+import '../../widgets/feature_set_panel.dart';
 // gps_track.dart は不要に（GpsHistoryRecorder に統合）
 import '../../widgets/layer_drawer/layer_drawer.dart';
 import '../../widgets/left_bottom_fab.dart';
@@ -407,6 +408,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                       left: 60,
                       top: 20,
                       child: FeatureDetailPanel(feature: selectedFeatures.first),
+                    )
+                  else if (selectedFeatures.length > 1)
+                    Positioned(
+                      left: 60,
+                      top: 20,
+                      child: FeatureSetPanel(features: selectedFeatures),
                     ),
                   // 外部機器ツールのステータスパネル（DeviceTool抽象経由）
                   if (currentTool is DeviceTool)

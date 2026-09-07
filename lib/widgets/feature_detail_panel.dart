@@ -33,6 +33,7 @@ import '../providers/ui_state_providers.dart';
 import '../widgets/feature_editor/actions/simplify_action.dart';
 import '../widgets/feature_editor/actions/trim_action.dart';
 import '../widgets/feature_editor/feature_editor_screen.dart';
+import '../widgets/info_panel_card.dart';
 import '../widgets/long_press_delete_button.dart';
 import '../widgets/photo_viewer.dart';
 
@@ -486,48 +487,12 @@ class FeatureDetailPanel extends ConsumerWidget {
     );
   }
 
-  /// パネルウィジェットビルダー
+  /// パネルの枠は [InfoPanelCard]（複数選択・現在位置のカードと共通）
   Widget _buildPanel(
     BuildContext context, {
     required String title,
     required List<Widget> children,
-  }) {
-    return Material(
-      elevation: 4,
-      borderRadius: BorderRadius.circular(12),
-      color: Colors.white.withValues(alpha: 0.8),
-      child: Container(
-        width: 220,
-        constraints: const BoxConstraints(
-          maxHeight: 300,
-        ),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.black12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            // スクロール可能にしつつ、内容に応じて縮小
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: children,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  }) =>
+      InfoPanelCard(title: title, children: children);
 }
 

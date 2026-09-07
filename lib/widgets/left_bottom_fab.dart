@@ -19,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../tools/pen_tool.dart';
+import '../tools/select_tool.dart';
 
 /// 左下に表示される白い円形のフローティングボタン
 class LeftBottomFab extends ConsumerWidget {
@@ -29,11 +30,18 @@ class LeftBottomFab extends ConsumerWidget {
     final isActive = ref.watch(isFabActiveProvider);
     final currentTool = ref.watch(currentToolProvider);
     
+    // ペン: 消しゴム／選択: 複数選択。ほかのツールでは意味を持たない
     Widget centerIcon;
     switch (currentTool.runtimeType) {
       case PenTool _:
         centerIcon = Icon(
           Icons.auto_fix_normal,
+          color: isActive ? Colors.white : Colors.grey,
+          size: 32,
+        );
+      case SelectTool _:
+        centerIcon = Icon(
+          Icons.library_add_check_outlined,
           color: isActive ? Colors.white : Colors.grey,
           size: 32,
         );

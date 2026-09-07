@@ -5,6 +5,7 @@
         --notes-ja assets/changelog/ja.md --notes-en assets/changelog/en.md [--apply] [--hold]
     python tool/play/play.py listing [--lang ja-JP] [--title ...] [--short ...] [--full FILE] [--apply]
     python tool/play/play.py images phoneScreenshots --lang ja-JP --add a.png b.png [--replace] [--apply]
+    python tool/play/play.py testers --track alpha [--group kokage-map-testers@googlegroups.com ...] [--apply]
 
 規約:
   - 書き込み系は --apply を付けたときだけ commit する。付けなければ edit を作って
@@ -56,6 +57,20 @@ class Play:
         else:
             self.edits.delete(**self._kw()).execute()
             print('edit を捨てた（dry-run。--apply で実行）')
+
+    # ---- テスター（Google グループ） ----
+    def testers(self, track, groups, apply):
+        """トラックのテスター一覧に Google グループを紐づける。
+        メールアドレス一覧（Play Console で作るもの）は API に無いので触らない・消えない。
+        --group を省けば現状表示だけ。"""
+        cur = self.edits.testers().get(**self._kw(track=track)).execute()
+        print('track %s googleGroups: %r' % (track, cur.get('googleGroups', [])))
+        if groups is None:
+            self.edits.delete(**self._kw()).execute()
+            return
+        self.edits.testers().update(**self._kw(track=track), body={'googleGroups': groups}).execute()
+        print('track %s <- googleGroups %r' % (track, groups))
+        self.finish(apply)
 
     # ---- 読む ----
     def status(self):
@@ -179,6 +194,11 @@ def main(argv):
     i.add_argument('--replace', action='store_true', help='既存を全部消してから追加')
     i.add_argument('--apply', action='store_true')
 
+    tt = sub.add_parser('testers')
+    tt.add_argument('--track', default='alpha')
+    tt.add_argument('--group', nargs='*', help='紐づける Google グループのアドレス（省略で現状表示）')
+    tt.add_argument('--apply', action='store_true')
+
     a = p.parse_args(argv)
     play = Play()
     try:
@@ -197,6 +217,8 @@ def main(argv):
             play.listing(a.lang, a.title, a.short, full, a.apply)
         elif a.cmd == 'images':
             play.images(a.type, a.lang, a.add, a.replace, a.apply)
+        elif a.cmd == 'testers':
+            play.testers(a.track, a.group, a.apply)
     except HttpError as e:
         print('API error %s: %s' % (e.status_code, e.reason), file=sys.stderr)
         try:

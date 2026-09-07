@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.6.2 — 2026/09/07
 
 ### 🏷 Labels on the map
 

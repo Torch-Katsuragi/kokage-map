@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### 🏷 Labels on the map
+
+- From the attribute table's label button (🏷), pick columns, reorder the cards and insert fixed text to
+  compose a label. Works for points, lines and polygons (polygons at the centroid, lines along the line).
+- Font size, colour and halo are under Settings → Layer style → Label.
+
+### ✅ Multi-select and bulk actions
+
+- With the select tool, enable the bottom-left button to select across layers by tap or lasso.
+- The panel shows counts, the centroid of points, total line length and total polygon area, and deletes them together.
+- The eraser no longer deletes on touch: it collects candidates and you confirm with "Delete N". Its hit area is a third of before.
+
+### 🧭 Usability
+
+- The layer list button moved to the right edge.
+- Switching tools briefly shows the tool name in the centre of the map.
+- The always-on GPS bar is gone; tap the location marker to see GPS details in a card (more room for the map).
+- The point "Open in Google Maps" button now copies the link; hold to open.
+
+### 🐛 Fixes
+
+- The Google account chooser no longer appears on every launch. A previous authorization is restored silently;
+  the chooser only shows when you sign in.
+- Deleted features sometimes stayed on the map.
+- Basemap tiles stayed blurry forever in places where a fetch had failed once, even after connectivity returned.
+  Already-blurry tiles: Settings → Basemap → Clear cache.
+- Cached basemap tiles sometimes did not appear until restart when far from home.
+
 ## v0.6.1 — 2026/09/07
 
 Everything since v0.6.0 (April 16), in one place.

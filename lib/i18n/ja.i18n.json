@@ -678,7 +678,8 @@
     "noFeatures": "フィーチャがありません",
     "error": "属性テーブルの表示に失敗しました",
     "initError": "属性テーブル初期化エラー: ${error}",
-    "sqlError": "SQL実行エラー（式の構文を確認してください）"
+    "sqlError": "SQL実行エラー（式の構文を確認してください）",
+    "labelComposer": "ラベルの組み立て"
   },
   "track": {
     "extractTitle": "GPS軌跡の抽出",
@@ -1145,5 +1146,27 @@
     "clearSelection": "選択解除",
     "deleteAll": "$n 件を削除（長押し）",
     "deleted": "$n 件を削除しました"
+  },
+  "gpsPanel": {
+    "title": "現在位置",
+    "status": "状態",
+    "position": "緯度, 経度",
+    "accuracy": "精度",
+    "satellites": "衛星数",
+    "source": "ソース",
+    "heading": "方角"
+  },
+  "labelComposer": {
+    "title": "ラベルの組み立て",
+    "show": "地図にラベルを表示する",
+    "columns": "列",
+    "order": "並び（ドラッグで入れ替え）",
+    "empty": "上の列を選ぶか、固定の文字を追加してください",
+    "fieldToken": "列の値",
+    "textToken": "固定の文字（タップで編集）",
+    "fixedText": "固定の文字",
+    "fixedTextHint": "例: 区画、/、ha",
+    "addText": "文字を追加",
+    "preview": "プレビュー（先頭のフィーチャ）"
   }
 }

@@ -63,6 +63,41 @@ class KMetaLayerStyle {
     this.labelOpacity,
   });
 
+  KMetaLayerStyle copyWith({
+    double? pointSize,
+    Color? pointColor,
+    double? lineWidth,
+    Color? lineColor,
+    double? polygonBorderWidth,
+    Color? polygonBorderColor,
+    Color? polygonFillColor,
+    double? polygonFillOpacity,
+    double? polygonBorderOpacity,
+    bool? labelEnabled,
+    String? labelProperty,
+    double? labelFontSize,
+    Color? labelColor,
+    Color? labelHaloColor,
+    double? labelOpacity,
+  }) =>
+      KMetaLayerStyle(
+        pointSize: pointSize ?? this.pointSize,
+        pointColor: pointColor ?? this.pointColor,
+        lineWidth: lineWidth ?? this.lineWidth,
+        lineColor: lineColor ?? this.lineColor,
+        polygonBorderWidth: polygonBorderWidth ?? this.polygonBorderWidth,
+        polygonBorderColor: polygonBorderColor ?? this.polygonBorderColor,
+        polygonFillColor: polygonFillColor ?? this.polygonFillColor,
+        polygonFillOpacity: polygonFillOpacity ?? this.polygonFillOpacity,
+        polygonBorderOpacity: polygonBorderOpacity ?? this.polygonBorderOpacity,
+        labelEnabled: labelEnabled ?? this.labelEnabled,
+        labelProperty: labelProperty ?? this.labelProperty,
+        labelFontSize: labelFontSize ?? this.labelFontSize,
+        labelColor: labelColor ?? this.labelColor,
+        labelHaloColor: labelHaloColor ?? this.labelHaloColor,
+        labelOpacity: labelOpacity ?? this.labelOpacity,
+      );
+
   /// JSONからパース
   factory KMetaLayerStyle.fromJson(Map<String, dynamic> json) {
     return KMetaLayerStyle(

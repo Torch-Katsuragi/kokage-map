@@ -335,6 +335,9 @@ abstract class LayerNode extends LayerTreeNode {
   /// KMetaスタイルがキャッシュ済みかどうか
   bool get isKmetaStyleLoaded => _kmetaStyleLoaded;
 
+  /// 読み込み済みならその値、未ロードなら null（描画の同期経路用）
+  KMetaLayerStyle? get kmetaStyleIfLoaded => _cachedKmetaStyle;
+
   /// turf_dartのFeatureCollectionオブジェクトを取得
   /// _featureMapから動的に生成（常に最新の状態を反映）
   turf.FeatureCollection get turfFeatureCollection {

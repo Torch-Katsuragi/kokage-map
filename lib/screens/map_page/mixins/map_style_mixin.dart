@@ -39,7 +39,11 @@ import '../../layer_style_settings_screen.dart'
         selectedColorDef,
         selectedMultiplierDef,
         clusteringEnabledDef,
-        clusteringDisableZoomDef;
+        clusteringDisableZoomDef,
+        labelFontSizeDef,
+        labelColorDef,
+        labelHaloColorDef,
+        labelOpacityDef;
 import '../map_page_state_base.dart';
 
 mixin MapStyleMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
@@ -123,6 +127,10 @@ mixin MapStyleMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
       lineVertexSizeFactor: style.getDouble(lineVertexPointSizeFactorDef),
       polygonVertexEnabled: style.getBool(polygonVertexPointsEnabledDef),
       polygonVertexSizeFactor: style.getDouble(polygonVertexPointSizeFactorDef),
+      labelFontSize: style.getDouble(labelFontSizeDef),
+      labelColor: style.getColor(labelColorDef),
+      labelHaloColor: style.getColor(labelHaloColorDef),
+      labelOpacity: style.getDouble(labelOpacityDef),
     );
   }
 }

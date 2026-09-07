@@ -146,6 +146,13 @@ class MapSourceManager {
   /// > 見え方を変えないための保険。
   static const kStyleProp = 'k-style';
 
+  /// ラベル文字列を載せる属性名（`FeatureGeoJsonInput.labelPropKey` と同じ）
+  static const kLabelProp = 'k-label';
+  static const kPointsLabel = 'k-points-label';
+  static const kLinesLabel = 'k-lines-label';
+  static const kPolygonsLabel = 'k-polygons-label';
+  static const _hasLabel = <Object>['has', kLabelProp];
+
   /// スタイルグループ。**並び順が z順**（View の並び）。
   List<MapStyleGroup> _styleGroups = const [];
 
@@ -181,6 +188,7 @@ class MapSourceManager {
     kLineVerticesCircle, kLineVerticesSelCircle,
     kClusterCircle, kClusterCount,
     kPointsCircle, kPointsSelCircle,
+    kPolygonsLabel, kLinesLabel, kPointsLabel,
     kImageClusterCircle, kImageClusterCount, kImageClusterName,
     kImagesSymbol, kImagesSelSymbol,
   ];
@@ -664,6 +672,12 @@ class MapSourceManager {
         'circle-stroke-color': '#FFFFFF',
       },
     ));
+    // ラベル（見た目は updateLayerStyles で設定値に置き換わる）
+    for (final l in _labelLayers(
+      size: 12, colorHex: '#000000', haloHex: '#FFFFFF', opacity: 1,
+    )) {
+      await style.addLayer(l);
+    }
 
     // --- ImageNode レイヤ ---
     // ImageNodeクラスタ円
@@ -866,6 +880,49 @@ class MapSourceManager {
             '',
           ];
 
+  /// ラベルのレイヤ（面・線・点）。`k-label` を持つフィーチャにだけ出す。
+  /// 面は重心に、線は線に沿って、点はマーカーの下に置く
+  List<ml.SymbolStyleLayer> _labelLayers({
+    required double size,
+    required String colorHex,
+    required String haloHex,
+    required double opacity,
+  }) {
+    final paint = <String, Object>{
+      'text-color': colorHex,
+      'text-halo-color': haloHex,
+      'text-halo-width': 1.5,
+      'text-opacity': opacity,
+    };
+    const font = <Object>['Open Sans Semibold'];
+    return [
+      ml.SymbolStyleLayer(
+        id: kPolygonsLabel, sourceId: kPolygons, filter: _hasLabel,
+        layout: {
+          'text-field': <Object>['get', kLabelProp],
+          'text-font': font, 'text-size': size, 'text-max-width': 12.0,
+        },
+        paint: paint),
+      ml.SymbolStyleLayer(
+        id: kLinesLabel, sourceId: kLines, filter: _hasLabel,
+        layout: {
+          'symbol-placement': 'line',
+          'text-field': <Object>['get', kLabelProp],
+          'text-font': font, 'text-size': size,
+        },
+        paint: paint),
+      ml.SymbolStyleLayer(
+        id: kPointsLabel, sourceId: kPoints, filter: _hasLabel,
+        layout: {
+          'text-field': <Object>['get', kLabelProp],
+          'text-font': font, 'text-size': size,
+          'text-anchor': 'top', 'text-offset': <Object>[0, 0.9],
+          'text-optional': true, 'text-max-width': 12.0,
+        },
+        paint: paint),
+    ];
+  }
+
   List<Object> _groupFilter(MapStyleGroup group) => <Object>[
     '==',
     <Object>['get', kStyleProp],
@@ -926,6 +983,10 @@ class MapSourceManager {
     required double lineVertexSizeFactor,
     required bool polygonVertexEnabled,
     required double polygonVertexSizeFactor,
+    double labelFontSize = 12,
+    Color labelColor = const Color(0xFF000000),
+    Color labelHaloColor = const Color(0xFFFFFFFF),
+    double labelOpacity = 1,
   }) async {
     if (!_initialized || _style == null) return;
     final s = _style!;
@@ -970,6 +1031,10 @@ class MapSourceManager {
       lineVR: lineVR, lineVSelR: lineVSelR,
       clusterRadius: clusterRadius,
       clusterTextSize: clusterTextSize,
+      labelFontSize: labelFontSize,
+      labelColorHex: _colorToHex(labelColor),
+      labelHaloHex: _colorToHex(labelHaloColor),
+      labelOpacity: labelOpacity,
     );
 
     AppLogger.debug('[MapSourceManager] layer styles updated');
@@ -998,6 +1063,10 @@ class MapSourceManager {
     required double lineVSelR,
     required List<Object> clusterRadius,
     required double clusterTextSize,
+    required double labelFontSize,
+    required String labelColorHex,
+    required String labelHaloHex,
+    required double labelOpacity,
   }) async {
     // グループぶんに増やしたレイヤも消す。順序は問わない
     for (final id in [..._groupLayerIds, ..._allLayerIds].reversed) {
@@ -1044,6 +1113,11 @@ class MapSourceManager {
       paint: {'circle-radius': pointSize, 'circle-color': pointHex, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'}));
     await s.addLayer(ml.CircleStyleLayer(id: kPointsSelCircle, sourceId: kPointsSel,
       paint: {'circle-radius': pointSize * selectedMultiplier, 'circle-color': selHex, 'circle-stroke-width': 2.0, 'circle-stroke-color': '#FFFFFF'}));
+    for (final l in _labelLayers(
+      size: labelFontSize, colorHex: labelColorHex, haloHex: labelHaloHex, opacity: labelOpacity,
+    )) {
+      await s.addLayer(l);
+    }
     await s.addLayer(ml.CircleStyleLayer(id: kImageClusterCircle, sourceId: kImageClusters,
       paint: {'circle-color': '#9C27B0', 'circle-radius': clusterRadius, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'}));
     await s.addLayer(ml.SymbolStyleLayer(id: kImageClusterCount, sourceId: kImageClusters,

@@ -19,12 +19,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
+import '../../models/kmeta.dart';
+import '../../models/nodes/feature_node.dart';
 import '../../providers/notification_providers.dart';
+import '../../providers/ui_state_providers.dart';
+import '../../screens/layer_style_settings_screen.dart' show layerStyleSettings, labelEnabledDef, labelPropertyDef;
 import '../../services/coordinate/index.dart';
+import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
 import 'attribute_table_controller.dart';
+import 'label_composer_dialog.dart';
 
 /// 属性テーブルツールバー
 class AttributeTableToolbar extends ConsumerStatefulWidget {
@@ -147,6 +154,13 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
               // 右端に押し出す
               const Expanded(child: SizedBox.shrink()),
 
+              // ラベルの組み立て（列を選んで並べる）
+              _buildIconButton(
+                Icons.label_outline,
+                null,
+                () => _openLabelComposer(context),
+                t.attributeTable.labelComposer,
+              ),
               // フィルタトグル
               _buildIconButton(
                 Icons.filter_alt,
@@ -653,6 +667,40 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
         ctrl.toggleColumnVisibility(value);
       }
     });
+  }
+
+  /// 地図に出すラベルを列の組み合わせで決める。結果はレイヤ固有スタイル
+  /// （`.kmeta.json` の `styles.layers[<layer>].labelProperty`）に保存する
+  Future<void> _openLabelComposer(BuildContext context) async {
+    final layer = widget.controller.layer;
+    final folderPath = layer.folderNode?.getAbsoluteFilePath();
+    if (folderPath == null) return;
+    final current = await layer.getKmetaStyle();
+    final sample = layer.children
+        .whereType<FeatureNode>()
+        .firstOrNull
+        ?.turfFeature
+        .properties
+        ?.cast<String, Object?>();
+    if (!context.mounted) return;
+    final result = await showLabelComposerDialog(
+      context,
+      columns: widget.controller.columnNames.where((c) => !c.startsWith('_')).toList(),
+      initialTemplate: layerStyleSettings.resolveString(labelPropertyDef, current),
+      initialEnabled: layerStyleSettings.resolveBool(labelEnabledDef, current),
+      sampleProps: sample,
+    );
+    if (result == null) return;
+
+    final style = (current ?? const KMetaLayerStyle()).copyWith(
+      labelProperty: result.template,
+      labelEnabled: result.enabled,
+    );
+    await KMetaService.instance.setLayerStyle(folderPath, layer.layerKey, style);
+    layer.folderNode?.invalidateMetaCache();
+    layer.invalidateKmetaStyleCache();
+    await layer.refreshStyleGroups();
+    ref.read(featureRefreshTriggerProvider.notifier).trigger();
   }
 
   Widget _buildIconButton(

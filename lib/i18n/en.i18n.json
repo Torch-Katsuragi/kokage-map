@@ -678,7 +678,8 @@
     "noFeatures": "No features",
     "error": "Failed to display attribute table",
     "initError": "Attribute table initialization error: ${error}",
-    "sqlError": "SQL execution error (please check the expression syntax)"
+    "sqlError": "SQL execution error (please check the expression syntax)",
+    "labelComposer": "Compose label"
   },
   "track": {
     "extractTitle": "GPS Track Extraction",
@@ -1145,5 +1146,27 @@
     "clearSelection": "Clear selection",
     "deleteAll": "Delete $n (hold)",
     "deleted": "Deleted $n"
+  },
+  "gpsPanel": {
+    "title": "Current location",
+    "status": "Status",
+    "position": "Lat, Lon",
+    "accuracy": "Accuracy",
+    "satellites": "Satellites",
+    "source": "Source",
+    "heading": "Heading"
+  },
+  "labelComposer": {
+    "title": "Compose label",
+    "show": "Show labels on the map",
+    "columns": "Columns",
+    "order": "Order (drag to rearrange)",
+    "empty": "Pick columns above or add fixed text",
+    "fieldToken": "Column value",
+    "textToken": "Fixed text (tap to edit)",
+    "fixedText": "Fixed text",
+    "fixedTextHint": "e.g. Compartment, /, ha",
+    "addText": "Add text",
+    "preview": "Preview (first feature)"
   }
 }

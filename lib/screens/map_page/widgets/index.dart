@@ -14,6 +14,5 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 export 'drawing_action_buttons.dart';
-export 'gps_info_bar.dart';
 export 'gps_survey_buttons.dart';
 export 'offscreen_location_indicator.dart';

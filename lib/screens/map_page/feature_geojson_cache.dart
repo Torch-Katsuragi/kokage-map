@@ -41,6 +41,7 @@ class FeatureGeoJsonInput {
     required this.polygonVertices,
     this.styleKeyOf,
     this.stylePropKey = 'k-style',
+    this.labelOf,
   });
 
   final List<LineFeatureNode> lines;
@@ -61,6 +62,13 @@ class FeatureGeoJsonInput {
 
   /// [styleKeyOf] の値を載せる属性名
   final String stylePropKey;
+
+  /// 地図に出すラベル文字列。null なら属性に載せない（＝ラベル無し）。
+  /// テンプレートの解決は呼び出し側（`label_template.dart`）
+  final String? Function(FeatureNode f)? labelOf;
+
+  /// ラベルを載せる属性名。MapSourceManager のラベルレイヤと合わせる
+  static const labelPropKey = 'k-label';
 }
 
 class FeatureGeoJsonCache {
@@ -90,8 +98,15 @@ class FeatureGeoJsonCache {
     String? name,
   ]) {
     final key = input.styleKeyOf?.call(f);
-    if (key == null) return name == null ? null : {'name': name};
-    return {if (name != null) 'name': name, input.stylePropKey: key};
+    final label = input.labelOf?.call(f);
+    if (key == null && label == null) {
+      return name == null ? null : {'name': name};
+    }
+    return {
+      if (name != null) 'name': name,
+      if (key != null) input.stylePropKey: key,
+      if (label != null) FeatureGeoJsonInput.labelPropKey: label,
+    };
   }
 
   static Map<String, Object?> _photoProps(ImageNode photo) => {

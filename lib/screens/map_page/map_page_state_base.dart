@@ -20,7 +20,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_compass/flutter_compass.dart';
-import 'package:geobase/geobase.dart' as geo;
 import 'package:maplibre/maplibre.dart' as ml;
 import '../../core/r_map_controller.dart';
 import '../../models/nodes/layer_tree_node.dart';
@@ -36,6 +35,7 @@ import '../../services/map_source_manager.dart';
 import '../../services/internal_gps_location_store.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../interfaces/map_state_interface.dart';
+import 'feature_geojson_cache.dart';
 
 /// MapPageの状態変数を定義する基底mixin
 /// 各機能別Mixinはこのmixinを継承（on）して状態にアクセス
@@ -185,30 +185,10 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   // =============================================
   // レンダリングキャッシュ（パン/ズーム時の再構築を防止）
-  // maplibreのFeature型を使用
   // =============================================
 
-  /// フィーチャ由来のPolyline（通常 / 選択済み）
-  List<geo.Feature<geo.Geometry>> cachedPolylines = [];
-  List<geo.Feature<geo.Geometry>> cachedSelectedPolylines = [];
-
-  /// フィーチャ由来のPolygon（通常 / 選択済み）
-  List<geo.Feature<geo.Geometry>> cachedPolygons = [];
-  List<geo.Feature<geo.Geometry>> cachedSelectedPolygons = [];
-
-  /// Point/ImageNodeのマーカー（通常 / 選択済み）
-  List<geo.Feature<geo.Point>> cachedMarkers = [];
-  List<geo.Feature<geo.Point>> cachedSelectedMarkers = [];
-
-  /// ImageNode（通常 / 選択済み）— SymbolStyleLayer用
-  List<geo.Feature<geo.Point>> cachedImageFeatures = [];
-  List<geo.Feature<geo.Point>> cachedSelectedImageFeatures = [];
-
-  /// 頂点マーカー（CircleStyleLayer用、GPU描画）
-  List<geo.Feature<geo.Point>> cachedLineVertices = [];
-  List<geo.Feature<geo.Point>> cachedLineVerticesSel = [];
-  List<geo.Feature<geo.Point>> cachedPolyVertices = [];
-  List<geo.Feature<geo.Point>> cachedPolyVerticesSel = [];
+  /// 地図に流す GeoJSON（通常 / 選択済み）。組み立ては [FeatureGeoJsonCache]
+  final geoJson = FeatureGeoJsonCache();
 
   /// オーバーレイ用Widgetマーカー（現在位置、測量ポイント等）
   List<ml.Marker> cachedOverlayMarkers = [];

@@ -23,10 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre/maplibre.dart' as ml;
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
-import 'package:turf/turf.dart' as turf;
-import '../../services/basemap_style_json.dart';
 import '../../services/map_source_manager.dart';
-import '../../core/platform_capabilities.dart';
 import 'package:path/path.dart' as p;
 import '../../utils/geo_converter.dart';
 import '../../providers/project_providers.dart';
@@ -61,11 +58,10 @@ import '../../providers/notification_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../providers/device_tool_providers.dart';
 import '../../providers/party_providers.dart';
-import '../../models/party/peer_position.dart';
-import '../../models/party/party_room.dart';
 import '../../services/party/party_invite.dart';
 import 'widgets/map_menu_button.dart';
 import 'widgets/party_controls.dart';
+import 'widgets/party_map_layers.dart';
 import '../layer_style_settings_screen.dart'
     show
         layerStyleSettings,
@@ -88,6 +84,7 @@ import '../layer_style_settings_screen.dart'
         clusteringDisableZoomDef;
 
 // Mixins
+import 'feature_geojson_cache.dart';
 import 'map_page_state_base.dart';
 import 'mixins/index.dart';
 
@@ -110,6 +107,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         MapPageStateBase,
         MapJumpMixin,
         MapInitializationMixin,
+        MapBasemapMixin,
         MapGpsTrackingMixin,
         MapGpsSurveyMixin,
         MapFeatureCacheMixin,
@@ -569,7 +567,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         // 描画プレビュー: ライン
         ..._buildDrawingPreviewPolylines(currentTool, drawingState),
         // パーティ位置共有: 仲間の圏外区間軌跡（gap backfill）
-        ..._buildPartyTrackPolylines(),
+        ...buildPartyTrackPolylines(ref.read(partySessionProvider)),
         // 外部機器ツールのオーバーレイ（DeviceTool抽象経由）
         if (currentTool is DeviceTool)
           ...currentTool.buildOverlayLayers(),
@@ -597,14 +595,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     );
   }
 
-  /// アクティブなbasemapレイヤIDのトラッキング（削除用）
-  final List<String> _activeBasemapLayerIds = [];
-  final List<String> _activeBasemapSourceIds = [];
-
   Future<void> _onMapStyleLoaded(ml.StyleController style) async {
     AppLogger.debug('[MAP] onStyleLoaded fired');
     mapControllerInstance.attachStyle(style);
-    await _addBasemapSources(style);
+    await addBasemapSources(style);
     await sourceManager.initialize(style);
 
     // 現在のスタイル設定を反映
@@ -612,108 +606,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
     // ソース初期化完了 → dirty フラグを強制セットして確実にフィーチャを送信
     invalidateLayerCache();
-  }
-
-  /// ベースマップソース追加（複数プロバイダ対応）
-  /// activeLayerConfigで有効なプロバイダを取得し、各プロバイダにRasterSource + RasterStyleLayerを登録
-  /// [belowLayerId] 指定時はそのレイヤの下に挿入（replaceBasemapSources用）
-  Future<void> _addBasemapSources(
-    ml.StyleController style, {
-    String? belowLayerId,
-  }) async {
-    final layers = baseMapService.activeLayerConfig;
-    if (layers.isEmpty) return;
-
-    // web は `StyleController.addSource()` で RasterSource を登録できない
-    // （maplibre_web 0.3.5 のバグ。詳細は basemap_style_json.dart）。
-    // ソースは初期スタイルJSONに全プロバイダぶん焼き込んであるので、
-    // ここではレイヤを積むだけでよい（`addLayer` は web でも正常に動く）。
-    if (PlatformCapabilities.isWeb) {
-      for (final (provider, opacity) in layers) {
-        final layerId = basemapLayerId(provider.id);
-        try {
-          await style.addLayer(
-            ml.RasterStyleLayer(
-              id: layerId,
-              sourceId: basemapSourceId(provider.id),
-              paint: {'raster-opacity': opacity},
-            ),
-            belowLayerId: belowLayerId,
-          );
-          _activeBasemapLayerIds.add(layerId);
-          AppLogger.debug(
-            '[MAP] addBasemapLayer(web): ${provider.id} '
-            'opacity=${opacity.toStringAsFixed(2)}',
-          );
-        } catch (e) {
-          AppLogger.debug('[MAP] addBasemapLayer error (${provider.id}): $e');
-        }
-      }
-      return;
-    }
-
-    for (final (provider, opacity) in layers) {
-      final sourceId = basemapSourceId(provider.id);
-      final layerId = basemapLayerId(provider.id);
-
-      ml.RasterSource source;
-
-      // Android + オフライン → mbtiles:// 直接読み込み
-      if (PlatformCapabilities.supportsOfflineMBTiles &&
-          !baseMapService.isNetworkAvailable) {
-        final mbtilesPath = baseMapService.getMBTilesPath(provider.id);
-        if (mbtilesPath != null) {
-          source = ml.RasterSource(
-            id: sourceId,
-            url: 'mbtiles://$mbtilesPath',
-            maxZoom: provider.maxZoom.toDouble(),
-            tileSize: 256,
-          );
-        } else {
-          final url = tileServer.isRunning
-              ? tileServer.urlTemplate(provider.id)
-              : provider.urlTemplate;
-          source = ml.RasterSource(
-            id: sourceId,
-            tiles: [url],
-            maxZoom: provider.maxZoom.toDouble(),
-            tileSize: 256,
-            attribution: provider.attribution,
-          );
-        }
-      } else {
-        // オンライン → TileServer経由（キャッシュ+フォールバック機能付き）
-        final url = tileServer.isRunning
-            ? tileServer.urlTemplate(provider.id)
-            : provider.urlTemplate;
-        source = ml.RasterSource(
-          id: sourceId,
-          tiles: [url],
-          maxZoom: provider.maxZoom.toDouble(),
-          tileSize: 256,
-          attribution: provider.attribution,
-        );
-      }
-
-      try {
-        await style.addSource(source);
-        await style.addLayer(
-          ml.RasterStyleLayer(
-            id: layerId,
-            sourceId: sourceId,
-            paint: {'raster-opacity': opacity},
-          ),
-          belowLayerId: belowLayerId,
-        );
-        _activeBasemapSourceIds.add(sourceId);
-        _activeBasemapLayerIds.add(layerId);
-        AppLogger.debug(
-          '[MAP] addBasemapSource: ${provider.id} opacity=${opacity.toStringAsFixed(2)}',
-        );
-      } catch (e) {
-        AppLogger.debug('[MAP] addBasemapSource error (${provider.id}): $e');
-      }
-    }
   }
 
   /// マップイベント処理
@@ -731,32 +623,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       cameraTickNotifier.value++;
       _refreshPointClusters();
     }
-  }
-
-  /// ベースマップ切替（旧ソース全削除→新ソース追加）
-  Future<void> replaceBasemapSource() async {
-    final style = mapControllerInstance.style;
-    if (style == null) return;
-
-    // 既存の全basemapレイヤを削除
-    for (final layerId in _activeBasemapLayerIds.reversed) {
-      try { await style.removeLayer(layerId); } catch (_) {}
-    }
-    _activeBasemapLayerIds.clear();
-
-    // ⚠ web のソースは初期スタイルJSONに焼き込んだもので、消すと二度と足せない
-    // （`addSource` が壊れているのがそもそもの発端）。消すのは native だけ。
-    if (!PlatformCapabilities.isWeb) {
-      for (final sourceId in _activeBasemapSourceIds.reversed) {
-        try { await style.removeSource(sourceId); } catch (_) {}
-      }
-      _activeBasemapSourceIds.clear();
-    }
-
-    await _addBasemapSources(
-      style,
-      belowLayerId: MapSourceManager.kPolygonsFill,
-    );
   }
 
   /// 描画プレビュー用ポリラインレイヤのリスト生成
@@ -847,363 +713,65 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     // View / レイヤのスタイル指定が変わっていたらレイヤを積み直す。
     // ⚠ フィーチャを組み立てる**前**に済ませること。`k-style` を載せるかどうかの
     //   判断が `sourceManager.styleGroups` を見ているため。
-    if (sourceManager.setStyleGroups(_buildStyleGroups())) {
-      _applyLayerStyles();
+    final groups = _buildStyleGroups();
+    if (sourceManager.setStyleGroups(groups)) {
+      _applyLayerStyles(groups: groups);
     }
 
-    final selectedSet = currentSelection.toSet();
+    final input = FeatureGeoJsonInput(
+      lines: lineFeatures,
+      polygons: polygonFeatures,
+      points: pointFeatures,
+      photos: photoNodes,
+      selected: currentSelection.toSet(),
+      // 固有スタイルが1つでもあれば、フィーチャに「どのグループのものか」を載せる
+      styleKeyOf: sourceManager.styleGroups.isEmpty
+          ? null
+          : (f) => f.parent.styleKeyOf(f.rowId),
+      stylePropKey: MapSourceManager.kStyleProp,
+      lineVertices: layerStyleSettings.getBool(lineVertexPointsEnabledDef),
+      polygonVertices: layerStyleSettings.getBool(polygonVertexPointsEnabledDef),
+    );
 
-    // 選択のみ変更: 選択ソースだけ再構築（通常ソースは不変→送信スキップ）
-    if (!dataChanged && selectionChanged) {
-      _rebuildSelectionOnly(selectedSet);
+    if (!dataChanged) {
+      // 選択のみ変更: 選択ソースだけ再構築（通常ソースは不変→送信スキップ）
+      geoJson.rebuildSelection(input);
       _pushFeaturesToSources();
       return;
     }
 
-    // 固有スタイルが1つでもあれば、フィーチャに「どのグループのものか」を載せる。
-    //
-    // ⚠ グループが無いときは載せない。属性が増えるとGeoJSONが太るし、
-    //   何より「View 導入前と完全に同じ」を保てなくなる。
-    final hasStyleGroups = sourceManager.styleGroups.isNotEmpty;
-    Map<String, Object?>? styleProps(FeatureNode f, [String? name]) {
-      if (!hasStyleGroups) return name == null ? null : {'name': name};
-      final key = f.parent.styleKeyOf(f.rowId);
-      return {
-        if (name != null) 'name': name,
-        MapSourceManager.kStyleProp: key,
-      };
-    }
-
-    // ポリラインをmaplibre Feature型に変換（通常=全件、選択=追加オーバーレイ）
-    cachedPolylines = [];
-    cachedSelectedPolylines = [];
-    for (final f in lineFeatures) {
-      final geoGeom = _turfLineToGeo(f.turfFeature.geometry);
-      if (geoGeom == null) continue;
-      final feature = geo.Feature<geo.Geometry>(
-        geometry: geoGeom,
-        properties: styleProps(f),
-      );
-      cachedPolylines.add(feature);
-      if (selectedSet.contains(f)) {
-        cachedSelectedPolylines.add(feature);
-      }
-    }
-
-    // ポリゴンをmaplibre Feature型に変換（通常=全件、選択=追加オーバーレイ）
-    cachedPolygons = [];
-    cachedSelectedPolygons = [];
-    for (final f in polygonFeatures) {
-      final geoGeom = _turfPolyToGeo(f.turfFeature.geometry);
-      if (geoGeom == null) continue;
-      final feature = geo.Feature<geo.Geometry>(
-        geometry: geoGeom,
-        properties: styleProps(f),
-      );
-      cachedPolygons.add(feature);
-      if (selectedSet.contains(f)) {
-        cachedSelectedPolygons.add(feature);
-      }
-    }
-
-    // ポイントをmaplibre Feature型に変換（通常=全件、選択=追加オーバーレイ）
-    cachedMarkers = [];
-    cachedSelectedMarkers = [];
-    for (final f in pointFeatures) {
-      if (f.geometry == null) continue;
-      for (final pt in f.geometry as List<LatLng>) {
-        final feature = geo.Feature(
-          geometry: geo.Point(pt.toGeographic()),
-          properties: styleProps(f, f.name),
-        );
-        cachedMarkers.add(feature);
-        if (selectedSet.contains(f)) {
-          cachedSelectedMarkers.add(feature);
-        }
-      }
-    }
-
-    // ImageNodeをGeoJSON Feature化（通常=全件、選択=追加オーバーレイ）
-    cachedImageFeatures = [];
-    cachedSelectedImageFeatures = [];
-    for (final photo in photoNodes.where((p) => p.hasLocation)) {
-      final props = <String, Object?>{
-        'name': photo.name,
-        'has_direction': photo.direction != null,
-        if (photo.direction != null) 'direction': photo.direction,
-        if (photo.takenAt != null)
-          'taken_at': photo.takenAt!.millisecondsSinceEpoch,
-      };
-      final feature = geo.Feature(
-        geometry: geo.Point(photo.location!.toGeographic()),
-        properties: props,
-      );
-      cachedImageFeatures.add(feature);
-      if (selectedSet.contains(photo)) {
-        cachedSelectedImageFeatures.add(feature);
-      }
-    }
-
-    // ライン頂点データ生成（通常=全件、選択=追加オーバーレイ）
-    cachedLineVertices = [];
-    cachedLineVerticesSel = [];
-    if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) {
-      for (final f in lineFeatures) {
-        final allPts = _extractAllLineVertices(f.turfFeature.geometry);
-        for (final pt in allPts) {
-          cachedLineVertices.add(geo.Feature(geometry: geo.Point(pt)));
-        }
-        if (selectedSet.contains(f)) {
-          for (final pt in allPts) {
-            cachedLineVerticesSel.add(geo.Feature(geometry: geo.Point(pt)));
-          }
-        }
-      }
-    }
-
-    // ポリゴン頂点データ生成（通常=全件、選択=追加オーバーレイ）
-    cachedPolyVertices = [];
-    cachedPolyVerticesSel = [];
-    if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) {
-      for (final f in polygonFeatures) {
-        final allPts = _extractAllPolyVertices(f.turfFeature.geometry);
-        for (final pt in allPts) {
-          cachedPolyVertices.add(geo.Feature(geometry: geo.Point(pt)));
-        }
-        if (selectedSet.contains(f)) {
-          for (final pt in allPts) {
-            cachedPolyVerticesSel.add(geo.Feature(geometry: geo.Point(pt)));
-          }
-        }
-      }
-    }
-
-    // MapSourceManager経由でGeoJSONソースを更新（変更時のみ送信）
+    geoJson.rebuildAll(input);
     _pushFeaturesToSources();
-
-    // オーバーレイ画像の同期
     _syncOverlayImages();
   }
 
-  /// 選択変更のみの場合の軽量パス: 選択リストだけを再構築
-  /// 通常リスト（cachedPolylines等）は前回のまま保持 → GeoJSON不変 → 送信スキップ
-  void _rebuildSelectionOnly(Set<LayerTreeNode> selectedSet) {
-    // ポリライン選択
-    cachedSelectedPolylines = [];
-    for (final f in lineFeatures) {
-      if (!selectedSet.contains(f)) continue;
-      final geoGeom = _turfLineToGeo(f.turfFeature.geometry);
-      if (geoGeom == null) continue;
-      cachedSelectedPolylines.add(geo.Feature<geo.Geometry>(geometry: geoGeom));
-    }
-
-    // ポリゴン選択
-    cachedSelectedPolygons = [];
-    for (final f in polygonFeatures) {
-      if (!selectedSet.contains(f)) continue;
-      final geoGeom = _turfPolyToGeo(f.turfFeature.geometry);
-      if (geoGeom == null) continue;
-      cachedSelectedPolygons.add(geo.Feature<geo.Geometry>(geometry: geoGeom));
-    }
-
-    // ポイント選択
-    cachedSelectedMarkers = [];
-    for (final f in pointFeatures) {
-      if (!selectedSet.contains(f) || f.geometry == null) continue;
-      for (final pt in f.geometry as List<LatLng>) {
-        cachedSelectedMarkers.add(geo.Feature(
-          geometry: geo.Point(pt.toGeographic()),
-          properties: {'name': f.name},
-        ));
-      }
-    }
-
-    // ImageNode選択
-    cachedSelectedImageFeatures = [];
-    for (final photo in photoNodes.where((p) => p.hasLocation)) {
-      if (!selectedSet.contains(photo)) continue;
-      cachedSelectedImageFeatures.add(geo.Feature(
-        geometry: geo.Point(photo.location!.toGeographic()),
-        properties: <String, Object?>{
-          'name': photo.name,
-          'has_direction': photo.direction != null,
-          if (photo.direction != null) 'direction': photo.direction,
-          if (photo.takenAt != null)
-            'taken_at': photo.takenAt!.millisecondsSinceEpoch,
-        },
-      ));
-    }
-
-    // ライン頂点選択
-    cachedLineVerticesSel = [];
-    if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) {
-      for (final f in lineFeatures) {
-        if (!selectedSet.contains(f)) continue;
-        for (final pt in _extractAllLineVertices(f.turfFeature.geometry)) {
-          cachedLineVerticesSel.add(geo.Feature(geometry: geo.Point(pt)));
-        }
-      }
-    }
-
-    // ポリゴン頂点選択
-    cachedPolyVerticesSel = [];
-    if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) {
-      for (final f in polygonFeatures) {
-        if (!selectedSet.contains(f)) continue;
-        for (final pt in _extractAllPolyVertices(f.turfFeature.geometry)) {
-          cachedPolyVerticesSel.add(geo.Feature(geometry: geo.Point(pt)));
-        }
-      }
-    }
-  }
-
-  // ============================================================
-  // turf → geobase 変換ヘルパー（_syncFeatureSources用）
-  // ============================================================
-
-  geo.Geometry? _turfLineToGeo(turf.GeometryObject? geom) {
-    if (geom is turf.MultiLineString) {
-      return geo.MultiLineString.from(
-        geom.coordinates.map(
-          (line) => line.map(
-            (p) => geo.Geographic(lon: p.lng.toDouble(), lat: p.lat.toDouble()),
-          ),
-        ),
-      );
-    }
-    if (geom is turf.LineString) {
-      return geo.LineString.from(
-        geom.coordinates.map(
-          (p) => geo.Geographic(lon: p.lng.toDouble(), lat: p.lat.toDouble()),
-        ),
-      );
-    }
-    return null;
-  }
-
-  geo.Geometry? _turfPolyToGeo(turf.GeometryObject? geom) {
-    if (geom is turf.MultiPolygon) {
-      return geo.MultiPolygon.from(
-        geom.coordinates.map(
-          (rings) => rings.map(
-            (ring) => ring.map(
-              (p) => geo.Geographic(
-                lon: p.lng.toDouble(),
-                lat: p.lat.toDouble(),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    if (geom is turf.Polygon) {
-      return geo.Polygon.from(
-        geom.coordinates.map(
-          (ring) => ring.map(
-            (p) => geo.Geographic(lon: p.lng.toDouble(), lat: p.lat.toDouble()),
-          ),
-        ),
-      );
-    }
-    return null;
-  }
-
-  List<geo.Geographic> _extractAllLineVertices(turf.GeometryObject? geom) {
-    final pts = <geo.Geographic>[];
-    if (geom is turf.MultiLineString) {
-      for (final line in geom.coordinates) {
-        for (final p in line) {
-          pts.add(geo.Geographic(
-            lon: p.lng.toDouble(),
-            lat: p.lat.toDouble(),
-          ));
-        }
-      }
-    } else if (geom is turf.LineString) {
-      for (final p in geom.coordinates) {
-        pts.add(geo.Geographic(
-          lon: p.lng.toDouble(),
-          lat: p.lat.toDouble(),
-        ));
-      }
-    }
-    return pts;
-  }
-
-  List<geo.Geographic> _extractAllPolyVertices(turf.GeometryObject? geom) {
-    final pts = <geo.Geographic>[];
-    void addRingVertices(List<turf.Position> ring) {
-      final positions = List<turf.Position>.from(ring);
-      if (positions.length >= 2 &&
-          positions.first.lat == positions.last.lat &&
-          positions.first.lng == positions.last.lng) {
-        positions.removeLast();
-      }
-      for (final p in positions) {
-        pts.add(geo.Geographic(
-          lon: p.lng.toDouble(),
-          lat: p.lat.toDouble(),
-        ));
-      }
-    }
-
-    if (geom is turf.MultiPolygon) {
-      for (final rings in geom.coordinates) {
-        for (final ring in rings) {
-          addRingVertices(ring);
-        }
-      }
-    } else if (geom is turf.Polygon) {
-      for (final ring in geom.coordinates) {
-        addRingVertices(ring);
-      }
-    }
-    return pts;
-  }
-
-  /// キャッシュ済みフィーチャをMapSourceManagerに送信
+  /// 組み立て済みのGeoJSONをMapSourceManagerに送る（変わったソースだけ送信される）
   void _pushFeaturesToSources() {
     if (!sourceManager.isInitialized) {
       // ソース未初期化 → dirty フラグを復元して次回リトライ
       layerCacheDirty = true;
       return;
     }
-    sourceManager.updateFeatures(MapSourceManager.kPolygons, cachedPolygons);
-    sourceManager.updateFeatures(
-      MapSourceManager.kPolygonsSel,
-      cachedSelectedPolygons,
-    );
-    sourceManager.updateFeatures(MapSourceManager.kLines, cachedPolylines);
-    sourceManager.updateFeatures(
-      MapSourceManager.kLinesSel,
-      cachedSelectedPolylines,
-    );
-    sourceManager.updateFeatures(MapSourceManager.kPoints, cachedMarkers);
-    sourceManager.updateFeatures(
-      MapSourceManager.kPointsSel,
-      cachedSelectedMarkers,
-    );
-    sourceManager.updateFeatures(MapSourceManager.kImages, cachedImageFeatures);
-    sourceManager.updateFeatures(
-      MapSourceManager.kImagesSel,
-      cachedSelectedImageFeatures,
-    );
-    sourceManager.updateFeatures(
-      MapSourceManager.kLineVertices,
-      cachedLineVertices,
-    );
-    sourceManager.updateFeatures(
-      MapSourceManager.kLineVerticesSel,
-      cachedLineVerticesSel,
-    );
-    sourceManager.updateFeatures(
-      MapSourceManager.kPolyVertices,
-      cachedPolyVertices,
-    );
-    sourceManager.updateFeatures(
-      MapSourceManager.kPolyVerticesSel,
-      cachedPolyVerticesSel,
-    );
+    final g = geoJson;
+    sourceManager
+      ..updateFeatures(MapSourceManager.kPolygons, g.polygons)
+      ..updateFeatures(MapSourceManager.kPolygonsSel, g.selectedPolygons)
+      ..updateFeatures(MapSourceManager.kLines, g.polylines)
+      ..updateFeatures(MapSourceManager.kLinesSel, g.selectedPolylines)
+      ..updateFeatures(MapSourceManager.kPoints, g.markers)
+      ..updateFeatures(MapSourceManager.kPointsSel, g.selectedMarkers)
+      ..updateFeatures(MapSourceManager.kImages, g.images)
+      ..updateFeatures(MapSourceManager.kImagesSel, g.selectedImages)
+      ..updateFeatures(MapSourceManager.kLineVertices, g.lineVertices)
+      ..updateFeatures(
+        MapSourceManager.kLineVerticesSel,
+        g.selectedLineVertices,
+      )
+      ..updateFeatures(MapSourceManager.kPolyVertices, g.polygonVertices)
+      ..updateFeatures(
+        MapSourceManager.kPolyVerticesSel,
+        g.selectedPolygonVertices,
+      );
     // クラスタリング: 現在のズームでクラスタ表示を更新
     _refreshPointClusters();
   }
@@ -1314,9 +882,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   }
 
   /// レイヤスタイル設定をMapSourceManagerに反映
-  void _applyLayerStyles() {
+  ///
+  /// [groups] を渡せば View 固有スタイルの再計算を省く（`_syncFeatureSources` が
+  /// 直前に組んだものをそのまま使う）
+  void _applyLayerStyles({List<MapStyleGroup>? groups}) {
     final style = layerStyleSettings;
-    sourceManager.setStyleGroups(_buildStyleGroups());
+    sourceManager.setStyleGroups(groups ?? _buildStyleGroups());
     // クラスタリング設定を反映
     final pointSize = style.getDouble(pointSizeDef);
     sourceManager.configureClustering(
@@ -1477,7 +1048,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           _buildSurveyPointMarker(drawingState.drawingPolygon[i], i, false),
       ],
       // パーティ位置共有: 他メンバーのマーカー
-      ..._buildPartyPeerMarkers(),
+      ...buildPartyPeerMarkers(ref.read(partySessionProvider)),
       // 現在位置マーカー — 最上位（常に見える）
       if (currentLocation != null)
         ml.Marker(
@@ -1486,128 +1057,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           child: _buildLocationMarkerWithCompass(),
         ),
     ];
-  }
-
-  /// パーティの他メンバー位置マーカー
-  List<ml.Marker> _buildPartyPeerMarkers() {
-    final session = ref.read(partySessionProvider);
-    if (session.peers.isEmpty) return const [];
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final markers = <ml.Marker>[];
-    for (final peer in session.peers.values) {
-      // メンバー一覧に居ないpeerはキック済みの残骸（live はhostが消せない）。
-      // 一覧ロード前（空）のときは描く。
-      if (session.members.isNotEmpty &&
-          !session.members.any((m) => m.uid == peer.uid)) {
-        continue;
-      }
-      final member = session.members.firstWhere(
-        (m) => m.uid == peer.uid,
-        orElse: () => PartyMember(uid: peer.uid, name: '', role: PartyRole.guest),
-      );
-      markers.add(
-        ml.Marker(
-          point: LatLng(peer.latitude, peer.longitude).toGeographic(),
-          size: const Size(140, 70),
-          child: _buildPeerMarker(peer, member.name, nowMs),
-        ),
-      );
-    }
-    return markers;
-  }
-
-  /// パーティの仲間の圏外区間軌跡（gap backfill の受信側）
-  ///
-  /// 「ブラックアウト中どこを通ったか」をピアマーカーと同系色の細線で描く。
-  /// 揮発データ（ルーム退出で消える。GeoPackageには保存しない）。
-  List<ml.PolylineLayer> _buildPartyTrackPolylines() {
-    final session = ref.read(partySessionProvider);
-    if (session.tracks.isEmpty) return const [];
-    final layers = <ml.PolylineLayer>[];
-    for (final entry in session.tracks.entries) {
-      // キック済みメンバーの軌跡は描かない（マーカーと同じ判定）
-      if (session.members.isNotEmpty &&
-          !session.members.any((m) => m.uid == entry.key)) {
-        continue;
-      }
-      layers.add(
-        ml.PolylineLayer(
-          polylines: [
-            for (final track in entry.value)
-              geo.Feature(
-                geometry: geo.LineString.from(
-                  track.points.toGeographics(),
-                ),
-              ),
-          ],
-          color: Colors.deepOrange.withValues(alpha: 0.5),
-          width: 3,
-        ),
-      );
-    }
-    return layers;
-  }
-
-  /// 他メンバー1人のマーカーウィジェット（鮮度で淡色化＋経過時間ラベル）
-  Widget _buildPeerMarker(PeerPosition peer, String name, int nowMs) {
-    final freshness = peer.freshnessAt(nowMs);
-    final double opacity;
-    final Color color;
-    switch (freshness) {
-      case PeerFreshness.fresh:
-        opacity = 1.0;
-        color = Colors.deepOrange;
-      case PeerFreshness.stale:
-        opacity = 0.6;
-        color = Colors.deepOrange;
-      case PeerFreshness.lost:
-        opacity = 0.4;
-        color = Colors.blueGrey;
-    }
-    final displayName = name.isEmpty ? t.party.memberFallback : name;
-    final label = freshness == PeerFreshness.fresh
-        ? displayName
-        : '$displayName・${_peerAgeLabel(peer.ageAt(nowMs))}';
-    return Opacity(
-      opacity: opacity,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 18,
-            height: 18,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: const [
-                BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 2),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontSize: 11),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 経過時間の短いラベル
-  String _peerAgeLabel(Duration age) {
-    if (age.inMinutes >= 1) return t.party.minAgo(min: age.inMinutes);
-    return t.party.secAgo(sec: age.inSeconds);
   }
 
   /// 描画開始の1点目インジケータ（十字マーク）

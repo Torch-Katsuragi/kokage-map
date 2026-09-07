@@ -395,12 +395,6 @@ abstract class FeatureNode extends LayerTreeNode {
     await geoPackageFile.flushChanges();
   }
 
-  /// 属性値の直接編集（レガシー互換用）
-  @Deprecated('Use setAttributeValue instead')
-  Future<void> editAttribute(String attributeName, dynamic newValue) async {
-    await setAttributeValue(attributeName, newValue);
-  }
-
   /// 詳細情報（項目名と値のペア、順序付き）
   List<MapEntry<String, String>> get detailEntries => [
     MapEntry('name', name),

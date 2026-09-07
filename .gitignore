@@ -62,3 +62,8 @@ KEYSTORE_HINT.txt
 
 # Firebase Hosting のデプロイキャッシュ
 .firebase/
+
+# ツールの出力（コミットしない）
+analyze_output.txt
+test_results.json
+test_results.txt

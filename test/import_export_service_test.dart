@@ -1,6 +1,6 @@
 // Root Maps: Import/Export Service Tests
 import 'package:flutter_test/flutter_test.dart';
-import 'package:root_maps/services/import_export_service.dart';
+import 'package:root_maps/services/import_export/import_export_service.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'dart:io';
 import 'dart:typed_data';

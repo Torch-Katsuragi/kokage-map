@@ -19,7 +19,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import '../services/import_export_service.dart';
+import '../services/import_export/import_export_service.dart';
 import '../services/coordinate/epsg_registry.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';

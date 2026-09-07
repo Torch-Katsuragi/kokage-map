@@ -110,8 +110,7 @@ lib/screens/map_page/
     └── map_gps_survey_mixin.dart     # GPS測量
 
 lib/widgets/
-├── track_extraction_dialog.dart     # 軌跡切り取りUI（sub_table JSON付き保存）
-└── gps_tracking_dialogs.dart        # SelectPointLayerDialog（測量用）
+└── track_extraction_dialog.dart     # 軌跡切り取りUI（sub_table JSON付き保存）
 
 lib/tools/
 └── gps_tool.dart                    # GPS測量ツール

@@ -41,15 +41,6 @@ abstract class LayerTreeNode {
   /// パスリゾルバ（注入可能、未設定時は親から継承またはデフォルト使用）
   PathResolver? _pathResolver;
 
-  /// nodeTypeがとりうる値（後方互換性のため維持、非推奨）
-  @Deprecated('Use NodeType enum instead')
-  static const List<String> nodeTypeValues = [
-    "folder",
-    "gpkg",
-    "layer",
-    "photo",
-  ];
-
   // UI関連の責務（baseIcon, baseIconColor）はNodePresenterに移動
   // lib/presentation/node_presenter.dart を参照
 
@@ -91,13 +82,6 @@ abstract class LayerTreeNode {
       current = current.parent;
     }
     return false;
-  }
-
-  /// 文字列nodeTypeからの変換（後方互換性）
-  /// 新規コードではNodeType enumを直接使用すること
-  @Deprecated('Use NodeType enum directly')
-  static NodeType nodeTypeFromString(String value) {
-    return NodeType.fromString(value) ?? NodeType.folder;
   }
 
   /// 初期化フラグ（重複実行を防ぐ）
@@ -151,14 +135,6 @@ abstract class LayerTreeNode {
   /// 指定typeの子ノードリストを返す
   List<LayerTreeNode> getChildrenByType(NodeType type) {
     return children.where((c) => c.nodeType == type).toList();
-  }
-
-  /// 文字列指定で子ノードを取得（後方互換性）
-  @Deprecated('Use getChildrenByType(NodeType) instead')
-  List<LayerTreeNode> getChildrenByTypeString(String type) {
-    final nodeType = NodeType.fromString(type);
-    if (nodeType == null) return [];
-    return getChildrenByType(nodeType);
   }
 
   /// 可視状態のLayerNodeリストを再帰的に取得（高速化用）
@@ -258,13 +234,6 @@ abstract class LayerTreeNode {
       }
     }
     return null;
-  }
-
-  /// 文字列nodeType指定で子ノードを取得（後方互換性）
-  @Deprecated('Use getChild with NodeType instead')
-  LayerTreeNode? getChildByTypeString(String name, {String? nodeType}) {
-    final type = nodeType != null ? NodeType.fromString(nodeType) : null;
-    return getChild(name, type: type);
   }
 
   /// パスリスト（このノードからのノード名リスト）を受け取り、該当する子孫ノードへの参照を返す

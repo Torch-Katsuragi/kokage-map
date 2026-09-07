@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### 🧹 Internal cleanup
+
+- Removed code that was no longer reachable (old exporters, old dialogs, migration helpers;
+  about 13k lines). No behaviour change.
+
 ### 🗺 Exporting a QGIS project no longer discards settings made in QGIS
 
 - The file is now named `<folder name>.qgs` instead of `project.qgs` (old files are renamed automatically).

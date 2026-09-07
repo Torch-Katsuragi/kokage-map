@@ -30,7 +30,7 @@ import '../../../services/geometry_conversion_service.dart';
 import '../../../utils/feature_calc_utils.dart';
 import '../../../models/app_notification.dart';
 import '../../../providers/notification_providers.dart';
-import '../../../widgets/dialog_manager.dart';
+import '../../../widgets/layer_import_export_dialog.dart';
 import '../../../widgets/geometry_conversion_dialogs.dart';
 import '../../../widgets/survey_conversion_dialog.dart';
 import '../../../screens/layer_style_settings_screen.dart';
@@ -162,7 +162,10 @@ class LayerTile extends ConsumerWidget {
           case 'style':
             await _openStyleSettings(context, ref);
           case 'export':
-            await DialogManager.showLayerExportDialog(context, sourceLayer: node);
+            await LayerImportExportDialog.showExportDialog(
+              context,
+              exportLayer: node,
+            );
           case 'convert_to_line' when node is PointLayerNode:
             await _convertPointsToLine(context, ref, node as PointLayerNode);
           case 'merge' when node is PolygonLayerNode:

@@ -48,7 +48,6 @@ dependencies:
   nmea: ^3.3.3
   proj4dart: ^2.1.0  # 座標変換用（geobase ^1.5.0 が ^2.0.0 を要求するため据え置き）
   desktop_drop: ^0.7.0  # デスクトップでのファイルドラッグ&ドロップ用
-  cross_file: ^0.3.4+2  # クロスプラットフォームファイル操作用
   charset_converter: ^2.3.0  # Shift_JIS等の文字コード変換用（ネイティブAPI使用）
   charset: ^2.0.1  # 純粋Dart実装の文字コード変換（Shift-JIS, EUC-JP対応）
   
@@ -75,7 +74,6 @@ dependencies:
   trina_grid: ^2.2.1                  # 高機能データグリッド（属性テーブル用、TrinaGrid後継）
 
   # コレクション操作用パッケージ
-  collection: ^1.18.0                 # 高度なコレクション操作用
   
   # 地理空間計算用パッケージ
   turf: ^0.0.10                       # GeoJSONベースの地理空間分析ライブラリ
@@ -109,7 +107,6 @@ dependencies:
   flutter_markdown: ^0.7.6              # CHANGELOG.md表示用
   markdown: ^7.0.0                         # カスタムMarkdownシンタックス用
   device_info_plus: ^12.4.0         # win32 ^5 vs ^6 競合のため据え置き
-  image_picker: ^1.2.1
   firebase_core: ^4.11.0
   firebase_database: ^12.4.4
   firebase_auth: ^6.5.4

@@ -1,277 +1,54 @@
 # Changelog
 
-## Unreleased
+## v0.6.1 — 2026/09/07
 
-### 🧹 Internal cleanup
+Everything since v0.6.0 (April 16), in one place.
 
-- Removed code that was no longer reachable (old exporters, old dialogs, migration helpers;
-  about 13k lines). No behaviour change.
-- Restructured the map screen and coordinate-system internals and tightened static analysis.
-  The library used to render the changelog and user guide was replaced by its successor.
+### 🌳 The app is now "Kokage Map"
 
-### 🗺 Exporting a QGIS project no longer discards settings made in QGIS
+- "RootMap GIS" and "K-Maps" were used in different places; it is now Kokage Map everywhere, including in-app text.
+- ⚠ The Drive folder name `RootMap GIS Projects` is unchanged (renaming it would orphan linked folders).
 
-- The file is now named `<folder name>.qgs` instead of `project.qgs` (old files are renamed automatically).
-- Exporting again updates the existing file in place. Print layouts, field settings and symbol
-  details set in QGIS are kept. Categorized and rule-based styles are left untouched.
-- You are notified when layers that no longer exist in the folder are removed, or when a style was left as is.
-- `<folder name>.qgs` now follows your changes automatically (visibility, styles, views, order),
-  and is created when a project is opened if it does not exist yet. The manual
-  "Export / Import QGIS project" menu items were removed.
-- When you save the `.qgs` in QGIS, the app loads those changes (views, styles, visibility)
-  the next time the project is opened, and tells you so.
-- Subfolders that carry their own settings (e.g. Drive-linked ones) get their own `.qgs`,
-  embedded into the parent project. A subfolder handed over on its own opens in QGIS.
-- Label settings and folder expansion state are written too. QGIS `.qgz` files can be read.
-- `.qgs` files are now included in Drive sync.
-- Internal: sync bookkeeping moved out of the shared files into the device. Folder settings are
-  no longer inherited from parent folders; each folder is self-contained.
-- ⚠ Layer IDs are now generated in a platform-independent way, so a previously exported file
-  gets its layers replaced once.
+### 🌐 Web version (Chrome / Edge)
 
-### 💾 GPS tracks now survive uninstalling the app (Android)
+- Open a project folder in the browser, view and edit GeoPackages, use Google Drive (clone, upload, download) and location-sharing parties. The last folder is remembered.
+- ⚠ Firefox / Safari cannot open folders and only show the basemap. Folder renaming and the global-folder setting are not available on web. Browser location is coarser than a phone's GPS, so use the Android app in the field.
+- Windows / macOS / Linux builds are discontinued in favour of the web version (distributed as a URL; installable as a PWA).
 
-- The global folder (GPS tracks, shared GeoPackages, photos) moved from the app's
-  private storage to shared storage at `Documents/KokageMap/Global`. It is visible
-  in the Files app.
-- Existing data is moved automatically on first launch (a notification tells you).
-  The old folder is kept as `k_maps_global.migrated`; it is safe to delete.
-- If you set a custom global folder in Settings, that setting still wins.
+### 🔍 Views, and per-layer / per-view styles
 
-### 🧭 An arrow now points toward your location when it is off screen
+- A layer can have several "views", each with its own condition (an SQL WHERE clause, the same syntax as QGIS filters). "Add view" in the layer menu.
+- Colour and width can be set per layer or per view. ⚠ Layer-level styles used to be saved but never drawn; they now take effect.
+- ⚠ Stacking order does not yet follow the folder structure.
 
-- If you pan far away and lose track of where you are, a small blue arrow on the
-  edge of the map shows which way to pan to get back.
-- Tap the arrow to jump straight to your current location.
-- Jumps land in the visible part of the map, not underneath the open layer panel.
-- "Go here" from the layer list and the attribute table now animates instead of snapping.
+### 🗺 QGIS interoperability
 
-### 📷 Follow-up fix for photos losing their location (Android)
+- Each folder gets a `<folder>.qgs` that is written automatically and follows visibility and style changes. Print layouts and symbol details set in QGIS are kept (categorized and rule-based styles are left alone).
+- When you save the `.qgs` in QGIS, views, styles and visibility are read back the next time the project is opened. `.qgz` files can be read too.
+- Subfolders with their own settings (e.g. Drive-linked) get their own `.qgs`, embedded into the parent project. A subfolder handed over on its own opens in QGIS.
+- GeoPackages edited in Kokage Map stay usable in QGIS: spatial index, extent and feature-count records are fixed up on save.
+- ⚠ Opening the result in QGIS has not been verified yet. Please report if it does not open.
 
-- On devices without "All files access" granted, the previous fix did not apply and
-  the location was silently dropped.
-- Added a second path that uses the media location permission (ACCESS_MEDIA_LOCATION).
-- When some photos still come in without location, a notification tells you how many
-  and what to do (allow "All files access").
+### 👥 Location-sharing party
 
-### 🔔 The ongoing notification now appears while recording GPS / sharing location (Android 13+)
+- Join via invite link or QR code (the link opens the web join screen).
+- Tracks walked while a member was out of coverage arrive when they reconnect and are drawn as thin lines.
+- The host can remove members.
+- Drive-linked folders can also be handed over by QR code ("Add folder" → "Scan QR code"; no server involved).
 
-- The app never asked for the notification permission, so on Android 13+ the
-  "GPS active" / "sharing location" ongoing notification was never shown.
-- The notification permission is now requested right after the location permission.
+### 📍 GPS and photos (Android)
 
-### 🧹 Startup fixes (Android)
+- The global folder (GPS tracks etc.) moved to `Documents/KokageMap/Global`, so it survives uninstalling the app. Existing data is migrated on first launch (the old folder is kept as `k_maps_global.migrated` and can be deleted).
+- When your location is off screen, an arrow on the edge points toward it; tap to jump there.
+- Photos keep their location, direction and original file name when added (also on devices without "All files access"). You are notified if a photo could not keep its location. ⚠ Cloud-only photos still have no location.
+- On Android 13+ the ongoing "recording GPS" / "sharing location" notification now appears (notification permission is requested). The "Nearby devices" prompt no longer shows on every launch.
 
-- The app no longer asks for the "Nearby devices" permission on every launch
-  (it is requested when you connect an external device / GNSS receiver).
-- Fixed the "app updated" banner appearing right after a fresh install.
-- Fixed the old app name (RootMap GIS) lingering in the notification channel name.
+### 🗾 Basemap and other fixes
 
-### 🗾 The default basemap is now GSI (standard map)
-
-- Fixed OpenStreetMap tiles all turning into "Access blocked" images
-  (the app now identifies itself the way the tile usage policy requires).
-- The initial basemap is now the GSI standard map. OpenStreetMap remains
-  available as a basemap choice.
-- ⚠ Bulk download is no longer available for OpenStreetMap (prohibited by
-  its tile usage policy; GSI maps can still be bulk-downloaded).
-- ℹ If "Access blocked" images got cached, clear them via
-  Settings → Basemap → Clear cache.
-
-### 📷 Photos keep their location info when added (Android)
-
-- The system photo picker strips GPS metadata for privacy; imported photos
-  lost their capture location and direction.
-- The app now re-reads the original file directly, preserving all metadata.
-- Also fixed imports being named after a number (like "20.jpg") — the
-  original file name is kept.
-- ⚠ Cloud-only photos (no local copy on the device) still have no location;
-  those show "no location info" as before.
-
-### 🔗 Invite links and QR codes for location-sharing parties
-
-- Copy an invite link or show a QR code from the room sheet.
-- Opening the link launches the web build with the join dialog pre-filled — no app needed.
-- The app's join screen can also scan the QR code.
-- The join field accepts either a room code or an invite link.
-
-### 👣 See where party members went while offline
-
-- Tracks walked while a member was out of coverage now arrive when they
-  reconnect, drawn as a faint line on the map.
-
-### 🚪 Hosts can now remove members
-
-- From the member list on the room sheet. The removed member gets a notification.
-
-### 📝 Cleaned up leftover old names (Root Maps)
-
-- Onboarding, permission disclosures, and the user guide now all say "Kokage Map".
-- The location disclosure now matches the location-sharing feature
-  (on-device only, shared with room members only while in a party).
-
-### 🌳 The app is now called Kokage Map
-
-- It used to be "RootMap GIS" in some places and "K-Maps" in others. One name now.
-- ⚠ The Drive folder name (`RootMap GIS Projects`) is **unchanged** — renaming it
-  would lose track of already-linked folders, and it does no harm.
-
-
-### 👥 Location-sharing parties now work on the web build
-
-- Create or join a room from the browser — the same rooms as the Android app.
-- ⚠ Browser location is less accurate than the device GPS; use the Android
-  app in the field.
-
-### ☁️ Google Drive sync now works on the web build
-
-- Clone a Drive folder from the browser and upload or download it.
-- Google's sign-in prompt (One Tap) now fires as the app opens.
-- Once you have granted access, a reload reconnects to Drive **without
-  asking anything** (a small window opens for about a second and closes
-  itself; no interaction needed).
-- Syncing after leaving the tab open for over an hour now reconnects
-  automatically before running.
-- A small "LOG" chip sits in the bottom-left corner. Tap it to see the
-  activity record (copy and paste it when reporting a problem).
-- Fixed a Drive URL you had finished typing sometimes staying stuck on
-  "cannot access this folder".
-- Fixed the "General" settings page, which used to spin forever in a browser.
-- Fixed creating, deleting, moving and renaming folders in a browser.
-- ⚠ A browser has no notion of a storage path, so the "Global folder"
-  setting is not shown on the web build.
-- ⚠ Renaming a folder is not possible in a browser (it would mean rebuilding
-  its whole contents).
-
-### 📱 Hand over a Drive-linked folder with a QR code
-
-- "Share via QR code" from a linked folder's row.
-- The receiving device picks it up with "Add folder" → "Scan QR code"
-  (data, styles and `project.qgs` all at once — no server involved).
-- ⚠ Reading a QR code needs a camera, so it is phone-only (the web build
-  shows only the URL field).
-
-### 🗺️ QGIS project (.qgs) export and import
-
-**Import**
-
-- If a folder contains a `.qgs`, views can be created from it
-  ("Import QGIS project" in the ≡ menu or a folder's menu).
-- **If QGIS held the same layer several times with different styles or filters,
-  you get one view for each.**
-- Anything that couldn't be taken in (layers outside the folder, PostGIS
-  connections, …) is reported in a notification.
-- ⚠ Views on the imported layers are replaced, so re-importing doesn't pile up.
-
-**Export**
-
-- From the ≡ menu on the map, or a folder's menu: "Export QGIS project".
-- A `project.qgs` appears in the folder. **Hand the whole folder to someone
-  and they can open it in QGIS as-is** (paths are written relative).
-- Folders, GeoPackages and layers become QGIS layer groups;
-  **views become QGIS layers**, filters included.
-- Anything left out (photos, GeoPackages referenced from outside the folder)
-  is reported in a notification.
-- ⚠ **Not yet verified against QGIS itself.** Please report if it won't open.
-
-### 🎨 Per-layer and per-view colours and widths
-
-- "Style" from a layer's menu, or from any view's menu.
-- **Each view can look different** — e.g. large blue dots for
-  "big parcels" and small green ones for the rest.
-- ⚠ **Until now, per-layer style settings were saved but never drawn.**
-  They take effect from this release.
-- ⚠ Stacking order (z-order) still doesn't follow the folder structure.
-
-### 🔍 Layers can now have "views"
-
-- Give one layer **several ways of showing it**, each with its own condition.
-  - e.g. keep "cedar only" and "cypress only" side by side and show just one.
-- Conditions are written as a SQL WHERE clause (same syntax as a QGIS filter).
-- Add one from the layer menu ("Add view"); each view's own menu has
-  rename, edit filter, duplicate, reorder and delete.
-- Layers without views behave exactly as before.
-
-### 🌐 Web usability improvements
-
-- **Switching the base map now takes effect immediately** (a reload used to be required).
-- **The app now remembers the last folder you opened.**
-  Reopen the browser and you'll see "Reopen last folder".
-  - ⚠ The browser will ask for access permission again when reopening.
-- Opening a folder is faster (it used to be scanned three times).
-
-### 🗺️ Fixed map animations stopping short of their destination
-
-- On the web build, the map could stop before reaching the target location.
-
-### 🎨 The layer list and attribute table are now opaque
-
-- The map used to show through them, which made text hard to read over aerial imagery.
-
-### 🖥️ Windows Support Discontinued
-
-- Windows, macOS and Linux builds are gone; **the web build replaces them**
-  - The web build now handles project folders and GeoPackages, so it took over the role
-- ⚠ **Distribution is now a URL** (open it in a browser, or install it as a PWA).
-  It is no longer an application you download and run
-- Android is unchanged
-
-### 🌐 The Web Build Starts Up and Shows a Map
-
-- Opening the app in a browser now gets you as far as a rendered base map (stage 1)
-  - Platform checks are collected in one place, closing the calls that crashed on web
-  - No local tile server on web — the browser fetches tiles directly
-- Not yet available: opening a project folder, reading or writing GeoPackages
-  (file handling comes in the next stage)
-
-### 📂 Project Folders on Web
-
-- Pick a folder in the browser and its subfolders, GeoPackages and photos appear in the layer list
-- ⚠ **Requires Google Chrome or Microsoft Edge.** Firefox and Safari have no way to open
-  a folder, so they only show the base map
-
-### 🗂️ Reading and Writing GeoPackages on Web
-
-- Layers and features now display and can be edited
-- Edits are written back to the original `.gpkg` automatically, as on Android and Windows
-
-### 📍 Faster Current Location (Web / Windows)
-
-- The location marker used to take over a minute to appear on web; it is now almost immediate
-  - A PC has no GPS receiver, so the browser derives your location from Wi-Fi and similar.
-    Asking it for high accuracy did not improve the result, it only made you wait longer
-- While a location is being acquired, a rough position is now shown straight away
-
-### 🖥️ Windows Support Restored
-
-- Map rendering works again on Windows (paused since April 2026)
-  - Fixed a build failure on Japanese-locale systems
-  - Fixed map tiles not loading
-  - Fixed map labels not rendering
-- Verified with 10,000 polygons in a release build
-
-### 🐛 Bug Fixes
-
-- Fixed the map sometimes not jumping to your current location on startup
-  (both Android and Windows)
-  - The camera move was lost when the first GPS fix arrived before the map was ready
-- Fixed the party create/join dialog overflowing the screen
-- Fixed camera operations (move, rotate, fit bounds) being silently dropped
-  when called before the map was ready
-
-### 🔗 Better QGIS Interoperability
-
-- GeoPackages edited in RootMap now keep working in QGIS
-  - Spatial index auto-update, temporarily removed while editing, is restored on save
-  - Layer extent is updated to match the actual data (so "Zoom to Layer" works)
-  - Feature count is kept in sync
-
-### 🔧 For Developers
-
-- File access now goes through a single filesystem abstraction, groundwork for web
-- Added a single command to run the test suite on both Windows and Android
-- Added a map backend contract test (same assertions on both platforms)
-- The project folder can now be passed as a launch option
+- The default basemap is now GSI (standard map). The OpenStreetMap "Access blocked" tiles are fixed, but bulk download of OpenStreetMap is not allowed by its terms (stale tiles: Settings → Basemap → Clear cache).
+- Fixed: the map sometimes not moving to your location on launch, stopping short of the target when jumping, and the party dialog overflowing the screen.
+- The layer list and attribute table backgrounds are now opaque (they were hard to read over aerial photos).
+- Internal: removed unused code, restructured the map screen and coordinate modules, tightened static analysis.
 
 ## v0.6.0 — 2026/04/16
 

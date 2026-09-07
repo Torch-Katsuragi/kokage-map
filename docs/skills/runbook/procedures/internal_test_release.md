@@ -43,7 +43,7 @@ python tool/play/play.py upload ... --apply --hold
 以下は API に無い。`claude-in-chrome` で Play Console を開いて行う（本人のクリックが必要な操作は交代する）。
 
 - 「アプリのコンテンツ」の宣言（権限宣言・データセーフティ・プライバシーポリシーURL・対象ユーザー）
-- テスターのメーリングリスト編集・オプトイン状況の確認（API で扱えるのは Google グループだけ）
+- テスターの一覧（メールアドレス一覧・Google グループとも）とオプトイン状況の確認。API の `edits.testers` は新方式のクローズドテストでは 403 になる（2026-09-07 実測）
 - 本番環境へのアクセス申請
 - 深いURLは `.../app/<appId>/tracks/<trackId>` `.../app-content/overview` `.../publishing` なら直接開ける
 

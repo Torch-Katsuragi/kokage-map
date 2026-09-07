@@ -6,6 +6,9 @@
     python tool/play/play.py listing [--lang ja-JP] [--title ...] [--short ...] [--full FILE] [--apply]
     python tool/play/play.py images phoneScreenshots --lang ja-JP --add a.png b.png [--replace] [--apply]
     python tool/play/play.py testers --track alpha [--group kokage-map-testers@googlegroups.com ...] [--apply]
+      ⚠ 2026-09-07 実測: この app の alpha は「クローズドテスト（新方式）」なので 403
+        （"upgraded to use open or closed testing; switch back to communities-based testing"）。
+        Google グループの紐づけは Play Console の テスト → クローズドテスト → テスター で行う
 
 規約:
   - 書き込み系は --apply を付けたときだけ commit する。付けなければ edit を作って

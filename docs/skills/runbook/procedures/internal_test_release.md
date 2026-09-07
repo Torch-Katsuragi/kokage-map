@@ -7,7 +7,11 @@ Play Console の画面を触るのは API に無い項目だけ。
 
 - `pubspec.yaml` の `version: X.Y.Z+N` の **N（versionCode）は Play に一度上げた値を再利用できない**。
   既に使った値は `python tool/play/play.py status` の `bundles:` に出る。
-- `assets/changelog/ja.md` / `en.md` の先頭エントリを今回の内容にする（ここがそのままリリースノートになる。500字まで）。
+- `assets/changelog/ja.md` / `en.md` の `## 未リリース` を **`## vX.Y.Z — YYYY/MM/DD` に切る**。
+  内容は前リリースとの差分の**最終形**にまとめ直す（打ち消された旧仕様・開発ログ粒度の項目は落とす。目安 50 行）。
+  ⚠ 2026-09-07 に、4 月から切らずに 266 行積み上がって旧仕様と矛盾していたのを整理した
+- Play のリリースノートは 500 字上限。changelog の先頭エントリをそのまま渡すと途中で切れるので、
+  `.temp/release/notes_ja.md` / `notes_en.md` に短く書いて `--notes-ja/--notes-en` に渡す（見出し無しなら全文が使われる）
 
 ## ステップ2: AAB の出力
 

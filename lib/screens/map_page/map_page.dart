@@ -74,6 +74,7 @@ import 'widgets/map_menu_button.dart';
 import 'widgets/overlay_image_layers.dart';
 import 'widgets/party_controls.dart';
 import 'widgets/party_map_layers.dart';
+import 'widgets/tool_name_flash.dart';
 
 /// Map and edit screen (main structure)
 class RootMapsHomePage extends ConsumerStatefulWidget {
@@ -365,9 +366,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                   }
                 });
               },
+              // ≡ メニュー（パーティ・水準器・設定を集約）はレイヤ一覧の左
+              beforeLayerButton: const [MapMenuButton()],
             ),
-            // ≡ メニュー（パーティ・水準器・設定を集約）
-            const MapMenuButton(),
           ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(36),
@@ -394,6 +395,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                         _buildGestureLayer(),
                         _buildDrawingPreviewInfo(),
                         _buildOffscreenLocationIndicator(),
+                        const ToolNameFlash(),
                       ],
                     ),
                   ),

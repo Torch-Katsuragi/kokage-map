@@ -26,6 +26,9 @@ List<Widget> buildMapAppBarActions({
   required bool drawerOpen,
   required VoidCallback onAttributeTableToggle,
   required VoidCallback onDrawerToggle,
+  /// レイヤ一覧ボタンの左に挟むもの（≡ メニューなど）。
+  /// レイヤ一覧は一番よく押すので、親指に近い右端に置く
+  List<Widget> beforeLayerButton = const [],
 }) {
   return [
     const NotificationBell(),
@@ -38,7 +41,8 @@ List<Widget> buildMapAppBarActions({
       tooltip: showAttributeTable ? t.attributeTable.closeTable : t.attributeTable.openTable,
       onPressed: onAttributeTableToggle,
     ),
-    // レイヤードロワーボタン
+    ...beforeLayerButton,
+    // レイヤードロワーボタン（右端）
     IconButton(
       icon: Icon(Icons.layers, color: drawerOpen ? Colors.blue : null),
       tooltip: drawerOpen ? 'Close Layer Drawer' : 'Open Layer Drawer',

@@ -844,6 +844,8 @@
     "sizeLabel": "サイズ: ",
     "edit": "編集",
     "openInGoogleMaps": "Google Maps で開く",
+    "copyGoogleMapsLink": "Google Maps のリンクをコピー（長押しで開く）",
+    "googleMapsLinkCopied": "Google Maps のリンクをコピーしました",
     "googleMapsOpenFailed": "Google Maps を開けませんでした",
     "delete": "削除（長押し）",
     "deleted": "削除しました",

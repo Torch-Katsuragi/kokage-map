@@ -844,6 +844,8 @@
     "sizeLabel": "Size: ",
     "edit": "Edit",
     "openInGoogleMaps": "Open in Google Maps",
+    "copyGoogleMapsLink": "Copy Google Maps link (hold to open)",
+    "googleMapsLinkCopied": "Google Maps link copied",
     "googleMapsOpenFailed": "Failed to open Google Maps",
     "delete": "Delete (hold)",
     "deleted": "Deleted",

@@ -17,6 +17,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -328,7 +329,7 @@ class FeatureDetailPanel extends ConsumerWidget {
           ),
       ];
 
-      // Pointの場合は「Google Mapsで開く」ボタンを追加
+      // Point は Google Maps のリンクをコピー（長押しで開く。開くのは隠し機能扱い）
       if (feature is PointFeatureNode) {
         final point = (feature as PointFeatureNode).point;
         final lat = point.latitude;
@@ -338,9 +339,10 @@ class FeatureDetailPanel extends ConsumerWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => _openInGoogleMaps(ref, lat, lng),
-              icon: const Icon(Icons.map_outlined, size: 16),
-              label: Text(t.featureDetail.openInGoogleMaps),
+              onPressed: () => _copyGoogleMapsLink(ref, lat, lng),
+              onLongPress: () => _openInGoogleMaps(ref, lat, lng),
+              icon: const Icon(Icons.link, size: 16),
+              label: Text(t.featureDetail.copyGoogleMapsLink),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green.shade50,
                 foregroundColor: Colors.green.shade700,
@@ -401,13 +403,27 @@ class FeatureDetailPanel extends ConsumerWidget {
     return const SizedBox.shrink();
   }
 
-  /// Google Mapsでポイントを開く
+  static Uri _googleMapsWebUri(double lat, double lng) =>
+      Uri.parse('https://www.google.com/maps?q=$lat,$lng');
+
+  /// Google Maps のリンクをクリップボードへ（LINE 等に貼る用途が主）
+  Future<void> _copyGoogleMapsLink(WidgetRef ref, double lat, double lng) async {
+    await Clipboard.setData(
+      ClipboardData(text: _googleMapsWebUri(lat, lng).toString()),
+    );
+    ref.read(notificationCenterProvider.notifier).add(
+      title: t.featureDetail.googleMapsLinkCopied,
+      level: NotificationLevel.success,
+    );
+  }
+
+  /// Google Mapsでポイントを開く（ボタン長押し）
   /// Android: geo: intentでGoogle Mapsアプリを優先起動
   /// PC/アプリなし: https:// URLでブラウザにフォールバック
   Future<void> _openInGoogleMaps(WidgetRef ref, double lat, double lng) async {
     // Android向け: geo: URIでGoogle Mapsアプリを直接起動
     final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng');
-    final webUri = Uri.parse('https://www.google.com/maps?q=$lat,$lng');
+    final webUri = _googleMapsWebUri(lat, lng);
 
     try {
       if (await canLaunchUrl(geoUri)) {

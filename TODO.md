@@ -25,8 +25,9 @@
       `restoreSessionSilently()`（`authorizationForScopes` だけ）に置き換え。詳細はコミット 7fe0f3f
 - [x] 削除したフィーチャの残留: DB 削除を待つ＋レイヤ再読込の条件を「未ロード」に
 - [x] 背景地図のボケ固定（拡大フォールバックのキャッシュ焼き込み）と県外キャッシュ不表示（透明PNG 200）
-  - [ ] 圏外検知は connectivity_plus の「接続あり」のまま。連続タイムアウトで offline に落として
-        mbtiles 直読みへ切り替える到達性ベースの判定は未実装（`basemap_service.dart:230` 付近）
+  - [x] 圏外検知を到達性ベースに（2026-09-07 夜）: タイル取得が 3 回続けて失敗したら `isNetworkAvailable` を
+        false に落とし（Android は mbtiles 直読みへ切替）、20 秒ごとに 1 本だけ短タイムアウトで試して戻す。
+        ⚠ 実機での圏外再現は未実施（インターフェイスありで電波なしの状態を作れない）
 - [x] 複数選択（左下ボタン有効時）・集合の情報パネル・消しゴムの集めてから確定
 - [x] GPS 情報は常時バーをやめ、現在位置を擬似フィーチャ `CurrentLocationNode` にして選択パイプラインに載せた
       （選択ツールのタップ候補にだけ入る。投げ縄・複数選択・消しゴムの対象外）。情報カードの枠 `InfoPanelCard` は
@@ -37,6 +38,7 @@
 - [x] 🐛 release で `filter:` 付きの `addLayer` が `Expression$Converter` の ClassNotFound で落ち、以後のレイヤが全部消える
       （R8 が maplibre_android の式クラスを削っていた）。`android/app/proguard-rules.pro` の keep で修正。
       View 固有スタイル（グループレイヤ）はこの経路を通るので、リリース版では以前から壊れていたはず
+- [x] テスター招待の手順書 [[docs/technical/closed-test-invite]]（アドレス一覧なら「アドレスを聞く＋リンク1つ」、Google グループならリンク2つ）
 - [ ] 3D 地図: 設計メモ [[docs/technical/3d-map-design]]（DEM を持って表示時に TIN 化、正射影の別画面を推奨）。実装は未着手
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 

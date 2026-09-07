@@ -151,7 +151,49 @@ class BaseMapService extends ChangeNotifier {
   bool get isOfflineMode => _isOfflineMode;
 
   /// ネットワークが利用可能かどうか
-  bool get isNetworkAvailable => _isNetworkAvailable;
+  /// ネットが使えるか。「インターフェイスがある」かつ「実際に届いている」
+  bool get isNetworkAvailable => _isNetworkAvailable && _reachable;
+
+  /// 実到達性。connectivity_plus は**インターフェイスの有無**しか見ないので、
+  /// 圏外でもモバイル回線が「接続中」なら true のまま。タイル取得が
+  /// [_failuresToGoOffline] 回続けて失敗（タイムアウト等）したら false に落とし、
+  /// [isNetworkAvailable] 経由で地図側に伝える（Android なら mbtiles 直読みに切り替わる）。
+  /// false の間は [_probeInterval] ごとに 1 本だけ短いタイムアウトで試し、
+  /// 成功したら true に戻す
+  bool _reachable = true;
+  int _consecutiveFailures = 0;
+  DateTime? _unreachableSince;
+  static const int _failuresToGoOffline = 3;
+  static const Duration _probeInterval = Duration(seconds: 20);
+
+  void _noteFetchSuccess() {
+    _consecutiveFailures = 0;
+    if (_reachable) return;
+    _reachable = true;
+    _unreachableSince = null;
+    AppLogger.debug('[BaseMapService] Network reachable again');
+    notifyListeners();
+  }
+
+  void _noteFetchFailure() {
+    _consecutiveFailures++;
+    if (_reachable && _consecutiveFailures >= _failuresToGoOffline) {
+      _reachable = false;
+      _unreachableSince = DateTime.now();
+      AppLogger.debug('[BaseMapService] Network unreachable (interface up but $_consecutiveFailures fetches failed)');
+      notifyListeners();
+    } else if (!_reachable) {
+      _unreachableSince = DateTime.now();
+    }
+  }
+
+  /// 到達不能と判定中で、まだ次の試行時刻に達していないか
+  bool get _inUnreachableCooldown {
+    final since = _unreachableSince;
+    return !_reachable &&
+        since != null &&
+        DateTime.now().difference(since) < _probeInterval;
+  }
 
   /// ダウンロード中かどうか
   bool get isDownloading => _isDownloading;
@@ -229,9 +271,16 @@ class BaseMapService extends ChangeNotifier {
   /// 接続状態更新
   void _updateConnectionStatus(List<ConnectivityResult> result) {
     final hasConnection = !result.contains(ConnectivityResult.none);
-    if (_isNetworkAvailable != hasConnection) {
-      _isNetworkAvailable = hasConnection;
-      AppLogger.debug('[BaseMapService] Network status changed: ${_isNetworkAvailable ? "Online" : "Offline (No Interface)"}');
+    final before = isNetworkAvailable;
+    _isNetworkAvailable = hasConnection;
+    // インターフェイスが戻ったら到達性は楽観的に true へ（次の取得で確かめる）
+    if (hasConnection && !_reachable) {
+      _reachable = true;
+      _consecutiveFailures = 0;
+      _unreachableSince = null;
+    }
+    if (before != isNetworkAvailable) {
+      AppLogger.debug('[BaseMapService] Network status changed: ${isNetworkAvailable ? "Online" : "Offline (No Interface)"}');
       notifyListeners();
     }
   }
@@ -553,8 +602,12 @@ class BaseMapService extends ChangeNotifier {
         return null;
       }
 
+      // 到達不能と判定中は、次の試行時刻まで待たずに諦める（1タイルごとに
+      // タイムアウトを待つと、圏外で画面が分単位で固まる）
+      if (_inUnreachableCooldown) return null;
+
       // ネットワークからダウンロード（connectivity_plusはヒントのみ、短いタイムアウトで実際に試行）
-      final timeout = _isNetworkAvailable ? 10 : 3;
+      final timeout = _reachable && _isNetworkAvailable ? 10 : 3;
       final url = provider.urlTemplate
           .replaceAll('{z}', z.toString())
           .replaceAll('{x}', x.toString())
@@ -572,6 +625,7 @@ class BaseMapService extends ChangeNotifier {
           .timeout(Duration(seconds: timeout));
 
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        _noteFetchSuccess();
         final data = response.bodyBytes;
         
         // ダウンロードデータの妥当性チェック
@@ -621,6 +675,7 @@ class BaseMapService extends ChangeNotifier {
       }
     } catch (e) {
       AppLogger.debug('[TILE] ❌ Network error');
+      _noteFetchFailure();
       
       // エラー時もキャッシュを確認（ネットワークエラーでもキャッシュがあれば利用）
       final errorFallbackData = await _getCachedTile(
@@ -634,8 +689,8 @@ class BaseMapService extends ChangeNotifier {
         return errorFallbackData;
       }
 
-      // リトライ機能（エラー時も適用）
-      if (retryCount < 1 && allowNetworkAccess) {
+      // リトライ機能（エラー時も適用。到達不能と判定したら粘らない）
+      if (retryCount < 1 && allowNetworkAccess && _reachable) {
         await Future.delayed(const Duration(milliseconds: 1000));
         return _getTileInternal(
           provider,

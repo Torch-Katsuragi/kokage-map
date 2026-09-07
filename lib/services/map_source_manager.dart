@@ -151,7 +151,6 @@ class MapSourceManager {
   static const kPointsLabel = 'k-points-label';
   static const kLinesLabel = 'k-lines-label';
   static const kPolygonsLabel = 'k-polygons-label';
-  static const _hasLabel = <Object>['has', kLabelProp];
 
   /// スタイルグループ。**並び順が z順**（View の並び）。
   List<MapStyleGroup> _styleGroups = const [];
@@ -880,8 +879,13 @@ class MapSourceManager {
             '',
           ];
 
-  /// ラベルのレイヤ（面・線・点）。`k-label` を持つフィーチャにだけ出す。
-  /// 面は重心に、線は線に沿って、点はマーカーの下に置く
+  /// ラベルのレイヤ（面・線・点）。`k-label` を持たないフィーチャは text-field が
+  /// 空になるので何も出ない。面は重心に、線は線に沿って、点はマーカーの下に置く。
+  ///
+  /// ⚠ `filter:` を付けてはいけない。maplibre_android の filter は JNI で
+  ///   `Expression$Converter` を使い、release（R8）でクラスが削られて
+  ///   `addLayer` が例外になる（2026-09-07 実機で全レイヤが消えた）。
+  ///   グループレイヤの filter は proguard の keep で守っている
   List<ml.SymbolStyleLayer> _labelLayers({
     required double size,
     required String colorHex,
@@ -897,14 +901,14 @@ class MapSourceManager {
     const font = <Object>['Open Sans Semibold'];
     return [
       ml.SymbolStyleLayer(
-        id: kPolygonsLabel, sourceId: kPolygons, filter: _hasLabel,
+        id: kPolygonsLabel, sourceId: kPolygons,
         layout: {
           'text-field': <Object>['get', kLabelProp],
           'text-font': font, 'text-size': size, 'text-max-width': 12.0,
         },
         paint: paint),
       ml.SymbolStyleLayer(
-        id: kLinesLabel, sourceId: kLines, filter: _hasLabel,
+        id: kLinesLabel, sourceId: kLines,
         layout: {
           'symbol-placement': 'line',
           'text-field': <Object>['get', kLabelProp],
@@ -912,7 +916,7 @@ class MapSourceManager {
         },
         paint: paint),
       ml.SymbolStyleLayer(
-        id: kPointsLabel, sourceId: kPoints, filter: _hasLabel,
+        id: kPointsLabel, sourceId: kPoints,
         layout: {
           'text-field': <Object>['get', kLabelProp],
           'text-font': font, 'text-size': size,

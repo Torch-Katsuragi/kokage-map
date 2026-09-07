@@ -29,6 +29,7 @@
 - Basemap tiles stayed blurry forever in places where a fetch had failed once, even after connectivity returned.
   Already-blurry tiles: Settings → Basemap → Clear cache.
 - Cached basemap tiles sometimes did not appear until restart when far from home.
+- With per-layer or per-view styles set, release builds could stop drawing every feature on the map.
 
 ## v0.6.1 — 2026/09/07
 

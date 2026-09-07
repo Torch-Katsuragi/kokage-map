@@ -55,11 +55,13 @@ android {
         buildTypes {
             release {
                 signingConfig = signingConfigs.getByName("release")
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             }
         }
     } else {
         buildTypes {
             release {
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
                 logger.warn("WARNING: android/key.properties が見つかりません。リリースビルドにはGoogle Driveから署名鍵を取得してください。")
             }
         }

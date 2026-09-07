@@ -200,9 +200,10 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     final service = GoogleDriveService();
     if (service.isDriveApiAvailable) return;
     _driveRestoreInFlight = true;
-    // 待たない。失敗しても通常のサインインUIが受け止める
+    // 待たない。失敗しても通常のサインインUIが受け止める。
+    // web はトークン復元、native は認可済みアカウントの復元（画面は出ない）
     unawaited(
-      service.restoreWebAuthorization().whenComplete(
+      service.restoreSessionSilently().whenComplete(
             () => _driveRestoreInFlight = false,
           ),
     );

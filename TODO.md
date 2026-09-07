@@ -32,7 +32,10 @@
 - [x] ラベル: `{列}` テンプレート（`label_template.dart`）・地図描画（点／線／面のシンボルレイヤ）・
       属性テーブルからの組み立てダイアログ。⚠ View ごとのラベル設定 UI は無い（View のスタイルに
       `labelProperty` があれば効く）。ラベルの衝突回避は MapLibre 任せ
-- [ ] 3D 地図: 設計メモ [[docs/technical/3d-map-design]]。実装は未着手
+- [x] 🐛 release で `filter:` 付きの `addLayer` が `Expression$Converter` の ClassNotFound で落ち、以後のレイヤが全部消える
+      （R8 が maplibre_android の式クラスを削っていた）。`android/app/proguard-rules.pro` の keep で修正。
+      View 固有スタイル（グループレイヤ）はこの経路を通るので、リリース版では以前から壊れていたはず
+- [ ] 3D 地図: 設計メモ [[docs/technical/3d-map-design]]（DEM を持って表示時に TIN 化、正射影の別画面を推奨）。実装は未着手
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 
 ## リファクタリング（2026-09-07）

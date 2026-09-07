@@ -18,6 +18,27 @@
 - [ ] 上流に issue/PR（josxha/flutter-maplibre）は**出さない**（AIが人間のコミュニティに投稿しない方針）。
       踏んだバグは手元の回避策とコメントに残してある
 
+## リファクタリング（2026-09-07）
+
+> ここ1か月で内部を大きく変えたあとの棚卸し。各段で analyze 0 件・unit テスト green を確認してコミット。
+
+- [x] 到達不能コードの削除 32 ファイル（約 1.3 万行。旧エクスポータ `lib/converters/`・`DialogManager`・
+      旧 Drive ダイアログ・`metadata_parser`・`layer_migration_service`・`tile_cache_geopackage` 等）。
+      判定は import 追跡＋クラス名検索の両方。`@Deprecated` 5 件、未使用依存 3 件、追跡していたツール出力も除去
+- [x] `KMetaService.getMergedMeta` → `getMeta`（継承チェーン廃止後の名残。マージ用キャッシュも撤去）
+- [x] `map_page.dart` 1931 → 1104 行。GeoJSON 組み立て `FeatureGeoJsonCache`（通常／選択の二重実装を一本化）、
+      `turf_geo_convert.dart`（純粋関数＋テスト）、`MapBasemapMixin` / `MapOverlayMixin` / `MapStyleMixin`、
+      `widgets/party_map_layers.dart` / `widgets/overlay_image_layers.dart`
+- [x] 座標系モジュールの三重化を解消。EPSG 表は `EpsgRegistry` だけ、`CoordinateConverter`（843 行）削除
+- [x] lint 強化（`analysis_options.yaml`）＋ `dart fix` 422 箇所。`unawaited_futures` 30 箇所は個別判断
+- [x] discontinued の `flutter_markdown` → `flutter_markdown_plus`
+- [ ] ⚠ **実機確認が未了**（このセッションは端末未接続）。地図まわりを触ったので
+      `integration_test/map_contract_test.dart` と、選択・オーバーレイ・パーティ・ベースマップ切替・
+      更新履歴画面（markdown 差し替え）を実機で一巡させる
+- [ ] 残った候補: `avoid_dynamic_calls`（63 件・手作業）、`cascade_invocations`（411 件・好みの問題なので保留）、
+      `map_page.dart` の `build`（161 行）と `_buildMapLibreMap`（109 行）、`shapefile_exporter.dart`（914 行）、
+      `settings_screen.dart`（1168 行）、`import_export/` の `SmartCoordinateSystemManager` の WKT 推定を `WktParser` へ寄せる
+
 ## 正典を `.qgs` に移す（2026-09-06・設計済み・未着手）
 
 > 設計は [[docs/technical/project-format-design#正典を `.qgs` に移す（2026-09-06 決定・設計）]]。

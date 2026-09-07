@@ -82,8 +82,8 @@ PartyLocationStore（シングルトン, InternalGpsLocationStore の双子）
 | 概念 | ファイル |
 |---|---|
 | 自分の現在地ストア（双子の参照元） | `lib/services/internal_gps_location_store.dart:84`（positionStream） |
-| 現在地マーカー描画（流儀の参照元） | `lib/screens/map_page/map_page.dart:1342`（ml.Marker / WidgetLayer） |
-| オーバーレイマーカー組立 | `lib/screens/map_page/map_page.dart:1326`（_buildOverlayWidgetMarkers） |
+| 現在地マーカー描画（流儀の参照元） | `lib/screens/map_page/map_page.dart`（`_buildOverlayWidgetMarkers` の末尾。ml.Marker / WidgetLayer） |
+| 仲間のマーカー・圏外区間の軌跡 | `lib/screens/map_page/widgets/party_map_layers.dart`（`buildPartyPeerMarkers` / `buildPartyTrackPolylines` / `PeerMarker`。2026-09-07 に map_page から切り出し） |
 | 軌跡記録（gap backfill のソース） | `lib/services/gps_history_recorder.dart` |
 | 内蔵+外部GNSS統合（マージ点パターン） | `lib/services/gps_manager_service.dart` |
 

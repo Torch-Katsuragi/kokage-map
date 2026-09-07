@@ -6,6 +6,8 @@
 
 - Removed code that was no longer reachable (old exporters, old dialogs, migration helpers;
   about 13k lines). No behaviour change.
+- Restructured the map screen and coordinate-system internals and tightened static analysis.
+  The library used to render the changelog and user guide was replaced by its successor.
 
 ### 🗺 Exporting a QGIS project no longer discards settings made in QGIS
 

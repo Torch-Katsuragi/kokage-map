@@ -56,7 +56,7 @@ Root Mapsでは、SSP（Secure Simple Pairing）対応の外部GNSS機器（例�
 - `lib/services/foreground_service.dart` - フォアグラウンドサービス管理（内蔵GPS専用）
 - `lib/services/gps_manager_service.dart` - 統合GPS管理サービス（メインisolate）
 - `lib/models/bluetooth_gnss_service.dart` - 外部GNSS通信サービス（メインisolate）
-- `lib/screens/map_page.dart` - GPS追跡機能実装（ハイブリッド方式）
+- `lib/screens/map_page/mixins/map_gps_tracking_mixin.dart` - GPS追跡機能実装（ハイブリッド方式）
 - `lib/tools/gps_tool.dart` - GPS測量機能（メインisolate専用）
 
 ## 技術的参考情報

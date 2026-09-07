@@ -72,19 +72,30 @@ class SelectTool extends MapTool {
   ) =>
       _buildCandidates(tapLatLng, mapState, selectRange);
 
+  /// 現在位置マーカーの当たり半径 [px]（マーカー本体 20px ＋ 余白）
+  static const double _locationMarkerHitPx = 22;
+
   static List<LayerTreeNode> _buildCandidates(
     LatLng tapLatLng,
     IMapState mapState,
-    double selectRange,
-  ) {
+    double selectRange, {
+    Offset? tapOffset,
+  }) {
     final candidates = <({int priority, double distance, LayerTreeNode node})>[];
 
-    // 現在位置マーカー（擬似フィーチャ）。点と同じ優先度
+    // 現在位置マーカー（擬似フィーチャ）。画面上で一番上に描かれているので、
+    // 判定も**画面座標でマーカーの円に入ったか**で行い、入っていれば最優先。
+    // ⚠ 距離順の候補に混ぜてはいけない。真下に軌跡の点や線があると距離で負けて
+    //   何回叩いても出てこなかった
     final here = mapState.currentLocationNode.location;
-    if (here != null) {
-      final d = GeometryCalc.calcDistance(tapLatLng, here);
-      if (d <= selectRange) {
-        candidates.add((priority: 0, distance: d, node: mapState.currentLocationNode));
+    if (here != null && tapOffset != null) {
+      try {
+        final px = (mapState.latLngToOffset(here) - tapOffset).distance;
+        if (px <= _locationMarkerHitPx) {
+          candidates.add((priority: -1, distance: px, node: mapState.currentLocationNode));
+        }
+      } catch (_) {
+        // 地図が未準備なら現在位置は候補にしない
       }
     }
 
@@ -169,7 +180,12 @@ class SelectTool extends MapTool {
     }
 
     final selectRange = _calcSelectRange(mapState);
-    final candidates = _buildCandidates(tapLatLng, mapState, selectRange);
+    final candidates = _buildCandidates(
+      tapLatLng,
+      mapState,
+      selectRange,
+      tapOffset: details.localPosition,
+    );
 
     // 左下ボタンが有効なら複数選択モード: レイヤをまたいで足し引きする
     if (_ref.read(isFabActiveProvider)) {

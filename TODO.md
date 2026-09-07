@@ -32,9 +32,9 @@
 - [x] 座標系モジュールの三重化を解消。EPSG 表は `EpsgRegistry` だけ、`CoordinateConverter`（843 行）削除
 - [x] lint 強化（`analysis_options.yaml`）＋ `dart fix` 422 箇所。`unawaited_futures` 30 箇所は個別判断
 - [x] discontinued の `flutter_markdown` → `flutter_markdown_plus`
-- [ ] ⚠ **実機確認が未了**（このセッションは端末未接続）。地図まわりを触ったので
-      `integration_test/map_contract_test.dart` と、選択・オーバーレイ・パーティ・ベースマップ切替・
-      更新履歴画面（markdown 差し替え）を実機で一巡させる
+- [x] 実機確認（2026-09-07・Pixel 11 Pro Fold）: `map_contract_test` 9 件 green。選択ハイライト（点・面）・
+      画面外矢印のジャンプ・ベースマップ切替・更新履歴画面・パーティのダイアログを一巡、Dart 例外なし。
+      ⚠パーティの実ルームとオーバーレイ画像の変形は実データが無く未確認
 - [ ] 残った候補: `avoid_dynamic_calls`（63 件・手作業）、`cascade_invocations`（411 件・好みの問題なので保留）、
       `map_page.dart` の `build`（161 行）と `_buildMapLibreMap`（109 行）、`shapefile_exporter.dart`（914 行）、
       `settings_screen.dart`（1168 行）、`import_export/` の `SmartCoordinateSystemManager` の WKT 推定を `WktParser` へ寄せる

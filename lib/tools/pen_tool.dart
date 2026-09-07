@@ -76,6 +76,13 @@ class PenTool extends MapTool {
 
     // フロートボタン押下時は消しゴム動作: タップで候補の出し入れ
     if (_ref.read(isFabActiveProvider)) {
+      if (_ref.read(selectedLayerNodeProvider) == null) {
+        _ref.read(notificationCenterProvider.notifier).add(
+          title: t.editor.noLayerSelected,
+          level: NotificationLevel.warning,
+        );
+        return;
+      }
       final latlng = mapState.offsetToLatLng(details.localPosition);
       final hit = _eraserTarget(latlng, mapState);
       if (hit != null) {
@@ -325,15 +332,21 @@ class PenTool extends MapTool {
     _uiUpdateTimer = null;
   }
 
-  /// 消しゴムの当たり判定。選択ツールと同じ半径・同じ優先順位で、
-  /// 全可視レイヤーのフィーチャだけを対象にする（写真・オーバーレイは消さない）
+  /// 消しゴムの当たり判定。選択ツールと同じ半径・同じ優先順位だが、
+  /// 対象は**選択中レイヤのフィーチャだけ**（ペンで描く先と同じ）。
+  /// 写真・オーバーレイ・現在位置は消さない
   FeatureNode? _eraserTarget(LatLng latlng, IMapState mapState) {
+    final layer = _ref.read(selectedLayerNodeProvider);
+    if (layer == null) return null;
     final candidates = SelectTool.candidatesAt(
       latlng,
       mapState,
       SelectTool.selectRangeFor(mapState),
     );
-    return candidates.whereType<FeatureNode>().firstOrNull;
+    return candidates
+        .whereType<FeatureNode>()
+        .where((f) => f.parent == layer)
+        .firstOrNull;
   }
 
   /// マウスホイールスクロールイベント（ズーム機能）

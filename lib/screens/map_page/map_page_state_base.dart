@@ -26,6 +26,7 @@ import 'package:maplibre/maplibre.dart' as ml;
 import '../../core/r_map_controller.dart';
 import '../../interfaces/map_state_interface.dart';
 import '../../models/gps_position_record.dart';
+import '../../models/nodes/current_location_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
@@ -57,6 +58,14 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   /// 現在位置
   LatLng? currentLocation;
+
+  /// 現在位置マーカーの擬似フィーチャ。値は地図側のフィールドをその都度読む
+  @override
+  late final CurrentLocationNode currentLocationNode = CurrentLocationNode(
+    locationOf: () => currentLocation,
+    gpsInfoOf: () => currentGpsInfo,
+    headingNotifier: headingNotifier,
+  );
 
   /// 位置情報ストリームサブスクリプション（Store.positionStream購読用）
   StreamSubscription<GpsPositionRecord>? positionSubscription;

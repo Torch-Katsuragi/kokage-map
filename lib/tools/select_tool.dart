@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../interfaces/map_state_interface.dart';
+import '../models/nodes/current_location_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../providers/selection_providers.dart';
@@ -77,6 +78,15 @@ class SelectTool extends MapTool {
     double selectRange,
   ) {
     final candidates = <({int priority, double distance, LayerTreeNode node})>[];
+
+    // 現在位置マーカー（擬似フィーチャ）。点と同じ優先度
+    final here = mapState.currentLocationNode.location;
+    if (here != null) {
+      final d = GeometryCalc.calcDistance(tapLatLng, here);
+      if (d <= selectRange) {
+        candidates.add((priority: 0, distance: d, node: mapState.currentLocationNode));
+      }
+    }
 
     for (final f in mapState.pointFeatures) {
       if (f.isDisposed) continue;
@@ -163,8 +173,9 @@ class SelectTool extends MapTool {
 
     // 左下ボタンが有効なら複数選択モード: レイヤをまたいで足し引きする
     if (_ref.read(isFabActiveProvider)) {
-      if (candidates.isEmpty) return;
-      final node = candidates.first;
+      // 現在位置は集合に入れない（消せないし集計もできない）
+      final node = candidates.where((c) => c is! CurrentLocationNode).firstOrNull;
+      if (node == null) return;
       _ref.read(selectedFeaturesProvider.notifier).toggle(node);
       if (node is FeatureNode) {
         _ref.read(selectedLayerNodeProvider.notifier).select(node.parent);

@@ -23,6 +23,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
+import '../models/nodes/current_location_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
 import '../models/nodes/overlay_image_node.dart';
@@ -45,6 +46,11 @@ class FeatureDetailPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (feature == null) return const SizedBox.shrink();
 
+    // 現在位置（擬似フィーチャ）
+    if (feature is CurrentLocationNode) {
+      return _buildCurrentLocation(context, ref, feature as CurrentLocationNode);
+    }
+
     // OverlayImageNode用の詳細パネル（ImageNodeより先にチェック）
     if (feature is OverlayImageNode) {
       final overlay = feature as OverlayImageNode;
@@ -52,6 +58,7 @@ class FeatureDetailPanel extends ConsumerWidget {
 
       return _buildPanel(
         context,
+        ref,
         title: '🗺️ オーバーレイ画像',
         children: [
           // オーバーレイアイコン
@@ -154,6 +161,7 @@ class FeatureDetailPanel extends ConsumerWidget {
 
       return _buildPanel(
         context,
+        ref,
         title: '📸 写真ファイル',
         children: [
           // 画像プレビューを追加（タップでフルスクリーン表示）
@@ -397,6 +405,7 @@ class FeatureDetailPanel extends ConsumerWidget {
       
       return _buildPanel(
         context,
+        ref,
         title: displayTitle,
         children: children,
       );
@@ -489,10 +498,63 @@ class FeatureDetailPanel extends ConsumerWidget {
 
   /// パネルの枠は [InfoPanelCard]（複数選択・現在位置のカードと共通）
   Widget _buildPanel(
-    BuildContext context, {
+    BuildContext context,
+    WidgetRef ref, {
     required String title,
     required List<Widget> children,
   }) =>
-      InfoPanelCard(title: title, children: children);
+      InfoPanelCard(
+        title: title,
+        onClose: () => ref.read(selectedFeaturesProvider.notifier).clear(),
+        children: children,
+      );
+
+  /// 現在位置（擬似フィーチャ）の GPS 情報
+  Widget _buildCurrentLocation(
+    BuildContext context,
+    WidgetRef ref,
+    CurrentLocationNode node,
+  ) {
+    final info = node.gpsInfo;
+    final active = info != null && info['isActive'] == true;
+    final lat = info?['latitude'] as double?;
+    final lon = info?['longitude'] as double?;
+    final accuracy = info?['accuracy'] as double?;
+    final satellites = info?['satelliteCount'] as int?;
+    final hdop = info?['hdop'] as double?;
+    final sourceName = info?['sourceName'] as String? ?? t.gps.unknownDevice;
+
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.only(bottom: 4.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Expanded(child: Text(value)),
+            ],
+          ),
+        );
+
+    return _buildPanel(
+      context,
+      ref,
+      title: t.gpsPanel.title,
+      children: [
+        if (!active) row(t.gpsPanel.status, t.gps.acquiring),
+        if (lat != null && lon != null)
+          row(t.gpsPanel.position, '${lat.toStringAsFixed(6)}, ${lon.toStringAsFixed(6)}'),
+        if (accuracy != null) row(t.gpsPanel.accuracy, '±${accuracy.toStringAsFixed(1)} m'),
+        if (satellites != null) row(t.gpsPanel.satellites, '$satellites'),
+        if (hdop != null) row('HDOP', hdop.toStringAsFixed(2)),
+        row(t.gpsPanel.source, sourceName),
+        ValueListenableBuilder<double?>(
+          valueListenable: node.headingNotifier,
+          builder: (_, heading, _) => heading == null
+              ? const SizedBox.shrink()
+              : row(t.gpsPanel.heading, '${heading.toStringAsFixed(0)}°'),
+        ),
+      ],
+    );
+  }
 }
 

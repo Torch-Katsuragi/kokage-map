@@ -19,7 +19,9 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+
 import '../core/r_map_controller.dart';
+import '../models/nodes/current_location_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
 import '../models/nodes/overlay_image_node.dart';
@@ -34,6 +36,9 @@ abstract class IMapState {
 
   /// 地図座標（緯度経度）を画面座標に変換
   Offset latLngToOffset(LatLng latlng);
+
+  /// 現在位置マーカーの擬似フィーチャ（タップ選択の候補に混ざる）
+  CurrentLocationNode get currentLocationNode;
 
   /// UIの再描画をトリガー
   void setState(VoidCallback fn);

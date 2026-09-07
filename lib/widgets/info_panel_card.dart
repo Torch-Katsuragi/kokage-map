@@ -16,7 +16,7 @@
 // こかげマップ: 地図の上に浮かぶ情報カードの共通の枠
 //
 // フィーチャ1件の詳細・複数選択の集計・現在位置の情報など、地図の左上に出す
-// カードはすべてこの枠を使う（見た目と幅を揃えるため）。
+// カードはすべてこの枠を使う（見た目・幅・閉じるボタンを揃えるため）。
 
 import 'package:flutter/material.dart';
 
@@ -27,7 +27,7 @@ class InfoPanelCard extends StatelessWidget {
     required this.children,
     this.width = 220,
     this.maxHeight = 300,
-    this.trailing,
+    required this.onClose,
   });
 
   final String title;
@@ -35,8 +35,8 @@ class InfoPanelCard extends StatelessWidget {
   final double width;
   final double maxHeight;
 
-  /// タイトル行の右端（閉じるボタンなど）
-  final Widget? trailing;
+  /// 右上の × 。地図の上のカードは全部これで閉じられる
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +67,12 @@ class InfoPanelCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (trailing != null) trailing!,
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: onClose,
+                ),
               ],
             ),
             const SizedBox(height: 8),

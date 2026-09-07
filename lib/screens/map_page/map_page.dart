@@ -72,7 +72,6 @@ import '../layer_style_settings_screen.dart'
 import 'feature_geojson_cache.dart';
 import 'map_page_state_base.dart';
 import 'mixins/index.dart';
-import 'widgets/gps_info_panel.dart';
 // Widgets
 import 'widgets/index.dart';
 import 'widgets/map_menu_button.dart';
@@ -411,17 +410,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                       left: 60,
                       top: 20,
                       child: FeatureSetPanel(features: selectedFeatures),
-                    )
-                  else if (_showGpsPanel)
-                    // 現在位置マーカーをタップしたときだけ出す GPS 情報
-                    Positioned(
-                      left: 60,
-                      top: 20,
-                      child: GpsInfoPanel(
-                        gpsInfo: currentGpsInfo,
-                        headingNotifier: headingNotifier,
-                        onClose: () => setState(() => _showGpsPanel = false),
-                      ),
                     ),
                   // 外部機器ツールのステータスパネル（DeviceTool抽象経由）
                   if (currentTool is DeviceTool)
@@ -867,20 +855,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   }
 
   /// ジェスチャーレイヤー構築
-  /// GPS 情報カードを出しているか（現在位置マーカーのタップで開閉）
-  bool _showGpsPanel = false;
-
-  /// タップ位置が現在位置マーカー（半径 28px）の上か
-  bool _hitsCurrentLocation(Offset local) {
-    final loc = currentLocation;
-    if (loc == null) return false;
-    try {
-      return (latLngToOffset(loc) - local).distance <= 28;
-    } catch (_) {
-      return false;
-    }
-  }
-
   Widget _buildGestureLayer() {
     return Positioned.fill(
       child: Listener(
@@ -914,11 +888,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTapUp: (details) {
-            // 現在位置マーカーの上なら GPS 情報カードの開閉（ツールより優先）
-            if (_hitsCurrentLocation(details.localPosition)) {
-              setState(() => _showGpsPanel = !_showGpsPanel);
-              return;
-            }
             ref.read(currentToolProvider).onTap(details, this);
           },
           onScaleStart: (details) {

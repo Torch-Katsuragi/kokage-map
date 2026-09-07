@@ -12,13 +12,14 @@
 
 - With the select tool, enable the bottom-left button to select across layers by tap or lasso.
 - The panel shows counts, the centroid of points, total line length and total polygon area, and deletes them together.
-- The eraser no longer deletes on touch: it collects candidates and you confirm with "Delete N". Its hit area is a third of before.
+- The eraser no longer deletes on touch: it collects candidates and you confirm with "Delete N". It only affects the selected layer, and its hit area is a third of before.
 
 ### 🧭 Usability
 
 - The layer list button moved to the right edge.
 - Switching tools briefly shows the tool name in the centre of the map.
-- The always-on GPS bar is gone; tap the location marker to see GPS details in a card (more room for the map).
+- The always-on GPS bar is gone. The location marker is selectable with the select tool like any feature and shows its card in the same place (more room for the map).
+- Every info card on the map now has a close button.
 - The point "Open in Google Maps" button now copies the link; hold to open.
 
 ### 🐛 Fixes

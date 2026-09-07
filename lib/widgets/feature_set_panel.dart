@@ -101,13 +101,7 @@ class FeatureSetPanel extends ConsumerWidget {
     final centroid = s.pointsCentroid;
     return InfoPanelCard(
       title: tr.title(n: s.total),
-      trailing: IconButton(
-        icon: const Icon(Icons.close, size: 18),
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
-        tooltip: tr.clearSelection,
-        onPressed: () => ref.read(selectedFeaturesProvider.notifier).clear(),
-      ),
+      onClose: () => ref.read(selectedFeaturesProvider.notifier).clear(),
       children: [
         if (s.points.isNotEmpty) row(tr.points, '${s.points.length}'),
         if (s.lines.isNotEmpty)

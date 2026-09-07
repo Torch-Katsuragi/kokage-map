@@ -17,6 +17,8 @@
 export 'map_jump_mixin.dart';
 export 'map_initialization_mixin.dart';
 export 'map_basemap_mixin.dart';
+export 'map_overlay_mixin.dart';
+export 'map_style_mixin.dart';
 export 'map_gps_tracking_mixin.dart';
 export 'map_gps_survey_mixin.dart';
 export 'map_feature_cache_mixin.dart';

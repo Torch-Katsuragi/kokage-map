@@ -15,7 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: 統合座標変換サービス
 // EpsgRegistryを使用した座標変換機能を提供
-// WGS84 ⇔ 他座標系の変換、住所ベースの座標系自動判定
+// WGS84 ⇔ 他座標系の変換、住所ベースの座標系自動判定、都道府県名抽出
 
 import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
@@ -132,7 +132,7 @@ class CoordinateService {
       // 住所を取得して座標系を判定
       final address = await AddressConverter.getAddressFromLatLng(point);
       if (address != null) {
-        final state = address.state ?? _extractPrefectureFromDisplayName(address.displayName);
+        final state = address.state ?? extractPrefecture(address.displayName);
         if (state != null) {
           final jgd2011 = registry.getJgd2011FromPrefecture(state);
           if (jgd2011 != null) {
@@ -157,6 +157,30 @@ class CoordinateService {
     return registry.getJgd2011FromPrefecture(prefecture);
   }
 
+  // ========== 都道府県抽出 ==========
+
+  /// 都道府県名の一覧（住所文字列からの抽出用）
+  static const List<String> prefectureNames = [
+    '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
+    '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
+    '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県',
+    '岐阜県', '静岡県', '愛知県', '三重県',
+    '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県',
+    '鳥取県', '島根県', '岡山県', '広島県', '山口県',
+    '徳島県', '香川県', '愛媛県', '高知県',
+    '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県',
+  ];
+
+  /// 住所文字列から都道府県名を抽出（最初に一致したものを返す、なければnull）
+  static String? extractPrefecture(String text) {
+    for (final prefecture in prefectureNames) {
+      if (text.contains(prefecture)) {
+        return prefecture;
+      }
+    }
+    return null;
+  }
+
   // ========== 内部ヘルパー ==========
 
   /// Projectionを取得または作成（キャッシュ付き）
@@ -174,27 +198,6 @@ class CoordinateService {
       AppLogger.debug('[CoordinateService] Projection作成エラー ($code): $e');
       return null;
     }
-  }
-
-  /// displayNameから都道府県を抽出
-  String? _extractPrefectureFromDisplayName(String displayName) {
-    const prefectures = [
-      '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
-      '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
-      '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県',
-      '岐阜県', '静岡県', '愛知県', '三重県',
-      '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県',
-      '鳥取県', '島根県', '岡山県', '広島県', '山口県',
-      '徳島県', '香川県', '愛媛県', '高知県',
-      '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県',
-    ];
-
-    for (final prefecture in prefectures) {
-      if (displayName.contains(prefecture)) {
-        return prefecture;
-      }
-    }
-    return null;
   }
 
   /// キャッシュをクリア

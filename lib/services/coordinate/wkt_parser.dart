@@ -35,7 +35,7 @@ class WktParser {
       AppLogger.debug('[WktParser] WKT解析開始: ${wkt.length}文字');
 
       // Step 1: WKTからEPSGコードを直接抽出
-      final epsgCode = _extractEpsgCodeFromWkt(wkt);
+      final epsgCode = extractEpsgCode(wkt);
       if (epsgCode != null) {
         AppLogger.debug('[WktParser] EPSGコード抽出成功: $epsgCode');
         final definition = registry.getByCode(epsgCode);
@@ -61,7 +61,8 @@ class WktParser {
   }
 
   /// WKT文字列からEPSGコードを抽出
-  String? _extractEpsgCodeFromWkt(String wkt) {
+  /// AUTHORITY["EPSG","XXXX"] または EPSG:XXXX 表記を検出、なければnull
+  static String? extractEpsgCode(String wkt) {
     // AUTHORITY["EPSG","XXXX"] パターン
     final authorityPattern = RegExp(r'AUTHORITY\["EPSG","(\d+)"\]');
     final match = authorityPattern.firstMatch(wkt);
@@ -88,12 +89,7 @@ class WktParser {
     if (utmMatch != null) {
       final zone = int.tryParse(utmMatch.group(1) ?? '');
       if (zone != null && zone >= 1 && zone <= 60) {
-        final epsgCode = 'EPSG:326${zone.toString().padLeft(2, '0')}';
-        return registry.getByCode(epsgCode) ?? EpsgDefinition(
-          code: epsgCode,
-          name: 'WGS 84 / UTM zone ${zone}N',
-          proj4String: '+proj=utm +zone=$zone +datum=WGS84 +units=m +no_defs',
-        );
+        return registry.getUtmZoneDefinition(zone);
       }
     }
 

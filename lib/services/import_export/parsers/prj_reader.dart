@@ -17,7 +17,7 @@
 // PRJファイル（座標系定義）の読み込みクラス
 import 'dart:io';
 import 'package:root_maps/utils/app_logger.dart';
-import '../../../utils/coordinate_converter.dart';
+import '../../coordinate/epsg_registry.dart';
 import '../coordinate_system_manager.dart';
 
 /// PRJファイルを読み込んで座標系情報を取得するクラス
@@ -26,7 +26,7 @@ class PrjReader {
       SmartCoordinateSystemManager();
 
   /// PRJファイルから座標系情報を読み取り
-  static Future<CoordinateSystem?> read(String prjFilePath) async {
+  static Future<EpsgDefinition?> read(String prjFilePath) async {
     try {
       final prjFile = File(prjFilePath);
       if (!prjFile.existsSync()) {

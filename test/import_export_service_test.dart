@@ -5,7 +5,7 @@ import 'package:root_maps/models/geometry_type.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:proj4dart/proj4dart.dart';
-import 'package:root_maps/utils/coordinate_converter.dart';
+import 'package:root_maps/services/coordinate/index.dart';
 
 void main() {
   group('ImportExportService Tests', () {
@@ -162,36 +162,36 @@ void main() {
   });
 
   group('ImportExportService座標変換テスト', () {
-    test('CoordinateSystemオブジェクトの作成', () {
-      final coordinateSystem = CoordinateSystem(
+    test('EpsgDefinitionオブジェクトの作成', () {
+      final coordinateSystem = EpsgDefinition(
+        code: 'EPSG:2448',
         name: 'JGD2000 / Japan Plane Rectangular CS VI',
-        epsgCode: 'EPSG:2448',
         proj4String:
             '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
       );
 
       expect(coordinateSystem.name, 'JGD2000 / Japan Plane Rectangular CS VI');
-      expect(coordinateSystem.epsgCode, 'EPSG:2448');
+      expect(coordinateSystem.code, 'EPSG:2448');
+      expect(coordinateSystem.codeNumber, '2448');
       // ignore: avoid_print
-      print('[TEST] CoordinateSystemオブジェクト作成成功');
+      print('[TEST] EpsgDefinitionオブジェクト作成成功');
     });
 
     test('和歌山県の座標変換テスト', () {
-      // 和歌山県北山村の平面直角座標系VI系の座標例
-      // 実際の座標値（推定値）
-      final x = 50000.0; // Easting (東方向)
-      final y = -150000.0; // Northing (北方向)
+      // 和歌山県北山村の平面直角座標系VI系の座標例（推定値）
+      // 平面直角座標系は X=Northing(北方向), Y=Easting(東方向)
+      final x = -150000.0; // Northing (北方向)
+      final y = 50000.0; // Easting (東方向)
 
-      final coordinateSystem = CoordinateSystem(
-        name: 'JGD2000 / Japan Plane Rectangular CS VI',
-        epsgCode: 'EPSG:2448',
-        proj4String:
-            '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-      );
+      final coordinateSystem = EpsgRegistry.instance.getByCode('EPSG:2448')!;
+      expect(coordinateSystem.name, contains('JGD2000'));
 
       try {
-        final point = Point(x: x, y: y);
-        final result = CoordinateConverter.xyToLatLng(point, coordinateSystem);
+        final result = CoordinateService.instance
+            .transformToLatLng(x, y, coordinateSystem);
+        if (result == null) {
+          fail('座標変換がnullを返しました');
+        }
 
         // ignore: avoid_print
         print(

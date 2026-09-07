@@ -25,13 +25,18 @@ class EpsgDefinition {
   final String name;
   final String proj4String;
   final List<String>? prefectures; // 対応する都道府県（JGD2011用）
+  final LatLngBounds? bounds; // 適用範囲（UTM用、nullなら無制限）
 
   const EpsgDefinition({
     required this.code,
     required this.name,
     required this.proj4String,
     this.prefectures,
+    this.bounds,
   });
+
+  /// 指定された緯度経度がこの座標系の適用範囲内か（範囲未定義なら常にtrue）
+  bool contains(LatLng point) => bounds?.contains(point) ?? true;
 
   /// EPSGコード番号部分を取得（例: "EPSG:6677" → "6677"）
   String get codeNumber => code.replaceFirst('EPSG:', '');
@@ -148,15 +153,27 @@ class EpsgRegistry {
   int calculateUtmZone(double longitude) => ((longitude + 180) / 6).floor() + 1;
 
   /// 緯度経度から最適なUTM座標系を取得
-  EpsgDefinition getUtmZone(LatLng point) {
-    final zone = calculateUtmZone(point.longitude);
+  EpsgDefinition getUtmZone(LatLng point) =>
+      getUtmZoneDefinition(calculateUtmZone(point.longitude));
+
+  /// UTMゾーン番号（1-60、北半球）からEPSG定義を取得
+  /// レジストリ未登録のゾーンは動的に生成する
+  EpsgDefinition getUtmZoneDefinition(int zone) {
     final epsgCode = 'EPSG:326${zone.toString().padLeft(2, '0')}';
-    return getByCode(epsgCode) ?? EpsgDefinition(
-      code: epsgCode,
-      name: 'WGS 84 / UTM zone ${zone}N',
-      proj4String: '+proj=utm +zone=$zone +datum=WGS84 +units=m +no_defs',
-    );
+    return getByCode(epsgCode) ??
+        EpsgDefinition(
+          code: epsgCode,
+          name: 'WGS 84 / UTM zone ${zone}N',
+          proj4String: '+proj=utm +zone=$zone +datum=WGS84 +units=m +no_defs',
+          bounds: utmNorthBounds(zone),
+        );
   }
+
+  /// UTM北半球ゾーンの適用範囲（経度6度幅、緯度0〜84度）
+  static LatLngBounds utmNorthBounds(int zone) => LatLngBounds(
+        LatLng(0, (zone * 6 - 186).toDouble()),
+        LatLng(84, (zone * 6 - 180).toDouble()),
+      );
 
   // ========== JGD2011 平面直角座標系（全19系）==========
 
@@ -349,31 +366,37 @@ class EpsgRegistry {
       code: 'EPSG:32651',
       name: 'WGS 84 / UTM zone 51N (九州西部)',
       proj4String: '+proj=utm +zone=51 +datum=WGS84 +units=m +no_defs',
+      bounds: LatLngBounds(LatLng(0, 120), LatLng(84, 126)),
     ),
     EpsgDefinition(
       code: 'EPSG:32652',
       name: 'WGS 84 / UTM zone 52N (九州・四国)',
       proj4String: '+proj=utm +zone=52 +datum=WGS84 +units=m +no_defs',
+      bounds: LatLngBounds(LatLng(0, 126), LatLng(84, 132)),
     ),
     EpsgDefinition(
       code: 'EPSG:32653',
       name: 'WGS 84 / UTM zone 53N (本州西部)',
       proj4String: '+proj=utm +zone=53 +datum=WGS84 +units=m +no_defs',
+      bounds: LatLngBounds(LatLng(0, 132), LatLng(84, 138)),
     ),
     EpsgDefinition(
       code: 'EPSG:32654',
       name: 'WGS 84 / UTM zone 54N (本州中部・東部)',
       proj4String: '+proj=utm +zone=54 +datum=WGS84 +units=m +no_defs',
+      bounds: LatLngBounds(LatLng(0, 138), LatLng(84, 144)),
     ),
     EpsgDefinition(
       code: 'EPSG:32655',
       name: 'WGS 84 / UTM zone 55N (北海道・東北)',
       proj4String: '+proj=utm +zone=55 +datum=WGS84 +units=m +no_defs',
+      bounds: LatLngBounds(LatLng(0, 144), LatLng(84, 150)),
     ),
     EpsgDefinition(
       code: 'EPSG:32656',
       name: 'WGS 84 / UTM zone 56N (千島列島)',
       proj4String: '+proj=utm +zone=56 +datum=WGS84 +units=m +no_defs',
+      bounds: LatLngBounds(LatLng(0, 150), LatLng(84, 156)),
     ),
   ];
 

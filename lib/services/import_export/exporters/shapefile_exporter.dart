@@ -878,9 +878,10 @@ class ShapefileExporter extends BaseExporter {
   }
 
   /// PRJファイルを書き込み（動的CRS対応）
+  /// レジストリ未登録のCRSはWGS84のWKTにフォールバック
   Future<void> _writePrjFile(String path, EpsgDefinition? targetCrs) async {
-    String wktString;
-    
+    String wktString = _epsgRegistry.getWktString('EPSG:4326')!;
+
     if (targetCrs != null) {
       // EpsgRegistryからWKT文字列を取得
       final registryWkt = _epsgRegistry.getWktString(targetCrs.code);
@@ -888,19 +889,10 @@ class ShapefileExporter extends BaseExporter {
         wktString = registryWkt;
         AppLogger.debug('[ShapefileExporter] PRJ: ${targetCrs.code} のWKT使用');
       } else {
-        // 登録されていない場合はWGS84をフォールバック
-        wktString = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",'
-            'SPHEROID["WGS_1984",6378137.0,298.257223563]],'
-            'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
         AppLogger.debug('[ShapefileExporter] PRJ: ${targetCrs.code} 未登録、WGS84使用');
       }
-    } else {
-      // デフォルト: WGS84
-      wktString = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",'
-          'SPHEROID["WGS_1984",6378137.0,298.257223563]],'
-          'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
     }
-    
+
     await File(path).writeAsString(wktString);
   }
 

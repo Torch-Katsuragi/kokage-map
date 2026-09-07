@@ -20,7 +20,7 @@ import 'dart:typed_data';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
-import '../../../utils/coordinate_converter.dart';
+import '../../coordinate/epsg_registry.dart';
 import '../../../utils/binary_utils.dart';
 import '../coordinate_system_manager.dart';
 
@@ -182,7 +182,7 @@ class ShapefileBinaryParser {
   /// [onRecord] レコードごとのコールバック
   static Future<int> parseRecords(
     String shpFilePath, {
-    CoordinateSystem? sourceCoordinateSystem,
+    EpsgDefinition? sourceCoordinateSystem,
     required Future<void> Function(int recordIndex, int shapeType, dynamic geometry) onRecord,
   }) async {
     try {
@@ -270,7 +270,7 @@ class ShapefileBinaryParser {
   static Future<LatLng?> _parsePoint(
     Uint8List bytes,
     int offset,
-    CoordinateSystem? sourceCoordinateSystem,
+    EpsgDefinition? sourceCoordinateSystem,
   ) async {
     if (offset + 16 > bytes.length) return null;
 
@@ -287,7 +287,7 @@ class ShapefileBinaryParser {
     Uint8List bytes,
     int offset,
     int contentLength,
-    CoordinateSystem? sourceCoordinateSystem,
+    EpsgDefinition? sourceCoordinateSystem,
   ) async {
     final startOffset = offset;
     
@@ -333,7 +333,7 @@ class ShapefileBinaryParser {
     Uint8List bytes,
     int offset,
     int contentLength,
-    CoordinateSystem? sourceCoordinateSystem,
+    EpsgDefinition? sourceCoordinateSystem,
   ) async {
     final startOffset = offset;
     
@@ -400,7 +400,7 @@ class ShapefileBinaryParser {
   static Future<LatLng?> _transformCoordinate(
     double x,
     double y,
-    CoordinateSystem? sourceCoordinateSystem,
+    EpsgDefinition? sourceCoordinateSystem,
     String geometryType,
   ) async {
     if (sourceCoordinateSystem != null) {

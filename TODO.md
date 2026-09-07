@@ -33,7 +33,7 @@
 - [x] 段0-b（2026-09-06）: 同期の帳簿（`files` / `lastSynced` / `driveRevisionId` / `deviceId`）を
       `SyncLedger`（SharedPreferences・キーは driveId かパスのハッシュ）へ。共有ファイルにはリンク情報4項目だけ。
       旧版が書いた帳簿は初回ロードで引き取って共有ファイルから剥がす。継承チェーンは廃止
-      （`getMergedMeta` は自フォルダの生メタデータを返す。引数は互換のため残置）
+      （`getMeta` は自フォルダのメタデータを返す。2026-09-07 に `getMergedMeta` から改名し、マージ用キャッシュも撤去）
       - [ ] ⚠ Drive 同期の通し確認は未実施（本セッションは Drive にサインインしていない）
 - [x] 段1: DOM 保持型 `QgsDocument`（2026-09-06）。`lib/services/qgis/qgs_document.dart`。
       QGIS 3.44 のフィクスチャで往復テスト 13 件（`test/qgs_document_test.dart`）:

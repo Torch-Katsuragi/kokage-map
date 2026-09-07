@@ -54,7 +54,7 @@ class SyncConflictResolver {
     }
 
     try {
-      final meta = await _kmetaService.getMergedMeta(localPath);
+      final meta = await _kmetaService.getMeta(localPath);
       final driveId = meta.sync.driveId;
       final syncedFiles = meta.sync.files;
 
@@ -255,7 +255,7 @@ class SyncConflictResolver {
     final entries = <MergeFileEntry>[];
 
     try {
-      final meta = await _kmetaService.getMergedMeta(localPath);
+      final meta = await _kmetaService.getMeta(localPath);
       final driveId = meta.sync.driveId;
       final syncedFiles = meta.sync.files;
 
@@ -402,7 +402,7 @@ class SyncConflictResolver {
     List<MergeDecision> decisions,
   ) async {
     try {
-      final meta = await _kmetaService.getMergedMeta(localPath);
+      final meta = await _kmetaService.getMeta(localPath);
       final driveId = meta.sync.driveId;
       final syncedFiles = Map<String, KMetaSyncFile>.from(meta.sync.files);
 
@@ -697,7 +697,7 @@ class SyncConflictResolver {
     String? driveId,
   }) async {
     try {
-      driveId ??= (await _kmetaService.getMergedMeta(localPath)).sync.driveId;
+      driveId ??= (await _kmetaService.getMeta(localPath)).sync.driveId;
       if (driveId == null) return 0;
 
       final driveData = await _fileOps.listDriveFilesWithFolders(driveId);

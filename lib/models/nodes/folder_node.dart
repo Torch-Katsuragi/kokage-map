@@ -70,7 +70,7 @@ class FolderNode extends LayerTreeNode {
     if (_cachedMeta != null) return _cachedMeta!;
     final folderPath = getAbsoluteFilePath();
     if (folderPath == null) return KMeta.empty;
-    _cachedMeta = await KMetaService.instance.getMergedMeta(folderPath);
+    _cachedMeta = await KMetaService.instance.getMeta(folderPath);
     return _cachedMeta!;
   }
 

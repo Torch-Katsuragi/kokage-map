@@ -18,36 +18,29 @@
 
 import '../core/fs/k_file_system.dart';
 import '../models/kmeta.dart';
-import '../models/nodes/layer_tree_node.dart';
 import '../utils/app_logger.dart';
 import 'sync_ledger.dart';
 
 /// フォルダメタデータサービス
-/// 継承チェーンを解決し、マージ済みメタデータを提供
+/// `.kmeta.json` の読み書きとキャッシュ。フォルダ設定は自己完結（親からの継承は無い）
 class KMetaService {
   // シングルトン
   static final KMetaService instance = KMetaService._internal();
   factory KMetaService() => instance;
   KMetaService._internal();
 
-  /// メタデータキャッシュ（フォルダパス → 生メタデータ）
+  /// メタデータキャッシュ（フォルダパス → メタデータ）
   final Map<String, KMeta> _rawCache = {};
-
-  /// マージ済みメタデータキャッシュ（フォルダパス → マージ済みメタデータ）
-  final Map<String, KMeta> _mergedCache = {};
 
   /// キャッシュをクリア
   void clearCache() {
     _rawCache.clear();
-    _mergedCache.clear();
     AppLogger.debug('[KMetaService] Cache cleared');
   }
 
   /// 特定フォルダのキャッシュをクリア（変更時に使用）
   void invalidateCache(String folderPath) {
     _rawCache.remove(folderPath);
-    // マージ済みキャッシュは子フォルダも影響を受けるのでクリア
-    _mergedCache.removeWhere((key, _) => key.startsWith(folderPath));
   }
 
   /// フォルダの生メタデータを取得（キャッシュ対応・バージョンゲート付き）
@@ -92,31 +85,14 @@ class KMetaService {
     return meta;
   }
 
-  /// フォルダのメタデータを取得。
+  /// フォルダのメタデータを取得（無ければ [KMeta.empty]）。
   ///
-  /// > [!IMPORTANT] 継承チェーンは 2026-09-06 に廃止した
+  /// > [!IMPORTANT] 親からの継承チェーンは 2026-09-06 に廃止した
   /// > 以前は root からこの dir までの親の `visibility` / `styles.defaultStyle` / `layout` を
   /// > マージしていた。子 dir の見た目が親のファイルに依存すると、サブ dir 単体を持ち出した
   /// > ときに QGIS で見え方が変わる（`.qgs` 正典化と正面から矛盾する）。
-  /// > いまは自フォルダの生メタデータそのもの。[projectRootDir] は互換のため残してある。
-  Future<KMeta> getMergedMeta(String folderPath, {String? projectRootDir}) async {
-    if (_mergedCache.containsKey(folderPath)) {
-      return _mergedCache[folderPath]!;
-    }
-
-    final meta = await getRawMeta(folderPath) ?? KMeta.empty;
-    _mergedCache[folderPath] = meta;
-    return meta;
-  }
-
-  /// LayerTreeNodeからマージ済みメタデータを取得
-  Future<KMeta> getMergedMetaForNode(LayerTreeNode node, {String? projectRootDir}) async {
-    final folderPath = node.getAbsoluteFilePath();
-    if (folderPath == null) {
-      return KMeta.empty;
-    }
-    return getMergedMeta(folderPath, projectRootDir: projectRootDir);
-  }
+  Future<KMeta> getMeta(String folderPath) async =>
+      await getRawMeta(folderPath) ?? KMeta.empty;
 
   /// 保存後に呼ばれる（`.qgs` の自動更新など）。アプリ起動時に配線する
   void Function(String folderPath)? onSaved;
@@ -129,7 +105,6 @@ class KMetaService {
   Future<bool> saveMeta(String folderPath, KMeta meta) async {
     final prevRaw = _rawCache[folderPath];
     _rawCache[folderPath] = meta;
-    _mergedCache.removeWhere((key, _) => key.startsWith(folderPath));
 
     final key = SyncLedger.keyFor(driveId: meta.sync.driveId, folderPath: folderPath);
     await SyncLedger.instance.write(key, SyncLedgerEntry.fromSync(meta.sync));

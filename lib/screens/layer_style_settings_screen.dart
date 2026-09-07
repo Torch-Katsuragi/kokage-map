@@ -364,7 +364,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
   Future<void> _onInit() async {
     if (widget.isViewMode) {
       // View に指定が無ければレイヤのスタイルを初期値として見せる
-      final meta = await KMetaService.instance.getMergedMeta(
+      final meta = await KMetaService.instance.getMeta(
         widget.folderPath!,
       );
       layerStyleSettings.loadOverlay(
@@ -372,7 +372,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
             meta.getLayerStyle(widget.targetLayer!.layerKey),
       );
     } else if (widget.isLayerMode) {
-      final meta = await KMetaService.instance.getMergedMeta(
+      final meta = await KMetaService.instance.getMeta(
         widget.folderPath!,
       );
       final layerStyle = meta.getLayerStyle(widget.targetLayer!.layerKey);

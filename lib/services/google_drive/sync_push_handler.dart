@@ -65,7 +65,7 @@ class SyncPushHandler {
       // デバウンス待ちの `.qgs` を書き切ってから上げる（古い版を飛ばさない）
       await QgsAutoRefresh.instance.flushNow();
 
-      final previousMeta = await _kmetaService.getMergedMeta(projectPath);
+      final previousMeta = await _kmetaService.getMeta(projectPath);
       final previousSyncedFiles = previousMeta.sync.files;
 
       if (!await fs.isDirectory(projectPath)) {
@@ -342,7 +342,7 @@ class SyncPushHandler {
 
   /// フォルダ単位でPush
   Future<SyncResult> pushFolder(String localPath) async {
-    final meta = await _kmetaService.getMergedMeta(localPath);
+    final meta = await _kmetaService.getMeta(localPath);
     final driveId = meta.sync.driveId;
 
     if (driveId == null) {

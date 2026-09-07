@@ -293,7 +293,7 @@ class SyncPullHandler {
 
   /// フォルダ単位でPull
   Future<SyncResult> pullFolder(String localPath) async {
-    final meta = await _kmetaService.getMergedMeta(localPath);
+    final meta = await _kmetaService.getMeta(localPath);
     final driveId = meta.sync.driveId;
 
     if (driveId == null) {

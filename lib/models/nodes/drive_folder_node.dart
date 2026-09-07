@@ -189,7 +189,7 @@ class DriveFolderNode extends FolderNode {
     final folderPath = getAbsoluteFilePath();
     if (folderPath == null) return;
 
-    final meta = await KMetaService.instance.getMergedMeta(folderPath);
+    final meta = await KMetaService.instance.getMeta(folderPath);
     if (meta.sync.lastSynced != null) {
       lastSynced = meta.sync.lastSynced;
     }

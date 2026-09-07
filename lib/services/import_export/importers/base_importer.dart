@@ -15,8 +15,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: Base Importer
 // インポーターの抽象基底クラス
-import '../import_export_models.dart';
 import '../../../models/nodes/geopackage_node.dart';
+import '../import_export_models.dart';
 
 /// インポーターの抽象基底クラス
 abstract class BaseImporter {

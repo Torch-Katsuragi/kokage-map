@@ -308,7 +308,7 @@ class SyncConflictResolver {
         MergeChangeType localChange = MergeChangeType.none;
         MergeChangeType remoteChange = MergeChangeType.none;
         DateTime? localModTime;
-        DateTime? remoteModTime = driveEntry?.file.modifiedTime;
+        final DateTime? remoteModTime = driveEntry?.file.modifiedTime;
         FileChangeInfo? moveInfo;
 
         if (driveEntry == null) {
@@ -458,14 +458,12 @@ class SyncConflictResolver {
                   );
                 }
               }
-              break;
             case MergeChangeType.deleted:
               if (entry.driveFileId != null) {
                 await _driveService.deleteFile(entry.driveFileId!);
                 syncedFiles.remove(relativePath);
                 deletedCount++;
               }
-              break;
             case MergeChangeType.none:
               AppLogger.debug('  → ローカル変更なし、リモート変更を復元: ${entry.remoteChange}');
               switch (entry.remoteChange) {
@@ -491,7 +489,6 @@ class SyncConflictResolver {
                       );
                     }
                   }
-                  break;
                 case MergeChangeType.added:
                   AppLogger.debug('  → リモート追加を削除（復元）');
                   if (entry.driveFileId != null) {
@@ -515,7 +512,6 @@ class SyncConflictResolver {
                   } else {
                     AppLogger.debug('    driveFileIdがnullのためスキップ');
                   }
-                  break;
                 case MergeChangeType.modified:
                   if (await fs.exists(localFilePath)) {
                     final relativeDir = p.dirname(relativePath);
@@ -538,7 +534,6 @@ class SyncConflictResolver {
                       );
                     }
                   }
-                  break;
                 case MergeChangeType.moved:
                   // ローカルを採用 → Driveのファイルを元の場所（ローカルのパス）に戻す
                   if (entry.driveFileId != null && entry.moveInfo != null) {
@@ -556,11 +551,9 @@ class SyncConflictResolver {
                       );
                     }
                   }
-                  break;
                 case MergeChangeType.none:
                   break;
               }
-              break;
             case MergeChangeType.moved:
               break;
           }
@@ -584,14 +577,12 @@ class SyncConflictResolver {
                   );
                 }
               }
-              break;
             case MergeChangeType.deleted:
               if (await fs.exists(localFilePath)) {
                 await fs.delete(localFilePath);
                 syncedFiles.remove(relativePath);
                 deletedCount++;
               }
-              break;
             case MergeChangeType.moved:
               if (entry.moveInfo != null && entry.driveFileId != null) {
                 final oldPath = _fileOps.relativePathToLocalPath(localPath, entry.moveInfo!.movedFrom ?? relativePath);
@@ -608,7 +599,6 @@ class SyncConflictResolver {
                   movedCount++;
                 }
               }
-              break;
             case MergeChangeType.none:
               switch (entry.localChange) {
                 case MergeChangeType.deleted:
@@ -627,14 +617,12 @@ class SyncConflictResolver {
                       );
                     }
                   }
-                  break;
                 case MergeChangeType.added:
                   if (await fs.exists(localFilePath)) {
                     await fs.delete(localFilePath);
                     syncedFiles.remove(relativePath);
                     deletedCount++;
                   }
-                  break;
                 case MergeChangeType.modified:
                   if (entry.driveFileId != null) {
                     final success = await _driveService.downloadFile(
@@ -649,13 +637,11 @@ class SyncConflictResolver {
                       );
                     }
                   }
-                  break;
                 case MergeChangeType.moved:
                   break;
                 case MergeChangeType.none:
                   break;
               }
-              break;
           }
         }
       }

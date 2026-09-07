@@ -12,6 +12,7 @@
 //
 //   合否は判定しない（アサーションを置かない）。数字を出すだけ。
 //   `tool/test_matrix.ps1` のゲートには含めない（benchmark/ サブディレクトリに置いてある）。
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -136,9 +137,9 @@ void main() {
       const targetZoom = 11.0;
       var done = false;
       final sw = Stopwatch()..start();
-      controller
+      unawaited(controller
           .animateTo(center: target, zoom: targetZoom)
-          .then((_) => done = true);
+          .then((_) => done = true));
 
       // Future が完了するまで
       await pumpUntil(

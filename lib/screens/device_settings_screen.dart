@@ -18,16 +18,16 @@
 /// ペアリング済み Bluetooth デバイスを一覧表示し、
 /// 対応する [ExternalDeviceService] への接続/切断を行う。
 library;
-import '../i18n/strings.g.dart';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 import '../devices/base/device_service.dart';
 import '../devices/trupulse/trupulse_providers.dart';
-import '../widgets/settings_widgets.dart';
+import '../i18n/strings.g.dart';
 import '../utils/app_logger.dart';
+import '../widgets/settings_widgets.dart';
 
 class DeviceSettingsScreen extends ConsumerStatefulWidget {
   final bool isEmbedded;
@@ -189,7 +189,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
                         : t.devices.connected),
                     trailing: s.isConnected
                         ? TextButton(
-                            onPressed: () => s.disconnect(),
+                            onPressed: s.disconnect,
                             child: Text(t.devices.disconnect),
                           )
                         : const SizedBox.square(

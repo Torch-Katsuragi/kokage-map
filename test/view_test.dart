@@ -114,7 +114,7 @@ void main() {
     test('文を切り替えられる形は弾く', () {
       // `.kmeta.json` は Drive 経由で他人から届きうる
       expect(
-        FeatureRepository.sanitizeFilter("1=1; DROP TABLE rinshoban"),
+        FeatureRepository.sanitizeFilter('1=1; DROP TABLE rinshoban'),
         isNull,
       );
     });

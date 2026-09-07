@@ -14,12 +14,13 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../tools/gps_tool.dart';
 import '../tools/map_tool.dart';
+import '../tools/overlay_transform_tool.dart';
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
-import '../tools/gps_tool.dart';
-import '../tools/overlay_transform_tool.dart';
 
 part 'tool_providers.g.dart';
 

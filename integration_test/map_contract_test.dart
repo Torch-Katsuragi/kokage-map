@@ -13,6 +13,7 @@
 //   web は maplibre-gl-js）なので、その挙動差をここで数値として固定する。
 //   もとは Windows版（maplibre_webview）の受け入れ条件として作ったもので、
 //   デスクトップ撤去後は web が同じ役目を引き継いでいる。
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -202,7 +203,7 @@ void main() {
       var done = false;
       // await するとテスト側が pump を回せず永久に完了しないため、
       // fire-and-forget して pump で進める。
-      controller.animateTo(center: target, zoom: 11.0).then((_) => done = true);
+      unawaited(controller.animateTo(center: target, zoom: 11.0).then((_) => done = true));
 
       await pumpUntil(
         tester,

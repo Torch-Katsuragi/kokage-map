@@ -151,7 +151,7 @@ void main() {
       final xy = service.transformToXY(const LatLng(33.93, 135.96), vi);
       expect(xy, isNotNull);
       // 原点 (36N, 136E) より南 → X(Northing) は負、東経がほぼ同じ → Y(Easting) は小さい
-      expect(xy!['x']!, lessThan(0));
+      expect(xy!['x'], lessThan(0));
       expect(xy['y']!.abs(), lessThan(10000));
     });
 

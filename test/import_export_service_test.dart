@@ -1,11 +1,12 @@
 // Root Maps: Import/Export Service Tests
-import 'package:flutter_test/flutter_test.dart';
-import 'package:root_maps/services/import_export/import_export_service.dart';
-import 'package:root_maps/models/geometry_type.dart';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
 import 'package:proj4dart/proj4dart.dart';
+import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/services/coordinate/index.dart';
+import 'package:root_maps/services/import_export/import_export_service.dart';
 
 void main() {
   group('ImportExportService Tests', () {
@@ -163,7 +164,7 @@ void main() {
 
   group('ImportExportService座標変換テスト', () {
     test('EpsgDefinitionオブジェクトの作成', () {
-      final coordinateSystem = EpsgDefinition(
+      const coordinateSystem = EpsgDefinition(
         code: 'EPSG:2448',
         name: 'JGD2000 / Japan Plane Rectangular CS VI',
         proj4String:
@@ -180,8 +181,8 @@ void main() {
     test('和歌山県の座標変換テスト', () {
       // 和歌山県北山村の平面直角座標系VI系の座標例（推定値）
       // 平面直角座標系は X=Northing(北方向), Y=Easting(東方向)
-      final x = -150000.0; // Northing (北方向)
-      final y = 50000.0; // Easting (東方向)
+      const x = -150000.0; // Northing (北方向)
+      const y = 50000.0; // Easting (東方向)
 
       final coordinateSystem = EpsgRegistry.instance.getByCode('EPSG:2448')!;
       expect(coordinateSystem.name, contains('JGD2000'));

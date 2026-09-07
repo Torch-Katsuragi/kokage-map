@@ -14,13 +14,15 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
 import 'package:sqflite/sqflite.dart';
-import '../../services/coordinate/gpkg_crs_resolver.dart';
+
 import '../../services/coordinate/geometry_reprojector.dart';
+import '../../services/coordinate/gpkg_crs_resolver.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/wkb_utils.dart';
 import '../geometry_type.dart';
@@ -138,7 +140,7 @@ class FeatureRepository {
     try {
       // テーブルに関連するトリガーを全取得
       final triggers = await db.rawQuery(
-        "SELECT name, sql FROM sqlite_master "
+        'SELECT name, sql FROM sqlite_master '
         "WHERE type = 'trigger' AND tbl_name = ?",
         [tableName],
       );
@@ -165,7 +167,7 @@ class FeatureRepository {
 
         // SpatiaLite関数を使っているトリガーを検出
         final usesSpatialiteFunction = spatialiteFunctions.any(
-          (fn) => sql.contains(fn),
+          sql.contains,
         );
 
         // rtree仮想テーブルを参照するトリガーを検出
@@ -503,7 +505,7 @@ class FeatureRepository {
       'description': description,
     };
     if (metadata != null) attributes['kmaps_metadata'] = jsonEncode(metadata);
-    return await addLineWithAttributes(tableName, line, attributes);
+    return addLineWithAttributes(tableName, line, attributes);
   }
 
   Future<int?> addPolygon(
@@ -518,7 +520,7 @@ class FeatureRepository {
       'description': description,
     };
     if (metadata != null) attributes['kmaps_metadata'] = jsonEncode(metadata);
-    return await addPolygonWithAttributes(tableName, rings, attributes);
+    return addPolygonWithAttributes(tableName, rings, attributes);
   }
 
   // ============================================================

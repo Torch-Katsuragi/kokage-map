@@ -17,21 +17,23 @@
 /// LayerDrawerやタイトルバーなど、複数のUIから再利用可能
 library;
 
+import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../core/platform_capabilities.dart';
-import '../../widgets/dialogs/drive_sign_in_prompt.dart';
-import '../../core/fs/k_file_system.dart';
-import '../../i18n/strings.g.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/fs/k_file_system.dart';
+import '../../core/platform_capabilities.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
-import '../../models/nodes/layer_tree_node.dart';
-import '../../providers/notification_providers.dart';
+import '../../models/nodes/drive_folder_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
-import '../../models/nodes/drive_folder_node.dart';
 import '../../models/nodes/global_folder_node.dart';
+import '../../models/nodes/layer_tree_node.dart';
+import '../../providers/notification_providers.dart';
 import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
+import '../../widgets/dialogs/drive_sign_in_prompt.dart';
 import '../../widgets/layer_drawer/sync_merge_dialog.dart';
 import 'index.dart';
 
@@ -93,19 +95,19 @@ class DriveSyncOperations {
       onStateChanged();
 
       if (!context.mounted) return;
-      showDialog(
+      unawaited(showDialog(
         context: context,
         barrierDismissible: false,
         builder: (_) => AlertDialog(
           content: Row(
             children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
+              const CircularProgressIndicator(),
+              const SizedBox(width: 16),
               Text(t.drive.checkingChanges),
             ],
           ),
         ),
-      );
+      ));
 
       final syncEngine = SyncEngine();
       final entries = await syncEngine.getMergeEntries(localPath);

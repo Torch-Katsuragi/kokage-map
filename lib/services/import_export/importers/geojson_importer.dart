@@ -17,16 +17,18 @@
 // GeoJSONインポートクラス（turfパッケージ活用版）
 import 'dart:convert';
 import 'dart:io';
-import 'package:root_maps/utils/app_logger.dart';
-import '../../../i18n/strings.g.dart';
+
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:turf/turf.dart' as turf;
-import '../import_export_models.dart';
+
+import '../../../converters/turf_converter.dart';
+import '../../../i18n/strings.g.dart';
+import '../../../models/geometry_type.dart';
 import '../../../models/nodes/geopackage_node.dart';
 import '../../../models/nodes/layer_node.dart';
-import '../../../models/geometry_type.dart';
-import '../../../converters/turf_converter.dart';
+import '../import_export_models.dart';
 import 'base_importer.dart';
 
 /// GeoJSONインポーター（turfパッケージ活用）
@@ -207,7 +209,6 @@ class GeoJSONImporter extends BaseImporter {
           } else {
             return null;
           }
-          break;
 
         case GeometryType.linestring:
           if (geometry is turf.LineString) {
@@ -230,7 +231,6 @@ class GeoJSONImporter extends BaseImporter {
           } else {
             return null;
           }
-          break;
 
         case GeometryType.polygon:
           if (geometry is turf.Polygon) {
@@ -260,7 +260,6 @@ class GeoJSONImporter extends BaseImporter {
           } else {
             return null;
           }
-          break;
       }
 
       return featureData;
@@ -344,13 +343,10 @@ class GeoJSONImporter extends BaseImporter {
     switch (geometryType) {
       case GeometryType.point:
         await targetGeoPackage.geoPackageFile.addPointsBatch(layerName, batchData);
-        break;
       case GeometryType.linestring:
         await targetGeoPackage.geoPackageFile.addLinesBatch(layerName, batchData);
-        break;
       case GeometryType.polygon:
         await targetGeoPackage.geoPackageFile.addPolygonsBatch(layerName, batchData);
-        break;
     }
   }
 }

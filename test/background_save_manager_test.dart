@@ -1,14 +1,15 @@
-﻿// BackgroundSaveManagerとGeoPackageFileの統合テスト
+// BackgroundSaveManagerとGeoPackageFileの統合テスト
 import 'dart:io';
-import 'package:test/test.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:root_maps/models/geopackage/geopackage_file.dart';
-import 'package:root_maps/models/geometry_type.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:root_maps/models/geometry_type.dart';
+import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/providers/app_container.dart';
 import 'package:root_maps/providers/project_providers.dart';
 import 'package:root_maps/utils/background_save_manager.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('BackgroundSaveManager Tests', () {
@@ -72,7 +73,7 @@ void main() {
 
     test('単一属性の遅延更新', () async {
       // 点フィーチャを追加
-      final point = LatLng(35.6762, 139.6503);
+      const point = LatLng(35.6762, 139.6503);
       final pointId = await geoPackageFile.addPoint(
         'test_points',
         point,
@@ -105,7 +106,7 @@ void main() {
 
     test('複数属性の一括遅延更新', () async {
       // 点フィーチャを追加
-      final point = LatLng(35.6762, 139.6503);
+      const point = LatLng(35.6762, 139.6503);
       final pointId = await geoPackageFile.addPoint(
         'test_points',
         point,
@@ -149,8 +150,8 @@ void main() {
 
       try {
         // 両方のファイルに点を追加
-        final point1 = LatLng(35.6762, 139.6503);
-        final point2 = LatLng(35.6586, 139.7454);
+        const point1 = LatLng(35.6762, 139.6503);
+        const point2 = LatLng(35.6586, 139.7454);
 
         final pointId1 = await geoPackageFile.addPoint(
           'test_points',
@@ -207,7 +208,7 @@ void main() {
 
     test('pending changesの状態確認', () async {
       // 点フィーチャを追加
-      final point = LatLng(35.6762, 139.6503);
+      const point = LatLng(35.6762, 139.6503);
       final pointId = await geoPackageFile.addPoint(
         'test_points',
         point,
@@ -237,7 +238,7 @@ void main() {
 
     test('GeoPackageFileのdispose処理', () async {
       // 点フィーチャを追加
-      final point = LatLng(35.6762, 139.6503);
+      const point = LatLng(35.6762, 139.6503);
       final pointId = await geoPackageFile.addPoint(
         'test_points',
         point,

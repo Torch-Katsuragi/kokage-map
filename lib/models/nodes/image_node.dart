@@ -16,19 +16,19 @@
 // Root Maps: 画像ノードクラス
 // 位置情報付き画像ファイルに対応するレイヤツリーノード
 
-import 'package:root_maps/utils/app_logger.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+import 'package:root_maps/utils/app_logger.dart';
 
 import '../../core/fs/k_file_system.dart';
-import 'package:latlong2/latlong.dart';
-import 'layer_tree_node.dart';
-import 'folder_node.dart';
 import '../../core/node_types.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/kmeta.dart';
 import '../../services/geotiff_service.dart';
 import '../../services/kmeta_service.dart';
 import '../../utils/exif_parser.dart';
+import 'folder_node.dart';
+import 'layer_tree_node.dart';
 import 'overlay_image_node.dart';
 
 // ExifParserからクラスを再エクスポート（後方互換性のため）
@@ -137,7 +137,7 @@ class ImageNode extends LayerTreeNode {
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
-    for (var entity in imageFiles) {
+    for (final entity in imageFiles) {
       try {
         final ext = p.extension(entity.path).toLowerCase();
         final isTiff = ext == '.tif' || ext == '.tiff';

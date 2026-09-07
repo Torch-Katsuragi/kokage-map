@@ -17,8 +17,8 @@
 /// maplibre移行で座標型が異なるため、境界で変換する
 library;
 
-import 'package:latlong2/latlong.dart';
 import 'package:geobase/geobase.dart';
+import 'package:latlong2/latlong.dart';
 
 extension LatLngToGeographic on LatLng {
   /// LatLng → Geographic 変換

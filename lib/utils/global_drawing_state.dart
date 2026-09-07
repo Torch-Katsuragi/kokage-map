@@ -13,14 +13,16 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:root_maps/utils/app_logger.dart';
-import 'package:latlong2/latlong.dart';
-import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../providers/selection_providers.dart';
-import '../i18n/strings.g.dart';
 import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
+import '../i18n/strings.g.dart';
+import '../models/nodes/feature_node.dart';
+import '../models/nodes/layer_node.dart';
+import '../providers/selection_providers.dart';
 
 /// グローバルな描画状態とメタデータを管理するクラス
 /// GPS測量とペンツールでの描画状態を共有する
@@ -375,7 +377,7 @@ class GlobalDrawingState {
     // 追記モードの場合、layerNodeは不要
     if (isEditMode) {
       if (_editingFeature is LineFeatureNode && isLineDrawing) {
-        return await confirmLineFeature(
+        return confirmLineFeature(
           name: name,
           description: description,
           additionalMetadata: additionalMetadata,
@@ -386,7 +388,7 @@ class GlobalDrawingState {
           AppLogger.debug('[GlobalDrawingState] ポリゴン確定: closeRing関数が必要です');
           return false;
         }
-        return await confirmPolygonFeature(
+        return confirmPolygonFeature(
           name: name,
           description: description,
           closeRing: closeRing,
@@ -402,7 +404,7 @@ class GlobalDrawingState {
       }
 
       if (layerNode is LineLayerNode && isLineDrawing) {
-        return await confirmLineFeature(
+        return confirmLineFeature(
           layerNode: layerNode,
           name: name,
           description: description,
@@ -414,7 +416,7 @@ class GlobalDrawingState {
           AppLogger.debug('[GlobalDrawingState] ポリゴン確定: closeRing関数が必要です');
           return false;
         }
-        return await confirmPolygonFeature(
+        return confirmPolygonFeature(
           layerNode: layerNode,
           name: name,
           description: description,

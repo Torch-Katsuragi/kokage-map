@@ -23,9 +23,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
+
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
-import '../base/device_service.dart';
+
 import '../../utils/app_logger.dart';
+import '../base/device_service.dart';
 import 'trupulse_measurement.dart';
 
 class TruPulseService extends ExternalDeviceService {

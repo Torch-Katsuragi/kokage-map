@@ -18,26 +18,27 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../i18n/strings.g.dart';
-import '../../../models/nodes/layer_tree_node.dart';
-import '../../../models/nodes/layer_node.dart';
+import '../../../models/app_notification.dart';
+import '../../../models/geometry_type.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
-import '../../../models/geometry_type.dart';
+import '../../../models/nodes/layer_node.dart';
+import '../../../models/nodes/layer_tree_node.dart';
+import '../../../models/nodes/view_node.dart';
+import '../../../presentation/node_presenter.dart';
+import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
-import '../../../services/geometry_conversion_service.dart';
-import '../../../utils/feature_calc_utils.dart';
-import '../../../models/app_notification.dart';
-import '../../../providers/notification_providers.dart';
-import '../../../widgets/layer_import_export_dialog.dart';
-import '../../../widgets/geometry_conversion_dialogs.dart';
-import '../../../widgets/survey_conversion_dialog.dart';
 import '../../../screens/layer_style_settings_screen.dart';
-import '../../../presentation/node_presenter.dart';
+import '../../../services/geometry_conversion_service.dart';
 import '../../../services/survey/survey_chain_resolver.dart';
 import '../../../utils/app_logger.dart';
-import '../../../models/nodes/view_node.dart';
+import '../../../utils/feature_calc_utils.dart';
+import '../../../widgets/geometry_conversion_dialogs.dart';
+import '../../../widgets/layer_import_export_dialog.dart';
+import '../../../widgets/survey_conversion_dialog.dart';
 import '../common_dialogs.dart';
 import 'drag_feedback_card.dart';
 import 'view_tile.dart';
@@ -291,7 +292,7 @@ class LayerTile extends ConsumerWidget {
             return true;
           }).toList(),
         );
-        node.dispose();
+        await node.dispose();
         ref.read(featureRefreshTriggerProvider.notifier).trigger();
       },
     );
@@ -343,7 +344,7 @@ class LayerTile extends ConsumerWidget {
     if (!context.mounted) return;
 
     final typeLabel = targetLayer is LineLayerNode ? 'Line' : 'Polygon';
-    String? featureName = await showDialog<String>(
+    final String? featureName = await showDialog<String>(
       context: context,
       builder: (context) {
         final ctrl = TextEditingController(text: sourceLayer.name);
@@ -602,7 +603,7 @@ class LayerTile extends ConsumerWidget {
         final copied = await parentGpkg.geoPackageFile.copyFeaturesBetweenLayers(src.name, node.name);
         if (copied > 0) {
           count += copied;
-          src.dispose();
+          await src.dispose();
         }
       }
 

@@ -21,8 +21,8 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../i18n/strings.g.dart';
 import '../core/platform_capabilities.dart';
+import '../i18n/strings.g.dart';
 import '../utils/app_logger.dart';
 
 /// オンボーディング完了フラグのSharedPreferencesキー
@@ -228,7 +228,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(
                     _totalPages,
-                    (index) => _buildDotIndicator(index),
+                    _buildDotIndicator,
                   ),
                 ),
               ),

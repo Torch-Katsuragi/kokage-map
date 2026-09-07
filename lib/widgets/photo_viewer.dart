@@ -14,9 +14,11 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // フルスクリーン写真ビューワー
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
-import 'dart:io';
+
 import '../i18n/strings.g.dart';
 
 /// フルスクリーン写真ビューワーウィジェット
@@ -57,15 +59,15 @@ class PhotoViewer extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.broken_image,
                         color: Colors.white54,
                         size: 64,
                       ),
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
                       Text(
                         t.photoViewer.loadError,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white54,
                           fontSize: 16,
                         ),
@@ -117,7 +119,7 @@ class PhotoViewer extends StatelessWidget {
               child: Text(
                 t.photoViewer.zoomHint,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 12,
                 ),

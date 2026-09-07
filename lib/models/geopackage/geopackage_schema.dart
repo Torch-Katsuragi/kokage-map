@@ -15,8 +15,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: GeoPackage スキーマ管理クラス
 // PRIMARY KEY検出、カラム追加・取得などのスキーマ操作を担当
-import '../../utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
+import '../../utils/app_logger.dart';
 import 'geopackage_connection.dart';
 
 /// GeoPackage スキーマを管理するクラス
@@ -30,8 +30,8 @@ class GeoPackageSchema {
 
   /// サポートする属性カラム名リスト（属性テーブルで表示するカラム）
   final List<String> supportedAttributes = [
-    "id", // 内部的にPRIMARY KEYを正規化したもの
-    "geom",
+    'id', // 内部的にPRIMARY KEYを正規化したもの
+    'geom',
   ];
 
   /// コンストラクタ
@@ -184,7 +184,7 @@ class GeoPackageSchema {
 
       if (getAll) return filteredColumns;
       return filteredColumns
-          .where((c) => supportedAttributes.contains(c))
+          .where(supportedAttributes.contains)
           .toList();
     } catch (e) {
       AppLogger.debug('[GeoPackageSchema] getColumnNames: エラー発生 - $e');

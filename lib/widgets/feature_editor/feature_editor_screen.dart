@@ -20,12 +20,12 @@
 library;
 
 import 'package:flutter/material.dart';
-import '../../i18n/strings.g.dart';
-import 'package:maplibre/maplibre.dart' as ml;
-import 'package:geobase/geobase.dart' as geo;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geobase/geobase.dart' as geo;
+import 'package:maplibre/maplibre.dart' as ml;
 
 import '../../core/r_map_controller.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../providers/service_providers.dart';
 import '../../services/basemap_service.dart';

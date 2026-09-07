@@ -16,11 +16,13 @@
 // Root Maps: CSV Exporter
 // CSVエクスポートクラス
 import 'dart:io';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:latlong2/latlong.dart';
-import '../import_export_models.dart';
-import '../../../models/nodes/layer_node.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
 import '../../../models/geometry_type.dart';
+import '../../../models/nodes/layer_node.dart';
+import '../import_export_models.dart';
 import 'base_exporter.dart';
 
 /// CSVエクスポーター
@@ -83,10 +85,10 @@ class CSVExporter extends BaseExporter {
           final lines = feature['lines'] as List<LatLng>;
           if (lines.isNotEmpty) {
             // 線の中心点を計算
-            double avgLng =
+            final double avgLng =
                 lines.map((p) => p.longitude).reduce((a, b) => a + b) /
                     lines.length;
-            double avgLat =
+            final double avgLat =
                 lines.map((p) => p.latitude).reduce((a, b) => a + b) /
                     lines.length;
             row.add(avgLng.toString());

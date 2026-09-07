@@ -25,12 +25,13 @@
 /// - GPS記録オプションの設定
 /// - リアルタイム位置情報監視
 library;
-import '../i18n/strings.g.dart';
-
-import 'package:root_maps/utils/app_logger.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
+import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
 import '../services/gps_manager_service.dart';
@@ -148,7 +149,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       }
 
       // 権限要求
-      Map<Permission, PermissionStatus> statuses =
+      final Map<Permission, PermissionStatus> statuses =
           await [
             Permission.bluetoothScan,
             Permission.bluetoothConnect,
@@ -158,9 +159,9 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       AppLogger.debug('[GpsSettingsScreen] Bluetooth権限要求結果: $statuses');
 
       // 必要な権限が全て許可されているかチェック
-      bool hasBluetoothScan =
+      final bool hasBluetoothScan =
           statuses[Permission.bluetoothScan]?.isGranted == true;
-      bool hasBluetoothConnect =
+      final bool hasBluetoothConnect =
           statuses[Permission.bluetoothConnect]?.isGranted == true;
 
       if (!hasBluetoothScan || !hasBluetoothConnect) {
@@ -213,7 +214,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
     final locationGranted = await Permission.location.isGranted;
 
     if (!mounted) return;
-    showDialog(
+    unawaited(showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
@@ -254,7 +255,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
           ],
         );
       },
-    );
+    ));
   }
 
   /// 権限状態表示行
@@ -429,7 +430,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       );
 
       if (gpsInfo != null && mounted) {
-        showDialog(
+        unawaited(showDialog(
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
@@ -459,7 +460,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
               ],
             );
           },
-        );
+        ));
       } else if (gpsInfo == null) {
         ref.read(notificationCenterProvider.notifier).add(
               title: 'GPS位置取得がタイムアウトしました',

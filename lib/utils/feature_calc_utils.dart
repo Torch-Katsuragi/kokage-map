@@ -21,10 +21,12 @@
 //
 // 依存: latlong2, turf
 
-import 'package:root_maps/utils/app_logger.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:turf/turf.dart';
 import 'dart:math' as math;
+
+import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/app_logger.dart';
+import 'package:turf/turf.dart';
+
 import '../models/nodes/feature_node.dart';
 
 /// degree・metre変換系
@@ -135,7 +137,7 @@ class GeometryCalc {
   /// [line]: 線分の座標リスト
   /// 戻り値: 重心座標（LatLng）
   static LatLng calcLineCentroid(List<LatLng> line) {
-    if (line.isEmpty) return LatLng(0, 0);
+    if (line.isEmpty) return const LatLng(0, 0);
     if (line.length == 1) return line.first;
 
     // turf_dartのLineStringとcentroid関数を使用
@@ -153,7 +155,7 @@ class GeometryCalc {
   /// [polygon]: 外環＋穴リスト（`List<List<LatLng>>`）
   /// 戻り値: 重心座標（LatLng）
   static LatLng calcPolygonCentroid(List<List<LatLng>> polygon) {
-    if (polygon.isEmpty || polygon[0].isEmpty) return LatLng(0, 0);
+    if (polygon.isEmpty || polygon[0].isEmpty) return const LatLng(0, 0);
 
     // turf_dartのPolygonとcentroid関数を使用
     final coordinates =
@@ -176,7 +178,7 @@ class GeometryCalc {
 
   /// 点集合（`List<LatLng>`）の重心を計算
   static LatLng calcPointsCentroid(List<LatLng> points) {
-    if (points.isEmpty) return LatLng(0, 0);
+    if (points.isEmpty) return const LatLng(0, 0);
     if (points.length == 1) return points.first;
 
     // turf_dartのMultiPointとcentroid関数を使用

@@ -16,30 +16,32 @@
 // Root Maps: 初期化処理Mixin
 // MapPageの各種サービス初期化処理を分離
 import 'dart:async';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:flutter_compass/flutter_compass.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
+
 import '../../../core/platform_capabilities.dart';
-import '../../../utils/app_logger.dart';
-import '../../../providers/project_providers.dart';
-import '../../../providers/ui_state_providers.dart';
-import '../../../models/nodes/layer_tree_node.dart';
+import '../../../i18n/strings.g.dart';
+import '../../../models/app_notification.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
 import '../../../models/nodes/layer_node.dart';
-import '../../../services/google_drive/index.dart';
-import '../../../services/google_drive/auto_sync_service.dart';
-import '../../../services/tile_server.dart';
-import '../../../services/basemap_style_json.dart';
-import '../map_page_state_base.dart';
-import 'map_jump_mixin.dart';
-import '../../../services/qgis/qgs_read_back.dart';
-import '../../../i18n/strings.g.dart';
-import '../../../models/app_notification.dart';
+import '../../../models/nodes/layer_tree_node.dart';
 import '../../../providers/notification_providers.dart';
+import '../../../providers/project_providers.dart';
+import '../../../providers/ui_state_providers.dart';
+import '../../../services/basemap_style_json.dart';
+import '../../../services/google_drive/auto_sync_service.dart';
+import '../../../services/google_drive/index.dart';
+import '../../../services/qgis/qgs_read_back.dart';
+import '../../../services/tile_server.dart';
+import '../../../utils/app_logger.dart';
 import '../../../utils/geo_converter.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
+import '../map_page_state_base.dart';
+import 'map_jump_mixin.dart';
 
 /// 初期化処理Mixin
 /// プロジェクトツリー、GPS、背景地図、コンパスの初期化を担当
@@ -61,7 +63,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       } else {
         ref
             .read(folderTreeProvider.notifier)
-            .set(FolderNode("Home", visible: true));
+            .set(FolderNode('Home', visible: true));
       }
     }
     currentNode = ref.read(folderTreeProvider);
@@ -141,11 +143,11 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
       // AutoSyncServiceを起動（WiFi時に自動同期、conflict時はサブタイトル通知）
       if (PlatformCapabilities.supportsDriveSyncStatusCheck) {
-        AutoSyncService.instance.start(
+        unawaited(AutoSyncService.instance.start(
           root: rootNode,
           onStatusChanged: () => triggerSetState(() {}),
-          onRefreshNeeded: (node) => _updateChildrenRecursive(node),
-        );
+          onRefreshNeeded: _updateChildrenRecursive,
+        ));
       }
     }
     AppLogger.debug('[Init] projectTree complete');
@@ -177,7 +179,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     // 兄弟ノードをFuture.waitで並列初期化（個別失敗は伝播させない）
     final childFutures = node.children
         .where((c) => c is FolderNode || c is GeoPackageNode)
-        .map((c) => updateNodeRecursively(c));
+        .map(updateNodeRecursively);
 
     await Future.wait(childFutures, eagerError: false);
   }
@@ -280,7 +282,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
       // 外部GNSS機器をスキャン（Bluetooth対応プラットフォームのみ）
       if (PlatformCapabilities.supportsBluetoothGnss) {
-        scanGnssDevicesBackground();
+        unawaited(scanGnssDevicesBackground());
       }
 
       // GPS位置情報取得を開始（InternalGpsLocationStore経由）

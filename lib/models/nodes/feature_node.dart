@@ -17,16 +17,18 @@
 // GeoPackage内のフィーチャに対応するレイヤツリーノード
 // turf_dartのFeatureオブジェクトをメインデータとして使用
 
-import 'package:root_maps/utils/app_logger.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:turf/turf.dart' as turf;
 import 'dart:async';
 import 'dart:convert';
-import 'layer_tree_node.dart';
-import 'layer_node.dart';
-import '../geopackage/geopackage_file.dart';
+
+import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/app_logger.dart';
+import 'package:turf/turf.dart' as turf;
+
 import '../../converters/turf_converter.dart';
 import '../../core/node_types.dart';
+import '../geopackage/geopackage_file.dart';
+import 'layer_node.dart';
+import 'layer_tree_node.dart';
 
 /// フィーチャノード基底クラス
 /// LayerNodeの子としてfeature単位で生成される
@@ -85,9 +87,9 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// フィーチャの重心座標（turf_dartで計算、キャッシュあり）
   LatLng get centroid {
-    if (_isDisposed || parent.isDisposed) return LatLng(0, 0);
+    if (_isDisposed || parent.isDisposed) return const LatLng(0, 0);
     return _cachedCentroid ??=
-        TurfConverter.calculateCentroid(turfFeature) ?? LatLng(0, 0);
+        TurfConverter.calculateCentroid(turfFeature) ?? const LatLng(0, 0);
   }
 
   /// 座標データをposition型で取得（turf_dart形式）
@@ -492,7 +494,7 @@ abstract class FeatureNode extends LayerTreeNode {
 
     // DBからID指定で削除を非同期で実行（UIには影響させない）
     // エラーが発生しても強制的に削除を試みる
-    geoPackageFile
+    unawaited(geoPackageFile
         .removeFeature(layerName, rowId)
         .then((_) {
           AppLogger.debug(
@@ -504,7 +506,7 @@ abstract class FeatureNode extends LayerTreeNode {
             '[ERROR] FeatureNode.dispose: DB deletion failed (rowId=$rowId): $e',
           );
           // エラーが発生しても処理は続行（壊れたデータでも削除できるようにする）
-        });
+        }));
 
     AppLogger.debug('[DEBUG] FeatureNode.dispose: base dispose completed');
 
@@ -601,7 +603,7 @@ class PointFeatureNode extends FeatureNode {
     if (geometry is turf.Point) {
       return TurfConverter.pointToLatlng(geometry);
     }
-    return LatLng(0, 0);
+    return const LatLng(0, 0);
   }
 
   /// 点座標をposition形式で取得

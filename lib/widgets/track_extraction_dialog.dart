@@ -24,17 +24,15 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../i18n/strings.g.dart';
-
 import '../models/app_notification.dart';
 import '../models/gps_track.dart';
-import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
+import '../models/nodes/layer_node.dart';
+import '../models/nodes/layer_tree_node.dart';
 import '../providers/notification_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/gps_history_recorder.dart';
@@ -285,7 +283,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
       return null;
     }
 
-    return await showDialog<LineLayerNode>(
+    return showDialog<LineLayerNode>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(t.track.selectLineLayer),

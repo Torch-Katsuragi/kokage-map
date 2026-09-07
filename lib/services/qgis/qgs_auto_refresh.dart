@@ -64,7 +64,7 @@ class QgsAutoRefresh {
 
     _dirty = true;
     _timer?.cancel();
-    _timer = Timer(debounce, () => _run());
+    _timer = Timer(debounce, _run);
   }
 
   /// 待ちがあれば今すぐ書き切る（Drive push・書き出しの前）。

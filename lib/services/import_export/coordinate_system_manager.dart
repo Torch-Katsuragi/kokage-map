@@ -15,8 +15,9 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: Coordinate System Manager
 // PRJ(WKT)文字列をEpsgDefinitionに解決する（EPSG定義の正はEpsgRegistry）
-import 'package:root_maps/utils/app_logger.dart';
 import 'package:proj4dart/proj4dart.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
 import '../coordinate/epsg_registry.dart';
 import '../coordinate/wkt_parser.dart';
 

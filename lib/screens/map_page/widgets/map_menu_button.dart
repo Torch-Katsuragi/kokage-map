@@ -20,8 +20,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../i18n/strings.g.dart';
 import '../../../core/platform_capabilities.dart';
+import '../../../i18n/strings.g.dart';
 import '../../../providers/party_providers.dart';
 import '../../level_screen.dart';
 import '../../settings_screen.dart';

@@ -15,8 +15,10 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: バックグラウンド保存管理クラス（シングルトン）
 // 複数のGeoPackageFileインスタンスのバックグラウンド保存を一元管理
-import 'package:root_maps/utils/app_logger.dart';
 import 'dart:async';
+
+import 'package:root_maps/utils/app_logger.dart';
+
 import '../models/geopackage/geopackage_file.dart';
 
 /// バックグラウンド保存を一元管理するシングルトンクラス
@@ -85,7 +87,7 @@ class BackgroundSaveManager {
     _saveTimer?.cancel();
 
     // 新しいタイマーを設定
-    _saveTimer = Timer(Duration(milliseconds: _saveDelayMs), () {
+    _saveTimer = Timer(const Duration(milliseconds: _saveDelayMs), () {
       AppLogger.debug('[DEBUG] BackgroundSaveManager: タイマー満了 - 保存処理開始');
       // 非同期関数を呼び出し（戻り値は無視）
       _saveChangesToDB();

@@ -18,10 +18,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
-import '../../models/nodes/layer_node.dart';
 import '../../models/geometry_type.dart';
+import '../../models/nodes/layer_node.dart';
 import '../../providers/notification_providers.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/qgis_expression_filter.dart';

@@ -502,7 +502,7 @@ class MapSourceManager {
   /// デフォルトのpaint設定でスタイルレイヤを追加
   Future<void> _addDefaultLayers(ml.StyleController style) async {
     // ポリゴン塗りつぶし（通常）
-    await style.addLayer(ml.FillStyleLayer(
+    await style.addLayer(const ml.FillStyleLayer(
       id: kPolygonsFill,
       sourceId: kPolygons,
       paint: {
@@ -511,7 +511,7 @@ class MapSourceManager {
       },
     ));
     // ポリゴン輪郭線（通常） — fill-outline-colorは1px固定のため別途LineStyleLayerで描画
-    await style.addLayer(ml.LineStyleLayer(
+    await style.addLayer(const ml.LineStyleLayer(
       id: kPolygonsOutline,
       sourceId: kPolygons,
       paint: {
@@ -520,7 +520,7 @@ class MapSourceManager {
       },
     ));
     // ポリゴン塗りつぶし（選択）
-    await style.addLayer(ml.FillStyleLayer(
+    await style.addLayer(const ml.FillStyleLayer(
       id: kPolygonsSelFill,
       sourceId: kPolygonsSel,
       paint: {
@@ -529,7 +529,7 @@ class MapSourceManager {
       },
     ));
     // ポリゴン輪郭線（選択）
-    await style.addLayer(ml.LineStyleLayer(
+    await style.addLayer(const ml.LineStyleLayer(
       id: kPolygonsSelOutline,
       sourceId: kPolygonsSel,
       paint: {
@@ -538,7 +538,7 @@ class MapSourceManager {
       },
     ));
     // ライン（通常）
-    await style.addLayer(ml.LineStyleLayer(
+    await style.addLayer(const ml.LineStyleLayer(
       id: kLinesLine,
       sourceId: kLines,
       paint: {
@@ -547,7 +547,7 @@ class MapSourceManager {
       },
     ));
     // ライン（選択）
-    await style.addLayer(ml.LineStyleLayer(
+    await style.addLayer(const ml.LineStyleLayer(
       id: kLinesSelLine,
       sourceId: kLinesSel,
       paint: {
@@ -565,7 +565,7 @@ class MapSourceManager {
       },
     ));
     // ポリゴン頂点（通常）
-    await style.addLayer(ml.CircleStyleLayer(
+    await style.addLayer(const ml.CircleStyleLayer(
       id: kPolyVerticesCircle,
       sourceId: kPolyVertices,
       paint: {
@@ -576,7 +576,7 @@ class MapSourceManager {
       },
     ));
     // ポリゴン頂点（選択）
-    await style.addLayer(ml.CircleStyleLayer(
+    await style.addLayer(const ml.CircleStyleLayer(
       id: kPolyVerticesSelCircle,
       sourceId: kPolyVerticesSel,
       paint: {
@@ -587,7 +587,7 @@ class MapSourceManager {
       },
     ));
     // ライン頂点（通常）
-    await style.addLayer(ml.CircleStyleLayer(
+    await style.addLayer(const ml.CircleStyleLayer(
       id: kLineVerticesCircle,
       sourceId: kLineVertices,
       paint: {
@@ -598,7 +598,7 @@ class MapSourceManager {
       },
     ));
     // ライン頂点（選択）
-    await style.addLayer(ml.CircleStyleLayer(
+    await style.addLayer(const ml.CircleStyleLayer(
       id: kLineVerticesSelCircle,
       sourceId: kLineVerticesSel,
       paint: {
@@ -610,7 +610,7 @@ class MapSourceManager {
     ));
     // クラスタ円（ポイント数に応じてサイズを段階的に変化、色はポイント設定に準拠）
     // デフォルトのpointSize=6.0に合わせたサイズ
-    await style.addLayer(ml.CircleStyleLayer(
+    await style.addLayer(const ml.CircleStyleLayer(
       id: kClusterCircle,
       sourceId: kClusters,
       paint: {
@@ -627,7 +627,7 @@ class MapSourceManager {
       },
     ));
     // クラスタ数テキスト
-    await style.addLayer(ml.SymbolStyleLayer(
+    await style.addLayer(const ml.SymbolStyleLayer(
       id: kClusterCount,
       sourceId: kClusters,
       layout: {
@@ -643,7 +643,7 @@ class MapSourceManager {
       },
     ));
     // ポイント（通常） — CircleStyleLayerで高速描画
-    await style.addLayer(ml.CircleStyleLayer(
+    await style.addLayer(const ml.CircleStyleLayer(
       id: kPointsCircle,
       sourceId: kPoints,
       paint: {
@@ -654,7 +654,7 @@ class MapSourceManager {
       },
     ));
     // ポイント（選択）
-    await style.addLayer(ml.CircleStyleLayer(
+    await style.addLayer(const ml.CircleStyleLayer(
       id: kPointsSelCircle,
       sourceId: kPointsSel,
       paint: {
@@ -667,7 +667,7 @@ class MapSourceManager {
 
     // --- ImageNode レイヤ ---
     // ImageNodeクラスタ円
-    await style.addLayer(ml.CircleStyleLayer(
+    await style.addLayer(const ml.CircleStyleLayer(
       id: kImageClusterCircle,
       sourceId: kImageClusters,
       paint: {
@@ -681,7 +681,7 @@ class MapSourceManager {
       },
     ));
     // ImageNodeクラスタ数テキスト（円の中央）
-    await style.addLayer(ml.SymbolStyleLayer(
+    await style.addLayer(const ml.SymbolStyleLayer(
       id: kImageClusterCount,
       sourceId: kImageClusters,
       layout: {
@@ -696,7 +696,7 @@ class MapSourceManager {
       },
     ));
     // ImageNodeクラスタ最新ファイル名（円の右横）
-    await style.addLayer(ml.SymbolStyleLayer(
+    await style.addLayer(const ml.SymbolStyleLayer(
       id: kImageClusterName,
       sourceId: kImageClusters,
       layout: {
@@ -714,7 +714,7 @@ class MapSourceManager {
       },
     ));
     // ImageNode（通常）
-    await style.addLayer(ml.SymbolStyleLayer(
+    await style.addLayer(const ml.SymbolStyleLayer(
       id: kImagesSymbol,
       sourceId: kImages,
       layout: {
@@ -741,7 +741,7 @@ class MapSourceManager {
       },
     ));
     // ImageNode（選択）
-    await style.addLayer(ml.SymbolStyleLayer(
+    await style.addLayer(const ml.SymbolStyleLayer(
       id: kImagesSelSymbol,
       sourceId: kImagesSel,
       layout: {
@@ -1049,10 +1049,10 @@ class MapSourceManager {
     await s.addLayer(ml.SymbolStyleLayer(id: kImageClusterCount, sourceId: kImageClusters,
       layout: {'text-field': '{point_count_abbreviated}', 'text-font': ['Open Sans Semibold'], 'text-size': clusterTextSize, 'text-allow-overlap': true},
       paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
-    await s.addLayer(ml.SymbolStyleLayer(id: kImageClusterName, sourceId: kImageClusters,
+    await s.addLayer(const ml.SymbolStyleLayer(id: kImageClusterName, sourceId: kImageClusters,
       layout: {'text-field': <Object>['get', 'name'], 'text-font': ['Open Sans Semibold'], 'text-size': 10.0, 'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0},
       paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
-    await s.addLayer(ml.SymbolStyleLayer(id: kImagesSymbol, sourceId: kImages,
+    await s.addLayer(const ml.SymbolStyleLayer(id: kImagesSymbol, sourceId: kImages,
       layout: {
         'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarker, _iconPhotoMarkerNoDir],
         'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
@@ -1061,7 +1061,7 @@ class MapSourceManager {
         'text-anchor': 'left', 'text-offset': <Object>[1.0, 0], 'text-max-width': 100.0, 'text-optional': true,
       },
       paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
-    await s.addLayer(ml.SymbolStyleLayer(id: kImagesSelSymbol, sourceId: kImagesSel,
+    await s.addLayer(const ml.SymbolStyleLayer(id: kImagesSelSymbol, sourceId: kImagesSel,
       layout: {
         'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarkerSel, _iconPhotoMarkerNoDirSel],
         'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],

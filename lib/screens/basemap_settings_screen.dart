@@ -16,17 +16,19 @@
 /// 背景地図設定画面
 /// 背景地図プロバイダーの選択とオフライン機能の管理
 library;
-import '../i18n/strings.g.dart';
-import 'package:root_maps/utils/app_logger.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-import '../models/basemap_provider.dart';
-import '../services/basemap_service.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
+import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
+import '../models/basemap_provider.dart';
 import '../providers/notification_providers.dart';
-import '../widgets/settings_widgets.dart';
 import '../providers/ui_state_providers.dart';
+import '../services/basemap_service.dart';
+import '../widgets/settings_widgets.dart';
 
 class BaseMapSettingsScreen extends ConsumerStatefulWidget {
   final bool isEmbedded;
@@ -160,19 +162,19 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
       // 進行状況ダイアログを表示
       if (!mounted) return;
       
-      showDialog(
+      unawaited(showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
           content: Row(
             children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
+              const CircularProgressIndicator(),
+              const SizedBox(width: 16),
               Expanded(child: Text(t.basemap.cacheValidation.validating)),
             ],
           ),
         ),
-      );
+      ));
 
       // キャッシュ検証実行
       final result = await _baseMapService.validateAndRepairCache();
@@ -214,7 +216,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
                 else
                   Text(
                     t.basemap.cacheValidation.noIssues,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.green,
                     ),
@@ -287,11 +289,11 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     } catch (_) {}
 
     double minZoom = (currentZoom - 2).clamp(provider.minZoom.toDouble(), provider.maxZoom.toDouble());
-    double maxZoom = (currentZoom + 2).clamp(provider.minZoom.toDouble(), provider.maxZoom.toDouble());
+    final double maxZoom = (currentZoom + 2).clamp(provider.minZoom.toDouble(), provider.maxZoom.toDouble());
     if (minZoom > maxZoom) minZoom = maxZoom;
 
-    RangeValues zoomRange = RangeValues(minZoom, maxZoom);
-    double radius = 1000; // 1km
+    final RangeValues zoomRange = RangeValues(minZoom, maxZoom);
+    const double radius = 1000; // 1km
 
     // ダイアログ表示
     await showDialog(
@@ -571,7 +573,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
               '${_cacheStats.values.fold(0, (sum, count) => sum + count)}タイル',
           buttonLabel: t.common.clear,
           buttonColor: Colors.red,
-          onPressed: _cacheStats.isNotEmpty ? () => _clearCache() : null,
+          onPressed: _cacheStats.isNotEmpty ? _clearCache : null,
           enabled: _cacheStats.isNotEmpty,
         ),
         const Divider(),
@@ -581,7 +583,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
           padding: const EdgeInsets.only(left: 16, top: 8),
           child: Text(
             t.basemap.perProviderCache,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ),
         const SizedBox(height: 8),
@@ -590,7 +592,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               t.basemap.noCacheData,
-              style: TextStyle(color: Colors.grey),
+              style: const TextStyle(color: Colors.grey),
             ),
           )
         else

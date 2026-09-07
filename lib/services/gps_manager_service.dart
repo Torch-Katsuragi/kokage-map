@@ -29,11 +29,13 @@ library;
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:flutter/foundation.dart';
-import '../i18n/strings.g.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
+import '../i18n/strings.g.dart';
 import '../models/bluetooth_gnss_service.dart';
 import '../models/gps_position_record.dart';
 import '../models/gps_track.dart';
@@ -275,7 +277,6 @@ class GpsManagerService extends ChangeNotifier {
       switch (_currentSource) {
         case GpsSourceType.internal:
           await _startInternalGps();
-          break;
         case GpsSourceType.external:
           if (_selectedGnssDevice != null) {
             await _startExternalGnss(_selectedGnssDevice!);
@@ -285,7 +286,6 @@ class GpsManagerService extends ChangeNotifier {
             _currentSource = GpsSourceType.internal;
             await _startInternalGps();
           }
-          break;
       }
 
       _isGpsActive = true;
@@ -425,14 +425,12 @@ class GpsManagerService extends ChangeNotifier {
       switch (sourceType) {
         case GpsSourceType.internal:
           await _startInternalGps();
-          break;
         case GpsSourceType.external:
           if (device == null) {
             throw ArgumentError(t.gps.externalDeviceRequired);
           }
           _selectedGnssDevice = device;
           await _startExternalGnss(device);
-          break;
       }
 
       // グローバル設定に保存

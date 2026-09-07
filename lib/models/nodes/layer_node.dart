@@ -18,20 +18,22 @@
 // turf_dartのFeatureCollectionオブジェクトをメインデータとして使用
 
 import 'dart:async';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:turf/turf.dart' as turf;
-import 'layer_tree_node.dart';
-import 'geopackage_node.dart';
-import 'folder_node.dart';
-import 'feature_node.dart';
-import 'view_node.dart';
-import '../geopackage/geopackage_file.dart';
-import '../geometry_type.dart';
-import '../kmeta.dart';
+
 import '../../converters/turf_converter.dart';
 import '../../core/node_types.dart';
 import '../../services/kmeta_service.dart';
+import '../geometry_type.dart';
+import '../geopackage/geopackage_file.dart';
+import '../kmeta.dart';
+import 'feature_node.dart';
+import 'folder_node.dart';
+import 'geopackage_node.dart';
+import 'layer_tree_node.dart';
+import 'view_node.dart';
 
 /// 重複レイヤ名のナンバリング処理ユーティリティ
 class LayerNameUtils {
@@ -971,7 +973,6 @@ abstract class LayerNode extends LayerTreeNode {
             AppLogger.debug('[LayerNode] ポイント抽出成功（旧形式）: ${points.first}');
             return {'point': points.first};
           }
-          break;
 
         case GeometryType.linestring:
           // ラインの場合：List<LatLng> で返される
@@ -985,7 +986,6 @@ abstract class LayerNode extends LayerTreeNode {
             AppLogger.debug('[LayerNode] ライン抽出成功（旧形式）: ${lines.length}個の頂点');
             return {'line': lines};
           }
-          break;
 
         case GeometryType.polygon:
           // ポリゴンの場合：List<List<LatLng>> で返される
@@ -1003,7 +1003,6 @@ abstract class LayerNode extends LayerTreeNode {
             );
             return {'rings': polygons};
           }
-          break;
       }
 
       AppLogger.debug('[LayerNode] ジオメトリデータの抽出に失敗');
@@ -1036,7 +1035,6 @@ abstract class LayerNode extends LayerTreeNode {
             targetLayerName,
             batchData,
           );
-          break;
 
         case GeometryType.linestring:
           AppLogger.debug('[LayerNode] ラインバッチ処理実行');
@@ -1044,7 +1042,6 @@ abstract class LayerNode extends LayerTreeNode {
             targetLayerName,
             batchData,
           );
-          break;
 
         case GeometryType.polygon:
           AppLogger.debug('[LayerNode] ポリゴンバッチ処理実行');
@@ -1052,7 +1049,6 @@ abstract class LayerNode extends LayerTreeNode {
             targetLayerName,
             batchData,
           );
-          break;
       }
 
       AppLogger.debug('[LayerNode] バッチ処理完了: ${insertedIds.length}個挿入');

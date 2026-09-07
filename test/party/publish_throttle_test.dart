@@ -7,7 +7,7 @@ void main() {
   group('PublishThrottle', () {
     const throttle = PublishThrottle();
     final t0 = DateTime(2026, 6, 23, 12, 0, 0);
-    final origin = const LatLng(35.0, 139.0);
+    const origin = LatLng(35.0, 139.0);
 
     test('初回（last==null）は必ず送信', () {
       expect(
@@ -18,7 +18,7 @@ void main() {
 
     test('距離しきい値未満かつハートビート未満は送信しない', () {
       // ほぼ同一地点・3秒後
-      final near = const LatLng(35.00001, 139.00001); // 約1.5m
+      const near = LatLng(35.00001, 139.00001); // 約1.5m
       expect(
         throttle.shouldPublish(
           current: near,
@@ -33,7 +33,7 @@ void main() {
 
     test('距離しきい値を超えたら送信', () {
       // 約50m北
-      final far = const LatLng(35.00045, 139.0);
+      const far = LatLng(35.00045, 139.0);
       expect(
         throttle.shouldPublish(
           current: far,
@@ -74,7 +74,7 @@ void main() {
 
     test('低バッテリーは距離しきい値を広げる', () {
       // 約30m（通常なら送信、低電池では倍の50m未満なので送信しない）
-      final mid = const LatLng(35.00027, 139.0);
+      const mid = LatLng(35.00027, 139.0);
       expect(
         throttle.shouldPublish(
           current: mid,

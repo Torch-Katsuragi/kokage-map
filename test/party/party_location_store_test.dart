@@ -104,9 +104,9 @@ void main() {
       store = build();
       store.start();
       source.peersCtrl.add({
-        'self': PeerPosition(
+        'self': const PeerPosition(
             uid: 'self', latitude: 1, longitude: 1, serverTimeMs: 0),
-        'other': PeerPosition(
+        'other': const PeerPosition(
             uid: 'other', latitude: 2, longitude: 2, serverTimeMs: 0),
       });
       await pumpEventQueue();

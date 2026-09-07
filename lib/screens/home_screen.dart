@@ -15,34 +15,35 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: ホーム画面（プロジェクト作成・選択）
 // プロジェクト新規作成・ローカル/DriveからインポートUI
-import '../i18n/strings.g.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../core/launch_options.dart';
+
 import '../core/fs/project_folder_picker.dart';
+import '../core/launch_options.dart';
 import '../core/platform_capabilities.dart';
+import '../i18n/strings.g.dart';
+import '../models/app_notification.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/global_folder_node.dart';
-import '../providers/project_providers.dart';
-import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
+import '../providers/project_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/changelog_service.dart';
+import '../services/global_folder_locator.dart';
 import '../services/party/party_invite.dart';
 import '../utils/folder_utils.dart';
 import 'changelog_screen.dart';
-import 'user_guide_screen.dart';
 import 'map_page/map_page.dart';
-
 import 'onboarding_screen.dart';
 import 'settings_screen.dart' show kGlobalFolderCustomPathKey;
-import '../services/global_folder_locator.dart';
+import 'user_guide_screen.dart';
 
 /// ホーム画面（最小構成）
 class HomeScreen extends ConsumerStatefulWidget {
@@ -173,7 +174,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       return;
     }
 
-    final dir = LaunchOptions.projectDir;
+    const dir = LaunchOptions.projectDir;
     if (!Directory(dir).existsSync()) {
       AppLogger.debug('[HomeScreen] PROJECT_DIR: パスが存在しない ($dir)');
       return;
@@ -436,7 +437,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     AppLogger.debug('[HomeScreen] ファイルピッカーを開いています...');
     // native は OS のピッカー、web は File System Access API
-    String? dir = await pickProjectFolder();
+    final String? dir = await pickProjectFolder();
     AppLogger.debug('[HomeScreen] 選択されたディレクトリ: $dir');
 
     if (dir != null) {
@@ -472,7 +473,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       AppLogger.debug('[HomeScreen] 地図画面に遷移中...');
       // マップ画面遷移後は権限チェックを無効化（GPS権限リクエストとの競合防止）
       _navigatedToMapPage = true;
-      Navigator.push(
+      unawaited(Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const RootMapsHomePage()),
       ).then((_) {
@@ -482,7 +483,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           _isOpeningProject = false;
           _openingProjectStatus = '';
         });
-      });
+      }));
     }
   }
 

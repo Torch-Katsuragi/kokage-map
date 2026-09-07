@@ -17,15 +17,16 @@
 // Google Driveと同期するフォルダを表すレイヤツリーノード
 
 import 'package:path/path.dart' as p;
+
 import '../../core/fs/k_file_system.dart';
-import 'folder_node.dart';
-import 'layer_tree_node.dart';
-import 'global_folder_node.dart';
-import 'geopackage_node.dart';
-import 'image_node.dart';
-import '../../services/kmeta_service.dart';
 import '../../core/node_types.dart';
+import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
+import 'folder_node.dart';
+import 'geopackage_node.dart';
+import 'global_folder_node.dart';
+import 'image_node.dart';
+import 'layer_tree_node.dart';
 
 /// グローバルフォルダ内のノードのパスを解決するヘルパー
 /// 親チェインにGlobalFolderNodeがあればそこからパスを構築、なければnull
@@ -169,7 +170,7 @@ class DriveFolderNode extends FolderNode {
     final directories = entries.where((e) => e.isDirectory).toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
-    for (var entity in directories) {
+    for (final entity in directories) {
       // サブフォルダはDriveSubFolderNodeとして作成
       nodes.add(
         DriveSubFolderNode(
@@ -285,7 +286,7 @@ class DriveSubFolderNode extends FolderNode {
     final directories = entries.where((e) => e.isDirectory).toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
-    for (var entity in directories) {
+    for (final entity in directories) {
       nodes.add(
         DriveSubFolderNode(
           entity.name,

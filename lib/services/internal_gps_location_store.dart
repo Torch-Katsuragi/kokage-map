@@ -29,10 +29,10 @@ import 'dart:async';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../core/platform_capabilities.dart';
+import '../i18n/strings.g.dart';
 import '../models/gps_position_record.dart';
 import '../utils/app_logger.dart';
-import '../i18n/strings.g.dart';
-import '../core/platform_capabilities.dart';
 import 'foreground_service.dart';
 
 /// 内蔵GPS位置情報ストア（シングルトン）

@@ -3,14 +3,14 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:turf/turf.dart' as turf;
 import 'package:root_maps/converters/turf_converter.dart';
+import 'package:turf/turf.dart' as turf;
 
 void main() {
   group('TurfConverter Tests', () {
     test('LatLng to Position conversion', () {
       // テスト用座標
-      final latlng = LatLng(35.6895, 139.6917); // 東京駅
+      const latlng = LatLng(35.6895, 139.6917); // 東京駅
 
       // LatLng → Position変換
       final position = TurfConverter.latlngToPosition(latlng);
@@ -30,7 +30,7 @@ void main() {
 
     test('Point Feature creation and conversion', () {
       // テスト用座標
-      final latlng = LatLng(35.6895, 139.6917);
+      const latlng = LatLng(35.6895, 139.6917);
 
       // turf_dartのPointを作成
       final point = TurfConverter.createPoint(latlng);
@@ -49,9 +49,9 @@ void main() {
     test('LineString Feature creation and conversion', () {
       // テスト用線分座標
       final line = [
-        LatLng(35.6895, 139.6917), // 東京駅
-        LatLng(35.6762, 139.6503), // 新宿駅
-        LatLng(35.6584, 139.7016), // 渋谷駅
+        const LatLng(35.6895, 139.6917), // 東京駅
+        const LatLng(35.6762, 139.6503), // 新宿駅
+        const LatLng(35.6584, 139.7016), // 渋谷駅
       ];
 
       // turf_dartのLineStringを作成
@@ -72,11 +72,11 @@ void main() {
       // テスト用ポリゴン座標（四角形）
       final polygon = [
         [
-          LatLng(35.6895, 139.6917), // 右上
-          LatLng(35.6762, 139.6917), // 右下
-          LatLng(35.6762, 139.6503), // 左下
-          LatLng(35.6895, 139.6503), // 左上
-          LatLng(35.6895, 139.6917), // 閉じる（最初の点と同じ）
+          const LatLng(35.6895, 139.6917), // 右上
+          const LatLng(35.6762, 139.6917), // 右下
+          const LatLng(35.6762, 139.6503), // 左下
+          const LatLng(35.6895, 139.6503), // 左上
+          const LatLng(35.6895, 139.6917), // 閉じる（最初の点と同じ）
         ],
       ];
 
@@ -101,7 +101,7 @@ void main() {
         'id': 1,
         'name': 'Test Point',
         'description': 'テスト用ポイント',
-        'geometry': [LatLng(35.6895, 139.6917)], // Point形式
+        'geometry': [const LatLng(35.6895, 139.6917)], // Point形式
         'rmaps_metadata': {'test': 'data'},
       };
 
@@ -134,11 +134,11 @@ void main() {
       // テスト用ポリゴン
       final polygon = [
         [
-          LatLng(0, 0),
-          LatLng(0, 2),
-          LatLng(2, 2),
-          LatLng(2, 0),
-          LatLng(0, 0), // 閉じる
+          const LatLng(0, 0),
+          const LatLng(0, 2),
+          const LatLng(2, 2),
+          const LatLng(2, 0),
+          const LatLng(0, 0), // 閉じる
         ],
       ];
 
@@ -161,11 +161,11 @@ void main() {
       // 面積計算テスト用ポリゴン
       final polygon = [
         [
-          LatLng(0, 0),
-          LatLng(0, 0.01), // 約1km
-          LatLng(0.01, 0.01),
-          LatLng(0.01, 0),
-          LatLng(0, 0),
+          const LatLng(0, 0),
+          const LatLng(0, 0.01), // 約1km
+          const LatLng(0.01, 0.01),
+          const LatLng(0.01, 0),
+          const LatLng(0, 0),
         ],
       ];
 
@@ -178,12 +178,12 @@ void main() {
       // 面積計算
       final area = TurfConverter.calculateArea(polygonFeature);
       expect(area, isNotNull);
-      expect(area!, greaterThan(0));
+      expect(area, greaterThan(0));
 
       // 長さ計算テスト用ライン
       final line = [
-        LatLng(0, 0),
-        LatLng(0, 0.01), // 約1km
+        const LatLng(0, 0),
+        const LatLng(0, 0.01), // 約1km
       ];
 
       final lineString = TurfConverter.createLineString(line);
@@ -192,7 +192,7 @@ void main() {
       // 長さ計算
       final length = TurfConverter.calculateLength(lineFeature);
       expect(length, isNotNull);
-      expect(length!, greaterThan(0));
+      expect(length, greaterThan(0));
 
       // ignore: avoid_print
       print('[TEST] 面積・長さ計算テスト成功: area=$area m², length=$length m');

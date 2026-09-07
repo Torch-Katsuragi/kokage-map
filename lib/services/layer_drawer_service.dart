@@ -18,17 +18,18 @@
 library;
 
 import 'package:path/path.dart' as p;
+
 import '../core/fs/k_file_system.dart';
-import '../models/nodes/layer_tree_node.dart';
+import '../i18n/strings.g.dart';
+import '../models/geopackage/geopackage_file.dart';
+import '../models/nodes/drive_folder_node.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/geopackage_node.dart';
-import '../models/nodes/image_node.dart';
 import '../models/nodes/global_folder_node.dart';
-import '../models/nodes/drive_folder_node.dart';
-import '../models/geopackage/geopackage_file.dart';
+import '../models/nodes/image_node.dart';
+import '../models/nodes/layer_tree_node.dart';
 import '../services/google_drive/index.dart';
 import '../services/kmeta_service.dart';
-import '../i18n/strings.g.dart';
 
 class LayerDrawerService {
   const LayerDrawerService._();
@@ -48,8 +49,8 @@ class LayerDrawerService {
     await fs.createDirectory(path);
 
     final child = switch (parent) {
-      GlobalFolderNode p => GlobalSubFolderNode(name, basePath: p.globalPath, visible: true, parent: parent),
-      GlobalSubFolderNode p => GlobalSubFolderNode(name, basePath: p.basePath, visible: true, parent: parent),
+      final GlobalFolderNode p => GlobalSubFolderNode(name, basePath: p.globalPath, visible: true, parent: parent),
+      final GlobalSubFolderNode p => GlobalSubFolderNode(name, basePath: p.basePath, visible: true, parent: parent),
       _ => FolderNode(name, visible: true, parent: parent),
     };
     parent.addChild(child);

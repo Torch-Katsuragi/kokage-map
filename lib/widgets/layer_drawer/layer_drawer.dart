@@ -19,21 +19,23 @@
 library;
 
 import 'dart:async';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
+import 'package:path/path.dart' as p;
+import 'package:root_maps/utils/app_logger.dart';
+
 import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
-import '../../models/nodes/layer_tree_node.dart';
+import '../../models/app_notification.dart';
+import '../../models/nodes/drive_folder_node.dart';
+import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
-import '../../models/nodes/layer_node.dart';
-import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
-import '../../models/nodes/drive_folder_node.dart';
-import '../../models/app_notification.dart';
+import '../../models/nodes/layer_node.dart';
+import '../../models/nodes/layer_tree_node.dart';
 import '../../providers/notification_providers.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/ui_state_providers.dart';
@@ -43,8 +45,8 @@ import '../../services/layer_drawer_service.dart';
 import '../dialogs/add_folder_type_dialog.dart';
 import '../dialogs/drive_url_input_dialog.dart';
 import 'common_dialogs.dart';
-import 'layer_drawer_title_bar.dart';
 import 'layer_drawer_drive_sync.dart';
+import 'layer_drawer_title_bar.dart';
 import 'sync_merge_dialog.dart';
 import 'tiles/drag_feedback_card.dart';
 import 'tiles/folder_tile.dart';

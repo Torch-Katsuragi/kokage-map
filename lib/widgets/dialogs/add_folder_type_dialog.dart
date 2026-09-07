@@ -87,7 +87,7 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
             if (_showDriveOption) ...[
               Text(
                 t.addFolder.folderType,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
                   color: Colors.grey,
                 ),
@@ -118,7 +118,7 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
                 autofocus: true,
                 decoration: InputDecoration(
                   labelText: t.addFolder.folderName,
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                 ),
                 onSubmitted: (_) => _onSubmit(),
               ),
@@ -139,7 +139,7 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
                     Expanded(
                       child: Text(
                         t.addFolder.driveUrlHint,
-                        style: TextStyle(fontSize: 13),
+                        style: const TextStyle(fontSize: 13),
                       ),
                     ),
                   ],

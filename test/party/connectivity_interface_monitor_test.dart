@@ -1,6 +1,6 @@
 // hasInterfaceFrom の判定テスト
-import 'package:flutter_test/flutter_test.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/services/party/connectivity_interface_monitor.dart';
 
 void main() {

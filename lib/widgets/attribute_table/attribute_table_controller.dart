@@ -19,14 +19,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trina_grid/trina_grid.dart';
-import '../../models/nodes/layer_node.dart';
-import '../../models/nodes/feature_node.dart';
-import '../../utils/app_logger.dart';
-import '../../utils/qgis_expression_filter.dart';
+
 import '../../i18n/strings.g.dart';
+import '../../models/nodes/feature_node.dart';
+import '../../models/nodes/layer_node.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../services/coordinate/index.dart';
+import '../../utils/app_logger.dart';
+import '../../utils/qgis_expression_filter.dart';
 
 /// 属性テーブルの表示設定
 class AttributeTableSettings {
@@ -480,7 +481,7 @@ class AttributeTableController extends ChangeNotifier {
     final buffer = StringBuffer();
 
     // ヘッダー行
-    final escapedHeaders = _columnNames.map((c) => _escapeCsvField(c));
+    final escapedHeaders = _columnNames.map(_escapeCsvField);
     buffer.writeln(escapedHeaders.join(','));
 
     // データ行
@@ -693,7 +694,7 @@ class AttributeTableController extends ChangeNotifier {
     TrinaLazyPaginationRequest request,
   ) async {
     final page = request.page;
-    final pageSize = defaultPageSize;
+    const pageSize = defaultPageSize;
     final totalFeatures = _displayFeatures.length;
     final totalPages =
         (totalFeatures / pageSize).ceil().clamp(1, double.infinity).toInt();

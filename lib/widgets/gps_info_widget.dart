@@ -473,27 +473,21 @@ class GpsInfoWidget extends StatelessWidget {
       case 0:
         qualityText = t.gps.gnss.qualityInvalid;
         qualityColor = Colors.red;
-        break;
       case 1:
         qualityText = t.gps.gnss.qualityStandard;
         qualityColor = Colors.orange;
-        break;
       case 2:
         qualityText = t.gps.gnss.qualityDgps;
         qualityColor = Colors.blue;
-        break;
       case 3:
         qualityText = t.gps.gnss.qualityRtkFixed;
         qualityColor = Colors.green;
-        break;
       case 4:
         qualityText = t.gps.gnss.qualityRtkFloat;
         qualityColor = Colors.lightGreen;
-        break;
       case 5:
         qualityText = t.gps.gnss.qualityDeadReckoning;
         qualityColor = Colors.purple;
-        break;
       default:
         qualityText = t.gps.gnss.qualityN(n: quality.toString());
         qualityColor = Colors.grey;

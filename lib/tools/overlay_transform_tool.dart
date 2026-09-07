@@ -172,16 +172,13 @@ class OverlayTransformTool extends MapTool {
     switch (_activeHandle) {
       case _HandleType.center:
         _applyMove(currentScreen, mapState);
-        break;
       case _HandleType.topLeft:
       case _HandleType.topRight:
       case _HandleType.bottomRight:
       case _HandleType.bottomLeft:
         _applyScale(currentScreen, mapState);
-        break;
       case _HandleType.rotate:
         _applyRotation(currentScreen, mapState);
-        break;
       case _HandleType.none:
         break;
     }

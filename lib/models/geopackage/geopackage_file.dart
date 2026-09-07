@@ -16,19 +16,21 @@
 // Root Maps: GeoPackageファイル管理クラス（ファサード）
 // 既存APIを維持しつつ、内部で各サービスクラスに委譲
 import 'dart:typed_data';
+
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+
+import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/background_save_manager.dart';
-import '../../i18n/strings.g.dart';
 import '../geometry_type.dart';
-import 'geopackage_connection.dart';
-import 'qgis_interop.dart';
-import 'geopackage_schema.dart';
-import 'spatial_index_manager.dart';
 import 'feature_repository.dart';
+import 'geopackage_connection.dart';
+import 'geopackage_schema.dart';
 import 'layer_repository.dart';
+import 'qgis_interop.dart';
+import 'spatial_index_manager.dart';
 
 /// GeoPackageファイルを管理するファサードクラス
 ///
@@ -160,7 +162,7 @@ class GeoPackageFile {
     // BackgroundSaveManagerから変更キューをクリア
     BackgroundSaveManager.instance.clearPendingChanges(this);
 
-    return await _connection.deleteFile();
+    return _connection.deleteFile();
   }
 
   // ============================================================

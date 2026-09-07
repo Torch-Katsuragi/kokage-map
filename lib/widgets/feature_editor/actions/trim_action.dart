@@ -20,11 +20,10 @@
 library;
 
 import 'package:flutter/material.dart';
-import '../../../i18n/strings.g.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
-
+import '../../../i18n/strings.g.dart';
 import '../../../models/app_notification.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../providers/notification_providers.dart';

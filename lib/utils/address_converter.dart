@@ -13,10 +13,11 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-import 'package:root_maps/utils/app_logger.dart';
-import 'package:latlong2/latlong.dart';
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
+import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/app_logger.dart';
 
 /// 住所情報を表すクラス
 class Address {

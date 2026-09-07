@@ -17,11 +17,12 @@
 library;
 
 import 'package:flutter/material.dart';
+
 import '../../i18n/strings.g.dart';
-import '../../models/nodes/layer_tree_node.dart';
-import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/drive_folder_node.dart';
+import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/global_folder_node.dart';
+import '../../models/nodes/layer_tree_node.dart';
 import '../../presentation/node_presenter.dart';
 
 enum AddAction { folder, geoPackage, photo }

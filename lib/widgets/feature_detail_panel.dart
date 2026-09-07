@@ -14,24 +14,26 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // フィーチャ詳細パネルウィジェット
-import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../i18n/strings.g.dart';
 import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../i18n/strings.g.dart';
+import '../models/app_notification.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
 import '../models/nodes/overlay_image_node.dart';
-import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
-import '../providers/selection_providers.dart';
 import '../providers/project_providers.dart';
+import '../providers/selection_providers.dart';
 import '../providers/ui_state_providers.dart';
-import '../widgets/long_press_delete_button.dart';
-import '../widgets/photo_viewer.dart';
-import '../widgets/feature_editor/feature_editor_screen.dart';
 import '../widgets/feature_editor/actions/simplify_action.dart';
 import '../widgets/feature_editor/actions/trim_action.dart';
+import '../widgets/feature_editor/feature_editor_screen.dart';
+import '../widgets/long_press_delete_button.dart';
+import '../widgets/photo_viewer.dart';
 
 class FeatureDetailPanel extends ConsumerWidget {
   final dynamic feature;
@@ -48,7 +50,7 @@ class FeatureDetailPanel extends ConsumerWidget {
 
       return _buildPanel(
         context,
-        title: "🗺️ オーバーレイ画像",
+        title: '🗺️ オーバーレイ画像',
         children: [
           // オーバーレイアイコン
           Container(
@@ -150,7 +152,7 @@ class FeatureDetailPanel extends ConsumerWidget {
 
       return _buildPanel(
         context,
-        title: "📸 写真ファイル",
+        title: '📸 写真ファイル',
         children: [
           // 画像プレビューを追加（タップでフルスクリーン表示）
           GestureDetector(
@@ -188,7 +190,7 @@ class FeatureDetailPanel extends ConsumerWidget {
                               const SizedBox(height: 4),
                               Text(
                                 t.featureDetail.imageError,
-                                style: TextStyle(color: Colors.grey, fontSize: 10),
+                                style: const TextStyle(color: Colors.grey, fontSize: 10),
                               ),
                             ],
                           ),
@@ -261,7 +263,7 @@ class FeatureDetailPanel extends ConsumerWidget {
               children: [
                 Text(
                   t.featureDetail.dateLabel,
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Expanded(
                   child: Text(
@@ -278,7 +280,7 @@ class FeatureDetailPanel extends ConsumerWidget {
             children: [
               Text(
                 t.featureDetail.sizeLabel,
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               Expanded(
                 child: Text(

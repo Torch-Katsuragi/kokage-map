@@ -310,15 +310,15 @@ class SettingsStore extends ChangeNotifier {
   Future<void> resetAll() async {
     for (final def in allDefs) {
       switch (def) {
-        case DoubleDef d:
+        case final DoubleDef d:
           await setDouble(d, d.defaultValue);
-        case SwitchDef s:
+        case final SwitchDef s:
           await setBool(s, s.defaultValue);
-        case ColorDef c:
+        case final ColorDef c:
           await setColor(c, c.defaultColor);
-        case IntDef i:
+        case final IntDef i:
           await setInt(i, i.defaultValue);
-        case StringDef s:
+        case final StringDef s:
           await setString(s, s.defaultValue);
       }
     }
@@ -336,10 +336,10 @@ class SettingsStore extends ChangeNotifier {
     // KMeta値を読み込み、ない場合はグローバル値をフォールバック
     for (final def in allDefs) {
       final dynamic kmetaVal = switch (def) {
-        DoubleDef d => d.kmetaGetter?.call(style),
-        SwitchDef s => s.kmetaGetter?.call(style),
-        ColorDef c => c.kmetaGetter?.call(style),
-        StringDef s => s.kmetaGetter?.call(style),
+        final DoubleDef d => d.kmetaGetter?.call(style),
+        final SwitchDef s => s.kmetaGetter?.call(style),
+        final ColorDef c => c.kmetaGetter?.call(style),
+        final StringDef s => s.kmetaGetter?.call(style),
         IntDef _ => null,
       };
       if (kmetaVal != null) {
@@ -358,12 +358,12 @@ class SettingsStore extends ChangeNotifier {
 
   /// グローバル値を取得（prefsまたはdefault）
   dynamic _getGlobalValue(SettingDef def) => switch (def) {
-    DoubleDef d => _prefs?.getDouble(d.key) ?? d.defaultValue,
-    SwitchDef s => _prefs?.getBool(s.key) ?? s.defaultValue,
-    ColorDef c =>
+    final DoubleDef d => _prefs?.getDouble(d.key) ?? d.defaultValue,
+    final SwitchDef s => _prefs?.getBool(s.key) ?? s.defaultValue,
+    final ColorDef c =>
         _prefs?.getInt(c.key) != null ? Color(_prefs!.getInt(c.key)!) : c.defaultColor,
-    IntDef i => _prefs?.getInt(i.key) ?? i.defaultValue,
-    StringDef s => _prefs?.getString(s.key) ?? s.defaultValue,
+    final IntDef i => _prefs?.getInt(i.key) ?? i.defaultValue,
+    final StringDef s => _prefs?.getString(s.key) ?? s.defaultValue,
   };
 
   /// overlayにグローバル値を充填

@@ -14,8 +14,9 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:convert';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:turf/turf.dart' as turf;
 
 /// turf_dartオブジェクトとこかげマップのデータ形式間の変換を行うユーティリティクラス
@@ -51,7 +52,7 @@ class TurfConverter {
       turf.LineString(
         coordinates:
             latlngsToPositions(line)
-                .map((pos) => turf.Position.of(pos))
+                .map(turf.Position.of)
                 .toList(),
       );
 
@@ -62,7 +63,7 @@ class TurfConverter {
                 .map(
                   (ring) =>
                       latlngsToPositions(ring)
-                          .map((pos) => turf.Position.of(pos))
+                          .map(turf.Position.of)
                           .toList(),
                 )
                 .toList(),
@@ -81,7 +82,7 @@ class TurfConverter {
                 .map(
                   (line) =>
                       latlngsToPositions(line)
-                          .map((pos) => turf.Position.of(pos))
+                          .map(turf.Position.of)
                           .toList(),
                 )
                 .toList(),
@@ -99,7 +100,7 @@ class TurfConverter {
                           .map(
                             (ring) =>
                                 latlngsToPositions(ring)
-                                    .map((pos) => turf.Position.of(pos))
+                                    .map(turf.Position.of)
                                     .toList(),
                           )
                           .toList(),

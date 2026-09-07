@@ -178,7 +178,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                 controller: _nameCtrl,
                 decoration: InputDecoration(
                   labelText: t.surveyConversion.featureNameOpt,
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
               ),
@@ -189,7 +189,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                 title: Text(t.surveyConversion.closeTraverse),
                 subtitle: Text(
                   t.surveyConversion.closeTraverseDesc,
-                  style: TextStyle(fontSize: 11),
+                  style: const TextStyle(fontSize: 11),
                 ),
                 value: _closePath,
                 dense: true,
@@ -225,7 +225,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                 title: Text(t.surveyConversion.declinationCorrection),
                 subtitle: Text(
                   t.surveyConversion.declinationDesc,
-                  style: TextStyle(fontSize: 11),
+                  style: const TextStyle(fontSize: 11),
                 ),
                 value: _useDeclination,
                 dense: true,
@@ -265,7 +265,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                 title: Text(t.surveyConversion.heightCorrection),
                 subtitle: Text(
                   t.surveyConversion.heightCorrectionDesc,
-                  style: TextStyle(fontSize: 11),
+                  style: const TextStyle(fontSize: 11),
                 ),
                 value: _useHeightCorrection,
                 dense: true,
@@ -281,7 +281,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         decoration: InputDecoration(
                           labelText: t.surveyConversion.instrumentHeight,
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                       ),
@@ -293,7 +293,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         decoration: InputDecoration(
                           labelText: t.surveyConversion.targetHeight,
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                       ),

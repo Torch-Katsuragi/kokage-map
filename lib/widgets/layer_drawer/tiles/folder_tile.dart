@@ -17,14 +17,15 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/fs/k_file_system.dart';
 import '../../../core/platform_capabilities.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../i18n/strings.g.dart';
-import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/drive_folder_node.dart';
-import '../../../providers/ui_state_providers.dart';
+import '../../../models/nodes/folder_node.dart';
 import '../../../presentation/node_presenter.dart';
+import '../../../providers/ui_state_providers.dart';
 import '../../dialogs/drive_qr_dialog.dart';
 import '../common_dialogs.dart';
 import '../sync_merge_dialog.dart';

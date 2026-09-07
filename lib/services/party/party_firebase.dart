@@ -29,9 +29,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../core/platform_capabilities.dart';
 import '../../firebase_options.dart';
 import '../../utils/app_logger.dart';
-import '../../core/platform_capabilities.dart';
 
 /// パーティ機能用 Firebase の初期化を一度だけ実行する遅延ゲート。
 class PartyFirebase {
@@ -72,11 +72,11 @@ class PartyFirebase {
         try {
           await FirebaseAppCheck.instance.activate(
             providerAndroid: kDebugMode
-                ? AndroidDebugProvider()
-                : AndroidPlayIntegrityProvider(),
+                ? const AndroidDebugProvider()
+                : const AndroidPlayIntegrityProvider(),
             providerApple: kDebugMode
-                ? AppleDebugProvider()
-                : AppleAppAttestProvider(),
+                ? const AppleDebugProvider()
+                : const AppleAppAttestProvider(),
           );
         } catch (e) {
           AppLogger.debug('[Party] App Check activate をスキップ: $e');

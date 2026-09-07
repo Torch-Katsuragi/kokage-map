@@ -16,18 +16,18 @@
 // Root Maps: GeoPackageノードクラス
 // GeoPackageファイルに対応するレイヤツリーノード
 
-import 'package:root_maps/utils/app_logger.dart';
 import 'package:path/path.dart' as p;
+import 'package:root_maps/utils/app_logger.dart';
 
 import '../../core/fs/k_file_system.dart';
-import 'layer_tree_node.dart';
-import 'layer_node.dart';
+import '../../core/node_types.dart';
+import '../../i18n/strings.g.dart';
+import '../../services/kmeta_service.dart';
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
 import 'folder_node.dart';
-import '../../services/kmeta_service.dart';
-import '../../core/node_types.dart';
-import '../../i18n/strings.g.dart';
+import 'layer_node.dart';
+import 'layer_tree_node.dart';
 
 /// GeoPackageファイルノード（GeoPackageFile参照型）
 /// LayerTreeNodeの共通機能はoverrideせず、GeoPackageFile参照のみ追加
@@ -145,7 +145,7 @@ class GeoPackageNode extends LayerTreeNode {
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
-    for (var entity in gpkgFiles) {
+    for (final entity in gpkgFiles) {
       final gpkgFile = GeoPackageFile(
         [entity.name],
         absolutePath: entity.path,
@@ -173,7 +173,7 @@ class GeoPackageNode extends LayerTreeNode {
       }
 
       final directory = p.dirname(currentPath);
-      final extension = '.gpkg';
+      const extension = '.gpkg';
       // 拡張子が含まれていない場合は付与
       final newFileName = newName.endsWith(extension) ? newName : '$newName$extension';
       final newPath = p.join(directory, newFileName);

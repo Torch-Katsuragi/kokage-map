@@ -231,9 +231,7 @@ class SyncFileOperations {
         await Future.any(active);
       }
 
-      final future = task().then((result) {
-        results.add(result);
-      });
+      final future = task().then(results.add);
       active.add(future);
       // ignore: unawaited_futures
       future.whenComplete(() => active.remove(future));

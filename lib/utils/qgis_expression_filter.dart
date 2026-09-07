@@ -24,8 +24,8 @@
 ///   "field" BETWEEN 1 AND 10  |  AND / OR / NOT  |  "field" ILIKE 'T%'
 library;
 
-import 'app_logger.dart';
 import '../i18n/strings.g.dart';
+import 'app_logger.dart';
 
 class QgisExpressionFilter {
   QgisExpressionFilter._();
@@ -62,7 +62,7 @@ class QgisExpressionFilter {
     }
 
     // ILIKE → SQLiteのLIKE（SQLiteのLIKEはASCII範囲でcase-insensitive）
-    var sql = trimmed.replaceAllMapped(
+    final sql = trimmed.replaceAllMapped(
       RegExp(r'\bILIKE\b', caseSensitive: false),
       (_) => 'LIKE',
     );
@@ -101,7 +101,7 @@ class QgisExpressionFilter {
     String expression,
     Set<String> validColumns,
   ) {
-    final fieldPattern = RegExp(r'"([^"]+)"');
+    final fieldPattern = RegExp('"([^"]+)"');
     for (final match in fieldPattern.allMatches(expression)) {
       final fieldName = match.group(1)!;
       if (!validColumns.contains(fieldName)) {

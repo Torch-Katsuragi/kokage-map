@@ -28,6 +28,7 @@
 // 位置情報が取れなかった写真があればユーザーに知らせる。
 
 import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,11 +36,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
-import '../i18n/strings.g.dart';
-import '../models/nodes/folder_node.dart';
+
 import '../core/platform_capabilities.dart';
-import '../models/nodes/image_node.dart';
+import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
+import '../models/nodes/folder_node.dart';
+import '../models/nodes/image_node.dart';
 import '../providers/notification_providers.dart';
 import '../utils/app_logger.dart';
 import '../utils/exif_parser.dart';

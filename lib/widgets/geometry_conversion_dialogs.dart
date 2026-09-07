@@ -16,9 +16,10 @@
 // lib/widgets/geometry_conversion_dialogs.dart
 // ジオメトリ変換ダイアログウィジェット
 import 'package:flutter/material.dart';
+
 import '../i18n/strings.g.dart';
-import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
+import '../models/nodes/layer_node.dart';
 import '../presentation/node_presenter.dart';
 
 /// ポイント→ライン/ポリゴン変換ダイアログ
@@ -81,7 +82,7 @@ class _ConvertPointsToGeometryDialogState extends State<ConvertPointsToGeometryD
             // レイヤー選択
             Text(
               t.geometryConversion.targetLayerLabel,
-              style: TextStyle(fontWeight: FontWeight.bold),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Container(
@@ -202,7 +203,7 @@ class _ConvertGeometryToPointsDialogState extends State<ConvertGeometryToPointsD
             // レイヤー選択
             Text(
               t.geometryConversion.targetPointLayer,
-              style: TextStyle(fontWeight: FontWeight.bold),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Container(

@@ -17,15 +17,16 @@
 // Google DriveフォルダのURLを入力またはQRスキャンしてクローンする
 
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../../core/platform_capabilities.dart';
 import 'package:flutter/services.dart';
-import '../../i18n/strings.g.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../core/platform_capabilities.dart';
+import '../../i18n/strings.g.dart';
 import '../../services/google_drive/index.dart';
-import 'drive_sign_in_prompt.dart';
 import '../../utils/app_logger.dart';
+import 'drive_sign_in_prompt.dart';
 
 /// Drive URL入力ダイアログの結果
 class DriveUrlInputResult {
@@ -129,7 +130,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (data?.text != null) {
       _urlController.text = data!.text!;
-      _validateUrl();
+      await _validateUrl();
     }
   }
 
@@ -364,7 +365,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                       const SizedBox(width: 8),
                       Text(
                         t.drive.folderDetected,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.green,
                           fontWeight: FontWeight.bold,
                         ),

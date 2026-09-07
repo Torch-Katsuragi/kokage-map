@@ -74,7 +74,7 @@ class PartyConnectionMonitor {
     required this.requestOffline,
     this.sustainedOfflineDelay = const Duration(seconds: 20),
     DelayedTimerFactory? timerFactory,
-  }) : _timerFactory = timerFactory ?? ((d, cb) => Timer(d, cb));
+  }) : _timerFactory = timerFactory ?? Timer.new;
 
   bool _hasInterface = false;
   bool _serverConnected = false;

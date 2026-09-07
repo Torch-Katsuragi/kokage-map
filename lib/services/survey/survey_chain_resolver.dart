@@ -20,9 +20,11 @@
 library;
 
 import 'dart:convert';
+
 import 'package:latlong2/latlong.dart';
-import '../../models/nodes/layer_node.dart';
+
 import '../../models/nodes/feature_node.dart';
+import '../../models/nodes/layer_node.dart';
 
 /// 測量チェーン内の1点を表すデータクラス
 class TraversePoint {

@@ -17,15 +17,17 @@
 // Shapefileエクスポートクラス（CRS変換対応）
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
-import '../import_export_models.dart';
-import '../../../models/nodes/layer_node.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
 import '../../../models/geometry_type.dart';
+import '../../../models/nodes/layer_node.dart';
 import '../../../utils/binary_utils.dart';
 import '../../../utils/wkb_utils.dart';
 import '../../coordinate/epsg_registry.dart';
+import '../import_export_models.dart';
 import 'base_exporter.dart';
 
 /// Shapefileエクスポーター（CRS変換対応）
@@ -93,13 +95,10 @@ class ShapefileExporter extends BaseExporter {
       switch (geometryType) {
         case GeometryType.point:
           await _writePointShapefile(geoJsonFeatures, basePath, targetCrs, options);
-          break;
         case GeometryType.linestring:
           await _writeLineShapefile(geoJsonFeatures, basePath, targetCrs, options);
-          break;
         case GeometryType.polygon:
           await _writePolygonShapefile(geoJsonFeatures, basePath, targetCrs, options);
-          break;
         default:
           return ImportExportResult.error('Unsupported geometry type: ${geometryType?.value}');
       }
@@ -204,7 +203,6 @@ class ShapefileExporter extends BaseExporter {
               'coordinates': coords,
             };
           }
-          break;
 
         case GeometryType.linestring:
           List<List<LatLng>>? lines = feature['lines'] as List<List<LatLng>>?;
@@ -241,7 +239,6 @@ class ShapefileExporter extends BaseExporter {
                 .toList();
             geometry = {'type': 'LineString', 'coordinates': coordinates};
           }
-          break;
 
         case GeometryType.polygon:
           List<List<LatLng>>? polygons = feature['polygons'] as List<List<LatLng>>?;
@@ -293,7 +290,6 @@ class ShapefileExporter extends BaseExporter {
 
             geometry = {'type': 'Polygon', 'coordinates': allRings};
           }
-          break;
 
         default:
           continue;
@@ -792,7 +788,7 @@ class ShapefileExporter extends BaseExporter {
         fieldLength = 1;
       }
 
-      String fieldName = entry.key.length > 10 ? entry.key.substring(0, 10) : entry.key;
+      final String fieldName = entry.key.length > 10 ? entry.key.substring(0, 10) : entry.key;
 
       if (!fields.any((f) => f['name'] == fieldName.toUpperCase())) {
         fields.add({
@@ -851,7 +847,7 @@ class ShapefileExporter extends BaseExporter {
           final metaValue = metadata.entries
               .firstWhere(
                 (entry) => entry.key.toUpperCase() == fieldName,
-                orElse: () => MapEntry('', ''),
+                orElse: () => const MapEntry('', ''),
               )
               .value;
           value = metaValue?.toString() ?? '';

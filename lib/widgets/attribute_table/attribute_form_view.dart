@@ -17,8 +17,9 @@
 // 個別フィーチャの属性をフォーム形式で表示・編集
 
 import 'package:flutter/material.dart';
-import '../../i18n/strings.g.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
 import 'attribute_table_controller.dart';

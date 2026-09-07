@@ -148,11 +148,11 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
         Container(
           width: double.infinity,
           height: 200,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
+          decoration: const BoxDecoration(
+            color: Color(0xFF1E1E1E),
             borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(8),
-              topRight: const Radius.circular(8),
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
             ),
           ),
           child: entries.isEmpty
@@ -166,11 +166,11 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
               : _TerminalView(entries: entries),
         ),
         Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF252526),
+          decoration: const BoxDecoration(
+            color: Color(0xFF252526),
             borderRadius: BorderRadius.only(
-              bottomLeft: const Radius.circular(8),
-              bottomRight: const Radius.circular(8),
+              bottomLeft: Radius.circular(8),
+              bottomRight: Radius.circular(8),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

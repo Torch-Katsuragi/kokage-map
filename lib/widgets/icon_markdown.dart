@@ -25,7 +25,7 @@ import 'package:markdown/markdown.dart' as md;
 
 /// `:icon-xxx:` パターンを検出するインラインシンタックス
 class IconInlineSyntax extends md.InlineSyntax {
-  IconInlineSyntax() : super(r':icon-([a-z_0-9]+):');
+  IconInlineSyntax() : super(':icon-([a-z_0-9]+):');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {

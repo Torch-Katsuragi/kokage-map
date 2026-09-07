@@ -16,18 +16,17 @@
 // Root Maps: GeoPackage DB接続管理クラス
 // DB接続の初期化、クローズ、バリデーションを担当
 import 'dart:async';
-import 'package:flutter/widgets.dart';
-import 'package:sqflite/sqflite.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-
+import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
 
 import '../../core/fs/k_file_system.dart';
-import '../../utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
+import '../../utils/app_logger.dart';
 
 /// GeoPackage DB接続を管理するクラス
 /// 責務: DB接続の初期化、クローズ、構造検証

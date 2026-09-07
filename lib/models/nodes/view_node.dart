@@ -22,8 +22,8 @@
 library;
 
 import '../../core/node_types.dart';
-import '../kmeta.dart';
 import '../../services/kmeta_service.dart';
+import '../kmeta.dart';
 import 'layer_node.dart';
 import 'layer_tree_node.dart';
 

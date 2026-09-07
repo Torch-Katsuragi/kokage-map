@@ -17,11 +17,13 @@
 // SHPファイルのバイナリ解析クラス
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
-import '../../coordinate/epsg_registry.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
 import '../../../utils/binary_utils.dart';
+import '../../coordinate/epsg_registry.dart';
 import '../coordinate_system_manager.dart';
 
 /// シェープファイルのタイプ定数
@@ -224,17 +226,14 @@ class ShapefileBinaryParser {
             case ShapeType.point:
               geometry = await _parsePoint(bytes, offset, sourceCoordinateSystem);
               geometryBytes = 16;
-              break;
             case ShapeType.polyLine:
               final result = await _parsePolyLine(bytes, offset, contentLength, sourceCoordinateSystem);
               geometry = result['geometry'];
               geometryBytes = result['bytesRead'] as int;
-              break;
             case ShapeType.polygon:
               final result = await _parsePolygon(bytes, offset, contentLength, sourceCoordinateSystem);
               geometry = result['geometry'];
               geometryBytes = result['bytesRead'] as int;
-              break;
             default:
               geometryBytes = (contentLength * 2) - 4;
           }

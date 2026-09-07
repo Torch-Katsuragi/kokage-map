@@ -16,22 +16,24 @@
 // lib/tools/gps_tool.dart
 // GPS関連機能を扱うツール（GPS測量機能対応）
 import 'dart:async';
-import 'package:root_maps/utils/app_logger.dart';
-import 'package:flutter/material.dart';
+
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'map_tool.dart';
-import 'pan_tool.dart';
-import '../utils/global_drawing_state.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
+import '../i18n/strings.g.dart';
+import '../interfaces/map_state_interface.dart';
+import '../models/nodes/feature_node.dart';
+import '../models/nodes/layer_node.dart';
+import '../providers/selection_providers.dart';
+import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/gps_manager_service.dart';
-import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import 'package:latlong2/latlong.dart';
-import '../interfaces/map_state_interface.dart';
-import '../providers/tool_providers.dart';
-import '../providers/selection_providers.dart';
-import '../i18n/strings.g.dart';
+import '../utils/global_drawing_state.dart';
+import 'map_tool.dart';
+import 'pan_tool.dart';
 /// GPS関連機能を扱うツール
 ///
 /// GPS測量機能を提供し、現在位置を記録してフィーチャを作成します:
@@ -490,16 +492,16 @@ class GpsTool extends MapTool {
     int validAccuracyCount = 0;
 
     for (final data in gpsDataList) {
-      totalLatitude += (data['latitude'] as double);
-      totalLongitude += (data['longitude'] as double);
+      totalLatitude += data['latitude'] as double;
+      totalLongitude += data['longitude'] as double;
 
       if (data['altitude'] != null) {
-        totalAltitude += (data['altitude'] as double);
+        totalAltitude += data['altitude'] as double;
         validAltitudeCount++;
       }
 
       if (data['accuracy'] != null) {
-        totalAccuracy += (data['accuracy'] as double);
+        totalAccuracy += data['accuracy'] as double;
         validAccuracyCount++;
       }
     }

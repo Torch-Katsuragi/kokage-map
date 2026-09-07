@@ -14,9 +14,10 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:typed_data';
+
 import 'package:geobase/geobase.dart' as geo;
-import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/app_logger.dart';
 
 // ============================================================
 // GPBinary ヘッダー処理（GeoPackage仕様、geobase スコープ外）
@@ -37,7 +38,7 @@ Uint8List _createGpbHeader({
 
   int flags = 0x01; // little endian
   if (minX != null && maxX != null && minY != null && maxY != null) {
-    flags |= (1 << 1); // XY envelope (type 1)
+    flags |= 1 << 1; // XY envelope (type 1)
   }
   header.addByte(flags);
 

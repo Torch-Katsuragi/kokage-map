@@ -16,12 +16,14 @@
 // lib/services/geometry_conversion_service.dart
 // ジオメトリ変換サービス（ポイント⇔ライン/ポリゴン）
 import 'dart:convert';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:latlong2/latlong.dart';
-import '../models/nodes/layer_tree_node.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
+import '../models/nodes/feature_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
+import '../models/nodes/layer_tree_node.dart';
 import 'survey/survey_chain_resolver.dart';
 import 'survey/traverse_adjuster.dart';
 
@@ -81,7 +83,7 @@ class GeometryConversionService {
             if (headers[i] == 'id' || headers[i] == 'geom') continue;
             props[headers[i]] = r[i];
           }
-          return (point: LatLng(0, 0), properties: props);
+          return (point: const LatLng(0, 0), properties: props);
         }).toList();
       }
     } catch (e) {
@@ -95,7 +97,7 @@ class GeometryConversionService {
     if (pts.length < 3) return [];
     final first = pts.first;
     final last = pts.last;
-    bool isClosed = (first.latitude == last.latitude) && (first.longitude == last.longitude);
+    final bool isClosed = (first.latitude == last.latitude) && (first.longitude == last.longitude);
     if (!isClosed) {
       return List<LatLng>.from(pts)..add(first);
     }
@@ -287,7 +289,7 @@ class GeometryConversionService {
 
     // 補正を適用して座標を再計算
     final result = TraverseAdjuster.adjust(chain, effectiveOptions);
-    var points = result.adjustedPositions;
+    final points = result.adjustedPositions;
 
     if (points.length < 2) return null;
 

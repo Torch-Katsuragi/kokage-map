@@ -16,13 +16,15 @@
 // Root Maps: Layer Import/Export Dialog Widget
 // レイヤー全体のインポート・エクスポート機能を提供するダイアログ
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+
 import 'package:desktop_drop/desktop_drop.dart';
-import '../services/import_export/import_export_service.dart';
-import '../services/coordinate/epsg_registry.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
+import '../services/coordinate/epsg_registry.dart';
+import '../services/import_export/import_export_service.dart';
 
 /// レイヤー全体のImport/Export機能を提供するダイアログ
 class LayerImportExportDialog extends StatefulWidget {
@@ -449,11 +451,11 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
             
             // CRS検索
             TextField(
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: 'Search CRS (e.g., 6677, Tokyo, IX)',
-                prefixIcon: const Icon(Icons.search, size: 20),
+                prefixIcon: Icon(Icons.search, size: 20),
                 isDense: true,
-                border: const OutlineInputBorder(),
+                border: OutlineInputBorder(),
                 filled: true,
                 fillColor: Colors.white,
               ),

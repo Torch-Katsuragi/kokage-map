@@ -16,16 +16,18 @@
 // Root Maps: GPS測量Mixin
 // GPS測量（単一点記録、長押し測量）関連の機能を提供
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../i18n/strings.g.dart';
-import '../../../utils/app_logger.dart';
-import '../../../tools/gps_tool.dart';
-import '../../../providers/selection_providers.dart';
-import '../../../providers/tool_providers.dart';
-import '../../../utils/global_drawing_state.dart';
 import '../../../models/app_notification.dart';
 import '../../../providers/notification_providers.dart';
+import '../../../providers/selection_providers.dart';
+import '../../../providers/tool_providers.dart';
+import '../../../tools/gps_tool.dart';
+import '../../../utils/app_logger.dart';
+import '../../../utils/global_drawing_state.dart';
 import '../map_page_state_base.dart';
 
 /// GPS測量Mixin
@@ -283,7 +285,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       final additionalMetadata = {
         'type': 'measurement_log',
         'contents': List<Map<String, dynamic>>.from(
-          surveyGpsData.map((e) => Map<String, dynamic>.from(e)),
+          surveyGpsData.map(Map<String, dynamic>.from),
         ),
       };
       
@@ -293,9 +295,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         description: result['description'] ?? '',
         closeRing: closeRing,
         additionalMetadata: additionalMetadata,
-        refreshCallback: () {
-          refreshMapUI();
-        },
+        refreshCallback: refreshMapUI,
       );
       
       // GPS測量成功時はGPS停止

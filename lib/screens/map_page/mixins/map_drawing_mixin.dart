@@ -17,13 +17,14 @@
 // ペンツールでの描画確定と追記モード関連の機能を提供
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../utils/app_logger.dart';
-import '../../../utils/global_drawing_state.dart';
-import '../../../models/nodes/layer_node.dart';
+
+import '../../../i18n/strings.g.dart';
 import '../../../models/nodes/feature_node.dart';
+import '../../../models/nodes/layer_node.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
-import '../../../i18n/strings.g.dart';
+import '../../../utils/app_logger.dart';
+import '../../../utils/global_drawing_state.dart';
 import '../map_page_state_base.dart';
 
 /// 描画確定Mixin
@@ -48,7 +49,7 @@ mixin MapDrawingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
     }
     
     // 属性入力ダイアログを表示
-    String? name = await showDialog<String>(
+    final String? name = await showDialog<String>(
       context: context,
       builder: (context) {
         String text = '';
@@ -80,9 +81,7 @@ mixin MapDrawingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
       name: name.isNotEmpty ? name : t.editor.newFeature,
       description: '',
       closeRing: closeRing,
-      refreshCallback: () {
-        refreshMapUI();
-      },
+      refreshCallback: refreshMapUI,
     );
     
     if (success) {

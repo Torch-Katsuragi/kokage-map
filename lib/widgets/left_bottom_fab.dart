@@ -37,14 +37,12 @@ class LeftBottomFab extends ConsumerWidget {
           color: isActive ? Colors.white : Colors.grey,
           size: 32,
         );
-        break;
       default:
         centerIcon = Icon(
           Icons.circle,
           color: isActive ? Colors.white : Colors.grey,
           size: 32,
         );
-        break;
     }
     
     return GestureDetector(

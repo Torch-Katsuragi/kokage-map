@@ -21,15 +21,17 @@
 library;
 
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import '../i18n/strings.g.dart';
+
 import '../core/settings_schema.dart';
-import '../widgets/settings_widgets.dart';
-import '../utils/app_logger.dart';
+import '../i18n/strings.g.dart';
 import '../models/kmeta.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/view_node.dart';
 import '../services/kmeta_service.dart';
+import '../utils/app_logger.dart';
+import '../widgets/settings_widgets.dart';
 
 // ============================================================
 // 設定定義
@@ -70,7 +72,7 @@ final lineColorDef = ColorDef(
   defaultArgb: 0xFF4CAF50,
   kmetaGetter: (k) => k.lineColor,
 );
-final lineVertexPointsEnabledDef = SwitchDef(
+const lineVertexPointsEnabledDef = SwitchDef(
   key: 'layer_style_line_vertex_points_enabled',
   title: 'Draw Vertex Points',
   description: 'Overlay points at each vertex (color follows line)',
@@ -130,7 +132,7 @@ final polygonBorderOpacityDef = DoubleDef(
   formatter: (v) => '${(v * 100).toInt()}%',
   kmetaGetter: (k) => k.polygonBorderOpacity,
 );
-final polygonVertexPointsEnabledDef = SwitchDef(
+const polygonVertexPointsEnabledDef = SwitchDef(
   key: 'layer_style_polygon_vertex_points_enabled',
   title: 'Draw Vertex Points',
   description: 'Overlay points at each vertex (color follows border)',
@@ -196,7 +198,7 @@ final labelOpacityDef = DoubleDef(
 );
 
 // --- Clustering (グローバル専用) ---
-final clusteringEnabledDef = SwitchDef(
+const clusteringEnabledDef = SwitchDef(
   key: 'layer_style_clustering_enabled',
   title: 'Enable Clustering',
   description: 'Nearby markers are grouped into clusters',
@@ -221,7 +223,7 @@ final clusteringDisableZoomDef = IntDef(
 );
 
 // --- Selection (グローバル専用) ---
-final selectedColorDef = ColorDef(
+const selectedColorDef = ColorDef(
   key: 'layer_style_selected_color',
   title: 'Color',
   defaultArgb: 0xFFE91E63,

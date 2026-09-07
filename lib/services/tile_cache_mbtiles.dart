@@ -20,9 +20,10 @@ library;
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:path/path.dart' as path;
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart' as path;
 
 /// 保存待ちタイル
 class _PendingTile {

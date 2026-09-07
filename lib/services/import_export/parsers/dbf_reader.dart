@@ -17,8 +17,9 @@
 // DBFファイル（dBASE III）の読み込みクラス
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:charset_converter/charset_converter.dart';
+import 'package:root_maps/utils/app_logger.dart';
 
 /// DBFファイルを読み込んで属性データを取得するクラス
 class DbfReader {
@@ -168,13 +169,11 @@ class DbfReader {
             case 'N': // 数値
             case 'F': // 浮動小数点
               value = double.tryParse(valueString);
-              break;
             case 'L': // 論理値
               value = valueString == 'T' ||
                   valueString == 't' ||
                   valueString == 'Y' ||
                   valueString == 'y';
-              break;
             case 'D': // 日付（YYYYMMDD）
               if (valueString.length == 8) {
                 try {
@@ -188,7 +187,6 @@ class DbfReader {
               } else {
                 value = valueString;
               }
-              break;
             default: // 'C' (文字列) など
               value = valueString;
           }

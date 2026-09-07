@@ -16,8 +16,9 @@
 // lib/tools/map_tool.dart
 // 地図操作ツールの抽象基底クラス
 // 各ツール（てのひら・ペン・選択等）はこのクラスを継承
-import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+
 import '../interfaces/map_state_interface.dart';
 
 /// 地図操作ツールの抽象基底クラス

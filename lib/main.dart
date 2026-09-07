@@ -15,33 +15,33 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:async';
 
-import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'services/party/party_firebase.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'i18n/strings.g.dart';
-import 'screens/home_screen.dart';
-import 'screens/map_page/map_page.dart';
+import 'package:root_maps/utils/app_logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'core/db/database_factory_setup.dart';
 import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
-import 'services/google_drive/index.dart';
-import 'widgets/debug_log_overlay.dart';
+import 'i18n/strings.g.dart';
+import 'models/nodes/feature_node.dart';
+import 'providers/drawing_provider.dart';
 import 'providers/project_providers.dart';
-import 'providers/ui_state_providers.dart';
-import 'services/kmeta_service.dart';
-import 'services/qgis/qgs_auto_refresh.dart';
 import 'providers/selection_providers.dart';
 import 'providers/service_providers.dart';
-import 'providers/drawing_provider.dart';
-import 'models/nodes/feature_node.dart';
+import 'providers/ui_state_providers.dart';
+import 'screens/home_screen.dart';
+import 'screens/map_page/map_page.dart';
+import 'services/google_drive/index.dart';
 import 'services/internal_gps_location_store.dart';
+import 'services/kmeta_service.dart';
+import 'services/party/party_firebase.dart';
+import 'services/qgis/qgs_auto_refresh.dart';
 import 'utils/background_save_manager.dart';
-
-import 'package:shared_preferences/shared_preferences.dart';
+import 'widgets/debug_log_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,20 +50,20 @@ void main() async {
 
   // Android: ナビゲーションバー（◁□○）を非表示にする（ステータスバーは維持）
   if (PlatformCapabilities.hidesSystemNavigationBar) {
-    SystemChrome.setEnabledSystemUIMode(
+    unawaited(SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: [SystemUiOverlay.top],
-    );
+    ));
     // ジェスチャーでナビバーが表示された後、自動的に再非表示にする
-    SystemChrome.setSystemUIChangeCallback((systemOverlaysAreVisible) async {
+    unawaited(SystemChrome.setSystemUIChangeCallback((systemOverlaysAreVisible) async {
       if (systemOverlaysAreVisible) {
         await Future.delayed(const Duration(seconds: 3));
-        SystemChrome.setEnabledSystemUIMode(
+        unawaited(SystemChrome.setEnabledSystemUIMode(
           SystemUiMode.manual,
           overlays: [SystemUiOverlay.top],
-        );
+        ));
       }
-    });
+    }));
   }
 
   // 言語設定: 保存値があればそれを使用、なければ端末の言語設定を自動検出
@@ -98,7 +98,7 @@ Future<void> _initLocale() async {
             .where((l) => l.languageCode == savedLocale)
             .firstOrNull;
     if (locale != null) {
-      LocaleSettings.instance.setLocale(locale);
+      await LocaleSettings.instance.setLocale(locale);
       return;
     }
   }

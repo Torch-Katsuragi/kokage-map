@@ -19,17 +19,17 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:googleapis/drive/v3.dart' as drive;
-import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 
 import '../../core/fs/k_file_system.dart';
 import '../../core/platform_capabilities.dart';
-import '../../utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
+import '../../utils/app_logger.dart';
 import 'drive_auth_state.dart';
 import 'web_token_client.dart';
 
@@ -459,7 +459,7 @@ class GoogleDriveService {
 
     try {
       // 既存のフォルダを検索
-      final query =
+      const query =
           "name = '$kMapsFolderName' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
       final result = await _driveApi!.files.list(q: query);
 

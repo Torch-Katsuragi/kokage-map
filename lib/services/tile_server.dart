@@ -20,11 +20,13 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart';
-import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
+
 import '../core/platform_capabilities.dart';
 import '../models/basemap_provider.dart';
 import '../utils/app_logger.dart';
@@ -247,16 +249,14 @@ class TileServer {
       ..set('Access-Control-Allow-Methods', 'GET');
 
     if (request.method == 'OPTIONS') {
-      request.response
-        ..statusCode = HttpStatus.noContent
-        ..close();
+      request.response.statusCode = HttpStatus.noContent;
+      unawaited(request.response.close());
       return;
     }
 
     if (request.method != 'GET') {
-      request.response
-        ..statusCode = HttpStatus.methodNotAllowed
-        ..close();
+      request.response.statusCode = HttpStatus.methodNotAllowed;
+      unawaited(request.response.close());
       return;
     }
 
@@ -277,9 +277,8 @@ class TileServer {
 
       // /tiles/{providerId}/{z}/{x}/{y}.ext → タイル配信
       if (segments.length != 5 || segments[0] != 'tiles') {
-        request.response
-          ..statusCode = HttpStatus.notFound
-          ..close();
+        request.response.statusCode = HttpStatus.notFound;
+        unawaited(request.response.close());
         return;
       }
 
@@ -292,9 +291,8 @@ class TileServer {
 
       final provider = BaseMapProvider.getProviderById(providerId);
       if (provider == null) {
-        request.response
-          ..statusCode = HttpStatus.notFound
-          ..close();
+        request.response.statusCode = HttpStatus.notFound;
+        unawaited(request.response.close());
         return;
       }
 
@@ -338,18 +336,16 @@ class TileServer {
     try {
       final filePath = request.uri.queryParameters['path'];
       if (filePath == null || filePath.isEmpty) {
-        request.response
-          ..statusCode = HttpStatus.badRequest
-          ..close();
+        request.response.statusCode = HttpStatus.badRequest;
+        unawaited(request.response.close());
         return;
       }
 
       final file = File(filePath);
       if (!await file.exists()) {
         AppLogger.debug('[TileServer] overlay file not found: $filePath');
-        request.response
-          ..statusCode = HttpStatus.notFound
-          ..close();
+        request.response.statusCode = HttpStatus.notFound;
+        unawaited(request.response.close());
         return;
       }
 

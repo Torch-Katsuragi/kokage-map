@@ -14,29 +14,30 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
-import '../i18n/strings.g.dart';
-import '../core/platform_capabilities.dart';
-import '../main.dart' show kAppLocaleKey;
-import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../services/global_folder_locator.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../core/platform_capabilities.dart';
+import '../i18n/strings.g.dart';
+import '../main.dart' show kAppLocaleKey;
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
+import '../providers/project_providers.dart';
+import '../providers/ui_state_providers.dart';
+import '../services/global_folder_locator.dart';
+import '../services/google_drive/auto_sync_service.dart';
+import '../services/google_drive/google_drive_service.dart';
+import '../utils/folder_utils.dart';
+import '../widgets/settings_widgets.dart';
 import 'basemap_settings_screen.dart';
 import 'device_settings_screen.dart';
 import 'gps_settings_screen.dart';
 import 'layer_style_settings_screen.dart';
-import '../services/google_drive/auto_sync_service.dart';
-import '../services/google_drive/google_drive_service.dart';
-import '../providers/project_providers.dart';
-import '../utils/folder_utils.dart';
-import '../widgets/settings_widgets.dart';
-import '../models/app_notification.dart';
-import '../providers/notification_providers.dart';
-import '../providers/ui_state_providers.dart';
 
 /// グローバルフォルダのカスタムパス用SharedPreferencesキー
 const kGlobalFolderCustomPathKey = 'global_folder_custom_path';
@@ -549,7 +550,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
   Future<void> _changeLocale(AppLocale locale) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(kAppLocaleKey, locale.languageCode);
-    LocaleSettings.instance.setLocale(locale);
+    await LocaleSettings.instance.setLocale(locale);
     if (mounted) setState(() {});
   }
 
@@ -727,11 +728,11 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
               ),
             ],
           ),
-          if (_hasGlobalFolder) SettingsSection(
+          if (_hasGlobalFolder) const SettingsSection(
             title: 'Info',
             icon: Icons.info_outline,
             iconColor: Colors.grey,
-            children: const [
+            children: [
               Padding(
                 padding: EdgeInsets.all(12),
                 child: Text(
@@ -1057,11 +1058,11 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
                   ),
                 ],
               ),
-              SettingsSection(
+              const SettingsSection(
                 title: 'Info',
                 icon: Icons.info_outline,
                 iconColor: Colors.grey,
-                children: const [
+                children: [
                   Padding(
                     padding: EdgeInsets.all(12),
                     child: Text(

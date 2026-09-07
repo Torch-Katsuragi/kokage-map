@@ -362,7 +362,7 @@ class QgsProjectBuilder {
   static String layerIdForViewKey(String viewKey, {String dirPath = ''}) {
     final dir = dirPath.replaceAll(r'\', '/').replaceFirst(RegExp(r'^\./'), '');
     final key = (dir.isEmpty || dir == '.') ? viewKey : '$dir/$viewKey';
-    final sanitized = viewKey.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
+    final sanitized = viewKey.replaceAll(RegExp('[^A-Za-z0-9]'), '_');
     // 非ASCIIを潰すと衝突しうるので、元のキー（dir 込み）のハッシュを添える
     return '${sanitized}_${stableHashHex(key)}';
   }

@@ -16,25 +16,27 @@
 // Root Maps: MapPage状態の基底mixin
 // 全てのMixinが共通でアクセスする状態変数を定義
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter_compass/flutter_compass.dart';
 import 'package:maplibre/maplibre.dart' as ml;
+
 import '../../core/r_map_controller.dart';
-import '../../models/nodes/layer_tree_node.dart';
-import '../../models/nodes/layer_node.dart';
+import '../../interfaces/map_state_interface.dart';
+import '../../models/gps_position_record.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
+import '../../models/nodes/layer_node.dart';
+import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
-import '../../models/gps_position_record.dart';
-import '../../services/gps_manager_service.dart';
 import '../../services/basemap_service.dart';
-import '../../services/tile_server.dart';
-import '../../services/map_source_manager.dart';
-import '../../services/internal_gps_location_store.dart';
 import '../../services/gps_history_recorder.dart';
-import '../../interfaces/map_state_interface.dart';
+import '../../services/gps_manager_service.dart';
+import '../../services/internal_gps_location_store.dart';
+import '../../services/map_source_manager.dart';
+import '../../services/tile_server.dart';
 import 'feature_geojson_cache.dart';
 
 /// MapPageの状態変数を定義する基底mixin
@@ -233,7 +235,7 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
     if (pts.length < 3) return [];
     final first = pts.first;
     final last = pts.last;
-    bool isClosed =
+    final bool isClosed =
         (first.latitude == last.latitude) &&
         (first.longitude == last.longitude);
     if (!isClosed) {

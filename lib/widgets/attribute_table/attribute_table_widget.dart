@@ -17,20 +17,22 @@
 // TrinaGridを使用した属性テーブル表示・編集
 
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../i18n/strings.g.dart';
 import 'package:trina_grid/trina_grid.dart';
+
+import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
-import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
+import '../../models/nodes/layer_node.dart';
 import '../../providers/notification_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../utils/app_logger.dart';
-import 'attribute_table_controller.dart';
-import 'attribute_table_toolbar.dart';
-import 'attribute_table_dialogs.dart';
 import 'attribute_form_view.dart';
+import 'attribute_table_controller.dart';
+import 'attribute_table_dialogs.dart';
+import 'attribute_table_toolbar.dart';
 
 /// 動的属性テーブルウィジェット（リファクタリング版）
 class AttributeTableWidget extends ConsumerStatefulWidget {
@@ -81,7 +83,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       _controller.removeListener(_onControllerChanged);
       // dispose中のプロバイダ変更を遅延実行
       final oldController = _controller;
-      Future.microtask(() => oldController.dispose());
+      Future.microtask(oldController.dispose);
       _controller = AttributeTableController(widget.layer, ref);
       _controller.addListener(_onControllerChanged);
       _loadedRevision = widget.layer.featuresRevision;

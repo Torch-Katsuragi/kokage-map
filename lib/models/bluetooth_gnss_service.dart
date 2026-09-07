@@ -15,11 +15,13 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:async';
 import 'dart:convert';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:flutter/foundation.dart';
-import '../i18n/strings.g.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:location/location.dart';
+import 'package:root_maps/utils/app_logger.dart';
+
+import '../i18n/strings.g.dart';
 
 /// Bluetooth GNSS接続サービス
 ///
@@ -259,14 +261,14 @@ class BluetoothGnssService extends ChangeNotifier {
       AppLogger.debug('$_logTag: デバイススキャンを開始');
 
       // Bluetooth許可を確認
-      bool isEnabled = await FlutterBluetoothSerial.instance.isEnabled ?? false;
+      final bool isEnabled = await FlutterBluetoothSerial.instance.isEnabled ?? false;
       if (!isEnabled) {
         AppLogger.debug('$_logTag: Bluetoothが無効です');
         throw Exception(t.gps.bluetoothDisabled);
       }
 
       // ペアリング済みデバイスを取得
-      List<BluetoothDevice> devices =
+      final List<BluetoothDevice> devices =
           await FlutterBluetoothSerial.instance.getBondedDevices();
       AppLogger.debug('$_logTag: ${devices.length}個のペアリング済みデバイスを発見');
 
@@ -398,15 +400,15 @@ class BluetoothGnssService extends ChangeNotifier {
   /// 受信データの処理
   void _onDataReceived(Uint8List data) {
     try {
-      String dataString = utf8.decode(data);
+      final String dataString = utf8.decode(data);
       _partialData += dataString;
 
       // NMEA文を行ごとに処理
-      List<String> lines = _partialData.split('\n');
+      final List<String> lines = _partialData.split('\n');
       _partialData = lines.last; // 最後の不完全な行を保持
 
       for (int i = 0; i < lines.length - 1; i++) {
-        String line = lines[i].trim();
+        final String line = lines[i].trim();
         if (line.isNotEmpty) {
           _processNmeaSentence(line);
         }
@@ -447,7 +449,7 @@ class BluetoothGnssService extends ChangeNotifier {
   /// GGA文の処理（位置情報）
   void _processGgaSentence(String sentence) {
     try {
-      List<String> parts = sentence.split(',');
+      final List<String> parts = sentence.split(',');
       if (parts.length >= 15) {
         // 緯度の処理
         if (parts[2].isNotEmpty && parts[3].isNotEmpty) {
@@ -469,8 +471,8 @@ class BluetoothGnssService extends ChangeNotifier {
         }
 
         // 品質インジケータ
-        int quality = int.tryParse(parts[6]) ?? 0;
-        double hdop = double.tryParse(parts[8]) ?? 1.0;
+        final int quality = int.tryParse(parts[6]) ?? 0;
+        final double hdop = double.tryParse(parts[8]) ?? 1.0;
         _gpsQuality = quality;
         _hdop = hdop;
         _accuracy = _calculateAccuracy(quality, hdop);
@@ -516,7 +518,7 @@ class BluetoothGnssService extends ChangeNotifier {
   /// RMC文の処理（推奨最小データ）
   void _processRmcSentence(String sentence) {
     try {
-      List<String> parts = sentence.split(',');
+      final List<String> parts = sentence.split(',');
       if (parts.length >= 13) {
         // 有効性チェック
         if (parts[2] != 'A') return; // 'A' = active, 'V' = void
@@ -537,7 +539,7 @@ class BluetoothGnssService extends ChangeNotifier {
 
         // 速度（ノット）
         if (parts[7].isNotEmpty) {
-          double speedKnots = double.tryParse(parts[7]) ?? 0.0;
+          final double speedKnots = double.tryParse(parts[7]) ?? 0.0;
           _speed = speedKnots * 0.514444; // ノットからm/sに変換
         }
 
@@ -574,7 +576,7 @@ class BluetoothGnssService extends ChangeNotifier {
   /// フォーマット: $GPGSA,A,3,01,02,03,...(12個),PDOP,HDOP,VDOP*CS
   void _processGsaSentence(String sentence) {
     try {
-      List<String> parts = sentence.split(',');
+      final List<String> parts = sentence.split(',');
       if (parts.length >= 18) {
         // Fix Mode: 1=No Fix, 2=2D, 3=3D
         if (parts[2].isNotEmpty) {
@@ -615,7 +617,7 @@ class BluetoothGnssService extends ChangeNotifier {
         }
         // VDOPはチェックサム付きの場合があるので除去
         if (parts.length > 17 && parts[17].isNotEmpty) {
-          String vdopStr = parts[17].split('*').first;
+          final String vdopStr = parts[17].split('*').first;
           _vdop = double.tryParse(vdopStr);
         }
       }
@@ -628,7 +630,7 @@ class BluetoothGnssService extends ChangeNotifier {
   /// フォーマット: $GPGSV,総文数,文番号,視野内衛星数,{PRN,仰角,方位角,SNR}*最大4衛星,*CS
   void _processGsvSentence(String sentence) {
     try {
-      List<String> parts = sentence.split(',');
+      final List<String> parts = sentence.split(',');
       if (parts.length < 8) return;
 
       // 衛星情報は4衛星分ずつ、各衛星4フィールド（PRN,仰角,方位角,SNR）
@@ -685,7 +687,7 @@ class BluetoothGnssService extends ChangeNotifier {
     try {
       // NMEAフォーマット: 緯度: ddmm.mmmm 経度: dddmm.mmmm
       // 小数点の位置を見つけて正確に分割
-      int dotIndex = dms.indexOf('.');
+      final int dotIndex = dms.indexOf('.');
       if (dotIndex == -1) {
         AppLogger.debug('$_logTag: DMS変換エラー - 小数点が見つかりません: $dms');
         return 0.0;
@@ -703,13 +705,13 @@ class BluetoothGnssService extends ChangeNotifier {
       }
 
       // 度と分を分離
-      String degreesPart = dms.substring(0, degreeLength);
-      String minutesPart = dms.substring(degreeLength);
+      final String degreesPart = dms.substring(0, degreeLength);
+      final String minutesPart = dms.substring(degreeLength);
 
-      double degrees = double.parse(degreesPart);
-      double minutes = double.parse(minutesPart);
+      final double degrees = double.parse(degreesPart);
+      final double minutes = double.parse(minutesPart);
 
-      double result = degrees + (minutes / 60.0);
+      final double result = degrees + (minutes / 60.0);
 
       return result;
     } catch (e) {

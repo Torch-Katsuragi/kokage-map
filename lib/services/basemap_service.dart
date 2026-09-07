@@ -20,22 +20,21 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'package:root_maps/utils/app_logger.dart';
-import 'package:flutter/foundation.dart';
-import '../i18n/strings.g.dart';
-
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:latlong2/latlong.dart';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
-import '../core/platform_capabilities.dart';
-import '../models/basemap_provider.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:root_maps/utils/app_logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+
+import '../core/platform_capabilities.dart';
+import '../i18n/strings.g.dart';
+import '../models/basemap_provider.dart';
 import 'tile_cache_mbtiles.dart';
 
 /// Isolateで実行するための画像処理関数（トップレベル関数）
@@ -523,7 +522,7 @@ class BaseMapService extends ChangeNotifier {
   ) async {
     // プロバイダーの最大ズームレベルを超えている場合は直接フォールバック
     if (z > provider.maxZoom) {
-      return await _getTileWithFallback(provider, z, x, y);
+      return _getTileWithFallback(provider, z, x, y);
     }
 
     // まず通常のタイル取得を試行
@@ -533,7 +532,7 @@ class BaseMapService extends ChangeNotifier {
     }
 
     // 通常のタイル取得に失敗した場合、フォールバック機能を使用
-    return await _getTileWithFallback(provider, z, x, y);
+    return _getTileWithFallback(provider, z, x, y);
   }
 
   /// 内部用のタイル取得メソッド（フォールバックなし）
@@ -637,8 +636,8 @@ class BaseMapService extends ChangeNotifier {
 
       // リトライ機能（エラー時も適用）
       if (retryCount < 1 && allowNetworkAccess) {
-        await Future.delayed(Duration(milliseconds: 1000));
-        return await _getTileInternal(
+        await Future.delayed(const Duration(milliseconds: 1000));
+        return _getTileInternal(
           provider,
           z,
           x,
@@ -699,7 +698,7 @@ class BaseMapService extends ChangeNotifier {
     }
 
     // さらに下位ズームレベルで再帰的に試行
-    return await _getTileWithFallback(
+    return _getTileWithFallback(
       provider,
       parentZ,
       parentX,

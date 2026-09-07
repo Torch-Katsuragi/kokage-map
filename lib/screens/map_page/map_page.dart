@@ -16,65 +16,64 @@
 // Root Maps: Map and edit screen
 // Main UI for map display and layer/feature editing
 // maplibre移行: FlutterMap → MapLibreMap
-import 'package:flutter/material.dart';
-import '../../i18n/strings.g.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:maplibre/maplibre.dart' as ml;
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
-import '../../services/map_source_manager.dart';
+import 'package:maplibre/maplibre.dart' as ml;
 import 'package:path/path.dart' as p;
-import '../../utils/geo_converter.dart';
-import '../../providers/project_providers.dart';
-import '../../models/nodes/layer_tree_node.dart';
-import '../../models/nodes/layer_node.dart';
+
+import '../../devices/base/device_tool.dart';
+import '../../i18n/strings.g.dart';
+import '../../models/app_notification.dart';
 import '../../models/nodes/feature_node.dart';
-// gps_track.dart は不要に（GpsHistoryRecorder に統合）
-import '../../widgets/layer_drawer/layer_drawer.dart';
-import '../../widgets/resizable_side_panel.dart';
-import '../../widgets/resizable_bottom_panel.dart';
+import '../../models/nodes/layer_node.dart';
+import '../../models/nodes/layer_tree_node.dart';
+import '../../providers/device_tool_providers.dart';
+import '../../providers/notification_providers.dart';
+import '../../providers/party_providers.dart';
+import '../../providers/project_providers.dart';
+import '../../providers/selection_providers.dart';
+import '../../providers/tool_providers.dart';
+import '../../providers/ui_state_providers.dart';
+import '../../services/map_source_manager.dart';
+import '../../services/party/party_invite.dart';
+import '../../tools/gps_tool.dart';
+import '../../tools/overlay_transform_tool.dart';
+import '../../tools/pen_tool.dart';
+import '../../tools/select_tool.dart';
+import '../../utils/app_logger.dart';
+import '../../utils/feature_calc_utils.dart';
+import '../../utils/geo_converter.dart';
+import '../../utils/global_drawing_state.dart';
+import '../../utils/keyboard_handler.dart';
 import '../../widgets/attribute_table/attribute_table_widget.dart';
 import '../../widgets/compass_fan_painter.dart';
 import '../../widgets/feature_detail_panel.dart';
+// gps_track.dart は不要に（GpsHistoryRecorder に統合）
+import '../../widgets/layer_drawer/layer_drawer.dart';
 import '../../widgets/left_bottom_fab.dart';
 import '../../widgets/map/r_map_widget.dart';
-import '../../widgets/map_toolbar.dart';
 import '../../widgets/map_appbar_actions.dart';
-import '../../utils/app_logger.dart';
-import '../../utils/feature_calc_utils.dart';
-import '../../utils/keyboard_handler.dart';
-import '../../tools/pen_tool.dart';
-import '../../tools/select_tool.dart';
-import '../../tools/gps_tool.dart';
-import '../../tools/overlay_transform_tool.dart';
-import '../../devices/base/device_tool.dart';
-import '../../providers/selection_providers.dart';
-import '../../providers/tool_providers.dart';
-import '../../utils/global_drawing_state.dart';
-import '../../models/app_notification.dart';
-import '../../providers/notification_providers.dart';
-import '../../providers/ui_state_providers.dart';
-import '../../providers/device_tool_providers.dart';
-import '../../providers/party_providers.dart';
-import '../../services/party/party_invite.dart';
-import 'widgets/map_menu_button.dart';
-import 'widgets/party_controls.dart';
-import 'widgets/overlay_image_layers.dart';
-import 'widgets/party_map_layers.dart';
+import '../../widgets/map_toolbar.dart';
+import '../../widgets/resizable_bottom_panel.dart';
+import '../../widgets/resizable_side_panel.dart';
 import '../layer_style_settings_screen.dart'
     show
         layerStyleSettings,
         lineVertexPointsEnabledDef,
         polygonVertexPointsEnabledDef;
-
 // Mixins
 import 'feature_geojson_cache.dart';
 import 'map_page_state_base.dart';
 import 'mixins/index.dart';
-
 // Widgets
 import 'widgets/index.dart';
+import 'widgets/map_menu_button.dart';
+import 'widgets/overlay_image_layers.dart';
+import 'widgets/party_controls.dart';
+import 'widgets/party_map_layers.dart';
 
 /// Map and edit screen (main structure)
 class RootMapsHomePage extends ConsumerStatefulWidget {
@@ -524,7 +523,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                 geometry: geo.Polygon.from([
                   closeRing(
                     lassoPoints
-                        .map((offset) => offsetToLatLng(offset))
+                        .map(offsetToLatLng)
                         .toList(),
                   ).toGeographics(),
                 ]),
@@ -989,7 +988,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           bottom: _bottomButtonsInset,
         ),
         semanticsLabel: t.map.jump.toCurrentLocation,
-        onTap: () => jumpToCurrentLocation(),
+        onTap: jumpToCurrentLocation,
       ),
     );
   }
@@ -1026,10 +1025,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
               currentNode = node;
             });
           },
-          onJumpTo: (latLng) => jumpTo(latLng),
-          onStartAppendMode: (feature) {
-            startAppendMode(feature);
-          },
+          onJumpTo: jumpTo,
+          onStartAppendMode: startAppendMode,
         ),
       ),
     );

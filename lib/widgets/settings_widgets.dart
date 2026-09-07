@@ -19,10 +19,11 @@
 /// 背景地図設定画面のスタイルをベースとしています。
 library;
 
-import 'package:flutter/material.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
-import '../i18n/strings.g.dart';
+import 'package:flutter/material.dart';
+
 import '../core/settings_schema.dart';
+import '../i18n/strings.g.dart';
 
 /// 設定セクション（カード形式）
 ///
@@ -658,11 +659,11 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
   }
 
   Widget _buildSettingTile(SettingDef def) => switch (def) {
-    DoubleDef d => _buildDoubleTile(d),
-    SwitchDef s => _buildSwitchTile(s),
-    ColorDef c => _buildColorTile(c),
-    IntDef i => _buildIntTile(i),
-    StringDef s => _buildStringTile(s),
+    final DoubleDef d => _buildDoubleTile(d),
+    final SwitchDef s => _buildSwitchTile(s),
+    final ColorDef c => _buildColorTile(c),
+    final IntDef i => _buildIntTile(i),
+    final StringDef s => _buildStringTile(s),
   };
 
   Widget _buildDoubleTile(DoubleDef def) {
@@ -840,7 +841,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
       ),
     );
     if (result != currentColor) {
-      _store.setColor(def, result);
+      await _store.setColor(def, result);
       _notifyChange();
       setState(() {});
     }

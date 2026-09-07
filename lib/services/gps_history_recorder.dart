@@ -31,8 +31,8 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 
-import '../models/geopackage/geopackage_file.dart';
 import '../models/geometry_type.dart';
+import '../models/geopackage/geopackage_file.dart';
 import '../models/gps_position_record.dart';
 import '../models/gps_track.dart';
 import '../utils/app_logger.dart';

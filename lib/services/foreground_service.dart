@@ -18,9 +18,10 @@
 // InternalGpsLocationStore の delegatedモード のバックエンドとして機能
 import 'dart:async';
 import 'dart:ui';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:root_maps/utils/app_logger.dart';
 
 /// フォアグラウンドサービス管理クラス
 /// シングルトンパターンで実装し、サービスの開始・停止を管理
@@ -89,7 +90,7 @@ class ForegroundServiceManager {
         // 前回のセッションからサービスが生き残っている場合
         // → まず停止して、クリーンな状態から再起動
         AppLogger.debug('[ForegroundService] 既存サービスを検出、再起動します');
-        service.invoke("stopService");
+        service.invoke('stopService');
         // サービス停止を少し待機
         await Future.delayed(const Duration(milliseconds: 500));
       }
@@ -111,7 +112,7 @@ class ForegroundServiceManager {
       final isRunning = await service.isRunning();
 
       if (isRunning) {
-        service.invoke("stopService");
+        service.invoke('stopService');
         AppLogger.debug('[ForegroundService] GPS位置取得サービス停止');
       } else {
         AppLogger.debug('[ForegroundService] サービスは既に停止済み');
@@ -124,7 +125,7 @@ class ForegroundServiceManager {
   /// アプリ終了時のクリーンアップ（強制停止）
   Future<void> dispose() async {
     try {
-      FlutterBackgroundService().invoke("stopService");
+      FlutterBackgroundService().invoke('stopService');
     } catch (_) {}
     AppLogger.debug('[ForegroundService] クリーンアップ完了');
   }
@@ -228,15 +229,15 @@ void onStart(ServiceInstance service) async {
           if (await service.isForegroundService()) {
             try {
               String notificationContent =
-                  "GPS取得中: ${DateTime.now().toString().substring(11, 19)}";
+                  'GPS取得中: ${DateTime.now().toString().substring(11, 19)}';
               if (currentPosition != null) {
                 notificationContent +=
-                    "\n${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}";
+                    '\n${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}';
               }
-              service.setForegroundNotificationInfo(
-                title: "こかげマップ GPS取得中",
+              unawaited(service.setForegroundNotificationInfo(
+                title: 'こかげマップ GPS取得中',
                 content: notificationContent,
-              );
+              ));
             } catch (_) {
               // 通知更新エラーは無視
             }
@@ -246,13 +247,13 @@ void onStart(ServiceInstance service) async {
         AppLogger.debug('[ForegroundService] タイマー処理エラー: $e');
         heartbeatTimer.cancel();
         timer.cancel();
-        positionSubscription?.cancel();
-        service.stopSelf();
+        unawaited(positionSubscription?.cancel());
+        unawaited(service.stopSelf());
       }
     });
   } catch (e) {
     AppLogger.debug('[ForegroundService] エントリーポイントエラー: $e');
-    service.stopSelf();
+    unawaited(service.stopSelf());
   }
 }
 

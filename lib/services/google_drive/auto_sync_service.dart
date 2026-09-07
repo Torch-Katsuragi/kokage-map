@@ -18,12 +18,13 @@
 // conflict時のみユーザーに通知（サブタイトル表示）
 
 import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/drive_folder_node.dart';
+import '../../models/nodes/layer_tree_node.dart';
 import '../../utils/app_logger.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';

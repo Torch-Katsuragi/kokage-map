@@ -89,7 +89,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
   Future<void> _applyFilter() async {
     final expression = _filterController.text.trim();
     if (expression.isEmpty) {
-      _clearFilter();
+      await _clearFilter();
       return;
     }
     final error = await widget.controller.applyFilter(expression);

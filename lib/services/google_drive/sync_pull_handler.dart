@@ -19,9 +19,9 @@
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
-import '../../i18n/strings.g.dart';
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';

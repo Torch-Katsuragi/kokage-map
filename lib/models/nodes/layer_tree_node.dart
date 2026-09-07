@@ -104,7 +104,7 @@ abstract class LayerTreeNode {
 
   /// ルートからのパスリスト（meta.json用途）
   List<String> getPathFromRoot() {
-    List<String> pathList = [];
+    final List<String> pathList = [];
     LayerTreeNode? current = this;
     while (current != null) {
       pathList.insert(0, current.name);
@@ -216,9 +216,9 @@ abstract class LayerTreeNode {
   Map<String, dynamic> toMap() {
     return {
       name: {
-        "nodeType": nodeType.value,
-        "children": children.map((c) => c.toMap()).toList(),
-        "visible": visible,
+        'nodeType': nodeType.value,
+        'children': children.map((c) => c.toMap()).toList(),
+        'visible': visible,
       },
     };
   }

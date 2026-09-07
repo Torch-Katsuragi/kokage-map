@@ -17,13 +17,15 @@
 // GeoJSONエクスポートクラス（turfパッケージ活用版）
 import 'dart:convert';
 import 'dart:io';
-import 'package:root_maps/utils/app_logger.dart';
+
 import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:turf/turf.dart' as turf;
-import '../import_export_models.dart';
-import '../../../models/nodes/layer_node.dart';
-import '../../../models/geometry_type.dart';
+
 import '../../../converters/turf_converter.dart';
+import '../../../models/geometry_type.dart';
+import '../../../models/nodes/layer_node.dart';
+import '../import_export_models.dart';
 import 'base_exporter.dart';
 
 /// GeoJSONエクスポーター（turfパッケージ活用）
@@ -103,14 +105,12 @@ class GeoJSONExporter extends BaseExporter {
           if (points != null && points.isNotEmpty) {
             geometry = TurfConverter.createPoint(points.first);
           }
-          break;
 
         case GeometryType.linestring:
           final lines = feature['lines'] as List<LatLng>?;
           if (lines != null && lines.length >= 2) {
             geometry = TurfConverter.createLineString(lines);
           }
-          break;
 
         case GeometryType.polygon:
           final polygons = feature['polygons'] as List<List<LatLng>>?;
@@ -129,7 +129,6 @@ class GeoJSONExporter extends BaseExporter {
             }).toList();
             geometry = TurfConverter.createPolygon(closedRings);
           }
-          break;
 
         default:
           break;

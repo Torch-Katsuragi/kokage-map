@@ -26,12 +26,14 @@ library;
 
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:sensors_plus/sensors_plus.dart';
-import '../services/gps_manager_service.dart';
+
 import '../i18n/strings.g.dart';
+import '../services/gps_manager_service.dart';
 
 /// 水準器画面
 class LevelScreen extends StatefulWidget {
@@ -777,7 +779,7 @@ class _TrianglePainter extends CustomPainter {
     final cosVal = math.cos(tiltRad);
 
     // 描画領域
-    final margin = 30.0;
+    const margin = 30.0;
     final maxWidth = size.width - margin * 2;
     final maxHeight = size.height - margin - 10;
 

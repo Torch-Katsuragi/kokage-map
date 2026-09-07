@@ -82,6 +82,10 @@ abstract class LayerNode extends LayerTreeNode {
   /// updateChildren進行中のCompleter（二重実行防止＋完了待ち）
   Completer<void>? _updateChildrenCompleter;
 
+  /// DB からフィーチャを一度でも読んだか。空のレイヤと未ロードのレイヤを区別する
+  bool _featuresLoaded = false;
+  bool get featuresLoaded => _featuresLoaded;
+
   /// dispose済みかどうかを取得
   bool get isDisposed => _isDisposed;
 
@@ -642,6 +646,7 @@ abstract class LayerNode extends LayerTreeNode {
 
     try {
       final featureList = await _loadFeaturesFromDB();
+      _featuresLoaded = true;
 
       // コンストラクタで _featureMap に登録済みの新エントリを退避
       final newEntries = <int, turf.Feature>{};

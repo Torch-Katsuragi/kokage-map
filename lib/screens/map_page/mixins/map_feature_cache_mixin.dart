@@ -67,14 +67,11 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
           .map((l) => l.getKmetaStyle()),
     );
 
-    // 初回読み込みが必要なレイヤのDB読み込みを並列実行
-    final layersNeedingLoad = layers.where((l) {
-      final features = l.children
-          .whereType<FeatureNode>()
-          .where((f) => !f.isDisposed)
-          .toList();
-      return features.isEmpty;
-    }).toList();
+    // 初回読み込みが必要なレイヤのDB読み込みを並列実行。
+    // ⚠ 「子が空なら読み直す」にしてはいけない。最後の1件を削除した直後の
+    //   リフレッシュで DB を読み直し、削除が終わっていない行を復活させていた。
+    //   本当に 0 件のレイヤを毎回読み直す無駄も無くなる
+    final layersNeedingLoad = layers.where((l) => !l.featuresLoaded).toList();
 
     if (layersNeedingLoad.isNotEmpty) {
       await Future.wait(

@@ -243,7 +243,9 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     if (PlatformCapabilities.supportsDriveSync) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
-          await GoogleDriveService().initialize();
+          // 無音で復元できるときだけサインイン済みにする。
+          // アカウント選択を出すのは Drive 操作のボタン直下だけ
+          await GoogleDriveService().restoreSessionSilently();
         } catch (e) {
           AppLogger.debug('[Root Maps] Drive初期化エラー: $e');
         }

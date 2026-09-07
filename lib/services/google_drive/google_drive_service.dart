@@ -127,13 +127,10 @@ class GoogleDriveService {
         AppLogger.debug('[GoogleDriveService] 認証イベントエラー: $error');
       });
 
-      // v7: 軽量認証を試行（以前の signInSilently 相当）
-      try {
-        await GoogleSignIn.instance.attemptLightweightAuthentication();
-      } catch (e) {
-        AppLogger.debug('[GoogleDriveService] 軽量認証失敗: $e');
-      }
-
+      // ⚠ ここで `attemptLightweightAuthentication()` を呼んではいけない。
+      //   Android の実装は「認可済みアカウントの自動選択」に失敗すると
+      //   絞り込み無しの One Tap（アカウント選択シート）を出す。起動のたびに
+      //   出ていた選択画面の正体がこれ。無音の復元は [restoreSessionSilently]。
       _isInitialized = true;
       _initCompleter!.complete();
     } catch (e) {
@@ -226,6 +223,50 @@ class GoogleDriveService {
     return prefs.getString(_kLastEmailKey);
   }
 
+  /// 起動時の無音復元。**画面は絶対に出さない**
+  ///
+  /// 以前に Drive スコープを認可したアカウントがあれば、そのトークンだけを
+  /// 取り直して API を組み立てる（アカウントの選択も同意も要求しない）。
+  /// 無ければ未サインインのまま。最初の Drive 操作で [signIn] が
+  /// ボタン直下から選択画面を出す。FolderSync 等と同じ振る舞い。
+  Future<bool> restoreSessionSilently() async {
+    if (!_isInitialized) await initialize();
+    if (PlatformCapabilities.isWeb) return restoreWebAuthorization();
+    try {
+      final authorization = await GoogleSignIn.instance.authorizationClient
+          .authorizationForScopes(_scopes);
+      if (authorization == null) {
+        AppLogger.debug('[GoogleDriveService] 無音復元: 認可済みアカウント無し');
+        authState.setUnauthenticated();
+        return false;
+      }
+      final api = drive.DriveApi(authorization.authClient(scopes: _scopes));
+      // 誰のトークンかはトークン自体に入っていないので、Driveに聞く
+      final user = (await api.about.get($fields: 'user')).user;
+      _driveApi = api;
+      authState.setAuthenticated(
+        DriveUser(
+          id: user?.permissionId ?? '',
+          email: user?.emailAddress ?? '',
+          displayName: user?.displayName,
+          photoUrl: user?.photoLink,
+        ),
+      );
+      await _rememberEmail(user?.emailAddress ?? '');
+      AppLogger.debug('[GoogleDriveService] 無音復元できた: ${user?.emailAddress}');
+      return true;
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] 無音復元に失敗（画面は出さない）: $e');
+      authState.setUnauthenticated();
+      return false;
+    }
+  }
+
+  /// [signIn] / [switchAccount] の実行中だけ true。
+  /// 認証イベントはユーザー操作と無関係にも届く（自動選択など）ので、
+  /// スコープ同意の画面はボタン直下のときにしか出さない
+  bool _interactiveSignIn = false;
+
   /// 認証イベントハンドラ
   Future<void> _handleAuthenticationEvent(
     GoogleSignInAuthenticationEvent event,
@@ -240,7 +281,8 @@ class GoogleDriveService {
           // 認可がまだなら「サインイン済み・認可待ち」で止め、[signIn] に託す。
           final authorized = await _initializeDriveApi(
             event.user,
-            promptIfUnauthorized: !PlatformCapabilities.isWeb,
+            promptIfUnauthorized:
+                !PlatformCapabilities.isWeb && _interactiveSignIn,
           );
           if (!authorized) {
             authState.setUnauthenticated();
@@ -295,8 +337,13 @@ class GoogleDriveService {
         return true;
       }
 
-      // v7: authenticate() を呼ぶ
-      await GoogleSignIn.instance.authenticate();
+      // v7: authenticate() を呼ぶ（ここはボタン直下なので選択画面が出てよい）
+      _interactiveSignIn = true;
+      try {
+        await GoogleSignIn.instance.authenticate();
+      } finally {
+        _interactiveSignIn = false;
+      }
       // 認証イベントハンドラが呼ばれて状態が更新される
       return authState.status == DriveAuthStatus.authenticated;
     } on GoogleSignInException catch (e) {
@@ -348,7 +395,12 @@ class GoogleDriveService {
       }
 
       // authenticate() でアカウント選択UIが表示される
-      await GoogleSignIn.instance.authenticate();
+      _interactiveSignIn = true;
+      try {
+        await GoogleSignIn.instance.authenticate();
+      } finally {
+        _interactiveSignIn = false;
+      }
       // 認証イベントハンドラが呼ばれて状態が更新される
       return authState.status == DriveAuthStatus.authenticated;
     } on GoogleSignInException catch (e) {
@@ -428,12 +480,9 @@ class GoogleDriveService {
     }
 
     try {
-      if (_currentUser == null) {
-        // 軽量認証を再試行
-        await GoogleSignIn.instance.attemptLightweightAuthentication();
-        // 認証イベントハンドラで _currentUser が更新される
-        if (_currentUser == null) return false;
-      }
+      // アカウントを掴んでいなければ無音復元だけ試す（画面は出さない。
+      // 自動同期などユーザー操作の無い経路から呼ばれるため）
+      if (_currentUser == null) return restoreSessionSilently();
 
       // Drive APIを再初期化（新しいトークンを取得）
       await _initializeDriveApi(_currentUser!);

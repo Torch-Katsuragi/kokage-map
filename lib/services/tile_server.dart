@@ -305,14 +305,14 @@ class TileServer {
           ..headers.contentType = ContentType.parse(contentType)
           ..add(tileData);
       } else {
-        AppLogger.debug(
-          '[TileServer] tile not available → transparent fallback',
-        );
-        // タイル無し → 透明PNG
+        AppLogger.debug('[TileServer] tile not available → 404');
+        // ⚠ 透明PNGを 200 で返してはいけない。MapLibre はそれを「中身の無い
+        //   正常なタイル」として保持し、あとでキャッシュから読めるようになっても
+        //   再要求しない（県外で白いまま、再起動で直る、の正体）。
+        //   404 なら親タイルの拡大で埋め、後で取り直してくれる。
         request.response
-          ..statusCode = HttpStatus.ok
-          ..headers.contentType = ContentType.parse('image/png')
-          ..add(BaseMapService.transparentTile);
+          ..statusCode = HttpStatus.notFound
+          ..headers.set(HttpHeaders.cacheControlHeader, 'no-store');
       }
     } on FormatException {
       request.response.statusCode = HttpStatus.badRequest;

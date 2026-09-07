@@ -492,21 +492,21 @@ abstract class FeatureNode extends LayerTreeNode {
     // 子ノードはFeatureNodeにはないが、安全のためクリア
     children.clear();
 
-    // DBからID指定で削除を非同期で実行（UIには影響させない）
-    // エラーが発生しても強制的に削除を試みる
-    unawaited(geoPackageFile
-        .removeFeature(layerName, rowId)
-        .then((_) {
-          AppLogger.debug(
-            '[DEBUG] FeatureNode.dispose: DB deletion completed (rowId=$rowId)',
-          );
-        })
-        .catchError((e) {
-          AppLogger.debug(
-            '[ERROR] FeatureNode.dispose: DB deletion failed (rowId=$rowId): $e',
-          );
-          // エラーが発生しても処理は続行（壊れたデータでも削除できるようにする）
-        }));
+    // DB からの削除を**待つ**。
+    // ⚠ 以前は投げっぱなしだった。削除直後のリフレッシュで「子が空になった
+    //   レイヤ」を DB から読み直すと、まだ消えていない行が新しいノードとして
+    //   復活していた（「たまに削除したフィーチャが残る」の正体）
+    try {
+      final removed = await geoPackageFile.removeFeature(layerName, rowId);
+      AppLogger.debug(
+        '[DEBUG] FeatureNode.dispose: DB deletion ${removed ? 'completed' : 'matched no row'} (rowId=$rowId)',
+      );
+    } catch (e) {
+      // エラーが発生しても処理は続行（壊れたデータでも削除できるようにする）
+      AppLogger.debug(
+        '[ERROR] FeatureNode.dispose: DB deletion failed (rowId=$rowId): $e',
+      );
+    }
 
     AppLogger.debug('[DEBUG] FeatureNode.dispose: base dispose completed');
 

@@ -628,15 +628,24 @@ class FeatureRepository {
   // 共通 Feature 操作
   // ============================================================
 
-  Future<void> removeFeature(String tableName, int id) async {
+  /// 行を削除する。実際に消えた行があれば true
+  ///
+  /// ⚠ 0 件削除（主キー名の取り違え等）を成功扱いにしない。以前は戻り値が無く、
+  ///   UI から消えたのに再起動で復活する事故を誰も検知できなかった
+  Future<bool> removeFeature(String tableName, int id) async {
     try {
       await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final whereClause = await schema.buildWhereClause(tableName);
-      await db.delete(tableName, where: whereClause, whereArgs: [id]);
+      final deleted = await db.delete(tableName, where: whereClause, whereArgs: [id]);
       await spatialIndex.removeFromRTreeIndex(tableName, id);
+      if (deleted == 0) {
+        AppLogger.debug('[FeatureRepository] removeFeature: 0件削除 ($tableName id=$id where=$whereClause)');
+      }
+      return deleted > 0;
     } catch (e) {
       AppLogger.debug('[FeatureRepository] removeFeature: エラー発生 - $e');
+      return false;
     }
   }
 

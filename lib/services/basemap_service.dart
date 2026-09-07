@@ -652,6 +652,16 @@ class BaseMapService extends ChangeNotifier {
   }
 
   /// フォールバック機能付きタイル取得
+  ///
+  /// 目的のタイルが取れないとき、先祖のタイル（1〜[maxFallbackLevels] 段上）から
+  /// 該当部分を切り出して拡大したものを返す。
+  ///
+  /// ⚠ 拡大したタイルは**キャッシュに保存しない**。以前は目的の z/x/y の
+  ///   正規タイルとして保存していたため、一度でも圏外・404 を踏んだ場所は
+  ///   電波が戻っても永久にボケたまま（キャッシュ優先で本物を取りに行かない）
+  ///   になっていた。「エリアによってズームが違って見える」の正体。
+  /// ⚠ 先祖は常に**目的のタイル**に対して切り出す。以前は親が無いとき
+  ///   「親のタイルを祖父から作る」再帰になっていて、別の領域の画像が返っていた。
   Future<Uint8List?> _getTileWithFallback(
     BaseMapProvider provider,
     int z,
@@ -659,52 +669,33 @@ class BaseMapService extends ChangeNotifier {
     int y, {
     int maxFallbackLevels = 5,
   }) async {
-    // 最小ズームレベルまで下がった場合、または最大フォールバック回数に達した場合は諦める
-    if (z <= provider.minZoom || maxFallbackLevels <= 0) {
-      return null;
-    }
+    for (var level = 1; level <= maxFallbackLevels; level++) {
+      final ancestorZ = z - level;
+      if (ancestorZ < provider.minZoom) break;
+      final ancestorX = x >> level;
+      final ancestorY = y >> level;
 
-    // 1段階下のズームレベルを計算
-    final parentZ = z - 1;
-    final parentX = x ~/ 2;
-    final parentY = y ~/ 2;
+      final ancestorTile = await _getTileInternal(
+        provider,
+        ancestorZ,
+        ancestorX,
+        ancestorY,
+        allowNetworkAccess: !_isOfflineMode,
+      );
+      if (ancestorTile == null) continue;
 
-    // 下位ズームレベルのタイルを取得
-    final parentTileData = await _getTileInternal(
-      provider,
-      parentZ,
-      parentX,
-      parentY,
-      allowNetworkAccess: !_isOfflineMode,
-    );
-
-    if (parentTileData != null) {
-      // 親タイルから適切な領域を切り出してスケールアップ
-      final scaledTile = await _extractAndScaleTile(
-        parentTileData,
+      final scaled = await _extractAndScaleTile(
+        ancestorTile,
         z,
         x,
         y,
-        parentZ,
-        parentX,
-        parentY,
+        ancestorZ,
+        ancestorX,
+        ancestorY,
       );
-
-      if (scaledTile != null) {
-        // スケールアップしたタイルをキャッシュに保存
-        await _cacheTile(provider.id, z, x, y, scaledTile);
-        return scaledTile;
-      }
+      if (scaled != null) return scaled;
     }
-
-    // さらに下位ズームレベルで再帰的に試行
-    return _getTileWithFallback(
-      provider,
-      parentZ,
-      parentX,
-      parentY,
-      maxFallbackLevels: maxFallbackLevels - 1,
-    );
+    return null;
   }
 
   /// 親タイルから指定領域を切り出してスケールアップ

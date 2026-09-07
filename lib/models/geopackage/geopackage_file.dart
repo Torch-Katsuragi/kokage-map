@@ -404,7 +404,7 @@ class GeoPackageFile {
   // ============================================================
 
   /// 指定IDのフィーチャを削除
-  Future<void> removeFeature(String tableName, int id) =>
+  Future<bool> removeFeature(String tableName, int id) =>
       _features.removeFeature(tableName, id);
 
   /// 単一フィーチャを取得

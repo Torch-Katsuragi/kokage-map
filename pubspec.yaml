@@ -104,7 +104,6 @@ dependencies:
   geobase: ^1.5.0
   exif: ^3.3.0
   audioplayers: ^6.6.0
-  flutter_markdown: ^0.7.6              # CHANGELOG.md表示用
   markdown: ^7.0.0                         # カスタムMarkdownシンタックス用
   device_info_plus: ^12.4.0         # win32 ^5 vs ^6 競合のため据え置き
   firebase_core: ^4.11.0
@@ -114,6 +113,7 @@ dependencies:
   firebase_app_check: ^0.4.5
   web: ^1.1.0                       # web版のFile System Access API（js_interop）
   qr_flutter: ^4.1.0                    # Drive連携フォルダのQRコード表示（スキャン側は mobile_scanner）
+  flutter_markdown_plus: ^1.0.12         # 更新履歴・使い方の表示用（flutter_markdown は 2026 に discontinued）
 
 
 dev_dependencies:

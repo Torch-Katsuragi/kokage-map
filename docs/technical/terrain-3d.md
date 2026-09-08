@@ -116,6 +116,18 @@ Android は `--route /terrain-spike` か intent extra `route`）。製品機能�
 地図面の窓口（カメラ／投影・逆投影／ヒットテスト／スナップショット）は変えない。`TerrainMapLayer` の中身を
 「窓 1 枚」から `TerrainWorld` に差し替える。
 
+**実装（2026-09-08 22 時・`70048f7`）**: `terrain_world.dart`（`TileKey` / `TerrainTile` / `TerrainWorld`）、
+`terrain_world_painter.dart`（複数タイルの描画・逆投影・遮蔽）、`TerrainMapLayer` v2。
+Pixel 9 で 4〜8 枚で画面を覆い、タイル境界に継ぎ目なし。回転・位置を変えての再突入で新しいタイルが足される。
+1 タイルの貼り付けは 20〜60ms（初回だけ）。
+
+- 描画順: タイルは `drawOrder`（北が奥なら y 昇順、東が奥なら x 昇順）、タイル内はチャンクの象限走査。
+  タイルごとに「カメラ中心をそのタイル座標で投影した点」を引くだけで並ぶ（投影が線形）
+- 縁: `TerrainTile.bordered` は東・北・北東の隣の縁を借りた 257×257。隣が届いたら `updateBorder` で組み直し、
+  ビルダーとシーンのキャッシュはキーが変わって自然に入れ替わる
+- 未実装: RTIN（三角形の間引き）、透視の眺めモードと靄、計算メッシュを描画より細かい zoom で持つ
+  （いまは同じタイル。AWS は z15 が最細なので zoom ≥ 16 では同じこと）、先読みの優先度（見えている分が揃ってから）
+
 ## 本体への接続（2026-09-08 夜・`feat(3d)`）
 
 - **ツールバーの「3D 地形」ボタン**（`terrain3dModeProvider`）で地図面を `TerrainMapLayer`

@@ -108,6 +108,8 @@ Android は `--route /terrain-spike` か intent extra `route`）。製品機能�
   （実機で確認: 3D 中のタップで情報カード、2D に戻っても選択が残る）
 - DEM: 表示ズーム −1 の 2×2 枚（zoom 16 → z15・4.8m・512²）。中心が範囲の内側 60% から外れるか
   ズームが 2 段変わったら読み直す（古い DEM は届くまで描き続ける）。
+  標高タイルは擬似プロバイダ `aws_terrarium`（`BaseMapType.terrain`）として `BaseMapService.getTile` を通す →
+  背景地図と同じ MBTiles キャッシュに入り、**一度見た範囲は圏外でも 3D になる**（祖先タイルからの切り出しは粗い標高になる）。
   背景: `BaseMapService.getTile` をアクティブなプロバイダの累積補正済み opacity で合成（MapLibre と同じ式）
 - 未対応: パーティの他メンバー・頂点マーカー・クラスタ・オーバーレイ画像（GeoTIFF）・描画プレビュー・
   外部機器ツールのオーバーレイ・等高線。DeviceTool（TruPulse）は 3D 中は選べない

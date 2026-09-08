@@ -30,6 +30,8 @@ const String kTileUserAgent =
 
 /// 背景地図の種類を定義するenum
 enum BaseMapType {
+  /// 標高タイル（背景地図ではない。3D 地形モードが `BaseMapService.getTile` のキャッシュを借りるためのもの）
+  terrain,
   openStreetMap,
   gsiStandard,
   gsiPale,

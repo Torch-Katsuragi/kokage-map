@@ -31,6 +31,7 @@ import '../../../core/terrain/terrain_scene.dart';
 import '../../../core/terrain/web_mercator.dart';
 import '../../../interfaces/map_state_interface.dart';
 import '../../../interfaces/terrain_projection.dart';
+import '../../../models/basemap_provider.dart';
 import '../../../models/party/party_room.dart';
 import '../../../providers/party_providers.dart';
 import '../../../providers/tool_providers.dart';
@@ -96,6 +97,19 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements TerrainProjection {
   static const _gestureCellBudget = 40000;
   static const _defaultPitchDeg = 45.0;
+
+  /// 標高タイルを背景地図と同じ経路（キャッシュ → ネット → 祖先タイルから切り出し）で取るための擬似プロバイダ。
+  /// 背景地図の一覧には出さない。祖先タイルからの切り出しは DEM では「粗い標高」になるが、無いよりよい
+  static const _terrainProvider = BaseMapProvider(
+    id: 'aws_terrarium',
+    name: 'Terrain Tiles',
+    description: 'AWS Terrain Tiles (Terrarium)',
+    urlTemplate: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+    maxZoom: 15,
+    attribution: 'Terrain Tiles (Mapzen / AWS Open Data)',
+    type: BaseMapType.terrain,
+    icon: Icons.terrain,
+  );
 
   late final TerrainCamera _camera;
   DemGrid? _dem;
@@ -174,7 +188,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     _loading = true;
     setState(() => _status = '標高タイル取得中…');
     try {
-      final dem = await DemTileLoader(source: DemTileSource.aws).load(
+      final dem = await DemTileLoader(
+        source: DemTileSource.aws,
+        fetcher: (tz, tx, ty) => widget.baseMapService.getTile(_terrainProvider, tz, tx, ty),
+      ).load(
         range,
         onProgress: (d, t) {
           if (mounted && gen == _generation) setState(() => _status = '標高タイル $d/$t');

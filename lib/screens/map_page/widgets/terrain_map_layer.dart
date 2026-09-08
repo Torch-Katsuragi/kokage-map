@@ -311,12 +311,18 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
       ..stepMeters = WebMercator.metersPerPixel(plan.demZoom);
     _repaint.value++;
     _notifyCamera();
+    if (!_everCovered && plan.coverage.full && drawables.isNotEmpty) {
+      _everCovered = true;
+      if (mounted) setState(() {});
+    }
     if (sw.elapsedMilliseconds > 120) {
       AppLogger.debug('[3D] refresh ${sw.elapsedMilliseconds}ms (plan $planMs [${_planner.lastTiming}], meshes built $_meshBuilds, '
           'placeholders $_placeholders, scenes built $_sceneBuilds, tiles ${drawables.length})');
     }
   }
 
+  /// 一度でも全面が揃ったか（揃うまで背景は透明）
+  bool _everCovered = false;
   int _meshBuilds = 0;
   @override
   int _placeholders = 0;
@@ -647,7 +653,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
                 onTapUp: _onTapUp,
                 child: ClipRect(
                   child: ColoredBox(
-                    color: const Color(0xFFE6E6E6),
+                    // 最初に全面が揃うまでは透明にして下の 2D 地図を見せる（入った直後の白い一瞬を消す）
+                    color: _everCovered ? const Color(0xFFE6E6E6) : Colors.transparent,
                     child: CustomPaint(painter: _painter, child: const SizedBox.expand()),
                   ),
                 ),

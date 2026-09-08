@@ -335,6 +335,26 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       polygons: widget.geoJson.selectedPolygons,
       points: widget.geoJson.selectedMarkers,
     );
+    // 線・面の頂点（設定で有効なとき。MapLibre 側の Circle レイヤに相当）
+    final vertexScene = TerrainSceneBuilder(
+      mesh: mesh,
+      stylesByKey: const {},
+      defaultStyle: TerrainFeatureStyle(
+        lineColor: defaultStyle.lineColor,
+        lineWidth: 1,
+        fillColor: defaultStyle.fillColor,
+        outlineColor: defaultStyle.outlineColor,
+        outlineWidth: 1,
+        pointColor: Colors.white,
+        pointSize: math.max(2.0, defaultStyle.pointSize * 0.45),
+      ),
+      labelProp: '__no_label__',
+    ).build(
+      points: [
+        if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) ...widget.geoJson.lineVertices,
+        if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) ...widget.geoJson.polygonVertices,
+      ],
+    );
     // 写真: 琥珀色の点 + 名前
     final photos = TerrainSceneBuilder(
       mesh: mesh,
@@ -422,7 +442,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
                 ),
       ],
     );
-    return _SceneBundle(normal: normal, selected: selected, photos: photos, track: trackScene, party: party);
+    return _SceneBundle(
+      normal: normal,
+      selected: selected,
+      photos: photos,
+      track: trackScene,
+      party: party,
+      vertices: vertexScene,
+    );
   }
 
   void _applyScene() {
@@ -444,6 +471,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       ]
       ..polygons = [...bundle.normal.polygons, ...bundle.selected.polygons]
       ..points = [
+        ...bundle.vertices.points,
         ...bundle.normal.points,
         ...bundle.photos.points,
         ...bundle.party.points,
@@ -585,6 +613,32 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
               ),
             if (ready)
               Positioned(
+                right: 0,
+                top: 48,
+                bottom: 96,
+                child: RotatedBox(
+                  quarterTurns: 3,
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 2,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                    ),
+                    child: Slider(
+                      value: _camera.pitch * 180 / math.pi,
+                      max: 70,
+                      onChanged: (v) {
+                        _camera.pitch = v * math.pi / 180;
+                        _rebuildMesh(coarse: true);
+                        setState(() {});
+                      },
+                      onChangeEnd: (_) => _rebuildMesh(),
+                    ),
+                  ),
+                ),
+              ),
+            if (ready)
+              Positioned(
                 left: 6,
                 bottom: 4,
                 child: Text(
@@ -621,6 +675,7 @@ class _SceneBundle {
     required this.photos,
     required this.track,
     required this.party,
+    required this.vertices,
   });
 
   final TerrainScene normal;
@@ -628,4 +683,5 @@ class _SceneBundle {
   final TerrainScene photos;
   final TerrainScene track;
   final TerrainScene party;
+  final TerrainScene vertices;
 }

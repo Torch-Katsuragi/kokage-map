@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/terrain/dem_grid.dart';
 import '../../../core/terrain/dem_tiles.dart';
 import '../../../core/terrain/terrain_camera.dart';
 import '../../../core/terrain/terrain_frame.dart';
@@ -173,6 +174,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
   // タイルが届いても他のタイルのキャッシュは生きたまま
   final Map<TerrainMeshBuilder, (double, double, TerrainMesh)> _meshes = {}; // (bearing, pitch, mesh)
   final Map<(TileKey, int, int), _TileScene> _scenes = {};
+  final Map<(TileKey, int, int), _TileScene> _staticScenes = {};
+  final Map<(TileKey, int, int), _TileScene> _dynamicScenes = {};
+
+  /// 1 フレームに作る静的な貼り付けの枚数と上限
+  int _staticBuilds = 0;
+  static const _staticBudget = 2;
   int _worldRevisionSeen = -1;
 
   // ジェスチャ
@@ -276,12 +283,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
     _meshBuilds = 0;
     _placeholders = 0;
     _sceneBuilds = 0;
+    _staticBuilds = 0;
     final plan = _planner.plan(_camera, _size, gesturing: _gesturing);
     final planMs = sw.elapsedMilliseconds;
     _lastPlan = plan;
     if (_world.revision != _worldRevisionSeen) {
       // タイルの出入り: 消えたタイルのぶんだけ捨てる（縁が変わったタイルはキーが変わるので自然に入れ替わる）
       _scenes.removeWhere((k, _) => !_world.has(k.$1));
+      _staticScenes.removeWhere((k, _) => !_world.has(k.$1));
+      _dynamicScenes.removeWhere((k, _) => !_world.has(k.$1));
       _pruneMeshes();
       _worldRevisionSeen = _world.revision;
     }
@@ -412,26 +422,29 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
     return true;
   }
 
+  /// タイル 1 枚の貼り付け。静的な部分（フィーチャ・頂点・写真・選択）と動的な部分（軌跡・パーティ・現在位置）を
+  /// 別々にキャッシュする。GPS の更新（1 秒ごと）で作り直すのは動的な部分だけ（数本・数点で軽い）
+  ///
+  /// 静的な部分は 1 フレーム [_staticBudget] 枚まで。超えたぶんは空のまま描いて次のフレームで足す
+  /// （引いた直後に 10 枚ぶん同時に届くと 1 枚 30〜150ms × 10 で止まる）
   _TileScene _sceneFor(TerrainTile tile, TerrainMesh mesh, int step) {
     final g = widget.geoJson;
     final track = widget.gpsTrack();
     final session = ref.read(partySessionProvider);
     final loc = widget.currentLocation;
-    final key = <Object?>[
-      g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images,
-      g.lineVertices, g.polygonVertices, track.length, session, loc,
-    ];
     final cacheKey = (tile.key, step, tile.borderMask);
+    final staticKey = <Object?>[
+      g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images,
+      g.lineVertices, g.polygonVertices,
+    ];
+    final dynamicKey = <Object?>[track.length, session, loc];
+    final key = <Object?>[...staticKey, ...dynamicKey];
     final cached = _scenes[cacheKey];
     if (cached != null && _sameKey(cached.key, key)) return cached;
 
-    _sceneBuilds++;
-    final sw = Stopwatch()..start();
     final dem = mesh.dem;
     final clip = Rect.fromLTWH(0, 0, dem.width, dem.height);
     final clipCells = math.max(1, (20 / (dem.cellSize * step)).round());
-    final defaultStyle = _defaultStyle();
-    final groups = {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
     final labelStyle = TextStyle(
       fontSize: layerStyleSettings.getDouble(labelFontSizeDef),
       color: layerStyleSettings.getColor(labelColorDef),
@@ -447,6 +460,49 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
           polygonClipCells: clipCells,
         );
 
+    // 静的な部分
+    var stat = _staticScenes[cacheKey];
+    if (stat == null || !_sameKey(stat.key, staticKey)) {
+      if (_staticBuilds >= _staticBudget) {
+        // 今フレームは見送り。手持ちがあれば古いものを使い、無ければ空
+        _scheduleRefresh();
+        stat ??= _TileScene(key: const [], lines: const [], polygons: const [], points: const [], labels: const []);
+      } else {
+        _staticBuilds++;
+        _sceneBuilds++;
+        stat = _buildStatic(tile, step, staticKey, g, builder, clip);
+        _staticScenes[cacheKey] = stat;
+      }
+    }
+    // 動的な部分
+    var dyn = _dynamicScenes[cacheKey];
+    if (dyn == null || !_sameKey(dyn.key, dynamicKey)) {
+      dyn = _buildDynamic(dynamicKey, track, session, loc, dem, builder, clip);
+      _dynamicScenes[cacheKey] = dyn;
+    }
+    final scene = _TileScene(
+      key: key,
+      lines: [...dyn.lines, ...stat.lines],
+      polygons: [...dyn.polygons, ...stat.polygons],
+      points: [...stat.points, ...dyn.points],
+      labels: [...stat.labels, ...dyn.labels],
+    );
+    _scenes[cacheKey] = scene;
+    return scene;
+  }
+
+  /// フィーチャ本体・頂点・写真・選択（GeoJSON のリストが同じ限り作り直さない）
+  _TileScene _buildStatic(
+    TerrainTile tile,
+    int step,
+    List<Object?> key,
+    FeatureGeoJsonCache g,
+    TerrainSceneBuilder Function(Map<String, TerrainFeatureStyle>, TerrainFeatureStyle, String) builder,
+    Rect clip,
+  ) {
+    final sw = Stopwatch()..start();
+    final defaultStyle = _defaultStyle();
+    final groups = {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
     final lines = <LiftedPolyline>[];
     final polygons = <LiftedPolygon>[];
     final points = <TerrainPoint>[];
@@ -458,6 +514,68 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
       polygons.addAll(s.polygons);
       points.addAll(s.points);
       if (withLabels) labels.addAll(s.labels);
+    }
+
+    // 1. 頂点（設定で有効なとき）
+    add(
+      builder(const {}, TerrainFeatureStyle(
+        lineColor: defaultStyle.lineColor, lineWidth: 1, fillColor: defaultStyle.fillColor,
+        outlineColor: defaultStyle.outlineColor, outlineWidth: 1, pointColor: Colors.white,
+        pointSize: math.max(2.0, defaultStyle.pointSize * 0.45),
+      ), '__no_label__').build(
+        points: [
+          if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) ...g.lineVertices,
+          if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) ...g.polygonVertices,
+        ],
+        clipRect: clip,
+      ),
+    );
+    // 2. フィーチャ本体
+    add(
+      builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey)
+          .build(lines: g.polylines, polygons: g.polygons, points: g.markers, clipRect: clip),
+    );
+    // 3. 写真（琥珀）
+    add(
+      builder(const {}, const TerrainFeatureStyle(
+        lineColor: Colors.amber, lineWidth: 1, fillColor: Colors.amber, outlineColor: Colors.amber,
+        outlineWidth: 1, pointColor: Colors.amber, pointSize: 7,
+      ), 'name').build(points: g.images, clipRect: clip),
+    );
+    // 4. 選択（上に重ねる）
+    add(
+      builder({for (final e in groups.entries) e.key: _selectedStyle(e.value)}, _selectedStyle(defaultStyle), '__no_label__')
+          .build(lines: g.selectedPolylines, polygons: g.selectedPolygons, points: g.selectedMarkers, clipRect: clip),
+      withLabels: false,
+    );
+    if (sw.elapsedMilliseconds > 20) {
+      AppLogger.debug('[3D] tile ${tile.key} step $step 貼り付け ${sw.elapsedMilliseconds}ms '
+          '(lines ${lines.length} polys ${polygons.length} pts ${points.length})');
+    }
+    return _TileScene(key: key, lines: lines, polygons: polygons, points: points, labels: labels);
+  }
+
+  /// 今日の GPS 軌跡・パーティ・現在位置（GPS の更新ごとに作り直す。軽い）
+  _TileScene _buildDynamic(
+    List<Object?> key,
+    List<LatLng> track,
+    PartySessionState session,
+    LatLng? loc,
+    DemGrid dem,
+    TerrainSceneBuilder Function(Map<String, TerrainFeatureStyle>, TerrainFeatureStyle, String) builder,
+    Rect clip,
+  ) {
+    final lines = <LiftedPolyline>[];
+    final polygons = <LiftedPolygon>[];
+    final points = <TerrainPoint>[];
+    final labels = <TerrainLabel>[];
+    void add(TerrainScene s) {
+      lines
+        ..addAll(s.outlines)
+        ..addAll(s.lines);
+      polygons.addAll(s.polygons);
+      points.addAll(s.points);
+      labels.addAll(s.labels);
     }
 
     // 1. 今日の GPS 軌跡（青緑・細め）
@@ -508,39 +626,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
         clipRect: clip,
       ),
     );
-    // 3. 頂点（設定で有効なとき）
-    add(
-      builder(const {}, TerrainFeatureStyle(
-        lineColor: defaultStyle.lineColor, lineWidth: 1, fillColor: defaultStyle.fillColor,
-        outlineColor: defaultStyle.outlineColor, outlineWidth: 1, pointColor: Colors.white,
-        pointSize: math.max(2.0, defaultStyle.pointSize * 0.45),
-      ), '__no_label__').build(
-        points: [
-          if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) ...g.lineVertices,
-          if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) ...g.polygonVertices,
-        ],
-        clipRect: clip,
-      ),
-    );
-    // 4. フィーチャ本体
-    add(
-      builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey)
-          .build(lines: g.polylines, polygons: g.polygons, points: g.markers, clipRect: clip),
-    );
-    // 5. 写真（琥珀）
-    add(
-      builder(const {}, const TerrainFeatureStyle(
-        lineColor: Colors.amber, lineWidth: 1, fillColor: Colors.amber, outlineColor: Colors.amber,
-        outlineWidth: 1, pointColor: Colors.amber, pointSize: 7,
-      ), 'name').build(points: g.images, clipRect: clip),
-    );
-    // 6. 選択（上に重ねる）
-    add(
-      builder({for (final e in groups.entries) e.key: _selectedStyle(e.value)}, _selectedStyle(defaultStyle), '__no_label__')
-          .build(lines: g.selectedPolylines, polygons: g.selectedPolygons, points: g.selectedMarkers, clipRect: clip),
-      withLabels: false,
-    );
-    // 7. 現在位置（青）
+    // 3. 現在位置（青）
     if (loc != null) {
       final x = WebMercator.xFromLon(loc.longitude) - dem.originX;
       final y = WebMercator.yFromLat(loc.latitude) - dem.originY;
@@ -548,13 +634,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
         points.add(TerrainPoint(x: x, y: y, color: Colors.blue, sizePx: 9));
       }
     }
-    final scene = _TileScene(key: key, lines: lines, polygons: polygons, points: points, labels: labels);
-    _scenes[cacheKey] = scene;
-    if (sw.elapsedMilliseconds > 20) {
-      AppLogger.debug('[3D] tile ${tile.key} step $step 貼り付け ${sw.elapsedMilliseconds}ms '
-          '(lines ${lines.length} polys ${polygons.length} pts ${points.length})');
-    }
-    return scene;
+    return _TileScene(key: key, lines: lines, polygons: polygons, points: points, labels: labels);
   }
 
   void _notifyCamera() {

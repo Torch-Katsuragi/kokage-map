@@ -46,8 +46,12 @@
       ⚠ [[docs/technical/3d-map-design]] は旧案（別画面・閲覧専用）で上書き済み
   - [x] 描画スパイク（Pixel 9: 北山村 z14 2x2 で LOD 57fps／全解像度 28fps）、実 DEM（AWS Terrain Tiles）＋地理院タイル合成、面・等高線・遮蔽つきヒットテスト、ゴールデン
   - [x] 本体接続: 3D トグル、カメラの引き継ぎと書き戻し、`TerrainProjection` で選択ツールがそのまま動く、写真・GPS 軌跡・現在位置・パーティ・頂点、pitch スライダ、web でも動く
+  - [x] 「常に隙間なく」の検証（2026-09-09）: `TerrainFramePlanner` + シミュレーション 6 本 + 実機ドライブモード（debug・🛣）。
+        引いた瞬間の停止（`heightRange` 全点走査 × 描き直し連鎖）・白抜け（穴埋めメッシュ）・メモリ（常駐ワーカー isolate）を解消。
+        Pixel 9 で欠けフレーム 0 / 2,650・UI 中央値 5ms
   - [ ] 残り: オーバーレイ画像（GeoTIFF）をテクスチャに焼く／クラスタ／DeviceTool のオーバーレイ／描画プレビュー／等高線オプション／
-        DEM の dir 同梱と焼き込み CLI（圏外で使えるように）／`SceneSink` / `MapSurfaceController` のインターフェース抽出／web の fps 計測（Chrome を前面に）
+        DEM の dir 同梱と焼き込み CLI（圏外で使えるように）／`SceneSink` / `MapSurfaceController` のインターフェース抽出／web の fps 計測（Chrome を前面に）／
+        profile ビルドでのメモリ実測（debug は土台が PSS 1.4GB）／ズームイン直後に細かい段へ切り替わるまでの 1 秒（ネット取得待ち）
   - [ ] ⚠ Terrain Tiles の出典表示は 3D 中の地図面左下に出している。About / ライセンス画面にも載せる
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 

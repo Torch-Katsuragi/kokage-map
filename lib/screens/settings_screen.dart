@@ -15,6 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -38,6 +39,7 @@ import 'basemap_settings_screen.dart';
 import 'device_settings_screen.dart';
 import 'gps_settings_screen.dart';
 import 'layer_style_settings_screen.dart';
+import 'terrain_spike/terrain_spike_screen.dart';
 
 /// グローバルフォルダのカスタムパス用SharedPreferencesキー
 const kGlobalFolderCustomPathKey = 'global_folder_custom_path';
@@ -442,6 +444,27 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
               ),
             ],
           ),
+          // 開発用（debug / profile ビルドのみ）。文言は i18n に載せない
+          if (!kReleaseMode)
+            SettingsSection(
+              title: '開発',
+              icon: Icons.science,
+              iconColor: Colors.purple,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.terrain, color: Colors.purple),
+                  title: const Text('3D 描画スパイク'),
+                  subtitle: const Text('drawVertices で DEM を描いて fps を測る'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TerrainSpikeScreen()),
+                    );
+                  },
+                ),
+              ],
+            ),
           SettingsSection(
             title: t.settings.appInfo.overview,
             icon: Icons.description,

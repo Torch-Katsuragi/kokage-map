@@ -35,6 +35,7 @@ import 'providers/service_providers.dart';
 import 'providers/ui_state_providers.dart';
 import 'screens/home_screen.dart';
 import 'screens/map_page/map_page.dart';
+import 'screens/terrain_spike/terrain_spike_screen.dart';
 import 'services/google_drive/index.dart';
 import 'services/internal_gps_location_store.dart';
 import 'services/kmeta_service.dart';
@@ -341,7 +342,11 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
         );
       },
       home: const HomeScreen(),
-      routes: {'/map': (context) => const RootMapsHomePage()},
+      routes: {
+        '/map': (context) => const RootMapsHomePage(),
+        // 3D 描画スパイク（開発用）。web は URL `#/terrain-spike` で直接開ける
+        '/terrain-spike': (context) => const TerrainSpikeScreen(),
+      },
     );
   }
 }

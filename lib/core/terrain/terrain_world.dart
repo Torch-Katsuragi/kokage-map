@@ -336,7 +336,6 @@ class TerrainWorld extends ChangeNotifier {
     TileRange range, {
     required double centerX,
     required double centerY,
-    bool evict = true,
     bool replaceQueue = true,
   }) {
     final wanted = <TileKey>[];
@@ -363,7 +362,6 @@ class TerrainWorld extends ChangeNotifier {
       _queue.addAll(wanted.where((k) => !seen.contains(k)));
     }
     _pump();
-    if (evict) _evict(keep: range);
   }
 
   void _pump() {
@@ -420,28 +418,6 @@ class TerrainWorld extends ChangeNotifier {
       if (t == null) continue;
       t.updateBorder(_tiles[k.east], _tiles[k.north], _tiles[k.northEast]);
     }
-  }
-
-  void _evict({required TileRange keep}) {
-    if (_tiles.length <= maxTiles) return;
-    // 見えている範囲と、その親（2 段）は残す
-    bool kept(TileKey k) {
-      var r = keep;
-      for (var i = 0; i <= 2; i++) {
-        if (k.z == r.z && k.x >= r.x0 && k.x <= r.x1 && k.y >= r.y0 && k.y <= r.y1) return true;
-        if (r.z == 0) break;
-        r = TileRange(z: r.z - 1, x0: r.x0 >> 1, y0: r.y0 >> 1, x1: r.x1 >> 1, y1: r.y1 >> 1);
-      }
-      return false;
-    }
-    final victims = _tiles.values.where((t) => !kept(t.key)).toList()
-      ..sort((a, b) => a.lastUsed.compareTo(b.lastUsed));
-    for (final v in victims) {
-      if (_tiles.length <= maxTiles) break;
-      _tiles.remove(v.key);
-      v.dispose();
-    }
-    revision++;
   }
 
   /// 理想の範囲を「手持ちで最良のタイル」で埋めて描画順（奥 → 手前）で返す
@@ -575,7 +551,7 @@ class TerrainWorld extends ChangeNotifier {
   }) {
     final ranges = ancestorRanges(range, levels: levels, margin: margin);
     for (var i = 0; i < ranges.length; i++) {
-      ensure(ranges[i], centerX: centerX, centerY: centerY, evict: false, replaceQueue: replaceQueue && i == 0);
+      ensure(ranges[i], centerX: centerX, centerY: centerY, replaceQueue: replaceQueue && i == 0);
     }
   }
 

@@ -137,8 +137,8 @@ class TerrainFramePlanner {
       levels: ancestorLevels,
       replaceQueue: true,
     );
-    world.ensure(range, centerX: camera.centerX, centerY: camera.centerY, evict: false, replaceQueue: false);
-    world.ensure(prefetch, centerX: camera.centerX, centerY: camera.centerY, evict: false, replaceQueue: false);
+    world.ensure(range, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
+    world.ensure(prefetch, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
     final tEnsure = sw.elapsedMilliseconds;
     world.trim(keep: prefetch, ancestorLevels: ancestorLevels);
     final tTrim = sw.elapsedMilliseconds;

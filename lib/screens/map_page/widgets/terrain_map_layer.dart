@@ -31,6 +31,8 @@ import '../../../core/terrain/terrain_scene.dart';
 import '../../../core/terrain/web_mercator.dart';
 import '../../../interfaces/map_state_interface.dart';
 import '../../../interfaces/terrain_projection.dart';
+import '../../../models/party/party_room.dart';
+import '../../../providers/party_providers.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../services/basemap_service.dart';
 import '../../../services/map_source_manager.dart';
@@ -374,7 +376,53 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
               ),
             ],
           );
-    return _SceneBundle(normal: normal, selected: selected, photos: photos, track: trackScene);
+    // パーティ（ルーム）の他メンバー: 橙の点 + 名前、圏外区間の軌跡は同系色の細線
+    final session = ref.read(partySessionProvider);
+    const peerStyle = TerrainFeatureStyle(
+      lineColor: Color(0x80FF5722),
+      lineWidth: 3,
+      fillColor: Color(0x00000000),
+      outlineColor: Color(0x00000000),
+      outlineWidth: 0,
+      pointColor: Colors.deepOrange,
+      pointSize: 8,
+    );
+    bool listed(String uid) => session.members.isEmpty || session.members.any((m) => m.uid == uid);
+    final party = TerrainSceneBuilder(
+      mesh: mesh,
+      stylesByKey: const {},
+      defaultStyle: peerStyle,
+      labelProp: 'name',
+      labelTextStyle: labelStyle.copyWith(color: Colors.deepOrange.shade900),
+    ).build(
+      points: [
+        for (final peer in session.peers.values)
+          if (listed(peer.uid))
+            geo.Feature<geo.Point>(
+              geometry: geo.Point(geo.Geographic(lon: peer.longitude, lat: peer.latitude)),
+              properties: {
+                'name': session.members
+                    .firstWhere(
+                      (m) => m.uid == peer.uid,
+                      orElse: () => PartyMember(uid: peer.uid, name: '', role: PartyRole.guest),
+                    )
+                    .name,
+              },
+            ),
+      ],
+      lines: [
+        for (final entry in session.tracks.entries)
+          if (listed(entry.key))
+            for (final track in entry.value)
+              if (track.points.length >= 2)
+                geo.Feature<geo.Geometry>(
+                  geometry: geo.LineString.from([
+                    for (final p in track.points) geo.Geographic(lon: p.longitude, lat: p.latitude),
+                  ]),
+                ),
+      ],
+    );
+    return _SceneBundle(normal: normal, selected: selected, photos: photos, track: trackScene, party: party);
   }
 
   void _applyScene() {
@@ -388,6 +436,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       ..mesh = mesh
       ..lines = [
         ...bundle.track.lines,
+        ...bundle.party.lines,
         ...bundle.normal.outlines,
         ...bundle.normal.lines,
         ...bundle.selected.outlines,
@@ -397,6 +446,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       ..points = [
         ...bundle.normal.points,
         ...bundle.photos.points,
+        ...bundle.party.points,
         ...bundle.selected.points,
         if (loc != null)
           TerrainPoint(
@@ -406,7 +456,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
             sizePx: 9,
           ),
       ]
-      ..labels = [...bundle.normal.labels, ...bundle.photos.labels];
+      ..labels = [...bundle.normal.labels, ...bundle.photos.labels, ...bundle.party.labels];
     _repaint.value++;
   }
 
@@ -505,6 +555,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
 
   @override
   Widget build(BuildContext context) {
+    // パーティの位置更新でシーンを組み直す（peers / tracks が変わるたび）
+    ref.listen(partySessionProvider, (_, _) {
+      _sceneByStep.clear();
+      _applyScene();
+    });
     final ready = _dem != null && _painter != null;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -565,10 +620,12 @@ class _SceneBundle {
     required this.selected,
     required this.photos,
     required this.track,
+    required this.party,
   });
 
   final TerrainScene normal;
   final TerrainScene selected;
   final TerrainScene photos;
   final TerrainScene track;
+  final TerrainScene party;
 }

@@ -373,6 +373,10 @@ class TerrainPainter extends CustomPainter {
   /// 選択中（強調表示）
   TerrainHit? selected;
 
+  /// ラベルの重なりを間引く（先勝ち）。前回の描画で表示したラベルの番号は [visibleLabels]
+  bool collideLabels = true;
+  final Set<int> visibleLabels = {};
+
   /// 描画に掛かった時間の通知（計測用）
   final void Function(Duration)? onPainted;
 
@@ -384,6 +388,16 @@ class TerrainPainter extends CustomPainter {
       camera.centerY - dem.originY,
       dem.elevationAt(camera.centerX, camera.centerY),
     );
+  }
+
+  /// 画面座標 → 視線と地形の交点（DEM 原点基準の x, y）。地形の外なら null
+  Offset? unproject(Offset screen, Size size) {
+    final pc = _projectedCenter();
+    final projected = Offset(
+      pc.dx + (screen.dx - size.width / 2) / camera.scale,
+      pc.dy + (screen.dy - size.height / 2) / camera.scale,
+    );
+    return camera.intersectTerrain(projected, mesh.dem);
   }
 
   /// DEM 原点基準の世界座標 → 画面座標
@@ -502,8 +516,10 @@ class TerrainPainter extends CustomPainter {
     }
     canvas.restore();
 
-    // ラベル（画面座標）
+    // ラベル（画面座標）。重なりは先勝ちで間引く
     final viewport = Offset.zero & size;
+    final placed = <Rect>[];
+    visibleLabels.clear();
     for (var i = 0; i < labels.length; i++) {
       final label = labels[i];
       final z = dem.elevationAt(label.x + dem.originX, label.y + dem.originY);
@@ -511,12 +527,25 @@ class TerrainPainter extends CustomPainter {
       if (!viewport.inflate(64).contains(sp)) continue;
       final tp = label.painter;
       final origin = sp - Offset(tp.width / 2, tp.height + 4);
+      final box = Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2);
       final isSel = selected?.kind == 'label' && selected?.index == i;
+      if (collideLabels && !isSel) {
+        var overlaps = false;
+        for (final r in placed) {
+          if (r.overlaps(box)) {
+            overlaps = true;
+            break;
+          }
+        }
+        if (overlaps) {
+          canvas.drawCircle(sp, 2, Paint()..color = Colors.black54); // 点だけ残す
+          continue;
+        }
+      }
+      placed.add(box);
+      visibleLabels.add(i);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2),
-          const Radius.circular(3),
-        ),
+        RRect.fromRectAndRadius(box, const Radius.circular(3)),
         Paint()..color = (isSel ? Colors.yellow : Colors.white).withValues(alpha: 0.85),
       );
       tp.paint(canvas, origin);
@@ -541,6 +570,7 @@ class TerrainPainter extends CustomPainter {
     }
 
     for (var i = 0; i < labels.length; i++) {
+      if (collideLabels && visibleLabels.isNotEmpty && !visibleLabels.contains(i)) continue; // 間引かれた
       final l = labels[i];
       final sp = toScreen(l.x, l.y, dem.elevationAt(l.x + dem.originX, l.y + dem.originY), size, pc);
       consider('label', i, (sp - point).distance);

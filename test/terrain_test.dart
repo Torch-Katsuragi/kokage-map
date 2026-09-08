@@ -315,4 +315,37 @@ void main() {
       expect(painter.isOccluded(80, 100, 0), isFalse);
     });
   });
+
+  group('TerrainCamera zoom / unproject', () {
+    test('zoom と scale は MapLibre の定義で往復する', () {
+      final cam = TerrainCamera(centerX: 0, centerY: 0, scale: 1);
+      cam.zoom = 14;
+      // z14 の 1px = 9.55m → scale = 1/9.55
+      expect(cam.scale, closeTo(1 / WebMercator.metersPerPixel(14), 1e-12));
+      expect(cam.zoom, closeTo(14, 1e-9));
+    });
+
+    test('視線と地形の交点は同じ視線上に戻る', () {
+      final dem = DemGrid.synthetic(cols: 41, rows: 41, cellSize: 10, relief: 150);
+      final cam = TerrainCamera(centerX: 200, centerY: 200, scale: 1, bearing: 0.4, pitch: 0.9, zScale: 1.2);
+      for (final p in [const Offset(50, 60), const Offset(200, 200), const Offset(330, 120)]) {
+        final z = dem.elevationAt(p.dx, p.dy);
+        final projected = cam.project(p.dx, p.dy, z);
+        final hit = cam.intersectTerrain(projected, dem);
+        expect(hit, isNotNull, reason: '$p');
+        // 手前の地形に隠れていなければ元の点、隠れていれば手前の点。どちらも同じ視線上
+        final back = cam.project(hit!.dx, hit.dy, dem.elevationAt(hit.dx, hit.dy));
+        expect(back.dx, closeTo(projected.dx, 1e-6));
+        expect(back.dy, closeTo(projected.dy, 2)); // 線形補間の誤差ぶん
+      }
+    });
+
+    test('真上なら高さに依らず 1 点', () {
+      final dem = DemGrid.synthetic(cols: 11, rows: 11, cellSize: 10);
+      final cam = TerrainCamera(centerX: 0, centerY: 0, scale: 1);
+      final hit = cam.intersectTerrain(cam.project(35, 45, 999), dem);
+      expect(hit!.dx, closeTo(35, 1e-9));
+      expect(hit.dy, closeTo(45, 1e-9));
+    });
+  });
 }

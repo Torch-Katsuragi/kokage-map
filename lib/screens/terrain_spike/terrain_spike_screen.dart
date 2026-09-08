@@ -490,12 +490,19 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     if (painter == null) return;
     final sw = Stopwatch()..start();
     final hit = painter.pick(d.localPosition, size);
+    final ground = painter.unproject(d.localPosition, size);
     painter.selected = hit;
     _repaint.value++;
+    final dem = _dem!;
+    final where = ground == null
+        ? '地形外'
+        : '${WebMercator.latFromY(ground.dy + dem.originY).toStringAsFixed(5)}, '
+            '${WebMercator.lonFromX(ground.dx + dem.originX).toStringAsFixed(5)} '
+            '${dem.elevationAt(ground.dx + dem.originX, ground.dy + dem.originY).toStringAsFixed(0)}m';
     setState(() {
       _hitText = hit == null
-          ? 'タップ: なし (${sw.elapsedMilliseconds}ms)'
-          : 'タップ: ${hit.kind == 'label' ? '区画 ${hit.index + 1}' : hit} (${sw.elapsedMilliseconds}ms)';
+          ? 'タップ: なし @ $where (${sw.elapsedMilliseconds}ms)'
+          : 'タップ: ${hit.kind == 'label' ? '区画 ${hit.index + 1}' : hit} @ $where (${sw.elapsedMilliseconds}ms)';
     });
   }
 

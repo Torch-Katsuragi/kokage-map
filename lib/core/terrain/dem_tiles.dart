@@ -112,28 +112,52 @@ class TileRange {
 /// 進捗通知（読み込んだ枚数 / 全枚数）
 typedef TileProgress = void Function(int done, int total);
 
-/// タイルを並列に取ってくる
-Future<List<Uint8List?>> _fetchAll(
-  http.Client client,
-  List<Uri> uris, {
+/// タイル 1 枚の取得。取れなければ null
+///
+/// 既定は URL テンプレートへの http。アプリでは `BaseMapService.getTile`
+/// （キャッシュ → ネット → 祖先タイルからの切り出し）を渡して同じ絵・同じオフライン挙動にする。
+typedef TileFetcher = Future<Uint8List?> Function(int z, int x, int y);
+
+/// URL テンプレートから http で取る [TileFetcher]
+TileFetcher httpTileFetcher(String urlTemplate, {http.Client? client, Map<String, String>? headers}) {
+  final c = client ?? http.Client();
+  return (z, x, y) async {
+    final uri = Uri.parse(
+      urlTemplate.replaceAll('{z}', '$z').replaceAll('{x}', '$x').replaceAll('{y}', '$y'),
+    );
+    try {
+      final res = await c.get(uri, headers: headers);
+      return res.statusCode == 200 ? res.bodyBytes : null;
+    } catch (_) {
+      return null; // 取れなかったタイルは null（DEM は 0m、テクスチャは空）
+    }
+  };
+}
+
+/// [range] の全タイルを並列に取ってくる（行優先・北から）
+Future<List<Uint8List?>> _fetchRange(
+  TileFetcher fetch,
+  TileRange range, {
   int concurrency = 8,
   TileProgress? onProgress,
 }) async {
-  final results = List<Uint8List?>.filled(uris.length, null);
+  final coords = <(int, int)>[];
+  for (var ty = range.y0; ty <= range.y1; ty++) {
+    for (var tx = range.x0; tx <= range.x1; tx++) {
+      coords.add((tx, ty));
+    }
+  }
+  final results = List<Uint8List?>.filled(coords.length, null);
   var next = 0;
   var done = 0;
   Future<void> worker() async {
     while (true) {
       final i = next++;
-      if (i >= uris.length) return;
-      try {
-        final res = await client.get(uris[i]);
-        if (res.statusCode == 200) results[i] = res.bodyBytes;
-      } catch (_) {
-        // 取れなかったタイルは null のまま（DEM は 0m、テクスチャは空）
-      }
+      if (i >= coords.length) return;
+      final (tx, ty) = coords[i];
+      results[i] = await fetch(range.z, tx, ty);
       done++;
-      onProgress?.call(done, uris.length);
+      onProgress?.call(done, coords.length);
     }
   }
 
@@ -143,21 +167,16 @@ Future<List<Uint8List?>> _fetchAll(
 
 /// 標高タイルを [DemGrid] に組み立てる
 class DemTileLoader {
-  DemTileLoader({required this.source, http.Client? client}) : _client = client ?? http.Client();
+  DemTileLoader({required this.source, TileFetcher? fetcher})
+      : _fetch = fetcher ?? httpTileFetcher(source.urlTemplate);
 
   final DemTileSource source;
-  final http.Client _client;
+  final TileFetcher _fetch;
 
   /// [range] の全タイルを 1 枚の格子にする。格子点はピクセル中心
   Future<DemGrid> load(TileRange range, {TileProgress? onProgress}) async {
     final z = range.z;
-    final uris = <Uri>[];
-    for (var ty = range.y0; ty <= range.y1; ty++) {
-      for (var tx = range.x0; tx <= range.x1; tx++) {
-        uris.add(Uri.parse(source.url(z, tx, ty)));
-      }
-    }
-    final bytesList = await _fetchAll(_client, uris, onProgress: onProgress);
+    final bytesList = await _fetchRange(_fetch, range, onProgress: onProgress);
     const ts = WebMercator.tileSize;
     final cols = range.width * ts;
     final rows = range.height * ts;
@@ -200,27 +219,15 @@ class DemTileLoader {
 ///
 /// 設計どおり「表示範囲のタイルを 1 枚に合成してから ImageShader で貼る」。
 class RasterTileComposer {
-  RasterTileComposer({required this.urlTemplate, http.Client? client}) : _client = client ?? http.Client();
+  RasterTileComposer({String? urlTemplate, TileFetcher? fetcher})
+      : assert(urlTemplate != null || fetcher != null),
+        _fetch = fetcher ?? httpTileFetcher(urlTemplate!);
 
-  final String urlTemplate;
-  final http.Client _client;
+  final TileFetcher _fetch;
 
   /// [range] のタイルを敷き詰めた画像を返す（幅 = width×256）
   Future<ui.Image> compose(TileRange range, {TileProgress? onProgress}) async {
-    final uris = <Uri>[];
-    for (var ty = range.y0; ty <= range.y1; ty++) {
-      for (var tx = range.x0; tx <= range.x1; tx++) {
-        uris.add(
-          Uri.parse(
-            urlTemplate
-                .replaceAll('{z}', '${range.z}')
-                .replaceAll('{x}', '$tx')
-                .replaceAll('{y}', '$ty'),
-          ),
-        );
-      }
-    }
-    final bytesList = await _fetchAll(_client, uris, onProgress: onProgress);
+    final bytesList = await _fetchRange(_fetch, range, onProgress: onProgress);
     const ts = WebMercator.tileSize;
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(recorder);

@@ -20,7 +20,7 @@ import 'dart:ui';
 import 'dem_grid.dart';
 import 'terrain_camera.dart';
 
-/// 奥行き順に並んだセルのひとかたまり
+/// 奥行き順に並んだセルのひとかたまり（= チャンク 1 つ）
 ///
 /// 帯ごとに `drawVertices` を 1 回呼び、その帯に落ちるベクタを続けて描くことで
 /// 深度バッファなしに前後関係を出す（[TerrainMesh] 参照）。
@@ -42,11 +42,16 @@ class TerrainMeshTiming {
     required this.resorted,
   });
 
+  /// 投影（チャンクごとの位置配列の計算）
   final Duration project;
+
+  /// 象限が変わったときのインデックス・並び順の作り直し
   final Duration sort;
+
+  /// `Vertices.raw` の生成
   final Duration assemble;
 
-  /// 並び替えをやり直したか（角度がしきい値を超えたとき）
+  /// 並び順をやり直したか（象限が変わったとき）
   final bool resorted;
 
   Duration get total => project + sort + assemble;
@@ -65,6 +70,11 @@ class TerrainMeshTiming {
 /// **行を奥から手前へ、行内も奥から手前へ**と格子をなぞる順で十分。
 /// 並び順は [TerrainCamera.bearing] の象限（4 通り）だけで決まり、
 /// pitch / pan / zoom では変わらない。ソートは要らない。
+///
+/// 格子は [TerrainMeshBuilder.chunkSize] セル角のチャンクに分け、チャンクを
+/// 象限走査の順に描く。チャンク内も同じ走査順。チャンク単位なら頂点を
+/// 隣のセルと共有でき（`Vertices.raw` の index は 16bit なので 1 チャンク ≤ 65535 頂点）、
+/// 毎フレームのコピー量がセルごとの複製より 5 倍ほど減る。
 class TerrainMesh {
   TerrainMesh._({
     required this.bands,
@@ -74,6 +84,7 @@ class TerrainMesh {
     required this.timing,
   });
 
+  /// 描画順に並んだチャンク
   final List<TerrainMeshBand> bands;
 
   /// 間引き後のセル番号 → 帯番号（ベクタを帯に振り分けるため）
@@ -95,14 +106,14 @@ class TerrainMesh {
     TerrainCamera camera, {
     required int textureWidth,
     required int textureHeight,
-    int cellsPerBand = 4000,
+    int chunkSize = 32,
     int step = 1,
   }) {
     return TerrainMeshBuilder(
       dem,
       textureWidth: textureWidth,
       textureHeight: textureHeight,
-      cellsPerBand: cellsPerBand,
+      chunkSize: chunkSize,
       step: step,
     ).build(camera);
   }
@@ -119,22 +130,80 @@ class TerrainMesh {
   }
 }
 
+/// チャンク 1 つぶんの静的データ
+class _Chunk {
+  _Chunk({
+    required this.c0,
+    required this.r0,
+    required this.cellCols,
+    required this.cellRows,
+    required this.texCoords,
+    required this.colors,
+  }) : positions = Float32List((cellCols + 1) * (cellRows + 1) * 2);
+
+  /// 左下セルの格子座標
+  final int c0;
+  final int r0;
+  final int cellCols;
+  final int cellRows;
+  int get vertexCols => cellCols + 1;
+  int get vertexRows => cellRows + 1;
+  int get cellCount => cellCols * cellRows;
+
+  final Float32List texCoords;
+  final Int32List colors;
+
+  /// 投影座標（毎フレーム書き換える。`Vertices.raw` がコピーするので使い回してよい）
+  final Float32List positions;
+
+  /// 象限ごとのインデックス（走査順）。使うときに作る
+  final List<Uint16List?> indicesByQuadrant = List.filled(4, null);
+
+  Uint16List indicesFor(int quadrant) {
+    final cached = indicesByQuadrant[quadrant];
+    if (cached != null) return cached;
+    final eastFar = (quadrant & 1) != 0;
+    final northFar = (quadrant & 2) != 0;
+    final idx = Uint16List(cellCount * 6);
+    var k = 0;
+    for (var rr = 0; rr < cellRows; rr++) {
+      final r = northFar ? cellRows - 1 - rr : rr;
+      for (var cc = 0; cc < cellCols; cc++) {
+        final c = eastFar ? cellCols - 1 - cc : cc;
+        final v00 = r * vertexCols + c;
+        final v10 = v00 + 1;
+        final v01 = v00 + vertexCols;
+        final v11 = v01 + 1;
+        idx[k++] = v00;
+        idx[k++] = v10;
+        idx[k++] = v01;
+        idx[k++] = v10;
+        idx[k++] = v11;
+        idx[k++] = v01;
+      }
+    }
+    indicesByQuadrant[quadrant] = idx;
+    return idx;
+  }
+}
+
 /// [TerrainMesh] を繰り返し組むための作業台
 ///
-/// カメラに依らないもの（間引き格子・陰影色・テクスチャ座標）は最初に 1 回だけ計算し、
-/// 毎回やるのは投影と帯の組み立てだけ。並び順（象限走査）とそれに沿った
-/// テクスチャ座標・色・インデックスは、方位の象限が変わったときだけ作り直す。
+/// カメラに依らないもの（間引き格子・頂点の陰影色・テクスチャ座標・チャンク分割）は
+/// 最初に 1 回だけ計算し、毎回やるのは投影と `Vertices.raw` の生成だけ。
+/// 並び順（象限走査）とインデックスは方位の象限が変わったときだけ作り直す。
 class TerrainMeshBuilder {
   TerrainMeshBuilder(
     this.dem, {
     required int textureWidth,
     required int textureHeight,
-    this.cellsPerBand = 16000,
+    this.chunkSize = 32,
     this.step = 1,
     int lightAzimuthDeg = 315,
     int lightAltitudeDeg = 45,
   })  : cols = (dem.cols - 1) ~/ step + 1,
-        rows = (dem.rows - 1) ~/ step + 1 {
+        rows = (dem.rows - 1) ~/ step + 1,
+        assert(chunkSize > 0 && (chunkSize + 1) * (chunkSize + 1) <= 65536) {
     final cell = dem.cellSize * step;
     _cellSize = cell;
     // 間引いた標高
@@ -146,57 +215,69 @@ class TerrainMeshBuilder {
     }
     final cellCols = cols - 1;
     final cellRows = rows - 1;
+    _cellCols = cellCols;
     _cellCount = cellCols * cellRows;
-    _cellColor = Int32List(_cellCount);
-    _cellTex = Float32List(_cellCount * 8);
-    _px = Float32List(cols * rows);
-    _py = Float32List(cols * rows);
-    _order = Int32List(_cellCount);
     _cellBand = Uint16List(_cellCount);
 
+    // 頂点ごとの陰影（中央差分の法線 × 光源）
     final az = lightAzimuthDeg * math.pi / 180;
     final alt = lightAltitudeDeg * math.pi / 180;
     final lx = math.sin(az) * math.cos(alt);
     final ly = math.cos(az) * math.cos(alt);
     final lz = math.sin(alt);
-    final texSx = textureWidth / dem.width;
-    final texSy = textureHeight / dem.height;
-    for (var r = 0; r < cellRows; r++) {
-      for (var c = 0; c < cellCols; c++) {
-        final ci = r * cellCols + c;
-        final i00 = r * cols + c;
-        final h00 = _heights[i00];
-        final h10 = _heights[i00 + 1];
-        final h01 = _heights[i00 + cols];
-        final h11 = _heights[i00 + cols + 1];
-        // 陰影: 対角の差分から法線
-        final nx = -((h10 + h11) - (h00 + h01)) / (2 * cell);
-        final ny = -((h01 + h11) - (h00 + h10)) / (2 * cell);
+    final vertexColor = Int32List(cols * rows);
+    for (var r = 0; r < rows; r++) {
+      final rS = r == 0 ? 0 : r - 1;
+      final rN = r == rows - 1 ? rows - 1 : r + 1;
+      for (var c = 0; c < cols; c++) {
+        final cW = c == 0 ? 0 : c - 1;
+        final cE = c == cols - 1 ? cols - 1 : c + 1;
+        final nx = -(_heights[r * cols + cE] - _heights[r * cols + cW]) / ((cE - cW) * cell);
+        final ny = -(_heights[rN * cols + c] - _heights[rS * cols + c]) / ((rN - rS) * cell);
         final len = math.sqrt(nx * nx + ny * ny + 1);
         final dot = (nx * lx + ny * ly + lz) / len;
         final shade = (0.35 + 0.65 * dot.clamp(0.0, 1.0)).clamp(0.0, 1.0);
         final g = (shade * 255).round();
-        _cellColor[ci] = 0xFF000000 | (g << 16) | (g << 8) | g;
-        // テクスチャ座標（画像は北が上なので v を反転）
-        final u0 = c * cell * texSx;
-        final u1 = (c + 1) * cell * texSx;
-        final t0 = textureHeight - r * cell * texSy;
-        final t1 = textureHeight - (r + 1) * cell * texSy;
-        final t = ci * 8;
-        _cellTex[t] = u0;
-        _cellTex[t + 1] = t0;
-        _cellTex[t + 2] = u1;
-        _cellTex[t + 3] = t0;
-        _cellTex[t + 4] = u0;
-        _cellTex[t + 5] = t1;
-        _cellTex[t + 6] = u1;
-        _cellTex[t + 7] = t1;
+        vertexColor[r * cols + c] = 0xFF000000 | (g << 16) | (g << 8) | g;
+      }
+    }
+
+    // チャンク分割（左下から東・北へ）
+    final texSx = textureWidth / dem.width;
+    final texSy = textureHeight / dem.height;
+    _chunkCols = (cellCols + chunkSize - 1) ~/ chunkSize;
+    _chunkRows = (cellRows + chunkSize - 1) ~/ chunkSize;
+    _chunks = <_Chunk>[];
+    for (var cr = 0; cr < _chunkRows; cr++) {
+      for (var cc = 0; cc < _chunkCols; cc++) {
+        final c0 = cc * chunkSize;
+        final r0 = cr * chunkSize;
+        final w = math.min(chunkSize, cellCols - c0);
+        final h = math.min(chunkSize, cellRows - r0);
+        final nv = (w + 1) * (h + 1);
+        final tex = Float32List(nv * 2);
+        final colors = Int32List(nv);
+        var v = 0;
+        for (var r = r0; r <= r0 + h; r++) {
+          for (var c = c0; c <= c0 + w; c++) {
+            // テクスチャ座標（画像は北が上なので v を反転）
+            tex[v * 2] = c * cell * texSx;
+            tex[v * 2 + 1] = textureHeight - r * cell * texSy;
+            colors[v] = vertexColor[r * cols + c];
+            v++;
+          }
+        }
+        _chunks.add(
+          _Chunk(c0: c0, r0: r0, cellCols: w, cellRows: h, texCoords: tex, colors: colors),
+        );
       }
     }
   }
 
   final DemGrid dem;
-  final int cellsPerBand;
+
+  /// チャンクの一辺（セル数）。小さいほどベクタの割り込みが細かく、`drawVertices` の回数は増える
+  final int chunkSize;
   final int step;
 
   /// 間引き後の格子点数
@@ -205,40 +286,43 @@ class TerrainMeshBuilder {
 
   late final double _cellSize;
   late final Float32List _heights;
+  late final int _cellCols;
   late final int _cellCount;
-  late final Int32List _cellColor;
-  late final Float32List _cellTex;
-  late final Float32List _px;
-  late final Float32List _py;
-  late final Int32List _order;
   late final Uint16List _cellBand;
+  late final int _chunkCols;
+  late final int _chunkRows;
+  late final List<_Chunk> _chunks;
 
-  // 並び順に沿って並べ直した帯ごとの静的配列（象限が変わったときだけ作り直す）
-  List<Float32List>? _bandTex;
-  List<Int32List>? _bandColors;
-  List<Uint16List>? _bandIndices;
+  /// 描画順に並べたチャンク（象限が変わったときだけ作り直す）
+  List<_Chunk>? _drawOrder;
   int? _orderedQuadrant;
+
+  int get chunkCount => _chunks.length;
 
   TerrainMesh build(TerrainCamera camera) {
     final sw = Stopwatch()..start();
     final cell = _cellSize;
-    final cellCols = cols - 1;
-
-    // 1. 格子点の投影座標（倍率 1・DEM 原点基準）
     final cosB = math.cos(camera.bearing);
     final sinB = math.sin(camera.bearing);
     final cosP = math.cos(camera.pitch);
     final sinP = math.sin(camera.pitch);
     final zk = camera.zScale * sinP;
-    for (var r = 0; r < rows; r++) {
-      final y = r * cell;
-      final ySin = y * sinB;
-      final yCos = y * cosB;
-      for (var c = 0; c < cols; c++) {
-        final i = r * cols + c;
-        final x = c * cell;
-        _px[i] = x * cosB - ySin;
-        _py[i] = -((x * sinB + yCos) * cosP + _heights[i] * zk);
+
+    // 1. チャンクごとに投影（倍率 1・DEM 原点基準）。境界の頂点は隣と重複して計算する
+    for (final ch in _chunks) {
+      final pos = ch.positions;
+      var v = 0;
+      for (var r = ch.r0; r < ch.r0 + ch.vertexRows; r++) {
+        final y = r * cell;
+        final ySin = y * sinB;
+        final yCos = y * cosB;
+        final row = r * cols;
+        for (var c = ch.c0; c < ch.c0 + ch.vertexCols; c++) {
+          final x = c * cell;
+          pos[v] = x * cosB - ySin;
+          pos[v + 1] = -((x * sinB + yCos) * cosP + _heights[row + c] * zk);
+          v += 2;
+        }
       }
     }
     final tProject = sw.elapsed;
@@ -247,48 +331,26 @@ class TerrainMeshBuilder {
     final quadrant = _quadrantOf(sinB, cosB);
     final needResort = _orderedQuadrant != quadrant;
     if (needResort) {
-      _reorder(quadrant, cellCols);
+      _reorder(quadrant);
       _orderedQuadrant = quadrant;
     }
     final tSort = sw.elapsed - tProject;
 
-    // 3. 帯ごとに位置だけ詰めて Vertices を組む
-    final bands = <TerrainMeshBand>[];
-    var pos = 0;
-    var b = 0;
-    while (pos < _cellCount) {
-      final n = math.min(cellsPerBand, _cellCount - pos);
-      final positions = Float32List(n * 8);
-      for (var k = 0; k < n; k++) {
-        final ci = _order[pos + k];
-        final c = ci % cellCols;
-        final r = ci ~/ cellCols;
-        final i00 = r * cols + c;
-        final v = k * 8;
-        positions[v] = _px[i00];
-        positions[v + 1] = _py[i00];
-        positions[v + 2] = _px[i00 + 1];
-        positions[v + 3] = _py[i00 + 1];
-        positions[v + 4] = _px[i00 + cols];
-        positions[v + 5] = _py[i00 + cols];
-        positions[v + 6] = _px[i00 + cols + 1];
-        positions[v + 7] = _py[i00 + cols + 1];
-      }
-      bands.add(
-        TerrainMeshBand(
-          vertices: Vertices.raw(
-            VertexMode.triangles,
-            positions,
-            textureCoordinates: _bandTex![b],
-            colors: _bandColors![b],
-            indices: _bandIndices![b],
-          ),
-          cellCount: n,
+    // 3. Vertices を組む（配列はコピーされるので使い回してよい）
+    final order = _drawOrder!;
+    final bands = List<TerrainMeshBand>.generate(order.length, (i) {
+      final ch = order[i];
+      return TerrainMeshBand(
+        vertices: Vertices.raw(
+          VertexMode.triangles,
+          ch.positions,
+          textureCoordinates: ch.texCoords,
+          colors: ch.colors,
+          indices: ch.indicesFor(quadrant),
         ),
+        cellCount: ch.cellCount,
       );
-      pos += n;
-      b++;
-    }
+    }, growable: false);
     final tAssemble = sw.elapsed - tProject - tSort;
     return TerrainMesh._(
       bands: bands,
@@ -311,60 +373,29 @@ class TerrainMeshBuilder {
   static int _quadrantOf(double sinB, double cosB) =>
       (sinB > 0 ? 1 : 0) | (cosB > 0 ? 2 : 0);
 
-  /// 象限走査で並び順を作り、帯ごとの静的配列を並べ直す
+  /// チャンクを象限走査の順に並べ、セル → 帯番号を引き直す
   ///
-  /// 遠い側の行から手前の行へ、行内も遠い側の列から手前の列へ。
-  /// 行と列のどちらを外側にしても正しいが、ここでは行（南北）を外側にする。
-  void _reorder(int quadrant, int cellCols) {
-    final cellRows = _cellCount ~/ cellCols;
+  /// 遠い側のチャンク行から手前へ、行内も遠い側から手前へ。
+  void _reorder(int quadrant) {
     final eastFar = (quadrant & 1) != 0;
     final northFar = (quadrant & 2) != 0;
-    var k = 0;
-    for (var rr = 0; rr < cellRows; rr++) {
-      final r = northFar ? cellRows - 1 - rr : rr;
-      for (var cc = 0; cc < cellCols; cc++) {
-        final c = eastFar ? cellCols - 1 - cc : cc;
-        _order[k++] = r * cellCols + c;
+    final order = <_Chunk>[];
+    for (var rr = 0; rr < _chunkRows; rr++) {
+      final cr = northFar ? _chunkRows - 1 - rr : rr;
+      for (var cc = 0; cc < _chunkCols; cc++) {
+        final ccol = eastFar ? _chunkCols - 1 - cc : cc;
+        order.add(_chunks[cr * _chunkCols + ccol]);
       }
     }
-
-    // 帯ごとの静的配列を並び順で作り直す
-    final tex = <Float32List>[];
-    final colors = <Int32List>[];
-    final indices = <Uint16List>[];
-    var pos = 0;
-    var b = 0;
-    while (pos < _cellCount) {
-      final n = math.min(cellsPerBand, _cellCount - pos);
-      final bt = Float32List(n * 8);
-      final bc = Int32List(n * 4);
-      final bi = Uint16List(n * 6);
-      for (var k = 0; k < n; k++) {
-        final ci = _order[pos + k];
-        _cellBand[ci] = b;
-        bt.setRange(k * 8, k * 8 + 8, _cellTex, ci * 8);
-        final argb = _cellColor[ci];
-        final v = k * 4;
-        bc[v] = argb;
-        bc[v + 1] = argb;
-        bc[v + 2] = argb;
-        bc[v + 3] = argb;
-        final t = k * 6;
-        bi[t] = v;
-        bi[t + 1] = v + 1;
-        bi[t + 2] = v + 2;
-        bi[t + 3] = v + 1;
-        bi[t + 4] = v + 3;
-        bi[t + 5] = v + 2;
+    for (var b = 0; b < order.length; b++) {
+      final ch = order[b];
+      for (var r = ch.r0; r < ch.r0 + ch.cellRows; r++) {
+        final base = r * _cellCols;
+        for (var c = ch.c0; c < ch.c0 + ch.cellCols; c++) {
+          _cellBand[base + c] = b;
+        }
       }
-      tex.add(bt);
-      colors.add(bc);
-      indices.add(bi);
-      pos += n;
-      b++;
     }
-    _bandTex = tex;
-    _bandColors = colors;
-    _bandIndices = indices;
+    _drawOrder = order;
   }
 }

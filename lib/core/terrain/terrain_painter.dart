@@ -103,6 +103,10 @@ class TerrainLabel {
 /// 描画順:
 /// 1. 帯ごとに地形（テクスチャ × 陰影色）→ その帯に落ちる線
 /// 2. ラベルは最後に画面座標で（地形に隠れない方針）
+///
+/// 1 インスタンスを使い回し、中身を差し替えて [repaint] で通知する。
+/// 毎フレーム `setState` で画面全体を組み直すと、地図面以外のウィジェットの
+/// 再構築が UI スレッドを食う（debug で 10ms 超）。
 class TerrainPainter extends CustomPainter {
   TerrainPainter({
     required this.mesh,
@@ -111,13 +115,14 @@ class TerrainPainter extends CustomPainter {
     required this.lines,
     required this.labels,
     this.onPainted,
+    super.repaint,
   });
 
-  final TerrainMesh mesh;
-  final TerrainCamera camera;
-  final ui.Image? texture;
-  final List<LiftedPolyline> lines;
-  final List<TerrainLabel> labels;
+  TerrainMesh mesh;
+  TerrainCamera camera;
+  ui.Image? texture;
+  List<LiftedPolyline> lines;
+  List<TerrainLabel> labels;
 
   /// 描画に掛かった時間の通知（計測用）
   final void Function(Duration)? onPainted;

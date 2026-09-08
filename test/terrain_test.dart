@@ -110,12 +110,12 @@ void main() {
         cam,
         textureWidth: 256,
         textureHeight: 256,
-        cellsPerBand: 50,
+        chunkSize: 5,
       );
       const cellCount = 20 * 20;
       expect(mesh.cellBand.length, cellCount);
       expect(mesh.bands.fold<int>(0, (a, b) => a + b.cellCount), cellCount);
-      expect(mesh.bands.length, (cellCount / 50).ceil());
+      expect(mesh.bands.length, 16); // 20/5 = 4 チャンク × 4
       // 隠面順: 視線の地上投影に沿って手前にあるセルは、必ず後（大きい帯番号か同じ帯）に描かれる
       // 帯番号しか外から見えないので、帯をまたぐ組だけ検査する
       final eastFar = math.sin(cam.bearing) > 0;

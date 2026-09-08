@@ -54,6 +54,11 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   TerrainMeshBuilder? _builderFull;
   TerrainMeshBuilder? _builderCoarse; // ジェスチャ・アニメ中の LOD（1 つ飛ばし）
   bool _lod = true;
+  int _chunkSize = 32;
+  final _repaint = ValueNotifier<int>(0);
+  TerrainPainter? _painter;
+  Duration _lastLift = Duration.zero;
+  final Map<int, List<LiftedPolyline>> _linesByStep = {}; // 持ち上げはカメラに依らないので step ごとに使い回す
   String _timing = '';
   late TerrainCamera _camera;
   List<LiftedPolyline> _lines = const [];
@@ -69,6 +74,9 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   Duration _maxPaint = Duration.zero;
   Duration _lastBuild = Duration.zero;
   String _animation = 'none'; // none / rotate / pan / pitch
+  final List<int> _uiMs = [];
+  final List<int> _rasterMs = [];
+  late final TimingsCallback _timingsCallback;
 
   // ジェスチャ
   double _scaleStart = 1;
@@ -86,6 +94,13 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
       pitch: 45 * math.pi / 180,
       zScale: 1 / math.cos(33.9 * math.pi / 180), // 北山村付近の緯度
     );
+    _timingsCallback = (timings) {
+      for (final t in timings) {
+        _uiMs.add(t.buildDuration.inMilliseconds);
+        _rasterMs.add(t.rasterDuration.inMilliseconds);
+      }
+    };
+    SchedulerBinding.instance.addTimingsCallback(_timingsCallback);
     _ticker = createTicker(_onTick)..start();
     _rebuildScene();
     _buildTexture();
@@ -94,6 +109,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   @override
   void dispose() {
     _ticker.dispose();
+    _repaint.dispose();
+    SchedulerBinding.instance.removeTimingsCallback(_timingsCallback);
     _texture?.dispose();
     super.dispose();
   }
@@ -128,8 +145,9 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
       lines.add([a, a + Offset(rnd.nextDouble() * 300 - 150, rnd.nextDouble() * 300 - 150)]);
     }
     _rawLines = lines;
-    _builderFull = TerrainMeshBuilder(dem, textureWidth: _textureSize, textureHeight: _textureSize);
-    _builderCoarse = TerrainMeshBuilder(dem, textureWidth: _textureSize, textureHeight: _textureSize, step: 2);
+    _linesByStep.clear();
+    _builderFull = TerrainMeshBuilder(dem, textureWidth: _textureSize, textureHeight: _textureSize, chunkSize: _chunkSize);
+    _builderCoarse = TerrainMeshBuilder(dem, textureWidth: _textureSize, textureHeight: _textureSize, step: 2, chunkSize: _chunkSize);
     _rebuildLabels();
     _rebuildMesh();
   }
@@ -151,6 +169,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
           )..layout(),
         ),
     ];
+    _painter?.labels = _labels;
+    _repaint.value++;
   }
 
   /// [coarse] は LOD（1 つ飛ばしの格子）で組む。ジェスチャ・アニメ中に使う
@@ -160,8 +180,9 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     _mesh = mesh;
     _lastBuild = mesh.buildTime;
     _timing = mesh.timing.toString();
+    final sw = Stopwatch()..start();
     final colors = [Colors.red, Colors.blue, Colors.orange, Colors.purple];
-    _lines = [
+    _lines = _linesByStep[mesh.step] ??= [
       for (var i = 0; i < _rawLines.length; i++)
         LiftedPolyline.lift(
           _rawLines[i],
@@ -170,6 +191,10 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
           widthPx: i == 0 ? 4 : 2,
         ),
     ];
+    _lastLift = sw.elapsed;
+    _painter?.mesh = mesh;
+    _painter?.lines = _lines;
+    _repaint.value++;
   }
 
   /// 地図らしいテクスチャを描いて画像にする（格子線・区画の塗り・道路・数字）
@@ -239,7 +264,9 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
       image.dispose();
       return;
     }
-    setState(() => _texture = image);
+    _texture = image;
+    _painter?.texture = image;
+    _repaint.value++;
   }
 
   void _onTick(Duration elapsed) {
@@ -250,12 +277,22 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
       _frames = 0;
       _windowStart = elapsed;
       _maxPaint = Duration.zero;
+      String stat(List<int> v) {
+        if (v.isEmpty) return '-';
+        final s = [...v]..sort();
+        return '${s[s.length ~/ 2]}/${s.last}';
+      }
       final line =
-          'spike fps=${_fps.toStringAsFixed(1)} paint=${_lastPaint.inMilliseconds}ms '
-          'build=${_lastBuild.inMilliseconds}ms ($_timing) step=${_mesh?.step} lod=$_lod '
+          'spike fps=${_fps.toStringAsFixed(1)} ui=${stat(_uiMs)} raster=${stat(_rasterMs)} '
+          'paint=${_lastPaint.inMilliseconds}ms '
+          'build=${_lastBuild.inMilliseconds}ms ($_timing) lift=${_lastLift.inMilliseconds}ms '
+          'step=${_mesh?.step} lod=$_lod chunk=$_chunkSize '
           'grid=$_gridPoints labels=$_labelCount anim=$_animation';
+      _uiMs.clear();
+      _rasterMs.clear();
       setSpikeTitle(line);
       debugPrint(line); // Android は logcat で拾う
+      setState(() {}); // 計測表示の更新は 1 秒に 1 回だけ
     }
     switch (_animation) {
       case 'rotate':
@@ -267,10 +304,10 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
       case 'pan':
         _camera.centerX = 1000 + math.sin(elapsed.inMilliseconds / 1500) * 400;
         _camera.centerY = 1000 + math.cos(elapsed.inMilliseconds / 1500) * 400;
+        _repaint.value++;
       default:
-        if (_frames > 2) return; // 静止中は 1 秒に数枚だけ描き直す（計測表示の更新）
+        return; // 静止中は描き直さない
     }
-    setState(() {});
   }
 
   void _onScaleStart(ScaleStartDetails d) {
@@ -281,19 +318,18 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
-    setState(() {
-      if (d.pointerCount >= 2) {
-        _camera.scale = (_scaleStart * d.scale).clamp(0.05, 20);
-        _camera.bearing = _bearingStart - d.rotation;
-        final dy = d.focalPoint.dy - _focalStart.dy;
-        _camera.pitch = (_pitchStart - dy * 0.004).clamp(0.0, 70 * math.pi / 180);
-        _rebuildMesh(coarse: true);
-      } else {
-        final move = _camera.unprojectPan(d.focalPointDelta);
-        _camera.centerX -= move.dx;
-        _camera.centerY -= move.dy;
-      }
-    });
+    if (d.pointerCount >= 2) {
+      _camera.scale = (_scaleStart * d.scale).clamp(0.05, 20);
+      _camera.bearing = _bearingStart - d.rotation;
+      final dy = d.focalPoint.dy - _focalStart.dy;
+      _camera.pitch = (_pitchStart - dy * 0.004).clamp(0.0, 70 * math.pi / 180);
+      _rebuildMesh(coarse: true);
+    } else {
+      final move = _camera.unprojectPan(d.focalPointDelta);
+      _camera.centerX -= move.dx;
+      _camera.centerY -= move.dy;
+      _repaint.value++;
+    }
   }
 
   void _onScaleEnd(ScaleEndDetails d) {
@@ -323,7 +359,7 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                     onScaleEnd: _onScaleEnd,
                     child: ClipRect(
                       child: CustomPaint(
-                        painter: TerrainPainter(
+                        painter: _painter ??= TerrainPainter(
                           mesh: mesh,
                           camera: _camera,
                           texture: _texture,
@@ -333,6 +369,7 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                             _lastPaint = d;
                             if (d > _maxPaint) _maxPaint = d;
                           },
+                          repaint: _repaint,
                         ),
                         child: const SizedBox.expand(),
                       ),
@@ -408,14 +445,25 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                     }),
                   ),
                 const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('LOD'),
-                  selected: _lod,
-                  onSelected: (v) => setState(() {
-                    _lod = v;
-                    _rebuildMesh();
-                  }),
-                ),
+                const Text('チャンク'),
+                for (final n in [16, 32, 64])
+                  ChoiceChip(
+                    label: Text('c$n'),
+                    selected: _chunkSize == n,
+                    onSelected: (_) => setState(() {
+                      _chunkSize = n;
+                      _rebuildScene();
+                    }),
+                  ),
+                for (final v in [true, false])
+                  ChoiceChip(
+                    label: Text(v ? 'lod on' : 'lod off'),
+                    selected: _lod == v,
+                    onSelected: (_) => setState(() {
+                      _lod = v;
+                      _rebuildMesh();
+                    }),
+                  ),
                 const Text('アニメ'),
                 for (final a in ['none', 'pan', 'rotate', 'pitch'])
                   ChoiceChip(

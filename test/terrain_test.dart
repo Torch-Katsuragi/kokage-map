@@ -288,4 +288,31 @@ void main() {
       }
     });
   });
+
+  group('TerrainPainter.isOccluded', () {
+    test('尾根の裏の点は隠れ、手前の点は見える', () {
+      // 南北に走る尾根: x = 50 で高さ 100、他は 0（20 格子・10m）
+      const n = 21;
+      final heights = Float32List(n * n);
+      for (var r = 0; r < n; r++) {
+        for (var c = 0; c < n; c++) {
+          heights[r * n + c] = (c >= 4 && c <= 6) ? 100 : 0;
+        }
+      }
+      final dem = DemGrid(cols: n, rows: n, originX: 0, originY: 0, cellSize: 10, heights: heights);
+      // 東（bearing 90°）を画面上に、45° 傾けて見る = 視点は西側の上空
+      final cam = TerrainCamera(centerX: 100, centerY: 100, scale: 1, bearing: math.pi / 2, pitch: math.pi / 4);
+      final mesh = TerrainMesh.build(dem, cam, textureWidth: 4, textureHeight: 4, chunkSize: 8);
+      final painter = TerrainPainter(mesh: mesh, camera: cam, texture: null, lines: const [], labels: const []);
+      // 尾根の東（奥）側の地面: 隠れる
+      expect(painter.isOccluded(80, 100, 0), isTrue);
+      // 尾根の西（手前）側の地面: 見える
+      expect(painter.isOccluded(20, 100, 0), isFalse);
+      // 奥でも高ければ見える
+      expect(painter.isOccluded(80, 100, 150), isFalse);
+      // 真上からは何も隠れない
+      cam.pitch = 0;
+      expect(painter.isOccluded(80, 100, 0), isFalse);
+    });
+  });
 }

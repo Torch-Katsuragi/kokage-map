@@ -83,7 +83,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   List<List<Offset>> _rawLines = const [];
   List<List<Offset>> _rawPolygons = const [];
   double _contourInterval = 0; // 0 = なし
-  List<List<Offset>> _contourLines = const [];
+  final Map<int, List<List<Offset>>> _contourLinesByStep = {}; // 格子の間引き段ごと
+  int _contourCount = 0;
   final Map<int, LiftedSegments> _contoursByStep = {};
   Duration _lastContour = Duration.zero;
   String _hitText = '';
@@ -238,22 +239,30 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     _hitText = '';
   }
 
-  /// DEM から等高線を引き直す（間隔 0 = なし）
+  /// 等高線のキャッシュを捨てる（間隔や DEM が変わったとき）
   void _extractContours() {
-    final dem = _dem;
     _contoursByStep.clear();
-    if (dem == null || _contourInterval <= 0) {
-      _contourLines = const [];
-      _lastContour = Duration.zero;
-      return;
-    }
-    final sw = Stopwatch()..start();
-    // 格子が細かすぎると線分が増えるので、セル数 10 万を目安に間引く
-    final cells = (dem.cols - 1) * (dem.rows - 1);
-    final step = math.max(1, math.sqrt(cells / 100000).ceil());
-    final byLevel = ContourExtractor.extract(dem, interval: _contourInterval, step: step);
-    _contourLines = [for (final segs in byLevel.values) ...segs];
-    _lastContour = sw.elapsed;
+    _contourLinesByStep.clear();
+    _contourCount = 0;
+    _lastContour = Duration.zero;
+  }
+
+  /// [meshStep] の格子に合わせて等高線を引く（間隔 0 = なし）
+  ///
+  /// ジェスチャ中（間引いた格子）は等高線も間引いた格子から引く。線分数が減って raster が軽くなる
+  List<List<Offset>> _contourLinesFor(int meshStep) {
+    final dem = _dem;
+    if (dem == null || _contourInterval <= 0) return const [];
+    return _contourLinesByStep[meshStep] ??= () {
+      final sw = Stopwatch()..start();
+      // 全解像度でもセル数 10 万を目安に間引く
+      final cells = (dem.cols - 1) * (dem.rows - 1);
+      final step = math.max(meshStep, math.sqrt(cells / 100000).ceil());
+      final byLevel = ContourExtractor.extract(dem, interval: _contourInterval, step: step);
+      final lines = [for (final segs in byLevel.values) ...segs];
+      _lastContour = sw.elapsed;
+      return lines;
+    }();
   }
 
   void _setTexture(ui.Image image, int width, int height) {
@@ -324,7 +333,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
         LiftedPolygon.lift(_rawPolygons[i], mesh, color: fills[i % fills.length]),
     ];
     final contours = _contoursByStep[step] ??=
-        LiftedSegments.lift(_contourLines, mesh, color: const Color(0xCC6D4C41), widthPx: 1);
+        LiftedSegments.lift(_contourLinesFor(step), mesh, color: const Color(0xCC6D4C41), widthPx: 1);
+    _contourCount = contours.segmentCount;
     _lastLift = sw.elapsed;
     _painter
       ?..mesh = mesh
@@ -418,7 +428,7 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
           'spike fps=${_fps.toStringAsFixed(1)} ui=${stat(_uiMs)} raster=${stat(_rasterMs)} '
           'paint=${_lastPaint.inMilliseconds}ms '
           'build=${_lastBuild.inMilliseconds}ms ($_timing) lift=${_lastLift.inMilliseconds}ms '
-          'contour=${_contourInterval.toStringAsFixed(0)}m/${_contourLines.length}本/${_lastContour.inMilliseconds}ms '
+          'contour=${_contourInterval.toStringAsFixed(0)}m/$_contourCount本/${_lastContour.inMilliseconds}ms '
           'step=${_mesh?.step} lod=$_lod chunk=$_chunkSize '
           'scene=${_sceneName.replaceAll(' ', '_')} labels=$_labelCount anim=$_animation';
       _uiMs.clear();
@@ -659,7 +669,6 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                     onSelected: (_) => setState(() {
                       _contourInterval = n;
                       _extractContours();
-                      _contoursByStep.clear();
                       _rebuildMesh();
                     }),
                   ),

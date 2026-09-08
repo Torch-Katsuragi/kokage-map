@@ -528,8 +528,7 @@ class TerrainPainter extends CustomPainter {
 
   /// 画面座標でのヒットテスト。優先は ラベル > 線 > 面
   ///
-  /// ⚠ 地形による遮蔽は見ていない（尾根の裏のフィーチャも当たる）。
-  /// 帯番号で「手前の地形より奥か」を判定する形にする余地がある。
+  /// 線と面は地形に隠れていれば当てない（[isOccluded]）。ラベルは最後に上描きしているので当てる。
   TerrainHit? pick(Offset point, Size size, {double tolerancePx = 20}) {
     final dem = mesh.dem;
     final pc = _projectedCenter();
@@ -552,7 +551,10 @@ class TerrainPainter extends CustomPainter {
       var prev = toScreen(line.xyz[0], line.xyz[1], line.xyz[2], size, pc);
       for (var i = 1; i < line.pointCount; i++) {
         final cur = toScreen(line.xyz[i * 3], line.xyz[i * 3 + 1], line.xyz[i * 3 + 2], size, pc);
-        consider('line', li, _distanceToSegment(point, prev, cur) - line.widthPx / 2);
+        final d = _distanceToSegment(point, prev, cur) - line.widthPx / 2;
+        if (d <= tolerancePx && !isOccluded(line.xyz[i * 3], line.xyz[i * 3 + 1], line.xyz[i * 3 + 2])) {
+          consider('line', li, d);
+        }
         prev = cur;
       }
     }
@@ -565,11 +567,48 @@ class TerrainPainter extends CustomPainter {
         final b = toScreen(poly.xyz[o + 3], poly.xyz[o + 4], poly.xyz[o + 5], size, pc);
         final c = toScreen(poly.xyz[o + 6], poly.xyz[o + 7], poly.xyz[o + 8], size, pc);
         if (LiftedPolygon.inTriangle(point, a, b, c)) {
+          // 三角形の重心で遮蔽を見る（三角形はセルより小さいので十分）
+          final gx = (poly.xyz[o] + poly.xyz[o + 3] + poly.xyz[o + 6]) / 3;
+          final gy = (poly.xyz[o + 1] + poly.xyz[o + 4] + poly.xyz[o + 7]) / 3;
+          final gz = (poly.xyz[o + 2] + poly.xyz[o + 5] + poly.xyz[o + 8]) / 3;
+          if (isOccluded(gx, gy, gz)) continue;
           return TerrainHit(kind: 'polygon', index: pi, distancePx: 0);
         }
       }
     }
     return best;
+  }
+
+  /// 世界座標（DEM 原点基準）の点が、手前の地形に隠れているか
+  ///
+  /// 正射影なので視線は平行。点から視点側へ地上投影の向き `(-sinB, -cosB)` に
+  /// セル幅ずつ進み、視線の高さ（`1/tan(pitch)` で上がる）より地形が高ければ隠れている。
+  /// 視線が DEM の最高点を超えたら打ち切る。
+  bool isOccluded(double x, double y, double z) {
+    final p = camera.pitch;
+    if (p <= 1e-6) return false; // 真上からは何も隠れない
+    final dem = mesh.dem;
+    final dx = -math.sin(camera.bearing);
+    final dy = -math.cos(camera.bearing);
+    final cell = dem.cellSize;
+    final rise = cell / math.tan(p) / camera.zScale; // 1 歩ごとに視線が上がる高さ（真の m）
+    var maxH = -double.infinity;
+    for (final h in dem.heights) {
+      if (h > maxH) maxH = h;
+    }
+    var cx = x;
+    var cy = y;
+    var cz = z + 0.5; // 自分自身のセルに引っ掛からないよう少し浮かせる
+    final steps = ((dem.width + dem.height) / cell).ceil();
+    for (var i = 0; i < steps; i++) {
+      cx += dx * cell;
+      cy += dy * cell;
+      cz += rise;
+      if (cz > maxH) return false;
+      if (cx < 0 || cy < 0 || cx > dem.width || cy > dem.height) return false;
+      if (dem.elevationAt(cx + dem.originX, cy + dem.originY) > cz) return true;
+    }
+    return false;
   }
 
   static double _distanceToSegment(Offset p, Offset a, Offset b) {

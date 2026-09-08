@@ -79,6 +79,9 @@ class TerrainMesh {
   TerrainMesh._({
     required this.bands,
     required this.cellBand,
+    required this.bandChunk,
+    required this.chunkSize,
+    required this.chunkCols,
     required this.dem,
     required this.step,
     required this.timing,
@@ -89,6 +92,20 @@ class TerrainMesh {
 
   /// 間引き後のセル番号 → 帯番号（ベクタを帯に振り分けるため）
   final Uint16List cellBand;
+
+  /// 帯番号 → チャンク番号（静的な並び。象限に依らないので、面の三角形はこれで束ねておく）
+  final Int32List bandChunk;
+
+  /// チャンクの一辺（セル数）と横方向のチャンク数
+  final int chunkSize;
+  final int chunkCols;
+
+  /// 間引き後のセル番号 → チャンク番号（静的）
+  int chunkOfCell(int cellIndex) {
+    final c = cellIndex % _cellCols;
+    final r = cellIndex ~/ _cellCols;
+    return (r ~/ chunkSize) * chunkCols + (c ~/ chunkSize);
+  }
 
   final DemGrid dem;
 
@@ -292,6 +309,7 @@ class TerrainMeshBuilder {
   late final int _chunkCols;
   late final int _chunkRows;
   late final List<_Chunk> _chunks;
+  late final Int32List _bandChunk = Int32List(_chunks.length);
 
   /// 描画順に並べたチャンク（象限が変わったときだけ作り直す）
   List<_Chunk>? _drawOrder;
@@ -355,6 +373,9 @@ class TerrainMeshBuilder {
     return TerrainMesh._(
       bands: bands,
       cellBand: _cellBand,
+      bandChunk: _bandChunk,
+      chunkSize: chunkSize,
+      chunkCols: _chunkCols,
       dem: dem,
       step: step,
       timing: TerrainMeshTiming(
@@ -389,6 +410,7 @@ class TerrainMeshBuilder {
     }
     for (var b = 0; b < order.length; b++) {
       final ch = order[b];
+      _bandChunk[b] = (ch.r0 ~/ chunkSize) * _chunkCols + (ch.c0 ~/ chunkSize);
       for (var r = ch.r0; r < ch.r0 + ch.cellRows; r++) {
         final base = r * _cellCols;
         for (var c = ch.c0; c < ch.c0 + ch.cellCols; c++) {

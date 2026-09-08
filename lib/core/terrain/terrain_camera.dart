@@ -113,25 +113,44 @@ class TerrainCamera {
       if (h > maxH) maxH = h;
       if (h < minH) minH = h;
     }
-    double terrainAt(Offset p) => dem.elevationAt(p.dx + dem.originX, p.dy + dem.originY);
-    bool inside(Offset p) => p.dx >= 0 && p.dy >= 0 && p.dx <= dem.width && p.dy <= dem.height;
+    return intersectHeightField(
+      projected,
+      (x, y) => (x >= 0 && y >= 0 && x <= dem.width && y <= dem.height)
+          ? dem.elevationAt(x + dem.originX, y + dem.originY)
+          : null,
+      minHeight: minH,
+      maxHeight: maxH,
+      stepMeters: dem.cellSize,
+    );
+  }
+
+  /// 任意の標高関数（原点基準の x, y → 標高。範囲外は null）に対する視線との交点
+  ///
+  /// [maxHeight] の高さから視線に沿って [stepMeters]（地上距離）ずつ下げ、
+  /// 初めて地形の下に潜った区間で線形補間する。標高関数が null を返す間は素通り
+  Offset? intersectHeightField(
+    Offset projected,
+    double? Function(double x, double y) elevation, {
+    required double minHeight,
+    required double maxHeight,
+    required double stepMeters,
+  }) {
     if (_sinP < 1e-6) {
       final p = unprojectAtHeight(projected, 0);
-      return inside(p) ? p : null;
+      return elevation(p.dx, p.dy) == null ? null : p;
     }
-    // 地上で 1 セルぶん進むごとの高さの刻み
-    final dz = dem.cellSize / (zScale * math.tan(pitch));
-    var zPrev = maxH + dz;
+    final dz = stepMeters / (zScale * math.tan(pitch));
+    var zPrev = maxHeight + dz;
     var pPrev = unprojectAtHeight(projected, zPrev);
-    var diffPrev = zPrev - terrainAt(pPrev); // 正 = 視線が地形の上
-    for (var z = maxH; z >= minH - dz; z -= dz) {
+    var diffPrev = 1.0;
+    for (var z = maxHeight; z >= minHeight - dz; z -= dz) {
       final p = unprojectAtHeight(projected, z);
-      // 視線は視点側の遠くから入ってくるので、DEM の外にいる間は進めるだけ
-      final diff = inside(p) ? z - terrainAt(p) : 1.0;
+      final h = elevation(p.dx, p.dy);
+      final diff = h == null ? 1.0 : z - h;
       if (diff <= 0 && diffPrev > 0) {
         final t = diffPrev / (diffPrev - diff);
         final hit = Offset(pPrev.dx + (p.dx - pPrev.dx) * t, pPrev.dy + (p.dy - pPrev.dy) * t);
-        return inside(hit) ? hit : null;
+        return elevation(hit.dx, hit.dy) == null ? null : hit;
       }
       zPrev = z;
       pPrev = p;

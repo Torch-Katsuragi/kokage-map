@@ -90,6 +90,63 @@ class LiftedPolyline {
   }
 }
 
+/// 折れ線を矩形で切って、中に残る部分の列を返す（Liang–Barsky）
+List<List<Offset>> clipPolylineToRect(List<Offset> points, Rect rect) {
+  final out = <List<Offset>>[];
+  var current = <Offset>[];
+  for (var i = 0; i + 1 < points.length; i++) {
+    final a = points[i];
+    final b = points[i + 1];
+    var t0 = 0.0;
+    var t1 = 1.0;
+    final dx = b.dx - a.dx;
+    final dy = b.dy - a.dy;
+    var visible = true;
+    for (final (p, q) in [
+      (-dx, a.dx - rect.left),
+      (dx, rect.right - a.dx),
+      (-dy, a.dy - rect.top),
+      (dy, rect.bottom - a.dy),
+    ]) {
+      if (p == 0) {
+        if (q < 0) {
+          visible = false;
+          break;
+        }
+        continue;
+      }
+      final t = q / p;
+      if (p < 0) {
+        if (t > t1) {
+          visible = false;
+          break;
+        }
+        if (t > t0) t0 = t;
+      } else {
+        if (t < t0) {
+          visible = false;
+          break;
+        }
+        if (t < t1) t1 = t;
+      }
+    }
+    if (!visible) {
+      if (current.length >= 2) out.add(current);
+      current = <Offset>[];
+      continue;
+    }
+    final ca = Offset(a.dx + dx * t0, a.dy + dy * t0);
+    final cb = Offset(a.dx + dx * t1, a.dy + dy * t1);
+    if (current.isEmpty || (current.last - ca).distance > 1e-9) {
+      if (current.length >= 2) out.add(current);
+      current = <Offset>[ca];
+    }
+    current.add(cb);
+  }
+  if (current.length >= 2) out.add(current);
+  return out;
+}
+
 /// DEM に沿って持ち上げた面（描画用）
 ///
 /// 面を三角形に分け（耳切り）、各三角形を DEM のセルで切り分け、
@@ -138,10 +195,13 @@ class LiftedPolygon {
       // 三角形の bbox に掛かるセルを走査
       final xs = [tri[0].dx, tri[1].dx, tri[2].dx];
       final ys = [tri[0].dy, tri[1].dy, tri[2].dy];
-      final c0 = (xs.reduce(math.min) / cell).floor();
-      final c1 = (xs.reduce(math.max) / cell).floor();
-      final r0 = (ys.reduce(math.min) / cell).floor();
-      final r1 = (ys.reduce(math.max) / cell).floor();
+      // 格子の外（タイルの外）は作らない
+      final maxC = (dem.width / cell).ceil() - 1;
+      final maxR = (dem.height / cell).ceil() - 1;
+      final c0 = (xs.reduce(math.min) / cell).floor().clamp(0, maxC);
+      final c1 = (xs.reduce(math.max) / cell).floor().clamp(0, maxC);
+      final r0 = (ys.reduce(math.min) / cell).floor().clamp(0, maxR);
+      final r1 = (ys.reduce(math.max) / cell).floor().clamp(0, maxR);
       for (var r = r0; r <= r1; r++) {
         for (var c = c0; c <= c1; c++) {
           final rect = Rect.fromLTWH(c * cell, r * cell, cell, cell);

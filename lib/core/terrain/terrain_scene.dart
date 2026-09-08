@@ -119,18 +119,35 @@ class TerrainSceneBuilder {
   final String labelProp;
   final TextStyle labelTextStyle;
 
+  /// [clipRect] を渡すと（DEM 原点基準）、その矩形の中だけを貼り付ける（タイル単位の貼り付け）。
+  /// 線は矩形で切り、面は矩形で切ってから貼り、点とラベルは矩形の中のものだけ
   TerrainScene build({
     Iterable<geo.Feature<geo.Geometry>> lines = const [],
     Iterable<geo.Feature<geo.Geometry>> polygons = const [],
     Iterable<geo.Feature<geo.Point>> points = const [],
+    Rect? clipRect,
   }) {
     final outLines = <LiftedPolyline>[];
     final outPolys = <LiftedPolygon>[];
     final outlines = <LiftedPolyline>[];
     final outPoints = <TerrainPoint>[];
     final labels = <TerrainLabel>[];
+    bool inside(Offset p) => clipRect == null || clipRect.contains(p);
+    bool bboxHits(List<Offset> pts) {
+      if (clipRect == null) return true;
+      var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;
+      for (final p in pts) {
+        if (p.dx < minX) minX = p.dx;
+        if (p.dx > maxX) maxX = p.dx;
+        if (p.dy < minY) minY = p.dy;
+        if (p.dy > maxY) maxY = p.dy;
+      }
+      // 幅や高さが 0 の bbox（水平な線など）でも当たるように区間で見る
+      return maxX >= clipRect.left && minX <= clipRect.right && maxY >= clipRect.top && minY <= clipRect.bottom;
+    }
 
     void label(Offset at, geo.Feature f) {
+      if (!inside(at)) return;
       final text = f.properties[labelProp];
       if (text is! String || text.isEmpty) return;
       labels.add(
@@ -149,9 +166,12 @@ class TerrainSceneBuilder {
       final style = _styleOf(f);
       for (final chain in _chainsOf(f.geometry)) {
         final pts = _toLocal(chain);
-        if (pts.length < 2) continue;
-        outLines.add(LiftedPolyline.lift(pts, mesh, color: style.lineColor, widthPx: style.lineWidth));
-        label(pts[pts.length ~/ 2], f);
+        if (pts.length < 2 || !bboxHits(pts)) continue;
+        final pieces = clipRect == null ? [pts] : clipPolylineToRect(pts, clipRect);
+        for (final piece in pieces) {
+          outLines.add(LiftedPolyline.lift(piece, mesh, color: style.lineColor, widthPx: style.lineWidth));
+        }
+        label(_midpointAlong(pts), f);
       }
     }
     for (final f in polygons) {
@@ -159,14 +179,20 @@ class TerrainSceneBuilder {
       for (final rings in _ringsOf(f.geometry)) {
         if (rings.isEmpty) continue;
         final exterior = _toLocal(rings.first);
-        if (exterior.length < 3) continue;
+        if (exterior.length < 3 || !bboxHits(exterior)) continue;
         // ⚠ 穴は塗りには反映しない（耳切りが穴なし）。縁だけ描く
-        outPolys.add(LiftedPolygon.lift(exterior, mesh, color: style.fillColor, clipCells: polygonClipCells));
+        final fillRing = clipRect == null ? exterior : LiftedPolygon.clipToRect(exterior, clipRect);
+        if (fillRing.length >= 3) {
+          outPolys.add(LiftedPolygon.lift(fillRing, mesh, color: style.fillColor, clipCells: polygonClipCells));
+        }
         for (final ring in rings) {
           final pts = _toLocal(ring);
           if (pts.length < 2) continue;
           if ((pts.first - pts.last).distance > 1e-6) pts.add(pts.first);
-          outlines.add(LiftedPolyline.lift(pts, mesh, color: style.outlineColor, widthPx: style.outlineWidth));
+          final pieces = clipRect == null ? [pts] : clipPolylineToRect(pts, clipRect);
+          for (final piece in pieces) {
+            outlines.add(LiftedPolyline.lift(piece, mesh, color: style.outlineColor, widthPx: style.outlineWidth));
+          }
         }
         var cx = 0.0;
         var cy = 0.0;
@@ -182,10 +208,29 @@ class TerrainSceneBuilder {
       final g = f.geometry;
       if (g == null) continue;
       final p = _toLocalPosition(g.position);
+      if (!inside(p)) continue;
       outPoints.add(TerrainPoint(x: p.dx, y: p.dy, color: style.pointColor, sizePx: style.pointSize));
       label(p, f);
     }
     return TerrainScene(lines: outLines, polygons: outPolys, outlines: outlines, points: outPoints, labels: labels);
+  }
+
+  /// 折れ線の長さの中点（ラベルの置き場）
+  static Offset _midpointAlong(List<Offset> pts) {
+    var total = 0.0;
+    for (var i = 0; i + 1 < pts.length; i++) {
+      total += (pts[i + 1] - pts[i]).distance;
+    }
+    var remain = total / 2;
+    for (var i = 0; i + 1 < pts.length; i++) {
+      final d = (pts[i + 1] - pts[i]).distance;
+      if (remain <= d) {
+        final t = d == 0 ? 0.0 : remain / d;
+        return pts[i] + (pts[i + 1] - pts[i]) * t;
+      }
+      remain -= d;
+    }
+    return pts.last;
   }
 
   TerrainFeatureStyle _styleOf(geo.Feature f) {

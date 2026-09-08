@@ -101,8 +101,8 @@ void main() {
       d.warmUp(async);
       final plan = d.step(async, 'idle');
       expect(plan.coverage.full, isTrue, reason: '${plan.coverage}');
-      // 核（1 周り外まで 20 枚 + 親 4 段 ≈ 30 枚）は上限に関わらず残す。それを超える先読みは trim される
-      expect(world.loadedCount, lessThanOrEqualTo(world.maxTiles + 16), reason: 'loaded ${world.loadedCount}');
+      // 核（1 周り外まで 20 枚 + 親 4 段 ≈ 30 枚 + 寄る方向の先読み ≈ 8 枚）は上限に関わらず残す。それを超える先読みは trim される
+      expect(world.loadedCount, lessThanOrEqualTo(world.maxTiles + 24), reason: 'loaded ${world.loadedCount}');
     });
   });
 
@@ -147,6 +147,20 @@ void main() {
         d.step(async, 'fast#$i');
       }
       expect(d.gaps.length, lessThanOrEqualTo(6), reason: d.gaps.join('\n'));
+    });
+  });
+
+  test('寄る: 手が空いている間に内側半分を 1 段細かく先読みしているので、1 段寄った瞬間に細かい段が出る', () {
+    fakeAsync((async) {
+      final world = simWorld();
+      final d = _Drive(world, kitayamaCamera(15), size);
+      d.warmUp(async);
+      final before = d.step(async, 'before');
+      d.camera.zoom = 16;
+      final after = d.step(async, 'after');
+      expect(after.demZoom, before.demZoom + 1, reason: '1 段寄ったら理想の段も 1 つ上がる');
+      expect(after.coverage.full, isTrue, reason: '${after.coverage}');
+      expect(after.coverage.exact, greaterThanOrEqualTo(after.coverage.ideal - 2), reason: '内側はほぼ理想の段で描ける: ${after.coverage}');
     });
   });
 

@@ -556,9 +556,9 @@ class TerrainWorld extends ChangeNotifier {
   }
 
   /// 上限を超えたぶんを、核（[keep] とその親 [ancestorLevels] 段、余白込み）以外の古いものから捨てる
-  void trim({required TileRange keep, int ancestorLevels = 3, int margin = 1}) {
+  void trim({required TileRange keep, int ancestorLevels = 3, int margin = 1, List<TileRange> alsoKeep = const []}) {
     if (_tiles.length <= maxTiles) return;
-    final core = [keep, ...ancestorRanges(keep, levels: ancestorLevels, margin: margin)];
+    final core = [keep, ...ancestorRanges(keep, levels: ancestorLevels, margin: margin), ...alsoKeep];
     bool kept(TileKey k) => core.any((r) => r.contains(k.z, k.x, k.y));
     final victims = _tiles.values.where((t) => !kept(t.key)).toList()..sort((a, b) => a.lastUsed.compareTo(b.lastUsed));
     var removed = false;

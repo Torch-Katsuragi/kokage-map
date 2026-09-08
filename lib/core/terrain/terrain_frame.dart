@@ -93,8 +93,9 @@ class TerrainFramePlanner {
     if (prev != null && (prev - z).abs() == 1) {
       final prevCount = TerrainWorld.tileRangeFor(bounds, prev).count;
       if (prev < z) {
-        // 粗い段に居た: 理想の段の枚数が上限に近い間は留まる（境目で往復しない）
-        if (TerrainWorld.tileRangeFor(bounds, z).count > maxCoreTiles * 0.6) z = prev;
+        // 粗い段に居た: 理想の段の枚数が上限すれすれの間だけ留まる（境目で往復しない。
+        // 広く取ると 1 段寄っても粗いままになる）
+        if (TerrainWorld.tileRangeFor(bounds, z).count > maxCoreTiles * 0.85) z = prev;
       } else if (prevCount <= maxCoreTiles) {
         // 細かい段に居た: 枚数が許容内なら留まる（寄っている最中に粗くしない）
         z = prev;
@@ -116,14 +117,24 @@ class TerrainFramePlanner {
   /// 直近の [plan] の内訳（ms）。引っかかりの切り分け用
   String lastTiming = '';
 
+  /// 直前に描いたタイル（画面の標高の幅を取るため）
+  List<TerrainTile> _lastTiles = const [];
+
+  /// 画面に掛かる標高の幅。直前に描いたタイルから取る（読み込み済み全部から取ると、遠くの粗い親の
+  /// 高低差で画面範囲が水増しされ、枚数が上限を超え続けて細かい段に上がれない）
+  double _screenHeightRange() {
+    var lo = double.infinity, hi = -double.infinity;
+    for (final t in _lastTiles) {
+      final (a, b) = t.raw.heightRange;
+      if (a < lo) lo = a;
+      if (b > hi) hi = b;
+    }
+    return lo.isFinite ? (hi - lo).clamp(100, 2000).toDouble() : 600;
+  }
+
   TerrainFramePlan plan(TerrainCamera camera, Size size, {bool gesturing = false}) {
     final sw = Stopwatch()..start();
-    final hr = world.heightRange;
-    final bounds = world.groundBounds(
-      camera,
-      size,
-      heightRange: hr == null ? 600 : (hr.$2 - hr.$1).clamp(100, 2000),
-    );
+    final bounds = world.groundBounds(camera, size, heightRange: _screenHeightRange());
     final zD = demZoomFor(camera, bounds);
     final range = TerrainWorld.tileRangeFor(bounds, zD);
     final prefetch = TerrainWorld.tileRangeFor(bounds, zD, margin: prefetchMargin);
@@ -139,10 +150,17 @@ class TerrainFramePlanner {
     );
     world.ensure(range, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
     world.ensure(prefetch, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
+    // 寄る方向の先読み: 手が空いているときだけ、画面の内側半分（1 段寄ったときに見える範囲）を 1 段細かい段で読んでおく
+    final inner = Rect.fromCenter(center: bounds.center, width: bounds.width / 2, height: bounds.height / 2);
+    final children = zD < world.demSource.maxZoom ? TerrainWorld.tileRangeFor(inner, zD + 1) : null;
+    if (children != null && world.pendingCount == 0) {
+      world.ensure(children, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
+    }
     final tEnsure = sw.elapsedMilliseconds;
-    world.trim(keep: prefetch, ancestorLevels: ancestorLevels);
+    world.trim(keep: prefetch, ancestorLevels: ancestorLevels, alsoKeep: [if (children != null) children]);
     final tTrim = sw.elapsedMilliseconds;
     final tiles = world.coverSet(range, camera);
+    _lastTiles = tiles;
     final tCover = sw.elapsedMilliseconds;
     final coverage = world.coverage(range);
     lastTiming = 'bounds $tBounds ensure ${tEnsure - tBounds} trim ${tTrim - tEnsure} cover ${tCover - tTrim} report ${sw.elapsedMilliseconds - tCover}';

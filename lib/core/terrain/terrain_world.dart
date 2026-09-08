@@ -137,6 +137,18 @@ class TerrainTile {
     return true;
   }
 
+  /// その場で作る粗いビルダー（16 間引き = 16×16 セル、1ms 程度）。
+  /// 細かい段が isolate から届くまでの穴埋め。読み込み済みのタイルは常に何かしら描ける
+  TerrainMeshBuilder placeholderBuilder({int chunkSize = 32, double skirtDepth = 0}) =>
+      builders[16] ??= TerrainMeshBuilder(
+        bordered,
+        textureWidth: textureWidth,
+        textureHeight: textureHeight,
+        chunkSize: chunkSize,
+        step: 16,
+        skirtDepth: skirtDepth,
+      );
+
   /// step のビルダーを isolate で作る（進行中なら同じ Future）
   Future<TerrainMeshBuilder> builderFor(int step, {int chunkSize = 32, double skirtDepth = 0}) {
     final ready = builders[step];
@@ -157,8 +169,8 @@ class TerrainTile {
       _building.remove(step);
       builders[step] = b;
       // 持つのは 2 段まで（1 段 数 MB）。新しい段から一番遠いものを捨てる
-      while (builders.length > 2) {
-        final far = builders.keys.where((k) => k != step).reduce((a, c) => (a - step).abs() >= (c - step).abs() ? a : c);
+      while (builders.keys.where((k) => k != 16).length > 2) {
+        final far = builders.keys.where((k) => k != step && k != 16).reduce((a, c) => (a - step).abs() >= (c - step).abs() ? a : c);
         builders.remove(far);
       }
       return b;

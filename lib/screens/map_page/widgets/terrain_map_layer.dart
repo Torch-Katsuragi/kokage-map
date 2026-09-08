@@ -278,6 +278,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     if (_size == Size.zero) return;
     final sw = Stopwatch()..start();
     _meshBuilds = 0;
+    _placeholders = 0;
     final plan = _planner.plan(_camera, _size, gesturing: _gesturing);
     final planMs = sw.elapsedMilliseconds;
     _lastPlan = plan;
@@ -295,8 +296,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       if (builder == null) {
         // isolate で作る。できたら描き直す
         tile.builderFor(step, chunkSize: _world.chunkSize, skirtDepth: skirt).then((_) => _scheduleRefresh());
-        // できているものがあれば（粗さが違っても）それで繋ぐ
-        if (tile.builders.isEmpty) continue;
+        // できているものがあれば（粗さが違っても）それで繋ぐ。何も無ければ粗い穴埋めをその場で作る
+        if (tile.builders.isEmpty) {
+          _placeholders++;
+          drawables.add(_drawable(tile, tile.placeholderBuilder(chunkSize: _world.chunkSize, skirtDepth: skirt), 16));
+          continue;
+        }
         final near = tile.builders.keys.reduce((a, b) => (a - step).abs() <= (b - step).abs() ? a : b);
         drawables.add(_drawable(tile, tile.builders[near]!, near));
         continue;
@@ -310,11 +315,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     _repaint.value++;
     _notifyCamera();
     if (sw.elapsedMilliseconds > 120) {
-      AppLogger.debug('[3D] refresh ${sw.elapsedMilliseconds}ms (plan $planMs, meshes built $_meshBuilds, tiles ${drawables.length})');
+      AppLogger.debug('[3D] refresh ${sw.elapsedMilliseconds}ms (plan $planMs, meshes built $_meshBuilds, placeholders $_placeholders, tiles ${drawables.length})');
     }
   }
 
   int _meshBuilds = 0;
+  int _placeholders = 0;
 
   /// 生きているタイルのビルダーに紐づかないメッシュを捨てる（GPU 側の頂点も返す）。
   /// ビルダーをキーに持つので、ここで外さないとタイルを捨ててもビルダーごと残る
@@ -676,7 +682,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
         }
         AppLogger.debug('[3D] drive t=${t.toStringAsFixed(1)}s z=${_camera.zoom.toStringAsFixed(2)} '
             'dem=${plan?.demZoom} ${plan?.coverage} tiles=${_world.loadedCount} pending=${_world.pendingCount} '
-            'ui=${stat(_driveUiMs)} raster=${stat(_driveRasterMs)} gapFrames=$_driveGapFrames/$_driveFrames');
+            'ui=${stat(_driveUiMs)} raster=${stat(_driveRasterMs)} placeholders=$_placeholders gapFrames=$_driveGapFrames/$_driveFrames');
         _driveUiMs.clear();
         _driveRasterMs.clear();
       }

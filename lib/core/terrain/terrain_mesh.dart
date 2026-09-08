@@ -204,6 +204,23 @@ class _Chunk {
   }
 }
 
+/// [TerrainMeshBuilder.buildInIsolate] の引数
+class TerrainMeshBuilderArgs {
+  const TerrainMeshBuilderArgs({
+    required this.dem,
+    required this.textureWidth,
+    required this.textureHeight,
+    this.chunkSize = 32,
+    this.step = 1,
+  });
+
+  final DemGrid dem;
+  final int textureWidth;
+  final int textureHeight;
+  final int chunkSize;
+  final int step;
+}
+
 /// [TerrainMesh] を繰り返し組むための作業台
 ///
 /// カメラに依らないもの（間引き格子・頂点の陰影色・テクスチャ座標・チャンク分割）は
@@ -289,7 +306,17 @@ class TerrainMeshBuilder {
         );
       }
     }
+    _bandChunk = Int32List(_chunks.length);
   }
+
+  /// isolate で作る（`compute` 向け）。前計算が 512² で 200ms 前後あるので UI スレッドを塞がない
+  static TerrainMeshBuilder buildInIsolate(TerrainMeshBuilderArgs a) => TerrainMeshBuilder(
+        a.dem,
+        textureWidth: a.textureWidth,
+        textureHeight: a.textureHeight,
+        chunkSize: a.chunkSize,
+        step: a.step,
+      );
 
   final DemGrid dem;
 
@@ -309,7 +336,7 @@ class TerrainMeshBuilder {
   late final int _chunkCols;
   late final int _chunkRows;
   late final List<_Chunk> _chunks;
-  late final Int32List _bandChunk = Int32List(_chunks.length);
+  late final Int32List _bandChunk;
 
   /// 描画順に並べたチャンク（象限が変わったときだけ作り直す）
   List<_Chunk>? _drawOrder;

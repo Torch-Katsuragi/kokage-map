@@ -106,7 +106,11 @@ class TerrainSceneBuilder {
     this.styleKeyProp = 'k-style',
     this.labelProp = 'k-label',
     this.labelTextStyle = const TextStyle(fontSize: 12, color: Colors.black),
+    this.polygonClipCells = 1,
   });
+
+  /// 面を切り分ける格子の粗さ（DEM セルの倍数）。大きい面が多いなら 4 程度
+  final int polygonClipCells;
 
   final TerrainMesh mesh;
   final Map<String, TerrainFeatureStyle> stylesByKey;
@@ -157,7 +161,7 @@ class TerrainSceneBuilder {
         final exterior = _toLocal(rings.first);
         if (exterior.length < 3) continue;
         // ⚠ 穴は塗りには反映しない（耳切りが穴なし）。縁だけ描く
-        outPolys.add(LiftedPolygon.lift(exterior, mesh, color: style.fillColor));
+        outPolys.add(LiftedPolygon.lift(exterior, mesh, color: style.fillColor, clipCells: polygonClipCells));
         for (final ring in rings) {
           final pts = _toLocal(ring);
           if (pts.length < 2) continue;

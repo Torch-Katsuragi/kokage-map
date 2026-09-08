@@ -124,10 +124,22 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   TerrainPainter? _painter;
   final _repaint = ValueNotifier<int>(0);
   final Map<int, _SceneBundle> _sceneByStep = {};
+  // 部分キャッシュ（step ごと）。何が変わったかに応じて必要な部分だけ組み直す
+  final Map<int, TerrainScene> _normalByStep = {};
+  final Map<int, TerrainScene> _selectedByStep = {};
+  final Map<int, TerrainScene> _photosByStep = {};
+  final Map<int, TerrainScene> _verticesByStep = {};
+  final Map<int, TerrainScene> _trackByStep = {};
+  final Map<int, TerrainScene> _partyByStep = {};
+  List<Object?> _normalKey = const [];
+  List<Object?> _selectedKey = const [];
+  int _trackLength = -1;
   Size _size = Size.zero;
   int _generation = 0;
   TileRange? _loadedRange;
   bool _loading = false;
+  /// デコード済みタイル画像。3D を出入りしても使い回す（192 枚 ≒ 48MB 上限）
+  static final _tileImages = TileImageCache(capacity: 192);
 
   // ジェスチャ
   double _scaleStart = 1;
@@ -187,6 +199,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     final range = TileRange.around(center.longitude, center.latitude, z, 2);
     _loading = true;
     setState(() => _status = '標高タイル取得中…');
+    final sw = Stopwatch()..start();
     try {
       final dem = await DemTileLoader(
         source: DemTileSource.aws,
@@ -199,6 +212,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       );
       if (!mounted || gen != _generation) return;
       _loadedRange = range;
+      final tDem = sw.elapsedMilliseconds;
       var minH = double.infinity;
       var maxH = -double.infinity;
       for (final h in dem.heights) {
@@ -212,14 +226,17 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       final cells = (dem.cols - 1) * (dem.rows - 1);
       _coarseStep = math.max(2, math.sqrt(cells / _gestureCellBudget).ceil());
       _builders.clear();
-      _sceneByStep.clear();
+      _clearSceneCaches();
 
       // 背景地図: アクティブなプロバイダを opacity で重ねる（MapLibre と同じ式）
       final layers = widget.baseMapService.activeLayerConfig;
       if (layers.isEmpty) throw StateError('背景地図が選ばれていません');
       final texZoom = z + 2;
       final texRange = range.zoomIn(2);
-      final composer = RasterTileComposer(fetcher: (tz, tx, ty) => widget.baseMapService.getTile(layers.first.$1, tz, tx, ty));
+      final composer = RasterTileComposer(
+        fetcher: (tz, tx, ty) => widget.baseMapService.getTile(layers.first.$1, tz, tx, ty),
+        imageCache: _tileImages,
+      );
       _attribution = layers.map((l) => l.$1.attribution).join(' / ');
       _attribution = '$_attribution / ${DemTileSource.aws.attribution}';
       final tex = await composer.composeLayers(
@@ -241,10 +258,26 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       _texture = tex;
       _textureWidth = tex.width;
       _textureHeight = tex.height;
-      _builders.clear();
-      AppLogger.debug('[3D] DEM z$z ${dem.cols}x${dem.rows} texture z$texZoom ${tex.width}x${tex.height}');
+      final tTex = sw.elapsedMilliseconds - tDem;
+      // ビルダーの前計算（頂点の陰影・チャンク分割）は isolate で。全解像度と LOD の 2 つを先に作っておく
+      final built = await Future.wait([
+        for (final step in {1, _coarseStep})
+          compute(
+            TerrainMeshBuilder.buildInIsolate,
+            TerrainMeshBuilderArgs(dem: dem, textureWidth: tex.width, textureHeight: tex.height, step: step),
+          ),
+      ]);
+      if (!mounted || gen != _generation) return;
+      _builders
+        ..clear()
+        ..addEntries([for (final b in built) MapEntry(b.step, b)]);
+      final tBuilder = sw.elapsedMilliseconds - tDem - tTex;
       setState(() => _status = '');
+      final t0 = sw.elapsedMilliseconds;
       _rebuildMesh();
+      AppLogger.debug('[3D] DEM z$z ${dem.cols}x${dem.rows} texture z$texZoom ${tex.width}x${tex.height} '
+          'timing: dem=${tDem}ms texture=${tTex}ms builders(isolate)=${tBuilder}ms '
+          'mesh+scene=${sw.elapsedMilliseconds - t0}ms total=${sw.elapsedMilliseconds}ms');
     } catch (e) {
       AppLogger.debug('[3D] 地形の取得に失敗: $e');
       if (mounted) setState(() => _status = '地形を取得できませんでした: $e');
@@ -279,8 +312,22 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   // ── シーン ──────────────────────────────────────────
 
   void _onSceneRevision() {
+    // 何が変わったかはキーで判定するので、ここでは束だけ捨てる
     _sceneByStep.clear();
     _applyScene();
+  }
+
+  void _clearSceneCaches() {
+    _sceneByStep.clear();
+    _normalByStep.clear();
+    _selectedByStep.clear();
+    _photosByStep.clear();
+    _verticesByStep.clear();
+    _trackByStep.clear();
+    _partyByStep.clear();
+    _normalKey = const [];
+    _selectedKey = const [];
+    _trackLength = -1;
   }
 
   TerrainFeatureStyle _styleFromGroup(MapStyleGroup g) => TerrainFeatureStyle(
@@ -322,38 +369,70 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   }
 
   _SceneBundle _buildScene(TerrainMesh mesh) {
+    final sw = Stopwatch()..start();
+    final bundle = _buildSceneInner(mesh);
+    AppLogger.debug('[3D] scene lift step=${mesh.step}: ${sw.elapsedMilliseconds}ms '
+        '(lines ${bundle.normal.lines.length} polys ${bundle.normal.polygons.length} '
+        'tris ${bundle.normal.polygons.fold<int>(0, (a, p) => a + p.triangleCount)})');
+    return bundle;
+  }
+
+  /// 面を切り分ける格子の粗さ。DEM が細かいほど粗くして、片の数を 20m 角程度に抑える
+  int _clipCellsFor(TerrainMesh mesh) =>
+      math.max(1, (20 / (mesh.dem.cellSize * mesh.step)).round());
+
+  static bool _sameKey(List<Object?> a, List<Object?> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
+  _SceneBundle _buildSceneInner(TerrainMesh mesh) {
+    final step = mesh.step;
     final defaultStyle = _defaultStyle();
     final groups = {for (final g in widget.styleGroups()) g.key: _styleFromGroup(g)};
     final labelStyle = TextStyle(
       fontSize: layerStyleSettings.getDouble(labelFontSizeDef),
       color: layerStyleSettings.getColor(labelColorDef),
     );
-    final normal = TerrainSceneBuilder(
+    final clip = _clipCellsFor(mesh);
+    final g = widget.geoJson;
+
+    // 通常のフィーチャ: GeoJSON のリストが同じ（rebuildAll されていない）なら持ち直さない
+    final normalKey = [g.polylines, g.polygons, g.markers];
+    if (!_sameKey(normalKey, _normalKey)) {
+      _normalByStep.clear();
+      _normalKey = normalKey;
+    }
+    final normal = _normalByStep[step] ??= TerrainSceneBuilder(
       mesh: mesh,
       stylesByKey: groups,
       defaultStyle: defaultStyle,
       styleKeyProp: MapSourceManager.kStyleProp,
       labelProp: FeatureGeoJsonInput.labelPropKey,
       labelTextStyle: labelStyle,
-    ).build(
-      lines: widget.geoJson.polylines,
-      polygons: widget.geoJson.polygons,
-      points: widget.geoJson.markers,
-    );
+      polygonClipCells: clip,
+    ).build(lines: g.polylines, polygons: g.polygons, points: g.markers);
+
+    // 選択: 選択リストが差し替わったときだけ
+    final selectedKey = [g.selectedPolylines, g.selectedPolygons, g.selectedMarkers];
+    if (!_sameKey(selectedKey, _selectedKey)) {
+      _selectedByStep.clear();
+      _selectedKey = selectedKey;
+    }
     final selStyle = _selectedStyle(defaultStyle);
-    final selected = TerrainSceneBuilder(
+    final selected = _selectedByStep[step] ??= TerrainSceneBuilder(
       mesh: mesh,
       stylesByKey: {for (final e in groups.entries) e.key: _selectedStyle(e.value)},
       defaultStyle: selStyle,
       styleKeyProp: MapSourceManager.kStyleProp,
       labelProp: '__no_label__',
-    ).build(
-      lines: widget.geoJson.selectedPolylines,
-      polygons: widget.geoJson.selectedPolygons,
-      points: widget.geoJson.selectedMarkers,
-    );
+      polygonClipCells: clip,
+    ).build(lines: g.selectedPolylines, polygons: g.selectedPolygons, points: g.selectedMarkers);
     // 線・面の頂点（設定で有効なとき。MapLibre 側の Circle レイヤに相当）
-    final vertexScene = TerrainSceneBuilder(
+    final vertexScene = _verticesByStep[step] ??= TerrainSceneBuilder(
       mesh: mesh,
       stylesByKey: const {},
       defaultStyle: TerrainFeatureStyle(
@@ -373,7 +452,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       ],
     );
     // 写真: 琥珀色の点 + 名前
-    final photos = TerrainSceneBuilder(
+    final photos = _photosByStep[step] ??= TerrainSceneBuilder(
       mesh: mesh,
       stylesByKey: const {},
       defaultStyle: const TerrainFeatureStyle(
@@ -388,9 +467,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       labelProp: 'name',
       labelTextStyle: labelStyle,
     ).build(points: widget.geoJson.images);
-    // GPS 軌跡: MapLibre 側の k-gps-track-line と同じ見た目（青緑・細め）
+    // GPS 軌跡: MapLibre 側の k-gps-track-line と同じ見た目（青緑・細め）。点数が変わったときだけ
     final track = widget.gpsTrack();
-    final trackScene = track.length < 2
+    if (track.length != _trackLength) {
+      _trackByStep.clear();
+      _trackLength = track.length;
+    }
+    final trackScene = _trackByStep[step] ??= track.length < 2
         ? TerrainScene.empty
         : TerrainSceneBuilder(
             mesh: mesh,
@@ -414,6 +497,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
             ],
           );
     // パーティ（ルーム）の他メンバー: 橙の点 + 名前、圏外区間の軌跡は同系色の細線
+    // （partySessionProvider の変化で _partyByStep を捨てる）
     final session = ref.read(partySessionProvider);
     const peerStyle = TerrainFeatureStyle(
       lineColor: Color(0x80FF5722),
@@ -425,7 +509,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       pointSize: 8,
     );
     bool listed(String uid) => session.members.isEmpty || session.members.any((m) => m.uid == uid);
-    final party = TerrainSceneBuilder(
+    final party = _partyByStep[step] ??= TerrainSceneBuilder(
       mesh: mesh,
       stylesByKey: const {},
       defaultStyle: peerStyle,
@@ -508,7 +592,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   void _rebuildMesh({bool coarse = false}) {
     if (_dem == null) return;
     final step = coarse ? _coarseStep : 1;
-    final mesh = _builderFor(step).build(_camera);
+    final swB = Stopwatch()..start();
+    final builder = _builderFor(step);
+    final tBuilder = swB.elapsedMilliseconds;
+    final mesh = builder.build(_camera);
+    if (tBuilder > 5) {
+      AppLogger.debug('[3D] builder step=$step: ${tBuilder}ms, mesh build ${mesh.buildTime.inMilliseconds}ms');
+    }
     _mesh = mesh;
     _painter ??= TerrainPainter(
       mesh: mesh,
@@ -567,22 +657,34 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     _focalStart = d.focalPoint;
   }
 
+  /// 1 本指 = 3D の回転（左右で方位、上下で傾き）。2 本指 = 平面移動と拡縮（松本の指定・2026-09-08）
+  ///
+  /// 移動と拡縮は Canvas の変換だけで済むのでメッシュを組み直さない。回転・傾きは LOD で組み直す
   void _onScaleUpdate(ScaleUpdateDetails d) {
     if (d.pointerCount >= 2) {
+      final before = _camera.scale;
       _camera.scale = (_scaleStart * d.scale).clamp(
         TerrainCamera.scaleForZoom(8),
         TerrainCamera.scaleForZoom(22),
       );
-      _camera.bearing = _bearingStart - d.rotation;
-      final dy = d.focalPoint.dy - _focalStart.dy;
-      _camera.pitch = (_pitchStart - dy * 0.004).clamp(0.0, 70 * math.pi / 180);
-      _rebuildMesh(coarse: true);
-    } else {
+      // 拡縮の中心を焦点に留める: 焦点の世界座標が変わらないように中心をずらす
+      if (before != _camera.scale && _size != Size.zero) {
+        final off = d.localFocalPoint - Offset(_size.width / 2, _size.height / 2);
+        final k = 1 - before / _camera.scale;
+        final move = _camera.unprojectPan(off * k);
+        _camera.centerX += move.dx;
+        _camera.centerY += move.dy;
+      }
       final move = _camera.unprojectPan(d.focalPointDelta);
       _camera.centerX -= move.dx;
       _camera.centerY -= move.dy;
       _repaint.value++;
       _notifyCamera();
+    } else {
+      final delta = d.focalPoint - _focalStart;
+      _camera.bearing = _bearingStart + delta.dx * 0.006;
+      _camera.pitch = (_pitchStart - delta.dy * 0.004).clamp(0.0, 70 * math.pi / 180);
+      _rebuildMesh(coarse: true);
     }
   }
 
@@ -602,6 +704,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   Widget build(BuildContext context) {
     // パーティの位置更新でシーンを組み直す（peers / tracks が変わるたび）
     ref.listen(partySessionProvider, (_, _) {
+      _partyByStep.clear();
       _sceneByStep.clear();
       _applyScene();
     });

@@ -4,7 +4,7 @@
 
 ### ⛰ 3D terrain mode (experimental)
 
-- Tap ⛰ on the left toolbar and the usual map tilts over the terrain. Pan with one finger; pinch, rotate and drag vertically with two fingers to zoom, rotate and tilt. The slider on the right edge also tilts
+- Tap ⛰ on the left toolbar and the usual map tilts over the terrain. Drag with one finger to rotate and tilt; use two fingers to pan and zoom. The slider on the right edge also tilts
 - Compartments, routes, survey points, photos, today's GPS track, your location and room members are draped on the terrain. Tap-to-select and info cards work in 3D
 - Drawing tools (Pen, GPS) return to the top-down 2D view automatically. The map position is kept when you leave 3D
 - Elevation comes from AWS Terrain Tiles (global, no key); the background is your selected basemap. ⚠ Elevation needs a network connection, so for now this is meant for the office

@@ -99,6 +99,8 @@ Android は `--route /terrain-spike` か intent extra `route`）。製品機能�
   （`lib/screens/map_page/widgets/terrain_map_layer.dart`）に切り替える。MapLibre は下に生きたまま
 - 入るとき MapLibre のカメラ（center / zoom / bearing）を引き継いで 45° 傾け、出るときに書き戻す。
   **真上ロック = 3D を抜けること**。ペン / GPS ツールを選ぶと自動で抜ける。3D 中はパン / 選択だけ
+- **操作（松本の指定・2026-09-08）: 1 本指 = 回転と傾き（左右で方位、上下で pitch）、2 本指 = 平面移動と拡縮**（焦点を留める）。
+  移動と拡縮は Canvas の変換だけで済み、メッシュを組み直すのは回転・傾きのときだけ（LOD）
 - 同じシーン: `FeatureGeoJsonCache` の GeoJSON（`k-style` / `k-label`）→ `TerrainSceneBuilder`。
   View 固有スタイル（`MapStyleGroup`）・全体設定の既定・選択色を反映。写真（琥珀の点 + 名前）、
   今日の GPS 軌跡（未 Consolidation 分）、現在位置（青い点）も載せる。
@@ -110,6 +112,13 @@ Android は `--route /terrain-spike` か intent extra `route`）。製品機能�
   ズームが 2 段変わったら読み直す（古い DEM は届くまで描き続ける）。
   標高タイルは擬似プロバイダ `aws_terrarium`（`BaseMapType.terrain`）として `BaseMapService.getTile` を通す →
   背景地図と同じ MBTiles キャッシュに入り、**一度見た範囲は圏外でも 3D になる**（祖先タイルからの切り出しは粗い標高になる）。
+- **読み込みの速さ**（Pixel 9 debug・キャッシュ済み、2026-09-08 夜の計測）: 初版は 1 回 0.85〜1.0 秒が全部 UI スレッドで、さらに
+  全フィーチャの持ち上げ直し（150〜190ms）が GPS 更新や同期のたびに走っていた（15 回/数十秒）。対処:
+  ①持ち上げは部分キャッシュ（フィーチャ本体は GeoJSON のリストが同じ限り持ち直さない。軌跡・パーティ・選択は別々）
+  ②面の切り分け格子を約 20m 角に粗くする（78k → 5.8k 三角形、190ms → 28ms）
+  ③DEM の PNG デコードとメッシュの前計算を isolate（`compute`）に
+  ④デコード済みタイル画像の LRU（192 枚・3D の出入りで使い回す）→ 2 回目の背景合成 663ms → 47ms。
+  結果: 1 回目 1.2 秒（UI を塞ぐのは 85ms）、2 回目以降 0.4 秒（同 55ms）
   背景: `BaseMapService.getTile` をアクティブなプロバイダの累積補正済み opacity で合成（MapLibre と同じ式）
 - 未対応: パーティの他メンバー・頂点マーカー・クラスタ・オーバーレイ画像（GeoTIFF）・描画プレビュー・
   外部機器ツールのオーバーレイ・等高線。DeviceTool（TruPulse）は 3D 中は選べない

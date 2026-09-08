@@ -17,6 +17,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
@@ -177,32 +178,14 @@ class DemTileLoader {
   Future<DemGrid> load(TileRange range, {TileProgress? onProgress}) async {
     final z = range.z;
     final bytesList = await _fetchRange(_fetch, range, onProgress: onProgress);
+    // PNG のデコードと格子の組み立ては純 Dart で数百 ms 掛かるので isolate へ（web では同じスレッド）
+    final heights = await compute(
+      _assembleHeights,
+      _AssembleArgs(bytesList: bytesList, width: range.width, height: range.height, encoding: source.encoding),
+    );
     const ts = WebMercator.tileSize;
     final cols = range.width * ts;
     final rows = range.height * ts;
-    final heights = Float32List(cols * rows);
-    var k = 0;
-    for (var ty = range.y0; ty <= range.y1; ty++) {
-      for (var tx = range.x0; tx <= range.x1; tx++) {
-        final bytes = bytesList[k++];
-        if (bytes == null) continue;
-        final decoded = img.decodePng(bytes);
-        if (decoded == null) continue;
-        final rgb = decoded.convert(format: img.Format.uint8, numChannels: 3).toUint8List();
-        final baseC = (tx - range.x0) * ts;
-        // タイル画像は北が 0 行目。DemGrid は南が 0 行目
-        final baseR = (range.y1 - ty) * ts;
-        for (var iy = 0; iy < ts; iy++) {
-          final r = baseR + (ts - 1 - iy);
-          final rowOff = r * cols + baseC;
-          final src = iy * ts * 3;
-          for (var ix = 0; ix < ts; ix++) {
-            final p = src + ix * 3;
-            heights[rowOff + ix] = source.decode(rgb[p], rgb[p + 1], rgb[p + 2]);
-          }
-        }
-      }
-    }
     final mpp = WebMercator.metersPerPixel(z);
     return DemGrid(
       cols: cols,
@@ -215,15 +198,61 @@ class DemTileLoader {
   }
 }
 
+class _AssembleArgs {
+  const _AssembleArgs({required this.bytesList, required this.width, required this.height, required this.encoding});
+
+  final List<Uint8List?> bytesList;
+  final int width;
+  final int height;
+  final DemEncoding encoding;
+}
+
+/// タイル画像列 → 標高格子（南が 0 行目）。isolate で走る
+Float32List _assembleHeights(_AssembleArgs a) {
+  const ts = WebMercator.tileSize;
+  final cols = a.width * ts;
+  final rows = a.height * ts;
+  final heights = Float32List(cols * rows);
+  double decode(int r, int g, int b) => switch (a.encoding) {
+        DemEncoding.terrarium => r * 256 + g + b / 256 - 32768,
+        DemEncoding.mapboxRgb => -10000 + (r * 65536 + g * 256 + b) * 0.1,
+      };
+  var k = 0;
+  for (var ty = 0; ty < a.height; ty++) {
+    for (var tx = 0; tx < a.width; tx++) {
+      final bytes = a.bytesList[k++];
+      if (bytes == null) continue;
+      final decoded = img.decodePng(bytes);
+      if (decoded == null) continue;
+      final rgb = decoded.convert(format: img.Format.uint8, numChannels: 3).toUint8List();
+      final baseC = tx * ts;
+      // タイル画像は北が 0 行目。DemGrid は南が 0 行目
+      final baseR = (a.height - 1 - ty) * ts;
+      for (var iy = 0; iy < ts; iy++) {
+        final r = baseR + (ts - 1 - iy);
+        final rowOff = r * cols + baseC;
+        final src = iy * ts * 3;
+        for (var ix = 0; ix < ts; ix++) {
+          final p = src + ix * 3;
+          heights[rowOff + ix] = decode(rgb[p], rgb[p + 1], rgb[p + 2]);
+        }
+      }
+    }
+  }
+  return heights;
+}
+
 /// ラスタタイル（背景地図）を 1 枚の画像に合成する
 ///
 /// 設計どおり「表示範囲のタイルを 1 枚に合成してから ImageShader で貼る」。
 class RasterTileComposer {
-  RasterTileComposer({String? urlTemplate, TileFetcher? fetcher})
+  RasterTileComposer({String? urlTemplate, TileFetcher? fetcher, TileImageCache? imageCache})
       : assert(urlTemplate != null || fetcher != null),
-        _fetch = fetcher ?? httpTileFetcher(urlTemplate!);
+        _fetch = fetcher ?? httpTileFetcher(urlTemplate!),
+        _imageCache = imageCache;
 
   final TileFetcher _fetch;
+  final TileImageCache? _imageCache;
 
   /// [range] のタイルを敷き詰めた画像を返す（幅 = width×256）
   Future<ui.Image> compose(TileRange range, {TileProgress? onProgress}) =>
@@ -242,43 +271,105 @@ class RasterTileComposer {
       ui.Rect.fromLTWH(0, 0, range.width * ts * 1.0, range.height * ts * 1.0),
       ui.Paint()..color = const ui.Color(0xFFDDDDDD),
     );
-    final images = <ui.Image>[];
+    final owned = <ui.Image>[]; // キャッシュに入れなかった画像（合成後に捨てる）
     var doneTotal = 0;
     final total = range.count * layers.length;
-    for (final (fetch, opacity) in layers) {
-      final bytesList = await _fetchRange(
-        fetch,
-        range,
-        onProgress: (d, _) => onProgress?.call(doneTotal + d, total),
-      );
-      doneTotal += range.count;
-      final paint = ui.Paint()..color = ui.Color.fromRGBO(255, 255, 255, opacity.clamp(0.0, 1.0));
-      var k = 0;
+    for (var li = 0; li < layers.length; li++) {
+      final (fetch, opacity) = layers[li];
+      final cache = _imageCache;
+      // キャッシュに無いタイルだけ取る
+      final missing = <(int, int)>[];
       for (var ty = range.y0; ty <= range.y1; ty++) {
         for (var tx = range.x0; tx <= range.x1; tx++) {
-          final bytes = bytesList[k++];
-          if (bytes == null) continue;
-          try {
-            final codec = await ui.instantiateImageCodec(bytes);
-            final frame = await codec.getNextFrame();
-            images.add(frame.image);
-            canvas.drawImage(
-              frame.image,
-              ui.Offset((tx - range.x0) * ts * 1.0, (ty - range.y0) * ts * 1.0),
-              paint,
-            );
-          } catch (_) {
-            // 壊れたタイルは飛ばす
+          if (cache == null || cache.get(li, range.z, tx, ty) == null) missing.add((tx, ty));
+        }
+      }
+      final fetched = <(int, int), Uint8List?>{};
+      if (missing.isNotEmpty) {
+        var next = 0;
+        var done = 0;
+        Future<void> worker() async {
+          while (true) {
+            final i = next++;
+            if (i >= missing.length) return;
+            final (tx, ty) = missing[i];
+            fetched[(tx, ty)] = await fetch(range.z, tx, ty);
+            done++;
+            onProgress?.call(doneTotal + done, total);
           }
+        }
+
+        await Future.wait([for (var k = 0; k < 8; k++) worker()]);
+      }
+      doneTotal += range.count;
+      final paint = ui.Paint()..color = ui.Color.fromRGBO(255, 255, 255, opacity.clamp(0.0, 1.0));
+      for (var ty = range.y0; ty <= range.y1; ty++) {
+        for (var tx = range.x0; tx <= range.x1; tx++) {
+          var image = cache?.get(li, range.z, tx, ty);
+          if (image == null) {
+            final bytes = fetched[(tx, ty)];
+            if (bytes == null) continue;
+            try {
+              final codec = await ui.instantiateImageCodec(bytes);
+              final frame = await codec.getNextFrame();
+              image = frame.image;
+            } catch (_) {
+              continue; // 壊れたタイルは飛ばす
+            }
+            if (cache != null) {
+              cache.put(li, range.z, tx, ty, image);
+            } else {
+              owned.add(image);
+            }
+          }
+          canvas.drawImage(
+            image,
+            ui.Offset((tx - range.x0) * ts * 1.0, (ty - range.y0) * ts * 1.0),
+            paint,
+          );
         }
       }
     }
     final picture = recorder.endRecording();
     final image = await picture.toImage(range.width * ts, range.height * ts);
     picture.dispose();
-    for (final i in images) {
+    for (final i in owned) {
       i.dispose();
     }
     return image;
+  }
+}
+
+/// デコード済みタイル画像の LRU（層番号・z・x・y で引く）
+///
+/// パンで隣へ読み直すとき、重なるタイルを再取得・再デコードしないため。
+class TileImageCache {
+  TileImageCache({this.capacity = 512});
+
+  final int capacity;
+  final _map = <String, ui.Image>{};
+
+  String _key(int layer, int z, int x, int y) => '$layer/$z/$x/$y';
+
+  ui.Image? get(int layer, int z, int x, int y) {
+    final k = _key(layer, z, x, y);
+    final v = _map.remove(k);
+    if (v != null) _map[k] = v; // 末尾へ（最近使った）
+    return v;
+  }
+
+  void put(int layer, int z, int x, int y, ui.Image image) {
+    _map[_key(layer, z, x, y)] = image;
+    while (_map.length > capacity) {
+      final oldest = _map.keys.first;
+      _map.remove(oldest)?.dispose();
+    }
+  }
+
+  void clear() {
+    for (final i in _map.values) {
+      i.dispose();
+    }
+    _map.clear();
   }
 }

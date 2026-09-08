@@ -127,9 +127,11 @@ class LiftedPolygon {
 
   int get triangleCount => cells.length;
 
-  static LiftedPolygon lift(List<Offset> ring, TerrainMesh mesh, {required Color color}) {
+  /// [clipCells] は面を切り分ける格子の粗さ（DEM セルの倍数）。
+  /// 4.8m の DEM で 1 だと 500m 四方の林班が 1 万片になる。4 なら 1/16 で、見た目の差はほぼ無い
+  static LiftedPolygon lift(List<Offset> ring, TerrainMesh mesh, {required Color color, int clipCells = 1}) {
     final dem = mesh.dem;
-    final cell = dem.cellSize * mesh.step;
+    final cell = dem.cellSize * mesh.step * clipCells;
     final out = <double>[];
     final cells = <int>[];
     for (final tri in earClip(ring)) {

@@ -18,11 +18,13 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geobase/geobase.dart' as geo;
 import 'package:root_maps/core/terrain/contours.dart';
 import 'package:root_maps/core/terrain/dem_grid.dart';
 import 'package:root_maps/core/terrain/terrain_camera.dart';
 import 'package:root_maps/core/terrain/terrain_mesh.dart';
 import 'package:root_maps/core/terrain/terrain_painter.dart';
+import 'package:root_maps/core/terrain/terrain_scene.dart';
 import 'package:root_maps/core/terrain/web_mercator.dart';
 
 void main() {
@@ -346,6 +348,81 @@ void main() {
       final hit = cam.intersectTerrain(cam.project(35, 45, 999), dem);
       expect(hit!.dx, closeTo(35, 1e-9));
       expect(hit.dy, closeTo(45, 1e-9));
+    });
+  });
+
+  group('TerrainSceneBuilder', () {
+    test('GeoJSON のフィーチャが Mercator の DEM 座標に載り、k-style / k-label が効く', () {
+      // 北山村役場付近に 1km 四方の DEM（z14 相当 9.55m 格子）
+      const lon0 = 135.965;
+      const lat0 = 33.925;
+      final originX = WebMercator.xFromLon(lon0);
+      final originY = WebMercator.yFromLat(lat0);
+      final dem = DemGrid(
+        cols: 101,
+        rows: 101,
+        originX: originX,
+        originY: originY,
+        cellSize: 10,
+        heights: Float32List(101 * 101)..fillRange(0, 101 * 101, 100),
+      );
+      final cam = TerrainCamera(centerX: originX + 500, centerY: originY + 500, scale: 1);
+      final mesh = TerrainMesh.build(dem, cam, textureWidth: 4, textureHeight: 4, chunkSize: 25);
+      final builder = TerrainSceneBuilder(
+        mesh: mesh,
+        stylesByKey: {
+          'view-a': const TerrainFeatureStyle(
+            lineColor: Color(0xFF00FF00),
+            lineWidth: 5,
+            fillColor: Color(0x80FF0000),
+            outlineColor: Color(0xFFFF0000),
+            outlineWidth: 1,
+            pointColor: Color(0xFF0000FF),
+            pointSize: 8,
+          ),
+        },
+      );
+      geo.Geographic ll(double dlon, double dlat) => geo.Geographic(lon: lon0 + dlon, lat: lat0 + dlat);
+      final scene = builder.build(
+        lines: [
+          geo.Feature<geo.Geometry>(
+            geometry: geo.LineString.from([ll(0.001, 0.001), ll(0.004, 0.003)]),
+            properties: {'k-style': 'view-a', 'k-label': '道'},
+          ),
+          geo.Feature<geo.Geometry>(geometry: geo.LineString.from([ll(0.002, 0.002), ll(0.003, 0.002)])),
+        ],
+        polygons: [
+          geo.Feature<geo.Geometry>(
+            geometry: geo.Polygon.from([
+              [ll(0.001, 0.004), ll(0.003, 0.004), ll(0.003, 0.006), ll(0.001, 0.006), ll(0.001, 0.004)],
+            ]),
+            properties: {'k-label': '区画'},
+          ),
+        ],
+        points: [
+          geo.Feature<geo.Point>(
+            geometry: geo.Point(ll(0.005, 0.005)),
+            properties: {'k-style': 'view-a', 'k-label': 'P'},
+          ),
+        ],
+      );
+      expect(scene.lines.length, 2);
+      expect(scene.lines[0].color, const Color(0xFF00FF00)); // view-a
+      expect(scene.lines[0].widthPx, 5);
+      expect(scene.lines[1].color, TerrainFeatureStyle.fallback.lineColor); // キー無し → 既定
+      expect(scene.polygons.length, 1);
+      expect(scene.outlines.length, 1);
+      expect(scene.points.length, 1);
+      expect(scene.points[0].sizePx, 8);
+      expect(scene.labels.map((l) => l.painter.plainText).toList(), ['道', '区画', 'P']);
+      // 座標: 経度 +0.005° ≈ 東へ 557m（Mercator）、緯度 +0.005° ≈ 北へ 671m（1/cos φ 倍）
+      final p = scene.points[0];
+      expect(p.x, closeTo(WebMercator.xFromLon(lon0 + 0.005) - originX, 1e-6));
+      expect(p.y, closeTo(WebMercator.yFromLat(lat0 + 0.005) - originY, 1e-6));
+      expect(p.x, closeTo(557, 5));
+      expect(p.y, closeTo(671, 5));
+      // 線は DEM（100m）で持ち上がっている
+      expect(scene.lines[0].xyz[2], closeTo(100, 1e-6));
     });
   });
 }

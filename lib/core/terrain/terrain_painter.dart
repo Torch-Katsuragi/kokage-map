@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 
 import 'terrain_camera.dart';
 import 'terrain_mesh.dart';
+import 'terrain_scene.dart';
 
 /// DEM に沿って持ち上げた折れ線（描画用）
 ///
@@ -356,6 +357,7 @@ class TerrainPainter extends CustomPainter {
     required this.labels,
     this.polygons = const [],
     this.segmentSets = const [],
+    this.points = const [],
     this.onPainted,
     super.repaint,
   });
@@ -368,6 +370,9 @@ class TerrainPainter extends CustomPainter {
 
   /// 等高線などの線分の束（面の上、線の下に描く）
   List<LiftedSegments> segmentSets;
+
+  /// 点フィーチャ（ビルボードの丸。ラベルの直前に画面座標で描く）
+  List<TerrainPoint> points;
   List<TerrainLabel> labels;
 
   /// 選択中（強調表示）
@@ -516,8 +521,26 @@ class TerrainPainter extends CustomPainter {
     }
     canvas.restore();
 
-    // ラベル（画面座標）。重なりは先勝ちで間引く
+    // 点（画面座標のビルボード）。地形に隠れているものは描かない
     final viewport = Offset.zero & size;
+    final pointPaint = Paint();
+    final pointEdge = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = Colors.white;
+    for (var i = 0; i < points.length; i++) {
+      final pt = points[i];
+      final z = dem.elevationAt(pt.x + dem.originX, pt.y + dem.originY);
+      final sp = toScreen(pt.x, pt.y, z, size, pc);
+      if (!viewport.inflate(16).contains(sp)) continue;
+      if (isOccluded(pt.x, pt.y, z)) continue;
+      final isSel = selected?.kind == 'point' && selected?.index == i;
+      pointPaint.color = isSel ? Colors.yellow : pt.color;
+      canvas.drawCircle(sp, isSel ? pt.sizePx + 3 : pt.sizePx, pointPaint);
+      canvas.drawCircle(sp, isSel ? pt.sizePx + 3 : pt.sizePx, pointEdge);
+    }
+
+    // ラベル（画面座標）。重なりは先勝ちで間引く
     final placed = <Rect>[];
     visibleLabels.clear();
     for (var i = 0; i < labels.length; i++) {
@@ -574,6 +597,13 @@ class TerrainPainter extends CustomPainter {
       final l = labels[i];
       final sp = toScreen(l.x, l.y, dem.elevationAt(l.x + dem.originX, l.y + dem.originY), size, pc);
       consider('label', i, (sp - point).distance);
+    }
+    for (var i = 0; i < points.length; i++) {
+      final pt = points[i];
+      final z = dem.elevationAt(pt.x + dem.originX, pt.y + dem.originY);
+      final sp = toScreen(pt.x, pt.y, z, size, pc);
+      final d = (sp - point).distance - pt.sizePx;
+      if (d <= tolerancePx && !isOccluded(pt.x, pt.y, z)) consider('point', i, d);
     }
     if (best != null) return best;
     for (var li = 0; li < lines.length; li++) {

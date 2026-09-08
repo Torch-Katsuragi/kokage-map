@@ -30,6 +30,7 @@ tags: [technical, design, 3d, dem, terrain]
 | `terrain_mesh.dart` | `TerrainMeshBuilder`: チャンク（32×32 セル）ごとの共有頂点、象限走査の並び順、LOD（間引き） |
 | `terrain_painter.dart` | `TerrainPainter`: 地形（テクスチャ × 陰影色）→ 面 → 線分の束 → 線 → ラベル。`pick` でヒットテスト |
 | `contours.dart` | DEM から等高線（marching squares） |
+| `terrain_scene.dart` | `TerrainSceneBuilder`: GeoJSON（geobase の Feature + `k-style` / `k-label`）→ 持ち上げ済みの線・面・縁・点・ラベル（seam ②の実体） |
 
 開発用の画面は `lib/screens/terrain_spike/`（設定 > アプリ情報、debug / profile のみ。web は `#/terrain-spike`、
 Android は `--route /terrain-spike` か intent extra `route`）。製品機能ではない。
@@ -61,14 +62,17 @@ Android は `--route /terrain-spike` か intent extra `route`）。製品機能�
   チャンクごとに束ねて投影バッファを使い回す。三角形 ∩ 矩形は凸なので扇状分割で正しい
 - 線分の束（`LiftedSegments`）: 等高線など本数の多いもの。チャンクごとに `drawRawPoints(PointMode.lines)` 1 回
   （Path 2.5 万本で paint 60ms → 5ms）
-- ラベル: ビルボード。地形に隠れない方針で最後に画面座標で描く
+- 点（`TerrainPoint`）: ビルボードの丸。地形に隠れていれば描かない
+- ラベル: ビルボード。地形に隠れない方針で最後に画面座標で描く。重なりは先勝ちで間引き、間引かれた分は点だけ残す
 
 ### ヒットテスト（`TerrainPainter.pick`）
 
 ラベル > 線 > 面 の順。線は線分までの距離、面は投影した三角形の内外。
 線と面は **地形に隠れていれば当てない**（`isOccluded`: 点から視点側へ視線の地上投影をセル幅ずつなぞり、
 `1/tan(pitch)` で上がる視線より地形が高ければ隠れている。視線が DEM の最高点を超えたら打ち切り）。
-ラベルは最後に上描きしているので当てる。
+ラベルは最後に上描きしているので当てる（間引かれたラベルは当てない）。
+画面座標 → 地形上の点は `unproject`（`TerrainCamera.intersectTerrain`: DEM の最高点から視線に沿って高さを下げ、地形に潜った区間で線形補間）。
+`TerrainCamera.zoom` は MapLibre と同じ定義（`scale = 256·2^zoom / 2πR`）。
 
 ## 計測（2026-09-08・Pixel 9・debug、AOT もほぼ同じ）
 
@@ -93,14 +97,14 @@ Android は `--route /terrain-spike` か intent extra `route`）。製品機能�
 
 - DEM は Terrarium タイルで持つ（`DemTileSource` プリセット。既定は AWS Terrain Tiles、全球・キー不要）。
   地理院 DEM は `tool/` の CLI で Terrarium に焼く（未実装）。dir 同梱の読み取りも未実装
-- 背景は `RasterTileComposer` で表示範囲を 1 枚に合成。いまはネットから直接。本番はアプリのタイルキャッシュから読む
+- 背景は `RasterTileComposer` で表示範囲を 1 枚に合成。タイル取得は `TileFetcher` 関数で差し替えられる（既定は http。本番は `BaseMapService.getTile` を渡す）
 - 出典表示: 地理院タイル・Terrain Tiles とも必要。スパイクでは地図面の左下に出している
 
 ## 未着手
 
 1. シーンモデルの切り出し（MapLibre を外すための抽象化）。既存のスタイル解釈を描画系から分離する
 2. 真上ロック・カメラ同期・2 モードの交代
-3. ラベルの衝突判定（MapLibre と同じく画面内の重なりを間引く）
+3. `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）
 4. 等高線の描画コスト: 間引いた格子から引いても 1.7 万本で raster 30〜40ms（Impeller の細線）。
    ジェスチャ中はさらに間引くか、等高線だけ間隔を広げる
 5. DEM の dir 同梱・焼き込み CLI・タイルキャッシュからのテクスチャ合成

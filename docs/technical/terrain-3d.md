@@ -93,6 +93,25 @@ Android は `--route /terrain-spike` か intent extra `route`）。製品機能�
 - **`FrameTiming`（ui / raster）を見ないと原因を取り違える**。最初の版は UI 時間の半分が `setState` だった
 - ⚠ Chrome / 内蔵ブラウザのウィンドウが隠れていると rAF が絞られ、web の fps は測れない（未計測）
 
+## 本体への接続（2026-09-08 夜・`feat(3d)`）
+
+- **ツールバーの「3D 地形」ボタン**（`terrain3dModeProvider`）で地図面を `TerrainMapLayer`
+  （`lib/screens/map_page/widgets/terrain_map_layer.dart`）に切り替える。MapLibre は下に生きたまま
+- 入るとき MapLibre のカメラ（center / zoom / bearing）を引き継いで 45° 傾け、出るときに書き戻す。
+  **真上ロック = 3D を抜けること**。ペン / GPS ツールを選ぶと自動で抜ける。3D 中はパン / 選択だけ
+- 同じシーン: `FeatureGeoJsonCache` の GeoJSON（`k-style` / `k-label`）→ `TerrainSceneBuilder`。
+  View 固有スタイル（`MapStyleGroup`）・全体設定の既定・選択色を反映。写真（琥珀の点 + 名前）、
+  今日の GPS 軌跡（未 Consolidation 分）、現在位置（青い点）も載せる。
+  更新は `terrainSceneRevision`（`_pushFeaturesToSources` と GPS 履歴更新で増える）
+- **投影の差し替え**: 3D 中は `IMapState.offsetToLatLng` / `latLngToOffset` が `TerrainProjection`
+  （視線と地形の交点 / 地形の高さで持ち上げた投影）を通る。選択ツール・投げ縄はそのまま動く
+  （実機で確認: 3D 中のタップで情報カード、2D に戻っても選択が残る）
+- DEM: 表示ズーム −1 の 2×2 枚（zoom 16 → z15・4.8m・512²）。中心が範囲の内側 60% から外れるか
+  ズームが 2 段変わったら読み直す（古い DEM は届くまで描き続ける）。
+  背景: `BaseMapService.getTile` をアクティブなプロバイダの累積補正済み opacity で合成（MapLibre と同じ式）
+- 未対応: パーティの他メンバー・頂点マーカー・クラスタ・オーバーレイ画像（GeoTIFF）・描画プレビュー・
+  外部機器ツールのオーバーレイ・等高線。DeviceTool（TruPulse）は 3D 中は選べない
+
 ## データ側
 
 - DEM は Terrarium タイルで持つ（`DemTileSource` プリセット。既定は AWS Terrain Tiles、全球・キー不要）。
@@ -102,9 +121,9 @@ Android は `--route /terrain-spike` か intent extra `route`）。製品機能�
 
 ## 未着手
 
-1. シーンモデルの切り出し（MapLibre を外すための抽象化）。既存のスタイル解釈を描画系から分離する
-2. 真上ロック・カメラ同期・2 モードの交代
-3. `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）
+1. `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）。いまは `TerrainMapLayer` が
+   `FeatureGeoJsonCache` と `MapStyleGroup` を直接読む形で seam ② を先取りしている
+2. 3D 中の機能追い付き（上の「未対応」）。パーティのマーカーと頂点が先
 4. 等高線の描画コスト: 間引いた格子から引いても 1.7 万本で raster 30〜40ms（Impeller の細線）。
    ジェスチャ中はさらに間引くか、等高線だけ間隔を広げる
 5. DEM の dir 同梱・焼き込み CLI・タイルキャッシュからのテクスチャ合成

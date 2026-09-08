@@ -19,6 +19,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/terrain/dem_grid.dart';
@@ -56,6 +57,7 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
     required this.sceneRevision,
     required this.styleGroups,
     required this.currentLocation,
+    required this.gpsTrack,
     required this.onProjectionChanged,
     required this.mapBearingNotifier,
     required this.cameraTickNotifier,
@@ -74,6 +76,9 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   final List<MapStyleGroup> Function() styleGroups;
 
   final LatLng? currentLocation;
+
+  /// 今日の GPS 軌跡（未 Consolidation 分。Consolidation 済みはレイヤ経由で届く）
+  final List<LatLng> Function() gpsTrack;
 
   /// 投影の登録 / 解除（3D に入るとき / 出るとき）
   final void Function(TerrainProjection? projection) onProjectionChanged;
@@ -328,7 +333,48 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       polygons: widget.geoJson.selectedPolygons,
       points: widget.geoJson.selectedMarkers,
     );
-    return _SceneBundle(normal: normal, selected: selected);
+    // 写真: 琥珀色の点 + 名前
+    final photos = TerrainSceneBuilder(
+      mesh: mesh,
+      stylesByKey: const {},
+      defaultStyle: const TerrainFeatureStyle(
+        lineColor: Colors.amber,
+        lineWidth: 1,
+        fillColor: Colors.amber,
+        outlineColor: Colors.amber,
+        outlineWidth: 1,
+        pointColor: Colors.amber,
+        pointSize: 7,
+      ),
+      labelProp: 'name',
+      labelTextStyle: labelStyle,
+    ).build(points: widget.geoJson.images);
+    // GPS 軌跡: MapLibre 側の k-gps-track-line と同じ見た目（青緑・細め）
+    final track = widget.gpsTrack();
+    final trackScene = track.length < 2
+        ? TerrainScene.empty
+        : TerrainSceneBuilder(
+            mesh: mesh,
+            stylesByKey: const {},
+            defaultStyle: const TerrainFeatureStyle(
+              lineColor: Color(0xCC00897B),
+              lineWidth: 3,
+              fillColor: Color(0x00000000),
+              outlineColor: Color(0x00000000),
+              outlineWidth: 0,
+              pointColor: Color(0xFF00897B),
+              pointSize: 4,
+            ),
+          ).build(
+            lines: [
+              geo.Feature<geo.Geometry>(
+                geometry: geo.LineString.from([
+                  for (final p in track) geo.Geographic(lon: p.longitude, lat: p.latitude),
+                ]),
+              ),
+            ],
+          );
+    return _SceneBundle(normal: normal, selected: selected, photos: photos, track: trackScene);
   }
 
   void _applyScene() {
@@ -341,6 +387,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     painter
       ..mesh = mesh
       ..lines = [
+        ...bundle.track.lines,
         ...bundle.normal.outlines,
         ...bundle.normal.lines,
         ...bundle.selected.outlines,
@@ -349,6 +396,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       ..polygons = [...bundle.normal.polygons, ...bundle.selected.polygons]
       ..points = [
         ...bundle.normal.points,
+        ...bundle.photos.points,
         ...bundle.selected.points,
         if (loc != null)
           TerrainPoint(
@@ -358,7 +406,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
             sizePx: 9,
           ),
       ]
-      ..labels = bundle.normal.labels;
+      ..labels = [...bundle.normal.labels, ...bundle.photos.labels];
     _repaint.value++;
   }
 
@@ -512,8 +560,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
 }
 
 class _SceneBundle {
-  const _SceneBundle({required this.normal, required this.selected});
+  const _SceneBundle({
+    required this.normal,
+    required this.selected,
+    required this.photos,
+    required this.track,
+  });
 
   final TerrainScene normal;
   final TerrainScene selected;
+  final TerrainScene photos;
+  final TerrainScene track;
 }

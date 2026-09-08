@@ -368,6 +368,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       sourceManager.updateGpsTrack(
         gpsHistoryRecorder.todayPoints.toGeographics(),
       );
+      terrainSceneRevision.value++; // 3D 地図面にも軌跡を流す
     }
   }
 

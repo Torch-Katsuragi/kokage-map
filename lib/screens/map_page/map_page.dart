@@ -403,6 +403,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                               sceneRevision: terrainSceneRevision,
                               styleGroups: () => sourceManager.styleGroups,
                               currentLocation: currentLocation,
+                              gpsTrack: () => gpsHistoryRecorder.todayPoints,
                               onProjectionChanged: (p) => terrainProjection = p,
                               mapBearingNotifier: mapBearingNotifier,
                               cameraTickNotifier: cameraTickNotifier,

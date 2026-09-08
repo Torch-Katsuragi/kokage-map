@@ -44,6 +44,8 @@ import '../../../utils/app_logger.dart';
 import '../../layer_style_settings_screen.dart';
 import '../feature_geojson_cache.dart';
 
+part 'terrain_map_layer_drive.dart';
+
 /// 3D 地形モードの地図面（v2: タイルの世界）
 ///
 /// MapLibre の地図の上に重ね、同じシーン（[FeatureGeoJsonCache] の GeoJSON と
@@ -133,7 +135,7 @@ class _TileScene {
   final List<TerrainLabel> labels;
 }
 
-class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements TerrainProjection {
+class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _TerrainDrive implements TerrainProjection {
   static const _defaultPitchDeg = 45.0;
 
   /// 標高タイルを背景地図と同じ経路（キャッシュ → ネット → 祖先タイルから切り出し）で取るための擬似プロバイダ。
@@ -152,26 +154,19 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   /// デコード済みタイル画像。3D を出入りしても使い回す（256 枚 ≒ 64MB 上限）
   static final _tileImages = TileImageCache(capacity: 128); // 256² RGBA × 128 ≈ 32MB
 
+  @override
   late final TerrainCamera _camera;
+  @override
   late final TerrainWorld _world;
   late final TerrainFramePlanner _planner;
   late final TerrainWorldPainter _painter;
+  @override
   TerrainFramePlan? _lastPlan;
 
-  // ドライブモード（debug のみ）: 台本でカメラを動かし、被覆率とフレーム時間をログに出す
-  Ticker? _drive;
-  Timer? _stallProbe;
-  (double, double, double, double) _driveOrigin = (0, 0, 0, 0); // centerX, centerY, zoom, bearing
-  Duration _driveStart = Duration.zero;
-  Duration _driveLastLog = Duration.zero;
-  final List<int> _driveUiMs = [];
-  final List<int> _driveRasterMs = [];
-  int _driveGapFrames = 0;
-  int _driveFrames = 0;
-  TimingsCallback? _driveTimings;
   final _repaint = ValueNotifier<int>(0);
   Size _size = Size.zero;
   String _attribution = '';
+  @override
   bool _gesturing = false;
 
   // タイルごとのキャッシュ。キーにビルダー（縁が変わると別物になる）と borderMask を含めるので、
@@ -274,6 +269,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   // ── フレームの組み立て ──────────────────────────────
 
   /// 見える範囲のタイルを揃え、描けるものを描画順に painter へ渡す
+  @override
   void _refresh() {
     if (_size == Size.zero) return;
     final sw = Stopwatch()..start();
@@ -322,6 +318,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   }
 
   int _meshBuilds = 0;
+  @override
   int _placeholders = 0;
   int _sceneBuilds = 0;
 
@@ -612,100 +609,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   void _onScaleEnd(ScaleEndDetails d) {
     _gesturing = false;
     _refresh();
-  }
-
-  // ── ドライブモード ──────────────────────────────────
-
-  /// 台本: 0〜8s 東へ 3km、8〜16s 引き 4 段、16〜24s 寄り 5 段、24〜32s 一回転、32〜40s 傾け往復、40〜48s 西へ 3km
-  void _startDrive() {
-    if (!kDebugMode || _drive != null) return;
-    _driveOrigin = (_camera.centerX, _camera.centerY, _camera.zoom, _camera.bearing);
-    _driveGapFrames = 0;
-    _driveFrames = 0;
-    _driveUiMs.clear();
-    _driveRasterMs.clear();
-    _driveTimings = (timings) {
-      for (final t in timings) {
-        _driveUiMs.add(t.buildDuration.inMilliseconds);
-        _driveRasterMs.add(t.rasterDuration.inMilliseconds);
-      }
-    };
-    SchedulerBinding.instance.addTimingsCallback(_driveTimings!);
-    var last = DateTime.now();
-    _stallProbe = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      final now = DateTime.now();
-      final gap = now.difference(last).inMilliseconds;
-      if (gap > 400) AppLogger.debug('[3D] stall ${gap}ms (isolate blocked)');
-      last = now;
-    });
-    _drive = Ticker((elapsed) {
-      try {
-        _driveTick(elapsed);
-      } catch (e, st) {
-        AppLogger.error('[3D] drive error', e, st);
-        _stopDrive();
-      }
-    })
-      ..start();
-  }
-
-  void _driveTick(Duration elapsed) {
-    final (startX, startY, startZoom, startBearing) = _driveOrigin;
-    {
-      if (_driveStart == Duration.zero) _driveStart = elapsed;
-      final t = (elapsed - _driveStart).inMilliseconds / 1000;
-      if (t > 48) {
-        _stopDrive();
-        return;
-      }
-      if (t < 8) {
-        _camera.centerX = startX + 3000 * (t / 8);
-      } else if (t < 16) {
-        _camera.zoom = startZoom - 4 * ((t - 8) / 8);
-      } else if (t < 24) {
-        _camera.zoom = startZoom - 4 + 5 * ((t - 16) / 8);
-      } else if (t < 32) {
-        _camera.bearing = startBearing + 2 * math.pi * ((t - 24) / 8);
-      } else if (t < 40) {
-        _camera.pitch = (35 + 35 * math.sin((t - 32) / 8 * 2 * math.pi)) * math.pi / 180;
-      } else {
-        _camera.centerX = startX + 3000 - 3000 * ((t - 40) / 8);
-        _camera.centerY = startY;
-      }
-      _gesturing = t >= 24 && t < 40;
-      _refresh();
-      _driveFrames++;
-      final plan = _lastPlan;
-      if (plan != null && !plan.coverage.full) _driveGapFrames++;
-      if (elapsed - _driveLastLog >= const Duration(milliseconds: 500)) {
-        _driveLastLog = elapsed;
-        String stat(List<int> v) {
-          if (v.isEmpty) return '-';
-          final s = [...v]..sort();
-          return '${s[s.length ~/ 2]}/${s.last}';
-        }
-        AppLogger.debug('[3D] drive t=${t.toStringAsFixed(1)}s z=${_camera.zoom.toStringAsFixed(2)} '
-            'dem=${plan?.demZoom} ${plan?.coverage} tiles=${_world.loadedCount} pending=${_world.pendingCount} '
-            'ui=${stat(_driveUiMs)} raster=${stat(_driveRasterMs)} placeholders=$_placeholders gapFrames=$_driveGapFrames/$_driveFrames');
-        _driveUiMs.clear();
-        _driveRasterMs.clear();
-      }
-    }
-  }
-
-  void _stopDrive() {
-    final d = _drive;
-    if (d == null) return;
-    d.dispose();
-    _drive = null;
-    _stallProbe?.cancel();
-    _stallProbe = null;
-    _driveStart = Duration.zero;
-    if (_driveTimings != null) SchedulerBinding.instance.removeTimingsCallback(_driveTimings!);
-    _driveTimings = null;
-    _gesturing = false;
-    AppLogger.debug('[3D] drive end: gapFrames=$_driveGapFrames/$_driveFrames tiles=${_world.loadedCount}');
-    if (mounted) _refresh();
   }
 
   /// ズームボタン（web / PC 向け。画面中心を留めて 1 段）

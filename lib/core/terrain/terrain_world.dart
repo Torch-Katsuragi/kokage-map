@@ -37,6 +37,17 @@ class TileKey {
 
   TileKey get east => TileKey(z, x + 1, y);
 
+  /// 親（1 段粗い）
+  TileKey get parent => TileKey(z - 1, x >> 1, y >> 1);
+
+  /// 子 4 枚（1 段細かい）。北西・北東・南西・南東
+  List<TileKey> get children => [
+        TileKey(z + 1, x * 2, y * 2),
+        TileKey(z + 1, x * 2 + 1, y * 2),
+        TileKey(z + 1, x * 2, y * 2 + 1),
+        TileKey(z + 1, x * 2 + 1, y * 2 + 1),
+      ];
+
   /// 北隣（タイル y は南向きに増える）
   TileKey get north => TileKey(z, x, y - 1);
   TileKey get northEast => TileKey(z, x + 1, y - 1);
@@ -126,7 +137,7 @@ class TerrainTile {
   }
 
   /// step のビルダーを isolate で作る（進行中なら同じ Future）
-  Future<TerrainMeshBuilder> builderFor(int step, {int chunkSize = 32}) {
+  Future<TerrainMeshBuilder> builderFor(int step, {int chunkSize = 32, double skirtDepth = 0}) {
     final ready = builders[step];
     if (ready != null) return Future.value(ready);
     return _building[step] ??= compute(
@@ -137,6 +148,7 @@ class TerrainTile {
         textureHeight: textureHeight,
         chunkSize: chunkSize,
         step: step,
+        skirtDepth: skirtDepth,
       ),
     ).then((b) {
       // 作っている間に縁が変わっていたら捨てる（呼び出し側が作り直す）
@@ -183,9 +195,12 @@ class TerrainWorld extends ChangeNotifier {
   final TileImageCache _imageCache;
 
   final LinkedHashMap<TileKey, TerrainTile> _tiles = LinkedHashMap();
-  final Set<TileKey> _pending = {};
-  final List<TileKey> _queue = [];
-  int _active = 0;
+
+  /// 読み込み中（isolate や通信の最中）。待ち行列とは別
+  final Set<TileKey> _inFlight = {};
+
+  /// 待ち行列（優先順）。`ensure` のたびに作り直す
+  List<TileKey> _queue = [];
   int _clock = 0;
 
   /// タイルの追加・削除・縁の更新で上がる（描画側の再構築の合図）
@@ -195,7 +210,7 @@ class TerrainWorld extends ChangeNotifier {
   String? lastError;
 
   int get loadedCount => _tiles.length;
-  int get pendingCount => _pending.length;
+  int get pendingCount => _inFlight.length + _queue.length;
 
   /// 表示ズームから DEM のズーム（1 段荒い = 1 セルが画面 2px）
   int demZoomFor(double zoom) =>
@@ -208,6 +223,14 @@ class TerrainWorld extends ChangeNotifier {
   }
 
   bool has(TileKey key) => _tiles.containsKey(key);
+
+  /// テスト用: 読み込みを通さずにタイルを置く
+  @visibleForTesting
+  void addTileForTest(TerrainTile tile) {
+    _tiles[tile.key] = tile;
+    _refreshBorders(tile.key);
+    revision++;
+  }
 
   /// カメラの見える地面の範囲（Mercator）
   ///
@@ -259,14 +282,23 @@ class TerrainWorld extends ChangeNotifier {
   }
 
   /// [range] のタイルを揃える。無いものは中心に近い順に読み始める（非同期・非ブロック）
-  void ensure(TileRange range, {required double centerX, required double centerY}) {
+  ///
+  /// [replaceQueue] が true なら古い待ち行列を捨てる（今見えているものを優先）。
+  /// 先読み（親の段など）は false で後ろに足す。読み込み中のものは影響を受けない
+  void ensure(
+    TileRange range, {
+    required double centerX,
+    required double centerY,
+    bool evict = true,
+    bool replaceQueue = true,
+  }) {
     final wanted = <TileKey>[];
     for (var y = range.y0; y <= range.y1; y++) {
       for (var x = range.x0; x <= range.x1; x++) {
         final key = TileKey(range.z, x, y);
         if (_tiles.containsKey(key)) {
           _tiles[key]!.lastUsed = ++_clock;
-        } else if (!_pending.contains(key)) {
+        } else if (!_inFlight.contains(key)) {
           wanted.add(key);
         }
       }
@@ -277,25 +309,23 @@ class TerrainWorld extends ChangeNotifier {
       return (cx - centerX) * (cx - centerX) + (cy - centerY) * (cy - centerY);
     }
     wanted.sort((a, b) => dist(a).compareTo(dist(b)));
-    // 古い待ち行列は捨てて、今見えているものを優先
-    _queue
-      ..removeWhere((k) => !_pending.contains(k) || true)
-      ..addAll(wanted);
-    for (final k in wanted) {
-      _pending.add(k);
+    if (replaceQueue) {
+      _queue = wanted;
+    } else {
+      final seen = _queue.toSet();
+      _queue.addAll(wanted.where((k) => !seen.contains(k)));
     }
     _pump();
-    _evict(keep: range);
+    if (evict) _evict(keep: range);
   }
 
   void _pump() {
-    while (_active < concurrency && _queue.isNotEmpty) {
+    while (_inFlight.length < concurrency && _queue.isNotEmpty) {
       final key = _queue.removeAt(0);
-      if (!_pending.contains(key)) continue;
-      _active++;
+      if (_inFlight.contains(key) || _tiles.containsKey(key)) continue;
+      _inFlight.add(key);
       unawaited(_load(key).whenComplete(() {
-        _active--;
-        _pending.remove(key);
+        _inFlight.remove(key);
         _pump();
       }));
     }
@@ -307,7 +337,7 @@ class TerrainWorld extends ChangeNotifier {
       final dem = await DemTileLoader(source: demSource, fetcher: demFetcher).load(range);
       final texRange = range.zoomIn(textureZoomOffset);
       final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache).compose(texRange);
-      if (!_pending.contains(key)) {
+      if (_tiles.containsKey(key)) {
         tex.dispose();
         return;
       }
@@ -337,10 +367,17 @@ class TerrainWorld extends ChangeNotifier {
 
   void _evict({required TileRange keep}) {
     if (_tiles.length <= maxTiles) return;
-    final victims = _tiles.values.where((t) {
-      final k = t.key;
-      return !(k.z == keep.z && k.x >= keep.x0 && k.x <= keep.x1 && k.y >= keep.y0 && k.y <= keep.y1);
-    }).toList()
+    // 見えている範囲と、その親（2 段）は残す
+    bool kept(TileKey k) {
+      var r = keep;
+      for (var i = 0; i <= 2; i++) {
+        if (k.z == r.z && k.x >= r.x0 && k.x <= r.x1 && k.y >= r.y0 && k.y <= r.y1) return true;
+        if (r.z == 0) break;
+        r = TileRange(z: r.z - 1, x0: r.x0 >> 1, y0: r.y0 >> 1, x1: r.x1 >> 1, y1: r.y1 >> 1);
+      }
+      return false;
+    }
+    final victims = _tiles.values.where((t) => !kept(t.key)).toList()
       ..sort((a, b) => a.lastUsed.compareTo(b.lastUsed));
     for (final v in victims) {
       if (_tiles.length <= maxTiles) break;
@@ -350,7 +387,73 @@ class TerrainWorld extends ChangeNotifier {
     revision++;
   }
 
-  /// 読み込み済みのタイルを描画順（奥 → 手前）で返す
+  /// 理想の範囲を「手持ちで最良のタイル」で埋めて描画順（奥 → 手前）で返す
+  ///
+  /// 理想のタイルが無ければ、読み込み済みの親（[maxAncestorLevels] 段まで）か、
+  /// 読み込み済みの子（1 段）で埋める。ズームが変わった瞬間に何も無くなるのを防ぐ
+  /// （タイル地図エンジンの「親子で保持」と同じ）。同じ親は 1 回だけ、最初に出会った位置で描く
+  /// （親の領域は子の領域の和なので、奥 → 手前の順序を壊さない）。
+  List<TerrainTile> coverSet(TileRange range, TerrainCamera camera, {int maxAncestorLevels = 3}) {
+    final out = <TerrainTile>[];
+    final emitted = <TileKey>{};
+    void emit(TerrainTile t) {
+      if (emitted.add(t.key)) out.add(t);
+    }
+
+    for (final key in _idealOrder(range, camera)) {
+      final exact = _tiles[key];
+      if (exact != null) {
+        exact.lastUsed = ++_clock;
+        emit(exact);
+        continue;
+      }
+      var k = key;
+      TerrainTile? ancestor;
+      for (var i = 0; i < maxAncestorLevels && k.z > 0; i++) {
+        k = k.parent;
+        ancestor = _tiles[k];
+        if (ancestor != null) break;
+      }
+      if (ancestor != null) {
+        ancestor.lastUsed = ++_clock;
+        emit(ancestor);
+        continue;
+      }
+      for (final c in _childrenInOrder(key, camera)) {
+        final t = _tiles[c];
+        if (t != null) {
+          t.lastUsed = ++_clock;
+          emit(t);
+        }
+      }
+    }
+    return out;
+  }
+
+  /// 理想のタイル番号を奥 → 手前の順に
+  List<TileKey> _idealOrder(TileRange range, TerrainCamera camera) {
+    final eastFar = math.sin(camera.bearing) > 0;
+    final northFar = math.cos(camera.bearing) > 0;
+    final ys = [for (var y = range.y0; y <= range.y1; y++) y];
+    final xs = [for (var x = range.x0; x <= range.x1; x++) x];
+    if (!northFar) ys.setAll(0, ys.reversed.toList());
+    if (!eastFar) xs.setAll(0, xs.reversed.toList());
+    return [for (final y in ys) for (final x in xs) TileKey(range.z, x, y)];
+  }
+
+  List<TileKey> _childrenInOrder(TileKey key, TerrainCamera camera) =>
+      _idealOrder(TileRange(z: key.z + 1, x0: key.x * 2, y0: key.y * 2, x1: key.x * 2 + 1, y1: key.y * 2 + 1), camera);
+
+  /// 親の段（[levels] 段ぶん）を先読みする。引いた瞬間に手元にあるように
+  void ensureAncestors(TileRange range, {required double centerX, required double centerY, int levels = 2}) {
+    var r = range;
+    for (var i = 0; i < levels && r.z > demSource.minZoom; i++) {
+      r = TileRange(z: r.z - 1, x0: r.x0 >> 1, y0: r.y0 >> 1, x1: r.x1 >> 1, y1: r.y1 >> 1);
+      ensure(r, centerX: centerX, centerY: centerY, evict: false, replaceQueue: false);
+    }
+  }
+
+  /// 読み込み済みのタイルを描画順（奥 → 手前）で返す（理想の段だけ）
   List<TerrainTile> drawOrder(TileRange range, TerrainCamera camera) {
     final sinB = math.sin(camera.bearing);
     final cosB = math.cos(camera.bearing);
@@ -399,8 +502,7 @@ class TerrainWorld extends ChangeNotifier {
       t.dispose();
     }
     _tiles.clear();
-    _pending.clear();
-    _queue.clear();
+    _queue = [];
     revision++;
     notifyListeners();
   }

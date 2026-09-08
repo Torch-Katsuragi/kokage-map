@@ -169,4 +169,45 @@ void main() {
       expect(scene.labels.length, 1); // 中点 (50,20) は中
     });
   });
+
+  group('coverSet（手持ちで最良の被覆）', () {
+    test('理想の段が無ければ親で埋め、同じ親は 1 回だけ。子があれば子で埋める', () {
+      final w = TerrainWorld(
+        demSource: DemTileSource.aws,
+        demFetcher: (z, x, y) async => null,
+        textureFetcher: (z, x, y) async => null,
+      );
+      const parent = TileKey(12, 100, 100);
+      w.addTileForTest(fakeTile(parent, 0));
+      // 理想: z13 の 2×2（= parent の子 4 枚）
+      const range = TileRange(z: 13, x0: 200, y0: 200, x1: 201, y1: 201);
+      final cam = TerrainCamera(centerX: 0, centerY: 0, scale: 1);
+      final cover = w.coverSet(range, cam);
+      expect(cover.map((t) => t.key).toList(), [parent]);
+      // 子が 1 枚届いたら、その場所は子、残りは親
+      w.addTileForTest(fakeTile(const TileKey(13, 200, 200), 0));
+      final cover2 = w.coverSet(range, cam).map((t) => t.key).toList();
+      expect(cover2, containsAll([parent, const TileKey(13, 200, 200)]));
+      expect(cover2.length, 2);
+      // 理想が z12 で無く、子（z13）だけあるとき
+      final w2 = TerrainWorld(
+        demSource: DemTileSource.aws,
+        demFetcher: (z, x, y) async => null,
+        textureFetcher: (z, x, y) async => null,
+      );
+      w2.addTileForTest(fakeTile(const TileKey(13, 200, 201), 0));
+      final cover3 = w2.coverSet(const TileRange(z: 12, x0: 100, y0: 100, x1: 100, y1: 100), cam);
+      expect(cover3.map((t) => t.key).toList(), [const TileKey(13, 200, 201)]);
+    });
+
+    test('スカートは 4 辺ぶんの帯', () {
+      final dem = DemGrid.synthetic(cols: 9, rows: 9, cellSize: 10);
+      final cam = TerrainCamera(centerX: 40, centerY: 40, scale: 1, pitch: 0.5);
+      final builder = TerrainMeshBuilder(dem, textureWidth: 8, textureHeight: 8, chunkSize: 4, skirtDepth: 20);
+      final mesh = builder.build(cam);
+      expect(mesh.skirt, isNotNull);
+      final plain = TerrainMeshBuilder(dem, textureWidth: 8, textureHeight: 8, chunkSize: 4).build(cam);
+      expect(plain.skirt, isNull);
+    });
+  });
 }

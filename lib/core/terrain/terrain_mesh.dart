@@ -85,7 +85,12 @@ class TerrainMesh {
     required this.dem,
     required this.step,
     required this.timing,
+    this.skirt,
   });
+
+  /// タイルの縁から [TerrainMeshBuilder.skirtDepth] だけ下に垂らした壁（4 辺）。
+  /// 段が違う隣との裂け目を隠す。地形より先に描く（縁の下に見えるのはこれだけ）
+  final Vertices? skirt;
 
   /// 描画順に並んだチャンク
   final List<TerrainMeshBand> bands;
@@ -212,6 +217,7 @@ class TerrainMeshBuilderArgs {
     required this.textureHeight,
     this.chunkSize = 32,
     this.step = 1,
+    this.skirtDepth = 0,
   });
 
   final DemGrid dem;
@@ -219,6 +225,7 @@ class TerrainMeshBuilderArgs {
   final int textureHeight;
   final int chunkSize;
   final int step;
+  final double skirtDepth;
 }
 
 /// [TerrainMesh] を繰り返し組むための作業台
@@ -233,6 +240,7 @@ class TerrainMeshBuilder {
     required int textureHeight,
     this.chunkSize = 32,
     this.step = 1,
+    this.skirtDepth = 0,
     int lightAzimuthDeg = 315,
     int lightAltitudeDeg = 45,
   })  : cols = (dem.cols - 1) ~/ step + 1,
@@ -279,6 +287,8 @@ class TerrainMeshBuilder {
     // チャンク分割（左下から東・北へ）
     final texSx = textureWidth / dem.width;
     final texSy = textureHeight / dem.height;
+    _texW = textureWidth.toDouble();
+    _texH = textureHeight.toDouble();
     _chunkCols = (cellCols + chunkSize - 1) ~/ chunkSize;
     _chunkRows = (cellRows + chunkSize - 1) ~/ chunkSize;
     _chunks = <_Chunk>[];
@@ -316,6 +326,7 @@ class TerrainMeshBuilder {
         textureHeight: a.textureHeight,
         chunkSize: a.chunkSize,
         step: a.step,
+        skirtDepth: a.skirtDepth,
       );
 
   final DemGrid dem;
@@ -324,11 +335,16 @@ class TerrainMeshBuilder {
   final int chunkSize;
   final int step;
 
+  /// スカートの深さ（m）。0 なら作らない
+  final double skirtDepth;
+
   /// 間引き後の格子点数
   final int cols;
   final int rows;
 
   late final double _cellSize;
+  late final double _texW;
+  late final double _texH;
   late final Float32List _heights;
   late final int _cellCols;
   late final int _cellCount;
@@ -405,6 +421,7 @@ class TerrainMeshBuilder {
       chunkCols: _chunkCols,
       dem: dem,
       step: step,
+      skirt: skirtDepth > 0 ? _buildSkirt(cell, cosB, sinB, cosP, zk) : null,
       timing: TerrainMeshTiming(
         project: tProject,
         sort: tSort,
@@ -412,6 +429,60 @@ class TerrainMeshBuilder {
         resorted: needResort,
       ),
     );
+  }
+
+  /// 4 辺のスカート。縁の頂点と、その真下（[skirtDepth] 下）を結ぶ帯
+  Vertices _buildSkirt(double cell, double cosB, double sinB, double cosP, double zk) {
+    final edge = <(int, int)>[];
+    for (var c = 0; c < cols; c++) {
+      edge.add((c, 0));
+    }
+    for (var r = 0; r < rows; r++) {
+      edge.add((cols - 1, r));
+    }
+    for (var c = cols - 1; c >= 0; c--) {
+      edge.add((c, rows - 1));
+    }
+    for (var r = rows - 1; r >= 0; r--) {
+      edge.add((0, r));
+    }
+    final n = edge.length;
+    final positions = Float32List(n * 4);
+    final tex = Float32List(n * 4);
+    final colors = Int32List(n * 2);
+    final indices = Uint16List((n - 1) * 6);
+    for (var i = 0; i < n; i++) {
+      final (c, r) = edge[i];
+      final x = c * cell;
+      final y = r * cell;
+      final h = _heights[r * cols + c];
+      final sx = x * cosB - y * sinB;
+      final syBase = -((x * sinB + y * cosB) * cosP);
+      positions[i * 4] = sx;
+      positions[i * 4 + 1] = syBase - h * zk;
+      positions[i * 4 + 2] = sx;
+      positions[i * 4 + 3] = syBase - (h - skirtDepth) * zk;
+      // テクスチャは縁の色を引き伸ばす
+      final u = x / dem.width * _texW;
+      final v = _texH - y / dem.height * _texH;
+      tex[i * 4] = u;
+      tex[i * 4 + 1] = v;
+      tex[i * 4 + 2] = u;
+      tex[i * 4 + 3] = v;
+      colors[i * 2] = 0xFFB0B0B0;
+      colors[i * 2 + 1] = 0xFF707070;
+      if (i + 1 < n) {
+        final t = i * 6;
+        final v0 = i * 2;
+        indices[t] = v0;
+        indices[t + 1] = v0 + 2;
+        indices[t + 2] = v0 + 1;
+        indices[t + 3] = v0 + 2;
+        indices[t + 4] = v0 + 3;
+        indices[t + 5] = v0 + 1;
+      }
+    }
+    return Vertices.raw(VertexMode.triangles, positions, textureCoordinates: tex, colors: colors, indices: indices);
   }
 
   /// 視線の地上投影の向きから象限を決める

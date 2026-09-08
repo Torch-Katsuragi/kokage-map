@@ -96,6 +96,29 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
 }
 
 /// タイル 1 枚ぶんの貼り付け済みフィーチャ（step ごと）
+class _ZoomButton extends StatelessWidget {
+  const _ZoomButton({required this.icon, required this.tooltip, required this.onPressed});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Colors.white.withValues(alpha: 0.9),
+          shape: const CircleBorder(),
+          elevation: 2,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onPressed,
+            child: SizedBox(width: 40, height: 40, child: Icon(icon, size: 22)),
+          ),
+        ),
+      );
+}
+
 class _TileScene {
   _TileScene({required this.key, required this.lines, required this.polygons, required this.points, required this.labels});
 
@@ -238,27 +261,35 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     // 描画と予算は画面に掛かるタイルだけ。先読みは 1 周り外まで
     final range = TerrainWorld.tileRangeFor(bounds, zD);
     final prefetch = TerrainWorld.tileRangeFor(bounds, zD, margin: 1);
-    _world.ensure(prefetch, centerX: _camera.centerX, centerY: _camera.centerY);
+    // 画面に掛かる分 → 親の段（引いた瞬間に手元にあるように）→ 1 周り外、の順で読む
+    _world.ensure(range, centerX: _camera.centerX, centerY: _camera.centerY, evict: false);
+    _world.ensureAncestors(range, centerX: _camera.centerX, centerY: _camera.centerY);
+    _world.ensure(prefetch, centerX: _camera.centerX, centerY: _camera.centerY, replaceQueue: false);
     if (_world.revision != _worldRevisionSeen) {
       // タイルの出入り: 消えたタイルのぶんだけ捨てる（縁が変わったタイルはキーが変わるので自然に入れ替わる）
       _scenes.removeWhere((k, _) => !_world.has(k.$1));
       if (_meshes.length > 64) _meshes.clear();
       _worldRevisionSeen = _world.revision;
     }
-    final step = _stepFor(range.count, gesturing: _gesturing);
-    final ordered = _world.drawOrder(range, _camera);
+    final baseStep = _stepFor(range.count, gesturing: _gesturing);
+    // 手持ちで最良の被覆（理想の段が無ければ親か子で埋める）
+    final ordered = _world.coverSet(range, _camera);
     final drawables = <TerrainTileDrawable>[];
     for (final tile in ordered) {
+      // 粗い親ほど画面上のセルが大きいので間引きを減らす。細かい子は増やす
+      final levelDiff = zD - tile.key.z;
+      final step = levelDiff >= 0 ? math.max(1, baseStep >> levelDiff) : math.min(16, baseStep << -levelDiff);
+      final skirt = tile.key.span * 0.03; // タイル幅の 3%
       final builder = tile.builders[step];
       if (builder == null) {
         // isolate で作る。できたら描き直す
-        tile.builderFor(step, chunkSize: _world.chunkSize).then((_) {
+        tile.builderFor(step, chunkSize: _world.chunkSize, skirtDepth: skirt).then((_) {
           if (mounted) _refresh();
         });
-        // 粗いものがあればそれで繋ぐ
-        final fallback = tile.builders.keys.where((s) => s > step).fold<int?>(null, (a, s) => a == null || s < a ? s : a);
-        if (fallback == null) continue;
-        drawables.add(_drawable(tile, tile.builders[fallback]!, fallback));
+        // できているものがあれば（粗さが違っても）それで繋ぐ
+        if (tile.builders.isEmpty) continue;
+        final near = tile.builders.keys.reduce((a, b) => (a - step).abs() <= (b - step).abs() ? a : b);
+        drawables.add(_drawable(tile, tile.builders[near]!, near));
         continue;
       }
       drawables.add(_drawable(tile, builder, step));
@@ -545,6 +576,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     _refresh();
   }
 
+  /// ズームボタン（web / PC 向け。画面中心を留めて 1 段）
+  void _zoomBy(double delta) {
+    _camera.zoom = (_camera.zoom + delta).clamp(8, 22);
+    _refresh();
+    setState(() {});
+  }
+
   void _onTapUp(TapUpDetails d) {
     // 選択などは既存のツールに任せる（投影は TerrainProjection 経由でここを通る）
     ref.read(currentToolProvider).onTap(d, widget.mapState);
@@ -607,6 +645,18 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
                     },
                   ),
                 ),
+              ),
+            ),
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ZoomButton(icon: Icons.add, tooltip: '拡大', onPressed: () => _zoomBy(1)),
+                  const SizedBox(height: 6),
+                  _ZoomButton(icon: Icons.remove, tooltip: '縮小', onPressed: () => _zoomBy(-1)),
+                ],
               ),
             ),
             Positioned(

@@ -207,6 +207,8 @@ class TerrainWorldPainter extends CustomPainter {
         }
       }
 
+      final skirt = mesh.skirt;
+      if (skirt != null) canvas.drawVertices(skirt, BlendMode.modulate, terrainPaint);
       for (var b = 0; b < mesh.bands.length; b++) {
         canvas.drawVertices(mesh.bands[b].vertices, BlendMode.modulate, terrainPaint);
         final chunk = mesh.bandChunk[b];

@@ -129,6 +129,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   test: ^1.25.15
+  fake_async: ^1.3.1                   # 地形の読み込みシミュレーション（terrain_world_sim_test）
   # ホストVMのユニットテストで sqflite を動かすために要る
   # （アプリ本体はモバイル=標準実装 / web=ffi_web なので、これはテスト専用）。
   sqflite_common_ffi: ^2.3.0

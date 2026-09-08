@@ -103,6 +103,24 @@ class TileRange {
         y1: ((y1 + 1) << dz) - 1,
       );
 
+  /// 1 段粗い親の範囲
+  TileRange get parent => TileRange(z: z - 1, x0: x0 >> 1, y0: y0 >> 1, x1: x1 >> 1, y1: y1 >> 1);
+
+  /// 周りに [margin] 枚の余白を足した範囲（世界の端で切る）
+  TileRange grow(int margin) {
+    if (margin <= 0) return this;
+    final n = 1 << z;
+    return TileRange(
+      z: z,
+      x0: (x0 - margin).clamp(0, n - 1),
+      y0: (y0 - margin).clamp(0, n - 1),
+      x1: (x1 + margin).clamp(0, n - 1),
+      y1: (y1 + margin).clamp(0, n - 1),
+    );
+  }
+
+  bool contains(int tz, int tx, int ty) => tz == z && tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1;
+
   /// 西端・南端の Mercator 座標
   double get west => WebMercator.tileWest(x0, z);
   double get south => WebMercator.tileNorth(y1 + 1, z);

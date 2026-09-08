@@ -13,16 +13,19 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/terrain/dem_tiles.dart';
 import '../../../core/terrain/terrain_camera.dart';
+import '../../../core/terrain/terrain_frame.dart';
 import '../../../core/terrain/terrain_mesh.dart';
 import '../../../core/terrain/terrain_painter.dart';
 import '../../../core/terrain/terrain_scene.dart';
@@ -131,9 +134,6 @@ class _TileScene {
 }
 
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements TerrainProjection {
-  /// 1 フレームで扱うセル数の予算。静止時と、ジェスチャ中（回転・傾き）
-  static const _staticCellBudget = 160000;
-  static const _gestureCellBudget = 40000;
   static const _defaultPitchDeg = 45.0;
 
   /// 標高タイルを背景地図と同じ経路（キャッシュ → ネット → 祖先タイルから切り出し）で取るための擬似プロバイダ。
@@ -154,7 +154,21 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
 
   late final TerrainCamera _camera;
   late final TerrainWorld _world;
+  late final TerrainFramePlanner _planner;
   late final TerrainWorldPainter _painter;
+  TerrainFramePlan? _lastPlan;
+
+  // ドライブモード（debug のみ）: 台本でカメラを動かし、被覆率とフレーム時間をログに出す
+  Ticker? _drive;
+  Timer? _stallProbe;
+  (double, double, double, double) _driveOrigin = (0, 0, 0, 0); // centerX, centerY, zoom, bearing
+  Duration _driveStart = Duration.zero;
+  Duration _driveLastLog = Duration.zero;
+  final List<int> _driveUiMs = [];
+  final List<int> _driveRasterMs = [];
+  int _driveGapFrames = 0;
+  int _driveFrames = 0;
+  TimingsCallback? _driveTimings;
   final _repaint = ValueNotifier<int>(0);
   Size _size = Size.zero;
   String _attribution = '';
@@ -199,6 +213,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
           : (z, x, y) => widget.baseMapService.getTile(basemap, z, x, y),
       imageCache: _tileImages,
     )..addListener(_onWorldChanged);
+    _planner = TerrainFramePlanner(_world);
     _painter = TerrainWorldPainter(
       camera: _camera,
       tiles: const [],
@@ -213,6 +228,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
 
   @override
   void dispose() {
+    _stopDrive();
     widget.sceneRevision.removeListener(_onSceneRevision);
     widget.onProjectionChanged(null);
     // 真上に戻して MapLibre へ書き戻す
@@ -227,7 +243,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   @override
   void didUpdateWidget(covariant TerrainMapLayer old) {
     super.didUpdateWidget(old);
-    if (old.currentLocation != widget.currentLocation) _refresh();
+    // build の最中なので、描き直しはフレームの後で（同期に通知すると setState during build）
+    if (old.currentLocation != widget.currentLocation) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh();
+      });
+    }
   }
 
   LatLng _centerLatLng() =>
@@ -241,44 +262,23 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
 
   // ── フレームの組み立て ──────────────────────────────
 
-  /// 予算に収まる間引き段数（タイル数 × (256/step)² ≤ 予算）
-  int _stepFor(int tileCount, {required bool gesturing}) {
-    final budget = gesturing ? _gestureCellBudget : _staticCellBudget;
-    for (final step in const [1, 2, 4, 8]) {
-      final cells = tileCount * (256 ~/ step) * (256 ~/ step);
-      if (cells <= budget) return step;
-    }
-    return 16;
-  }
-
   /// 見える範囲のタイルを揃え、描けるものを描画順に painter へ渡す
   void _refresh() {
     if (_size == Size.zero) return;
-    final zD = _world.demZoomFor(_camera.zoom);
-    // 見える地面の範囲: 標高の幅は読み込み済みの実測（無ければ 600m）
-    final hr = _world.heightRange;
-    final bounds = _world.groundBounds(_camera, _size, heightRange: hr == null ? 600 : (hr.$2 - hr.$1).clamp(100, 2000));
-    // 描画と予算は画面に掛かるタイルだけ。先読みは 1 周り外まで
-    final range = TerrainWorld.tileRangeFor(bounds, zD);
-    final prefetch = TerrainWorld.tileRangeFor(bounds, zD, margin: 1);
-    // 画面に掛かる分 → 親の段（引いた瞬間に手元にあるように）→ 1 周り外、の順で読む
-    _world.ensure(range, centerX: _camera.centerX, centerY: _camera.centerY, evict: false);
-    _world.ensureAncestors(range, centerX: _camera.centerX, centerY: _camera.centerY);
-    _world.ensure(prefetch, centerX: _camera.centerX, centerY: _camera.centerY, replaceQueue: false);
+    final sw = Stopwatch()..start();
+    _meshBuilds = 0;
+    final plan = _planner.plan(_camera, _size, gesturing: _gesturing);
+    final planMs = sw.elapsedMilliseconds;
+    _lastPlan = plan;
     if (_world.revision != _worldRevisionSeen) {
       // タイルの出入り: 消えたタイルのぶんだけ捨てる（縁が変わったタイルはキーが変わるので自然に入れ替わる）
       _scenes.removeWhere((k, _) => !_world.has(k.$1));
       if (_meshes.length > 64) _meshes.clear();
       _worldRevisionSeen = _world.revision;
     }
-    final baseStep = _stepFor(range.count, gesturing: _gesturing);
-    // 手持ちで最良の被覆（理想の段が無ければ親か子で埋める）
-    final ordered = _world.coverSet(range, _camera);
     final drawables = <TerrainTileDrawable>[];
-    for (final tile in ordered) {
-      // 粗い親ほど画面上のセルが大きいので間引きを減らす。細かい子は増やす
-      final levelDiff = zD - tile.key.z;
-      final step = levelDiff >= 0 ? math.max(1, baseStep >> levelDiff) : math.min(16, baseStep << -levelDiff);
+    for (final tile in plan.tiles) {
+      final step = plan.stepFor(tile);
       final skirt = tile.key.span * 0.03; // タイル幅の 3%
       final builder = tile.builders[step];
       if (builder == null) {
@@ -296,11 +296,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     }
     _painter
       ..tiles = drawables
-      ..heightRange = hr ?? (0, 1000)
-      ..stepMeters = WebMercator.metersPerPixel(zD);
+      ..heightRange = _world.heightRange ?? (0, 1000)
+      ..stepMeters = WebMercator.metersPerPixel(plan.demZoom);
     _repaint.value++;
     _notifyCamera();
+    if (sw.elapsedMilliseconds > 120) {
+      AppLogger.debug('[3D] refresh ${sw.elapsedMilliseconds}ms (plan $planMs, meshes built $_meshBuilds, tiles ${drawables.length})');
+    }
   }
+
+  int _meshBuilds = 0;
 
   TerrainTileDrawable _drawable(TerrainTile tile, TerrainMeshBuilder builder, int step) {
     final cached = _meshes[builder];
@@ -309,6 +314,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       mesh = cached.$3;
     } else {
       mesh = builder.build(_camera);
+      _meshBuilds++;
       _meshes[builder] = (_camera.bearing, _camera.pitch, mesh);
     }
     final scene = _sceneFor(tile, mesh, step);
@@ -576,6 +582,100 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     _refresh();
   }
 
+  // ── ドライブモード ──────────────────────────────────
+
+  /// 台本: 0〜8s 東へ 3km、8〜16s 引き 4 段、16〜24s 寄り 5 段、24〜32s 一回転、32〜40s 傾け往復、40〜48s 西へ 3km
+  void _startDrive() {
+    if (!kDebugMode || _drive != null) return;
+    _driveOrigin = (_camera.centerX, _camera.centerY, _camera.zoom, _camera.bearing);
+    _driveGapFrames = 0;
+    _driveFrames = 0;
+    _driveUiMs.clear();
+    _driveRasterMs.clear();
+    _driveTimings = (timings) {
+      for (final t in timings) {
+        _driveUiMs.add(t.buildDuration.inMilliseconds);
+        _driveRasterMs.add(t.rasterDuration.inMilliseconds);
+      }
+    };
+    SchedulerBinding.instance.addTimingsCallback(_driveTimings!);
+    var last = DateTime.now();
+    _stallProbe = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      final now = DateTime.now();
+      final gap = now.difference(last).inMilliseconds;
+      if (gap > 400) AppLogger.debug('[3D] stall ${gap}ms (isolate blocked)');
+      last = now;
+    });
+    _drive = Ticker((elapsed) {
+      try {
+        _driveTick(elapsed);
+      } catch (e, st) {
+        AppLogger.error('[3D] drive error', e, st);
+        _stopDrive();
+      }
+    })
+      ..start();
+  }
+
+  void _driveTick(Duration elapsed) {
+    final (startX, startY, startZoom, startBearing) = _driveOrigin;
+    {
+      if (_driveStart == Duration.zero) _driveStart = elapsed;
+      final t = (elapsed - _driveStart).inMilliseconds / 1000;
+      if (t > 48) {
+        _stopDrive();
+        return;
+      }
+      if (t < 8) {
+        _camera.centerX = startX + 3000 * (t / 8);
+      } else if (t < 16) {
+        _camera.zoom = startZoom - 4 * ((t - 8) / 8);
+      } else if (t < 24) {
+        _camera.zoom = startZoom - 4 + 5 * ((t - 16) / 8);
+      } else if (t < 32) {
+        _camera.bearing = startBearing + 2 * math.pi * ((t - 24) / 8);
+      } else if (t < 40) {
+        _camera.pitch = (35 + 35 * math.sin((t - 32) / 8 * 2 * math.pi)) * math.pi / 180;
+      } else {
+        _camera.centerX = startX + 3000 - 3000 * ((t - 40) / 8);
+        _camera.centerY = startY;
+      }
+      _gesturing = t >= 24 && t < 40;
+      _refresh();
+      _driveFrames++;
+      final plan = _lastPlan;
+      if (plan != null && !plan.coverage.full) _driveGapFrames++;
+      if (elapsed - _driveLastLog >= const Duration(milliseconds: 500)) {
+        _driveLastLog = elapsed;
+        String stat(List<int> v) {
+          if (v.isEmpty) return '-';
+          final s = [...v]..sort();
+          return '${s[s.length ~/ 2]}/${s.last}';
+        }
+        AppLogger.debug('[3D] drive t=${t.toStringAsFixed(1)}s z=${_camera.zoom.toStringAsFixed(2)} '
+            'dem=${plan?.demZoom} ${plan?.coverage} tiles=${_world.loadedCount} pending=${_world.pendingCount} '
+            'ui=${stat(_driveUiMs)} raster=${stat(_driveRasterMs)} gapFrames=$_driveGapFrames/$_driveFrames');
+        _driveUiMs.clear();
+        _driveRasterMs.clear();
+      }
+    }
+  }
+
+  void _stopDrive() {
+    final d = _drive;
+    if (d == null) return;
+    d.dispose();
+    _drive = null;
+    _stallProbe?.cancel();
+    _stallProbe = null;
+    _driveStart = Duration.zero;
+    if (_driveTimings != null) SchedulerBinding.instance.removeTimingsCallback(_driveTimings!);
+    _driveTimings = null;
+    _gesturing = false;
+    AppLogger.debug('[3D] drive end: gapFrames=$_driveGapFrames/$_driveFrames tiles=${_world.loadedCount}');
+    if (mounted) _refresh();
+  }
+
   /// ズームボタン（web / PC 向け。画面中心を留めて 1 段）
   void _zoomBy(double delta) {
     _camera.zoom = (_camera.zoom + delta).clamp(8, 22);
@@ -653,6 +753,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (kDebugMode) ...[
+                    // 台本でカメラを動かして被覆率とフレーム時間を [3D] drive ログに出す
+                    _ZoomButton(
+                      icon: _drive == null ? Icons.route : Icons.stop,
+                      tooltip: 'ドライブ',
+                      onPressed: () => setState(_drive == null ? _startDrive : _stopDrive),
+                    ),
+                    const SizedBox(height: 6),
+                  ],
                   _ZoomButton(icon: Icons.add, tooltip: '拡大', onPressed: () => _zoomBy(1)),
                   const SizedBox(height: 6),
                   _ZoomButton(icon: Icons.remove, tooltip: '縮小', onPressed: () => _zoomBy(-1)),

@@ -165,6 +165,27 @@ class TerrainTile {
   }
 }
 
+/// タイル 1 枚の読み込み（テストで差し替える）
+typedef TileLoader = Future<TerrainTile?> Function(TileKey key);
+
+/// 被覆の内訳（検証用）
+class CoverageReport {
+  const CoverageReport({required this.ideal, required this.exact, required this.byAncestor, required this.byChild});
+
+  /// 理想のタイル数と、それぞれ何で埋まったか
+  final int ideal;
+  final int exact;
+  final int byAncestor;
+  final int byChild;
+
+  int get covered => exact + byAncestor + byChild;
+  double get ratio => ideal == 0 ? 1 : covered / ideal;
+  bool get full => covered >= ideal;
+
+  @override
+  String toString() => 'cover ${(ratio * 100).toStringAsFixed(0)}% (exact $exact ancestor $byAncestor child $byChild / $ideal)';
+}
+
 /// 見渡す限り 1 面の世界（DEM タイルのストリーミング）
 ///
 /// - カメラの見える範囲 + 余白のタイルを非同期に読み、届いたら [revision] を上げる。フレームは止めない
@@ -181,7 +202,12 @@ class TerrainWorld extends ChangeNotifier {
     this.concurrency = 4,
     this.chunkSize = 32,
     TileImageCache? imageCache,
-  }) : _imageCache = imageCache ?? TileImageCache(capacity: 256);
+    TileLoader? tileLoader,
+  })  : _imageCache = imageCache ?? TileImageCache(capacity: 256),
+        _tileLoader = tileLoader;
+
+  /// タイル 1 枚の読み込み（DEM とテクスチャ）。テストでは擬似タイルを遅延つきで返す
+  final TileLoader? _tileLoader;
 
   final DemTileSource demSource;
   final TileFetcher demFetcher;
@@ -331,25 +357,35 @@ class TerrainWorld extends ChangeNotifier {
     }
   }
 
+  Future<TerrainTile?> _defaultLoad(TileKey key) async {
+    final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
+    final sw = Stopwatch()..start();
+    final dem = await DemTileLoader(source: demSource, fetcher: demFetcher).load(range);
+    final demMs = sw.elapsedMilliseconds;
+    final texRange = range.zoomIn(textureZoomOffset);
+    final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache).compose(texRange);
+    if (sw.elapsedMilliseconds > 800) debugPrint('[3D] tile $key load ${sw.elapsedMilliseconds}ms (dem $demMs)');
+    return TerrainTile(key: key, raw: dem)
+      ..texture = tex
+      ..textureWidth = tex.width
+      ..textureHeight = tex.height;
+  }
+
   Future<void> _load(TileKey key) async {
     try {
-      final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
-      final dem = await DemTileLoader(source: demSource, fetcher: demFetcher).load(range);
-      final texRange = range.zoomIn(textureZoomOffset);
-      final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache).compose(texRange);
+      final tile = await (_tileLoader ?? _defaultLoad)(key);
+      if (tile == null) return;
       if (_tiles.containsKey(key)) {
-        tex.dispose();
+        tile.dispose();
         return;
       }
-      final tile = TerrainTile(key: key, raw: dem)
-        ..texture = tex
-        ..textureWidth = tex.width
-        ..textureHeight = tex.height
-        ..lastUsed = ++_clock;
+      tile.lastUsed = ++_clock;
       _tiles[key] = tile;
+      final sw = Stopwatch()..start();
       _refreshBorders(key);
       revision++;
       notifyListeners();
+      if (sw.elapsedMilliseconds > 200) debugPrint('[3D] tile $key arrival ${sw.elapsedMilliseconds}ms (borders + listeners)');
     } catch (e) {
       lastError = '$e';
       debugPrint('[3D] tile $key の読み込みに失敗: $e');
@@ -393,7 +429,7 @@ class TerrainWorld extends ChangeNotifier {
   /// 読み込み済みの子（1 段）で埋める。ズームが変わった瞬間に何も無くなるのを防ぐ
   /// （タイル地図エンジンの「親子で保持」と同じ）。同じ親は 1 回だけ、最初に出会った位置で描く
   /// （親の領域は子の領域の和なので、奥 → 手前の順序を壊さない）。
-  List<TerrainTile> coverSet(TileRange range, TerrainCamera camera, {int maxAncestorLevels = 3}) {
+  List<TerrainTile> coverSet(TileRange range, TerrainCamera camera, {int maxAncestorLevels = 8}) {
     final out = <TerrainTile>[];
     final emitted = <TileKey>{};
     void emit(TerrainTile t) {
@@ -419,15 +455,60 @@ class TerrainWorld extends ChangeNotifier {
         emit(ancestor);
         continue;
       }
+      // 子（1 段）→ 無ければ孫（2 段）で埋める
       for (final c in _childrenInOrder(key, camera)) {
         final t = _tiles[c];
         if (t != null) {
           t.lastUsed = ++_clock;
           emit(t);
+          continue;
+        }
+        for (final g in _childrenInOrder(c, camera)) {
+          final gt = _tiles[g];
+          if (gt != null) {
+            gt.lastUsed = ++_clock;
+            emit(gt);
+          }
         }
       }
     }
     return out;
+  }
+
+  /// 理想の範囲がどれだけ埋まっているか（[coverSet] と同じ規則で数える）
+  ///
+  /// 子で埋める場合は 4 枚そろって初めて 1 枚ぶんと数える（部分的な子は隙間が出る）
+  CoverageReport coverage(TileRange range, {int maxAncestorLevels = 8}) {
+    var exact = 0, byAncestor = 0, byChild = 0;
+    for (var y = range.y0; y <= range.y1; y++) {
+      for (var x = range.x0; x <= range.x1; x++) {
+        final key = TileKey(range.z, x, y);
+        if (_tiles.containsKey(key)) {
+          exact++;
+          continue;
+        }
+        var k = key;
+        var found = false;
+        for (var i = 0; i < maxAncestorLevels && k.z > 0; i++) {
+          k = k.parent;
+          if (_tiles.containsKey(k)) {
+            found = true;
+            break;
+          }
+        }
+        if (found) {
+          byAncestor++;
+          continue;
+        }
+        bool coveredBy(TileKey k, int depth) {
+          if (_tiles.containsKey(k)) return true;
+          if (depth == 0) return false;
+          return k.children.every((c) => coveredBy(c, depth - 1));
+        }
+        if (coveredBy(key, 2)) byChild++;
+      }
+    }
+    return CoverageReport(ideal: range.count, exact: exact, byAncestor: byAncestor, byChild: byChild);
   }
 
   /// 理想のタイル番号を奥 → 手前の順に
@@ -444,13 +525,53 @@ class TerrainWorld extends ChangeNotifier {
   List<TileKey> _childrenInOrder(TileKey key, TerrainCamera camera) =>
       _idealOrder(TileRange(z: key.z + 1, x0: key.x * 2, y0: key.y * 2, x1: key.x * 2 + 1, y1: key.y * 2 + 1), camera);
 
-  /// 親の段（[levels] 段ぶん）を先読みする。引いた瞬間に手元にあるように
-  void ensureAncestors(TileRange range, {required double centerX, required double centerY, int levels = 2}) {
+  /// 親の段（[levels] 段ぶん）を**粗い方から**読む。ピラミッドは上から埋めるのが定石で、
+  /// 一番粗い親 1〜2 枚が届けば画面全体が（粗くても）埋まる。
+  /// [replaceQueue] が true なら一番粗い段で待ち行列を置き換える（呼び出し側はこの後に理想の段を足す）
+  /// [range] の親の段の範囲を粗い順に返す（最大 [levels] 段、[minZoom] まで）
+  ///
+  /// 3 段以上上には [margin] 枚の余白を足す。引いている最中に広がる縁を粗い段で先に埋めるため。
+  /// 粗い段ほど 1 枚が広いので余白の枚数は少なくて済み、近い段に足すと枚数が嵩む
+  List<TileRange> ancestorRanges(TileRange range, {required int levels, int margin = 1, int marginFrom = 2}) {
+    final out = <TileRange>[];
     var r = range;
     for (var i = 0; i < levels && r.z > demSource.minZoom; i++) {
-      r = TileRange(z: r.z - 1, x0: r.x0 >> 1, y0: r.y0 >> 1, x1: r.x1 >> 1, y1: r.y1 >> 1);
-      ensure(r, centerX: centerX, centerY: centerY, evict: false, replaceQueue: false);
+      r = r.parent;
+      out.add(i >= marginFrom ? r.grow(margin) : r);
     }
+    return out.reversed.toList();
+  }
+
+  /// 親の段を粗い方から順に揃える（[ancestorRanges] の順）。
+  /// [replaceQueue] なら一番粗い段でキューを入れ替える（前の景色の残りを捨てる）
+  void ensureAncestors(
+    TileRange range, {
+    required double centerX,
+    required double centerY,
+    int levels = 2,
+    bool replaceQueue = false,
+    int margin = 1,
+  }) {
+    final ranges = ancestorRanges(range, levels: levels, margin: margin);
+    for (var i = 0; i < ranges.length; i++) {
+      ensure(ranges[i], centerX: centerX, centerY: centerY, evict: false, replaceQueue: replaceQueue && i == 0);
+    }
+  }
+
+  /// 上限を超えたぶんを、核（[keep] とその親 [ancestorLevels] 段、余白込み）以外の古いものから捨てる
+  void trim({required TileRange keep, int ancestorLevels = 3, int margin = 1}) {
+    if (_tiles.length <= maxTiles) return;
+    final core = [keep, ...ancestorRanges(keep, levels: ancestorLevels, margin: margin)];
+    bool kept(TileKey k) => core.any((r) => r.contains(k.z, k.x, k.y));
+    final victims = _tiles.values.where((t) => !kept(t.key)).toList()..sort((a, b) => a.lastUsed.compareTo(b.lastUsed));
+    var removed = false;
+    for (final v in victims) {
+      if (_tiles.length <= maxTiles) break;
+      _tiles.remove(v.key);
+      v.dispose();
+      removed = true;
+    }
+    if (removed) revision++;
   }
 
   /// 読み込み済みのタイルを描画順（奥 → 手前）で返す（理想の段だけ）

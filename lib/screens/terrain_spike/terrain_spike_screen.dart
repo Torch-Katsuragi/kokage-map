@@ -18,6 +18,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:geobase/geobase.dart' as geo;
 
 import '../../core/terrain/contours.dart';
 import '../../core/terrain/dem_grid.dart';
@@ -25,6 +26,7 @@ import '../../core/terrain/dem_tiles.dart';
 import '../../core/terrain/terrain_camera.dart';
 import '../../core/terrain/terrain_mesh.dart';
 import '../../core/terrain/terrain_painter.dart';
+import '../../core/terrain/terrain_scene.dart';
 import '../../core/terrain/web_mercator.dart';
 import 'spike_title_stub.dart'
     if (dart.library.js_interop) 'spike_title_web.dart';
@@ -88,6 +90,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   final Map<int, LiftedSegments> _contoursByStep = {};
   Duration _lastContour = Duration.zero;
   String _hitText = '';
+  bool _useGeoJson = false; // 合成の線・面の代わりに GeoJSON → TerrainSceneBuilder のシーンを出す
+  final Map<int, TerrainScene> _sceneByStep = {};
 
   // 計測
   late final Ticker _ticker;
@@ -228,6 +232,7 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     ];
     _linesByStep.clear();
     _polygonsByStep.clear();
+    _sceneByStep.clear();
     _contoursByStep.clear();
     _builders.clear();
     _extractContours();
@@ -305,6 +310,63 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     _repaint.value++;
   }
 
+  /// DEM の中に置いた GeoJSON のサンプル（経度緯度）。既存の地図と同じ形でシーンにする
+  TerrainScene _buildGeoJsonScene(TerrainMesh mesh) {
+    final dem = mesh.dem;
+    geo.Geographic at(double fx, double fy) => geo.Geographic(
+          lon: WebMercator.lonFromX(dem.originX + dem.width * fx),
+          lat: WebMercator.latFromY(dem.originY + dem.height * fy),
+        );
+    final builder = TerrainSceneBuilder(
+      mesh: mesh,
+      stylesByKey: {
+        'road': const TerrainFeatureStyle(
+          lineColor: Color(0xFFE53935), lineWidth: 4,
+          fillColor: Color(0x00000000), outlineColor: Color(0x00000000), outlineWidth: 0,
+          pointColor: Color(0xFFE53935), pointSize: 6,
+        ),
+        'stand': const TerrainFeatureStyle(
+          lineColor: Color(0xFF2E7D32), lineWidth: 2,
+          fillColor: Color(0x662E7D32), outlineColor: Color(0xFF1B5E20), outlineWidth: 2,
+          pointColor: Color(0xFF2E7D32), pointSize: 6,
+        ),
+      },
+    );
+    return builder.build(
+      lines: [
+        geo.Feature<geo.Geometry>(
+          geometry: geo.LineString.from([for (var i = 0; i <= 20; i++) at(i / 20, 0.15 + 0.6 * i / 20)]),
+          properties: const {'k-style': 'road', 'k-label': '林道 1 号'},
+        ),
+        geo.Feature<geo.Geometry>(
+          geometry: geo.LineString.from([at(0.1, 0.8), at(0.4, 0.75), at(0.5, 0.9)]),
+          properties: const {'k-label': '作業道'},
+        ),
+      ],
+      polygons: [
+        geo.Feature<geo.Geometry>(
+          geometry: geo.Polygon.from([
+            [at(0.55, 0.2), at(0.85, 0.25), at(0.8, 0.5), at(0.6, 0.45), at(0.55, 0.2)],
+          ]),
+          properties: const {'k-style': 'stand', 'k-label': '12 林班'},
+        ),
+        geo.Feature<geo.Geometry>(
+          geometry: geo.Polygon.from([
+            [at(0.15, 0.3), at(0.35, 0.3), at(0.35, 0.5), at(0.15, 0.5), at(0.15, 0.3)],
+          ]),
+          properties: const {'k-label': '13 林班'},
+        ),
+      ],
+      points: [
+        for (var i = 0; i < 12; i++)
+          geo.Feature<geo.Point>(
+            geometry: geo.Point(at(0.1 + 0.07 * i, 0.6 + 0.03 * (i % 3))),
+            properties: {'k-style': i.isEven ? 'road' : 'stand', 'k-label': '測点 ${i + 1}'},
+          ),
+      ],
+    );
+  }
+
   /// [coarse] はジェスチャ・アニメ中の LOD（格子を間引く）で組む
   void _rebuildMesh({bool coarse = false}) {
     final step = (coarse && _lod) ? _coarseStep : 1;
@@ -313,6 +375,22 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     _lastBuild = mesh.buildTime;
     _timing = mesh.timing.toString();
     final sw = Stopwatch()..start();
+    if (_useGeoJson) {
+      final scene = _sceneByStep[step] ??= _buildGeoJsonScene(mesh);
+      final contours = _contoursByStep[step] ??=
+          LiftedSegments.lift(_contourLinesFor(step), mesh, color: const Color(0xCC6D4C41), widthPx: 1);
+      _contourCount = contours.segmentCount;
+      _lastLift = sw.elapsed;
+      _painter
+        ?..mesh = mesh
+        ..lines = [...scene.outlines, ...scene.lines]
+        ..polygons = scene.polygons
+        ..points = scene.points
+        ..labels = scene.labels
+        ..segmentSets = [contours];
+      _repaint.value++;
+      return;
+    }
     final colors = [Colors.red, Colors.blue, Colors.orange, Colors.purple];
     _lines = _linesByStep[step] ??= [
       for (var i = 0; i < _rawLines.length; i++)
@@ -340,6 +418,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
       ?..mesh = mesh
       ..lines = _lines
       ..polygons = _polygons
+      ..points = const []
+      ..labels = _labels
       ..segmentSets = [contours];
     _repaint.value++;
   }
@@ -502,7 +582,7 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     setState(() {
       _hitText = hit == null
           ? 'タップ: なし @ $where (${sw.elapsedMilliseconds}ms)'
-          : 'タップ: ${hit.kind == 'label' ? '区画 ${hit.index + 1}' : hit} @ $where (${sw.elapsedMilliseconds}ms)';
+          : 'タップ: ${hit.kind == 'label' ? painter.labels[hit.index].painter.plainText : hit} @ $where (${sw.elapsedMilliseconds}ms)';
     });
   }
 
@@ -668,6 +748,15 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                       _rebuildMesh();
                     }),
                   ),
+                ChoiceChip(
+                  label: const Text('GeoJSON'),
+                  selected: _useGeoJson,
+                  onSelected: (v) => setState(() {
+                    _useGeoJson = v;
+                    _painter?.selected = null;
+                    _rebuildMesh();
+                  }),
+                ),
                 const Text('等高線'),
                 for (final n in [0.0, 10.0, 20.0, 50.0])
                   ChoiceChip(

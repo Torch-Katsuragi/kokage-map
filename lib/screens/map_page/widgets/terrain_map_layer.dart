@@ -279,6 +279,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     final sw = Stopwatch()..start();
     _meshBuilds = 0;
     _placeholders = 0;
+    _sceneBuilds = 0;
     final plan = _planner.plan(_camera, _size, gesturing: _gesturing);
     final planMs = sw.elapsedMilliseconds;
     _lastPlan = plan;
@@ -315,12 +316,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     _repaint.value++;
     _notifyCamera();
     if (sw.elapsedMilliseconds > 120) {
-      AppLogger.debug('[3D] refresh ${sw.elapsedMilliseconds}ms (plan $planMs, meshes built $_meshBuilds, placeholders $_placeholders, tiles ${drawables.length})');
+      AppLogger.debug('[3D] refresh ${sw.elapsedMilliseconds}ms (plan $planMs [${_planner.lastTiming}], meshes built $_meshBuilds, '
+          'placeholders $_placeholders, scenes built $_sceneBuilds, tiles ${drawables.length})');
     }
   }
 
   int _meshBuilds = 0;
   int _placeholders = 0;
+  int _sceneBuilds = 0;
 
   /// 生きているタイルのビルダーに紐づかないメッシュを捨てる（GPU 側の頂点も返す）。
   /// ビルダーをキーに持つので、ここで外さないとタイルを捨ててもビルダーごと残る
@@ -419,6 +422,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     final cached = _scenes[cacheKey];
     if (cached != null && _sameKey(cached.key, key)) return cached;
 
+    _sceneBuilds++;
     final sw = Stopwatch()..start();
     final dem = mesh.dem;
     final clip = Rect.fromLTWH(0, 0, dem.width, dem.height);

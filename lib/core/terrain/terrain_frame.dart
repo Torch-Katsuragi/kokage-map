@@ -113,7 +113,11 @@ class TerrainFramePlanner {
     return 16;
   }
 
+  /// 直近の [plan] の内訳（ms）。引っかかりの切り分け用
+  String lastTiming = '';
+
   TerrainFramePlan plan(TerrainCamera camera, Size size, {bool gesturing = false}) {
+    final sw = Stopwatch()..start();
     final hr = world.heightRange;
     final bounds = world.groundBounds(
       camera,
@@ -125,6 +129,7 @@ class TerrainFramePlanner {
     final prefetch = TerrainWorld.tileRangeFor(bounds, zD, margin: prefetchMargin);
     // 読み込み順: 一番粗い親 → …→ 理想の段 → 1 周り外。ピラミッドは上から埋める。
     // 親は 1 周り外の範囲 + さらに余白ぶん読む（引いている最中に広がる縁を、粗い親で先に埋めるため。親は枚数が少なく安い）
+    final tBounds = sw.elapsedMilliseconds;
     world.ensureAncestors(
       prefetch,
       centerX: camera.centerX,
@@ -134,14 +139,20 @@ class TerrainFramePlanner {
     );
     world.ensure(range, centerX: camera.centerX, centerY: camera.centerY, evict: false, replaceQueue: false);
     world.ensure(prefetch, centerX: camera.centerX, centerY: camera.centerY, evict: false, replaceQueue: false);
+    final tEnsure = sw.elapsedMilliseconds;
     world.trim(keep: prefetch, ancestorLevels: ancestorLevels);
+    final tTrim = sw.elapsedMilliseconds;
+    final tiles = world.coverSet(range, camera);
+    final tCover = sw.elapsedMilliseconds;
+    final coverage = world.coverage(range);
+    lastTiming = 'bounds $tBounds ensure ${tEnsure - tBounds} trim ${tTrim - tEnsure} cover ${tCover - tTrim} report ${sw.elapsedMilliseconds - tCover}';
     return TerrainFramePlan(
       demZoom: zD,
       range: range,
       prefetch: prefetch,
       baseStep: stepFor(range.count, gesturing: gesturing),
-      tiles: world.coverSet(range, camera),
-      coverage: world.coverage(range),
+      tiles: tiles,
+      coverage: coverage,
     );
   }
 }

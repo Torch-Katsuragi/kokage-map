@@ -35,6 +35,7 @@ import '../../providers/notification_providers.dart';
 import '../../providers/party_providers.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/selection_providers.dart';
+import '../../providers/terrain_providers.dart';
 import '../../providers/tool_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../services/map_source_manager.dart';
@@ -78,6 +79,7 @@ import 'widgets/map_menu_button.dart';
 import 'widgets/overlay_image_layers.dart';
 import 'widgets/party_controls.dart';
 import 'widgets/party_map_layers.dart';
+import 'widgets/terrain_map_layer.dart';
 import 'widgets/tool_name_flash.dart';
 
 /// Map and edit screen (main structure)
@@ -342,6 +344,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
     final currentTool = ref.watch(currentToolProvider);
     final isPanTool = currentTool.name == 'Pan';
+    final terrain3d = ref.watch(terrain3dModeProvider);
 
     return KeyboardShortcutWrapper(
       mapState: this,
@@ -390,6 +393,21 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                       children: [
                         _buildMapLibreMap(isPanTool),
                         _buildGestureLayer(),
+                        // 3D 地形モード: 地図面を上に重ね、ジェスチャもここで受ける
+                        if (terrain3d && basemapStyleUri != null)
+                          Positioned.fill(
+                            child: TerrainMapLayer(
+                              mapState: this,
+                              baseMapService: baseMapService,
+                              geoJson: geoJson,
+                              sceneRevision: terrainSceneRevision,
+                              styleGroups: () => sourceManager.styleGroups,
+                              currentLocation: currentLocation,
+                              onProjectionChanged: (p) => terrainProjection = p,
+                              mapBearingNotifier: mapBearingNotifier,
+                              cameraTickNotifier: cameraTickNotifier,
+                            ),
+                          ),
                         _buildDrawingPreviewInfo(),
                         _buildOffscreenLocationIndicator(),
                         const ToolNameFlash(),
@@ -760,6 +778,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       );
     // クラスタリング: 現在のズームでクラスタ表示を更新
     _refreshPointClusters();
+    // 3D 地図面にも同じシーンを流す
+    terrainSceneRevision.value++;
   }
 
   /// 現在のズームレベルでクラスタ表示を更新

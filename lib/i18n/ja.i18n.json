@@ -551,7 +551,8 @@
       "pen": "ペン",
       "select": "選択",
       "gpsTool": "GPSツール",
-      "overlayTransform": "オーバーレイ変換"
+      "overlayTransform": "オーバーレイ変換",
+      "terrain3d": "3D 地形"
     },
     "jump": {
       "noLocation": "現在位置をまだ取得できていません",

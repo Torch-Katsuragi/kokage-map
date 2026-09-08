@@ -551,7 +551,8 @@
       "pen": "Pen",
       "select": "Select",
       "gpsTool": "GPS Tool",
-      "overlayTransform": "Overlay Transform"
+      "overlayTransform": "Overlay Transform",
+      "terrain3d": "3D terrain"
     },
     "jump": {
       "noLocation": "Current location is not available yet",

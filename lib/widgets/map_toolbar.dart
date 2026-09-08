@@ -21,6 +21,7 @@ import '../i18n/strings.g.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../providers/device_tool_providers.dart';
 import '../providers/selection_providers.dart';
+import '../providers/terrain_providers.dart';
 import '../providers/tool_providers.dart';
 
 /// 地図画面左側のツールバー
@@ -69,6 +70,7 @@ class MapToolbar extends ConsumerWidget {
               tooltip: t.map.toolbar.pen,
               isSelected: currentTool.name == 'Pen',
               onPressed: () {
+                ref.read(terrain3dModeProvider.notifier).set(false); // 手描きは真上で
                 ref.read(currentToolProvider.notifier).set(ref.read(penToolProvider));
                 onToolChanged();
               },
@@ -89,7 +91,23 @@ class MapToolbar extends ConsumerWidget {
               tooltip: t.map.toolbar.gpsTool,
               isSelected: currentTool.name == 'GPS',
               onPressed: () {
+                ref.read(terrain3dModeProvider.notifier).set(false); // 測量点の手動追加は真上で
                 ref.read(currentToolProvider.notifier).set(ref.read(gpsToolProvider));
+                onToolChanged();
+              },
+            ),
+            const SizedBox(height: 8),
+            _ToolButton(
+              icon: Icons.terrain,
+              tooltip: t.map.toolbar.terrain3d,
+              isSelected: ref.watch(terrain3dModeProvider),
+              onPressed: () {
+                final on = !ref.read(terrain3dModeProvider);
+                if (on && currentTool.name != 'Pan' && currentTool.name != 'Select') {
+                  // 3D では閲覧と選択だけ
+                  ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
+                }
+                ref.read(terrain3dModeProvider.notifier).set(on);
                 onToolChanged();
               },
             ),

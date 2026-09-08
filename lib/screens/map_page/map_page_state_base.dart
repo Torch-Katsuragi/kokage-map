@@ -25,6 +25,7 @@ import 'package:maplibre/maplibre.dart' as ml;
 
 import '../../core/r_map_controller.dart';
 import '../../interfaces/map_state_interface.dart';
+import '../../interfaces/terrain_projection.dart';
 import '../../models/gps_position_record.dart';
 import '../../models/nodes/current_location_node.dart';
 import '../../models/nodes/feature_node.dart';
@@ -207,6 +208,12 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// キャッシュ再構築フラグ
   bool layerCacheDirty = true;
 
+  /// 3D 地形モード中の投影。null なら MapLibre（`TerrainMapLayer` が登録 / 解除する）
+  TerrainProjection? terrainProjection;
+
+  /// 地図に流す GeoJSON が更新されたら増える（3D 地図面がシーンを組み直す合図）
+  final ValueNotifier<int> terrainSceneRevision = ValueNotifier<int>(0);
+
   /// 前回キャッシュ構築時の選択状態（identity比較用）
   List<LayerTreeNode>? lastCacheSelection;
 
@@ -222,6 +229,11 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   @override
   LatLng offsetToLatLng(Offset offset) {
+    final terrain = terrainProjection;
+    if (terrain != null) {
+      final p = terrain.unproject(offset);
+      if (p != null) return p;
+    }
     try {
       return mapControllerInstance.toLngLat(offset);
     } catch (e) {
@@ -231,6 +243,8 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   @override
   Offset latLngToOffset(LatLng latlng) {
+    final terrain = terrainProjection;
+    if (terrain != null) return terrain.project(latlng);
     try {
       return mapControllerInstance.toScreenLocation(latlng);
     } catch (e) {

@@ -226,8 +226,15 @@ class RasterTileComposer {
   final TileFetcher _fetch;
 
   /// [range] のタイルを敷き詰めた画像を返す（幅 = width×256）
-  Future<ui.Image> compose(TileRange range, {TileProgress? onProgress}) async {
-    final bytesList = await _fetchRange(_fetch, range, onProgress: onProgress);
+  Future<ui.Image> compose(TileRange range, {TileProgress? onProgress}) =>
+      composeLayers(range, [(_fetch, 1.0)], onProgress: onProgress);
+
+  /// 複数のタイル層を opacity で重ねて 1 枚にする（背景地図のブレンド。MapLibre 側と同じ累積補正済み opacity を渡す）
+  Future<ui.Image> composeLayers(
+    TileRange range,
+    List<(TileFetcher, double)> layers, {
+    TileProgress? onProgress,
+  }) async {
     const ts = WebMercator.tileSize;
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(recorder);
@@ -235,20 +242,35 @@ class RasterTileComposer {
       ui.Rect.fromLTWH(0, 0, range.width * ts * 1.0, range.height * ts * 1.0),
       ui.Paint()..color = const ui.Color(0xFFDDDDDD),
     );
-    var k = 0;
     final images = <ui.Image>[];
-    for (var ty = range.y0; ty <= range.y1; ty++) {
-      for (var tx = range.x0; tx <= range.x1; tx++) {
-        final bytes = bytesList[k++];
-        if (bytes == null) continue;
-        final codec = await ui.instantiateImageCodec(bytes);
-        final frame = await codec.getNextFrame();
-        images.add(frame.image);
-        canvas.drawImage(
-          frame.image,
-          ui.Offset((tx - range.x0) * ts * 1.0, (ty - range.y0) * ts * 1.0),
-          ui.Paint(),
-        );
+    var doneTotal = 0;
+    final total = range.count * layers.length;
+    for (final (fetch, opacity) in layers) {
+      final bytesList = await _fetchRange(
+        fetch,
+        range,
+        onProgress: (d, _) => onProgress?.call(doneTotal + d, total),
+      );
+      doneTotal += range.count;
+      final paint = ui.Paint()..color = ui.Color.fromRGBO(255, 255, 255, opacity.clamp(0.0, 1.0));
+      var k = 0;
+      for (var ty = range.y0; ty <= range.y1; ty++) {
+        for (var tx = range.x0; tx <= range.x1; tx++) {
+          final bytes = bytesList[k++];
+          if (bytes == null) continue;
+          try {
+            final codec = await ui.instantiateImageCodec(bytes);
+            final frame = await codec.getNextFrame();
+            images.add(frame.image);
+            canvas.drawImage(
+              frame.image,
+              ui.Offset((tx - range.x0) * ts * 1.0, (ty - range.y0) * ts * 1.0),
+              paint,
+            );
+          } catch (_) {
+            // 壊れたタイルは飛ばす
+          }
+        }
       }
     }
     final picture = recorder.endRecording();

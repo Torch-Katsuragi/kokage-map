@@ -24,6 +24,7 @@ import 'dem_grid.dart';
 import 'dem_tiles.dart';
 import 'terrain_camera.dart';
 import 'terrain_mesh.dart';
+import 'terrain_worker.dart';
 import 'web_mercator.dart';
 
 /// XYZ タイルの番号
@@ -140,7 +141,7 @@ class TerrainTile {
   Future<TerrainMeshBuilder> builderFor(int step, {int chunkSize = 32, double skirtDepth = 0}) {
     final ready = builders[step];
     if (ready != null) return Future.value(ready);
-    return _building[step] ??= compute(
+    return _building[step] ??= TerrainWorker.instance.run(
       TerrainMeshBuilder.buildInIsolate,
       TerrainMeshBuilderArgs(
         dem: bordered,
@@ -155,6 +156,11 @@ class TerrainTile {
       if (identical(_building[step], null)) return b;
       _building.remove(step);
       builders[step] = b;
+      // 持つのは 2 段まで（1 段 数 MB）。新しい段から一番遠いものを捨てる
+      while (builders.length > 2) {
+        final far = builders.keys.where((k) => k != step).reduce((a, c) => (a - step).abs() >= (c - step).abs() ? a : c);
+        builders.remove(far);
+      }
       return b;
     });
   }
@@ -249,6 +255,9 @@ class TerrainWorld extends ChangeNotifier {
   }
 
   bool has(TileKey key) => _tiles.containsKey(key);
+
+  /// 読み込み済みのタイル（順序は到着順）
+  Iterable<TerrainTile> get tiles => _tiles.values;
 
   /// テスト用: 読み込みを通さずにタイルを置く
   @visibleForTesting

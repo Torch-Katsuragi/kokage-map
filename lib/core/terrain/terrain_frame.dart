@@ -92,7 +92,13 @@ class TerrainFramePlanner {
     final prev = _lastZoom;
     if (prev != null && (prev - z).abs() == 1) {
       final prevCount = TerrainWorld.tileRangeFor(bounds, prev).count;
-      if (prevCount <= maxCoreTiles * 1.5 && prevCount >= 2) z = prev;
+      if (prev < z) {
+        // 粗い段に居た: 理想の段の枚数が上限に近い間は留まる（境目で往復しない）
+        if (TerrainWorld.tileRangeFor(bounds, z).count > maxCoreTiles * 0.6) z = prev;
+      } else if (prevCount <= maxCoreTiles) {
+        // 細かい段に居た: 枚数が許容内なら留まる（寄っている最中に粗くしない）
+        z = prev;
+      }
     }
     _lastZoom = z;
     return z;

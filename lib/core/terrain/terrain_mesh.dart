@@ -105,6 +105,14 @@ class TerrainMesh {
   final int chunkSize;
   final int chunkCols;
 
+  /// GPU 側の頂点バッファを返す（捨てるタイルのメッシュはこれを呼ぶ。忘れると Graphics メモリが溜まる）
+  void dispose() {
+    skirt?.dispose();
+    for (final b in bands) {
+      b.vertices.dispose();
+    }
+  }
+
   /// 間引き後のセル番号 → チャンク番号（静的）
   int chunkOfCell(int cellIndex) {
     final c = cellIndex % _cellCols;

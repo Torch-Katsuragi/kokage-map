@@ -150,7 +150,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   );
 
   /// デコード済みタイル画像。3D を出入りしても使い回す（256 枚 ≒ 64MB 上限）
-  static final _tileImages = TileImageCache(capacity: 256);
+  static final _tileImages = TileImageCache(capacity: 128); // 256² RGBA × 128 ≈ 32MB
 
   late final TerrainCamera _camera;
   late final TerrainWorld _world;
@@ -236,6 +236,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     _world
       ..removeListener(_onWorldChanged)
       ..dispose();
+    for (final v in _meshes.values) {
+      v.$3.dispose();
+    }
+    _meshes.clear();
     _repaint.dispose();
     super.dispose();
   }
@@ -280,6 +284,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     if (_world.revision != _worldRevisionSeen) {
       // タイルの出入り: 消えたタイルのぶんだけ捨てる（縁が変わったタイルはキーが変わるので自然に入れ替わる）
       _scenes.removeWhere((k, _) => !_world.has(k.$1));
+      _pruneMeshes();
       _worldRevisionSeen = _world.revision;
     }
     final drawables = <TerrainTileDrawable>[];
@@ -298,11 +303,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       }
       drawables.add(_drawable(tile, builder, step));
     }
-    if (_meshes.length > 96) {
-      // 今描いていないメッシュだけ捨てる（全部捨てると次のフレームで全タイルを作り直して引っかかる）
-      final used = {for (final d in drawables) d.mesh};
-      _meshes.removeWhere((_, v) => !used.contains(v.$3));
-    }
     _painter
       ..tiles = drawables
       ..heightRange = _world.heightRange ?? (0, 1000)
@@ -316,6 +316,17 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
 
   int _meshBuilds = 0;
 
+  /// 生きているタイルのビルダーに紐づかないメッシュを捨てる（GPU 側の頂点も返す）。
+  /// ビルダーをキーに持つので、ここで外さないとタイルを捨ててもビルダーごと残る
+  void _pruneMeshes() {
+    final live = <TerrainMeshBuilder>{for (final t in _world.tiles) ...t.builders.values};
+    _meshes.removeWhere((b, v) {
+      if (live.contains(b)) return false;
+      v.$3.dispose();
+      return true;
+    });
+  }
+
   TerrainTileDrawable _drawable(TerrainTile tile, TerrainMeshBuilder builder, int step) {
     final cached = _meshes[builder];
     final TerrainMesh mesh;
@@ -324,6 +335,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     } else {
       mesh = builder.build(_camera);
       _meshBuilds++;
+      // 古いメッシュの Vertices は native 側にあり GC を待つと溜まるので、その場で返す
+      cached?.$3.dispose();
       _meshes[builder] = (_camera.bearing, _camera.pitch, mesh);
     }
     final scene = _sceneFor(tile, mesh, step);

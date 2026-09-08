@@ -17,11 +17,12 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show compute, debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
 import 'dem_grid.dart';
+import 'terrain_worker.dart';
 import 'web_mercator.dart';
 
 /// 標高タイルの符号化
@@ -199,7 +200,7 @@ class DemTileLoader {
     final bytesList = await _fetchRange(_fetch, range, onProgress: onProgress);
     final fetchMs = sw.elapsedMilliseconds;
     // PNG のデコードと格子の組み立ては純 Dart で数百 ms 掛かるので isolate へ（web では同じスレッド）
-    final heights = await compute(
+    final heights = await TerrainWorker.instance.run(
       _assembleHeights,
       _AssembleArgs(bytesList: bytesList, width: range.width, height: range.height, encoding: source.encoding),
     );

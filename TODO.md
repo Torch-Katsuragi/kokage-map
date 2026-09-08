@@ -40,7 +40,15 @@
       View 固有スタイル（グループレイヤ）はこの経路を通るので、リリース版では以前から壊れていたはず
 - [x] テスター招待の手順書 [[docs/technical/closed-test-invite]]（アドレス一覧なら「アドレスを聞く＋リンク1つ」、Google グループならリンク2つ）
 - [ ] ベータ案内の隠しページ `kokage-map.sleeptree.jp/beta/`（2026-09-07 松本了承・未着手）: `/about/` と同じ体裁で `web/beta/index.html`。内容は 14 日条件・グループ参加→テスターになるの 2 手順・つまずき・不具合報告フォーム（フォーム作成は本人操作）。テスター一覧のグループ化が審査を通ってから「準備ができました」に書き換える
-- [ ] 3D 地図: 設計メモ [[docs/technical/3d-map-design]]（DEM を持って表示時に TIN 化、正射影の別画面を推奨）。**別ブランチで着手**（2026-09-07 決定。大きい変更なので master に直接積まない）
+- [/] **3D 地形モード（`feature/3d-map`・2026-09-08）**: 別画面ではなく「いつもの地図が傾く」。純 Dart（`drawVertices` + 象限走査の painter's algorithm）で
+      `lib/core/terrain/`、本体接続は `lib/screens/map_page/widgets/terrain_map_layer.dart`（ツールバーの ⛰）。
+      設計の正典は Vault `3D化の詰め_2026-09-07`、実装ノートは [[docs/technical/terrain-3d]]、順1 の設計は [[docs/technical/scene-model]]。
+      ⚠ [[docs/technical/3d-map-design]] は旧案（別画面・閲覧専用）で上書き済み
+  - [x] 描画スパイク（Pixel 9: 北山村 z14 2x2 で LOD 57fps／全解像度 28fps）、実 DEM（AWS Terrain Tiles）＋地理院タイル合成、面・等高線・遮蔽つきヒットテスト、ゴールデン
+  - [x] 本体接続: 3D トグル、カメラの引き継ぎと書き戻し、`TerrainProjection` で選択ツールがそのまま動く、写真・GPS 軌跡・現在位置・パーティ・頂点、pitch スライダ、web でも動く
+  - [ ] 残り: オーバーレイ画像（GeoTIFF）をテクスチャに焼く／クラスタ／DeviceTool のオーバーレイ／描画プレビュー／等高線オプション／
+        DEM の dir 同梱と焼き込み CLI（圏外で使えるように）／`SceneSink` / `MapSurfaceController` のインターフェース抽出／web の fps 計測（Chrome を前面に）
+  - [ ] ⚠ Terrain Tiles の出典表示は 3D 中の地図面左下に出している。About / ライセンス画面にも載せる
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 
 ## リファクタリング（2026-09-07）

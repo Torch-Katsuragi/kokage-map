@@ -17,7 +17,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, debugPrint;
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
@@ -195,12 +195,17 @@ class DemTileLoader {
   /// [range] の全タイルを 1 枚の格子にする。格子点はピクセル中心
   Future<DemGrid> load(TileRange range, {TileProgress? onProgress}) async {
     final z = range.z;
+    final sw = Stopwatch()..start();
     final bytesList = await _fetchRange(_fetch, range, onProgress: onProgress);
+    final fetchMs = sw.elapsedMilliseconds;
     // PNG のデコードと格子の組み立ては純 Dart で数百 ms 掛かるので isolate へ（web では同じスレッド）
     final heights = await compute(
       _assembleHeights,
       _AssembleArgs(bytesList: bytesList, width: range.width, height: range.height, encoding: source.encoding),
     );
+    if (sw.elapsedMilliseconds > 800) {
+      debugPrint('[3D] dem ${range.z}/${range.x0}/${range.y0} fetch ${fetchMs}ms assemble ${sw.elapsedMilliseconds - fetchMs}ms');
+    }
     const ts = WebMercator.tileSize;
     final cols = range.width * ts;
     final rows = range.height * ts;

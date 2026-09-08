@@ -244,21 +244,28 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
   void didUpdateWidget(covariant TerrainMapLayer old) {
     super.didUpdateWidget(old);
     // build の最中なので、描き直しはフレームの後で（同期に通知すると setState during build）
-    if (old.currentLocation != widget.currentLocation) {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _refresh();
-      });
-    }
+    if (old.currentLocation != widget.currentLocation) _scheduleRefresh();
+  }
+
+  bool _refreshScheduled = false;
+
+  /// 次のフレームの頭で 1 回だけ描き直す。タイル到着・メッシュ完成・シーン更新など
+  /// 非同期のきっかけはすべてここを通す（同期に呼ぶと到着のたびに連鎖して止まる）
+  void _scheduleRefresh() {
+    if (_refreshScheduled || !mounted) return;
+    _refreshScheduled = true;
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      _refreshScheduled = false;
+      if (mounted) _refresh();
+    });
   }
 
   LatLng _centerLatLng() =>
       LatLng(WebMercator.latFromY(_camera.centerY), WebMercator.lonFromX(_camera.centerX));
 
-  void _onWorldChanged() {
-    if (mounted) _refresh();
-  }
+  void _onWorldChanged() => _scheduleRefresh();
 
-  void _onSceneRevision() => _refresh();
+  void _onSceneRevision() => _scheduleRefresh();
 
   // ── フレームの組み立て ──────────────────────────────
 
@@ -273,7 +280,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
     if (_world.revision != _worldRevisionSeen) {
       // タイルの出入り: 消えたタイルのぶんだけ捨てる（縁が変わったタイルはキーが変わるので自然に入れ替わる）
       _scenes.removeWhere((k, _) => !_world.has(k.$1));
-      if (_meshes.length > 64) _meshes.clear();
       _worldRevisionSeen = _world.revision;
     }
     final drawables = <TerrainTileDrawable>[];
@@ -283,9 +289,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
       final builder = tile.builders[step];
       if (builder == null) {
         // isolate で作る。できたら描き直す
-        tile.builderFor(step, chunkSize: _world.chunkSize, skirtDepth: skirt).then((_) {
-          if (mounted) _refresh();
-        });
+        tile.builderFor(step, chunkSize: _world.chunkSize, skirtDepth: skirt).then((_) => _scheduleRefresh());
         // できているものがあれば（粗さが違っても）それで繋ぐ
         if (tile.builders.isEmpty) continue;
         final near = tile.builders.keys.reduce((a, b) => (a - step).abs() <= (b - step).abs() ? a : b);
@@ -293,6 +297,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
         continue;
       }
       drawables.add(_drawable(tile, builder, step));
+    }
+    if (_meshes.length > 96) {
+      // 今描いていないメッシュだけ捨てる（全部捨てると次のフレームで全タイルを作り直して引っかかる）
+      final used = {for (final d in drawables) d.mesh};
+      _meshes.removeWhere((_, v) => !used.contains(v.$3));
     }
     _painter
       ..tiles = drawables
@@ -692,13 +701,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> implements Te
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(partySessionProvider, (_, _) => _refresh());
+    ref.listen(partySessionProvider, (_, _) => _scheduleRefresh());
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;
         if (size != _size) {
           _size = size;
-          WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+          _scheduleRefresh();
         }
         final loading = _world.pendingCount > 0;
         return Stack(

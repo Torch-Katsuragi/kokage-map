@@ -52,6 +52,22 @@ class DemGrid {
   double get width => (cols - 1) * cellSize;
   double get height => (rows - 1) * cellSize;
 
+  (double, double)? _range;
+
+  /// 標高の最小・最大（初回に 1 度だけ走査。65k 点で数 ms）
+  (double, double) get heightRange => _range ??= _scanRange();
+
+  (double, double) _scanRange() {
+    var minH = double.infinity, maxH = -double.infinity;
+    final h = heights;
+    for (var i = 0; i < h.length; i++) {
+      final v = h[i];
+      if (v < minH) minH = v;
+      if (v > maxH) maxH = v;
+    }
+    return (minH, maxH);
+  }
+
   double heightAtIndex(int c, int r) => heights[r * cols + c];
 
   /// 双一次補間で任意点の標高を返す。格子外は端の値

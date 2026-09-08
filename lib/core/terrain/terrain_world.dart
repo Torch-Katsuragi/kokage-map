@@ -606,14 +606,16 @@ class TerrainWorld extends ChangeNotifier {
     return best?.raw.elevationAt(x, y);
   }
 
-  /// 読み込み済みタイルの標高の範囲（無ければ null）
+  /// 読み込み済みタイルの標高の範囲（無ければ null）。タイルごとの最小・最大を畳むだけ
+  ///
+  /// ⚠ 以前は毎回 全タイルの全点を走査していて（50 枚で 340 万点）、タイル到着ごとの描き直しが
+  /// 連鎖するとイベントループを数十秒独占した（Pixel 9 で実測）
   (double, double)? get heightRange {
     var minH = double.infinity, maxH = -double.infinity;
     for (final t in _tiles.values) {
-      for (final h in t.raw.heights) {
-        if (h < minH) minH = h;
-        if (h > maxH) maxH = h;
-      }
+      final (lo, hi) = t.raw.heightRange;
+      if (lo < minH) minH = lo;
+      if (hi > maxH) maxH = hi;
     }
     return minH.isFinite ? (minH, maxH) : null;
   }

@@ -23,6 +23,8 @@
 library;
 
 import 'package:flutter/widgets.dart';
+import 'package:geobase/geobase.dart' as geo;
+import 'package:latlong2/latlong.dart';
 import 'package:maplibre/maplibre.dart' as ml;
 import '../../tools/map_tool.dart';
 import 'device_service.dart';
@@ -36,6 +38,11 @@ abstract class DeviceTool extends MapTool with ChangeNotifier {
 
   /// 地図上に描画するオーバーレイレイヤ（PolylineLayer等）
   List<ml.Layer> buildOverlayLayers();
+
+  /// 描画系に依らない形のオーバーレイ（3D の地形にも載せる）: 線と基準点。
+  /// [buildOverlayLayers] / [buildOverlayMarkers] はこれを MapLibre 向けに包む
+  List<geo.Feature<geo.LineString>> overlayLines() => const [];
+  LatLng? get overlayStation => null;
 
   /// 地図上に描画するウィジェットマーカー（BP標識等）
   List<ml.Marker> buildOverlayMarkers();

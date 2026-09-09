@@ -557,7 +557,20 @@ class TruPulseTool extends DeviceTool {
   }
 
   @override
+  LatLng? get overlayStation => _station?.point;
+
+  @override
   List<ml.Layer> buildOverlayLayers() {
+    final lines = overlayLines();
+    if (lines.isEmpty) return [];
+    return [
+      ml.PolylineLayer(polylines: lines, color: Colors.red, width: 2),
+    ];
+  }
+
+  /// 基準点 → 計測点の線（描画系に依らない形）
+  @override
+  List<geo.Feature<geo.LineString>> overlayLines() {
     final layer = _overlayLayer;
     if (layer == null) return [];
 
@@ -578,12 +591,7 @@ class TruPulseTool extends DeviceTool {
         ]),
       ));
     }
-
-    if (lines.isEmpty) return [];
-
-    return [
-      ml.PolylineLayer(polylines: lines, color: Colors.red, width: 2),
-    ];
+    return lines;
   }
 
   @override

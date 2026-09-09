@@ -35,6 +35,7 @@ import '../../../core/terrain/terrain_scene.dart';
 import '../../../core/terrain/terrain_world.dart';
 import '../../../core/terrain/terrain_world_painter.dart';
 import '../../../core/terrain/web_mercator.dart';
+import '../../../devices/base/device_tool.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../interfaces/map_state_interface.dart';
 import '../../../interfaces/terrain_projection.dart';
@@ -304,10 +305,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       ..addStatusListener((st) {
         if (st == AnimationStatus.completed && mounted) setState(() {});
       });
-    if (_toolTakesDrag(ref.read(currentToolProvider).name)) {
+    final tool = ref.read(currentToolProvider);
+    if (_toolTakesDrag(tool.name)) {
       _penLock = true;
       _pitchBeforePen = _camera.pitch;
       _camera.pitch = 0;
+    }
+    if (tool is DeviceTool) {
+      _listenedDevice = tool..addListener(_scheduleRefresh);
     }
   }
 
@@ -357,7 +362,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   static bool _toolTakesDrag(String toolName) => toolName == 'Pen' || toolName == 'Overlay Transform';
 
   /// ツールが変わった: 1 本指を取るツールなら真上に寄せて 1 本指を渡す。離れたら傾きを戻す
+  DeviceTool? _listenedDevice;
+
   void _onToolChanged(String toolName) {
+    // 外部機器ツールは計測のたびに notify するので、その間だけ購読する
+    final tool = ref.read(currentToolProvider);
+    if (!identical(tool, _listenedDevice)) {
+      _listenedDevice?.removeListener(_scheduleRefresh);
+      _listenedDevice = tool is DeviceTool ? tool : null;
+      _listenedDevice?.addListener(_scheduleRefresh);
+    }
     final pen = _toolTakesDrag(toolName);
     if (pen && !_penLock) {
       _penLock = true;
@@ -374,6 +388,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   @override
   void dispose() {
+    _listenedDevice?.removeListener(_scheduleRefresh);
     _anim.dispose();
     _retextureTimer?.cancel();
     for (final im in _overlayImages.values) {
@@ -617,9 +632,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       if (tool is OverlayTransformTool && tool.target != null) tool.target!,
     ];
     final overlayFrameKey = [for (final n in selectedOverlays) '${n.filePath}@${n.cornerCoordinates}'].join(';');
+    final deviceLines = tool is DeviceTool ? tool.overlayLines() : const <geo.Feature<geo.LineString>>[];
+    final deviceStation = tool is DeviceTool ? tool.overlayStation : null;
     final dynamicKey = <Object?>[
       track.length, session, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview,
       overlayFrameKey, tool is OverlayTransformTool ? tool.rotationHandlePosition : null,
+      deviceLines.length, deviceStation,
     ];
     final key = <Object?>[...staticKey, ...dynamicKey];
     final cached = _scenes[cacheKey];
@@ -660,7 +678,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     // 動的な部分
     var dyn = _dynamicScenes[cacheKey];
     if (dyn == null || !_sameKey(dyn.key, dynamicKey)) {
-      dyn = _buildDynamic(dynamicKey, track, session, loc, dem, builder, clip, selectedOverlays: selectedOverlays, tool: tool);
+      dyn = _buildDynamic(dynamicKey, track, session, loc, dem, builder, clip,
+          selectedOverlays: selectedOverlays, tool: tool, deviceLines: deviceLines, deviceStation: deviceStation);
       _dynamicScenes[cacheKey] = dyn;
     }
     final scene = _TileScene(
@@ -749,6 +768,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     Rect clip, {
     List<OverlayImageNode> selectedOverlays = const [],
     MapTool? tool,
+    List<geo.Feature<geo.LineString>> deviceLines = const [],
+    LatLng? deviceStation,
   }) {
     final lines = <LiftedPolyline>[];
     final polygons = <LiftedPolygon>[];
@@ -889,6 +910,21 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         final x = WebMercator.xFromLon(handle.longitude) - dem.originX;
         final y = WebMercator.yFromLat(handle.latitude) - dem.originY;
         if (clip.contains(Offset(x, y))) points.add(TerrainPoint(x: x, y: y, color: Colors.blue, sizePx: 10));
+      }
+    }
+    // 6. 外部機器ツール（TruPulse）: 基準点 → 計測点の線（赤）と基準点
+    if (deviceLines.isNotEmpty || deviceStation != null) {
+      const deviceStyle = TerrainFeatureStyle(
+        lineColor: Colors.red, lineWidth: 2, fillColor: Color(0x00000000),
+        outlineColor: Colors.red, outlineWidth: 0, pointColor: Colors.red, pointSize: 8,
+      );
+      if (deviceLines.isNotEmpty) {
+        add(builder(const {}, deviceStyle, '__no_label__').build(lines: deviceLines, clipRect: clip));
+      }
+      if (deviceStation != null) {
+        final x = WebMercator.xFromLon(deviceStation.longitude) - dem.originX;
+        final y = WebMercator.yFromLat(deviceStation.latitude) - dem.originY;
+        if (clip.contains(Offset(x, y))) points.add(TerrainPoint(x: x, y: y, color: Colors.orange, sizePx: 12));
       }
     }
     return _TileScene(key: key, lines: lines, polygons: polygons, points: points, labels: labels);

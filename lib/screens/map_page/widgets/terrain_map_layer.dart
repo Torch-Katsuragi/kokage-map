@@ -243,7 +243,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   final Map<String, ui.Image> _overlayImages = {};
   final Set<String> _overlayLoading = {};
   String _overlayKey = '';
+
+  /// 次の作り直しで触る範囲（Mercator）。前回と今回のオーバーレイの四隅を含む。null なら全部
+  Rect? _overlayBounds;
   Timer? _retextureTimer;
+  Rect? _lastOverlayBounds;
 
   // ジェスチャ
   double _scaleStart = 1;
@@ -296,7 +300,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       ..addStatusListener((st) {
         if (st == AnimationStatus.completed && mounted) setState(() {});
       });
-    if (ref.read(currentToolProvider).name == 'Pen') {
+    if (_toolTakesDrag(ref.read(currentToolProvider).name)) {
       _penLock = true;
       _pitchBeforePen = _camera.pitch;
       _camera.pitch = 0;
@@ -345,9 +349,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _anim.forward(from: 0);
   }
 
-  /// ツールが変わった: ペンなら真上に寄せて 1 本指を描画に渡す。離れたら傾きを戻す
+  /// 1 本指を取るツール（真上ロックの対象）
+  static bool _toolTakesDrag(String toolName) => toolName == 'Pen' || toolName == 'Overlay Transform';
+
+  /// ツールが変わった: 1 本指を取るツールなら真上に寄せて 1 本指を渡す。離れたら傾きを戻す
   void _onToolChanged(String toolName) {
-    final pen = toolName == 'Pen';
+    final pen = _toolTakesDrag(toolName);
     if (pen && !_penLock) {
       _penLock = true;
       _pitchBeforePen = _camera.pitch;
@@ -951,6 +958,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     ].join(';');
     if (key == _overlayKey) return;
     _overlayKey = key;
+    // 前回の範囲（消えた分）と今回の範囲（現れた分）の両方を作り直す
+    var b = _overlayBounds ?? _lastOverlayBounds;
+    for (final n in nodes) {
+      for (final c in n.cornerCoordinates) {
+        final p = Offset(WebMercator.xFromLon(c.longitude), WebMercator.yFromLat(c.latitude));
+        b = b == null ? Rect.fromPoints(p, p) : b.expandToInclude(Rect.fromPoints(p, p));
+      }
+    }
+    _overlayBounds = b?.inflate(50) ?? _overlayBounds;
+    _lastOverlayBounds = b;
     AppLogger.debug('[3D] overlays: ${nodes.length} 枚 ${[for (final n in nodes) n.filePath]}');
     for (final n in nodes) {
       if (_overlayImages.containsKey(n.filePath) || _overlayLoading.contains(n.filePath)) continue;
@@ -980,7 +997,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _retextureTimer?.cancel();
     _retextureTimer = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
-      _world.retexture();
+      _world.retexture(within: _overlayBounds);
+      _overlayBounds = null;
     });
   }
 

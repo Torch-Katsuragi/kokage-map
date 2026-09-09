@@ -571,6 +571,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       v.$3.dispose();
     }
     _meshes.clear();
+    _painter.disposeCaches();
     _repaint.dispose();
     super.dispose();
   }

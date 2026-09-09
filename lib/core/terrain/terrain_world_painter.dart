@@ -72,6 +72,9 @@ class _ProjectedBatch {
   final double bearing;
   final double pitch;
   final ui.Vertices vertices;
+
+  /// 最後に描いた時刻（ms）。しばらく描かなければ捨てる（Vertices は native 側）
+  int lastUsed = 0;
 }
 
 /// タイルの点を投影した結果（方位・傾きが変わるまで使い回す）。hidden: 0 = 未判定、1 = 見える、2 = 隠れている
@@ -138,6 +141,9 @@ class _ProjectedLines {
   final double bearing;
   final double pitch;
 
+  /// 最後に描いた時刻（ms）
+  int lastUsed = 0;
+
   /// 投影したときの本数（静的シーンが育つと増える）
   final int count;
 
@@ -186,10 +192,14 @@ class TerrainWorldPainter extends CustomPainter {
 
   /// 面の束の投影キャッシュ。正射影なので方位・傾きが同じ間は投影が変わらず、
   /// 移動・拡縮は Canvas の変換だけで済む（毎フレーム 50 万頂点を投影し直さない）
-  final Expando<_ProjectedBatch> _batchCache = Expando();
+  /// ⚠ Expando ではなく Map: 描かなくなったタイル（別の段・画面外）の束が GC を待つ間、native の Vertices が溜まる。
+  /// [_sweepMs] 描いていないものはこちらから捨てる
+  final Map<PolygonBatch, _ProjectedBatch> _batchCache = {};
+  static const _sweepMs = 3000;
+  int _lastSweep = 0;
 
   /// 線の投影キャッシュ（タイルの線リストごと）
-  final Expando<_ProjectedLines> _lineCache = Expando();
+  final Map<List<LiftedPolyline>, _ProjectedLines> _lineCache = {};
 
   /// 点の投影と隠れ判定のキャッシュ（タイルの点リストごと）
   final Expando<_ProjectedPoints> _pointCache = Expando();
@@ -388,6 +398,7 @@ class TerrainWorldPainter extends CustomPainter {
       // 細い線（≤ 2.5px）は線分の配列にして drawRawPoints（Path を毎フレーム組むより軽い。継ぎ目の欠けは太さ的に見えない）、
       // 太い線は角と端を丸くしたいので Path。方位・傾きが同じ間はキャッシュ
       var pl = _lineCache[t.lines];
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
       if (pl == null ||
           pl.bearing != camera.bearing ||
           pl.pitch != camera.pitch ||
@@ -396,6 +407,7 @@ class TerrainWorldPainter extends CustomPainter {
         pl = _projectLines(t.lines, mesh, skipThin: gesturing);
         _lineCache[t.lines] = pl;
       }
+      pl.lastUsed = nowMs;
       final dynLines = t.dynamicLines.isEmpty ? null : _projectLines(t.dynamicLines, mesh, skipThin: false);
       final pathsByBand = pl.pathsByBand;
       final segsByBand = pl.segsByBand;
@@ -417,6 +429,7 @@ class TerrainWorldPainter extends CustomPainter {
               );
               _batchCache[batch] = pb;
             }
+            pb.lastUsed = nowMs;
             canvas.drawVertices(pb.vertices, BlendMode.srcOver, fillPaint);
           }
         }
@@ -625,8 +638,31 @@ class TerrainWorldPainter extends CustomPainter {
         canvas.drawCircle(sp, 2.5, anchorPaint);
       }
     }
+    _sweepCaches();
     sw.stop();
     onPainted?.call(sw.elapsed);
+  }
+
+  /// しばらく描いていない投影キャッシュを捨てる（1 秒に 1 回）
+  void _sweepCaches() {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastSweep < 1000) return;
+    _lastSweep = nowMs;
+    _batchCache.removeWhere((_, pb) {
+      if (nowMs - pb.lastUsed <= _sweepMs) return false;
+      pb.vertices.dispose();
+      return true;
+    });
+    _lineCache.removeWhere((_, pl) => nowMs - pl.lastUsed > _sweepMs);
+  }
+
+  /// 全部捨てる（レイヤを閉じるとき）
+  void disposeCaches() {
+    for (final pb in _batchCache.values) {
+      pb.vertices.dispose();
+    }
+    _batchCache.clear();
+    _lineCache.clear();
   }
 
   @override

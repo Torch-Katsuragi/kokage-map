@@ -193,11 +193,20 @@ class DemTileLoader {
   final DemTileSource source;
   final TileFetcher _fetch;
 
-  /// [range] の全タイルを 1 枚の格子にする。格子点はピクセル中心
+  /// [range] の全タイルを 1 枚の格子にする。格子点はピクセル中心。1 枚でも取れなければ例外
   Future<DemGrid> load(TileRange range, {TileProgress? onProgress}) async {
+    final dem = await tryLoad(range, onProgress: onProgress);
+    if (dem == null) throw StateError('DEM タイルが取れない: ${range.z}/${range.x0}/${range.y0}');
+    return dem;
+  }
+
+  /// [load] の null 版。1 枚でも取れなければ null
+  /// （⚠ 以前は取れなかったタイルが 0m の平面になっていた）
+  Future<DemGrid?> tryLoad(TileRange range, {TileProgress? onProgress}) async {
     final z = range.z;
     final sw = Stopwatch()..start();
     final bytesList = await _fetchRange(_fetch, range, onProgress: onProgress);
+    if (bytesList.any((b) => b == null)) return null;
     final fetchMs = sw.elapsedMilliseconds;
     // PNG のデコードと格子の組み立ては純 Dart で数百 ms 掛かるので isolate へ（web では同じスレッド）
     final heights = await TerrainWorker.instance.run(
@@ -232,6 +241,50 @@ class _AssembleArgs {
 }
 
 /// タイル画像列 → 標高格子（南が 0 行目）。isolate で走る
+/// 親タイル（[levels] 段上）の高さから、子タイル (childX, childY) の 256×256 を高さの空間で双一次補間して作る
+///
+/// PNG の RGB を拡大すると 2×2〜8×8 のブロック状の階段になる（Terrarium の桁が独立に補間される）。
+/// 高さに直してから補間すれば、粗いだけで滑らかな地形になる
+class UpsampleArgs {
+  const UpsampleArgs({required this.parent, required this.levels, required this.childX, required this.childY});
+
+  /// 親の高さ（256×256・南が 0 行目）
+  final Float32List parent;
+  final int levels;
+  final int childX;
+  final int childY;
+}
+
+Float32List upsampleFromParent(UpsampleArgs a) {
+  const n = WebMercator.tileSize;
+  final f = 1 << a.levels; // 親 1 枚に子が f×f
+  final sub = n ~/ f; // 子 1 枚ぶんの親の格子点数
+  final cx = a.childX & (f - 1);
+  final cyNorth = a.childY & (f - 1); // タイル y は北から。DemGrid は南が 0 行目
+  final c0 = cx * sub;
+  final r0 = (f - 1 - cyNorth) * sub;
+  final out = Float32List(n * n);
+  // 子の格子点 i（ピクセル中心）は親の格子座標で (i + 0.5) / f - 0.5
+  for (var r = 0; r < n; r++) {
+    final py = r0 + (r + 0.5) / f - 0.5;
+    final ry0 = py.floor().clamp(0, n - 1);
+    final ry1 = (ry0 + 1).clamp(0, n - 1);
+    final ty = (py - ry0).clamp(0.0, 1.0);
+    for (var c = 0; c < n; c++) {
+      final px = c0 + (c + 0.5) / f - 0.5;
+      final cx0 = px.floor().clamp(0, n - 1);
+      final cx1 = (cx0 + 1).clamp(0, n - 1);
+      final tx = (px - cx0).clamp(0.0, 1.0);
+      final h00 = a.parent[ry0 * n + cx0];
+      final h10 = a.parent[ry0 * n + cx1];
+      final h01 = a.parent[ry1 * n + cx0];
+      final h11 = a.parent[ry1 * n + cx1];
+      out[r * n + c] = (h00 * (1 - tx) + h10 * tx) * (1 - ty) + (h01 * (1 - tx) + h11 * tx) * ty;
+    }
+  }
+  return out;
+}
+
 Float32List _assembleHeights(_AssembleArgs a) {
   const ts = WebMercator.tileSize;
   final cols = a.width * ts;

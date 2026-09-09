@@ -70,9 +70,14 @@ class TileKey {
 
 /// 世界の 1 タイル（計算メッシュ = 生の DEM、描画メッシュ = 間引いたビルダー）
 class TerrainTile {
-  TerrainTile({required this.key, required this.raw});
+  TerrainTile({required this.key, required this.raw, int? sourceZoom}) : sourceZoom = sourceZoom ?? key.z;
 
   final TileKey key;
+
+  /// 高さの出どころの段。[key] の段より粗ければ親から補間した近似（本物が取れたら差し替える）
+  final int sourceZoom;
+
+  bool get approximate => sourceZoom < key.z;
 
   /// 生の DEM（256×256・格子点はピクセル中心）。標高の問い合わせと当たり判定はこれ
   final DemGrid raw;
@@ -126,10 +131,17 @@ class TerrainTile {
   }
 
   /// 隣の状態を反映する。縁が変わったら true（ビルダーを作り直す必要あり）
+  TerrainTile? _eastRef, _northRef, _northEastRef;
+
   bool updateBorder(TerrainTile? east, TerrainTile? north, TerrainTile? northEast) {
     final mask = (east != null ? 1 : 0) | (north != null ? 2 : 0) | (northEast != null ? 4 : 0);
-    if (mask == borderMask && builders.isNotEmpty) return false;
-    if (mask == borderMask) return false;
+    // 隣が同じ物なら何もしない。隣が近似 → 本物に差し替わったときは同じ mask でも縁を借り直す
+    if (mask == borderMask && identical(east, _eastRef) && identical(north, _northRef) && identical(northEast, _northEastRef)) {
+      return false;
+    }
+    _eastRef = east;
+    _northRef = north;
+    _northEastRef = northEast;
     borderMask = mask;
     bordered = _makeBordered(east, north, northEast);
     builders.clear();
@@ -342,8 +354,11 @@ class TerrainWorld extends ChangeNotifier {
     for (var y = range.y0; y <= range.y1; y++) {
       for (var x = range.x0; x <= range.x1; x++) {
         final key = TileKey(range.z, x, y);
-        if (_tiles.containsKey(key)) {
-          _tiles[key]!.lastUsed = ++_clock;
+        final have = _tiles[key];
+        if (have != null) {
+          have.lastUsed = ++_clock;
+          // 近似（親から補間）なら本物を取りに行く（失敗直後は待つ）
+          if (have.approximate && !_inFlight.contains(key) && !_recentlyFailed(key)) wanted.add(key);
         } else if (!_inFlight.contains(key) && !_recentlyFailed(key)) {
           wanted.add(key);
         }
@@ -367,7 +382,7 @@ class TerrainWorld extends ChangeNotifier {
   void _pump() {
     while (_inFlight.length < concurrency && _queue.isNotEmpty) {
       final key = _queue.removeAt(0);
-      if (_inFlight.contains(key) || _tiles.containsKey(key)) continue;
+      if (_inFlight.contains(key) || (_tiles[key]?.approximate == false)) continue;
       _inFlight.add(key);
       unawaited(_load(key).whenComplete(() {
         _inFlight.remove(key);
@@ -379,20 +394,65 @@ class TerrainWorld extends ChangeNotifier {
   Future<TerrainTile?> _defaultLoad(TileKey key) async {
     final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
     final sw = Stopwatch()..start();
-    final dem = await DemTileLoader(source: demSource, fetcher: demFetcher).load(range);
+    final loader = DemTileLoader(source: demSource, fetcher: demFetcher);
+    var dem = await loader.tryLoad(range);
+    var sourceZoom = key.z;
+    if (dem == null) {
+      // 取れない（圏外・遅い）: 親を高さの空間で補間した近似で埋める。本物は後で取り直す
+      final approx = await _approximateFromAncestor(loader, key);
+      if (approx == null) return null;
+      dem = approx.$1;
+      sourceZoom = approx.$2;
+    }
     final demMs = sw.elapsedMilliseconds;
     final texRange = range.zoomIn(textureZoomOffset);
     final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache).compose(texRange);
     if (sw.elapsedMilliseconds > 800) debugPrint('[3D] tile $key load ${sw.elapsedMilliseconds}ms (dem $demMs)');
-    return TerrainTile(key: key, raw: dem)
+    return TerrainTile(key: key, raw: dem, sourceZoom: sourceZoom)
       ..texture = tex
       ..textureWidth = tex.width
       ..textureHeight = tex.height;
   }
 
+  /// 親（最大 [maxApproximateLevels] 段上）から補間した近似の DEM と、その親の段
+  Future<(DemGrid, int)?> _approximateFromAncestor(DemTileLoader loader, TileKey key) async {
+    for (var k = 1; k <= maxApproximateLevels && key.z - k >= demSource.minZoom; k++) {
+      final pz = key.z - k;
+      final px = key.x >> k;
+      final py = key.y >> k;
+      final parent = _tiles[TileKey(pz, px, py)]?.raw ??
+          await loader.tryLoad(TileRange(z: pz, x0: px, y0: py, x1: px, y1: py));
+      if (parent == null || parent.cols != WebMercator.tileSize) continue;
+      final heights = await TerrainWorker.instance.run(
+        upsampleFromParent,
+        UpsampleArgs(parent: parent.heights, levels: k, childX: key.x, childY: key.y),
+      );
+      final mpp = WebMercator.metersPerPixel(key.z);
+      return (
+        DemGrid(
+          cols: WebMercator.tileSize,
+          rows: WebMercator.tileSize,
+          originX: key.west + mpp / 2,
+          originY: key.south + mpp / 2,
+          cellSize: mpp,
+          heights: heights,
+        ),
+        pz,
+      );
+    }
+    return null;
+  }
+
+  /// 近似に使う親の最大段数
+  int maxApproximateLevels = 5;
+
   /// 読み込みに失敗した時刻。しばらく再試行しない（圏外で毎フレーム失敗し続けないように）
   final Map<TileKey, int> _failedAt = {};
   static const _retryAfterMs = 10000;
+
+  /// テスト用: 失敗の記録を消す（fake_async では DateTime.now が進まない）
+  @visibleForTesting
+  void debugClearFailures() => _failedAt.clear();
 
   bool _recentlyFailed(TileKey key) {
     final t = _failedAt[key];
@@ -409,9 +469,15 @@ class TerrainWorld extends ChangeNotifier {
         _failedAt[key] = DateTime.now().millisecondsSinceEpoch;
         return;
       }
-      if (_tiles.containsKey(key)) {
-        tile.dispose();
-        return;
+      if (tile.approximate) _failedAt[key] = DateTime.now().millisecondsSinceEpoch; // 本物の取り直しは少し待つ
+      final existing = _tiles[key];
+      if (existing != null) {
+        if (tile.sourceZoom <= existing.sourceZoom) {
+          tile.dispose();
+          return;
+        }
+        // 近似 → 本物（または より近い親）に差し替え。古い方のメッシュはレイヤの掃除で返る
+        existing.dispose();
       }
       tile.lastUsed = ++_clock;
       _tiles[key] = tile;

@@ -173,9 +173,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
   // タイルごとのキャッシュ。キーにビルダー（縁が変わると別物になる）と borderMask を含めるので、
   // タイルが届いても他のタイルのキャッシュは生きたまま
   final Map<TerrainMeshBuilder, (double, double, TerrainMesh)> _meshes = {}; // (bearing, pitch, mesh)
-  final Map<(TileKey, int, int), _TileScene> _scenes = {};
-  final Map<(TileKey, int, int), _TileScene> _staticScenes = {};
-  final Map<(TileKey, int, int), _TileScene> _dynamicScenes = {};
+  // キー: (タイル, step, 縁の組み合わせ, 高さの出どころの段)。近似 → 本物の差し替えで作り直す
+  final Map<(TileKey, int, int, int), _TileScene> _scenes = {};
+  final Map<(TileKey, int, int, int), _TileScene> _staticScenes = {};
+  final Map<(TileKey, int, int, int), _TileScene> _dynamicScenes = {};
 
   /// 1 フレームに作る静的な貼り付けの枚数と上限
   int _staticBuilds = 0;
@@ -432,7 +433,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
     final track = widget.gpsTrack();
     final session = ref.read(partySessionProvider);
     final loc = widget.currentLocation;
-    final cacheKey = (tile.key, step, tile.borderMask);
+    final cacheKey = (tile.key, step, tile.borderMask, tile.sourceZoom);
     final staticKey = <Object?>[
       g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images,
       g.lineVertices, g.polygonVertices,

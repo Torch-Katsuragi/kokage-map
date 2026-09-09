@@ -33,14 +33,20 @@ class TerrainTileDrawable {
     required this.texture,
     this.lines = const [],
     this.polygons = const [],
+    this.dynamicLines = const [],
+    this.dynamicPolygons = const [],
     this.segmentSets = const [],
     this.points = const [],
     this.labels = const [],
     Map<int, PolygonBatch>? polygonBatches,
   }) : polygonBatches = polygonBatches ?? PolygonBatch.byChunk(polygons);
 
-  /// チャンク番号 → 面の束（シーン側で一度作って使い回す）
+  /// チャンク番号 → 面の束（シーン側で一度作って使い回す。投影はこの束ごとにキャッシュされる）
   final Map<int, PolygonBatch> polygonBatches;
+
+  /// 毎フレーム変わりうる線・面（描画中の線、軌跡、向きの線など）。少ないので投影をキャッシュしない
+  final List<LiftedPolyline> dynamicLines;
+  final List<LiftedPolygon> dynamicPolygons;
 
   /// タイルの DEM 原点（Mercator m）
   final double originX;
@@ -175,11 +181,11 @@ class TerrainWorldPainter extends CustomPainter {
     }
   }
 
-  _ProjectedLines _projectLines(TerrainTileDrawable t, TerrainMesh mesh, {required bool skipThin}) {
+  _ProjectedLines _projectLines(List<LiftedPolyline> lines, TerrainMesh mesh, {required bool skipThin}) {
     final pathsByBand = <int, Map<(int, double), Path>>{};
     final segLists = <int, Map<(int, double), List<double>>>{};
-    for (var li = 0; li < t.lines.length; li++) {
-      final line = t.lines[li];
+    for (var li = 0; li < lines.length; li++) {
+      final line = lines[li];
       final n = line.pointCount;
       final styleKey = (line.color.toARGB32(), line.widthPx);
       final thin = line.widthPx <= 2.5;
@@ -289,9 +295,10 @@ class TerrainWorldPainter extends CustomPainter {
       // 太い線は角と端を丸くしたいので Path。方位・傾きが同じ間はキャッシュ
       var pl = _lineCache[t.lines];
       if (pl == null || pl.bearing != camera.bearing || pl.pitch != camera.pitch || pl.thinSkipped != gesturing) {
-        pl = _projectLines(t, mesh, skipThin: gesturing);
+        pl = _projectLines(t.lines, mesh, skipThin: gesturing);
         _lineCache[t.lines] = pl;
       }
+      final dynLines = t.dynamicLines.isEmpty ? null : _projectLines(t.dynamicLines, mesh, skipThin: false);
       final pathsByBand = pl.pathsByBand;
       final segsByBand = pl.segsByBand;
 
@@ -313,6 +320,15 @@ class TerrainWorldPainter extends CustomPainter {
           }
           canvas.drawVertices(pb.vertices, BlendMode.srcOver, fillPaint);
         }
+        for (final poly in t.dynamicPolygons) {
+          final src = poly.byChunk[chunk];
+          if (src == null) continue;
+          final dst = poly.projected[chunk]!;
+          projectInto(src, dst);
+          fillPaint.color = poly.color;
+          canvas.drawVertices(ui.Vertices.raw(ui.VertexMode.triangles, dst), BlendMode.srcOver, fillPaint);
+        }
+        fillPaint.color = const Color(0xFFFFFFFF);
         for (final set in t.segmentSets) {
           final src = set.byChunk[chunk];
           if (src == null) continue;
@@ -333,12 +349,33 @@ class TerrainWorldPainter extends CustomPainter {
           }
         }
         final paths = pathsByBand[b];
-        if (paths == null) continue;
-        for (final e in paths.entries) {
-          linePaint
-            ..color = Color(e.key.$1)
-            ..strokeWidth = e.key.$2 / camera.scale;
-          canvas.drawPath(e.value, linePaint);
+        if (paths != null) {
+          for (final e in paths.entries) {
+            linePaint
+              ..color = Color(e.key.$1)
+              ..strokeWidth = e.key.$2 / camera.scale;
+            canvas.drawPath(e.value, linePaint);
+          }
+        }
+        if (dynLines != null) {
+          final ds = dynLines.segsByBand[b];
+          if (ds != null) {
+            for (final e in ds.entries) {
+              segmentPaint
+                ..color = Color(e.key.$1)
+                ..strokeWidth = e.key.$2 / camera.scale;
+              canvas.drawRawPoints(ui.PointMode.lines, e.value, segmentPaint);
+            }
+          }
+          final dp = dynLines.pathsByBand[b];
+          if (dp != null) {
+            for (final e in dp.entries) {
+              linePaint
+                ..color = Color(e.key.$1)
+                ..strokeWidth = e.key.$2 / camera.scale;
+              canvas.drawPath(e.value, linePaint);
+            }
+          }
         }
       }
       canvas.restore();

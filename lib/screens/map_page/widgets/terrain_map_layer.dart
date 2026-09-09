@@ -173,15 +173,32 @@ class _CompassButton extends StatelessWidget {
 }
 
 class _TileScene {
-  _TileScene({required this.key, required this.lines, required this.polygons, required this.points, required this.labels});
+  _TileScene({
+    required this.key,
+    required this.lines,
+    required this.polygons,
+    required this.points,
+    required this.labels,
+    this.dynamicLines = const [],
+    this.dynamicPolygons = const [],
+    Map<int, PolygonBatch>? polygonBatches,
+  }) : _batches = polygonBatches;
 
-  /// チャンクごとの面の束（初回に作る。描画は毎フレームこれを投影する）
-  late final Map<int, PolygonBatch> polygonBatches = PolygonBatch.byChunk(polygons);
+  Map<int, PolygonBatch>? _batches;
+
+  /// チャンクごとの面の束（初回に作る。描画側は束ごとに投影をキャッシュするので、同一性を保つ）
+  Map<int, PolygonBatch> get polygonBatches => _batches ??= PolygonBatch.byChunk(polygons);
 
   /// 何から作ったか（GeoJSON リストの同一性・選択・軌跡の点数・パーティ・現在位置）
   final List<Object?> key;
+
+  /// 静的（フィーチャ本体など。投影をキャッシュする）
   final List<LiftedPolyline> lines;
   final List<LiftedPolygon> polygons;
+
+  /// 動的（描画中の線・軌跡・向きなど。毎フレーム投影）
+  final List<LiftedPolyline> dynamicLines;
+  final List<LiftedPolygon> dynamicPolygons;
   final List<TerrainPoint> points;
   final List<TerrainLabel> labels;
 }
@@ -575,6 +592,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       lines: scene.lines,
       polygons: scene.polygons,
       polygonBatches: scene.polygonBatches,
+      dynamicLines: scene.dynamicLines,
+      dynamicPolygons: scene.dynamicPolygons,
       points: scene.points,
       labels: scene.labels,
     );
@@ -705,10 +724,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           headingDeg: headingDeg);
       _dynamicScenes[cacheKey] = dyn;
     }
+    // 静的な線・面はそのまま（リストと束の同一性を保つ → 描画側の投影キャッシュが効く）。動的な方は別に持つ
     final scene = _TileScene(
       key: key,
-      lines: [...dyn.lines, ...stat.lines],
-      polygons: [...dyn.polygons, ...stat.polygons],
+      lines: stat.lines,
+      polygons: stat.polygons,
+      polygonBatches: stat.polygonBatches,
+      dynamicLines: dyn.lines,
+      dynamicPolygons: dyn.polygons,
       points: [...stat.points, ...dyn.points],
       labels: [...stat.labels, ...dyn.labels],
     );

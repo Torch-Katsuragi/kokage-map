@@ -428,11 +428,19 @@ class TerrainWorld extends ChangeNotifier {
     final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
     for (final source in demSources) {
       if (key.z < source.minZoom || key.z > source.maxZoom) continue;
+      final missKey = '${source.id}/${key.z}/${key.x}/${key.y}';
+      if (_missing.contains(missKey)) continue;
       final dem = await DemTileLoader(source: source, fetcher: (z, x, y) => demFetcher(source, z, x, y)).tryLoad(range);
       if (dem != null) return dem;
+      // 無かったソースは覚えておく（タイルキャッシュは 404 を覚えないので、毎回ネットに聞くと 1 枚数秒掛かる）
+      _missing.add(missKey);
+      if (_missing.length > 4096) _missing.clear();
     }
     return null;
   }
+
+  /// このセッションで「無かった」(ソース, タイル)。圏外の失敗は _failedAt が別に持つ
+  final Set<String> _missing = {};
 
   /// 親（最大 [maxApproximateLevels] 段上）から補間した近似の DEM と、その親の段
   Future<(DemGrid, int)?> _approximateFromAncestor(TileKey key) async {

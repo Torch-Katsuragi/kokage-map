@@ -557,7 +557,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       if (mounted) setState(() {});
     }
     if (sw.elapsedMilliseconds > 120) {
-      AppLogger.debug('[3D] refresh ${sw.elapsedMilliseconds}ms (plan $planMs [${_planner.lastTiming}], meshes built $_meshBuilds, '
+      debugPrint('[3D] refresh ${sw.elapsedMilliseconds}ms (plan $planMs [${_planner.lastTiming}], meshes built $_meshBuilds, '
           'placeholders $_placeholders, scenes built $_sceneBuilds, tiles ${drawables.length})');
     }
   }
@@ -602,7 +602,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       mesh = builder.build(_camera);
       _meshBuilds++;
       if (mesh.timing.project + mesh.timing.sort + mesh.timing.assemble > const Duration(milliseconds: 60)) {
-        AppLogger.debug('[3D] mesh ${tile.key} step $step: project ${mesh.timing.project.inMilliseconds}ms '
+        debugPrint('[3D] mesh ${tile.key} step $step: project ${mesh.timing.project.inMilliseconds}ms '
             'sort ${mesh.timing.sort.inMilliseconds}ms assemble ${mesh.timing.assemble.inMilliseconds}ms (resorted ${mesh.timing.resorted})');
       }
       // 古いメッシュの Vertices は native 側にあり GC を待つと溜まるので、その場で返す
@@ -862,7 +862,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
     scene.complete = true;
     if (sw.elapsedMilliseconds > 20) {
-      AppLogger.debug('[3D] tile ${tile.key} step $step 貼り付け 最後の一片 ${sw.elapsedMilliseconds}ms '
+      debugPrint('[3D] tile ${tile.key} step $step 貼り付け 最後の一片 ${sw.elapsedMilliseconds}ms '
           '(lines ${scene.lines.length} polys ${scene.polygons.length} pts ${scene.points.length})');
     }
   }

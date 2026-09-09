@@ -47,6 +47,7 @@ import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../services/basemap_service.dart';
 import '../../../services/map_source_manager.dart';
+import '../../../tools/gps_tool.dart';
 import '../../../tools/map_tool.dart';
 import '../../../tools/overlay_transform_tool.dart';
 import '../../../utils/app_logger.dart';
@@ -80,6 +81,7 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
     required this.onProjectionChanged,
     required this.mapBearingNotifier,
     required this.cameraTickNotifier,
+    this.heading,
   });
 
   final IMapState mapState;
@@ -98,6 +100,9 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
 
   /// 今日の GPS 軌跡（未 Consolidation 分。Consolidation 済みはレイヤ経由で届く）
   final List<LatLng> Function() gpsTrack;
+
+  /// 端末の向き（度）。現在位置から向きの線を引く（2D のコンパス扇に相当）
+  final ValueListenable<double?>? heading;
 
   /// 投影の登録 / 解除（3D に入るとき / 出るとき）
   final void Function(TerrainProjection? projection) onProjectionChanged;
@@ -299,6 +304,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       repaint: _repaint,
     );
     widget.sceneRevision.addListener(_onSceneRevision);
+    widget.heading?.addListener(_scheduleRefresh);
     widget.onProjectionChanged(this);
     _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 350))
       ..addListener(_onAnimTick)
@@ -395,6 +401,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       im.dispose();
     }
     _stopDrive();
+    widget.heading?.removeListener(_scheduleRefresh);
     widget.sceneRevision.removeListener(_onSceneRevision);
     widget.onProjectionChanged(null);
     // 真上に戻して MapLibre へ書き戻す
@@ -634,10 +641,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final overlayFrameKey = [for (final n in selectedOverlays) '${n.filePath}@${n.cornerCoordinates}'].join(';');
     final deviceLines = tool is DeviceTool ? tool.overlayLines() : const <geo.Feature<geo.LineString>>[];
     final deviceStation = tool is DeviceTool ? tool.overlayStation : null;
+    final headingDeg = widget.heading?.value;
+    final headingKey = headingDeg == null ? null : (headingDeg / 5).round();
     final dynamicKey = <Object?>[
       track.length, session, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview,
       overlayFrameKey, tool is OverlayTransformTool ? tool.rotationHandlePosition : null,
-      deviceLines.length, deviceStation,
+      deviceLines.length, deviceStation, headingKey, tool.name,
     ];
     final key = <Object?>[...staticKey, ...dynamicKey];
     final cached = _scenes[cacheKey];
@@ -679,7 +688,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     var dyn = _dynamicScenes[cacheKey];
     if (dyn == null || !_sameKey(dyn.key, dynamicKey)) {
       dyn = _buildDynamic(dynamicKey, track, session, loc, dem, builder, clip,
-          selectedOverlays: selectedOverlays, tool: tool, deviceLines: deviceLines, deviceStation: deviceStation);
+          selectedOverlays: selectedOverlays, tool: tool, deviceLines: deviceLines, deviceStation: deviceStation,
+          headingDeg: headingDeg);
       _dynamicScenes[cacheKey] = dyn;
     }
     final scene = _TileScene(
@@ -770,6 +780,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     MapTool? tool,
     List<geo.Feature<geo.LineString>> deviceLines = const [],
     LatLng? deviceStation,
+    double? headingDeg,
   }) {
     final lines = <LiftedPolyline>[];
     final polygons = <LiftedPolygon>[];
@@ -832,12 +843,36 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         clipRect: clip,
       ),
     );
-    // 3. 現在位置（青）
+    // 3. 現在位置（青）と端末の向き（青い線、30m。2D のコンパス扇に相当）
     if (loc != null) {
       final x = WebMercator.xFromLon(loc.longitude) - dem.originX;
       final y = WebMercator.yFromLat(loc.latitude) - dem.originY;
       if (clip.contains(Offset(x, y))) {
         points.add(TerrainPoint(x: x, y: y, color: Colors.blue, sizePx: 9));
+      }
+      if (headingDeg != null) {
+        const len = 30.0;
+        final rad = headingDeg * math.pi / 180;
+        final tip = LatLng(
+          loc.latitude + len * math.cos(rad) / 111320.0,
+          loc.longitude + len * math.sin(rad) / (111320.0 * math.cos(loc.latitude * math.pi / 180)),
+        );
+        add(
+          builder(const {}, const TerrainFeatureStyle(
+            lineColor: Colors.blue, lineWidth: 4, fillColor: Color(0x00000000),
+            outlineColor: Color(0x00000000), outlineWidth: 0, pointColor: Colors.blue, pointSize: 4,
+          ), '__no_label__').build(
+            lines: [
+              geo.Feature<geo.Geometry>(
+                geometry: geo.LineString.from([
+                  geo.Geographic(lon: loc.longitude, lat: loc.latitude),
+                  geo.Geographic(lon: tip.longitude, lat: tip.latitude),
+                ]),
+              ),
+            ],
+            clipRect: clip,
+          ),
+        );
       }
     }
     // 4. 描画中の線・面・点（ペン）。2D の描画プレビューと同じ赤
@@ -866,14 +901,63 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         ),
       );
     }
-    for (final p in [
-      ...drawing.drawingLine,
-      ...drawing.drawingPolygon,
-      if (drawing.pointPreview != null) drawing.pointPreview!,
-    ]) {
-      final x = WebMercator.xFromLon(p.longitude) - dem.originX;
-      final y = WebMercator.yFromLat(p.latitude) - dem.originY;
-      if (clip.contains(Offset(x, y))) points.add(TerrainPoint(x: x, y: y, color: Colors.red, sizePx: 6));
+    final survey = tool is GpsTool;
+    if (survey) {
+      // GPS 測量: 紫の点に「集めた点数」のラベル（2D の _buildSurveyPointMarker と同じ）
+      int countOf(List<Map<String, dynamic>?> meta, int i) {
+        if (i >= meta.length) return i + 1;
+        final m = meta[i];
+        if (m == null) return 1;
+        if (m['point_count'] is int) return m['point_count'] as int;
+        if (m['collected_points'] is List) return (m['collected_points'] as List).length;
+        return 1;
+      }
+
+      add(
+        builder(const {}, const TerrainFeatureStyle(
+          lineColor: Colors.purple, lineWidth: 2, fillColor: Color(0x00000000),
+          outlineColor: Colors.purple, outlineWidth: 0, pointColor: Colors.purple, pointSize: 11,
+        ), 'name').build(
+          points: [
+            for (var i = 0; i < drawing.drawingLine.length; i++)
+              geo.Feature<geo.Point>(
+                geometry: geo.Point(geo.Geographic(lon: drawing.drawingLine[i].longitude, lat: drawing.drawingLine[i].latitude)),
+                properties: {'name': '${countOf(drawing.lineMetadata, i)}'},
+              ),
+            for (var i = 0; i < drawing.drawingPolygon.length; i++)
+              geo.Feature<geo.Point>(
+                geometry: geo.Point(geo.Geographic(lon: drawing.drawingPolygon[i].longitude, lat: drawing.drawingPolygon[i].latitude)),
+                properties: {'name': '${countOf(drawing.polygonMetadata, i)}'},
+              ),
+          ],
+          clipRect: clip,
+        ),
+      );
+    } else {
+      for (final p in [
+        ...drawing.drawingLine,
+        ...drawing.drawingPolygon,
+        if (drawing.pointPreview != null) drawing.pointPreview!,
+      ]) {
+        final x = WebMercator.xFromLon(p.longitude) - dem.originX;
+        final y = WebMercator.yFromLat(p.latitude) - dem.originY;
+        if (clip.contains(Offset(x, y))) points.add(TerrainPoint(x: x, y: y, color: Colors.red, sizePx: 6));
+      }
+      // 1 点目の目印（白い輪）: 線・面を描き始めた直後
+      final first = drawing.drawingLine.length == 1
+          ? drawing.drawingLine.first
+          : drawing.drawingPolygon.length == 1
+              ? drawing.drawingPolygon.first
+              : null;
+      if (first != null) {
+        final x = WebMercator.xFromLon(first.longitude) - dem.originX;
+        final y = WebMercator.yFromLat(first.latitude) - dem.originY;
+        if (clip.contains(Offset(x, y))) {
+          points
+            ..add(TerrainPoint(x: x, y: y, color: Colors.white, sizePx: 14))
+            ..add(TerrainPoint(x: x, y: y, color: Colors.red, sizePx: 8));
+        }
+      }
     }
     // 5. 選択中のオーバーレイ画像の枠（青）と、変換ツールの回転ハンドル（2D の buildOverlaySelectionLayers と同じ）
     if (selectedOverlays.isNotEmpty) {

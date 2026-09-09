@@ -407,6 +407,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                               onProjectionChanged: (p) => terrainProjection = p,
                               mapBearingNotifier: mapBearingNotifier,
                               cameraTickNotifier: cameraTickNotifier,
+                              heading: headingNotifier,
                             ),
                           ),
                         _buildDrawingPreviewInfo(),

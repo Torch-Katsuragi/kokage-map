@@ -344,7 +344,7 @@ class TerrainWorld extends ChangeNotifier {
         final key = TileKey(range.z, x, y);
         if (_tiles.containsKey(key)) {
           _tiles[key]!.lastUsed = ++_clock;
-        } else if (!_inFlight.contains(key)) {
+        } else if (!_inFlight.contains(key) && !_recentlyFailed(key)) {
           wanted.add(key);
         }
       }
@@ -390,10 +390,25 @@ class TerrainWorld extends ChangeNotifier {
       ..textureHeight = tex.height;
   }
 
+  /// 読み込みに失敗した時刻。しばらく再試行しない（圏外で毎フレーム失敗し続けないように）
+  final Map<TileKey, int> _failedAt = {};
+  static const _retryAfterMs = 10000;
+
+  bool _recentlyFailed(TileKey key) {
+    final t = _failedAt[key];
+    if (t == null) return false;
+    if (DateTime.now().millisecondsSinceEpoch - t < _retryAfterMs) return true;
+    _failedAt.remove(key);
+    return false;
+  }
+
   Future<void> _load(TileKey key) async {
     try {
       final tile = await (_tileLoader ?? _defaultLoad)(key);
-      if (tile == null) return;
+      if (tile == null) {
+        _failedAt[key] = DateTime.now().millisecondsSinceEpoch;
+        return;
+      }
       if (_tiles.containsKey(key)) {
         tile.dispose();
         return;
@@ -407,6 +422,7 @@ class TerrainWorld extends ChangeNotifier {
       if (sw.elapsedMilliseconds > 200) debugPrint('[3D] tile $key arrival ${sw.elapsedMilliseconds}ms (borders + listeners)');
     } catch (e) {
       lastError = '$e';
+      _failedAt[key] = DateTime.now().millisecondsSinceEpoch;
       debugPrint('[3D] tile $key の読み込みに失敗: $e');
     }
   }

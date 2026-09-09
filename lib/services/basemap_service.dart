@@ -569,9 +569,13 @@ class BaseMapService extends ChangeNotifier {
     int x,
     int y,
   ) async {
+    // 標高タイル（Terrarium）は親を拡大して返さない。RGB を拡大すると高さがブロック状の階段になり、
+    // 3D の崖にギザギザの溝が出る（Pixel 9 で実測）。3D 側は自前のピラミッドで親タイルを正しい形で描く
+    final noFallback = provider.type == BaseMapType.terrain;
+
     // プロバイダーの最大ズームレベルを超えている場合は直接フォールバック
     if (z > provider.maxZoom) {
-      return _getTileWithFallback(provider, z, x, y);
+      return noFallback ? null : _getTileWithFallback(provider, z, x, y);
     }
 
     // まず通常のタイル取得を試行
@@ -581,7 +585,7 @@ class BaseMapService extends ChangeNotifier {
     }
 
     // 通常のタイル取得に失敗した場合、フォールバック機能を使用
-    return _getTileWithFallback(provider, z, x, y);
+    return noFallback ? null : _getTileWithFallback(provider, z, x, y);
   }
 
   /// 内部用のタイル取得メソッド（フォールバックなし）

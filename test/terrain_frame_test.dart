@@ -80,8 +80,8 @@ void main() {
 
   group('TerrainWorld.ancestorRanges', () {
     final world = TerrainWorld(
-      demSource: DemTileSource.aws,
-      demFetcher: (z, x, y) async => null,
+      demSources: const [DemTileSource.aws],
+      demFetcher: (s, z, x, y) async => null,
       textureFetcher: (z, x, y) async => null,
     );
 
@@ -103,8 +103,8 @@ void main() {
 
     test('heightRange はタイルごとの範囲を畳む', () {
       final w = TerrainWorld(
-        demSource: DemTileSource.aws,
-        demFetcher: (z, x, y) async => null,
+        demSources: const [DemTileSource.aws],
+        demFetcher: (s, z, x, y) async => null,
         textureFetcher: (z, x, y) async => null,
       );
       expect(w.heightRange, isNull);
@@ -137,8 +137,8 @@ void main() {
           zScale: WebMercator.zScaleAt(33.93),
         );
     final world = TerrainWorld(
-      demSource: DemTileSource.aws,
-      demFetcher: (z, x, y) async => null,
+      demSources: const [DemTileSource.aws],
+      demFetcher: (s, z, x, y) async => null,
       textureFetcher: (z, x, y) async => null,
     );
     const size = Size(1080, 2000);

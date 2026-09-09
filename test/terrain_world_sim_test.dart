@@ -29,8 +29,8 @@ import 'package:root_maps/core/terrain/web_mercator.dart';
 /// タイルの読み込みを遅延つきの擬似タイルで置き換えた世界を作る
 TerrainWorld simWorld({Duration latency = const Duration(milliseconds: 300), int maxTiles = 40}) {
   return TerrainWorld(
-    demSource: DemTileSource.aws,
-    demFetcher: (z, x, y) async => null,
+    demSources: const [DemTileSource.aws],
+    demFetcher: (s, z, x, y) async => null,
     textureFetcher: (z, x, y) async => null,
     maxTiles: maxTiles,
     tileLoader: (key) async {

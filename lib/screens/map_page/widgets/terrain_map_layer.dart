@@ -143,18 +143,21 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
   /// 寝かせるほど画面に掛かる地面が広がり、計画が段を下げて粗くなる（枚数は上限内に収まる）
   static const _maxPitchDeg = 85.0;
 
-  /// 標高タイルを背景地図と同じ経路（キャッシュ → ネット → 祖先タイルから切り出し）で取るための擬似プロバイダ。
-  /// 背景地図の一覧には出さない。祖先タイルからの切り出しは DEM では「粗い標高」になるが、無いよりよい
-  static const _terrainProvider = BaseMapProvider(
-    id: 'aws_terrarium',
-    name: 'Terrain Tiles',
-    description: 'AWS Terrain Tiles (Terrarium)',
-    urlTemplate: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
-    maxZoom: 15,
-    attribution: 'Terrain Tiles (Mapzen / AWS Open Data)',
-    type: BaseMapType.terrain,
-    icon: Icons.terrain,
-  );
+  /// 標高タイルのソースごとの擬似プロバイダ（背景地図と同じ MBTiles キャッシュに入る。祖先フォールバックはしない）
+  static final Map<String, BaseMapProvider> _terrainProviders = {
+    for (final s in DemTileSource.defaultCascade)
+      s.id: BaseMapProvider(
+        id: s.id,
+        name: s.id,
+        description: '標高タイル ${s.id}',
+        urlTemplate: s.urlTemplate,
+        attribution: s.attribution,
+        minZoom: s.minZoom,
+        maxZoom: s.maxZoom,
+        type: BaseMapType.terrain,
+        icon: Icons.terrain,
+      ),
+  };
 
   /// デコード済みタイル画像。3D を出入りしても使い回す（256 枚 ≒ 64MB 上限）
   static final _tileImages = TileImageCache(capacity: 128); // 256² RGBA × 128 ≈ 32MB
@@ -210,11 +213,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
     final basemap = layers.isNotEmpty ? layers.first.$1 : null;
     _attribution = [
       if (basemap != null) basemap.attribution,
-      DemTileSource.aws.attribution,
+      ...{for (final s in DemTileSource.defaultCascade) s.attribution},
     ].join(' / ');
     _world = TerrainWorld(
-      demSource: DemTileSource.aws,
-      demFetcher: (z, x, y) => widget.baseMapService.getTile(_terrainProvider, z, x, y),
+      demSources: DemTileSource.defaultCascade,
+      demFetcher: (source, z, x, y) => widget.baseMapService.getTile(_terrainProviders[source.id]!, z, x, y),
       textureFetcher: basemap == null
           ? (z, x, y) async => null
           : (z, x, y) => widget.baseMapService.getTile(basemap, z, x, y),

@@ -32,11 +32,16 @@ enum DemEncoding {
 
   /// Mapbox Terrain-RGB: `h = -10000 + (R*65536 + G*256 + B) * 0.1`
   mapboxRgb,
+
+  /// 地理院 標高タイル PNG: `x = 2^16 R + 2^8 G + B`、x < 2^23 なら `h = 0.01 x`、x > 2^23 なら `h = 0.01 (x − 2^24)`、
+  /// x = 2^23（RGB = 128,0,0）は無効（海・データなし）
+  gsiPng,
 }
 
 /// 標高タイルの出どころ（プリセット構造。アプリは中身を知らない）
 class DemTileSource {
   const DemTileSource({
+    required this.id,
     required this.urlTemplate,
     required this.encoding,
     required this.attribution,
@@ -44,29 +49,74 @@ class DemTileSource {
     this.maxZoom = 15,
   });
 
+  /// タイルキャッシュの擬似プロバイダ ID にも使う（重複不可）
+  final String id;
+
   final String urlTemplate;
   final DemEncoding encoding;
   final String attribution;
   final int minZoom;
   final int maxZoom;
 
-  /// AWS Terrain Tiles（全球・キー不要・Terrarium）。既定のプリセット
+  /// AWS Terrain Tiles（全球・キー不要・Terrarium）。日本は 30m 級を引き伸ばしたもの。最後の受け皿
   static const aws = DemTileSource(
+    id: 'aws_terrarium',
     urlTemplate: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
     encoding: DemEncoding.terrarium,
     attribution: 'Terrain Tiles (Mapzen / AWS Open Data)',
     maxZoom: 15,
   );
 
+  /// 地理院 標高タイル DEM1A（航空レーザ 1m メッシュ、精度 0.3m 以内、整備範囲のみ。2025-03 に範囲拡大）
+  static const gsiDem1a = DemTileSource(
+    id: 'gsi_dem1a_png',
+    urlTemplate: 'https://cyberjapandata.gsi.go.jp/xyz/dem1a_png/{z}/{x}/{y}.png',
+    encoding: DemEncoding.gsiPng,
+    attribution: '地理院タイル（標高タイル）',
+    minZoom: 2,
+    maxZoom: 17,
+  );
+
+  /// 地理院 標高タイル DEM5A（航空レーザ 5m メッシュ、精度 0.3m 以内、整備範囲のみ）
+  static const gsiDem5a = DemTileSource(
+    id: 'gsi_dem5a_png',
+    urlTemplate: 'https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/{z}/{x}/{y}.png',
+    encoding: DemEncoding.gsiPng,
+    attribution: '地理院タイル（標高タイル）',
+    minZoom: 2,
+    maxZoom: 15,
+  );
+
+  /// 地理院 標高タイル DEM10B（1/2.5 万地形図の等高線由来、全国）
+  static const gsiDem10b = DemTileSource(
+    id: 'gsi_dem10b_png',
+    urlTemplate: 'https://cyberjapandata.gsi.go.jp/xyz/dem10b_png/{z}/{x}/{y}.png',
+    encoding: DemEncoding.gsiPng,
+    attribution: '地理院タイル（標高タイル）',
+    minZoom: 2,
+    maxZoom: 14,
+  );
+
+  /// 既定の並び: 細かい方から試し、無ければ次へ（DEM1A → DEM5A → DEM10B → AWS）
+  static const defaultCascade = [gsiDem1a, gsiDem5a, gsiDem10b, aws];
+
   String url(int z, int x, int y) => urlTemplate
       .replaceAll('{z}', '$z')
       .replaceAll('{x}', '$x')
       .replaceAll('{y}', '$y');
 
+  /// 無効値は NaN
   double decode(int r, int g, int b) => switch (encoding) {
         DemEncoding.terrarium => r * 256 + g + b / 256 - 32768,
         DemEncoding.mapboxRgb => -10000 + (r * 65536 + g * 256 + b) * 0.1,
+        DemEncoding.gsiPng => _decodeGsi((r << 16) | (g << 8) | b),
       };
+
+  static double _decodeGsi(int x) {
+    const half = 1 << 23;
+    if (x == half) return double.nan;
+    return (x < half ? x : x - (1 << 24)) * 0.01;
+  }
 }
 
 /// XYZ タイルの矩形範囲
@@ -293,6 +343,7 @@ Float32List _assembleHeights(_AssembleArgs a) {
   double decode(int r, int g, int b) => switch (a.encoding) {
         DemEncoding.terrarium => r * 256 + g + b / 256 - 32768,
         DemEncoding.mapboxRgb => -10000 + (r * 65536 + g * 256 + b) * 0.1,
+        DemEncoding.gsiPng => DemTileSource._decodeGsi((r << 16) | (g << 8) | b),
       };
   var k = 0;
   for (var ty = 0; ty < a.height; ty++) {
@@ -316,7 +367,21 @@ Float32List _assembleHeights(_AssembleArgs a) {
       }
     }
   }
+  _fillInvalid(heights);
   return heights;
+}
+
+/// 無効値（NaN。地理院タイルの海・データなし）を埋める: 行の中で直前の有効値、無ければ 0（海面）
+void _fillInvalid(Float32List h) {
+  var last = 0.0;
+  for (var i = 0; i < h.length; i++) {
+    final v = h[i];
+    if (v.isNaN) {
+      h[i] = last;
+    } else {
+      last = v;
+    }
+  }
 }
 
 /// ラスタタイル（背景地図）を 1 枚の画像に合成する

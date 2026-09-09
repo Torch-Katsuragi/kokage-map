@@ -99,7 +99,7 @@ class TerrainFramePlanner {
   /// 前回の段と 1 つ違いで枚数が許容内なら前回を使う（境目で往復しない）
   int demZoomFor(TerrainCamera camera, Size size) {
     var z = world.demZoomFor(camera.zoom);
-    while (z > world.demSource.minZoom && visibleTileCount(camera, size, z) > maxCoreTiles) {
+    while (z > world.minZoom && visibleTileCount(camera, size, z) > maxCoreTiles) {
       z--;
     }
     final prev = _lastZoom;
@@ -165,7 +165,7 @@ class TerrainFramePlanner {
     world.ensure(prefetch, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
     // 寄る方向の先読み: 手が空いているときだけ、画面の内側半分（1 段寄ったときに見える範囲）を 1 段細かい段で読んでおく
     final inner = Rect.fromCenter(center: bounds.center, width: bounds.width / 2, height: bounds.height / 2);
-    final children = zD < world.demSource.maxZoom ? TerrainWorld.tileRangeFor(inner, zD + 1) : null;
+    final children = zD < world.maxZoom ? TerrainWorld.tileRangeFor(inner, zD + 1) : null;
     if (children != null && world.pendingCount == 0) {
       world.ensure(children, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
     }

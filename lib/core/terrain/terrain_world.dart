@@ -198,6 +198,9 @@ class TerrainTile {
 /// タイル 1 枚の読み込み（テストで差し替える）
 typedef TileLoader = Future<TerrainTile?> Function(TileKey key);
 
+/// 標高タイルのバイト列の取得（ソースごと）
+typedef DemFetcher = Future<Uint8List?> Function(DemTileSource source, int z, int x, int y);
+
 /// 被覆の内訳（検証用）
 class CoverageReport {
   const CoverageReport({required this.ideal, required this.exact, required this.byAncestor, required this.byChild});
@@ -224,7 +227,7 @@ class CoverageReport {
 /// - 描画順はタイルの象限走査（奥の行 → 手前、行内も奥 → 手前）。タイル内はチャンクの象限走査
 class TerrainWorld extends ChangeNotifier {
   TerrainWorld({
-    required this.demSource,
+    required this.demSources,
     required this.demFetcher,
     required this.textureFetcher,
     this.textureZoomOffset = 1,
@@ -239,8 +242,15 @@ class TerrainWorld extends ChangeNotifier {
   /// タイル 1 枚の読み込み（DEM とテクスチャ）。テストでは擬似タイルを遅延つきで返す
   final TileLoader? _tileLoader;
 
-  final DemTileSource demSource;
-  final TileFetcher demFetcher;
+  /// 標高タイルの出どころ。細かい方から順に試す（[DemTileSource.defaultCascade]）
+  final List<DemTileSource> demSources;
+
+  /// (ソース, z, x, y) → PNG のバイト列。無ければ null
+  final DemFetcher demFetcher;
+
+  /// 段の範囲は連なり全体で見る（一番細かいソースの maxZoom まで）
+  int get minZoom => demSources.map((s) => s.minZoom).reduce(math.min);
+  int get maxZoom => demSources.map((s) => s.maxZoom).reduce(math.max);
   final TileFetcher textureFetcher;
 
   /// テクスチャは DEM より何段細かいラスタで作るか（1 = 512²）
@@ -270,7 +280,7 @@ class TerrainWorld extends ChangeNotifier {
 
   /// 表示ズームから DEM のズーム（1 段荒い = 1 セルが画面 2px）
   int demZoomFor(double zoom) =>
-      (zoom.round() - 1).clamp(demSource.minZoom, demSource.maxZoom);
+      (zoom.round() - 1).clamp(minZoom, maxZoom);
 
   TerrainTile? tile(TileKey key) {
     final t = _tiles[key];
@@ -394,12 +404,11 @@ class TerrainWorld extends ChangeNotifier {
   Future<TerrainTile?> _defaultLoad(TileKey key) async {
     final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
     final sw = Stopwatch()..start();
-    final loader = DemTileLoader(source: demSource, fetcher: demFetcher);
-    var dem = await loader.tryLoad(range);
+    var dem = await _loadDem(key);
     var sourceZoom = key.z;
     if (dem == null) {
       // 取れない（圏外・遅い）: 親を高さの空間で補間した近似で埋める。本物は後で取り直す
-      final approx = await _approximateFromAncestor(loader, key);
+      final approx = await _approximateFromAncestor(key);
       if (approx == null) return null;
       dem = approx.$1;
       sourceZoom = approx.$2;
@@ -414,14 +423,24 @@ class TerrainWorld extends ChangeNotifier {
       ..textureHeight = tex.height;
   }
 
+  /// [key] の DEM を、ソースを細かい方から順に試して取る（その段を持たないソースは飛ばす）
+  Future<DemGrid?> _loadDem(TileKey key) async {
+    final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
+    for (final source in demSources) {
+      if (key.z < source.minZoom || key.z > source.maxZoom) continue;
+      final dem = await DemTileLoader(source: source, fetcher: (z, x, y) => demFetcher(source, z, x, y)).tryLoad(range);
+      if (dem != null) return dem;
+    }
+    return null;
+  }
+
   /// 親（最大 [maxApproximateLevels] 段上）から補間した近似の DEM と、その親の段
-  Future<(DemGrid, int)?> _approximateFromAncestor(DemTileLoader loader, TileKey key) async {
-    for (var k = 1; k <= maxApproximateLevels && key.z - k >= demSource.minZoom; k++) {
+  Future<(DemGrid, int)?> _approximateFromAncestor(TileKey key) async {
+    for (var k = 1; k <= maxApproximateLevels && key.z - k >= minZoom; k++) {
       final pz = key.z - k;
       final px = key.x >> k;
       final py = key.y >> k;
-      final parent = _tiles[TileKey(pz, px, py)]?.raw ??
-          await loader.tryLoad(TileRange(z: pz, x0: px, y0: py, x1: px, y1: py));
+      final parent = _tiles[TileKey(pz, px, py)]?.raw ?? await _loadDem(TileKey(pz, px, py));
       if (parent == null || parent.cols != WebMercator.tileSize) continue;
       final heights = await TerrainWorker.instance.run(
         upsampleFromParent,
@@ -614,7 +633,7 @@ class TerrainWorld extends ChangeNotifier {
   List<TileRange> ancestorRanges(TileRange range, {required int levels, int margin = 1, int marginFrom = 2}) {
     final out = <TileRange>[];
     var r = range;
-    for (var i = 0; i < levels && r.z > demSource.minZoom; i++) {
+    for (var i = 0; i < levels && r.z > minZoom; i++) {
       r = r.parent;
       out.add(i >= marginFrom ? r.grow(margin) : r);
     }

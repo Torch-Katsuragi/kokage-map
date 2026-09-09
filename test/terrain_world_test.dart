@@ -86,8 +86,8 @@ void main() {
 
   group('TerrainWorld', () {
     TerrainWorld world() => TerrainWorld(
-          demSource: DemTileSource.aws,
-          demFetcher: (z, x, y) async => null,
+          demSources: const [DemTileSource.aws],
+          demFetcher: (s, z, x, y) async => null,
           textureFetcher: (z, x, y) async => null,
         );
 
@@ -173,8 +173,8 @@ void main() {
   group('coverSet（手持ちで最良の被覆）', () {
     test('理想の段が無ければ親で埋め、同じ親は 1 回だけ。子があれば子で埋める', () {
       final w = TerrainWorld(
-        demSource: DemTileSource.aws,
-        demFetcher: (z, x, y) async => null,
+        demSources: const [DemTileSource.aws],
+        demFetcher: (s, z, x, y) async => null,
         textureFetcher: (z, x, y) async => null,
       );
       const parent = TileKey(12, 100, 100);
@@ -191,8 +191,8 @@ void main() {
       expect(cover2.length, 2);
       // 理想が z12 で無く、子（z13）だけあるとき
       final w2 = TerrainWorld(
-        demSource: DemTileSource.aws,
-        demFetcher: (z, x, y) async => null,
+        demSources: const [DemTileSource.aws],
+        demFetcher: (s, z, x, y) async => null,
         textureFetcher: (z, x, y) async => null,
       );
       w2.addTileForTest(fakeTile(const TileKey(13, 200, 201), 0));

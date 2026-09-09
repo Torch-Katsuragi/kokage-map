@@ -35,6 +35,21 @@ DemGrid _dem(TileKey key, double Function(int c, int r) f) {
 }
 
 void main() {
+  group('DemTileSource.decode（地理院 PNG）', () {
+    const gsi = DemTileSource.gsiDem1a;
+    test('正・負・無効', () {
+      // x = 12345 → 123.45m
+      expect(gsi.decode(0, 0x30, 0x39), closeTo(123.45, 1e-6));
+      // x = 2^24 - 500 → -5.00m
+      const x = (1 << 24) - 500;
+      expect(gsi.decode((x >> 16) & 255, (x >> 8) & 255, x & 255), closeTo(-5.0, 1e-6));
+      // (128, 0, 0) = 無効
+      expect(gsi.decode(128, 0, 0).isNaN, isTrue);
+      // Terrarium は従来どおり
+      expect(DemTileSource.aws.decode(128, 100, 0), closeTo(100, 1e-6));
+    });
+  });
+
   group('upsampleFromParent（親から高さの空間で補間）', () {
     test('一定の親 → 一定の子', () {
       final parent = Float32List(256 * 256)..fillRange(0, 256 * 256, 500);
@@ -84,8 +99,8 @@ void main() {
         const key = TileKey(15, 100, 200);
         var exactAvailable = false;
         final world = TerrainWorld(
-          demSource: DemTileSource.aws,
-          demFetcher: (z, x, y) async => null,
+          demSources: const [DemTileSource.aws],
+          demFetcher: (s, z, x, y) async => null,
           textureFetcher: (z, x, y) async => null,
           tileLoader: (k) async {
             await Future<void>.delayed(const Duration(milliseconds: 10));

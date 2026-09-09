@@ -444,6 +444,14 @@ class MapSourceManager {
   // 初期化
   // --------------------------------------------------
 
+  /// スタイル（MapLibre）が外れた。次の [initialize] で全部登録し直す
+  void detachStyle() {
+    _style = null;
+    _initialized = false;
+    _initCompleter = null;
+    _lastData.clear();
+  }
+
   /// StyleController にソースとレイヤを一括登録（二重実行防止）
   Future<void> initialize(ml.StyleController style) async {
     if (_initialized) return;

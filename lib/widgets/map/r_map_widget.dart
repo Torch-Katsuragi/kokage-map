@@ -41,9 +41,13 @@ class RMapWidget extends StatefulWidget {
     this.onEvent,
     this.layers = const [],
     this.children = const [],
+    this.onDispose,
   });
 
   final ml.MapOptions options;
+
+  /// ウィジェットが外れたとき（3D に入ると地図は組み立てない）
+  final VoidCallback? onDispose;
   final Set<Factory<OneSequenceGestureRecognizer>>? gestureRecognizers;
   final RMapControllerCallback? onMapCreated;
   final RMapStyleLoadedCallback? onStyleLoaded;
@@ -57,6 +61,12 @@ class RMapWidget extends StatefulWidget {
 
 class _RMapWidgetState extends State<RMapWidget> {
   final RMapController _controller = RMapController();
+
+  @override
+  void dispose() {
+    widget.onDispose?.call();
+    super.dispose();
+  }
 
   /// onMapCreated が呼ばれる前に didUpdateWidget が発火すると
   /// コントローラ未初期化でエラーになるため、

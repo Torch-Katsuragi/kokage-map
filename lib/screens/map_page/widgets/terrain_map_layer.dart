@@ -1258,6 +1258,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   void _notifyCamera() {
     widget.mapBearingNotifier.value = _camera.bearing * 180 / math.pi;
     widget.cameraTickNotifier.value++;
+    // 3D 中は MapLibre が無いので、戻すときの初期値として覚えさせる
+    widget.mapState.mapController.rememberCamera(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);
   }
 
   // ── TerrainProjection ───────────────────────────────

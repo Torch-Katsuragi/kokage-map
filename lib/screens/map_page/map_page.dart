@@ -391,7 +391,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                     left: 44,
                     child: Stack(
                       children: [
-                        _buildMapLibreMap(isPanTool),
+                        // 3D 中は MapLibre を組み立てない（下で生かしておくと数百 MB 食う。
+                        // 戻すときは覚えておいたカメラで組み立て直す）
+                        if (!terrain3d)
+                          _buildMapLibreMap(isPanTool)
+                        else
+                          const Positioned.fill(child: ColoredBox(color: Color(0xFFE8E8E8))),
                         _buildGestureLayer(),
                         // 3D 地形モード: 地図面を上に重ね、ジェスチャもここで受ける
                         if (terrain3d && basemapStyleUri != null)
@@ -494,10 +499,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     final currentTool = ref.read(currentToolProvider);
 
     return RMapWidget(
+      onDispose: _onMapLibreDisposed,
       options: ml.MapOptions(
         initStyle: basemapStyleUri!,
-        initCenter: defaultCenter.toGeographic(),
-        initZoom: 16.0,
+        initCenter: (mapController.lastCenter ?? defaultCenter).toGeographic(),
+        initZoom: mapController.lastZoom,
+        initBearing: mapController.lastBearing,
         gestures: const ml.MapGestures(
           pan: false,
           zoom: false,
@@ -586,6 +593,17 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           ),
       ],
     );
+  }
+
+  /// MapLibre が外れた（3D に入った）。コントローラ・スタイル・登録済みソースの記録を捨て、
+  /// 次に組み立てたとき（3D を抜けたとき）に onStyleLoaded から全部やり直す
+  void _onMapLibreDisposed() {
+    AppLogger.debug('[MAP] MapLibre disposed (3D)');
+    mapControllerInstance.detach();
+    sourceManager.detachStyle();
+    activeBasemapLayerIds.clear();
+    activeBasemapSourceIds.clear();
+    activeOverlaySourceIds.clear();
   }
 
   Future<void> _onMapStyleLoaded(ml.StyleController style) async {

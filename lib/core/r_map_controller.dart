@@ -32,24 +32,45 @@ import '../utils/geo_converter.dart';
 
 /// 旧 `flutter_map` 互換のカメラ情報
 class KMapCamera {
-  final ml.MapController _controller;
+  final ml.MapController? _controller;
+  final LatLng? _fixedCenter;
+  final double _fixedZoom;
+  final double _fixedBearing;
 
-  KMapCamera(this._controller);
+  KMapCamera(ml.MapController controller)
+      : _controller = controller,
+        _fixedCenter = null,
+        _fixedZoom = 0,
+        _fixedBearing = 0;
 
-  double get zoom => _controller.getCamera().zoom;
-  LatLng get center => _controller.getCamera().center.toLatLng();
+  /// 地図が組み立てられていない間（3D 中）の、最後に覚えたカメラ
+  const KMapCamera.fixed({required LatLng center, required double zoom, required double bearing})
+      : _controller = null,
+        _fixedCenter = center,
+        _fixedZoom = zoom,
+        _fixedBearing = bearing;
+
+  double get zoom => _controller?.getCamera().zoom ?? _fixedZoom;
+  LatLng get center => _controller?.getCamera().center.toLatLng() ?? _fixedCenter!;
 
   /// bearing (maplibre) = rotation (旧 flutter_map) として扱う
-  double get rotation => _controller.getCamera().bearing;
-  double get bearing => _controller.getCamera().bearing;
-  double get pitch => _controller.getCamera().pitch;
+  double get rotation => bearing;
+  double get bearing => _controller?.getCamera().bearing ?? _fixedBearing;
+  double get pitch => _controller?.getCamera().pitch ?? 0;
 
-  /// 画面座標 → 地図座標
-  LatLng offsetToCrs(Offset offset) => _controller.toLngLat(offset).toLatLng();
+  /// 画面座標 → 地図座標（地図が無い間は使えない。呼ぶ側は 3D の投影を先に見る）
+  LatLng offsetToCrs(Offset offset) {
+    final c = _controller;
+    if (c == null) throw StateError('map is not attached');
+    return c.toLngLat(offset).toLatLng();
+  }
 
   /// 地図座標 → 画面座標
-  Offset latLngToScreenOffset(LatLng latlng) =>
-      _controller.toScreenLocation(latlng.toGeographic());
+  Offset latLngToScreenOffset(LatLng latlng) {
+    final c = _controller;
+    if (c == null) throw StateError('map is not attached');
+    return c.toScreenLocation(latlng.toGeographic());
+  }
 }
 
 /// maplibreのMapControllerをラップし、旧 flutter_map 互換APIを提供
@@ -86,6 +107,37 @@ class RMapController {
     _controller = controller;
   }
 
+  /// 地図（MapLibre）が外れた（3D 中は組み立てない）。最後のカメラは覚えておき、
+  /// 以後のカメラ操作は保留にして次に組み立てたときに流す
+  void detach() {
+    final c = _controller;
+    if (c != null) {
+      try {
+        final cam = c.getCamera();
+        rememberCamera(cam.center.toLatLng(), cam.zoom, cam.bearing);
+      } on Object catch (_) {}
+    }
+    _controller = null;
+    _styleController = null;
+    _fitDebounceTimer?.cancel();
+    _isCameraAnimating = false;
+  }
+
+  LatLng? _lastCenter;
+  double _lastZoom = 16;
+  double _lastBearing = 0;
+
+  /// 最後に覚えたカメラ（地図を組み立て直すときの初期値、外れている間の [camera]）
+  LatLng? get lastCenter => _lastCenter;
+  double get lastZoom => _lastZoom;
+  double get lastBearing => _lastBearing;
+
+  void rememberCamera(LatLng center, double zoom, double bearing) {
+    _lastCenter = center;
+    _lastZoom = zoom;
+    _lastBearing = bearing;
+  }
+
   /// 地図が使える状態か（コントローラとスタイルの両方が揃っているか）
   bool get isAttached => _controller != null && _styleController != null;
 
@@ -114,8 +166,15 @@ class RMapController {
 
   /// カメラ情報
   KMapCamera get camera {
-    assert(_controller != null, 'MapController is not attached');
-    return KMapCamera(_controller!);
+    final c = _controller;
+    if (c == null) {
+      return KMapCamera.fixed(
+        center: _lastCenter ?? const LatLng(35.681236, 139.767125),
+        zoom: _lastZoom,
+        bearing: _lastBearing,
+      );
+    }
+    return KMapCamera(c);
   }
 
   /// カメラ移動（同期的にfire-and-forget）
@@ -123,6 +182,7 @@ class RMapController {
   /// Returns: 即座に反映されたら true。attach 前だった場合は false を返し、
   /// attach 後に実行されるよう保留する（呼び出しは失われない）。
   bool move(LatLng center, double zoom) {
+    rememberCamera(center, zoom, _lastBearing);
     final controller = _controller;
     if (controller == null) {
       _pendingCameraAction = () => move(center, zoom);
@@ -136,6 +196,7 @@ class RMapController {
   ///
   /// Returns: [move] と同じ。attach 前なら false を返して保留する。
   bool moveAndRotate(LatLng center, double zoom, double rotation) {
+    rememberCamera(center, zoom, rotation);
     final controller = _controller;
     if (controller == null) {
       _pendingCameraAction = () => moveAndRotate(center, zoom, rotation);

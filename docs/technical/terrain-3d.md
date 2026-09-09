@@ -220,6 +220,9 @@ DEM の組み立て 1.4 秒 → 21ms（常駐 isolate）。縮小 4 段のスク
 - **ペン = 真上ロック**: ペンを選ぶと 3D のまま傾きを 0 に寄せ、1 本指を `PenTool` に渡す（2D と同じ経路。
   座標は `TerrainProjection` を通るので傾いていても正しい）。2 本指は移動・拡縮のまま。ペンを離れたら元の傾きに戻す。
   描画中の線・面・点は動的シーンに赤で出す（`GlobalDrawingState`）。GPS ツール・TruPulse・選択は 3D のまま
+- 2D のカメラ移動（`jumpTo`: 現在位置へ移動・フィーチャへ移動・属性テーブル）は 3D 中 `TerrainProjection.jumpTo` で地形のカメラを動かす
+- 選択中のオーバーレイ画像の枠（青）と変換ツールの回転ハンドル、外部機器ツール（TruPulse）の基準点と計測線も 3D に載る
+  （`DeviceTool.overlayLines` / `overlayStation`。MapLibre 向けの層はそれを包む）
 - 残っている仮実装: ツールバーの「3D 地形」切替（MapLibre を外すまで）。カメラ状態の `.kmeta.json` 保存は未着手
 
 ## データ側
@@ -241,7 +244,7 @@ DEM の組み立て 1.4 秒 → 21ms（常駐 isolate）。縮小 4 段のスク
 
 1. `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）。いまは `TerrainMapLayer` が
    `FeatureGeoJsonCache` と `MapStyleGroup` を直接読む形で seam ② を先取りしている
-2. 3D 中の機能追い付き（上の「未対応」）。残りはクラスタ・DeviceTool のオーバーレイ・等高線オプション・web のオーバーレイ画像
+2. 3D 中の機能追い付き（上の「未対応」）。残りはクラスタ・等高線オプション・web のオーバーレイ画像・パーティのマーカー（ウィジェット）
 4. 等高線の描画コスト: 間引いた格子から引いても 1.7 万本で raster 30〜40ms（Impeller の細線）。
    ジェスチャ中はさらに間引くか、等高線だけ間隔を広げる
 5. DEM の dir 同梱・焼き込み CLI・タイルキャッシュからのテクスチャ合成

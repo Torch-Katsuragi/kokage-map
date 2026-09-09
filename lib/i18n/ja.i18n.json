@@ -566,7 +566,8 @@
       "cancel": "消しゴムの候補を取り消す"
     },
     "terrain": {
-      "resetView": "北を上に・真上から"
+      "resetView": "北を上に・真上から",
+      "loading": "地形を読み込み中（$pending 枚）"
     }
   },
   "importExport": {

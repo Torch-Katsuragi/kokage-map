@@ -1684,7 +1684,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
                   ),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    child: Text('地形 ${_world.loadedCount} 枚 / 読み込み中 ${_world.pendingCount}', style: const TextStyle(fontSize: 12)),
+                    child: Text(t.map.terrain.loading(pending: _world.pendingCount), style: const TextStyle(fontSize: 12)),
                   ),
                 ),
               ),

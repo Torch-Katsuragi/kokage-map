@@ -566,7 +566,8 @@
       "cancel": "Discard eraser candidates"
     },
     "terrain": {
-      "resetView": "North up, top-down"
+      "resetView": "North up, top-down",
+      "loading": "Loading terrain ($pending tiles)"
     }
   },
   "importExport": {

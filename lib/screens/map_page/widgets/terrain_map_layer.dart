@@ -139,6 +139,10 @@ class _TileScene {
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _TerrainDrive implements TerrainProjection {
   static const _defaultPitchDeg = 45.0;
 
+  /// 傾きの上限。正射影では 90° で地面が線に潰れる（横顔になる）ので手前で止める。
+  /// 寝かせるほど画面に掛かる地面が広がり、計画が段を下げて粗くなる（枚数は上限内に収まる）
+  static const _maxPitchDeg = 85.0;
+
   /// 標高タイルを背景地図と同じ経路（キャッシュ → ネット → 祖先タイルから切り出し）で取るための擬似プロバイダ。
   /// 背景地図の一覧には出さない。祖先タイルからの切り出しは DEM では「粗い標高」になるが、無いよりよい
   static const _terrainProvider = BaseMapProvider(
@@ -708,7 +712,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
     } else {
       final delta = d.focalPoint - _focalStart;
       _camera.bearing = _bearingStart + delta.dx * 0.006;
-      _camera.pitch = (_pitchStart - delta.dy * 0.004).clamp(0.0, 70 * math.pi / 180);
+      _camera.pitch = (_pitchStart - delta.dy * 0.004).clamp(0.0, _maxPitchDeg * math.pi / 180);
       _gesturing = true;
     }
     _refresh();
@@ -776,7 +780,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
                   ),
                   child: Slider(
                     value: _camera.pitch * 180 / math.pi,
-                    max: 70,
+                    max: _maxPitchDeg,
                     onChanged: (v) {
                       _camera.pitch = v * math.pi / 180;
                       _gesturing = true;

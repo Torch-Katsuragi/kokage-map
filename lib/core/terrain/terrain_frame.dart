@@ -91,7 +91,7 @@ class TerrainFramePlanner {
   static double visibleTileCount(TerrainCamera camera, Size size, int z) {
     final span = WebMercator.tileSpan(z);
     final w = size.width / camera.scale / span;
-    final h = size.height / camera.scale / math.max(0.2, math.cos(camera.pitch)) / span;
+    final h = size.height / camera.scale / math.max(0.08, math.cos(camera.pitch)) / span; // 85° まで
     return (w + 1) * (h + 1);
   }
 

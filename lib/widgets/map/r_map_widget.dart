@@ -63,6 +63,18 @@ class _RMapWidgetState extends State<RMapWidget> {
   final RMapController _controller = RMapController();
 
   @override
+  void deactivate() {
+    // ⚠ maplibre_android 0.3.5 はプラットフォームビューを捨ててもネイティブの地図を破棄しない
+    // （create/dispose ごとに漏れる。0.3.6 で修正だが Flutter ≥ 3.44 が要る）。
+    // 捨てる前に空のスタイルを読ませて、少なくともタイルとソースのぶんは手放す。
+    // dispose では子（MapLibreMap）が先に外れているので deactivate で
+    try {
+      _controller.raw?.setStyle(kEmptyMapStyle);
+    } on Object catch (_) {}
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     widget.onDispose?.call();
     super.dispose();

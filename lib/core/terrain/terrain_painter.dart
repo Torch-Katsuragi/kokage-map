@@ -161,11 +161,30 @@ class PolygonBatch {
   /// 投影した画面座標（毎フレーム上書き）
   final Float32List projected;
 
-  /// [polygons] をチャンク番号ごとにまとめる
-  static Map<int, PolygonBatch> byChunk(List<LiftedPolygon> polygons) {
+  /// [batches] を 1 本につなぐ
+  static PolygonBatch concat(List<PolygonBatch> batches) {
+    if (batches.length == 1) return batches.first;
+    var n = 0;
+    for (final b in batches) {
+      n += b.xyz.length;
+    }
+    final xyz = Float32List(n);
+    final colors = Int32List(n ~/ 3);
+    var o = 0;
+    for (final b in batches) {
+      xyz.setRange(o, o + b.xyz.length, b.xyz);
+      colors.setRange(o ~/ 3, o ~/ 3 + b.colors.length, b.colors);
+      o += b.xyz.length;
+    }
+    return PolygonBatch(xyz, colors);
+  }
+
+  /// [polygons] の [from] 番目以降をチャンク番号ごとにまとめる
+  static Map<int, PolygonBatch> byChunk(List<LiftedPolygon> polygons, {int from = 0}) {
     final xyzs = <int, List<Float32List>>{};
     final counts = <int, int>{};
-    for (final p in polygons) {
+    for (var i = from; i < polygons.length; i++) {
+      final p = polygons[i];
       for (final e in p.byChunk.entries) {
         (xyzs[e.key] ??= []).add(e.value);
         counts[e.key] = (counts[e.key] ?? 0) + e.value.length;
@@ -177,7 +196,8 @@ class PolygonBatch {
       final colors = Int32List(counts[e.key]! ~/ 3);
       var o = 0;
       var v = 0;
-      for (final p in polygons) {
+      for (var i = from; i < polygons.length; i++) {
+        final p = polygons[i];
         final src = p.byChunk[e.key];
         if (src == null) continue;
         xyz.setRange(o, o + src.length, src);

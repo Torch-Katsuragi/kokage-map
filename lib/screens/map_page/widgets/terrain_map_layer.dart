@@ -189,21 +189,32 @@ class _TileScene {
   /// まだ持ち上げていないフィーチャがある（時間を分けて育てる静的シーン）
   bool complete;
 
-  Map<int, PolygonBatch>? _batches;
-  int _batchesFor = -1;
+  Map<int, List<PolygonBatch>>? _batches;
+  int _batchesFor = 0;
+  bool _coalesced = false;
 
   /// 合成したシーンは静的シーンの束を指す（静的シーンが育っても同じ束を見る）
   final _TileScene? staticSource;
 
-  /// チャンクごとの面の束（面が増えたら作り直す。描画側は束ごとに投影をキャッシュするので、増えていない限り同一性を保つ）
-  Map<int, PolygonBatch> get polygonBatches {
+  /// チャンクごとの面の束。育つ間は増えたぶんだけ束を足す（作り直すと描画側の投影キャッシュが全部飛ぶ）。
+  /// 育ち切ったらチャンクごとに 1 本につなぐ
+  Map<int, List<PolygonBatch>> get polygonBatches {
     final src = staticSource;
     if (src != null) return src.polygonBatches;
-    if (_batches == null || _batchesFor != polygons.length) {
-      _batches = PolygonBatch.byChunk(polygons);
+    final batches = _batches ??= {};
+    if (_batchesFor != polygons.length) {
+      for (final e in PolygonBatch.byChunk(polygons, from: _batchesFor).entries) {
+        (batches[e.key] ??= []).add(e.value);
+      }
       _batchesFor = polygons.length;
     }
-    return _batches!;
+    if (complete && !_coalesced) {
+      _coalesced = true;
+      for (final e in batches.entries) {
+        if (e.value.length > 1) batches[e.key] = [PolygonBatch.concat(e.value)];
+      }
+    }
+    return batches;
   }
 
   /// 何から作ったか（GeoJSON リストの同一性・選択・軌跡の点数・パーティ・現在位置）
@@ -228,6 +239,17 @@ class _StaticProgress {
   int phase = 0; // 0: 頂点・選択・写真、1: 面、2: 線、3: 完了
   int polygon = 0;
   int line = 0;
+
+  /// このタイルに掛かるフィーチャの番号（bbox で先に絞る。1 万面を 40 枚のタイルで毎回総当たりしない）
+  List<int>? polygonIdx;
+  List<int>? lineIdx;
+
+  /// 1 回の持ち上げに渡すフィーチャ数。直前の実測から 2ms ぶんに合わせる（寄った段の面は 1 つが重い）
+  int chunk = 64;
+
+  void tune(int n, int micros) {
+    chunk = (n * 2000 / math.max(micros, 50)).round().clamp(8, 1000);
+  }
 }
 
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
@@ -285,7 +307,47 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// 1 フレームに育てる静的な貼り付けの枚数と上限（ジェスチャ中は控えめに、静止中は速く）
   int _staticBuilds = 0;
   int get _staticBudget => _gesturing ? 2 : 3;
+
+  /// 1 フレームの貼り付けに使う時間（タイル合計）
   Duration get _sliceBudget => _gesturing ? const Duration(milliseconds: 4) : const Duration(milliseconds: 12);
+  final Stopwatch _staticSw = Stopwatch();
+
+  /// フィーチャの bbox（Mercator m）。リストごとに一度だけ
+  final Expando<Float64List> _bboxCache = Expando();
+
+  Float64List _bboxes(List<geo.Feature<geo.Geometry>> fs) {
+    var b = _bboxCache[fs];
+    if (b != null) return b;
+    b = Float64List(fs.length * 4);
+    for (var i = 0; i < fs.length; i++) {
+      final box = fs[i].geometry?.calculateBounds();
+      if (box == null) {
+        b[i * 4] = double.nan;
+        continue;
+      }
+      final x0 = WebMercator.xFromLon(box.minX), x1 = WebMercator.xFromLon(box.maxX);
+      final y0 = WebMercator.yFromLat(box.minY), y1 = WebMercator.yFromLat(box.maxY);
+      b[i * 4] = math.min(x0, x1);
+      b[i * 4 + 1] = math.min(y0, y1);
+      b[i * 4 + 2] = math.max(x0, x1);
+      b[i * 4 + 3] = math.max(y0, y1);
+    }
+    _bboxCache[fs] = b;
+    return b;
+  }
+
+  /// [clip]（Mercator m）に bbox が掛かるフィーチャの番号
+  List<int> _featureIndexes(List<geo.Feature<geo.Geometry>> fs, Rect clip) {
+    final b = _bboxes(fs);
+    final out = <int>[];
+    for (var i = 0; i < fs.length; i++) {
+      final x0 = b[i * 4];
+      if (x0.isNaN) continue;
+      if (b[i * 4 + 2] < clip.left || x0 > clip.right || b[i * 4 + 3] < clip.top || b[i * 4 + 1] > clip.bottom) continue;
+      out.add(i);
+    }
+    return out;
+  }
   int _worldRevisionSeen = -1;
 
   // カメラのアニメ（コンパスタップ・ペンの真上ロック）
@@ -353,6 +415,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       heightRange: (0, 1000),
       stepMeters: 10,
       repaint: _repaint,
+      onPainted: (d) {
+        if (d.inMilliseconds > 40) {
+          var labels = 0, points = 0;
+          for (final t in _painter.tiles) {
+            labels += t.labels.length;
+            points += t.points.length;
+          }
+          debugPrint('[3D] paint ${d.inMilliseconds}ms (tiles ${_painter.tiles.length}, labels $labels, points $points)');
+        }
+      },
     );
     widget.sceneRevision.addListener(_onSceneRevision);
     widget.heading?.addListener(_scheduleRefresh);
@@ -508,6 +580,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _placeholders = 0;
     _sceneBuilds = 0;
     _staticBuilds = 0;
+    _staticSw
+      ..reset()
+      ..start();
     final plan = _planner.plan(_camera, _size, gesturing: _gesturing);
     final planMs = sw.elapsedMilliseconds;
     _lastPlan = plan;
@@ -791,8 +866,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     Rect clip,
   ) {
     final sliceBudget = _sliceBudget;
-    const chunk = 200; // 1 回の持ち上げに渡すフィーチャ数
     final sw = Stopwatch()..start();
+    bool over() {
+      if (_staticSw.elapsed <= sliceBudget) return false;
+      if (sw.elapsedMilliseconds > 30) {
+        debugPrint('[3D] tile ${tile.key} step $step 貼り付け 一片 ${sw.elapsedMilliseconds}ms '
+            '(phase ${progress.phase} polys ${progress.polygon}/${progress.polygonIdx?.length} chunk ${progress.chunk})');
+      }
+      return true;
+    }
     final defaultStyle = _defaultStyle();
     final groups = {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
     // 引いた段（セルが 30m 以上 = 表示ズーム 13 以下）では面の輪郭を省く。
@@ -859,36 +941,46 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       } else {
         add(pointScene, withLabels: !coarse);
       }
+      final worldClip = clip.shift(Offset(tile.bordered.originX, tile.bordered.originY));
+      progress.polygonIdx = _featureIndexes(g.polygons, worldClip);
+      progress.lineIdx = _featureIndexes(g.polylines, worldClip);
       progress.phase = 1;
+      if (over()) return;
     }
     // 面（引いた段ではラベル無し）
+    final polygonIdx = progress.polygonIdx!;
     while (progress.phase == 1) {
-      if (progress.polygon >= g.polygons.length) {
+      if (progress.polygon >= polygonIdx.length) {
         progress.phase = 2;
         break;
       }
-      final end = math.min(progress.polygon + chunk, g.polygons.length);
+      final end = math.min(progress.polygon + progress.chunk, polygonIdx.length);
+      final t0 = sw.elapsedMicroseconds;
       add(
         builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey)
-            .build(polygons: g.polygons.sublist(progress.polygon, end), clipRect: clip),
+            .build(polygons: [for (var i = progress.polygon; i < end; i++) g.polygons[polygonIdx[i]]], clipRect: clip),
         withLabels: !coarse,
       );
+      progress.tune(end - progress.polygon, sw.elapsedMicroseconds - t0);
       progress.polygon = end;
-      if (sw.elapsed > sliceBudget) return;
+      if (over()) return;
     }
     // 線
+    final lineIdx = progress.lineIdx!;
     while (progress.phase == 2) {
-      if (progress.line >= g.polylines.length) {
+      if (progress.line >= lineIdx.length) {
         progress.phase = 3;
         break;
       }
-      final end = math.min(progress.line + chunk, g.polylines.length);
+      final end = math.min(progress.line + progress.chunk, lineIdx.length);
+      final t0 = sw.elapsedMicroseconds;
       add(
         builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey)
-            .build(lines: g.polylines.sublist(progress.line, end), clipRect: clip),
+            .build(lines: [for (var i = progress.line; i < end; i++) g.polylines[lineIdx[i]]], clipRect: clip),
       );
+      progress.tune(end - progress.line, sw.elapsedMicroseconds - t0);
       progress.line = end;
-      if (sw.elapsed > sliceBudget) return;
+      if (over()) return;
     }
     scene.complete = true;
     if (sw.elapsedMilliseconds > 20) {

@@ -775,14 +775,34 @@ class TerrainWorld extends ChangeNotifier {
 
   /// 標高（Mercator 座標）。読み込み済みの最も細かいタイルで答える。無ければ null
   double? elevationAt(double x, double y) {
+    // 続けて引くのは同じ辺りが多い（ラベル・点・光線）。前回当たったタイルが一番細かい段なら全タイルを走査しない
+    // （1 万ラベル × 40 枚の走査で 1 フレーム 20ms 超えていた）
+    if (_finestZFor != revision) {
+      _finestZ = -1;
+      for (final t in _tiles.values) {
+        if (t.key.z > _finestZ) _finestZ = t.key.z;
+      }
+      _finestZFor = revision;
+      _lastHit = null;
+    }
+    final last = _lastHit;
+    if (last != null && last.key.z == _finestZ) {
+      final b = last.key.bounds;
+      if (x >= b.left && x < b.right && y >= b.top && y < b.bottom) return last.raw.elevationAt(x, y);
+    }
     TerrainTile? best;
     for (final t in _tiles.values) {
       if (best != null && t.key.z <= best.key.z) continue;
       final b = t.key.bounds;
       if (x >= b.left && x < b.right && y >= b.top && y < b.bottom) best = t;
     }
+    _lastHit = best;
     return best?.raw.elevationAt(x, y);
   }
+
+  TerrainTile? _lastHit;
+  int _finestZ = -1;
+  int _finestZFor = -1;
 
   /// 読み込み済みタイルの標高の範囲（無ければ null）。タイルごとの最小・最大を畳むだけ
   ///

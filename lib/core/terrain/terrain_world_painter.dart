@@ -39,11 +39,12 @@ class TerrainTileDrawable {
     this.segmentSets = const [],
     this.points = const [],
     this.labels = const [],
-    Map<int, PolygonBatch>? polygonBatches,
-  }) : polygonBatches = polygonBatches ?? PolygonBatch.byChunk(polygons);
+    Map<int, List<PolygonBatch>>? polygonBatches,
+  }) : polygonBatches = polygonBatches ?? {for (final e in PolygonBatch.byChunk(polygons).entries) e.key: [e.value]};
 
-  /// チャンク番号 → 面の束（シーン側で一度作って使い回す。投影はこの束ごとにキャッシュされる）
-  final Map<int, PolygonBatch> polygonBatches;
+  /// チャンク番号 → 面の束（シーン側で一度作って使い回す。投影はこの束ごとにキャッシュされる。
+  /// 貼り付けが育つ間は 1 チャンクに束が複数ある）
+  final Map<int, List<PolygonBatch>> polygonBatches;
 
   /// 毎フレーム変わりうる線・面（描画中の線、軌跡、向きの線など）。少ないので投影をキャッシュしない
   final List<LiftedPolyline> dynamicLines;
@@ -83,6 +84,51 @@ class _ProjectedPoints {
   final Float32List xy;
   final Float32List z;
   final Uint8List hidden;
+}
+
+/// タイルのラベルを投影した結果（方位・傾きが変わるまで使い回す）
+class _ProjectedLabels {
+  _ProjectedLabels(this.bearing, this.pitch, this.count, this.xy);
+
+  final double bearing;
+  final double pitch;
+  final int count;
+  final Float32List xy;
+}
+
+/// 置いたラベルの矩形を画面の格子に入れて、重なりの判定を近くのものだけにする（1 万ラベル × 200 個の総当たりをしない）
+class _PlacedGrid {
+  static const _cell = 96.0;
+  final Map<int, List<Rect>> _cells = {};
+  int length = 0;
+
+  static int _key(int cx, int cy) => cx * 100003 + cy;
+
+  bool overlaps(Rect r) {
+    final cx0 = (r.left / _cell).floor(), cx1 = (r.right / _cell).floor();
+    final cy0 = (r.top / _cell).floor(), cy1 = (r.bottom / _cell).floor();
+    for (var cy = cy0; cy <= cy1; cy++) {
+      for (var cx = cx0; cx <= cx1; cx++) {
+        final list = _cells[_key(cx, cy)];
+        if (list == null) continue;
+        for (final o in list) {
+          if (o.overlaps(r)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  void add(Rect r) {
+    final cx0 = (r.left / _cell).floor(), cx1 = (r.right / _cell).floor();
+    final cy0 = (r.top / _cell).floor(), cy1 = (r.bottom / _cell).floor();
+    for (var cy = cy0; cy <= cy1; cy++) {
+      for (var cx = cx0; cx <= cx1; cx++) {
+        (_cells[_key(cx, cy)] ??= []).add(r);
+      }
+    }
+    length++;
+  }
 }
 
 /// タイルの線を投影して帯 × 見た目でまとめた結果
@@ -148,13 +194,30 @@ class TerrainWorldPainter extends CustomPainter {
   /// 点の投影と隠れ判定のキャッシュ（タイルの点リストごと）
   final Expando<_ProjectedPoints> _pointCache = Expando();
 
+  /// ラベルの投影キャッシュ（タイルのラベルリストごと）
+  final Expando<_ProjectedLabels> _labelCache = Expando();
+
   /// 1 フレームに新しく隠れ判定する点の上限（1 点の判定は視線に沿って標高を何十回も引く）
   static const _occlusionTestsPerFrame = 300;
   TerrainHit? selected;
   final Set<int> visibleLabels = {};
   final void Function(Duration)? onPainted;
 
-  double get _centerHeight => elevationAt(camera.centerX, camera.centerY) ?? 0;
+  /// 画面中心の標高。カメラ中心とタイルが同じ間は引き直さない（toScreen のたびに引いていた）
+  double get _centerHeight {
+    if (_chCache == null || _chX != camera.centerX || _chY != camera.centerY || !identical(_chTiles, tiles)) {
+      _chX = camera.centerX;
+      _chY = camera.centerY;
+      _chTiles = tiles;
+      _chCache = elevationAt(camera.centerX, camera.centerY) ?? 0;
+    }
+    return _chCache!;
+  }
+
+  double? _chCache;
+  double _chX = double.nan;
+  double _chY = double.nan;
+  Object? _chTiles;
 
   /// タイル座標での「画面中心に来る点」の投影座標
   Offset _pcFor(TerrainTileDrawable t) =>
@@ -334,20 +397,22 @@ class TerrainWorldPainter extends CustomPainter {
       for (var b = 0; b < mesh.bands.length; b++) {
         canvas.drawVertices(mesh.bands[b].vertices, BlendMode.modulate, terrainPaint);
         final chunk = mesh.bandChunk[b];
-        final batch = t.polygonBatches[chunk];
-        if (batch != null) {
-          var pb = _batchCache[batch];
-          if (pb == null || pb.bearing != camera.bearing || pb.pitch != camera.pitch) {
-            projectInto(batch.xyz, batch.projected);
-            pb?.vertices.dispose();
-            pb = _ProjectedBatch(
-              camera.bearing,
-              camera.pitch,
-              ui.Vertices.raw(ui.VertexMode.triangles, batch.projected, colors: batch.colors),
-            );
-            _batchCache[batch] = pb;
+        final batches = t.polygonBatches[chunk];
+        if (batches != null) {
+          for (final batch in batches) {
+            var pb = _batchCache[batch];
+            if (pb == null || pb.bearing != camera.bearing || pb.pitch != camera.pitch) {
+              projectInto(batch.xyz, batch.projected);
+              pb?.vertices.dispose();
+              pb = _ProjectedBatch(
+                camera.bearing,
+                camera.pitch,
+                ui.Vertices.raw(ui.VertexMode.triangles, batch.projected, colors: batch.colors),
+              );
+              _batchCache[batch] = pb;
+            }
+            canvas.drawVertices(pb.vertices, BlendMode.srcOver, fillPaint);
           }
-          canvas.drawVertices(pb.vertices, BlendMode.srcOver, fillPaint);
         }
         for (final poly in t.dynamicPolygons) {
           final src = poly.byChunk[chunk];
@@ -428,10 +493,11 @@ class TerrainWorldPainter extends CustomPainter {
       if (pp == null || pp.bearing != camera.bearing || pp.pitch != camera.pitch || pp.count != pts.length) {
         final xy = Float32List(pts.length * 2);
         final z = Float32List(pts.length);
+        final dem = t.mesh.dem;
         for (var i = 0; i < pts.length; i++) {
           final wx = t.originX + pts[i].x;
           final wy = t.originY + pts[i].y;
-          z[i] = elevationAt(wx, wy) ?? 0;
+          z[i] = dem.elevationAt(wx, wy);
           final p = camera.project(wx, wy, z[i]);
           xy[i * 2] = p.dx;
           xy[i * 2 + 1] = p.dy;
@@ -473,11 +539,10 @@ class TerrainWorldPainter extends CustomPainter {
     // ラベル（画面座標）。重なりは先勝ちで間引く。
     // 勝ち負けの順はタイルの描画順（方位で変わる）ではなく、文字と位置で決めた固定の順にする
     // （回転中にラベルの出入りがちらつかないように）。番号（visibleLabels・pick）はタイル順のまま
-    final placed = <Rect>[];
+    final placed = _PlacedGrid();
     visibleLabels.clear();
     // 勝ち負けの順を固定するのに、ラベル全部を並べ替えると 1 万個で毎フレーム重い。
     // タイルを原点（≒タイルキー）で並べ、タイル内はシーンの順（一定）にすれば、方位に依らない順になる
-    final entries = <(int, TerrainTileDrawable, TerrainLabel)>[];
     final indexBase = <TerrainTileDrawable, int>{};
     var labelIndex = 0;
     for (final t in tiles) {
@@ -485,22 +550,40 @@ class TerrainWorldPainter extends CustomPainter {
       labelIndex += t.labels.length;
     }
     final ordered = [...tiles]..sort((a, b) => a.originY != b.originY ? a.originY.compareTo(b.originY) : a.originX.compareTo(b.originX));
-    for (final t in ordered) {
-      final base = indexBase[t]!;
-      for (var k = 0; k < t.labels.length; k++) {
-        entries.add((base + k, t, t.labels[k]));
-      }
-    }
     // 置けるラベルの上限。1 万面 = 1 万ラベルを全部当たり判定・layout すると 1 フレーム秒単位になる
     const maxPlaced = 200;
-    for (final (i, t, label) in entries) {
-      {
-        final wx = t.originX + label.x;
-        final wy = t.originY + label.y;
-        final sp = toScreen(wx, wy, elevationAt(wx, wy) ?? 0, size);
-        if (!viewport.inflate(64).contains(sp)) continue;
+    final dotPaint = Paint()..color = Colors.black54;
+    final boxPaint = Paint()..color = Colors.white.withValues(alpha: 0.85);
+    final anchorPaint = Paint()..color = Colors.black;
+    final labelViewport = viewport.inflate(64);
+    for (final t in ordered) {
+      final labels = t.labels;
+      if (labels.isEmpty) continue;
+      final base = indexBase[t]!;
+      // 投影は方位・傾きごとにキャッシュ（点と同じ）。標高はタイル自身の DEM から
+      var pl = _labelCache[labels];
+      if (pl == null || pl.bearing != camera.bearing || pl.pitch != camera.pitch || pl.count != labels.length) {
+        final xy = Float32List(labels.length * 2);
+        final dem = t.mesh.dem;
+        for (var k = 0; k < labels.length; k++) {
+          final wx = t.originX + labels[k].x;
+          final wy = t.originY + labels[k].y;
+          final p = camera.project(wx, wy, dem.elevationAt(wx, wy));
+          xy[k * 2] = p.dx;
+          xy[k * 2 + 1] = p.dy;
+        }
+        pl = _ProjectedLabels(camera.bearing, camera.pitch, labels.length, xy);
+        _labelCache[labels] = pl;
+      }
+      for (var k = 0; k < labels.length; k++) {
+        final sp = Offset(
+          size.width / 2 + (pl.xy[k * 2] - pc.dx) * camera.scale,
+          size.height / 2 + (pl.xy[k * 2 + 1] - pc.dy) * camera.scale,
+        );
+        if (!labelViewport.contains(sp)) continue;
+        final label = labels[k];
         if (collideLabels && placed.length >= maxPlaced) {
-          canvas.drawCircle(sp, 2, Paint()..color = Colors.black54);
+          canvas.drawCircle(sp, 2, dotPaint);
           continue;
         }
         // layout（重い）の前に、文字数からの見積もりで重なりを弾く
@@ -508,34 +591,22 @@ class TerrainWorldPainter extends CustomPainter {
         final estW = label.text.length * fontSize * 0.7 + 4;
         final estH = fontSize * 1.3 + 2;
         final estBox = Rect.fromLTWH(sp.dx - estW / 2, sp.dy - estH - 4, estW, estH);
-        if (collideLabels && placed.any((r) => r.overlaps(estBox))) {
-          canvas.drawCircle(sp, 2, Paint()..color = Colors.black54);
+        if (collideLabels && placed.overlaps(estBox)) {
+          canvas.drawCircle(sp, 2, dotPaint);
           continue;
         }
         final tp = label.painter;
         final origin = sp - Offset(tp.width / 2, tp.height + 4);
         final box = Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2);
-        if (collideLabels) {
-          var overlaps = false;
-          for (final r in placed) {
-            if (r.overlaps(box)) {
-              overlaps = true;
-              break;
-            }
-          }
-          if (overlaps) {
-            canvas.drawCircle(sp, 2, Paint()..color = Colors.black54);
-            continue;
-          }
+        if (collideLabels && placed.overlaps(box)) {
+          canvas.drawCircle(sp, 2, dotPaint);
+          continue;
         }
         placed.add(box);
-        visibleLabels.add(i);
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(box, const Radius.circular(3)),
-          Paint()..color = Colors.white.withValues(alpha: 0.85),
-        );
+        visibleLabels.add(base + k);
+        canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(3)), boxPaint);
         tp.paint(canvas, origin);
-        canvas.drawCircle(sp, 2.5, Paint()..color = Colors.black);
+        canvas.drawCircle(sp, 2.5, anchorPaint);
       }
     }
     sw.stop();

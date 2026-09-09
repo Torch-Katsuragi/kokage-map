@@ -71,10 +71,13 @@ class _ProjectedBatch {
 
 /// タイルの線を投影して帯 × 見た目でまとめた結果
 class _ProjectedLines {
-  _ProjectedLines(this.bearing, this.pitch, this.thinSkipped, this.pathsByBand, this.segsByBand);
+  _ProjectedLines(this.bearing, this.pitch, this.thinSkipped, this.count, this.pathsByBand, this.segsByBand);
 
   final double bearing;
   final double pitch;
+
+  /// 投影したときの本数（静的シーンが育つと増える）
+  final int count;
 
   /// 細い線を省いた（回転中）
   final bool thinSkipped;
@@ -217,7 +220,7 @@ class TerrainWorldPainter extends CustomPainter {
         }
       }
     }
-    return _ProjectedLines(camera.bearing, camera.pitch, skipThin, pathsByBand, {
+    return _ProjectedLines(camera.bearing, camera.pitch, skipThin, lines.length, pathsByBand, {
       for (final e in segLists.entries) e.key: {for (final s in e.value.entries) s.key: Float32List.fromList(s.value)},
     });
   }
@@ -294,7 +297,11 @@ class TerrainWorldPainter extends CustomPainter {
       // 細い線（≤ 2.5px）は線分の配列にして drawRawPoints（Path を毎フレーム組むより軽い。継ぎ目の欠けは太さ的に見えない）、
       // 太い線は角と端を丸くしたいので Path。方位・傾きが同じ間はキャッシュ
       var pl = _lineCache[t.lines];
-      if (pl == null || pl.bearing != camera.bearing || pl.pitch != camera.pitch || pl.thinSkipped != gesturing) {
+      if (pl == null ||
+          pl.bearing != camera.bearing ||
+          pl.pitch != camera.pitch ||
+          pl.thinSkipped != gesturing ||
+          pl.count != t.lines.length) {
         pl = _projectLines(t.lines, mesh, skipThin: gesturing);
         _lineCache[t.lines] = pl;
       }

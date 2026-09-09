@@ -181,13 +181,29 @@ class _TileScene {
     required this.labels,
     this.dynamicLines = const [],
     this.dynamicPolygons = const [],
-    Map<int, PolygonBatch>? polygonBatches,
-  }) : _batches = polygonBatches;
+    this.staticSource,
+    this.complete = true,
+  });
+
+  /// まだ持ち上げていないフィーチャがある（時間を分けて育てる静的シーン）
+  bool complete;
 
   Map<int, PolygonBatch>? _batches;
+  int _batchesFor = -1;
 
-  /// チャンクごとの面の束（初回に作る。描画側は束ごとに投影をキャッシュするので、同一性を保つ）
-  Map<int, PolygonBatch> get polygonBatches => _batches ??= PolygonBatch.byChunk(polygons);
+  /// 合成したシーンは静的シーンの束を指す（静的シーンが育っても同じ束を見る）
+  final _TileScene? staticSource;
+
+  /// チャンクごとの面の束（面が増えたら作り直す。描画側は束ごとに投影をキャッシュするので、増えていない限り同一性を保つ）
+  Map<int, PolygonBatch> get polygonBatches {
+    final src = staticSource;
+    if (src != null) return src.polygonBatches;
+    if (_batches == null || _batchesFor != polygons.length) {
+      _batches = PolygonBatch.byChunk(polygons);
+      _batchesFor = polygons.length;
+    }
+    return _batches!;
+  }
 
   /// 何から作ったか（GeoJSON リストの同一性・選択・軌跡の点数・パーティ・現在位置）
   final List<Object?> key;
@@ -201,6 +217,13 @@ class _TileScene {
   final List<LiftedPolygon> dynamicPolygons;
   final List<TerrainPoint> points;
   final List<TerrainLabel> labels;
+}
+
+/// 静的シーンの育ち具合
+class _StaticProgress {
+  int phase = 0; // 0: 頂点・選択・写真、1: 面、2: 線、3: 完了
+  int polygon = 0;
+  int line = 0;
 }
 
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
@@ -253,10 +276,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   final Map<(TileKey, int, int, int), _TileScene> _scenes = {};
   final Map<(TileKey, int, int, int), _TileScene> _staticScenes = {};
   final Map<(TileKey, int, int, int), _TileScene> _dynamicScenes = {};
+  final Map<(TileKey, int, int, int), _StaticProgress> _staticProgress = {};
 
-  /// 1 フレームに作る静的な貼り付けの枚数と上限
+  /// 1 フレームに育てる静的な貼り付けの枚数と上限（ジェスチャ中は控えめに、静止中は速く）
   int _staticBuilds = 0;
-  static const _staticBudget = 2;
+  int get _staticBudget => _gesturing ? 2 : 3;
+  Duration get _sliceBudget => _gesturing ? const Duration(milliseconds: 4) : const Duration(milliseconds: 12);
   int _worldRevisionSeen = -1;
 
   // カメラのアニメ（コンパスタップ・ペンの真上ロック）
@@ -486,6 +511,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       // タイルの出入り: 消えたタイルのぶんだけ捨てる（縁が変わったタイルはキーが変わるので自然に入れ替わる）
       _scenes.removeWhere((k, _) => !_world.has(k.$1));
       _staticScenes.removeWhere((k, _) => !_world.has(k.$1));
+      _staticProgress.removeWhere((k, _) => !_world.has(k.$1));
       _dynamicScenes.removeWhere((k, _) => !_world.has(k.$1));
       _pruneMeshes();
       _worldRevisionSeen = _world.revision;
@@ -702,7 +728,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           polygonClipCells: clipCells,
         );
 
-    // 静的な部分
+    // 静的な部分。1 回あたり数 ms ずつ育てる（1 タイル 1 万面を一度に持ち上げると 0.5〜1 秒止まる）
     var stat = _staticScenes[cacheKey];
     if (stat == null || !_sameKey(stat.key, staticKey)) {
       if (_staticBuilds >= _staticBudget) {
@@ -710,11 +736,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         _scheduleRefresh();
         stat ??= _TileScene(key: const [], lines: const [], polygons: const [], points: const [], labels: const []);
       } else {
-        _staticBuilds++;
-        _sceneBuilds++;
-        stat = _buildStatic(tile, step, staticKey, g, builder, clip);
+        stat = _TileScene(key: staticKey, lines: [], polygons: [], points: [], labels: [], complete: false);
         _staticScenes[cacheKey] = stat;
+        _staticProgress[cacheKey] = _StaticProgress();
       }
+    }
+    if (!stat.complete && _staticBuilds < _staticBudget) {
+      _staticBuilds++;
+      _sceneBuilds++;
+      _advanceStatic(tile, step, stat, _staticProgress[cacheKey] ??= _StaticProgress(), g, builder, clip);
+      if (!stat.complete) _scheduleRefresh();
     }
     // 動的な部分
     var dyn = _dynamicScenes[cacheKey];
@@ -729,83 +760,111 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       key: key,
       lines: stat.lines,
       polygons: stat.polygons,
-      polygonBatches: stat.polygonBatches,
+      staticSource: stat,
       dynamicLines: dyn.lines,
       dynamicPolygons: dyn.polygons,
       points: [...stat.points, ...dyn.points],
       labels: [...stat.labels, ...dyn.labels],
+      complete: stat.complete,
     );
-    _scenes[cacheKey] = scene;
+    // 静的シーンが育ち切るまでは合成も作り直す（点・ラベルは合成時に写すため）
+    if (stat.complete) _scenes[cacheKey] = scene;
     return scene;
   }
 
-  /// フィーチャ本体・頂点・写真・選択（GeoJSON のリストが同じ限り作り直さない）
-  _TileScene _buildStatic(
+  /// フィーチャ本体・頂点・写真・選択を [scene] に足す。1 回に [sliceBudget] まで（残りは次の呼び出し）
+  void _advanceStatic(
     TerrainTile tile,
     int step,
-    List<Object?> key,
+    _TileScene scene,
+    _StaticProgress progress,
     FeatureGeoJsonCache g,
     TerrainSceneBuilder Function(Map<String, TerrainFeatureStyle>, TerrainFeatureStyle, String) builder,
     Rect clip,
   ) {
+    final sliceBudget = _sliceBudget;
+    const chunk = 200; // 1 回の持ち上げに渡すフィーチャ数
     final sw = Stopwatch()..start();
     final defaultStyle = _defaultStyle();
     final groups = {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
-    final lines = <LiftedPolyline>[];
-    final polygons = <LiftedPolygon>[];
-    final points = <TerrainPoint>[];
-    final labels = <TerrainLabel>[];
     // 引いた段（セルが 30m 以上 = 表示ズーム 13 以下）では面の輪郭を省く。
     // 60m の面が数ピクセルの眺めで 1 万面の輪郭（4 万本の線分）を毎フレーム描くと raster が 0.5 秒になる
     final coarse = tile.bordered.cellSize * step >= 30;
     void add(TerrainScene s, {bool withLabels = true}) {
-      if (!coarse) lines.addAll(s.outlines);
-      lines.addAll(s.lines);
-      polygons.addAll(s.polygons);
-      points.addAll(s.points);
-      if (withLabels) labels.addAll(s.labels);
+      if (!coarse) scene.lines.addAll(s.outlines);
+      scene.lines.addAll(s.lines);
+      scene.polygons.addAll(s.polygons);
+      scene.points.addAll(s.points);
+      if (withLabels) scene.labels.addAll(s.labels);
     }
 
-    // 1. 頂点（設定で有効なとき）
-    add(
-      builder(const {}, TerrainFeatureStyle(
-        lineColor: defaultStyle.lineColor, lineWidth: 1, fillColor: defaultStyle.fillColor,
-        outlineColor: defaultStyle.outlineColor, outlineWidth: 1, pointColor: Colors.white,
-        pointSize: math.max(2.0, defaultStyle.pointSize * 0.45),
-      ), '__no_label__').build(
-        points: [
-          if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) ...g.lineVertices,
-          if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) ...g.polygonVertices,
-        ],
-        clipRect: clip,
-      ),
-    );
-    // 2. フィーチャ本体。引いた段では面・点のラベルを作らない（数ピクセルの面に 1 万個のラベルは意味が無く、毎フレームの当たり判定が重い）
-    add(
-      builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey).build(lines: g.polylines, clipRect: clip),
-    );
-    add(
-      builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey).build(polygons: g.polygons, points: g.markers, clipRect: clip),
-      withLabels: !coarse,
-    );
-    // 3. 写真（琥珀）
-    add(
-      builder(const {}, const TerrainFeatureStyle(
-        lineColor: Colors.amber, lineWidth: 1, fillColor: Colors.amber, outlineColor: Colors.amber,
-        outlineWidth: 1, pointColor: Colors.amber, pointSize: 7,
-      ), 'name').build(points: g.images, clipRect: clip),
-    );
-    // 4. 選択（上に重ねる）
-    add(
-      builder({for (final e in groups.entries) e.key: _selectedStyle(e.value)}, _selectedStyle(defaultStyle), '__no_label__')
-          .build(lines: g.selectedPolylines, polygons: g.selectedPolygons, points: g.selectedMarkers, clipRect: clip),
-      withLabels: false,
-    );
-    if (sw.elapsedMilliseconds > 20) {
-      AppLogger.debug('[3D] tile ${tile.key} step $step 貼り付け ${sw.elapsedMilliseconds}ms '
-          '(lines ${lines.length} polys ${polygons.length} pts ${points.length})');
+    if (progress.phase == 0) {
+      // 選択（先に見せたい）・頂点・写真は少ないので一度に
+      add(
+        builder({for (final e in groups.entries) e.key: _selectedStyle(e.value)}, _selectedStyle(defaultStyle), '__no_label__')
+            .build(lines: g.selectedPolylines, polygons: g.selectedPolygons, points: g.selectedMarkers, clipRect: clip),
+        withLabels: false,
+      );
+      add(
+        builder(const {}, TerrainFeatureStyle(
+          lineColor: defaultStyle.lineColor, lineWidth: 1, fillColor: defaultStyle.fillColor,
+          outlineColor: defaultStyle.outlineColor, outlineWidth: 1, pointColor: Colors.white,
+          pointSize: math.max(2.0, defaultStyle.pointSize * 0.45),
+        ), '__no_label__').build(
+          points: [
+            if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) ...g.lineVertices,
+            if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) ...g.polygonVertices,
+          ],
+          clipRect: clip,
+        ),
+      );
+      add(
+        builder(const {}, const TerrainFeatureStyle(
+          lineColor: Colors.amber, lineWidth: 1, fillColor: Colors.amber, outlineColor: Colors.amber,
+          outlineWidth: 1, pointColor: Colors.amber, pointSize: 7,
+        ), 'name').build(points: g.images, clipRect: clip),
+      );
+      // 点フィーチャも少ないので一度に
+      add(
+        builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey).build(points: g.markers, clipRect: clip),
+        withLabels: !coarse,
+      );
+      progress.phase = 1;
     }
-    return _TileScene(key: key, lines: lines, polygons: polygons, points: points, labels: labels);
+    // 面（引いた段ではラベル無し）
+    while (progress.phase == 1) {
+      if (progress.polygon >= g.polygons.length) {
+        progress.phase = 2;
+        break;
+      }
+      final end = math.min(progress.polygon + chunk, g.polygons.length);
+      add(
+        builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey)
+            .build(polygons: g.polygons.sublist(progress.polygon, end), clipRect: clip),
+        withLabels: !coarse,
+      );
+      progress.polygon = end;
+      if (sw.elapsed > sliceBudget) return;
+    }
+    // 線
+    while (progress.phase == 2) {
+      if (progress.line >= g.polylines.length) {
+        progress.phase = 3;
+        break;
+      }
+      final end = math.min(progress.line + chunk, g.polylines.length);
+      add(
+        builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey)
+            .build(lines: g.polylines.sublist(progress.line, end), clipRect: clip),
+      );
+      progress.line = end;
+      if (sw.elapsed > sliceBudget) return;
+    }
+    scene.complete = true;
+    if (sw.elapsedMilliseconds > 20) {
+      AppLogger.debug('[3D] tile ${tile.key} step $step 貼り付け 最後の一片 ${sw.elapsedMilliseconds}ms '
+          '(lines ${scene.lines.length} polys ${scene.polygons.length} pts ${scene.points.length})');
+    }
   }
 
   /// 今日の GPS 軌跡・パーティ・現在位置（GPS の更新ごとに作り直す。軽い）

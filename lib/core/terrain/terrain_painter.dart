@@ -458,6 +458,9 @@ class TerrainLabel {
   final TextStyle? style;
   TextPainter? _painter;
 
+  /// layout 済みか（描画側は 1 フレームに新しく layout する数を絞る）
+  bool get isLaidOut => _painter != null;
+
   TextPainter get painter => _painter ??= TextPainter(
         text: TextSpan(text: text, style: style),
         textDirection: TextDirection.ltr,

@@ -312,6 +312,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   Duration get _sliceBudget => _gesturing ? const Duration(milliseconds: 4) : const Duration(milliseconds: 12);
   final Stopwatch _staticSw = Stopwatch();
 
+  /// 1 フレームのメッシュ生成に使う時間。超えたぶんは手持ちの段か穴埋めで繋いで次のフレームに回す
+  /// （新しいタイルが 5 枚同時に届くと 20ms × 5 で 1 フレーム 100ms になっていた）
+  static const _meshBudgetMs = 20;
+  final Stopwatch _meshSw = Stopwatch();
+
   /// フィーチャの bbox（Mercator m）。リストごとに一度だけ
   final Expando<Float64List> _bboxCache = Expando();
 
@@ -416,6 +421,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       stepMeters: 10,
       repaint: _repaint,
       onPainted: (d) {
+        if (_painter.deferredLayouts > 0) _scheduleRefresh();
         if (d.inMilliseconds > 40) {
           var labels = 0, points = 0;
           for (final t in _painter.tiles) {
@@ -583,6 +589,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _staticSw
       ..reset()
       ..start();
+    _meshSw.reset();
     final plan = _planner.plan(_camera, _size, gesturing: _gesturing);
     final planMs = sw.elapsedMilliseconds;
     _lastPlan = plan;
@@ -635,7 +642,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _everCovered = true;
       if (mounted) setState(() {});
     }
-    if (sw.elapsedMilliseconds > 120) {
+    if (sw.elapsedMilliseconds > 40) {
       debugPrint('[3D] refresh ${sw.elapsedMilliseconds}ms (plan $planMs [${_planner.lastTiming}], meshes built $_meshBuilds, '
           'placeholders $_placeholders, scenes built $_sceneBuilds, tiles ${drawables.length})');
     }
@@ -678,9 +685,20 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     if (cached != null && cached.$1 == _camera.bearing && cached.$2 == _camera.pitch) {
       mesh = cached.$3;
     } else {
+      if (!_gesturing && step != 16 && _meshSw.elapsedMilliseconds > _meshBudgetMs) {
+        _scheduleRefresh();
+        for (final e in tile.builders.entries) {
+          final c = _meshes[e.value];
+          if (c != null && c.$1 == _camera.bearing && c.$2 == _camera.pitch) return _drawable(tile, e.value, e.key);
+        }
+        _placeholders++;
+        return _drawable(tile, tile.placeholderBuilder(chunkSize: _world.chunkSize, skirtDepth: tile.key.span * 0.03), 16);
+      }
+      _meshSw.start();
       mesh = builder.build(_camera);
+      _meshSw.stop();
       _meshBuilds++;
-      if (mesh.timing.project + mesh.timing.sort + mesh.timing.assemble > const Duration(milliseconds: 60)) {
+      if (mesh.timing.project + mesh.timing.sort + mesh.timing.assemble > const Duration(milliseconds: 25)) {
         debugPrint('[3D] mesh ${tile.key} step $step: project ${mesh.timing.project.inMilliseconds}ms '
             'sort ${mesh.timing.sort.inMilliseconds}ms assemble ${mesh.timing.assemble.inMilliseconds}ms (resorted ${mesh.timing.resorted})');
       }
@@ -845,7 +863,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       dynamicPolygons: dyn.polygons,
       dynamicPoints: dyn.points,
       points: stat.points,
-      labels: [...stat.labels, ...dyn.labels],
+      // 動的なラベルが無ければ静的のリストをそのまま（同一性を保つ → 描画側のラベル投影キャッシュが効く）
+      labels: dyn.labels.isEmpty ? stat.labels : [...stat.labels, ...dyn.labels],
       complete: stat.complete,
     );
     // 静的シーンが育ち切るまでは合成も作り直す（点・ラベルは合成時に写すため）

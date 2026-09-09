@@ -197,6 +197,12 @@ class TerrainWorldPainter extends CustomPainter {
   /// ラベルの投影キャッシュ（タイルのラベルリストごと）
   final Expando<_ProjectedLabels> _labelCache = Expando();
 
+  /// 1 フレームに新しく layout するラベルの上限（1 個 0.2〜0.3ms。寄った瞬間に 200 個まとめて layout すると 70ms）
+  static const _layoutsPerFrame = 40;
+
+  /// 上限で今フレーム見送ったラベルの数（> 0 なら次のフレームで描き直す）
+  int deferredLayouts = 0;
+
   /// 1 フレームに新しく隠れ判定する点の上限（1 点の判定は視線に沿って標高を何十回も引く）
   static const _occlusionTestsPerFrame = 300;
   TerrainHit? selected;
@@ -552,6 +558,8 @@ class TerrainWorldPainter extends CustomPainter {
     final ordered = [...tiles]..sort((a, b) => a.originY != b.originY ? a.originY.compareTo(b.originY) : a.originX.compareTo(b.originX));
     // 置けるラベルの上限。1 万面 = 1 万ラベルを全部当たり判定・layout すると 1 フレーム秒単位になる
     const maxPlaced = 200;
+    var layouts = 0;
+    deferredLayouts = 0;
     final dotPaint = Paint()..color = Colors.black54;
     final boxPaint = Paint()..color = Colors.white.withValues(alpha: 0.85);
     final anchorPaint = Paint()..color = Colors.black;
@@ -594,6 +602,14 @@ class TerrainWorldPainter extends CustomPainter {
         if (collideLabels && placed.overlaps(estBox)) {
           canvas.drawCircle(sp, 2, dotPaint);
           continue;
+        }
+        if (!label.isLaidOut) {
+          if (layouts >= _layoutsPerFrame) {
+            deferredLayouts++;
+            canvas.drawCircle(sp, 2, dotPaint);
+            continue;
+          }
+          layouts++;
         }
         final tp = label.painter;
         final origin = sp - Offset(tp.width / 2, tp.height + 4);

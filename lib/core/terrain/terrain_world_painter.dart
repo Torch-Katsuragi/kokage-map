@@ -35,6 +35,7 @@ class TerrainTileDrawable {
     this.polygons = const [],
     this.dynamicLines = const [],
     this.dynamicPolygons = const [],
+    this.dynamicPoints = const [],
     this.segmentSets = const [],
     this.points = const [],
     this.labels = const [],
@@ -47,6 +48,9 @@ class TerrainTileDrawable {
   /// 毎フレーム変わりうる線・面（描画中の線、軌跡、向きの線など）。少ないので投影をキャッシュしない
   final List<LiftedPolyline> dynamicLines;
   final List<LiftedPolygon> dynamicPolygons;
+
+  /// 毎フレーム変わりうる点（現在位置・描画中の点など）。投影をキャッシュしない
+  final List<TerrainPoint> dynamicPoints;
 
   /// タイルの DEM 原点（Mercator m）
   final double originX;
@@ -449,6 +453,17 @@ class TerrainWorldPainter extends CustomPainter {
         }
         if (h == 2) continue;
         final pt = pts[i];
+        pointPaint.color = pt.color;
+        canvas.drawCircle(sp, pt.sizePx, pointPaint);
+        canvas.drawCircle(sp, pt.sizePx, pointEdge);
+      }
+      for (final pt in t.dynamicPoints) {
+        final wx = t.originX + pt.x;
+        final wy = t.originY + pt.y;
+        final z = elevationAt(wx, wy) ?? 0;
+        final sp = toScreen(wx, wy, z, size);
+        if (!viewport.inflate(16).contains(sp)) continue;
+        if (!gesturing && isOccluded(wx, wy, z)) continue;
         pointPaint.color = pt.color;
         canvas.drawCircle(sp, pt.sizePx, pointPaint);
         canvas.drawCircle(sp, pt.sizePx, pointEdge);

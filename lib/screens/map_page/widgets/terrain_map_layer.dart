@@ -181,6 +181,7 @@ class _TileScene {
     required this.labels,
     this.dynamicLines = const [],
     this.dynamicPolygons = const [],
+    this.dynamicPoints = const [],
     this.staticSource,
     this.complete = true,
   });
@@ -215,6 +216,9 @@ class _TileScene {
   /// 動的（描画中の線・軌跡・向きなど。毎フレーム投影）
   final List<LiftedPolyline> dynamicLines;
   final List<LiftedPolygon> dynamicPolygons;
+  final List<TerrainPoint> dynamicPoints;
+
+  /// 静的な点（投影をキャッシュする）。合成シーンでは静的シーンのリストをそのまま指す
   final List<TerrainPoint> points;
   final List<TerrainLabel> labels;
 }
@@ -620,6 +624,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       polygonBatches: scene.polygonBatches,
       dynamicLines: scene.dynamicLines,
       dynamicPolygons: scene.dynamicPolygons,
+      dynamicPoints: scene.dynamicPoints,
       points: scene.points,
       labels: scene.labels,
     );
@@ -763,7 +768,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       staticSource: stat,
       dynamicLines: dyn.lines,
       dynamicPolygons: dyn.polygons,
-      points: [...stat.points, ...dyn.points],
+      dynamicPoints: dyn.points,
+      points: stat.points,
       labels: [...stat.labels, ...dyn.labels],
       complete: stat.complete,
     );

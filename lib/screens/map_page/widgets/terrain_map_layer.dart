@@ -780,10 +780,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         clipRect: clip,
       ),
     );
-    // 2. フィーチャ本体
+    // 2. フィーチャ本体。引いた段では面・点のラベルを作らない（数ピクセルの面に 1 万個のラベルは意味が無く、毎フレームの当たり判定が重い）
     add(
-      builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey)
-          .build(lines: g.polylines, polygons: g.polygons, points: g.markers, clipRect: clip),
+      builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey).build(lines: g.polylines, clipRect: clip),
+    );
+    add(
+      builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey).build(polygons: g.polygons, points: g.markers, clipRect: clip),
+      withLabels: !coarse,
     );
     // 3. 写真（琥珀）
     add(

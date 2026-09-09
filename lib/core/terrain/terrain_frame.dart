@@ -65,7 +65,7 @@ class TerrainFramePlan {
 class TerrainFramePlanner {
   TerrainFramePlanner(
     this.world, {
-    this.staticCellBudget = 160000,
+    this.staticCellBudget = 100000,
     this.gestureCellBudget = 40000,
     this.ancestorLevels = 4,
     this.prefetchMargin = 1,

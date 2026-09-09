@@ -407,22 +407,22 @@ class TerrainWorldPainter extends CustomPainter {
     // （回転中にラベルの出入りがちらつかないように）。番号（visibleLabels・pick）はタイル順のまま
     final placed = <Rect>[];
     visibleLabels.clear();
+    // 勝ち負けの順を固定するのに、ラベル全部を並べ替えると 1 万個で毎フレーム重い。
+    // タイルを原点（≒タイルキー）で並べ、タイル内はシーンの順（一定）にすれば、方位に依らない順になる
     final entries = <(int, TerrainTileDrawable, TerrainLabel)>[];
+    final indexBase = <TerrainTileDrawable, int>{};
     var labelIndex = 0;
     for (final t in tiles) {
-      for (final label in t.labels) {
-        entries.add((labelIndex++, t, label));
+      indexBase[t] = labelIndex;
+      labelIndex += t.labels.length;
+    }
+    final ordered = [...tiles]..sort((a, b) => a.originY != b.originY ? a.originY.compareTo(b.originY) : a.originX.compareTo(b.originX));
+    for (final t in ordered) {
+      final base = indexBase[t]!;
+      for (var k = 0; k < t.labels.length; k++) {
+        entries.add((base + k, t, t.labels[k]));
       }
     }
-    entries.sort((a, b) {
-      final ta = a.$3.text;
-      final tb = b.$3.text;
-      final c = ta.compareTo(tb);
-      if (c != 0) return c;
-      final ya = a.$2.originY + a.$3.y;
-      final yb = b.$2.originY + b.$3.y;
-      return ya != yb ? ya.compareTo(yb) : (a.$2.originX + a.$3.x).compareTo(b.$2.originX + b.$3.x);
-    });
     // 置けるラベルの上限。1 万面 = 1 万ラベルを全部当たり判定・layout すると 1 フレーム秒単位になる
     const maxPlaced = 200;
     for (final (i, t, label) in entries) {

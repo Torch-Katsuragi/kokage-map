@@ -19,8 +19,10 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
@@ -1087,6 +1089,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       final move = _camera.unprojectPan(d.focalPointDelta);
       _camera.centerX -= move.dx;
       _camera.centerY -= move.dy;
+    } else if (_mouse && !HardwareKeyboard.instance.isControlPressed) {
+      // マウスの左ドラッグは移動（回転は右ドラッグか Ctrl + 左）
+      final move = _camera.unprojectPan(d.focalPointDelta);
+      _camera.centerX -= move.dx;
+      _camera.centerY -= move.dy;
     } else {
       final delta = d.focalPoint - _focalStart;
       _camera.bearing = _bearingStart + delta.dx * 0.006;
@@ -1107,7 +1114,27 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   }
 
   /// ペンロック中の生のポインタ（2D のジェスチャ層と同じく、描画の滑らかさのためにバッファへ）
+  /// 今のポインタがマウスか（web / PC）。マウスなら 左ドラッグ = 移動、右ドラッグ or Ctrl + 左 = 回転・傾き、ホイール = 拡縮
+  /// （MapLibre の慣例。2 本指が無いので）
+  bool _mouse = false;
+  Offset? _rightDragLast;
+
   void _onPointer(PointerEvent e) {
+    if (e is PointerDownEvent) {
+      _mouse = e.kind == PointerDeviceKind.mouse;
+      // 右ボタンのドラッグは ScaleGestureRecognizer が拾わないので生のポインタで回す
+      _rightDragLast = _mouse && (e.buttons & kSecondaryButton) != 0 ? e.localPosition : null;
+    } else if (e is PointerMoveEvent && _rightDragLast != null) {
+      final delta = e.localPosition - _rightDragLast!;
+      _rightDragLast = e.localPosition;
+      _rotateBy(delta);
+    } else if (e is PointerUpEvent || e is PointerCancelEvent) {
+      if (_rightDragLast != null) {
+        _rightDragLast = null;
+        _gesturing = false;
+        _refresh();
+      }
+    }
     if (!_penLock) return;
     final tool = ref.read(currentToolProvider);
     if (e is PointerDownEvent || e is PointerMoveEvent) {
@@ -1115,6 +1142,28 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     } else if (e is PointerUpEvent) {
       tool.clearPointerBuffer();
     }
+  }
+
+  /// 画面上の移動量 [delta] を方位・傾きに（1 本指・右ドラッグ・Ctrl + 左ドラッグで共通）
+  void _rotateBy(Offset delta) {
+    _camera.bearing += delta.dx * 0.006;
+    _camera.pitch = (_camera.pitch - delta.dy * 0.004).clamp(0.0, _maxPitchDeg * math.pi / 180);
+    _gesturing = true;
+    _refresh();
+  }
+
+  /// ホイール = 拡縮（カーソルの下を留める）
+  void _onPointerSignal(PointerSignalEvent e) {
+    if (e is! PointerScrollEvent || _size == Size.zero) return;
+    final before = _camera.scale;
+    final dz = -e.scrollDelta.dy / 400; // 1 ノッチ ≒ 0.25 段
+    _camera.zoom = (_camera.zoom + dz).clamp(8, 22);
+    final off = e.localPosition - Offset(_size.width / 2, _size.height / 2);
+    final k = 1 - before / _camera.scale;
+    final move = _camera.unprojectPan(off * k);
+    _camera.centerX += move.dx;
+    _camera.centerY += move.dy;
+    _refresh();
   }
 
   // ── オーバーレイ画像 ─────────────────────────────────
@@ -1252,6 +1301,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
                 onPointerDown: _onPointer,
                 onPointerMove: _onPointer,
                 onPointerUp: _onPointer,
+                onPointerCancel: _onPointer,
+                onPointerSignal: _onPointerSignal,
                 child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onScaleStart: _onScaleStart,

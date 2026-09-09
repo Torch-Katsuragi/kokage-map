@@ -435,18 +435,27 @@ class TerrainWorld extends ChangeNotifier {
     final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
     DemGrid? merged;
     var holes = 0;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final misses = <String>[];
     for (final source in demSources) {
       if (key.z < source.minZoom || key.z > source.maxZoom) continue;
       final missKey = '${source.id}/${key.z}/${key.x}/${key.y}';
-      if (_missing.contains(missKey)) continue;
+      final missedAt = _missing[missKey];
+      if (missedAt != null && nowMs - missedAt < _missingTtlMs) continue;
       final dem = await DemTileLoader(source: source, fetcher: (z, x, y) => demFetcher(source, z, x, y))
           .tryLoad(range, fillInvalid: false);
       if (dem == null) {
-        // 無かったソースは覚えておく（タイルキャッシュは 404 を覚えないので、毎回ネットに聞くと 1 枚数秒掛かる）
-        _missing.add(missKey);
-        if (_missing.length > 4096) _missing.clear();
+        misses.add(missKey);
         continue;
       }
+      // 無かったソースは覚えておく（タイルキャッシュは 404 を覚えないので、毎回ネットに聞くと 1 枚数秒掛かる）。
+      // ⚠ 取れなかった理由は 404 か通信失敗か分からないので、同じタイルで後ろのソースが取れたとき（= 通信は生きている）だけ覚える。
+      // 全部取れなかった（圏外）ときは覚えない
+      for (final k in misses) {
+        _missing[k] = nowMs;
+      }
+      misses.clear();
+      if (_missing.length > 4096) _missing.clear();
       if (merged == null) {
         merged = dem;
         holes = _countNaN(dem.heights);
@@ -475,9 +484,10 @@ class TerrainWorld extends ChangeNotifier {
     return n;
   }
 
-  /// このセッションで「無かった」(ソース, タイル)。圏外の失敗は _failedAt が別に持つ。
-  /// 3D に入り直すたびに世界は作り直すので、アプリ全体で持つ
-  static final Set<String> _missing = {};
+  /// 「無かった」(ソース, タイル) → 覚えた時刻（ms）。圏外の失敗は _failedAt が別に持つ。
+  /// 3D に入り直すたびに世界は作り直すので、アプリ全体で持つ。通信の一時的な失敗を永久に覚えないよう期限つき
+  static final Map<String, int> _missing = {};
+  static const _missingTtlMs = 10 * 60 * 1000;
 
   /// 親（最大 [maxApproximateLevels] 段上）から補間した近似の DEM と、その親の段
   Future<(DemGrid, int)?> _approximateFromAncestor(TileKey key) async {

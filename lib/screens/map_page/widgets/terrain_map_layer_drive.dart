@@ -40,7 +40,7 @@ mixin _TerrainDrive on State<TerrainMapLayer> {
 
   /// 台本: 0〜8s 東へ 3km、8〜16s 引き 4 段、16〜24s 寄り 5 段、24〜32s 一回転、32〜40s 傾け往復、40〜48s 西へ 3km
   void _startDrive() {
-    if (!kDebugMode || _drive != null) return;
+    if (kReleaseMode || _drive != null) return;
     _driveOrigin = (_camera.centerX, _camera.centerY, _camera.zoom, _camera.bearing);
     _driveGapFrames = 0;
     _driveFrames = 0;

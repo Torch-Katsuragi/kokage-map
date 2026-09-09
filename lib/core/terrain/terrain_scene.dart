@@ -150,16 +150,7 @@ class TerrainSceneBuilder {
       if (!inside(at)) return;
       final text = f.properties[labelProp];
       if (text is! String || text.isEmpty) return;
-      labels.add(
-        TerrainLabel(
-          x: at.dx,
-          y: at.dy,
-          painter: TextPainter(
-            text: TextSpan(text: text, style: labelTextStyle),
-            textDirection: TextDirection.ltr,
-          )..layout(),
-        ),
-      );
+      labels.add(TerrainLabel(x: at.dx, y: at.dy, text: text, style: labelTextStyle));
     }
 
     for (final f in lines) {

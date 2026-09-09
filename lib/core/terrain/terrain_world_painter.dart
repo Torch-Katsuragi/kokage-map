@@ -36,7 +36,11 @@ class TerrainTileDrawable {
     this.segmentSets = const [],
     this.points = const [],
     this.labels = const [],
-  });
+    Map<int, PolygonBatch>? polygonBatches,
+  }) : polygonBatches = polygonBatches ?? PolygonBatch.byChunk(polygons);
+
+  /// チャンク番号 → 面の束（シーン側で一度作って使い回す）
+  final Map<int, PolygonBatch> polygonBatches;
 
   /// タイルの DEM 原点（Mercator m）
   final double originX;
@@ -207,36 +211,55 @@ class TerrainWorldPainter extends CustomPainter {
       enterTile(t);
       final terrainPaint = terrainPaintFor(t);
 
-      // 線を帯ごとに振り分けた Path
-      final pathsByBand = <int, List<(Path, int)>>{};
+      // 線を「帯 × 見た目（色・太さ）」ごとにまとめる（線ごとに drawPath すると数千回になる）。
+      // 細い線（≤ 2.5px）は線分の配列にして drawRawPoints（Path を毎フレーム組むより軽い。継ぎ目の欠けは太さ的に見えない）、
+      // 太い線は角と端を丸くしたいので Path
+      final pathsByBand = <int, Map<(int, double), Path>>{};
+      final segsByBand = <int, Map<(int, double), List<double>>>{};
       for (var li = 0; li < t.lines.length; li++) {
         final line = t.lines[li];
         final n = line.pointCount;
+        final styleKey = (line.color.toARGB32(), line.widthPx);
+        final thin = line.widthPx <= 2.5;
         var currentBand = -1;
         Path? path;
+        List<double>? segs;
         for (var i = 0; i < n - 1; i++) {
           final band = mesh.cellBand[line.cells[i]];
           final a = camera.project(line.xyz[i * 3], line.xyz[i * 3 + 1], line.xyz[i * 3 + 2]);
           final b = camera.project(line.xyz[i * 3 + 3], line.xyz[i * 3 + 4], line.xyz[i * 3 + 5]);
-          if (band != currentBand) {
-            path = Path()..moveTo(a.dx, a.dy);
-            (pathsByBand[band] ??= []).add((path, li));
-            currentBand = band;
+          if (thin) {
+            if (band != currentBand) {
+              segs = (segsByBand[band] ??= {})[styleKey] ??= <double>[];
+              currentBand = band;
+            }
+            segs!
+              ..add(a.dx)
+              ..add(a.dy)
+              ..add(b.dx)
+              ..add(b.dy);
+          } else {
+            if (band != currentBand) {
+              path = (pathsByBand[band] ??= {})[styleKey] ??= Path();
+              path.moveTo(a.dx, a.dy);
+              currentBand = band;
+            }
+            path!.lineTo(b.dx, b.dy);
           }
-          path!.lineTo(b.dx, b.dy);
         }
       }
 
       for (var b = 0; b < mesh.bands.length; b++) {
         canvas.drawVertices(mesh.bands[b].vertices, BlendMode.modulate, terrainPaint);
         final chunk = mesh.bandChunk[b];
-        for (final poly in t.polygons) {
-          final src = poly.byChunk[chunk];
-          if (src == null) continue;
-          final dst = poly.projected[chunk]!;
-          projectInto(src, dst);
-          fillPaint.color = poly.color;
-          canvas.drawVertices(ui.Vertices.raw(ui.VertexMode.triangles, dst), BlendMode.srcOver, fillPaint);
+        final batch = t.polygonBatches[chunk];
+        if (batch != null) {
+          projectInto(batch.xyz, batch.projected);
+          canvas.drawVertices(
+            ui.Vertices.raw(ui.VertexMode.triangles, batch.projected, colors: batch.colors),
+            BlendMode.srcOver,
+            fillPaint,
+          );
         }
         for (final set in t.segmentSets) {
           final src = set.byChunk[chunk];
@@ -248,14 +271,22 @@ class TerrainWorldPainter extends CustomPainter {
             ..strokeWidth = set.widthPx / camera.scale;
           canvas.drawRawPoints(ui.PointMode.lines, dst, segmentPaint);
         }
+        final segs = segsByBand[b];
+        if (segs != null) {
+          for (final e in segs.entries) {
+            segmentPaint
+              ..color = Color(e.key.$1)
+              ..strokeWidth = e.key.$2 / camera.scale;
+            canvas.drawRawPoints(ui.PointMode.lines, Float32List.fromList(e.value), segmentPaint);
+          }
+        }
         final paths = pathsByBand[b];
         if (paths == null) continue;
-        for (final (path, li) in paths) {
-          final line = t.lines[li];
+        for (final e in paths.entries) {
           linePaint
-            ..color = line.color
-            ..strokeWidth = line.widthPx / camera.scale;
-          canvas.drawPath(path, linePaint);
+            ..color = Color(e.key.$1)
+            ..strokeWidth = e.key.$2 / camera.scale;
+          canvas.drawPath(e.value, linePaint);
         }
       }
       canvas.restore();
@@ -295,8 +326,8 @@ class TerrainWorldPainter extends CustomPainter {
       }
     }
     entries.sort((a, b) {
-      final ta = a.$3.painter.text?.toPlainText() ?? '';
-      final tb = b.$3.painter.text?.toPlainText() ?? '';
+      final ta = a.$3.text;
+      final tb = b.$3.text;
       final c = ta.compareTo(tb);
       if (c != 0) return c;
       final ya = a.$2.originY + a.$3.y;

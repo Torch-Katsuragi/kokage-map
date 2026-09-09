@@ -147,6 +147,52 @@ List<List<Offset>> clipPolylineToRect(List<Offset> points, Rect rect) {
   return out;
 }
 
+/// チャンク 1 つぶんの面の三角形をまとめた束（色は頂点ごと）。
+/// 面ごとに drawVertices を呼ぶと 1 万面で 1 フレーム数千回になるので、チャンクごとに 1 回にする
+class PolygonBatch {
+  PolygonBatch(this.xyz, this.colors) : projected = Float32List(xyz.length ~/ 3 * 2);
+
+  /// 頂点の x, y, z（三角形数 × 9）
+  final Float32List xyz;
+
+  /// 頂点ごとの色（ARGB、三角形数 × 3）
+  final Int32List colors;
+
+  /// 投影した画面座標（毎フレーム上書き）
+  final Float32List projected;
+
+  /// [polygons] をチャンク番号ごとにまとめる
+  static Map<int, PolygonBatch> byChunk(List<LiftedPolygon> polygons) {
+    final xyzs = <int, List<Float32List>>{};
+    final counts = <int, int>{};
+    for (final p in polygons) {
+      for (final e in p.byChunk.entries) {
+        (xyzs[e.key] ??= []).add(e.value);
+        counts[e.key] = (counts[e.key] ?? 0) + e.value.length;
+      }
+    }
+    final out = <int, PolygonBatch>{};
+    for (final e in xyzs.entries) {
+      final xyz = Float32List(counts[e.key]!);
+      final colors = Int32List(counts[e.key]! ~/ 3);
+      var o = 0;
+      var v = 0;
+      for (final p in polygons) {
+        final src = p.byChunk[e.key];
+        if (src == null) continue;
+        xyz.setRange(o, o + src.length, src);
+        o += src.length;
+        final argb = p.color.toARGB32();
+        final nv = src.length ~/ 3;
+        colors.fillRange(v, v + nv, argb);
+        v += nv;
+      }
+      out[e.key] = PolygonBatch(xyz, colors);
+    }
+    return out;
+  }
+}
+
 /// DEM に沿って持ち上げた面（描画用）
 ///
 /// 面を三角形に分け（耳切り）、各三角形を DEM のセルで切り分け、
@@ -380,12 +426,22 @@ class LiftedSegments {
 
 /// 地形に乗せるラベル（ビルボード）
 class TerrainLabel {
-  TerrainLabel({required this.x, required this.y, required this.painter});
+  /// [painter] を渡さなければ [text] と [style] から**描くときに**作る（1 万ラベルの layout を貼り付け時にやらない）
+  TerrainLabel({required this.x, required this.y, TextPainter? painter, String? text, this.style})
+      : _painter = painter,
+        text = text ?? painter?.text?.toPlainText() ?? '';
 
   /// DEM 原点基準の Mercator m
   final double x;
   final double y;
-  final TextPainter painter;
+  final String text;
+  final TextStyle? style;
+  TextPainter? _painter;
+
+  TextPainter get painter => _painter ??= TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: TextDirection.ltr,
+      )..layout();
 }
 
 /// ヒットテストの結果

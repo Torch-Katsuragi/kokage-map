@@ -175,6 +175,9 @@ class _CompassButton extends StatelessWidget {
 class _TileScene {
   _TileScene({required this.key, required this.lines, required this.polygons, required this.points, required this.labels});
 
+  /// チャンクごとの面の束（初回に作る。描画は毎フレームこれを投影する）
+  late final Map<int, PolygonBatch> polygonBatches = PolygonBatch.byChunk(polygons);
+
   /// 何から作ったか（GeoJSON リストの同一性・選択・軌跡の点数・パーティ・現在位置）
   final List<Object?> key;
   final List<LiftedPolyline> lines;
@@ -554,6 +557,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     } else {
       mesh = builder.build(_camera);
       _meshBuilds++;
+      if (mesh.timing.project + mesh.timing.sort + mesh.timing.assemble > const Duration(milliseconds: 60)) {
+        AppLogger.debug('[3D] mesh ${tile.key} step $step: project ${mesh.timing.project.inMilliseconds}ms '
+            'sort ${mesh.timing.sort.inMilliseconds}ms assemble ${mesh.timing.assemble.inMilliseconds}ms (resorted ${mesh.timing.resorted})');
+      }
       // 古いメッシュの Vertices は native 側にあり GC を待つと溜まるので、その場で返す
       cached?.$3.dispose();
       _meshes[builder] = (_camera.bearing, _camera.pitch, mesh);
@@ -566,6 +573,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       texture: tile.texture,
       lines: scene.lines,
       polygons: scene.polygons,
+      polygonBatches: scene.polygonBatches,
       points: scene.points,
       labels: scene.labels,
     );
@@ -656,7 +664,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
     final dem = mesh.dem;
     final clip = Rect.fromLTWH(0, 0, dem.width, dem.height);
-    final clipCells = math.max(1, (20 / (dem.cellSize * step)).round());
+    // 面を地形に沿わせる格子の粗さ: 約 20m、ただし最低 4 セル（引いた段では 1 セルまで切り分けても画面上 1〜2px で意味が無く、
+    // 1 万面で貼り付けが 1 秒を超えた）
+    final clipCells = math.max(4, (20 / (dem.cellSize * step)).round());
     final labelStyle = TextStyle(
       fontSize: layerStyleSettings.getDouble(labelFontSizeDef),
       color: layerStyleSettings.getColor(labelColorDef),
@@ -1334,8 +1344,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (kDebugMode) ...[
-                    // 台本でカメラを動かして被覆率とフレーム時間を [3D] drive ログに出す
+                  if (!kReleaseMode) ...[
+                    // 台本でカメラを動かして被覆率とフレーム時間を [3D] drive ログに出す（debug / profile）
                     _ZoomButton(
                       icon: _drive == null ? Icons.route : Icons.stop,
                       tooltip: 'ドライブ',

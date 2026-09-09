@@ -69,6 +69,18 @@ class _ProjectedBatch {
   final ui.Vertices vertices;
 }
 
+/// タイルの点を投影した結果（方位・傾きが変わるまで使い回す）。hidden: 0 = 未判定、1 = 見える、2 = 隠れている
+class _ProjectedPoints {
+  _ProjectedPoints(this.bearing, this.pitch, this.count, this.xy, this.z, this.hidden);
+
+  final double bearing;
+  final double pitch;
+  final int count;
+  final Float32List xy;
+  final Float32List z;
+  final Uint8List hidden;
+}
+
 /// タイルの線を投影して帯 × 見た目でまとめた結果
 class _ProjectedLines {
   _ProjectedLines(this.bearing, this.pitch, this.thinSkipped, this.count, this.pathsByBand, this.segsByBand);
@@ -128,6 +140,12 @@ class TerrainWorldPainter extends CustomPainter {
 
   /// 線の投影キャッシュ（タイルの線リストごと）
   final Expando<_ProjectedLines> _lineCache = Expando();
+
+  /// 点の投影と隠れ判定のキャッシュ（タイルの点リストごと）
+  final Expando<_ProjectedPoints> _pointCache = Expando();
+
+  /// 1 フレームに新しく隠れ判定する点の上限（1 点の判定は視線に沿って標高を何十回も引く）
+  static const _occlusionTestsPerFrame = 300;
   TerrainHit? selected;
   final Set<int> visibleLabels = {};
   final void Function(Duration)? onPainted;
@@ -388,21 +406,49 @@ class TerrainWorldPainter extends CustomPainter {
       canvas.restore();
     }
 
-    // 点（画面座標）。隠れているものは描かない
+    // 点（画面座標）。隠れているものは描かない。
+    // 投影は方位・傾きごとにキャッシュし、隠れ判定は画面に入っている点だけ・1 フレーム上限つきで進める
+    // （1 万点を毎フレーム投影して光線探索すると 400ms）
     final viewport = Offset.zero & size;
     final pointPaint = Paint();
     final pointEdge = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..color = Colors.white;
+    final pc = camera.project(camera.centerX, camera.centerY, _centerHeight);
+    var occlusionTests = 0;
     for (final t in tiles) {
-      for (final pt in t.points) {
-        final wx = t.originX + pt.x;
-        final wy = t.originY + pt.y;
-        final z = elevationAt(wx, wy) ?? 0;
-        final sp = toScreen(wx, wy, z, size);
+      final pts = t.points;
+      if (pts.isEmpty) continue;
+      var pp = _pointCache[pts];
+      if (pp == null || pp.bearing != camera.bearing || pp.pitch != camera.pitch || pp.count != pts.length) {
+        final xy = Float32List(pts.length * 2);
+        final z = Float32List(pts.length);
+        for (var i = 0; i < pts.length; i++) {
+          final wx = t.originX + pts[i].x;
+          final wy = t.originY + pts[i].y;
+          z[i] = elevationAt(wx, wy) ?? 0;
+          final p = camera.project(wx, wy, z[i]);
+          xy[i * 2] = p.dx;
+          xy[i * 2 + 1] = p.dy;
+        }
+        pp = _ProjectedPoints(camera.bearing, camera.pitch, pts.length, xy, z, Uint8List(pts.length));
+        _pointCache[pts] = pp;
+      }
+      for (var i = 0; i < pts.length; i++) {
+        final sp = Offset(
+          size.width / 2 + (pp.xy[i * 2] - pc.dx) * camera.scale,
+          size.height / 2 + (pp.xy[i * 2 + 1] - pc.dy) * camera.scale,
+        );
         if (!viewport.inflate(16).contains(sp)) continue;
-        if (isOccluded(wx, wy, z)) continue;
+        var h = pp.hidden[i];
+        if (h == 0 && !gesturing && occlusionTests < _occlusionTestsPerFrame) {
+          occlusionTests++;
+          h = isOccluded(t.originX + pts[i].x, t.originY + pts[i].y, pp.z[i]) ? 2 : 1;
+          pp.hidden[i] = h;
+        }
+        if (h == 2) continue;
+        final pt = pts[i];
         pointPaint.color = pt.color;
         canvas.drawCircle(sp, pt.sizePx, pointPaint);
         canvas.drawCircle(sp, pt.sizePx, pointEdge);

@@ -773,6 +773,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   }
 
   /// フィーチャ本体・頂点・写真・選択を [scene] に足す。1 回に [sliceBudget] まで（残りは次の呼び出し）
+  static const labelStyleForClusters = TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF3F51B5));
+
   void _advanceStatic(
     TerrainTile tile,
     int step,
@@ -824,11 +826,33 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           outlineWidth: 1, pointColor: Colors.amber, pointSize: 7,
         ), 'name').build(points: g.images, clipRect: clip),
       );
-      // 点フィーチャも少ないので一度に
-      add(
-        builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey).build(points: g.markers, clipRect: clip),
-        withLabels: !coarse,
-      );
+      // 点フィーチャ。引いた段では格子（画面 60px 相当）でまとめて数を出す（1 万点を 1 点ずつ描かない）
+      final pointScene = builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey).build(points: g.markers, clipRect: clip);
+      if (coarse && pointScene.points.length > 50) {
+        final cellM = tile.bordered.cellSize * step * 30; // 1 セル ≒ 2px → 60px
+        final buckets = <(int, int), List<TerrainPoint>>{};
+        for (final p in pointScene.points) {
+          (buckets[((p.x / cellM).floor(), (p.y / cellM).floor())] ??= []).add(p);
+        }
+        for (final e in buckets.entries) {
+          final ps = e.value;
+          if (ps.length == 1) {
+            scene.points.add(ps.first);
+            continue;
+          }
+          var cx = 0.0, cy = 0.0;
+          for (final p in ps) {
+            cx += p.x;
+            cy += p.y;
+          }
+          cx /= ps.length;
+          cy /= ps.length;
+          scene.points.add(TerrainPoint(x: cx, y: cy, color: const Color(0xFF3F51B5), sizePx: 12));
+          scene.labels.add(TerrainLabel(x: cx, y: cy, text: '${ps.length}', style: labelStyleForClusters));
+        }
+      } else {
+        add(pointScene, withLabels: !coarse);
+      }
       progress.phase = 1;
     }
     // 面（引いた段ではラベル無し）

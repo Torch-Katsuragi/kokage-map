@@ -252,7 +252,10 @@ class DemTileLoader {
 
   /// [load] の null 版。1 枚でも取れなければ null
   /// （⚠ 以前は取れなかったタイルが 0m の平面になっていた）
-  Future<DemGrid?> tryLoad(TileRange range, {TileProgress? onProgress}) async {
+  ///
+  /// [fillInvalid] が false なら無効値（地理院タイルの海・データなし）を NaN のまま返す
+  /// （呼び出し側が別ソースで埋める）。true なら [fillInvalidHeights] で埋める
+  Future<DemGrid?> tryLoad(TileRange range, {TileProgress? onProgress, bool fillInvalid = true}) async {
     final z = range.z;
     final sw = Stopwatch()..start();
     final bytesList = await _fetchRange(_fetch, range, onProgress: onProgress);
@@ -266,6 +269,7 @@ class DemTileLoader {
     if (sw.elapsedMilliseconds > 800) {
       debugPrint('[3D] dem ${range.z}/${range.x0}/${range.y0} fetch ${fetchMs}ms assemble ${sw.elapsedMilliseconds - fetchMs}ms');
     }
+    if (fillInvalid) fillInvalidHeights(heights);
     const ts = WebMercator.tileSize;
     final cols = range.width * ts;
     final rows = range.height * ts;
@@ -367,12 +371,14 @@ Float32List _assembleHeights(_AssembleArgs a) {
       }
     }
   }
-  _fillInvalid(heights);
   return heights;
 }
 
 /// 無効値（NaN。地理院タイルの海・データなし・水面）を埋める: 直前の有効値。先頭が無効なら最初の有効値、全部無効なら 0（海面）
-void _fillInvalid(Float32List h) {
+///
+/// ⚠ 整備範囲の縁のタイルは大半が無効で、これで埋めると行ごとの縞と巨大な台地になる。
+/// 世界（TerrainWorld）は先に次のソースで埋め（[TerrainWorld] の連なり）、残りだけこれで埋める
+void fillInvalidHeights(Float32List h) {
   var last = 0.0;
   for (var i = 0; i < h.length; i++) {
     if (!h[i].isNaN) {

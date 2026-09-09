@@ -17,6 +17,7 @@ import 'dart:typed_data';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:root_maps/core/terrain/dem_grid.dart';
 import 'package:root_maps/core/terrain/dem_tiles.dart';
 import 'package:root_maps/core/terrain/terrain_world.dart';
@@ -90,6 +91,58 @@ void main() {
       final south = upsampleFromParent(UpsampleArgs(parent: parent, levels: 1, childX: 0, childY: 11));
       expect(north[0], greaterThan(127));
       expect(south[255 * 256], lessThan(128.5));
+    });
+  });
+
+  group('TerrainWorld のソースの重ね合わせ', () {
+    // 地理院 PNG（x = 2^16R + 2^8G + B、0.01m）。左半分が無効 (128,0,0)、右半分 200m のタイル
+    Uint8List gsiTile({required bool leftInvalid, required double height}) {
+      final im = img.Image(width: 256, height: 256);
+      final x = (height * 100).round();
+      for (var y = 0; y < 256; y++) {
+        for (var c = 0; c < 256; c++) {
+          if (leftInvalid && c < 128) {
+            im.setPixelRgb(c, y, 128, 0, 0);
+          } else {
+            im.setPixelRgb(c, y, (x >> 16) & 255, (x >> 8) & 255, x & 255);
+          }
+        }
+      }
+      return Uint8List.fromList(img.encodePng(im));
+    }
+
+    test('細かいソースの無効な点は次のソースで埋まり、縞や台地にならない', () async {
+      final fine = gsiTile(leftInvalid: true, height: 200);
+      final coarse = gsiTile(leftInvalid: false, height: 50);
+      var fetches = <String>[];
+      final world = TerrainWorld(
+        demSources: const [DemTileSource.gsiDem1a, DemTileSource.gsiDem5a, DemTileSource.aws],
+        demFetcher: (s, z, x, y) async {
+          fetches.add(s.id);
+          if (s == DemTileSource.gsiDem1a) return fine;
+          if (s == DemTileSource.gsiDem5a) return coarse;
+          return null;
+        },
+        textureFetcher: (z, x, y) async => null,
+      );
+      final dem = await world.debugLoadDem(const TileKey(15, 100, 200));
+      expect(dem, isNotNull);
+      expect(dem!.heights[128 * 256 + 10], closeTo(50, 0.01), reason: '左は 5A の値');
+      expect(dem.heights[128 * 256 + 200], closeTo(200, 0.01), reason: '右は 1A の値');
+      expect(fetches, ['gsi_dem1a_png', 'gsi_dem5a_png'], reason: '穴が埋まったら AWS までは聞かない');
+      // 2 回目: 無かったソースは覚えていて聞かない
+      fetches = [];
+      final world2 = TerrainWorld(
+        demSources: const [DemTileSource.gsiDem1a, DemTileSource.aws],
+        demFetcher: (s, z, x, y) async {
+          fetches.add(s.id);
+          return s == DemTileSource.aws ? coarse : null; // AWS は Terrarium だが符号化の違いはここでは見ない
+        },
+        textureFetcher: (z, x, y) async => null,
+      );
+      await world2.debugLoadDem(const TileKey(15, 1, 1));
+      await world2.debugLoadDem(const TileKey(15, 1, 1));
+      expect(fetches.where((f) => f == 'gsi_dem1a_png').length, 1, reason: '404 は 1 回だけ');
     });
   });
 

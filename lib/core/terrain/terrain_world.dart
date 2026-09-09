@@ -424,19 +424,51 @@ class TerrainWorld extends ChangeNotifier {
   }
 
   /// [key] の DEM を、ソースを細かい方から順に試して取る（その段を持たないソースは飛ばす）
+  /// [key] の DEM を、ソースを細かい方から順に重ねて作る。
+  /// 細かいソースの無効な点（整備範囲外・水面）は次のソースの値で埋める（同じタイル座標なので点ごとに重ねられる）。
+  /// 全部重ねても残った無効値は [fillInvalidHeights] で埋める
   Future<DemGrid?> _loadDem(TileKey key) async {
     final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
+    DemGrid? merged;
+    var holes = 0;
     for (final source in demSources) {
       if (key.z < source.minZoom || key.z > source.maxZoom) continue;
       final missKey = '${source.id}/${key.z}/${key.x}/${key.y}';
       if (_missing.contains(missKey)) continue;
-      final dem = await DemTileLoader(source: source, fetcher: (z, x, y) => demFetcher(source, z, x, y)).tryLoad(range);
-      if (dem != null) return dem;
-      // 無かったソースは覚えておく（タイルキャッシュは 404 を覚えないので、毎回ネットに聞くと 1 枚数秒掛かる）
-      _missing.add(missKey);
-      if (_missing.length > 4096) _missing.clear();
+      final dem = await DemTileLoader(source: source, fetcher: (z, x, y) => demFetcher(source, z, x, y))
+          .tryLoad(range, fillInvalid: false);
+      if (dem == null) {
+        // 無かったソースは覚えておく（タイルキャッシュは 404 を覚えないので、毎回ネットに聞くと 1 枚数秒掛かる）
+        _missing.add(missKey);
+        if (_missing.length > 4096) _missing.clear();
+        continue;
+      }
+      if (merged == null) {
+        merged = dem;
+        holes = _countNaN(dem.heights);
+      } else {
+        final a = merged.heights;
+        final b = dem.heights;
+        holes = 0;
+        for (var i = 0; i < a.length; i++) {
+          if (a[i].isNaN) {
+            a[i] = b[i];
+            if (a[i].isNaN) holes++;
+          }
+        }
+      }
+      if (holes == 0) return merged;
     }
-    return null;
+    if (merged != null && holes > 0) fillInvalidHeights(merged.heights);
+    return merged;
+  }
+
+  static int _countNaN(Float32List h) {
+    var n = 0;
+    for (var i = 0; i < h.length; i++) {
+      if (h[i].isNaN) n++;
+    }
+    return n;
   }
 
   /// このセッションで「無かった」(ソース, タイル)。圏外の失敗は _failedAt が別に持つ
@@ -476,6 +508,10 @@ class TerrainWorld extends ChangeNotifier {
   /// 読み込みに失敗した時刻。しばらく再試行しない（圏外で毎フレーム失敗し続けないように）
   final Map<TileKey, int> _failedAt = {};
   static const _retryAfterMs = 10000;
+
+  /// テスト用: ソースの重ね合わせだけを呼ぶ
+  @visibleForTesting
+  Future<DemGrid?> debugLoadDem(TileKey key) => _loadDem(key);
 
   /// テスト用: 失敗の記録を消す（fake_async では DateTime.now が進まない）
   @visibleForTesting

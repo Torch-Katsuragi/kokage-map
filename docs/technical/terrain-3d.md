@@ -223,7 +223,7 @@ DEM の組み立て 1.4 秒 → 21ms（常駐 isolate）。縮小 4 段のスク
 - 2D のカメラ移動（`jumpTo`: 現在位置へ移動・フィーチャへ移動・属性テーブル）は 3D 中 `TerrainProjection.jumpTo` で地形のカメラを動かす
 - 選択中のオーバーレイ画像の枠（青）と変換ツールの回転ハンドル、外部機器ツール（TruPulse）の基準点と計測線も 3D に載る
   （`DeviceTool.overlayLines` / `overlayStation`。MapLibre 向けの層はそれを包む）
-- 残っている仮実装: ツールバーの「3D 地形」切替（MapLibre を外すまで）。カメラ状態の `.kmeta.json` 保存は未着手
+- 残っている仮実装: ツールバーの「3D 地形」切替（MapLibre を外すまで）。カメラ状態は保存しない（松本 2026-09-09）
 
 ## データ側
 

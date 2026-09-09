@@ -224,10 +224,14 @@ DEM の組み立て 1.4 秒 → 21ms（常駐 isolate）。縮小 4 段のスク
 - 選択中のオーバーレイ画像の枠（青）と変換ツールの回転ハンドル、外部機器ツール（TruPulse）の基準点と計測線も 3D に載る
   （`DeviceTool.overlayLines` / `overlayStation`。MapLibre 向けの層はそれを包む）
 - 残っている仮実装: ツールバーの「3D 地形」切替（MapLibre を外すまで）。カメラ状態は保存しない（松本 2026-09-09）
-- **3D 中は MapLibre を組み立てない**（2026-09-09 夜）: `map_page` は `terrain3d` の間 `RMapWidget` を出さない。外れたら
-  `RMapController.detach`・`MapSourceManager.detachStyle`・登録済みソース/オーバーレイの記録を捨て（`_onMapLibreDisposed`）、
-  戻すときは覚えておいたカメラ（`rememberCamera`。地形レイヤが `_notifyCamera` で流す）を `initCenter` にして組み立て直し、
-  `onStyleLoaded` から全部やり直す。地図が無い間の `mapController.camera` は最後のカメラを返す（`KMapCamera.fixed`）
+- **3D 中は MapLibre を空のスタイルにする**（2026-09-09 夜）: 下で生かしたままだと 3D の PSS が 1.3GB（Graphics 450MB）。
+  最初はウィジェットごと外したが、`maplibre_android` 0.3.5 はプラットフォームビューを捨てるときにネイティブの地図を
+  破棄しないので、2D に戻すたびに native heap が 170MB 増えて戻らなかった（5 往復で PSS 2GB）。
+  なので `terrain3dModeProvider` を聞いて、入るときは `setStyle(kEmptyMapStyle)`（タイル・ソースを手放す）＋
+  `RMapController.detachStyle`・`MapSourceManager.detachStyle`・登録済みソース/オーバーレイの記録を捨てる。
+  抜けるときは基図のスタイルを `setStyle` し直し、`onStyleLoaded` から全部やり直す（3D 中に来る空スタイルの onStyleLoaded は無視）。
+  カメラは MapLibre が持ったまま（3D を抜けるときに書き戻す）。`RMapController.rememberCamera` / `KMapCamera.fixed` は
+  コントローラが無い間（起動直後）の保険として残す
 
 ## 1 万面 + 1 万点の負荷（2026-09-09 夜・Pixel 9・profile）
 

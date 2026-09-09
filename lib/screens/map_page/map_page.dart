@@ -345,6 +345,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     final currentTool = ref.watch(currentToolProvider);
     final isPanTool = currentTool.name == 'Pan';
     final terrain3d = ref.watch(terrain3dModeProvider);
+    ref.listen(terrain3dModeProvider, (_, on) => _onTerrain3dChanged(on));
 
     return KeyboardShortcutWrapper(
       mapState: this,
@@ -391,12 +392,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                     left: 44,
                     child: Stack(
                       children: [
-                        // 3D 中は MapLibre を組み立てない（下で生かしておくと数百 MB 食う。
-                        // 戻すときは覚えておいたカメラで組み立て直す）
-                        if (!terrain3d)
-                          _buildMapLibreMap(isPanTool)
-                        else
-                          const Positioned.fill(child: ColoredBox(color: Color(0xFFE8E8E8))),
+                        // 3D 中も MapLibre は下に置いたまま、スタイルを空にしてタイルとソースを手放す
+                        // （組み立て直すと maplibre_android がネイティブの地図を捨てず、往復ごとに 170MB 漏れた）
+                        _buildMapLibreMap(isPanTool),
                         _buildGestureLayer(),
                         // 3D 地形モード: 地図面を上に重ね、ジェスチャもここで受ける
                         if (terrain3d && basemapStyleUri != null)
@@ -600,18 +598,41 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     );
   }
 
-  /// MapLibre が外れた（3D に入った）。コントローラ・スタイル・登録済みソースの記録を捨て、
-  /// 次に組み立てたとき（3D を抜けたとき）に onStyleLoaded から全部やり直す
+  /// MapLibre のウィジェットが外れた（画面を閉じた）。コントローラ・スタイル・登録済みソースの記録を捨てる
   void _onMapLibreDisposed() {
-    AppLogger.debug('[MAP] MapLibre disposed (3D)');
+    AppLogger.debug('[MAP] MapLibre disposed');
     mapControllerInstance.detach();
+    _forgetStyle();
+  }
+
+  /// スタイル側の記録を捨てる。次の onStyleLoaded で基図・フィーチャ・オーバーレイを全部登録し直す
+  void _forgetStyle() {
     sourceManager.detachStyle();
     activeBasemapLayerIds.clear();
     activeBasemapSourceIds.clear();
     activeOverlaySourceIds.clear();
   }
 
+  /// 3D の出入り。入るときは MapLibre を空のスタイルにしてタイルとソースを手放し（メモリ）、
+  /// 抜けるときは基図のスタイルを読み直す（onStyleLoaded から全部やり直す）
+  void _onTerrain3dChanged(bool on) {
+    final raw = mapControllerInstance.raw;
+    if (raw == null) return;
+    if (on) {
+      mapControllerInstance.detachStyle();
+      _forgetStyle();
+      raw.setStyle(kEmptyMapStyle);
+    } else if (basemapStyleUri != null) {
+      raw.setStyle(basemapStyleUri!);
+    }
+  }
+
   Future<void> _onMapStyleLoaded(ml.StyleController style) async {
+    // 3D 中に来るのは空のスタイル。何も載せない（抜けるときに基図のスタイルを読み直して、そのときに載せる）
+    if (ref.read(terrain3dModeProvider)) {
+      AppLogger.debug('[MAP] onStyleLoaded (empty, 3D)');
+      return;
+    }
     AppLogger.debug('[MAP] onStyleLoaded fired');
     mapControllerInstance.attachStyle(style);
     await addBasemapSources(style);

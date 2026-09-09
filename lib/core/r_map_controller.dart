@@ -123,6 +123,11 @@ class RMapController {
     _isCameraAnimating = false;
   }
 
+  /// スタイルだけ外す（3D 中は空のスタイルにしてタイルとソースを手放す。コントローラは生きたまま）
+  void detachStyle() {
+    _styleController = null;
+  }
+
   LatLng? _lastCenter;
   double _lastZoom = 16;
   double _lastBearing = 0;

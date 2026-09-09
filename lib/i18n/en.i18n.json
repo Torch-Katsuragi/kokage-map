@@ -109,7 +109,10 @@
       "overviewText": "Kokage Map is a cross-platform map application built with Flutter.\n\nIt provides features such as GeoPackage-based data management, GPS surveying and track recording, external GNSS device connectivity, and offline map support.",
       "licenses": "Licenses",
       "openSourceLicenses": "Open Source Licenses",
-      "openSourceLicensesDesc": "List of licenses for packages used"
+      "openSourceLicensesDesc": "List of licenses for packages used",
+      "dataSources": "Map data sources",
+      "dataSourcesBasemap": "Basemaps",
+      "dataSourcesElevation": "Elevation (3D terrain)"
     },
     "general": {
       "title": "General",

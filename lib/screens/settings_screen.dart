@@ -24,9 +24,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/platform_capabilities.dart';
+import '../core/terrain/dem_tiles.dart';
 import '../i18n/strings.g.dart';
 import '../main.dart' show kAppLocaleKey;
 import '../models/app_notification.dart';
+import '../models/basemap_provider.dart';
 import '../providers/notification_providers.dart';
 import '../providers/project_providers.dart';
 import '../providers/ui_state_providers.dart';
@@ -496,6 +498,24 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
                     applicationVersion: _packageInfo?.version ?? '',
                   );
                 },
+              ),
+            ],
+          ),
+          // 地図データの出典（地図面の左下にも出しているが、ここにもまとめて載せる）
+          SettingsSection(
+            title: t.settings.appInfo.dataSources,
+            icon: Icons.public,
+            iconColor: Colors.green,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.map, color: Colors.green),
+                title: Text(t.settings.appInfo.dataSourcesBasemap),
+                subtitle: Text({for (final p in BaseMapProvider.availableProviders) p.attribution}.join('\n')),
+              ),
+              ListTile(
+                leading: const Icon(Icons.terrain, color: Colors.green),
+                title: Text(t.settings.appInfo.dataSourcesElevation),
+                subtitle: Text({for (final s in DemTileSource.defaultCascade) s.attribution}.join('\n')),
               ),
             ],
           ),

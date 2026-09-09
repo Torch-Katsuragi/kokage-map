@@ -109,7 +109,10 @@
       "overviewText": "こかげマップはFlutter製のクロスプラットフォーム地図アプリケーションです。\n\nGeoPackage形式でのデータ管理、GPS測量・軌跡記録、外部GNSS機器連携、オフライン地図対応などの機能を提供します。",
       "licenses": "ライセンス",
       "openSourceLicenses": "オープンソースライセンス",
-      "openSourceLicensesDesc": "使用しているパッケージのライセンス一覧"
+      "openSourceLicensesDesc": "使用しているパッケージのライセンス一覧",
+      "dataSources": "地図データの出典",
+      "dataSourcesBasemap": "背景地図",
+      "dataSourcesElevation": "標高（3D 地形）"
     },
     "general": {
       "title": "一般",

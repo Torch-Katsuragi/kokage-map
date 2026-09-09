@@ -39,11 +39,15 @@ import '../../../i18n/strings.g.dart';
 import '../../../interfaces/map_state_interface.dart';
 import '../../../interfaces/terrain_projection.dart';
 import '../../../models/basemap_provider.dart';
+import '../../../models/nodes/overlay_image_node.dart';
 import '../../../models/party/party_room.dart';
 import '../../../providers/party_providers.dart';
+import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../services/basemap_service.dart';
 import '../../../services/map_source_manager.dart';
+import '../../../tools/map_tool.dart';
+import '../../../tools/overlay_transform_tool.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/global_drawing_state.dart';
 import '../../layer_style_settings_screen.dart';
@@ -607,7 +611,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       g.lineVertices, g.polygonVertices,
     ];
     final drawing = GlobalDrawingState.instance;
-    final dynamicKey = <Object?>[track.length, session, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview];
+    final tool = ref.read(currentToolProvider);
+    final selectedOverlays = <OverlayImageNode>[
+      ...ref.read(selectedFeaturesProvider).whereType<OverlayImageNode>(),
+      if (tool is OverlayTransformTool && tool.target != null) tool.target!,
+    ];
+    final overlayFrameKey = [for (final n in selectedOverlays) '${n.filePath}@${n.cornerCoordinates}'].join(';');
+    final dynamicKey = <Object?>[
+      track.length, session, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview,
+      overlayFrameKey, tool is OverlayTransformTool ? tool.rotationHandlePosition : null,
+    ];
     final key = <Object?>[...staticKey, ...dynamicKey];
     final cached = _scenes[cacheKey];
     if (cached != null && _sameKey(cached.key, key)) return cached;
@@ -647,7 +660,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     // 動的な部分
     var dyn = _dynamicScenes[cacheKey];
     if (dyn == null || !_sameKey(dyn.key, dynamicKey)) {
-      dyn = _buildDynamic(dynamicKey, track, session, loc, dem, builder, clip);
+      dyn = _buildDynamic(dynamicKey, track, session, loc, dem, builder, clip, selectedOverlays: selectedOverlays, tool: tool);
       _dynamicScenes[cacheKey] = dyn;
     }
     final scene = _TileScene(
@@ -733,8 +746,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     LatLng? loc,
     DemGrid dem,
     TerrainSceneBuilder Function(Map<String, TerrainFeatureStyle>, TerrainFeatureStyle, String) builder,
-    Rect clip,
-  ) {
+    Rect clip, {
+    List<OverlayImageNode> selectedOverlays = const [],
+    MapTool? tool,
+  }) {
     final lines = <LiftedPolyline>[];
     final polygons = <LiftedPolygon>[];
     final points = <TerrainPoint>[];
@@ -838,6 +853,43 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       final x = WebMercator.xFromLon(p.longitude) - dem.originX;
       final y = WebMercator.yFromLat(p.latitude) - dem.originY;
       if (clip.contains(Offset(x, y))) points.add(TerrainPoint(x: x, y: y, color: Colors.red, sizePx: 6));
+    }
+    // 5. 選択中のオーバーレイ画像の枠（青）と、変換ツールの回転ハンドル（2D の buildOverlaySelectionLayers と同じ）
+    if (selectedOverlays.isNotEmpty) {
+      const frameStyle = TerrainFeatureStyle(
+        lineColor: Colors.blue, lineWidth: 2, fillColor: Color(0x00000000),
+        outlineColor: Colors.blue, outlineWidth: 2, pointColor: Colors.blue, pointSize: 10,
+      );
+      final handle = tool is OverlayTransformTool ? tool.rotationHandlePosition : null;
+      add(
+        builder(const {}, frameStyle, '__no_label__').build(
+          lines: [
+            for (final n in {...selectedOverlays})
+              geo.Feature<geo.Geometry>(
+                geometry: geo.LineString.from([
+                  for (final c in n.cornerCoordinates) geo.Geographic(lon: c.longitude, lat: c.latitude),
+                  geo.Geographic(lon: n.cornerCoordinates[0].longitude, lat: n.cornerCoordinates[0].latitude),
+                ]),
+              ),
+            if (handle != null && tool is OverlayTransformTool && tool.target != null)
+              geo.Feature<geo.Geometry>(
+                geometry: geo.LineString.from([
+                  geo.Geographic(
+                    lon: (tool.target!.cornerCoordinates[0].longitude + tool.target!.cornerCoordinates[1].longitude) / 2,
+                    lat: (tool.target!.cornerCoordinates[0].latitude + tool.target!.cornerCoordinates[1].latitude) / 2,
+                  ),
+                  geo.Geographic(lon: handle.longitude, lat: handle.latitude),
+                ]),
+              ),
+          ],
+          clipRect: clip,
+        ),
+      );
+      if (handle != null) {
+        final x = WebMercator.xFromLon(handle.longitude) - dem.originX;
+        final y = WebMercator.yFromLat(handle.latitude) - dem.originY;
+        if (clip.contains(Offset(x, y))) points.add(TerrainPoint(x: x, y: y, color: Colors.blue, sizePx: 10));
+      }
     }
     return _TileScene(key: key, lines: lines, polygons: polygons, points: points, labels: labels);
   }

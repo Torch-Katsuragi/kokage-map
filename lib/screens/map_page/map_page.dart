@@ -1045,6 +1045,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       child: OffscreenLocationIndicator(
         location: currentLocation,
         mapController: mapController,
+        project: (l) => terrainProjection?.project(l),
         repaint: cameraTickNotifier,
         obscured: EdgeInsets.only(
           right: _effectiveDrawerWidth,

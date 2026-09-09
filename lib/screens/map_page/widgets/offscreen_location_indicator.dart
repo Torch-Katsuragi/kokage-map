@@ -43,6 +43,9 @@ class OffscreenLocationIndicator extends StatelessWidget {
   /// アクセシビリティ用ラベル
   final String? semanticsLabel;
 
+  /// 3D 中の投影（地形の高さで持ち上げた画面座標）。null を返したら MapLibre の投影
+  final Offset? Function(LatLng)? project;
+
   const OffscreenLocationIndicator({
     super.key,
     required this.location,
@@ -51,6 +54,7 @@ class OffscreenLocationIndicator extends StatelessWidget {
     required this.onTap,
     this.obscured = EdgeInsets.zero,
     this.semanticsLabel,
+    this.project,
   });
 
   /// 縁から矢印中心までの距離
@@ -110,14 +114,16 @@ class OffscreenLocationIndicator extends StatelessWidget {
 
   EdgeIndicatorPlacement? _placement(Size viewport) {
     final loc = location;
-    // raw が無い間（スタイル読込前）は toScreenLocation が使えない
-    if (loc == null || mapController.raw == null) return null;
-
-    Offset screen;
-    try {
-      screen = mapController.toScreenLocation(loc);
-    } on Object {
-      return null;
+    if (loc == null) return null;
+    Offset? screen = project?.call(loc);
+    if (screen == null) {
+      // raw が無い間（スタイル読込前・3D 中）は toScreenLocation が使えない
+      if (mapController.raw == null) return null;
+      try {
+        screen = mapController.toScreenLocation(loc);
+      } on Object {
+        return null;
+      }
     }
 
     return computeEdgeIndicator(

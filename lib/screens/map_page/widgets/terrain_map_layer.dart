@@ -504,6 +504,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
     _painter
       ..tiles = drawables
+      ..gesturing = _gesturing
       ..heightRange = _world.heightRange ?? (0, 1000)
       ..stepMeters = WebMercator.metersPerPixel(plan.demZoom);
     _repaint.value++;
@@ -731,10 +732,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final polygons = <LiftedPolygon>[];
     final points = <TerrainPoint>[];
     final labels = <TerrainLabel>[];
+    // 引いた段（セルが 30m 以上 = 表示ズーム 13 以下）では面の輪郭を省く。
+    // 60m の面が数ピクセルの眺めで 1 万面の輪郭（4 万本の線分）を毎フレーム描くと raster が 0.5 秒になる
+    final coarse = tile.bordered.cellSize * step >= 30;
     void add(TerrainScene s, {bool withLabels = true}) {
-      lines
-        ..addAll(s.outlines)
-        ..addAll(s.lines);
+      if (!coarse) lines.addAll(s.outlines);
+      lines.addAll(s.lines);
       polygons.addAll(s.polygons);
       points.addAll(s.points);
       if (withLabels) labels.addAll(s.labels);

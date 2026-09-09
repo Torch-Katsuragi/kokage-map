@@ -41,9 +41,15 @@ mixin _TerrainDrive on State<TerrainMapLayer> {
   /// 台本: 0〜8s 東へ 3km、8〜16s 引き 4 段、16〜24s 寄り 5 段、24〜32s 一回転、32〜40s 傾け往復、40〜48s 西へ 3km
   void _startDrive() {
     if (kReleaseMode || _drive != null) return;
+    // 比較できるように、開始時のズームは 16・方位は北・傾き 45° に揃える（中心はそのまま）
+    _camera
+      ..zoom = 16
+      ..bearing = 0
+      ..pitch = 45 * math.pi / 180;
     _driveOrigin = (_camera.centerX, _camera.centerY, _camera.zoom, _camera.bearing);
     _driveGapFrames = 0;
     _driveFrames = 0;
+    _driveLastLog = Duration.zero; // 2 回目以降のドライブでログが出なくなっていた
     _driveUiMs.clear();
     _driveRasterMs.clear();
     _driveTimings = (timings) {
@@ -57,14 +63,15 @@ mixin _TerrainDrive on State<TerrainMapLayer> {
     _stallProbe = Timer.periodic(const Duration(milliseconds: 100), (_) {
       final now = DateTime.now();
       final gap = now.difference(last).inMilliseconds;
-      if (gap > 400) AppLogger.debug('[3D] stall ${gap}ms (isolate blocked)');
+      if (gap > 400) debugPrint('[3D] stall ${gap}ms (isolate blocked)');
       last = now;
     });
     _drive = Ticker((elapsed) {
       try {
         _driveTick(elapsed);
       } catch (e, st) {
-        AppLogger.error('[3D] drive error', e, st);
+        debugPrint('[3D] drive error: $e');
+        debugPrint('$st');
         _stopDrive();
       }
     })
@@ -106,7 +113,7 @@ mixin _TerrainDrive on State<TerrainMapLayer> {
           final s = [...v]..sort();
           return '${s[s.length ~/ 2]}/${s.last}';
         }
-        AppLogger.debug('[3D] drive t=${t.toStringAsFixed(1)}s z=${_camera.zoom.toStringAsFixed(2)} '
+        debugPrint('[3D] drive t=${t.toStringAsFixed(1)}s z=${_camera.zoom.toStringAsFixed(2)} '
             'dem=${plan?.demZoom} ${plan?.coverage} tiles=${_world.loadedCount} pending=${_world.pendingCount} '
             'ui=${stat(_driveUiMs)} raster=${stat(_driveRasterMs)} placeholders=$_placeholders gapFrames=$_driveGapFrames/$_driveFrames');
         _driveUiMs.clear();
@@ -126,7 +133,7 @@ mixin _TerrainDrive on State<TerrainMapLayer> {
     if (_driveTimings != null) SchedulerBinding.instance.removeTimingsCallback(_driveTimings!);
     _driveTimings = null;
     _gesturing = false;
-    AppLogger.debug('[3D] drive end: gapFrames=$_driveGapFrames/$_driveFrames tiles=${_world.loadedCount}');
+    debugPrint('[3D] drive end: gapFrames=$_driveGapFrames/$_driveFrames tiles=${_world.loadedCount}');
     if (mounted) _refresh();
   }
 

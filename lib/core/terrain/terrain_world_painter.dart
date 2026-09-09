@@ -54,6 +54,28 @@ class TerrainTileDrawable {
   final List<TerrainLabel> labels;
 }
 
+/// 面の束を投影した結果（方位・傾きが変わるまで使い回す）
+class _ProjectedBatch {
+  _ProjectedBatch(this.bearing, this.pitch, this.vertices);
+
+  final double bearing;
+  final double pitch;
+  final ui.Vertices vertices;
+}
+
+/// タイルの線を投影して帯 × 見た目でまとめた結果
+class _ProjectedLines {
+  _ProjectedLines(this.bearing, this.pitch, this.thinSkipped, this.pathsByBand, this.segsByBand);
+
+  final double bearing;
+  final double pitch;
+
+  /// 細い線を省いた（回転中）
+  final bool thinSkipped;
+  final Map<int, Map<(int, double), Path>> pathsByBand;
+  final Map<int, Map<(int, double), Float32List>> segsByBand;
+}
+
 /// 世界（複数タイル）を 1 枚に描く
 ///
 /// 描画順: タイル（奥 → 手前・呼び出し側が並べる）→ タイル内はチャンクの帯 → 帯ごとに面・線分・線。
@@ -87,6 +109,16 @@ class TerrainWorldPainter extends CustomPainter {
   double stepMeters;
 
   bool collideLabels;
+
+  /// 回転・傾けの最中（細い線を省く）
+  bool gesturing = false;
+
+  /// 面の束の投影キャッシュ。正射影なので方位・傾きが同じ間は投影が変わらず、
+  /// 移動・拡縮は Canvas の変換だけで済む（毎フレーム 50 万頂点を投影し直さない）
+  final Expando<_ProjectedBatch> _batchCache = Expando();
+
+  /// 線の投影キャッシュ（タイルの線リストごと）
+  final Expando<_ProjectedLines> _lineCache = Expando();
   TerrainHit? selected;
   final Set<int> visibleLabels = {};
   final void Function(Duration)? onPainted;
@@ -141,6 +173,47 @@ class TerrainWorldPainter extends CustomPainter {
       d += stepMeters;
       if (d > 50000) return false;
     }
+  }
+
+  _ProjectedLines _projectLines(TerrainTileDrawable t, TerrainMesh mesh, {required bool skipThin}) {
+    final pathsByBand = <int, Map<(int, double), Path>>{};
+    final segLists = <int, Map<(int, double), List<double>>>{};
+    for (var li = 0; li < t.lines.length; li++) {
+      final line = t.lines[li];
+      final n = line.pointCount;
+      final styleKey = (line.color.toARGB32(), line.widthPx);
+      final thin = line.widthPx <= 2.5;
+      if (thin && skipThin) continue;
+      var currentBand = -1;
+      Path? path;
+      List<double>? segs;
+      for (var i = 0; i < n - 1; i++) {
+        final band = mesh.cellBand[line.cells[i]];
+        final a = camera.project(line.xyz[i * 3], line.xyz[i * 3 + 1], line.xyz[i * 3 + 2]);
+        final b = camera.project(line.xyz[i * 3 + 3], line.xyz[i * 3 + 4], line.xyz[i * 3 + 5]);
+        if (thin) {
+          if (band != currentBand) {
+            segs = (segLists[band] ??= {})[styleKey] ??= <double>[];
+            currentBand = band;
+          }
+          segs!
+            ..add(a.dx)
+            ..add(a.dy)
+            ..add(b.dx)
+            ..add(b.dy);
+        } else {
+          if (band != currentBand) {
+            path = (pathsByBand[band] ??= {})[styleKey] ??= Path();
+            path.moveTo(a.dx, a.dy);
+            currentBand = band;
+          }
+          path!.lineTo(b.dx, b.dy);
+        }
+      }
+    }
+    return _ProjectedLines(camera.bearing, camera.pitch, skipThin, pathsByBand, {
+      for (final e in segLists.entries) e.key: {for (final s in e.value.entries) s.key: Float32List.fromList(s.value)},
+    });
   }
 
   @override
@@ -213,53 +286,32 @@ class TerrainWorldPainter extends CustomPainter {
 
       // 線を「帯 × 見た目（色・太さ）」ごとにまとめる（線ごとに drawPath すると数千回になる）。
       // 細い線（≤ 2.5px）は線分の配列にして drawRawPoints（Path を毎フレーム組むより軽い。継ぎ目の欠けは太さ的に見えない）、
-      // 太い線は角と端を丸くしたいので Path
-      final pathsByBand = <int, Map<(int, double), Path>>{};
-      final segsByBand = <int, Map<(int, double), List<double>>>{};
-      for (var li = 0; li < t.lines.length; li++) {
-        final line = t.lines[li];
-        final n = line.pointCount;
-        final styleKey = (line.color.toARGB32(), line.widthPx);
-        final thin = line.widthPx <= 2.5;
-        var currentBand = -1;
-        Path? path;
-        List<double>? segs;
-        for (var i = 0; i < n - 1; i++) {
-          final band = mesh.cellBand[line.cells[i]];
-          final a = camera.project(line.xyz[i * 3], line.xyz[i * 3 + 1], line.xyz[i * 3 + 2]);
-          final b = camera.project(line.xyz[i * 3 + 3], line.xyz[i * 3 + 4], line.xyz[i * 3 + 5]);
-          if (thin) {
-            if (band != currentBand) {
-              segs = (segsByBand[band] ??= {})[styleKey] ??= <double>[];
-              currentBand = band;
-            }
-            segs!
-              ..add(a.dx)
-              ..add(a.dy)
-              ..add(b.dx)
-              ..add(b.dy);
-          } else {
-            if (band != currentBand) {
-              path = (pathsByBand[band] ??= {})[styleKey] ??= Path();
-              path.moveTo(a.dx, a.dy);
-              currentBand = band;
-            }
-            path!.lineTo(b.dx, b.dy);
-          }
-        }
+      // 太い線は角と端を丸くしたいので Path。方位・傾きが同じ間はキャッシュ
+      var pl = _lineCache[t.lines];
+      if (pl == null || pl.bearing != camera.bearing || pl.pitch != camera.pitch || pl.thinSkipped != gesturing) {
+        pl = _projectLines(t, mesh, skipThin: gesturing);
+        _lineCache[t.lines] = pl;
       }
+      final pathsByBand = pl.pathsByBand;
+      final segsByBand = pl.segsByBand;
 
       for (var b = 0; b < mesh.bands.length; b++) {
         canvas.drawVertices(mesh.bands[b].vertices, BlendMode.modulate, terrainPaint);
         final chunk = mesh.bandChunk[b];
         final batch = t.polygonBatches[chunk];
         if (batch != null) {
-          projectInto(batch.xyz, batch.projected);
-          canvas.drawVertices(
-            ui.Vertices.raw(ui.VertexMode.triangles, batch.projected, colors: batch.colors),
-            BlendMode.srcOver,
-            fillPaint,
-          );
+          var pb = _batchCache[batch];
+          if (pb == null || pb.bearing != camera.bearing || pb.pitch != camera.pitch) {
+            projectInto(batch.xyz, batch.projected);
+            pb?.vertices.dispose();
+            pb = _ProjectedBatch(
+              camera.bearing,
+              camera.pitch,
+              ui.Vertices.raw(ui.VertexMode.triangles, batch.projected, colors: batch.colors),
+            );
+            _batchCache[batch] = pb;
+          }
+          canvas.drawVertices(pb.vertices, BlendMode.srcOver, fillPaint);
         }
         for (final set in t.segmentSets) {
           final src = set.byChunk[chunk];
@@ -277,7 +329,7 @@ class TerrainWorldPainter extends CustomPainter {
             segmentPaint
               ..color = Color(e.key.$1)
               ..strokeWidth = e.key.$2 / camera.scale;
-            canvas.drawRawPoints(ui.PointMode.lines, Float32List.fromList(e.value), segmentPaint);
+            canvas.drawRawPoints(ui.PointMode.lines, e.value, segmentPaint);
           }
         }
         final paths = pathsByBand[b];
@@ -334,12 +386,27 @@ class TerrainWorldPainter extends CustomPainter {
       final yb = b.$2.originY + b.$3.y;
       return ya != yb ? ya.compareTo(yb) : (a.$2.originX + a.$3.x).compareTo(b.$2.originX + b.$3.x);
     });
+    // 置けるラベルの上限。1 万面 = 1 万ラベルを全部当たり判定・layout すると 1 フレーム秒単位になる
+    const maxPlaced = 200;
     for (final (i, t, label) in entries) {
       {
         final wx = t.originX + label.x;
         final wy = t.originY + label.y;
         final sp = toScreen(wx, wy, elevationAt(wx, wy) ?? 0, size);
         if (!viewport.inflate(64).contains(sp)) continue;
+        if (collideLabels && placed.length >= maxPlaced) {
+          canvas.drawCircle(sp, 2, Paint()..color = Colors.black54);
+          continue;
+        }
+        // layout（重い）の前に、文字数からの見積もりで重なりを弾く
+        final fontSize = label.style?.fontSize ?? 14;
+        final estW = label.text.length * fontSize * 0.7 + 4;
+        final estH = fontSize * 1.3 + 2;
+        final estBox = Rect.fromLTWH(sp.dx - estW / 2, sp.dy - estH - 4, estW, estH);
+        if (collideLabels && placed.any((r) => r.overlaps(estBox))) {
+          canvas.drawCircle(sp, 2, Paint()..color = Colors.black54);
+          continue;
+        }
         final tp = label.painter;
         final origin = sp - Offset(tp.width / 2, tp.height + 4);
         final box = Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2);

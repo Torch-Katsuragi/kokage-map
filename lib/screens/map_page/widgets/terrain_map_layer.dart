@@ -300,7 +300,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
     for (final tile in plan.tiles) {
       final step = plan.stepFor(tile);
       final skirt = tile.key.span * 0.03; // タイル幅の 3%
-      final builder = tile.builders[step];
+      var builder = tile.builders[step];
+      var useStep = step;
       if (builder == null) {
         // isolate で作る。できたら描き直す
         tile.builderFor(step, chunkSize: _world.chunkSize, skirtDepth: skirt).then((_) => _scheduleRefresh());
@@ -310,11 +311,18 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
           drawables.add(_drawable(tile, tile.placeholderBuilder(chunkSize: _world.chunkSize, skirtDepth: skirt), 16));
           continue;
         }
-        final near = tile.builders.keys.reduce((a, b) => (a - step).abs() <= (b - step).abs() ? a : b);
-        drawables.add(_drawable(tile, tile.builders[near]!, near));
-        continue;
+        useStep = _nearestStep(tile, step, preferScene: true);
+        builder = tile.builders[useStep];
+      } else if (!_hasStaticScene(tile, step) && _staticBuilds >= _staticBudget) {
+        // この段の貼り付けはまだ無く、今フレームの予算も尽きた。貼り付けのある段のメッシュで繋ぐ
+        // （空のまま描くと回転中にフィーチャが消える）
+        final alt = _nearestStep(tile, step, preferScene: true);
+        if (_hasStaticScene(tile, alt)) {
+          useStep = alt;
+          builder = tile.builders[alt];
+        }
       }
-      drawables.add(_drawable(tile, builder, step));
+      drawables.add(_drawable(tile, builder, useStep));
     }
     _painter
       ..tiles = drawables
@@ -338,6 +346,19 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
   @override
   int _placeholders = 0;
   int _sceneBuilds = 0;
+
+  bool _hasStaticScene(TerrainTile tile, int step) =>
+      _staticScenes.containsKey((tile.key, step, tile.borderMask, tile.sourceZoom));
+
+  /// [step] に一番近いビルダーの段。[preferScene] なら貼り付けが揃っている段を優先
+  int _nearestStep(TerrainTile tile, int step, {bool preferScene = false}) {
+    int best(Iterable<int> keys) => keys.reduce((a, b) => (a - step).abs() <= (b - step).abs() ? a : b);
+    if (preferScene) {
+      final withScene = tile.builders.keys.where((s) => _hasStaticScene(tile, s));
+      if (withScene.isNotEmpty) return best(withScene);
+    }
+    return best(tile.builders.keys);
+  }
 
   /// 生きているタイルのビルダーに紐づかないメッシュを捨てる（GPU 側の頂点も返す）。
   /// ビルダーをキーに持つので、ここで外さないとタイルを捨ててもビルダーごと残る

@@ -52,6 +52,10 @@
   - [ ] 残り: オーバーレイ画像（GeoTIFF）をテクスチャに焼く／クラスタ／DeviceTool のオーバーレイ／描画プレビュー／等高線オプション／
         DEM の dir 同梱と焼き込み CLI（圏外で使えるように）／`SceneSink` / `MapSurfaceController` のインターフェース抽出／web の fps 計測（Chrome を前面に）／
         メモリ削減（profile 実測で 3D の増分 +200〜250MB。画像 LRU・`raw` の畳み込み・親テクスチャ 256²）
+  - [ ] 3D を正とした UI（Vault `3D化の詰め` 11 節 B）: 切替ボタンと pitch スライダーを消し、コンパスタップで北上・真上、
+        ペン選択中だけ自動で真上ロック（離れたら眺めを戻す）、カメラ状態を `.kmeta.json` に保存、web/PC は右ドラッグで回転
+  - [ ] 焼いた DEM タイル（地理院 DEM5A/10B・県点群 DTM）の配布先は Cloudflare R2（転送量課金なし。Drive/Box は大量 DL でロック）。
+        焼き込み CLI は `tool/`（Vault 11 節 A）
   - [ ] ⚠ Terrain Tiles の出典表示は 3D 中の地図面左下に出している。About / ライセンス画面にも載せる
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 

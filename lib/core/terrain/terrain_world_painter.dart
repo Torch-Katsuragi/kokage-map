@@ -282,13 +282,29 @@ class TerrainWorldPainter extends CustomPainter {
       }
     }
 
-    // ラベル（画面座標）。重なりは先勝ちで間引く
+    // ラベル（画面座標）。重なりは先勝ちで間引く。
+    // 勝ち負けの順はタイルの描画順（方位で変わる）ではなく、文字と位置で決めた固定の順にする
+    // （回転中にラベルの出入りがちらつかないように）。番号（visibleLabels・pick）はタイル順のまま
     final placed = <Rect>[];
     visibleLabels.clear();
+    final entries = <(int, TerrainTileDrawable, TerrainLabel)>[];
     var labelIndex = 0;
     for (final t in tiles) {
       for (final label in t.labels) {
-        final i = labelIndex++;
+        entries.add((labelIndex++, t, label));
+      }
+    }
+    entries.sort((a, b) {
+      final ta = a.$3.painter.text?.toPlainText() ?? '';
+      final tb = b.$3.painter.text?.toPlainText() ?? '';
+      final c = ta.compareTo(tb);
+      if (c != 0) return c;
+      final ya = a.$2.originY + a.$3.y;
+      final yb = b.$2.originY + b.$3.y;
+      return ya != yb ? ya.compareTo(yb) : (a.$2.originX + a.$3.x).compareTo(b.$2.originX + b.$3.x);
+    });
+    for (final (i, t, label) in entries) {
+      {
         final wx = t.originX + label.x;
         final wy = t.originY + label.y;
         final sp = toScreen(wx, wy, elevationAt(wx, wy) ?? 0, size);

@@ -561,6 +561,9 @@
     "eraser": {
       "confirm": "$n 件を削除",
       "cancel": "消しゴムの候補を取り消す"
+    },
+    "terrain": {
+      "resetView": "北を上に・真上から"
     }
   },
   "importExport": {

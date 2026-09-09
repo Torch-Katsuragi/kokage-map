@@ -561,6 +561,9 @@
     "eraser": {
       "confirm": "Delete $n",
       "cancel": "Discard eraser candidates"
+    },
+    "terrain": {
+      "resetView": "North up, top-down"
     }
   },
   "importExport": {

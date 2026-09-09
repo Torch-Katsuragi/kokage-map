@@ -33,6 +33,7 @@ import '../../../core/terrain/terrain_scene.dart';
 import '../../../core/terrain/terrain_world.dart';
 import '../../../core/terrain/terrain_world_painter.dart';
 import '../../../core/terrain/web_mercator.dart';
+import '../../../i18n/strings.g.dart';
 import '../../../interfaces/map_state_interface.dart';
 import '../../../interfaces/terrain_projection.dart';
 import '../../../models/basemap_provider.dart';
@@ -42,6 +43,7 @@ import '../../../providers/tool_providers.dart';
 import '../../../services/basemap_service.dart';
 import '../../../services/map_source_manager.dart';
 import '../../../utils/app_logger.dart';
+import '../../../utils/global_drawing_state.dart';
 import '../../layer_style_settings_screen.dart';
 import '../feature_geojson_cache.dart';
 
@@ -125,6 +127,37 @@ class _ZoomButton extends StatelessWidget {
       );
 }
 
+/// 方位に合わせて回るコンパス。真上（pitch 0）でなければ縁を少し濃くして「傾いている」ことを示す
+class _CompassButton extends StatelessWidget {
+  const _CompassButton({required this.bearingDeg, required this.pitchDeg, required this.onPressed});
+
+  final double bearingDeg;
+  final double pitchDeg;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: t.map.terrain.resetView,
+        child: Material(
+          color: Colors.white.withValues(alpha: 0.9),
+          shape: CircleBorder(side: BorderSide(color: pitchDeg > 1 ? Colors.blueGrey : Colors.black26, width: pitchDeg > 1 ? 2 : 1)),
+          elevation: 2,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onPressed,
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Transform.rotate(
+                angle: -bearingDeg * math.pi / 180,
+                child: const Icon(Icons.navigation, size: 24, color: Colors.redAccent),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
 class _TileScene {
   _TileScene({required this.key, required this.lines, required this.polygons, required this.points, required this.labels});
 
@@ -136,7 +169,9 @@ class _TileScene {
   final List<TerrainLabel> labels;
 }
 
-class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _TerrainDrive implements TerrainProjection {
+class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
+    with SingleTickerProviderStateMixin, _TerrainDrive
+    implements TerrainProjection {
   static const _defaultPitchDeg = 45.0;
 
   /// 傾きの上限。正射影では 90° で地面が線に潰れる（横顔になる）ので手前で止める。
@@ -190,6 +225,18 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
   static const _staticBudget = 2;
   int _worldRevisionSeen = -1;
 
+  // カメラのアニメ（コンパスタップ・ペンの真上ロック）
+  late final AnimationController _anim;
+  ({double bearing, double pitch, double centerX, double centerY, double zoom})? _animFrom;
+  ({double bearing, double pitch, double centerX, double centerY, double zoom})? _animTo;
+
+  /// ペン選択中: 真上に寄せて 1 本指をツール（描画）に渡す。離れたら元の傾きに戻す
+  bool _penLock = false;
+  double? _pitchBeforePen;
+
+  /// 今の 1 本指ドラッグをツールに渡している最中
+  bool _toolDrag = false;
+
   // ジェスチャ
   double _scaleStart = 1;
   double _bearingStart = 0;
@@ -234,10 +281,73 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
     );
     widget.sceneRevision.addListener(_onSceneRevision);
     widget.onProjectionChanged(this);
+    _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 350))
+      ..addListener(_onAnimTick)
+      ..addStatusListener((st) {
+        if (st == AnimationStatus.completed && mounted) setState(() {});
+      });
+    if (ref.read(currentToolProvider).name == 'Pen') {
+      _penLock = true;
+      _pitchBeforePen = _camera.pitch;
+      _camera.pitch = 0;
+    }
+  }
+
+  // ── カメラのアニメ ──────────────────────────────────
+
+  /// 指定した項目だけ 350ms で滑らかに動かす（方位は近い方へ回る）
+  void _animateTo({double? bearing, double? pitch, double? centerX, double? centerY, double? zoom}) {
+    var b = bearing ?? _camera.bearing;
+    // 近い方へ回る
+    var d = b - _camera.bearing;
+    while (d > math.pi) {
+      d -= 2 * math.pi;
+    }
+    while (d < -math.pi) {
+      d += 2 * math.pi;
+    }
+    b = _camera.bearing + d;
+    _animFrom = (bearing: _camera.bearing, pitch: _camera.pitch, centerX: _camera.centerX, centerY: _camera.centerY, zoom: _camera.zoom);
+    _animTo = (bearing: b, pitch: pitch ?? _camera.pitch, centerX: centerX ?? _camera.centerX, centerY: centerY ?? _camera.centerY, zoom: zoom ?? _camera.zoom);
+    _anim.forward(from: 0);
+  }
+
+  void _onAnimTick() {
+    final a = _animFrom;
+    final z = _animTo;
+    if (a == null || z == null) return;
+    final t = Curves.easeInOutCubic.transform(_anim.value);
+    double lerp(double x, double y) => x + (y - x) * t;
+    _camera
+      ..bearing = lerp(a.bearing, z.bearing)
+      ..pitch = lerp(a.pitch, z.pitch)
+      ..centerX = lerp(a.centerX, z.centerX)
+      ..centerY = lerp(a.centerY, z.centerY)
+      ..zoom = lerp(a.zoom, z.zoom);
+    _gesturing = _anim.isAnimating;
+    _refresh();
+  }
+
+  /// コンパスのタップ: 北を上に・真上から
+  void _resetView() => _animateTo(bearing: 0, pitch: 0);
+
+  /// ツールが変わった: ペンなら真上に寄せて 1 本指を描画に渡す。離れたら傾きを戻す
+  void _onToolChanged(String toolName) {
+    final pen = toolName == 'Pen';
+    if (pen && !_penLock) {
+      _penLock = true;
+      _pitchBeforePen = _camera.pitch;
+      _animateTo(pitch: 0);
+    } else if (!pen && _penLock) {
+      _penLock = false;
+      _toolDrag = false;
+      _animateTo(pitch: _pitchBeforePen ?? _defaultPitchDeg * math.pi / 180);
+    }
   }
 
   @override
   void dispose() {
+    _anim.dispose();
     _stopDrive();
     widget.sceneRevision.removeListener(_onSceneRevision);
     widget.onProjectionChanged(null);
@@ -257,8 +367,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
   @override
   void didUpdateWidget(covariant TerrainMapLayer old) {
     super.didUpdateWidget(old);
-    // build の最中なので、描き直しはフレームの後で（同期に通知すると setState during build）
-    if (old.currentLocation != widget.currentLocation) _scheduleRefresh();
+    // build の最中なので、描き直しはフレームの後で（同期に通知すると setState during build）。
+    // 親の setState（描画中の線・現在位置など）は全部ここに来るので、毎回 1 回だけ予約する
+    _scheduleRefresh();
   }
 
   bool _refreshScheduled = false;
@@ -467,7 +578,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
       g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images,
       g.lineVertices, g.polygonVertices,
     ];
-    final dynamicKey = <Object?>[track.length, session, loc];
+    final drawing = GlobalDrawingState.instance;
+    final dynamicKey = <Object?>[track.length, session, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview];
     final key = <Object?>[...staticKey, ...dynamicKey];
     final cached = _scenes[cacheKey];
     if (cached != null && _sameKey(cached.key, key)) return cached;
@@ -664,6 +776,41 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
         points.add(TerrainPoint(x: x, y: y, color: Colors.blue, sizePx: 9));
       }
     }
+    // 4. 描画中の線・面・点（ペン）。2D の描画プレビューと同じ赤
+    final drawing = GlobalDrawingState.instance;
+    const drawStyle = TerrainFeatureStyle(
+      lineColor: Colors.red, lineWidth: 3, fillColor: Color(0x33FF0000),
+      outlineColor: Colors.red, outlineWidth: 2, pointColor: Colors.red, pointSize: 8,
+    );
+    if (drawing.drawingLine.length >= 2 || drawing.drawingPolygon.length >= 2) {
+      add(
+        builder(const {}, drawStyle, '__no_label__').build(
+          lines: [
+            if (drawing.drawingLine.length >= 2)
+              geo.Feature<geo.Geometry>(
+                geometry: geo.LineString.from([for (final p in drawing.drawingLine) geo.Geographic(lon: p.longitude, lat: p.latitude)]),
+              ),
+            if (drawing.drawingPolygon.length >= 2)
+              geo.Feature<geo.Geometry>(
+                geometry: geo.LineString.from([
+                  for (final p in drawing.drawingPolygon) geo.Geographic(lon: p.longitude, lat: p.latitude),
+                  geo.Geographic(lon: drawing.drawingPolygon.first.longitude, lat: drawing.drawingPolygon.first.latitude),
+                ]),
+              ),
+          ],
+          clipRect: clip,
+        ),
+      );
+    }
+    for (final p in [
+      ...drawing.drawingLine,
+      ...drawing.drawingPolygon,
+      if (drawing.pointPreview != null) drawing.pointPreview!,
+    ]) {
+      final x = WebMercator.xFromLon(p.longitude) - dem.originX;
+      final y = WebMercator.yFromLat(p.latitude) - dem.originY;
+      if (clip.contains(Offset(x, y))) points.add(TerrainPoint(x: x, y: y, color: Colors.red, sizePx: 6));
+    }
     return _TileScene(key: key, lines: lines, polygons: polygons, points: points, labels: labels);
   }
 
@@ -692,6 +839,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
   // ── ジェスチャ ──────────────────────────────────────
 
   void _onScaleStart(ScaleStartDetails d) {
+    if (_penLock && d.pointerCount == 1) {
+      // 真上ロック中の 1 本指は描画（2D と同じ経路。座標は TerrainProjection を通る）
+      _toolDrag = true;
+      ref.read(currentToolProvider).onScaleStart(d, widget.mapState);
+      return;
+    }
+    _toolDrag = false;
     _scaleStart = _camera.scale;
     _bearingStart = _camera.bearing;
     _pitchStart = _camera.pitch;
@@ -700,6 +854,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
 
   /// 1 本指 = 3D の回転（左右で方位、上下で傾き）。2 本指 = 平面移動と拡縮（松本の指定・2026-09-08）
   void _onScaleUpdate(ScaleUpdateDetails d) {
+    if (_toolDrag) {
+      if (d.pointerCount == 1) ref.read(currentToolProvider).onScaleUpdate(d, widget.mapState);
+      return;
+    }
     if (d.pointerCount >= 2) {
       final before = _camera.scale;
       _camera.scale = (_scaleStart * d.scale).clamp(TerrainCamera.scaleForZoom(8), TerrainCamera.scaleForZoom(22));
@@ -723,8 +881,24 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
   }
 
   void _onScaleEnd(ScaleEndDetails d) {
+    if (_toolDrag) {
+      _toolDrag = false;
+      ref.read(currentToolProvider).onScaleEnd(d, widget.mapState);
+      return;
+    }
     _gesturing = false;
     _refresh();
+  }
+
+  /// ペンロック中の生のポインタ（2D のジェスチャ層と同じく、描画の滑らかさのためにバッファへ）
+  void _onPointer(PointerEvent e) {
+    if (!_penLock) return;
+    final tool = ref.read(currentToolProvider);
+    if (e is PointerDownEvent || e is PointerMoveEvent) {
+      tool.addPointerToBuffer(e.localPosition);
+    } else if (e is PointerUpEvent) {
+      tool.clearPointerBuffer();
+    }
   }
 
   /// ズームボタン（web / PC 向け。画面中心を留めて 1 段）
@@ -744,6 +918,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
   @override
   Widget build(BuildContext context) {
     ref.listen(partySessionProvider, (_, _) => _scheduleRefresh());
+    ref.listen(currentToolProvider, (_, next) => _onToolChanged(next.name));
+    final desktop = kIsWeb || (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS);
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;
@@ -755,7 +931,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
         return Stack(
           children: [
             Positioned.fill(
-              child: GestureDetector(
+              child: Listener(
+                onPointerDown: _onPointer,
+                onPointerMove: _onPointer,
+                onPointerUp: _onPointer,
+                child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onScaleStart: _onScaleStart,
                 onScaleUpdate: _onScaleUpdate,
@@ -769,34 +949,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
                   ),
                 ),
               ),
+              ),
             ),
+            // コンパス: 方位に合わせて回る。タップで北を上に・真上から
             Positioned(
-              right: 0,
-              top: 48,
-              bottom: 96,
-              child: RotatedBox(
-                quarterTurns: 3,
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 2,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-                  ),
-                  child: Slider(
-                    value: _camera.pitch * 180 / math.pi,
-                    max: _maxPitchDeg,
-                    onChanged: (v) {
-                      _camera.pitch = v * math.pi / 180;
-                      _gesturing = true;
-                      _refresh();
-                      setState(() {});
-                    },
-                    onChangeEnd: (_) {
-                      _gesturing = false;
-                      _refresh();
-                    },
-                  ),
-                ),
+              right: 8,
+              top: 8,
+              child: ValueListenableBuilder<double>(
+                valueListenable: widget.mapBearingNotifier,
+                builder: (_, bearingDeg, _) => _CompassButton(bearingDeg: bearingDeg, pitchDeg: _camera.pitch * 180 / math.pi, onPressed: _resetView),
               ),
             ),
             Positioned(
@@ -814,9 +975,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
                     ),
                     const SizedBox(height: 6),
                   ],
-                  _ZoomButton(icon: Icons.add, tooltip: '拡大', onPressed: () => _zoomBy(1)),
-                  const SizedBox(height: 6),
-                  _ZoomButton(icon: Icons.remove, tooltip: '縮小', onPressed: () => _zoomBy(-1)),
+                  if (desktop) ...[
+                    _ZoomButton(icon: Icons.add, tooltip: '拡大', onPressed: () => _zoomBy(1)),
+                    const SizedBox(height: 6),
+                    _ZoomButton(icon: Icons.remove, tooltip: '縮小', onPressed: () => _zoomBy(-1)),
+                  ],
                 ],
               ),
             ),

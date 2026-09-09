@@ -165,18 +165,10 @@ class TerrainWorldPainter extends CustomPainter {
     final segmentPaint = Paint()..strokeCap = StrokeCap.butt;
     final identity = Float64List.fromList(Matrix4.identity().storage);
 
-    for (final t in tiles) {
-      final mesh = t.mesh;
-      final pc = _pcFor(t);
-      canvas.save();
-      canvas.clipRect(Offset.zero & size);
-      canvas.translate(size.width / 2, size.height / 2);
-      canvas.scale(camera.scale);
-      canvas.translate(-pc.dx, -pc.dy);
-
-      final terrainPaint = Paint();
+    Paint terrainPaintFor(TerrainTileDrawable t) {
+      final paint = Paint();
       if (t.texture != null) {
-        terrainPaint.shader = ui.ImageShader(
+        paint.shader = ui.ImageShader(
           t.texture!,
           TileMode.clamp,
           TileMode.clamp,
@@ -184,8 +176,36 @@ class TerrainWorldPainter extends CustomPainter {
           filterQuality: FilterQuality.low,
         );
       } else {
-        terrainPaint.color = Colors.white;
+        paint.color = Colors.white;
       }
+      return paint;
+    }
+
+    void enterTile(TerrainTileDrawable t) {
+      final pc = _pcFor(t);
+      canvas.save();
+      canvas.clipRect(Offset.zero & size);
+      canvas.translate(size.width / 2, size.height / 2);
+      canvas.scale(camera.scale);
+      canvas.translate(-pc.dx, -pc.dy);
+    }
+
+    // スカートは全タイルぶんを先に描く（地形の前に）。
+    // タイルごとに「スカート → 地形」の順だと、手前のタイルのスカートが奥のタイルの斜面の上に乗る
+    // （斜面が縁から下がっていく所では、縁から垂らした壁の方が手前に来る）。全部先に描けば、
+    // どのタイルの地形にも覆われ、段違いの裂け目からだけ見える
+    for (final t in tiles) {
+      final skirt = t.mesh.skirt;
+      if (skirt == null) continue;
+      enterTile(t);
+      canvas.drawVertices(skirt, BlendMode.modulate, terrainPaintFor(t));
+      canvas.restore();
+    }
+
+    for (final t in tiles) {
+      final mesh = t.mesh;
+      enterTile(t);
+      final terrainPaint = terrainPaintFor(t);
 
       // 線を帯ごとに振り分けた Path
       final pathsByBand = <int, List<(Path, int)>>{};
@@ -207,8 +227,6 @@ class TerrainWorldPainter extends CustomPainter {
         }
       }
 
-      final skirt = mesh.skirt;
-      if (skirt != null) canvas.drawVertices(skirt, BlendMode.modulate, terrainPaint);
       for (var b = 0; b < mesh.bands.length; b++) {
         canvas.drawVertices(mesh.bands[b].vertices, BlendMode.modulate, terrainPaint);
         final chunk = mesh.bandChunk[b];

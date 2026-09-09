@@ -19,6 +19,7 @@ import 'dart:ui';
 import 'dem_tiles.dart';
 import 'terrain_camera.dart';
 import 'terrain_world.dart';
+import 'web_mercator.dart';
 
 /// 1 フレームぶんの計画: どの段をどの範囲で、何枚をどの間引きで描くか
 class TerrainFramePlan {
@@ -82,21 +83,32 @@ class TerrainFramePlanner {
 
   int? _lastZoom;
 
+  /// 画面に掛かるタイル枚数の見積もり（段 [z]）。**回転に依らない**
+  ///
+  /// 画面の地上面積（幅 / 倍率 × 高さ / 倍率 / cos(pitch)）をタイルの面積で割る。
+  /// 外接矩形のタイル範囲で数えると、斜め向きのとき枚数が最大 2 倍に膨れて段が 45° ごとに
+  /// 切り替わり、地形全体が作り直されて荒ぶる（シミュレーションで一周に 8 回）
+  static double visibleTileCount(TerrainCamera camera, Size size, int z) {
+    final span = WebMercator.tileSpan(z);
+    final w = size.width / camera.scale / span;
+    final h = size.height / camera.scale / math.max(0.2, math.cos(camera.pitch)) / span;
+    return (w + 1) * (h + 1);
+  }
+
   /// 理想の段: 表示ズーム −1 から始め、画面に掛かるタイルが [maxCoreTiles] を超える間は下げる。
   /// 前回の段と 1 つ違いで枚数が許容内なら前回を使う（境目で往復しない）
-  int demZoomFor(TerrainCamera camera, Rect bounds) {
+  int demZoomFor(TerrainCamera camera, Size size) {
     var z = world.demZoomFor(camera.zoom);
-    while (z > world.demSource.minZoom && TerrainWorld.tileRangeFor(bounds, z).count > maxCoreTiles) {
+    while (z > world.demSource.minZoom && visibleTileCount(camera, size, z) > maxCoreTiles) {
       z--;
     }
     final prev = _lastZoom;
     if (prev != null && (prev - z).abs() == 1) {
-      final prevCount = TerrainWorld.tileRangeFor(bounds, prev).count;
       if (prev < z) {
         // 粗い段に居た: 理想の段の枚数が上限すれすれの間だけ留まる（境目で往復しない。
         // 広く取ると 1 段寄っても粗いままになる）
-        if (TerrainWorld.tileRangeFor(bounds, z).count > maxCoreTiles * 0.85) z = prev;
-      } else if (prevCount <= maxCoreTiles) {
+        if (visibleTileCount(camera, size, z) > maxCoreTiles * 0.85) z = prev;
+      } else if (visibleTileCount(camera, size, prev) <= maxCoreTiles) {
         // 細かい段に居た: 枚数が許容内なら留まる（寄っている最中に粗くしない）
         z = prev;
       }
@@ -105,8 +117,9 @@ class TerrainFramePlanner {
     return z;
   }
 
-  /// 予算に収まる間引き段数（タイル数 × (256/step)² ≤ 予算）
-  int stepFor(int tileCount, {required bool gesturing}) {
+  /// 予算に収まる間引き段数（タイル数 × (256/step)² ≤ 予算）。
+  /// [tileCount] は [visibleTileCount] の見積もり（回転に依らない。外接矩形の枚数だと 45° ごとに段数が変わる）
+  int stepFor(double tileCount, {required bool gesturing}) {
     final budget = gesturing ? gestureCellBudget : staticCellBudget;
     for (final step in const [1, 2, 4, 8]) {
       if (tileCount * (256 ~/ step) * (256 ~/ step) <= budget) return step;
@@ -135,7 +148,7 @@ class TerrainFramePlanner {
   TerrainFramePlan plan(TerrainCamera camera, Size size, {bool gesturing = false}) {
     final sw = Stopwatch()..start();
     final bounds = world.groundBounds(camera, size, heightRange: _screenHeightRange());
-    final zD = demZoomFor(camera, bounds);
+    final zD = demZoomFor(camera, size);
     final range = TerrainWorld.tileRangeFor(bounds, zD);
     final prefetch = TerrainWorld.tileRangeFor(bounds, zD, margin: prefetchMargin);
     // 読み込み順: 一番粗い親 → …→ 理想の段 → 1 周り外。ピラミッドは上から埋める。
@@ -168,7 +181,7 @@ class TerrainFramePlanner {
       demZoom: zD,
       range: range,
       prefetch: prefetch,
-      baseStep: stepFor(range.count, gesturing: gesturing),
+      baseStep: stepFor(visibleTileCount(camera, size, zD), gesturing: gesturing),
       tiles: tiles,
       coverage: coverage,
     );

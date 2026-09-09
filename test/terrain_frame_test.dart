@@ -145,27 +145,36 @@ void main() {
 
     test('画面に掛かる枚数が上限を超える間は段を下げる', () {
       final planner = TerrainFramePlanner(world, maxCoreTiles: 10);
-      final flat = world.groundBounds(cam(16), size, heightRange: 600);
-      final z = planner.demZoomFor(cam(16), flat);
+      final z = planner.demZoomFor(cam(16), size);
       expect(z, lessThanOrEqualTo(15));
-      expect(TerrainWorld.tileRangeFor(flat, z).count, lessThanOrEqualTo(10));
+      expect(TerrainFramePlanner.visibleTileCount(cam(16), size, z), lessThanOrEqualTo(10));
       // 寝かせるほど画面が広い → 段は同じか下がる
-      final wide = world.groundBounds(cam(16, pitchDeg: 70), size, heightRange: 600);
-      expect(TerrainFramePlanner(world, maxCoreTiles: 10).demZoomFor(cam(16, pitchDeg: 70), wide), lessThanOrEqualTo(z));
+      expect(TerrainFramePlanner(world, maxCoreTiles: 10).demZoomFor(cam(16, pitchDeg: 70), size), lessThanOrEqualTo(z));
     });
 
-    test('境目で往復しない: 粗い段に居たら枚数が上限の 6 割を超える間は留まる', () {
+    test('境目で往復しない: 粗い段に居たら枚数が上限すれすれの間は留まる', () {
       final planner = TerrainFramePlanner(world, maxCoreTiles: 10);
       var crossings = 0;
       int? prev;
       for (var i = 0; i <= 40; i++) {
         final zoom = 15 + i * 0.05; // 15 → 17 をゆっくり
-        final b = world.groundBounds(cam(zoom), size, heightRange: 600);
-        final z = planner.demZoomFor(cam(zoom), b);
+        final z = planner.demZoomFor(cam(zoom), size);
         if (prev != null && z != prev) crossings++;
         prev = z;
       }
       expect(crossings, lessThanOrEqualTo(2), reason: '2 段ぶん寄るので切り替わりは 2 回まで');
+    });
+
+    test('回転しても段は変わらない（枚数の見積もりが外接矩形に依らない）', () {
+      for (final zoom in [12.0, 13.75, 14.25, 15.0, 16.25]) {
+        final planner = TerrainFramePlanner(world, maxCoreTiles: 10);
+        final c = cam(zoom);
+        final z0 = planner.demZoomFor(c, size);
+        for (var i = 0; i < 72; i++) {
+          c.bearing = i * 5 * math.pi / 180;
+          expect(planner.demZoomFor(c, size), z0, reason: 'zoom $zoom bearing ${i * 5}');
+        }
+      }
     });
   });
 

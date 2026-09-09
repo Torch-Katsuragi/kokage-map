@@ -371,9 +371,15 @@ Float32List _assembleHeights(_AssembleArgs a) {
   return heights;
 }
 
-/// 無効値（NaN。地理院タイルの海・データなし）を埋める: 行の中で直前の有効値、無ければ 0（海面）
+/// 無効値（NaN。地理院タイルの海・データなし・水面）を埋める: 直前の有効値。先頭が無効なら最初の有効値、全部無効なら 0（海面）
 void _fillInvalid(Float32List h) {
   var last = 0.0;
+  for (var i = 0; i < h.length; i++) {
+    if (!h[i].isNaN) {
+      last = h[i];
+      break;
+    }
+  }
   for (var i = 0; i < h.length; i++) {
     final v = h[i];
     if (v.isNaN) {

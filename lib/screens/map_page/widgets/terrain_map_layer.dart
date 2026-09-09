@@ -304,9 +304,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
     for (final tile in plan.tiles) {
       final step = plan.stepFor(tile);
       final skirt = tile.key.span * 0.03; // タイル幅の 3%
-      var builder = tile.builders[step];
       var useStep = step;
-      if (builder == null) {
+      TerrainMeshBuilder builder;
+      final ideal = tile.builders[step];
+      if (ideal == null) {
         // isolate で作る。できたら描き直す
         tile.builderFor(step, chunkSize: _world.chunkSize, skirtDepth: skirt).then((_) => _scheduleRefresh());
         // できているものがあれば（粗さが違っても）それで繋ぐ。何も無ければ粗い穴埋めをその場で作る
@@ -316,15 +317,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer> with _Terrain
           continue;
         }
         useStep = _nearestStep(tile, step, preferScene: true);
-        builder = tile.builders[useStep];
+        builder = tile.builders[useStep]!;
       } else if (!_hasStaticScene(tile, step) && _staticBuilds >= _staticBudget) {
         // この段の貼り付けはまだ無く、今フレームの予算も尽きた。貼り付けのある段のメッシュで繋ぐ
         // （空のまま描くと回転中にフィーチャが消える）
         final alt = _nearestStep(tile, step, preferScene: true);
-        if (_hasStaticScene(tile, alt)) {
-          useStep = alt;
-          builder = tile.builders[alt];
-        }
+        useStep = _hasStaticScene(tile, alt) ? alt : step;
+        builder = tile.builders[useStep]!;
+      } else {
+        builder = ideal;
       }
       drawables.add(_drawable(tile, builder, useStep));
     }

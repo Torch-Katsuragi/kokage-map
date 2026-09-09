@@ -27,4 +27,7 @@ abstract class TerrainProjection {
 
   /// 地図座標 → 画面座標（地形の高さで持ち上げて投影）
   Offset project(LatLng latLng);
+
+  /// カメラを [center]・[zoom] へ動かす（方位・傾きは保つ）。2D の jumpTo と同じ約束
+  Future<void> jumpTo(LatLng center, double zoom, {bool animate = true});
 }

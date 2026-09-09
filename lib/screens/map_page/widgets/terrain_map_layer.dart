@@ -319,8 +319,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     b = _camera.bearing + d;
     _animFrom = (bearing: _camera.bearing, pitch: _camera.pitch, centerX: _camera.centerX, centerY: _camera.centerY, zoom: _camera.zoom);
     _animTo = (bearing: b, pitch: pitch ?? _camera.pitch, centerX: centerX ?? _camera.centerX, centerY: centerY ?? _camera.centerY, zoom: zoom ?? _camera.zoom);
-    _anim.forward(from: 0);
   }
+
+  /// [_animateTo] で決めた先へ動かす（待てる）
 
   void _onAnimTick() {
     final a = _animFrom;
@@ -339,7 +340,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   }
 
   /// コンパスのタップ: 北を上に・真上から
-  void _resetView() => _animateTo(bearing: 0, pitch: 0);
+  void _resetView() {
+    _animateTo(bearing: 0, pitch: 0);
+    _anim.forward(from: 0);
+  }
 
   /// ツールが変わった: ペンなら真上に寄せて 1 本指を描画に渡す。離れたら傾きを戻す
   void _onToolChanged(String toolName) {
@@ -348,10 +352,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _penLock = true;
       _pitchBeforePen = _camera.pitch;
       _animateTo(pitch: 0);
+      _anim.forward(from: 0);
     } else if (!pen && _penLock) {
       _penLock = false;
       _toolDrag = false;
       _animateTo(pitch: _pitchBeforePen ?? _defaultPitchDeg * math.pi / 180);
+      _anim.forward(from: 0);
     }
   }
 
@@ -849,6 +855,22 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final x = WebMercator.xFromLon(latLng.longitude);
     final y = WebMercator.yFromLat(latLng.latitude);
     return _painter.toScreen(x, y, _world.elevationAt(x, y) ?? 0, _size);
+  }
+
+  @override
+  Future<void> jumpTo(LatLng center, double zoom, {bool animate = true}) async {
+    final x = WebMercator.xFromLon(center.longitude);
+    final y = WebMercator.yFromLat(center.latitude);
+    if (!animate) {
+      _camera
+        ..centerX = x
+        ..centerY = y
+        ..zoom = zoom;
+      _refresh();
+      return;
+    }
+    _animateTo(centerX: x, centerY: y, zoom: zoom);
+    await _anim.forward(from: 0);
   }
 
   // ── ジェスチャ ──────────────────────────────────────

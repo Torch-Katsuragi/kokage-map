@@ -142,6 +142,30 @@ void main() {
     });
   });
 
+  group('TerrainMeshBuilder.cellTriangles', () {
+    const sw = 0, se = 1, nw = 2, ne = 3;
+    const far = {0: sw, 1: se, 2: nw, 3: ne}; // bit0 = 東が奥、bit1 = 北が奥
+    const near = {0: ne, 1: nw, 2: se, 3: sw};
+
+    test('奥の角を含む三角形を先に描き、対角線は奥と手前の角を結ばない', () {
+      for (var q = 0; q < 4; q++) {
+        final t = TerrainMeshBuilder.cellTriangles(q, sw: sw, se: se, nw: nw, ne: ne);
+        expect(t.length, 6);
+        final first = t.sublist(0, 3), second = t.sublist(3);
+        expect(first, contains(far[q]), reason: 'quadrant $q: 奥の角が先');
+        expect(first, isNot(contains(near[q])), reason: 'quadrant $q: 手前の角は後');
+        expect(second, contains(near[q]));
+        // 共有辺（対角線）= 両方に含まれる 2 頂点。奥・手前の角ではない
+        final shared = first.toSet().intersection(second.toSet());
+        expect(shared.length, 2);
+        expect(shared, isNot(contains(far[q])));
+        expect(shared, isNot(contains(near[q])));
+        // 4 頂点すべて使う
+        expect({...first, ...second}, {sw, se, nw, ne});
+      }
+    });
+  });
+
   group('LiftedPolygon', () {
     test('耳切りは凹多角形も面積を保つ', () {
       // L 字

@@ -189,6 +189,11 @@ class _Chunk {
   /// 象限ごとのインデックス（走査順）。使うときに作る
   final List<Uint16List?> indicesByQuadrant = List.filled(4, null);
 
+  /// セル内の 2 枚の三角形も奥 → 手前。
+  ///
+  /// 対角線は「奥の角と手前の角を結ばない」方（奥の角を含む三角形と手前の角を含む三角形に割れる）を取り、
+  /// 奥の角を含む方を先に描く。固定の対角線・固定の順だと、北東が奥の向きでは奥の三角形が手前を
+  /// 上書きし、崖の縁ごとにギザギザの溝が出る（Pixel 9・pitch 70°・寄りで顕著だった）
   Uint16List indicesFor(int quadrant) {
     final cached = indicesByQuadrant[quadrant];
     if (cached != null) return cached;
@@ -200,16 +205,11 @@ class _Chunk {
       final r = northFar ? cellRows - 1 - rr : rr;
       for (var cc = 0; cc < cellCols; cc++) {
         final c = eastFar ? cellCols - 1 - cc : cc;
-        final v00 = r * vertexCols + c;
-        final v10 = v00 + 1;
-        final v01 = v00 + vertexCols;
-        final v11 = v01 + 1;
-        idx[k++] = v00;
-        idx[k++] = v10;
-        idx[k++] = v01;
-        idx[k++] = v10;
-        idx[k++] = v11;
-        idx[k++] = v01;
+        final sw = r * vertexCols + c;
+        final tri = TerrainMeshBuilder.cellTriangles(quadrant, sw: sw, se: sw + 1, nw: sw + vertexCols, ne: sw + vertexCols + 1);
+        for (final v in tri) {
+          idx[k++] = v;
+        }
       }
     }
     indicesByQuadrant[quadrant] = idx;
@@ -499,6 +499,19 @@ class TerrainMeshBuilder {
   /// bit0: 東向き成分が正（東が遠い）、bit1: 北向き成分が正（北が遠い）
   static int _quadrantOf(double sinB, double cosB) =>
       (sinB > 0 ? 1 : 0) | (cosB > 0 ? 2 : 0);
+
+  /// 象限 [quadrant]（bit0 = 東が奥、bit1 = 北が奥）でのセル 1 つの 2 三角形（6 頂点、奥の三角形が先）。
+  /// 対角線は奥の角と手前の角を結ばない方を取る
+  static List<int> cellTriangles(int quadrant, {required int sw, required int se, required int nw, required int ne}) {
+    final eastFar = (quadrant & 1) != 0;
+    final northFar = (quadrant & 2) != 0;
+    if (eastFar == northFar) {
+      // 奥の角が NE か SW → 対角線は NW–SE。NE 側 (se, ne, nw) と SW 側 (sw, se, nw)
+      return eastFar ? [se, ne, nw, sw, se, nw] : [sw, se, nw, se, ne, nw];
+    }
+    // 奥の角が NW か SE → 対角線は SW–NE。NW 側 (sw, ne, nw) と SE 側 (sw, se, ne)
+    return northFar ? [sw, ne, nw, sw, se, ne] : [sw, se, ne, sw, ne, nw];
+  }
 
   /// チャンクを象限走査の順に並べ、セル → 帯番号を引き直す
   ///

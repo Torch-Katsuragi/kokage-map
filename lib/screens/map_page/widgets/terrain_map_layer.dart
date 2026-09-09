@@ -322,6 +322,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   // タイルごとのキャッシュ。キーにビルダー（縁が変わると別物になる）と borderMask を含めるので、
   // タイルが届いても他のタイルのキャッシュは生きたまま
   final Map<TerrainMeshBuilder, (double, double, TerrainMesh)> _meshes = {}; // (bearing, pitch, mesh)
+
+  /// メッシュを最後に描いた時刻（ms）。しばらく描いていないメッシュは捨てる（Vertices は native 側で 1 枚 1〜2MB）
+  final Map<TerrainMeshBuilder, int> _meshUsed = {};
+  static const _meshKeepMs = 3000;
   // キー: (タイル, step, 縁の組み合わせ, 高さの出どころの段)。近似 → 本物の差し替えで作り直す
   final Map<(TileKey, int, int, int), _TileScene> _scenes = {};
   final Map<(TileKey, int, int, int), _TileScene> _staticScenes = {};
@@ -340,6 +344,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// （新しいタイルが 5 枚同時に届くと 20ms × 5 で 1 フレーム 100ms になっていた）
   static const _meshBudgetMs = 20;
   final Stopwatch _meshSw = Stopwatch();
+  int _frameMs = 0;
 
   /// フィーチャの bbox（Mercator m）。リストごとに一度だけ
   final Expando<Float64List> _bboxCache = Expando();
@@ -614,6 +619,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       ..reset()
       ..start();
     _meshSw.reset();
+    _frameMs = DateTime.now().millisecondsSinceEpoch;
     final plan = _planner.plan(_camera, _size, gesturing: _gesturing);
     final planMs = sw.elapsedMilliseconds;
     _lastPlan = plan;
@@ -655,6 +661,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       }
       drawables.add(_drawable(tile, builder, useStep));
     }
+    _pruneStaleMeshes(_frameMs);
     _painter
       ..tiles = drawables
       ..gesturing = _gesturing
@@ -699,6 +706,18 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _meshes.removeWhere((b, v) {
       if (live.contains(b)) return false;
       v.$3.dispose();
+      _meshUsed.remove(b);
+      return true;
+    });
+  }
+
+  /// [_meshKeepMs] 以上描いていないメッシュを捨てる（方位・傾きが変われば作り直すものなので、持ち続ける価値は薄い）
+  void _pruneStaleMeshes(int nowMs) {
+    _meshes.removeWhere((b, v) {
+      final used = _meshUsed[b];
+      if (used != null && nowMs - used <= _meshKeepMs) return false;
+      v.$3.dispose();
+      _meshUsed.remove(b);
       return true;
     });
   }
@@ -706,6 +725,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   TerrainTileDrawable _drawable(TerrainTile tile, TerrainMeshBuilder builder, int step) {
     final cached = _meshes[builder];
     final TerrainMesh mesh;
+    _meshUsed[builder] = _frameMs;
     if (cached != null && cached.$1 == _camera.bearing && cached.$2 == _camera.pitch) {
       mesh = cached.$3;
     } else {
@@ -867,8 +887,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _staticBuilds++;
       _sceneBuilds++;
       _advanceStatic(tile, step, stat, _staticProgress[cacheKey] ??= _StaticProgress(), g, builder, clip);
-      if (!stat.complete) _scheduleRefresh();
     }
+    // 育ち切っていないタイルがある限り次のフレームも来る（今フレームの予算に漏れたタイルも）
+    if (!stat.complete) _scheduleRefresh();
     // 動的な部分
     var dyn = _dynamicScenes[cacheKey];
     if (dyn == null || !_sameKey(dyn.key, dynamicKey)) {

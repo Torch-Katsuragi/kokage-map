@@ -648,6 +648,10 @@ class BaseMapService extends ChangeNotifier {
         await _cacheTile(provider.id, z, x, y, data);
 
         return data;
+      } else if (response.statusCode == 404) {
+        // 無いものは無い（標高タイルの整備範囲外など）。粘ると 1 枚 1.5 秒になる
+        _noteFetchSuccess();
+        return null;
       } else {
         // ネットワーク取得失敗時にキャッシュを再確認（別プロバイダーや古いキャッシュの可能性）
         final fallbackCachedData = await _getCachedTile(

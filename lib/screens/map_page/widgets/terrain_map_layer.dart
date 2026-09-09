@@ -292,6 +292,30 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   final _repaint = ValueNotifier<int>(0);
   Size _size = Size.zero;
   String _attribution = '';
+
+  /// いま貼っている基図（設定で変わる）
+  BaseMapProvider? _basemap;
+
+  BaseMapProvider? _currentBasemap() {
+    final layers = widget.baseMapService.activeLayerConfig;
+    return layers.isNotEmpty ? layers.first.$1 : null;
+  }
+
+  String _attributionFor(BaseMapProvider? basemap) => [
+        if (basemap != null) basemap.attribution,
+        ...{for (final s in DemTileSource.defaultCascade) s.attribution},
+      ].join(' / ');
+
+  /// 基図の設定が変わった（3D 中は MapLibre が無いので、地形のテクスチャを貼り直す）
+  void _onBasemapChanged() {
+    final b = _currentBasemap();
+    if (b?.id == _basemap?.id) return;
+    _basemap = b;
+    _attribution = _attributionFor(b);
+    _tileImages.clear(); // 画像 LRU は層番号で引くので、前の基図の絵が混ざる
+    _world.retexture();
+    if (mounted) setState(() {});
+  }
   @override
   bool _gesturing = false;
 
@@ -396,18 +420,17 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       pitch: _defaultPitchDeg * math.pi / 180,
       zScale: WebMercator.zScaleAt(center.latitude),
     );
-    final layers = widget.baseMapService.activeLayerConfig;
-    final basemap = layers.isNotEmpty ? layers.first.$1 : null;
-    _attribution = [
-      if (basemap != null) basemap.attribution,
-      ...{for (final s in DemTileSource.defaultCascade) s.attribution},
-    ].join(' / ');
+    _basemap = _currentBasemap();
+    _attribution = _attributionFor(_basemap);
+    widget.baseMapService.addListener(_onBasemapChanged);
     _world = TerrainWorld(
       demSources: DemTileSource.defaultCascade,
       demFetcher: (source, z, x, y) => widget.baseMapService.getTile(_terrainProviders[source.id]!, z, x, y),
-      textureFetcher: basemap == null
-          ? (z, x, y) async => null
-          : (z, x, y) => widget.baseMapService.getTile(basemap, z, x, y),
+      // 基図は設定で変わりうるので、取りに行くたびに今のものを見る
+      textureFetcher: (z, x, y) {
+        final b = _basemap;
+        return b == null ? Future.value(null) : widget.baseMapService.getTile(b, z, x, y);
+      },
       imageCache: _tileImages,
     )
       ..addListener(_onWorldChanged)
@@ -524,6 +547,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   @override
   void dispose() {
     _listenedDevice?.removeListener(_scheduleRefresh);
+    widget.baseMapService.removeListener(_onBasemapChanged);
     _anim.dispose();
     _retextureTimer?.cancel();
     for (final im in _overlayImages.values) {
@@ -896,11 +920,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
     final defaultStyle = _defaultStyle();
     final groups = {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
-    // 引いた段（セルが 30m 以上 = 表示ズーム 13 以下）では面の輪郭を省く。
-    // 60m の面が数ピクセルの眺めで 1 万面の輪郭（4 万本の線分）を毎フレーム描くと raster が 0.5 秒になる
+    // 引いた段（セルが 30m 以上 = 表示ズーム 13 以下）で、このタイルに面が多いときだけ輪郭とラベルを省く。
+    // 60m の面が数ピクセルの眺めで 1 万面の輪郭（4 万本の線分）を毎フレーム描くと raster が 0.5 秒になる。
+    // ⚠ ズームだけで省くと林班の境界（塗りは薄く、輪郭が本体）が引いた途端に消える。数百面なら描く。
+    // 判定はデータ全体の面数（タイルごとに変えると継ぎ接ぎになる）
     final coarse = tile.bordered.cellSize * step >= 30;
+    final dense = coarse && g.polygons.length > 2000;
     void add(TerrainScene s, {bool withLabels = true}) {
-      if (!coarse) scene.lines.addAll(s.outlines);
+      if (!dense) scene.lines.addAll(s.outlines);
       scene.lines.addAll(s.lines);
       scene.polygons.addAll(s.polygons);
       scene.points.addAll(s.points);
@@ -958,7 +985,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           scene.labels.add(TerrainLabel(x: cx, y: cy, text: '${ps.length}', style: labelStyleForClusters));
         }
       } else {
-        add(pointScene, withLabels: !coarse);
+        add(pointScene); // 引いた段でも点が少なければラベルは出す（多ければ上でまとめている）
       }
       final worldClip = clip.shift(Offset(tile.bordered.originX, tile.bordered.originY));
       progress.polygonIdx = _featureIndexes(g.polygons, worldClip);
@@ -978,7 +1005,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       add(
         builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey)
             .build(polygons: [for (var i = progress.polygon; i < end; i++) g.polygons[polygonIdx[i]]], clipRect: clip),
-        withLabels: !coarse,
+        withLabels: !dense,
       );
       progress.tune(end - progress.polygon, sw.elapsedMicroseconds - t0);
       progress.polygon = end;
@@ -1293,6 +1320,30 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
     _animateTo(centerX: x, centerY: y, zoom: zoom);
     await _anim.forward(from: 0);
+  }
+
+  @override
+  Future<void> fitCoordinates(List<LatLng> coordinates, {EdgeInsets padding = EdgeInsets.zero}) async {
+    if (coordinates.isEmpty) return;
+    var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;
+    for (final c in coordinates) {
+      final x = WebMercator.xFromLon(c.longitude);
+      final y = WebMercator.yFromLat(c.latitude);
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    final center = LatLng(WebMercator.latFromY((minY + maxY) / 2), WebMercator.lonFromX((minX + maxX) / 2));
+    if (_size == Size.zero) return jumpTo(center, _camera.zoom);
+    // 1 点なら寄るだけ。幅は真上から見た Mercator m（傾いていると画面の地面は広いので余裕がある）
+    final spanX = math.max(maxX - minX, 20.0);
+    final spanY = math.max(maxY - minY, 20.0);
+    final w = math.max(_size.width - padding.horizontal, 50.0);
+    final h = math.max(_size.height - padding.vertical, 50.0);
+    final scale = math.min(w / spanX, h / spanY); // px / m
+    final zoom = (math.log(scale * 2 * math.pi * WebMercator.radius / 256) / math.ln2).clamp(2.0, 18.0);
+    return jumpTo(center, zoom);
   }
 
   // ── ジェスチャ ──────────────────────────────────────

@@ -409,7 +409,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                               styleGroups: () => sourceManager.styleGroups,
                               currentLocation: currentLocation,
                               gpsTrack: () => gpsHistoryRecorder.todayPoints,
-                              onProjectionChanged: (p) => terrainProjection = p,
+                              onProjectionChanged: (p) {
+                                terrainProjection = p;
+                                // レイヤのダブルタップなど、ホルダー経由の「寄せる」も 3D に流す
+                                mapControllerInstance.fitOverride =
+                                    p == null ? null : (c, pad) => p.fitCoordinates(c, padding: pad);
+                              },
                               mapBearingNotifier: mapBearingNotifier,
                               cameraTickNotifier: cameraTickNotifier,
                               heading: headingNotifier,

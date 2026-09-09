@@ -475,8 +475,9 @@ class TerrainWorld extends ChangeNotifier {
     return n;
   }
 
-  /// このセッションで「無かった」(ソース, タイル)。圏外の失敗は _failedAt が別に持つ
-  final Set<String> _missing = {};
+  /// このセッションで「無かった」(ソース, タイル)。圏外の失敗は _failedAt が別に持つ。
+  /// 3D に入り直すたびに世界は作り直すので、アプリ全体で持つ
+  static final Set<String> _missing = {};
 
   /// 親（最大 [maxApproximateLevels] 段上）から補間した近似の DEM と、その親の段
   Future<(DemGrid, int)?> _approximateFromAncestor(TileKey key) async {

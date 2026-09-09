@@ -15,6 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:ui';
 
+import 'package:flutter/widgets.dart' show EdgeInsets;
 import 'package:latlong2/latlong.dart';
 
 /// 3D 地形モード中の投影（地図面の窓口のうち「投影・逆投影」）
@@ -30,4 +31,7 @@ abstract class TerrainProjection {
 
   /// カメラを [center]・[zoom] へ動かす（方位・傾きは保つ）。2D の jumpTo と同じ約束
   Future<void> jumpTo(LatLng center, double zoom, {bool animate = true});
+
+  /// [coordinates] が画面に収まるように動かす（レイヤのダブルタップなど）。2D の fitCoordinates と同じ約束
+  Future<void> fitCoordinates(List<LatLng> coordinates, {EdgeInsets padding = EdgeInsets.zero});
 }

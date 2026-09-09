@@ -310,11 +310,19 @@ class RMapController {
   ///
   /// 短時間の連続呼び出しはデバウンスし、最後の呼び出しのみ実行する。
   /// 進行中のアニメーションがあれば即キャンセルしてから開始する。
+  /// 3D 中の差し替え先（地形のカメラを動かす）。地図の外からの「ここへ寄せる」はこれを先に見る
+  void Function(List<LatLng> coordinates, EdgeInsets padding)? fitOverride;
+
   void fitCoordinates(
     List<LatLng> coordinates, {
     EdgeInsets padding = EdgeInsets.zero,
   }) {
     if (coordinates.isEmpty) return;
+    final override = fitOverride;
+    if (override != null) {
+      override(coordinates, padding);
+      return;
+    }
     if (_controller == null) {
       // attach 前。保留してから attach 時に実行する。
       _pendingCameraAction =

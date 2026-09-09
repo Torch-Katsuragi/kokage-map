@@ -90,7 +90,7 @@ class DemTileSource {
   /// 地理院 標高タイル DEM10B（1/2.5 万地形図の等高線由来、全国）
   static const gsiDem10b = DemTileSource(
     id: 'gsi_dem10b_png',
-    urlTemplate: 'https://cyberjapandata.gsi.go.jp/xyz/dem10b_png/{z}/{x}/{y}.png',
+    urlTemplate: 'https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png',
     encoding: DemEncoding.gsiPng,
     attribution: '地理院タイル（標高タイル）',
     minZoom: 2,

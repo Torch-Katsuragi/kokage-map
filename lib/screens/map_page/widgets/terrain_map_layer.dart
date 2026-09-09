@@ -929,6 +929,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     ].join(';');
     if (key == _overlayKey) return;
     _overlayKey = key;
+    AppLogger.debug('[3D] overlays: ${nodes.length} 枚 ${[for (final n in nodes) n.filePath]}');
     for (final n in nodes) {
       if (_overlayImages.containsKey(n.filePath) || _overlayLoading.contains(n.filePath)) continue;
       _overlayLoading.add(n.filePath);
@@ -956,8 +957,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   void _scheduleRetexture() {
     _retextureTimer?.cancel();
     _retextureTimer = Timer(const Duration(milliseconds: 400), () {
-      if (mounted) _world.retexture();
+      if (!mounted) return;
+      _world.retexture();
     });
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _overlayKey = ''; // ホットリロードでオーバーレイを同期し直す
   }
 
   /// テクスチャの上にオーバーレイ画像を描く（四隅の Mercator 座標 → テクスチャのピクセルへのアフィン変換）

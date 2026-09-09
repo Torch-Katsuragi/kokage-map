@@ -396,6 +396,9 @@ void fillInvalidHeights(Float32List h) {
   }
 }
 
+/// テクスチャに上描きする手（オーバーレイ画像など）。canvas は [range] の左上が原点、1 タイル = 256px
+typedef TextureDecorator = void Function(ui.Canvas canvas, TileRange range);
+
 /// ラスタタイル（背景地図）を 1 枚の画像に合成する
 ///
 /// 設計どおり「表示範囲のタイルを 1 枚に合成してから ImageShader で貼る」。
@@ -409,14 +412,16 @@ class RasterTileComposer {
   final TileImageCache? _imageCache;
 
   /// [range] のタイルを敷き詰めた画像を返す（幅 = width×256）
-  Future<ui.Image> compose(TileRange range, {TileProgress? onProgress}) =>
-      composeLayers(range, [(_fetch, 1.0)], onProgress: onProgress);
+  Future<ui.Image> compose(TileRange range, {TileProgress? onProgress, TextureDecorator? decorate}) =>
+      composeLayers(range, [(_fetch, 1.0)], onProgress: onProgress, decorate: decorate);
 
-  /// 複数のタイル層を opacity で重ねて 1 枚にする（背景地図のブレンド。MapLibre 側と同じ累積補正済み opacity を渡す）
+  /// 複数のタイル層を opacity で重ねて 1 枚にする（背景地図のブレンド。MapLibre 側と同じ累積補正済み opacity を渡す）。
+  /// [decorate] は最後に呼ばれ、オーバーレイ画像などを上に描ける（座標は範囲左上原点のピクセル）
   Future<ui.Image> composeLayers(
     TileRange range,
     List<(TileFetcher, double)> layers, {
     TileProgress? onProgress,
+    TextureDecorator? decorate,
   }) async {
     const ts = WebMercator.tileSize;
     final recorder = ui.PictureRecorder();
@@ -484,6 +489,7 @@ class RasterTileComposer {
         }
       }
     }
+    decorate?.call(canvas, range);
     final picture = recorder.endRecording();
     final image = await picture.toImage(range.width * ts, range.height * ts);
     picture.dispose();

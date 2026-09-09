@@ -248,6 +248,9 @@ class TerrainWorld extends ChangeNotifier {
   /// (ソース, z, x, y) → PNG のバイト列。無ければ null
   final DemFetcher demFetcher;
 
+  /// テクスチャに上描きする手（オーバーレイ画像）。変えたら [retexture]
+  TextureDecorator? textureDecorator;
+
   /// 段の範囲は連なり全体で見る（一番細かいソースの maxZoom まで）
   int get minZoom => demSources.map((s) => s.minZoom).reduce(math.min);
   int get maxZoom => demSources.map((s) => s.maxZoom).reduce(math.max);
@@ -415,7 +418,8 @@ class TerrainWorld extends ChangeNotifier {
     }
     final demMs = sw.elapsedMilliseconds;
     final texRange = range.zoomIn(textureZoomOffset);
-    final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache).compose(texRange);
+    final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
+        .compose(texRange, decorate: textureDecorator);
     if (sw.elapsedMilliseconds > 800) debugPrint('[3D] tile $key load ${sw.elapsedMilliseconds}ms (dem $demMs)');
     return TerrainTile(key: key, raw: dem, sourceZoom: sourceZoom)
       ..texture = tex
@@ -504,6 +508,38 @@ class TerrainWorld extends ChangeNotifier {
 
   /// 近似に使う親の最大段数
   int maxApproximateLevels = 5;
+
+  int _retextureGen = 0;
+
+  /// 読み込み済みタイルのテクスチャを作り直す（オーバーレイ画像が変わったとき）。
+  /// [within]（Mercator）に掛かるタイルだけ。途中で再度呼ばれたら古い方は止まる
+  Future<void> retexture({ui.Rect? within}) async {
+    final gen = ++_retextureGen;
+    final targets = [
+      for (final t in _tiles.values)
+        if (within == null || _intersects(t.key, within)) t,
+    ];
+    for (final tile in targets) {
+      if (gen != _retextureGen || !_tiles.containsKey(tile.key)) return;
+      final range = TileRange(z: tile.key.z, x0: tile.key.x, y0: tile.key.y, x1: tile.key.x, y1: tile.key.y);
+      final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
+          .compose(range.zoomIn(textureZoomOffset), decorate: textureDecorator);
+      if (gen != _retextureGen || !_tiles.containsKey(tile.key)) {
+        tex.dispose();
+        return;
+      }
+      tile.texture?.dispose();
+      tile
+        ..texture = tex
+        ..textureWidth = tex.width
+        ..textureHeight = tex.height;
+      revision++;
+      notifyListeners();
+    }
+  }
+
+  static bool _intersects(TileKey k, ui.Rect r) =>
+      k.west < r.right && k.west + k.span > r.left && k.south < r.bottom && k.south + k.span > r.top;
 
   /// 読み込みに失敗した時刻。しばらく再試行しない（圏外で毎フレーム失敗し続けないように）
   final Map<TileKey, int> _failedAt = {};

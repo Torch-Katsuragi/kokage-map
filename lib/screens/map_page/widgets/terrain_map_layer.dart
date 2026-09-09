@@ -14,7 +14,9 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -237,6 +239,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// 今の 1 本指ドラッグをツールに渡している最中
   bool _toolDrag = false;
 
+  // オーバーレイ画像（GeoTIFF など）: 地形のテクスチャに焼く
+  final Map<String, ui.Image> _overlayImages = {};
+  final Set<String> _overlayLoading = {};
+  String _overlayKey = '';
+  Timer? _retextureTimer;
+
   // ジェスチャ
   double _scaleStart = 1;
   double _bearingStart = 0;
@@ -269,7 +277,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           ? (z, x, y) async => null
           : (z, x, y) => widget.baseMapService.getTile(basemap, z, x, y),
       imageCache: _tileImages,
-    )..addListener(_onWorldChanged);
+    )
+      ..addListener(_onWorldChanged)
+      ..textureDecorator = _decorateTexture;
     _planner = TerrainFramePlanner(_world);
     _painter = TerrainWorldPainter(
       camera: _camera,
@@ -348,6 +358,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   @override
   void dispose() {
     _anim.dispose();
+    _retextureTimer?.cancel();
+    for (final im in _overlayImages.values) {
+      im.dispose();
+    }
     _stopDrive();
     widget.sceneRevision.removeListener(_onSceneRevision);
     widget.onProjectionChanged(null);
@@ -398,6 +412,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   @override
   void _refresh() {
     if (_size == Size.zero) return;
+    _syncOverlays();
     final sw = Stopwatch()..start();
     _meshBuilds = 0;
     _placeholders = 0;
@@ -898,6 +913,88 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       tool.addPointerToBuffer(e.localPosition);
     } else if (e is PointerUpEvent) {
       tool.clearPointerBuffer();
+    }
+  }
+
+  // ── オーバーレイ画像 ─────────────────────────────────
+
+  /// 見えているオーバーレイ画像の集合・位置が変わったら、画像を読み、テクスチャを作り直す（400ms にまとめる）
+  void _syncOverlays() {
+    if (kIsWeb) return; // web はファイルパスで読めない（未対応）
+    final nodes = widget.mapState.overlayImageNodes;
+    final key = [
+      for (final n in nodes)
+        '${n.filePath}|${n.overlayParams.centerLat},${n.overlayParams.centerLng},${n.overlayParams.scale},'
+            '${n.overlayParams.rotation},${n.overlayParams.imageWidth},${n.overlayParams.imageHeight}',
+    ].join(';');
+    if (key == _overlayKey) return;
+    _overlayKey = key;
+    for (final n in nodes) {
+      if (_overlayImages.containsKey(n.filePath) || _overlayLoading.contains(n.filePath)) continue;
+      _overlayLoading.add(n.filePath);
+      _loadOverlayImage(n.filePath, n.imageUrl).then((im) {
+        _overlayLoading.remove(n.filePath);
+        if (im == null || !mounted) return;
+        _overlayImages[n.filePath] = im;
+        _scheduleRetexture();
+      });
+    }
+    _scheduleRetexture();
+  }
+
+  Future<ui.Image?> _loadOverlayImage(String key, String url) async {
+    try {
+      final path = url.startsWith('file:///') ? Uri.parse(url).toFilePath() : url;
+      final bytes = await File(path).readAsBytes();
+      return await decodeImageFromList(bytes);
+    } catch (e) {
+      AppLogger.debug('[3D] overlay $key を読めない: $e');
+      return null;
+    }
+  }
+
+  void _scheduleRetexture() {
+    _retextureTimer?.cancel();
+    _retextureTimer = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) _world.retexture();
+    });
+  }
+
+  /// テクスチャの上にオーバーレイ画像を描く（四隅の Mercator 座標 → テクスチャのピクセルへのアフィン変換）
+  void _decorateTexture(ui.Canvas canvas, TileRange range) {
+    if (_overlayImages.isEmpty) return;
+    const ts = WebMercator.tileSize;
+    final west = range.west;
+    final north = WebMercator.tileNorth(range.y0, range.z);
+    final pxPerM = range.width * ts / range.widthMeters;
+    final texRect = Rect.fromLTWH(0, 0, range.width * ts * 1.0, range.height * ts * 1.0);
+    for (final n in widget.mapState.overlayImageNodes) {
+      final im = _overlayImages[n.filePath];
+      if (im == null) continue;
+      final c = n.cornerCoordinates; // TL, TR, BR, BL
+      Offset px(LatLng p) => Offset(
+            (WebMercator.xFromLon(p.longitude) - west) * pxPerM,
+            (north - WebMercator.yFromLat(p.latitude)) * pxPerM,
+          );
+      final tl = px(c[0]);
+      final tr = px(c[1]);
+      final bl = px(c[3]);
+      final br = px(c[2]);
+      final bbox = Rect.fromPoints(tl, br).expandToInclude(Rect.fromPoints(tr, bl));
+      if (!bbox.overlaps(texRect)) continue;
+      final w = im.width.toDouble();
+      final h = im.height.toDouble();
+      // 画像ピクセル (u, v) → tl + u/w (tr − tl) + v/h (bl − tl)
+      final m = Float64List.fromList([
+        (tr.dx - tl.dx) / w, (tr.dy - tl.dy) / w, 0, 0,
+        (bl.dx - tl.dx) / h, (bl.dy - tl.dy) / h, 0, 0,
+        0, 0, 1, 0,
+        tl.dx, tl.dy, 0, 1,
+      ]);
+      canvas.save();
+      canvas.transform(m);
+      canvas.drawImage(im, Offset.zero, ui.Paint()..filterQuality = ui.FilterQuality.medium);
+      canvas.restore();
     }
   }
 

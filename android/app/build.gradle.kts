@@ -31,10 +31,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
-    }
-
     defaultConfig {
         applicationId = "com.k_root.k_maps"
         minSdk = flutter.minSdkVersion
@@ -65,6 +61,13 @@ android {
                 logger.warn("WARNING: android/key.properties が見つかりません。リリースビルドにはGoogle Driveから署名鍵を取得してください。")
             }
         }
+    }
+}
+
+// KGP 2.4 では kotlinOptions.jvmTarget がエラーになる（compilerOptions DSL へ移行）
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }
 }
 

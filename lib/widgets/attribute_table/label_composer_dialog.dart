@@ -165,8 +165,7 @@ class _LabelComposerDialogState extends State<_LabelComposerDialog> {
                   physics: const NeverScrollableScrollPhysics(),
                   buildDefaultDragHandles: false,
                   itemCount: _tokens.length,
-                  onReorder: (from, to) => setState(() {
-                    if (to > from) to--;
+                  onReorderItem: (from, to) => setState(() {
                     _tokens.insert(to, _tokens.removeAt(from));
                   }),
                   itemBuilder: (context, i) {

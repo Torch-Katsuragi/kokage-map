@@ -42,10 +42,10 @@ Flutter製の地図アプリ（RootMap GIS）。**Android と web** の2プラ�
 ## コード生成
 
 `*.g.dart` はリポジトリに入っていない（`.gitignore` 済み）。
-`flutter pub get` のあとに回すこと。**順番に意味がある**。
+`flutter pub get` のあとに回すこと。`dart run slang` を先に回さない
+（build_runner 2.16 以降は既存の `strings*.g.dart` があると落ちる → [[docs/technical/testing#コード生成]]）。
 
 ```powershell
-dart run slang
 dart run build_runner build --delete-conflicting-outputs
 ```
 

@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 0.6.2+19
 
 environment:
-  sdk: ^3.7.2
+  sdk: ^3.12.0
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -96,7 +96,7 @@ dependencies:
   # flutter_secure_storage: 削除（lib/内で未使用、win32バージョン競合の原因）
   mobile_scanner: ^7.1.4
   package_info_plus: ^9.0.0         # win32 ^5 vs ^6 競合のため据え置き
-  maplibre: ^0.3.5
+  maplibre: ^0.3.6
   # ⚠ maplibre_webview（デスクトップのWebView実装）は 2026-08-25 に外した。
   #    デスクトップ版の撤去にあわせて不要になり、推移的に入っていた
   #    flutter_inappwebview も Android APK から落ちる。

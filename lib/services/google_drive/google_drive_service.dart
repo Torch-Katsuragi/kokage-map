@@ -482,7 +482,7 @@ class GoogleDriveService {
     try {
       // アカウントを掴んでいなければ無音復元だけ試す（画面は出さない。
       // 自動同期などユーザー操作の無い経路から呼ばれるため）
-      if (_currentUser == null) return restoreSessionSilently();
+      if (_currentUser == null) return await restoreSessionSilently();
 
       // Drive APIを再初期化（新しいトークンを取得）
       await _initializeDriveApi(_currentUser!);

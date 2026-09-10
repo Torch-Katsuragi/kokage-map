@@ -7,6 +7,10 @@ analyzer:
   exclude:
     - "**/*.g.dart"
     - lib/i18n/strings*.g.dart
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
 
 linter:
   rules:

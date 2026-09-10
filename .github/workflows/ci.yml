@@ -21,7 +21,7 @@ on:
 #    忘れると `Undefined name 'Translations'` のような分かりにくい形で落ちる
 #    （2026-08-26 まで4ジョブ全部がこれで落ちていた）。
 env:
-  FLUTTER_VERSION: '3.41.6'
+  FLUTTER_VERSION: '3.47.3'
 
 jobs:
   analyze-and-unit:
@@ -35,12 +35,10 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      # ⚠ 順番に意味がある。slang を先に回さないと、build_runner の
-      #    slang_build_runner と出力がぶつかって落ちる
-      - name: コード生成（i18n → riverpod）
-        run: |
-          dart run slang
-          dart run build_runner build --delete-conflicting-outputs
+      # ⚠ `dart run slang` を先に回さない。build_runner 2.16 以降は自分が作っていない
+      #    strings*.g.dart があると Asset already exists で落ちる（i18n も build_runner が作る）
+      - name: コード生成（riverpod + i18n）
+        run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter analyze
       - run: flutter test
 
@@ -55,12 +53,10 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      # ⚠ 順番に意味がある。slang を先に回さないと、build_runner の
-      #    slang_build_runner と出力がぶつかって落ちる
-      - name: コード生成（i18n → riverpod）
-        run: |
-          dart run slang
-          dart run build_runner build --delete-conflicting-outputs
+      # ⚠ `dart run slang` を先に回さない。build_runner 2.16 以降は自分が作っていない
+      #    strings*.g.dart があると Asset already exists で落ちる（i18n も build_runner が作る）
+      - name: コード生成（riverpod + i18n）
+        run: dart run build_runner build --delete-conflicting-outputs
       # web版が「コンパイルすら通らない」状態に戻るのを防ぐゲート。
       # 実行時の振る舞いは下の e2e-web が見る。
       - run: flutter build web --release
@@ -76,12 +72,10 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      # ⚠ 順番に意味がある。slang を先に回さないと、build_runner の
-      #    slang_build_runner と出力がぶつかって落ちる
-      - name: コード生成（i18n → riverpod）
-        run: |
-          dart run slang
-          dart run build_runner build --delete-conflicting-outputs
+      # ⚠ `dart run slang` を先に回さない。build_runner 2.16 以降は自分が作っていない
+      #    strings*.g.dart があると Asset already exists で落ちる（i18n も build_runner が作る）
+      - name: コード生成（riverpod + i18n）
+        run: dart run build_runner build --delete-conflicting-outputs
       # ubuntu-latest には Chrome と chromedriver が同梱されている。
       # バージョンずれで落ちたときはここを見ること。
       - name: chromedriver のバージョンを記録
@@ -114,10 +108,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      # ⚠ 順番に意味がある。slang を先に回さないと、build_runner の
-      #    slang_build_runner と出力がぶつかって落ちる
-      - name: コード生成（i18n → riverpod）
-        run: |
-          dart run slang
-          dart run build_runner build --delete-conflicting-outputs
+      # ⚠ `dart run slang` を先に回さない。build_runner 2.16 以降は自分が作っていない
+      #    strings*.g.dart があると Asset already exists で落ちる（i18n も build_runner が作る）
+      - name: コード生成（riverpod + i18n）
+        run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter build apk --debug

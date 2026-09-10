@@ -15,13 +15,14 @@ tags: [technical, testing, android, web]
 `flutter pub get` のあとに回すこと。
 
 ```powershell
-dart run slang                                          # i18n（strings*.g.dart）
-dart run build_runner build --delete-conflicting-outputs # riverpod
+dart run build_runner build --delete-conflicting-outputs # riverpod + i18n（slang_build_runner）
 ```
 
-> [!WARNING] 順番に意味がある
-> `slang` を先に回さないと、`build_runner` の `slang_build_runner` と
-> 出力がぶつかって `InvalidOutputException: Asset already exists` で落ちる。
+> [!WARNING] `dart run slang` を先に回さない（2026-09-10 逆転）
+> build_runner 2.16 以降は、自分が作っていない `strings*.g.dart` があると
+> `InvalidOutputException: Asset already exists` で落ちる（`--delete-conflicting-outputs` でも消さない）。
+> 2.13 時代は逆に `slang` を先に回す必要があった。手元に古い `strings*.g.dart` が残っていたら
+> `lib/i18n/strings*.g.dart` を消してから build_runner を回す。
 
 > [!IMPORTANT] CI でも回すこと
 > 2026-08-26 まで、CIは**4ジョブ全部が生成コード不足で落ちていた**。

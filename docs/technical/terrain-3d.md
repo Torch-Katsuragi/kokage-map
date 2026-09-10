@@ -270,6 +270,23 @@ Godot 乗り換えは不採用（地図面以外が全部 Flutter、web が重�
 - 背景は `RasterTileComposer` で表示範囲を 1 枚に合成。タイル取得は `TileFetcher` 関数で差し替えられる（既定は http。本番は `BaseMapService.getTile` を渡す）
 - 出典表示: 地理院タイル・Terrain Tiles とも必要。スパイクでは地図面の左下に出している
 
+## flutter_gpu スパイク（2026-09-10）
+
+Vault `3D化の詰め_2026-09-07` 12 節の「Godot より先に flutter_gpu を試す」の実装。製品機能ではない（`lib/screens/terrain_spike/` の GPU チップ）。
+
+| ファイル | 役割 |
+|---|---|
+| `lib/core/terrain/gpu/terrain_gpu_renderer.dart` | `TerrainGpuRenderer`: DEM を頂点バッファ（position + uv + shade、24B/頂点、32bit インデックス）に一度だけ上げ、面の束（position + rgba、28B/頂点）も一度だけ。毎フレームは mvp 1 本（正射影 or 透視）をユニフォームに書いて 2 draw。深度バッファ付き（面は深度を書かず、NDC で 0.0005 手前に寄せて z-fight 回避）。`GpuImageSurface` に描いて `ui.Image` を Canvas に `drawImageRect` |
+| `terrain_gpu_renderer_stub.dart` / `terrain_gpu.dart` | web 用の空実装と条件 export（`package:flutter_gpu` は dart:ffi 依存） |
+| `shaders/*.vert|frag`, `terrain.shaderbundle.json`, `hook/build.dart` | シェーダ束。`flutter_gpu_shaders` の build hook が `build/shaderbundles/terrain.shaderbundle` を作り、pubspec の assets で載せる（web ビルドでも hook は走る） |
+| `android/app/src/main/AndroidManifest.xml` | `io.flutter.embedding.android.EnableFlutterGPU=true`（無いと `gpuContext` が例外） |
+
+正射影の mvp は `TerrainCamera.project` と同じ幾何を行列にしたもの（真上 = 2D 地図と一致）。奥行きは `TerrainCamera.depth` を DEM の箱の 8 隅で正規化。
+透視は「画面中心で 1m = scale px になる距離」に視点を置く（fov 50°）。NDC は +Y が上、z ∈ [0, 1]（OpenGL の [-1, 1] を半分に畳む）。
+ラベルは Dart 側で `toScreen`（最後の mvp）を使って Canvas に描く。ヒットテストは範囲外。
+
+計測の結果は下の表（Pixel 9・profile）。
+
 ## 未着手
 
 1. `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）。いまは `TerrainMapLayer` が

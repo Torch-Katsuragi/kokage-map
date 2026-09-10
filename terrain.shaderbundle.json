@@ -1,0 +1,18 @@
+{
+  "TerrainVertex": {
+    "type": "vertex",
+    "file": "shaders/terrain.vert"
+  },
+  "TerrainFragment": {
+    "type": "fragment",
+    "file": "shaders/terrain.frag"
+  },
+  "PolygonVertex": {
+    "type": "vertex",
+    "file": "shaders/polygon.vert"
+  },
+  "PolygonFragment": {
+    "type": "fragment",
+    "file": "shaders/polygon.frag"
+  }
+}

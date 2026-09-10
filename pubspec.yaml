@@ -96,6 +96,11 @@ dependencies:
   # flutter_secure_storage: 削除（lib/内で未使用、win32バージョン競合の原因）
   mobile_scanner: ^7.1.4
   package_info_plus: ^9.0.0         # win32 ^5 vs ^6 競合のため据え置き
+  # 3D の flutter_gpu スパイク（Vault 3D化の詰め 12 節）。web は stub（lib/core/terrain/gpu/）
+  flutter_gpu:
+    sdk: flutter
+  flutter_gpu_shaders: ^0.5.2 # hook/build.dart でシェーダ束（terrain.shaderbundle）を作る
+  hooks: ^2.2.0
   maplibre: ^0.3.6
   # ⚠ maplibre_webview（デスクトップのWebView実装）は 2026-08-25 に外した。
   #    デスクトップ版の撤去にあわせて不要になり、推移的に入っていた
@@ -153,6 +158,7 @@ flutter:
     - assets/sounds/
     - assets/changelog/
     - assets/user_guide/
+    - build/shaderbundles/terrain.shaderbundle # hook/build.dart が作る（flutter_gpu）
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

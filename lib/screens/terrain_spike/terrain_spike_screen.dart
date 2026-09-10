@@ -14,6 +14,7 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -23,6 +24,7 @@ import 'package:geobase/geobase.dart' as geo;
 import '../../core/terrain/contours.dart';
 import '../../core/terrain/dem_grid.dart';
 import '../../core/terrain/dem_tiles.dart';
+import '../../core/terrain/gpu/terrain_gpu.dart';
 import '../../core/terrain/terrain_camera.dart';
 import '../../core/terrain/terrain_mesh.dart';
 import '../../core/terrain/terrain_painter.dart';
@@ -93,6 +95,17 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   bool _useGeoJson = false; // 合成の線・面の代わりに GeoJSON → TerrainSceneBuilder のシーンを出す
   final Map<int, TerrainScene> _sceneByStep = {};
 
+  // flutter_gpu スパイク（Vault 3D化の詰め 12 節）: 頂点はデバイスバッファに一度だけ、毎フレームは mvp だけ。
+  // 深度バッファがあるので pitch の上限も帯分割も無い。ラベルは Canvas で上描き
+  bool _useGpu = false;
+  bool _perspective = false;
+  int _gpuLoadPolygons = 0; // 負荷用の格子状の面（0 / 1 万 / 10 万）
+  TerrainGpuRenderer? _gpu;
+  String _gpuStatus = '';
+  bool _gpuBusy = false;
+
+  double get _maxPitchDeg => _useGpu ? 85 : 70;
+
   // 計測
   late final Ticker _ticker;
   int _frames = 0;
@@ -132,7 +145,85 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     _repaint.dispose();
     SchedulerBinding.instance.removeTimingsCallback(_timingsCallback);
     _texture?.dispose();
+    _gpu?.dispose();
     super.dispose();
+  }
+
+  // ── flutter_gpu ────────────────────────────────────
+
+  /// GPU 描画系を用意して、いまのシーン（DEM・テクスチャ・面）を上げる
+  Future<void> _ensureGpu() async {
+    if (_gpuBusy) return;
+    _gpuBusy = true;
+    try {
+      _gpu ??= await TerrainGpuRenderer.create();
+      final dem = _dem;
+      final tex = _texture;
+      if (dem == null || tex == null) return; // テクスチャが来たら _setTexture からまた呼ばれる
+      final sw = Stopwatch()..start();
+      _gpu!.setTerrain(dem);
+      await _gpu!.setTexture(tex);
+      _gpu!.setPolygons(_gpuPolygonBatches(dem));
+      _gpuStatus =
+          'GPU 準備 ${sw.elapsedMilliseconds}ms 地形 ${_gpu!.terrainVertexCount} 頂点 面 ${_gpu!.polygonVertexCount} 頂点';
+    } catch (e) {
+      _gpuStatus = 'GPU 不可: $e';
+      _useGpu = false;
+    } finally {
+      _gpuBusy = false;
+      if (mounted) setState(() {});
+      _repaint.value++;
+    }
+  }
+
+  /// 負荷用の面だけ差し替える
+  void _uploadGpuPolygons() {
+    final dem = _dem;
+    final gpu = _gpu;
+    if (dem == null || gpu == null) return;
+    final sw = Stopwatch()..start();
+    gpu.setPolygons(_gpuPolygonBatches(dem));
+    _gpuStatus = '面 ${gpu.polygonVertexCount} 頂点を上げた ${sw.elapsedMilliseconds}ms';
+    _repaint.value++;
+  }
+
+  /// いまの面（全解像度で持ち上げたもの）＋負荷用の格子状の面
+  List<PolygonBatch> _gpuPolygonBatches(DemGrid dem) {
+    final lifted = _useGeoJson ? (_sceneByStep[1]?.polygons ?? const <LiftedPolygon>[]) : (_polygonsByStep[1] ?? _polygons);
+    return [
+      ...PolygonBatch.byChunk(lifted).values,
+      if (_gpuLoadPolygons > 0) _gridPolygons(dem, _gpuLoadPolygons),
+    ];
+  }
+
+  /// DEM の上に [count] 個の小さな四角を格子状に並べた面の束（三角形 2 枚ずつ、半透明の 2 色）。
+  /// 角の高さは DEM から引く。セルに切り分けないので、四角が DEM のセルより大きいと地形に埋まる所が出る
+  static PolygonBatch _gridPolygons(DemGrid dem, int count) {
+    final n = math.sqrt(count).ceil();
+    final pitchX = dem.width / n;
+    final pitchY = dem.height / n;
+    final s = math.min(pitchX, pitchY) * 0.8;
+    final xyz = Float32List(n * n * 18);
+    final colors = Int32List(n * n * 6);
+    var o = 0;
+    var v = 0;
+    double z(double x, double y) => dem.elevationAt(dem.originX + x, dem.originY + y);
+    for (var j = 0; j < n; j++) {
+      for (var i = 0; i < n; i++) {
+        final x0 = i * pitchX + (pitchX - s) / 2;
+        final y0 = j * pitchY + (pitchY - s) / 2;
+        final x1 = x0 + s;
+        final y1 = y0 + s;
+        final z00 = z(x0, y0), z10 = z(x1, y0), z01 = z(x0, y1), z11 = z(x1, y1);
+        final tri = [x0, y0, z00, x1, y0, z10, x0, y1, z01, x1, y0, z10, x1, y1, z11, x0, y1, z01];
+        xyz.setRange(o, o + 18, tri);
+        o += 18;
+        final color = (i + j).isEven ? 0x732E7D32 : 0x73E65100;
+        colors.fillRange(v, v + 6, color);
+        v += 6;
+      }
+    }
+    return PolygonBatch(xyz, colors);
   }
 
   // ── シーン ─────────────────────────────────────────
@@ -279,6 +370,7 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     _builders.clear();
     _painter?.texture = image;
     _rebuildMesh();
+    if (_useGpu) _ensureGpu();
   }
 
   TerrainMeshBuilder _builderFor(int step) => _builders[step] ??= TerrainMeshBuilder(
@@ -369,6 +461,12 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
 
   /// [coarse] はジェスチャ・アニメ中の LOD（格子を間引く）で組む
   void _rebuildMesh({bool coarse = false}) {
+    // GPU 描画系では頂点を組み直さない（それを無くすのがスパイクの目的）。面・ラベルを持ち上げる土台の
+    // メッシュは最初の 1 回だけ組む
+    if (_useGpu && _mesh != null) {
+      _repaint.value++;
+      return;
+    }
     final step = (coarse && _lod) ? _coarseStep : 1;
     final mesh = _builderFor(step).build(_camera);
     _mesh = mesh;
@@ -510,7 +608,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
           'build=${_lastBuild.inMilliseconds}ms ($_timing) lift=${_lastLift.inMilliseconds}ms '
           'contour=${_contourInterval.toStringAsFixed(0)}m/$_contourCount本/${_lastContour.inMilliseconds}ms '
           'step=${_mesh?.step} lod=$_lod chunk=$_chunkSize '
-          'scene=${_sceneName.replaceAll(' ', '_')} labels=$_labelCount anim=$_animation';
+          'scene=${_sceneName.replaceAll(' ', '_')} labels=$_labelCount anim=$_animation'
+          '${_useGpu ? ' persp=$_perspective loadPolys=$_gpuLoadPolygons ${_gpu?.stats}' : ''}';
       _uiMs.clear();
       _rasterMs.clear();
       setSpikeTitle(line);
@@ -550,7 +649,7 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
       _camera.scale = (_scaleStart * d.scale).clamp(0.02, 20);
       _camera.bearing = _bearingStart - d.rotation;
       final dy = d.focalPoint.dy - _focalStart.dy;
-      _camera.pitch = (_pitchStart - dy * 0.004).clamp(0.0, 70 * math.pi / 180);
+      _camera.pitch = (_pitchStart - dy * 0.004).clamp(0.0, _maxPitchDeg * math.pi / 180);
       _rebuildMesh(coarse: true);
     } else {
       final move = _camera.unprojectPan(d.focalPointDelta);
@@ -566,6 +665,10 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   }
 
   void _onTapUp(TapUpDetails d, Size size) {
+    if (_useGpu) {
+      setState(() => _hitText = 'GPU 描画系: ヒットテストはスパイクの範囲外');
+      return;
+    }
     final painter = _painter;
     if (painter == null) return;
     final sw = Stopwatch()..start();
@@ -616,16 +719,27 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                             onTapUp: (d) => _onTapUp(d, size),
                             child: ClipRect(
                               child: CustomPaint(
-                                painter: _painter ??= TerrainPainter(
-                                  mesh: mesh,
-                                  camera: _camera,
-                                  texture: _texture,
-                                  lines: _lines,
-                                  polygons: _polygons,
-                                  labels: _labels,
-                                  onPainted: (d) => _lastPaint = d,
-                                  repaint: _repaint,
-                                ),
+                                painter: _useGpu && _gpu != null && _dem != null
+                                    ? _GpuSpikePainter(
+                                        renderer: _gpu!,
+                                        camera: _camera,
+                                        dem: _dem!,
+                                        labels: _labels,
+                                        perspective: _perspective,
+                                        pixelRatio: MediaQuery.devicePixelRatioOf(context),
+                                        onPainted: (d) => _lastPaint = d,
+                                        repaint: _repaint,
+                                      )
+                                    : _painter ??= TerrainPainter(
+                                        mesh: mesh,
+                                        camera: _camera,
+                                        texture: _texture,
+                                        lines: _lines,
+                                        polygons: _polygons,
+                                        labels: _labels,
+                                        onPainted: (d) => _lastPaint = d,
+                                        repaint: _repaint,
+                                      ),
                                 child: const SizedBox.expand(),
                               ),
                             ),
@@ -638,12 +752,12 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                               style: const TextStyle(fontSize: 10, color: Colors.black87, backgroundColor: Colors.white70),
                             ),
                           ),
-                          if (_status.isNotEmpty || _hitText.isNotEmpty)
+                          if (_status.isNotEmpty || _hitText.isNotEmpty || _gpuStatus.isNotEmpty)
                             Positioned(
                               left: 6,
                               top: 4,
                               child: Text(
-                                [_status, _hitText].where((s) => s.isNotEmpty).join('  '),
+                                [_status, _hitText, _gpuStatus].where((s) => s.isNotEmpty).join('  '),
                                 style: const TextStyle(fontSize: 12, color: Colors.black, backgroundColor: Colors.white70),
                               ),
                             ),
@@ -673,8 +787,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                 SizedBox(width: 72, child: Text('pitch ${pitchDeg.toStringAsFixed(0)}°')),
                 Expanded(
                   child: Slider(
-                    value: pitchDeg,
-                    max: 70,
+                    value: math.min(pitchDeg, _maxPitchDeg),
+                    max: _maxPitchDeg,
                     onChanged: (v) => setState(() {
                       _camera.pitch = v * math.pi / 180;
                       _rebuildMesh();
@@ -775,6 +889,46 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                     selected: _animation == a,
                     onSelected: (_) => setState(() => _animation = a),
                   ),
+                const Text('GPU'),
+                ChoiceChip(
+                  label: Text(TerrainGpuRenderer.isSupported ? 'flutter_gpu' : 'flutter_gpu（web 不可）'),
+                  selected: _useGpu,
+                  onSelected: TerrainGpuRenderer.isSupported
+                      ? (v) {
+                          setState(() {
+                            _useGpu = v;
+                            _gpuStatus = v ? 'GPU 準備中…' : '';
+                          });
+                          if (v) {
+                            _ensureGpu();
+                          } else {
+                            _camera.pitch = math.min(_camera.pitch, 70 * math.pi / 180);
+                            _rebuildMesh();
+                          }
+                        }
+                      : null,
+                ),
+                ChoiceChip(
+                  label: const Text('透視'),
+                  selected: _perspective,
+                  onSelected: _useGpu
+                      ? (v) => setState(() {
+                            _perspective = v;
+                            _repaint.value++;
+                          })
+                      : null,
+                ),
+                for (final n in [0, 10000, 100000])
+                  ChoiceChip(
+                    label: Text(n == 0 ? '負荷面なし' : '${n ~/ 10000}万面'),
+                    selected: _gpuLoadPolygons == n,
+                    onSelected: _useGpu
+                        ? (_) {
+                            setState(() => _gpuLoadPolygons = n);
+                            _uploadGpuPolygons();
+                          }
+                        : null,
+                  ),
                 Text(
                   'zoom ${_camera.scale.toStringAsFixed(2)} px/m  '
                   '格子 ${_dem?.cols}x${_dem?.rows} (${_dem?.cellSize.toStringAsFixed(1)}m)  '
@@ -788,4 +942,68 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
       ),
     );
   }
+}
+
+/// flutter_gpu で描いた画像を貼り、ラベルを Canvas で上描きする（スパイク用。重なり判定なし・200 個まで）
+class _GpuSpikePainter extends CustomPainter {
+  _GpuSpikePainter({
+    required this.renderer,
+    required this.camera,
+    required this.dem,
+    required this.labels,
+    required this.perspective,
+    required this.pixelRatio,
+    this.onPainted,
+    super.repaint,
+  });
+
+  final TerrainGpuRenderer renderer;
+  final TerrainCamera camera;
+  final DemGrid dem;
+  final List<TerrainLabel> labels;
+  final bool perspective;
+  final double pixelRatio;
+  final void Function(Duration)? onPainted;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sw = Stopwatch()..start();
+    final image = renderer.render(
+      camera,
+      size,
+      origin: Offset(dem.originX, dem.originY),
+      centerHeight: dem.elevationAt(camera.centerX, camera.centerY),
+      pixelRatio: pixelRatio,
+      perspective: perspective,
+    );
+    if (image != null) {
+      canvas.drawImageRect(
+        image,
+        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+        Offset.zero & size,
+        Paint()..filterQuality = FilterQuality.low,
+      );
+    }
+    final viewport = Offset.zero & size;
+    final boxPaint = Paint()..color = Colors.white.withValues(alpha: 0.85);
+    final anchorPaint = Paint()..color = Colors.black;
+    var placed = 0;
+    for (final label in labels) {
+      if (placed >= 200) break;
+      final z = dem.elevationAt(dem.originX + label.x, dem.originY + label.y);
+      final sp = renderer.toScreen(label.x, label.y, z, size);
+      if (sp == null || !viewport.contains(sp)) continue;
+      final tp = label.painter;
+      final origin = sp - Offset(tp.width / 2, tp.height + 4);
+      final box = Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2);
+      canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(3)), boxPaint);
+      tp.paint(canvas, origin);
+      canvas.drawCircle(sp, 2.5, anchorPaint);
+      placed++;
+    }
+    onPainted?.call(sw.elapsed);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GpuSpikePainter old) => true;
 }

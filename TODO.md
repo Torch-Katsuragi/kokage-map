@@ -99,6 +99,22 @@
   - [ ] 眺めモードの残り: 面・線にも靄、純 Dart 経路（web）の透視。2 本指の移動・拡縮・ホイールは透視の式にした（指の下の地面を留める。実機のピンチは未確認）
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 
+## Android のビルド環境（2026-09-11 夜）
+
+- [x] **AGP 9.1.0 / Gradle 9.3.1 / Java 17 / Kotlin 2.4.0**（Flutter 3.47 のテンプレ構成。`android.newDsl=false` `android.builtInKotlin=false` はテンプレと同じ opt-out）。
+      debug / release を Pixel 9 に新規インストールして起動・SAF のフォルダ選択・3D（GPU）まで確認
+  - `flutter_bluetooth_serial` 0.4.0 は build.gradle が `jcenter()` と AGP 4.1 の buildscript を持ち Gradle 9 で評価に失敗
+    → `third_party/flutter_bluetooth_serial/` に写しを置き build.gradle だけ現代化、`dependency_overrides` で差し替え。
+    ⚠ 写しの pubspec の sdk は `>=2.12.0 <3.0.0` のまま（3.0 に上げると `StreamSink` の継承がクラス修飾子で落ちる）。上流には出さない
+  - file_picker 11 / device_info_plus 13 は「AGP 9 なら Kotlin は組み込み」と決め打ちして KGP を当てないので、
+    opt-out 中は Kotlin が一切コンパイルされず `GeneratedPluginRegistrant` がクラスを見つけられない
+    → file_picker は 12.3（federated。`android_file_picker` は property を見る）へ、それでも残る分は root の `build.gradle.kts` で
+    「builtInKotlin=false のとき、Kotlin ソースを持つのに KGP が無いライブラリにこちらから KGP を当てる」橋渡し（`kotlin.jvm.target.validation.mode=warning`）
+  - file_picker 12 の API 移行: pickFiles は List、`identifier` → `uri`、`path` は file:// のときだけ、`saveFile` は bytes 先渡し
+    （エクスポートは一時フォルダに書いてから保存ダイアログ。Shapefile の組は zip）。⚠ ギャラリー取り込み・エクスポートの実機確認は未
+- [ ] Flutter の警告「KGP を当てるプラグイン（desktop_drop / firebase_* / location）は将来ビルドできなくなる」→ プラグイン側の更新を待って上げる。
+      `android.builtInKotlin=true` にできたら root の橋渡しは外す
+
 ## リファクタリング（2026-09-07）
 
 > ここ1か月で内部を大きく変えたあとの棚卸し。各段で analyze 0 件・unit テスト green を確認してコミット。

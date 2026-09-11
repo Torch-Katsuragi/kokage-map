@@ -122,6 +122,13 @@ dependencies:
   flutter_markdown_plus: ^1.0.12         # 更新履歴・使い方の表示用（flutter_markdown は 2026 に discontinued）
 
 
+# 手元コピーで差し替える依存（pub.dev 版が現行のビルド環境で壊れているもの）
+dependency_overrides:
+  # 0.4.0 の android/build.gradle が jcenter() と AGP 4.1 の buildscript を持ち、Gradle 9 で評価に失敗する。
+  # third_party/ の写しは build.gradle だけ書き直し（namespace・compileSdk 35・mavenCentral）。ソースは同じ
+  flutter_bluetooth_serial:
+    path: third_party/flutter_bluetooth_serial
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

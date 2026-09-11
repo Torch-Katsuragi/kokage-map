@@ -126,7 +126,14 @@ msiexec /a .temp\QGIS-LTR.msi /qn TARGETDIR=C:\Users\<user>\qgis-extract
 
 書かないもの（`QgsProject.skipped` に入り、通知に出る）:
 
-- 画像・オーバーレイ画像（QGISのラスタレイヤには落とせるが未対応）
+- 写真（`ImageNode`。QGIS には写真の概念が無い）
+- GeoTIFF でないオーバーレイ画像（png/jpg は位置を QGIS に伝えられない）
+
+オーバーレイ画像のうち **GeoTIFF（.tif/.tiff）はラスタレイヤとして書く**（2026-09-11）。
+位置は `.tif` の GeoTIFF タグに焼き込み済み（`GeoTiffWriteScheduler`）なので、`.qgs` には
+`provider=gdal` の参照（相対パス）だけを書き、レンダラ（`<pipe>`）は書かない。QGIS は読込時に既定の
+レンダラを付ける。DOM 保持型の更新では参照と名前だけ直し、QGIS が付けた `<pipe>` は残す。
+読み戻し（インポータ）はラスタを黙って飛ばす。⚠ QGIS での実開封は未確認（XML の形は `test/qgs_raster_test.dart`）
 - プロジェクトフォルダの**外**を参照する `.gpkg`
   （渡された相手の環境には無いので、残すと「レイヤはあるが表示されない」になる）
 

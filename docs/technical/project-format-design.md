@@ -392,7 +392,7 @@ QGIS は root 要素に `version` `saveDateTime` `saveUser` `saveUserFull` を�
 | `views[*].style` / `styles.layers` | `maplayer/renderer-v2`（single symbol） | 解決済みの値を各レイヤに書く |
 | `styles.layers.label*` | `maplayer/labeling type="simple"` | **現行未対応。ここで足す** |
 | `styles.defaultStyle` と継承チェーン | 廃止 | 各レイヤに解決済みの値を書く。既定値はアプリ設定だけ（下の矛盾1） |
-| `imageOverlays` | ラスタ `maplayer`（gdal・GeoTIFF）＋ `customproperties/kokage/overlay/*` | **現行未対応**。GeoTIFF は既に生成している |
+| `imageOverlays` | ラスタ `maplayer`（gdal・GeoTIFF）＋ `customproperties/kokage/overlay/*` | ラスタ `maplayer` の参照は **2026-09-11 に対応**（`QgsRasterLayer`）。`customproperties/kokage/overlay/*`（変換パラメータ）は未。GeoTIFF は既に生成している |
 | `sync.driveId/driveFolderName/driveUrl/isReadOnly` | `properties/kokage/sync/*` | リンク情報だけ |
 | `sync.files/lastSynced/driveRevisionId/deviceId` | **共有ファイルには置かない** | アプリ私有領域 `AppSupport/sync/<driveId>.json`（下の矛盾3） |
 | `version` | `properties/kokage/schemaVersion` | 印（`savedAt` `savedBy` `dirName` `contentHash`）も同じ場所 |

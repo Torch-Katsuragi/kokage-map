@@ -290,7 +290,7 @@
     - [ ] ⚠ **web はリロードでサインインが切れる。** 起動時に One Tap を投げる
           ようにしたが、FedCMのクールダウンやChromeの「サイト間のログイン」
           オフで**出ないことがある**。ボタン側の経路を消さないこと
-    - [ ] 本番ドメインを決めたら、承認済みJavaScript生成元に追加する
+    - [x] 本番ドメイン `https://kokage-map.sleeptree.jp` を承認済み JavaScript 生成元に追加済み（[[docs/technical/web-hosting]] の OAuth 生成元。2026-08-28）
 - [ ] ~~`layer_styles`~~ → **優先度を下げた**。`.qgs` にレンダラを書けば冗長。gpkg単体を渡す場合の保険のみ
 
 ## web版（調査済み・2026-08-21）

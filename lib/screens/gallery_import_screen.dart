@@ -76,7 +76,7 @@ class GalleryImporter {
       type: FileType.image,
       allowMultiple: true,
     );
-    if (result == null || result.files.isEmpty) return false;
+    if (result.isEmpty) return false;
 
     final folderPath = targetFolder.getAbsoluteFilePath();
     if (folderPath == null) {
@@ -92,7 +92,7 @@ class GalleryImporter {
     int imported = 0;
     // リダクションされた可能性があり、実際に位置情報が取れなかった枚数
     int strippedLocation = 0;
-    for (final file in result.files) {
+    for (final file in result) {
       try {
         // Photo Picker は表示名がメディアID（例: "20.jpg"）になるので、
         // MediaStore から元のファイル名を引き直せたらそちらを使う
@@ -167,13 +167,19 @@ class GalleryImporter {
 
   /// 元のファイル名を解決する（Android のみ MediaStore へ問い合わせ）。
   /// 取れなければピッカーが報告した表示名のまま。
+  /// Android の content URI（file_picker 12 で `identifier` は `uri` になった。キャッシュにコピーされたものは file://）
+  static String? _contentUri(PlatformFile file) {
+    final uri = file.uri;
+    return uri.scheme == 'content' ? uri.toString() : null;
+  }
+
   static Future<String> _resolveSourceName(PlatformFile file) async {
-    if (PlatformCapabilities.supportsNativeGalleryCopy &&
-        file.identifier != null) {
+    final contentUri = _contentUri(file);
+    if (PlatformCapabilities.supportsNativeGalleryCopy && contentUri != null) {
       try {
         final name = await _channel.invokeMethod<String>(
           'resolveDisplayName',
-          {'uri': file.identifier},
+          {'uri': contentUri},
         );
         if (name != null && name.isNotEmpty) return name;
       } catch (_) {}
@@ -187,11 +193,11 @@ class GalleryImporter {
   /// 非 Android や identifier が無い場合は File.copy でフォールバック。
   static Future<_CopyResult> _copyFile(PlatformFile file, String destPath) async {
     // Android: content URI が取れればネイティブ側で実ファイルコピー
-    if (PlatformCapabilities.supportsNativeGalleryCopy &&
-        file.identifier != null) {
+    final contentUri = _contentUri(file);
+    if (PlatformCapabilities.supportsNativeGalleryCopy && contentUri != null) {
       try {
         final mode = await _channel.invokeMethod<String>('copyOriginal', {
-          'uri': file.identifier,
+          'uri': contentUri,
           'destPath': destPath,
         });
         switch (mode) {
@@ -210,7 +216,16 @@ class GalleryImporter {
     // フォールバック: file_picker のキャッシュパスからコピー
     // ⚠ Android ではこのキャッシュはピッカーが渡したリダクション済みの複製
     final srcPath = file.path;
-    if (srcPath == null) return _CopyResult.failed;
+    if (srcPath == null) {
+      // file_picker 12: content:// のままでキャッシュのパスが無いときは中身を読んで書く（EXIF は落ちうる）
+      try {
+        await File(destPath).writeAsBytes(await file.readAsBytes());
+      } catch (e) {
+        AppLogger.debug('[GalleryImport] readAsBytes failed: $e');
+        return _CopyResult.failed;
+      }
+      return PlatformCapabilities.supportsNativeGalleryCopy ? _CopyResult.maybeRedacted : _CopyResult.original;
+    }
     await File(srcPath).copy(destPath);
     return PlatformCapabilities.supportsNativeGalleryCopy
         ? _CopyResult.maybeRedacted

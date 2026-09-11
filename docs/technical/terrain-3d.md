@@ -373,6 +373,36 @@ debug ビルドの数値もほぼ同じ（純 Dart 801² が 17〜19fps・UI 35m
   残る UI 時間はラベルの layout・点の投影と隠れ判定・貼り付け（GIS 側）。密な範囲で寄った瞬間の raster 15〜32ms も点・ラベルの Canvas 描画
 - 3D の出入り 2 往復・3D 中のタップ（情報カード）・GPS 軌跡（動的な線）・オーバーレイ画像（テクスチャ）は従来どおり
 
+## 3D を正に（2026-09-11 昼）
+
+決定（松本、推奨採用）: 長押しの割り当てなし／pitch 上限 75°／起動時は真上。
+
+- `Terrain3dMode` の既定は `!kIsWeb`。Android / desktop は起動から 3D（pitch 0 = 2D と同じ絵）。ツールバーの ⛰ は web だけ
+- **3D の間は MapLibre を組まない**（`_buildMapLibreMap` が `SizedBox`）。ネイティブの地図も Graphics メモリも持たない。
+  web は 3D を抜けたときにここで組み直す（カメラは `RMapController` が覚えている）
+- `RMapController.jumpOverride`: `move` / `moveAndRotate` / `animateTo` を 3D のカメラへ流す。**置いた瞬間に attach 前の保留分も流す**
+  （3D 既定では `attachStyle` が来ず、起動時の現在位置ジャンプが永久に保留されていた）
+- `_pushFeaturesToSources` は MapLibre のソース初期化に関わらず 3D に先に流す（未初期化で早期 return して 3D にフィーチャが来なかった）
+- 3D 側で不足していた 2D 機能は無い（クラスタは格子まとめ、パーティは点とラベル、DeviceTool・描画プレビュー・投げ縄・変形ハンドル・画面外インジケータは済み）。
+  MapLibre のコード（`RMapWidget` / `MapSourceManager` / basemap・overlay mixin / `ml.Layer` を返す party・DeviceTool）は web の 2D のために残っている。
+  web も 3D 既定にできれば（純 Dart 経路の fps 次第）丸ごと消せる。feature_editor の地図は別（MapLibre のまま）
+
+## 眺めモード（透視投影、2026-09-11 昼）
+
+コンパスの長押しで切替（透視中はコンパスの縁が空色）。GPU 経路のみ（純 Dart の描画は正射影の線形性に頼っている）。
+
+- `TerrainCamera.perspective`: 同じ方位・傾き・倍率のまま、画面中心（高さ centerHeight）で 1 m = scale px になる距離に視点を置く（fov 50°）。
+  画面の「上」は `(sinB·cosP, cosB·cosP, sinP)`（視線と直交。真上のときは方位の向き。up = z 軸だと真上で退化する）
+- 投影は線形でないので、ラベル・動的な点・ヒットテストは毎フレーム行列で落とす（`projectPerspective`）。
+  逆投影は逆行列で視線を作り、地上距離 stepMeters ずつ地形をなぞる（`intersectRayPerspective`）。隠れ判定は点から視点へなぞる
+- GPU の mvp は `toUnit × proj × view × diag(1,1,zScale)`。タイルの平行移動は M × T = 4 列目に M の 1・2 列 × 移動量（**w 行も**）
+- 靄: `terrain.frag` がクリップ w（視点からの奥行き）で視点距離 × 1.5〜4 を空色に溶かす。クリアも空色（地平線の上が空）。
+  面・線・点は靄を掛けない（遠くで浮くが、靄より遠いラベルは省く）
+- タイル計画: `groundBounds` は 4 隅の視線と高さ平面の交点。地平線の上を向く隅と遠すぎる隅は靄の先（× 4）で打ち切る。
+  傾けると画面に掛かるタイルが 30 枚まで増える（正射影は 12）。段は `visibleTileCount` の見積もりで下がる
+- Pixel 9 debug: 傾けた眺めで山並みが靄に溶ける。タップの情報カード（面・線）も効く。ドライブは欠けフレーム 0・UI 中央値 6〜18ms・最大 141ms（入った瞬間のタイル一斉読み込み）
+- 未対応: 2 本指の移動・拡縮は正射影の式（中心付近では同じ、端では速さが違う）、面・線の靄、透視中の純 Dart 経路（web）
+
 ## 未着手
 
 1. `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）。いまは `TerrainMapLayer` が

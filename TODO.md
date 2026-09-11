@@ -75,9 +75,10 @@
   - [x] v0.7.0+20 を Play のクローズドテスト（alpha）へ送信（2026-09-11 20:40、審査中）。署名済み AAB（106MB、`259e406`）を Surface で組み
         `play.py upload --track alpha --name 0.7.0+20 --apply`。⚠ 106MB の AAB は API のソケットが 98% で時間切れになることがある →
         `socket.setdefaulttimeout(1800)` を掛けたラッパから呼ぶ（Surface の `C:/Users/mtmtk/play_upload.py`）
-  - [ ] ストアのスクショを 3D の新 UI で撮り直す（Pixel 9 が要る）
-  - [ ] DEM の取得を速くした `d6e3a5a`（主力ソースを同時に取る・AWS は最後の砦・1 段上の親を先に・http.Client 使い回し）は
-        Pixel 9 で体感を確かめてから master へ（一気に寄ったときに理想の段が最後に来る問題。松本 2026-09-11「4,5,6,7,8,9 と順番に読んでいる」）
+  - [x] ストアのスクショを 3D の新 UI で撮り直した（2026-09-11 21:40、ja-JP 5 枚差し替え・審査中）。Pixel 9 の 1080×2424 は上下を切って 1080×2160（Play の 2:1 上限）。
+        原本は Vault `google play console/store_shots_2026-09-11/`
+  - [x] DEM の取得を速くした `d6e3a5a`（主力ソースを同時に取る・AWS は最後の砦・1 段上の親を先に・http.Client 使い回し）:
+        Pixel 9 debug のドライブ 48 秒で欠けフレーム 0・寄せる最中も理想の段が 1.5 秒以内 → master へ ff・web デプロイ（2026-09-11 夜）
   - [x] 3D を正とした UI の後半 ①（2026-09-11。決定: 長押し割り当てなし／pitch 上限 75°／起動時は真上）: Android / desktop は起動から 3D（真上）、
         切替ボタンは web だけ、MapLibre は空のスタイルで組む、`RMapController.jumpOverride` で移動系を 3D に流す（起動時の現在位置ジャンプ含む）
   - [x] 3D の間は MapLibre を組まない（2026-09-11 昼。Android / desktop はネイティブの地図を持たない。web は 3D を抜けたときに組み直す）

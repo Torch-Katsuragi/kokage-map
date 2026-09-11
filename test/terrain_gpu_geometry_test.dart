@@ -167,7 +167,7 @@ void main() {
     tearDown(() {
       TerrainShading.source = TerrainShadeSource.slope;
       TerrainShading.slopeMaxDeg = 50;
-      TerrainShading.slopeStrength = 0.8;
+      TerrainShading.slopeStrength = 0.6;
     });
 
     test('傾斜: 平らは 0.5（変化なし）、急なほど暗く、slopeMaxDeg で頭打ち', () {

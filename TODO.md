@@ -72,7 +72,8 @@
         残: 透視の眺めモード、純 Dart 経路の整理（web にだけ要る）
   - [x] web も GPU（`feature/web-gpu`、2026-09-11 午後）: `package:web` で WebGL2 を直接叩く同 API のレンダラ。スパイク画面の「world GPU」で 801² 回転が 12 → 45〜60 fps。
         地図ページの web も 3D（同日夕）、オーバーレイ画像も web で読む、面・線にも靄。`--wasm` は測って見送り。手法は [[docs/technical/terrain-3d]]「web の GPU」
-  - [ ] v0.7.0+20 を Play のクローズドテストへ（AAB は `tool/play/play.py upload`。本人操作）
+  - [x] v0.7.0+20 を master へ ff・web を本番へデプロイ（2026-09-11 夕）。release の新規インストールで位置情報の許可直後に落ちるバグ（`getBondedDevices`）も同時に修正
+  - [ ] v0.7.0+20 を Play のクローズドテストへ（AAB は `tool/play/play.py upload`。本人操作）。ストアのスクショは 3D の新 UI で撮り直す
   - [x] 3D を正とした UI の後半 ①（2026-09-11。決定: 長押し割り当てなし／pitch 上限 75°／起動時は真上）: Android / desktop は起動から 3D（真上）、
         切替ボタンは web だけ、MapLibre は空のスタイルで組む、`RMapController.jumpOverride` で移動系を 3D に流す（起動時の現在位置ジャンプ含む）
   - [x] 3D の間は MapLibre を組まない（2026-09-11 昼。Android / desktop はネイティブの地図を持たない。web は 3D を抜けたときに組み直す）

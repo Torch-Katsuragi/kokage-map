@@ -111,7 +111,7 @@
     → file_picker は 12.3（federated。`android_file_picker` は property を見る）へ、それでも残る分は root の `build.gradle.kts` で
     「builtInKotlin=false のとき、Kotlin ソースを持つのに KGP が無いライブラリにこちらから KGP を当てる」橋渡し（`kotlin.jvm.target.validation.mode=warning`）
   - file_picker 12 の API 移行: pickFiles は List、`identifier` → `uri`、`path` は file:// のときだけ、`saveFile` は bytes 先渡し
-    （エクスポートは一時フォルダに書いてから保存ダイアログ。Shapefile の組は zip）。エクスポートは Pixel 9 で確認済み（release、SAF の保存 → zip に shp/shx/dbf/cpg/prj）。⚠ ギャラリー取り込みの実機確認は未
+    （エクスポートは一時フォルダに書いてから保存ダイアログ。Shapefile の組は zip）。エクスポート（release、SAF の保存 → zip に shp/shx/dbf/cpg/prj）とギャラリー取り込み（Photo Picker → content:// → プロジェクトフォルダに複製）を Pixel 9 で確認済み（2026-09-11 23:10）
 - [ ] Flutter の警告「KGP を当てるプラグイン（desktop_drop / firebase_* / location）は将来ビルドできなくなる」→ プラグイン側の更新を待って上げる。
       `android.builtInKotlin=true` にできたら root の橋渡しは外す
 

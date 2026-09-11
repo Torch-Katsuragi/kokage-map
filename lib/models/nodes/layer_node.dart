@@ -82,6 +82,9 @@ abstract class LayerNode extends LayerTreeNode {
   /// updateChildren進行中のCompleter（二重実行防止＋完了待ち）
   Completer<void>? _updateChildrenCompleter;
 
+  /// 進行中に呼ばれた（終わったら読み直す）
+  bool _rerunRequested = false;
+
   /// DB からフィーチャを一度でも読んだか。空のレイヤと未ロードのレイヤを区別する
   bool _featuresLoaded = false;
   bool get featuresLoaded => _featuresLoaded;
@@ -637,14 +640,25 @@ abstract class LayerNode extends LayerTreeNode {
       return;
     }
 
-    // 実行中なら完了を待つ（二重実行防止＋呼び出し元に結果を返す）
+    // 実行中なら完了を待ってから**もう一度読む**。進行中の読み込みは古い WHERE（View を消灯する前の
+    // activeViewFilter）で走っていることがあり、その結果をそのまま返すと消灯した View のフィーチャが
+    // 地図に残る（2026-09-01 実機で確認した「View を hide しても消えない」の原因）
     if (_updateChildrenCompleter != null) {
       AppLogger.debug(
-        '[LayerNode] updateChildren already in progress for $layerName, waiting',
+        '[LayerNode] updateChildren already in progress for $layerName, waiting then reloading',
       );
-      return _updateChildrenCompleter!.future;
+      _rerunRequested = true;
+      try {
+        await _updateChildrenCompleter!.future;
+      } catch (_) {
+        // 進行中の失敗は向こうの呼び出し元が受け取る。こちらは読み直す
+      }
+      if (_updateChildrenCompleter != null) return _updateChildrenCompleter!.future; // 別の待ち手が再実行を始めた
+      if (!_rerunRequested) return; // 再実行済み
+      return updateChildren();
     }
 
+    _rerunRequested = false;
     _updateChildrenCompleter = Completer<void>();
 
     try {

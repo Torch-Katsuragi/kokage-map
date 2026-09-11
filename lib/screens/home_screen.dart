@@ -733,34 +733,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       ),
                     if (_projectDir != null) ...[
                       const SizedBox(height: 16),
+                      // 地図から戻ってきたときの導線。タップでピッカーを通さず同じフォルダを開き直す
                       Card(
                         color: Colors.green[50],
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            children: [
-                              const Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
-                                size: 24,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                t.common.selectedFolder,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
+                        child: InkWell(
+                          onTap: _isOpeningProject ? null : () => _openProjectDir(_projectDir!),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                  size: 24,
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _projectDir!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontFamily: 'monospace',
+                                const SizedBox(height: 8),
+                                Text(
+                                  t.common.selectedFolder,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
+                                const SizedBox(height: 4),
+                                Text(
+                                  _projectDir!,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontFamily: 'monospace',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  t.home.tapToOpenMap,
+                                  style: TextStyle(color: Colors.green[800]),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

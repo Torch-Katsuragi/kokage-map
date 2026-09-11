@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>こかげマップ ベータテストのご案内</title>
+<style>
+  body{font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans JP","Hiragino Sans",sans-serif;max-width:760px;margin:0 auto;padding:24px 20px 64px;line-height:1.7;color:#222;background:#fff}
+  h1{font-size:1.7rem;border-bottom:2px solid #1e88e5;padding-bottom:.3em}
+  h2{font-size:1.2rem;margin-top:2em;border-left:4px solid #1e88e5;padding-left:.5em}
+  ol.steps{padding-left:1.4em}
+  ol.steps li{margin:.8em 0}
+  .btn{display:inline-block;margin:.3em 0;padding:.55em 1.1em;border-radius:6px;background:#1e88e5;color:#fff;text-decoration:none;font-weight:600}
+  .btn:hover{background:#1565c0}
+  .note{background:#f3f7fb;border-left:4px solid #90caf9;padding:.6em 1em;margin:1em 0}
+  .warn{background:#fff8e1;border-left:4px solid #ffb300;padding:.6em 1em;margin:1em 0}
+  dt{font-weight:600;margin-top:1em}
+  dd{margin:.2em 0 0 1em}
+  code{background:#f2f2f2;padding:.05em .3em;border-radius:3px}
+  footer{margin-top:3em;font-size:.9rem;color:#555}
+  .links a{display:inline-block;margin:.3em 1.2em .3em 0}
+</style>
+</head>
+<body>
+<p><a href="/about/">こかげマップについて</a> · <a href="/privacy/">プライバシーポリシー</a></p>
+
+<h1>こかげマップ ベータテストのご案内</h1>
+
+<p>こかげマップ（Android 版）のクローズドテストにご協力ください。Google Play のテスト版として配信しているので、インストールも更新も Play ストアから行えます。</p>
+
+<div class="note">
+テスターの募集は準備中です。参加の手順は下のとおりですが、Play 側の受付が整うまでは「このアプリは利用できません」と表示されることがあります。整い次第、このページを「準備ができました」に書き換えます。
+</div>
+
+<h2>お願いしたいこと</h2>
+<ul>
+  <li>インストールしたら、<strong>14 日間はアンインストールせずに置いておいてください</strong>。Google Play の審査条件（テスター 12 人以上が 14 日間続けて参加していること）のためです</li>
+  <li>普段の作業で使ってみて、おかしいところ・分かりにくいところがあれば教えてください。画面のスクリーンショットがあると助かります</li>
+  <li>手元の GeoPackage（<code>.gpkg</code>）や QGIS のプロジェクトがあれば、それを開いて試してもらえると一番ありがたいです</li>
+</ul>
+
+<h2>参加の手順（2 ステップ）</h2>
+<p>どちらも <strong>Play ストアで使っている Google アカウント</strong>で開いてください。別のアカウントだと「利用できません」になります。</p>
+<ol class="steps">
+  <li>
+    テスター用の Google グループに参加します。「グループに参加」を押すだけです。<br>
+    <a class="btn" href="https://groups.google.com/g/kokage-map-testers">グループに参加する</a>
+  </li>
+  <li>
+    参加できたら、こちらで「テスターになる」を押し、その下の「Google Play からダウンロード」からインストールします。<br>
+    <a class="btn" href="https://play.google.com/apps/testing/com.k_root.k_maps">テスターになる</a>
+  </li>
+</ol>
+<p>グループのメンバー一覧はオーナーだけが見られます。参加者どうしにはアドレスは見えません。</p>
+
+<h2>つまずきやすいところ</h2>
+<dl>
+  <dt>リンクを開いたのに「このアプリは利用できません」と出る</dt>
+  <dd>Play にログインしているアカウントが、グループに参加したアカウントと違っています。Play ストアアプリの右上のアイコンからアカウントを切り替えてください</dd>
+  <dt>「テスターになる」を押したのに Play ストアでアプリが出てこない</dt>
+  <dd>反映に数分かかることがあります。Play ストアアプリを一度閉じて開き直してください</dd>
+  <dt>家族共有や仕事用プロファイルのアカウントを使っている</dt>
+  <dd>テストの対象外になることがあります。個人の Google アカウントでお試しください</dd>
+  <dt>初回起動で位置情報の許可を押した直後に終了する</dt>
+  <dd>v0.7.0 で修正済みです。Play ストアから最新版に更新してください</dd>
+</dl>
+
+<h2>不具合・要望の報告</h2>
+<p>報告フォームは準備中です。それまでは、ふだんの連絡手段（LINE など）で、画面のスクリーンショットと一緒にお知らせください。GitHub のアカウントをお持ちの方は <a href="https://github.com/Torch-Katsuragi/kokage-map/issues">Issues</a> からでも構いません。</p>
+
+<h2>データの扱い</h2>
+<p>アプリは、あなたが選んだフォルダのファイルだけを読み書きします。開発者にデータが送られることはありません。詳しくは <a href="/privacy/">プライバシーポリシー</a> をご覧ください。</p>
+
+<p class="links"><a href="/about/">こかげマップについて</a> <a href="https://kokage-map.sleeptree.jp/">web 版を開く</a> <a href="https://github.com/Torch-Katsuragi/kokage-map">ソースコード（GitHub）</a></p>
+
+<footer>© Nemurigi Kobo / ねむりぎ工房</footer>
+</body>
+</html>

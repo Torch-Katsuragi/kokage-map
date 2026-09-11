@@ -65,14 +65,7 @@ class LayerTile extends ConsumerWidget {
 
     final tileContent = GestureDetector(
       onTap: () => ref.read(selectedLayerNodeProvider.notifier).select(node),
-      onDoubleTap: () {
-        final coords = node.getAllCoordinates();
-        if (coords.isEmpty) return;
-        ref.read(mapControllerHolderProvider)?.fitCoordinates(
-          coords,
-          padding: const EdgeInsets.all(50),
-        );
-      },
+      onDoubleTap: () => _zoomToLayer(ref),
       child: ListTile(
         contentPadding: const EdgeInsets.only(left: 32, right: 16),
         leading: _buildLeadingIcon(ref, isSelected),
@@ -175,11 +168,17 @@ class LayerTile extends ConsumerWidget {
             await _absorbMatchingLayers(context, ref);
           case 'add_view':
             await _addView(ref);
+          case 'zoom':
+            _zoomToLayer(ref);
           case 'delete':
             await _handleDelete(context, ref);
         }
       },
       itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'zoom',
+          child: Row(children: [const Icon(Icons.center_focus_strong, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.zoomTo)]),
+        ),
         PopupMenuItem(
           value: 'rename',
           child: Row(children: [const Icon(Icons.edit, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.rename)]),
@@ -211,6 +210,17 @@ class LayerTile extends ConsumerWidget {
         const PopupMenuDivider(),
         PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.layer.delete)),
       ],
+    );
+  }
+
+  /// レイヤの全フィーチャが入る範囲へ寄せる（行のダブルタップと ⋮ の「レイヤへ寄せる」）。
+  /// 地図は現在地で開くので、遠方のデータを持つ gpkg を開いた人には「何も出ない」に見える。その導線
+  void _zoomToLayer(WidgetRef ref) {
+    final coords = node.getAllCoordinates();
+    if (coords.isEmpty) return;
+    ref.read(mapControllerHolderProvider)?.fitCoordinates(
+      coords,
+      padding: const EdgeInsets.all(50),
     );
   }
 

@@ -1223,7 +1223,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       final x = WebMercator.xFromLon(loc.longitude) - dem.originX;
       final y = WebMercator.yFromLat(loc.latitude) - dem.originY;
       if (clip.contains(Offset(x, y))) {
-        points.add(TerrainPoint(x: x, y: y, color: Colors.blue, sizePx: 9));
+        // 半透明: 不透明だと真下の点や短い線を隠す（2026-09-01 実機で確認）
+        points.add(TerrainPoint(x: x, y: y, color: Colors.blue.withValues(alpha: 0.55), sizePx: 9));
       }
       if (headingDeg != null) {
         const len = 30.0;

@@ -1472,23 +1472,39 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       return;
     }
     if (d.pointerCount >= 2) {
-      final before = _camera.scale;
-      _camera.scale = (_scaleStart * d.scale).clamp(TerrainCamera.scaleForZoom(8), TerrainCamera.scaleForZoom(22));
-      if (before != _camera.scale && _size != Size.zero) {
-        final off = d.localFocalPoint - Offset(_size.width / 2, _size.height / 2);
-        final k = 1 - before / _camera.scale;
-        final move = _camera.unprojectPan(off * k);
-        _camera.centerX += move.dx;
-        _camera.centerY += move.dy;
+      if (_camera.perspective && _size != Size.zero) {
+        // 透視: 指の下の地面（中心の高さの平面）を指に付いて来させる。拡縮も焦点の下を留める
+        final from = _groundUnder(d.localFocalPoint - d.focalPointDelta);
+        _camera.scale = (_scaleStart * d.scale).clamp(TerrainCamera.scaleForZoom(8), TerrainCamera.scaleForZoom(22));
+        final to = _groundUnder(d.localFocalPoint);
+        _camera.centerX += from.dx - to.dx;
+        _camera.centerY += from.dy - to.dy;
+      } else {
+        final before = _camera.scale;
+        _camera.scale = (_scaleStart * d.scale).clamp(TerrainCamera.scaleForZoom(8), TerrainCamera.scaleForZoom(22));
+        if (before != _camera.scale && _size != Size.zero) {
+          final off = d.localFocalPoint - Offset(_size.width / 2, _size.height / 2);
+          final k = 1 - before / _camera.scale;
+          final move = _camera.unprojectPan(off * k);
+          _camera.centerX += move.dx;
+          _camera.centerY += move.dy;
+        }
+        final move = _camera.unprojectPan(d.focalPointDelta);
+        _camera.centerX -= move.dx;
+        _camera.centerY -= move.dy;
       }
-      final move = _camera.unprojectPan(d.focalPointDelta);
-      _camera.centerX -= move.dx;
-      _camera.centerY -= move.dy;
     } else if (_mouse && !HardwareKeyboard.instance.isControlPressed) {
       // マウスの左ドラッグは移動（回転は右ドラッグか Ctrl + 左）
-      final move = _camera.unprojectPan(d.focalPointDelta);
-      _camera.centerX -= move.dx;
-      _camera.centerY -= move.dy;
+      if (_camera.perspective && _size != Size.zero) {
+        final from = _groundUnder(d.localFocalPoint - d.focalPointDelta);
+        final to = _groundUnder(d.localFocalPoint);
+        _camera.centerX += from.dx - to.dx;
+        _camera.centerY += from.dy - to.dy;
+      } else {
+        final move = _camera.unprojectPan(d.focalPointDelta);
+        _camera.centerX -= move.dx;
+        _camera.centerY -= move.dy;
+      }
     } else {
       final delta = d.focalPoint - _focalStart;
       _camera.bearing = _bearingStart + delta.dx * 0.006;
@@ -1539,6 +1555,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
   }
 
+  /// 透視のとき、画面座標 [screen] の視線が「カメラ中心の高さの平面」に当たる点（カメラ中心基準）。
+  /// 地平線の上や遠すぎる点は靄の先で打ち切るので、空をつまんで動かしても飛ばない
+  Offset _groundUnder(Offset screen) {
+    final ch = _world.elevationAt(_camera.centerX, _camera.centerY) ?? 0;
+    return _camera.groundPointPerspective(screen, ch, ch, maxDistance: _camera.eyeDistance * TerrainCamera.fogEndFactor);
+  }
+
   /// 画面上の移動量 [delta] を方位・傾きに（1 本指・右ドラッグ・Ctrl + 左ドラッグで共通）
   void _rotateBy(Offset delta) {
     _camera.bearing += delta.dx * 0.006;
@@ -1552,6 +1575,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     if (e is! PointerScrollEvent || _size == Size.zero) return;
     final before = _camera.scale;
     final dz = -e.scrollDelta.dy / 400; // 1 ノッチ ≒ 0.25 段
+    if (_camera.perspective) {
+      final from = _groundUnder(e.localPosition);
+      _camera.zoom = (_camera.zoom + dz).clamp(8, 22);
+      final to = _groundUnder(e.localPosition);
+      _camera.centerX += from.dx - to.dx;
+      _camera.centerY += from.dy - to.dy;
+      _refresh();
+      return;
+    }
     _camera.zoom = (_camera.zoom + dz).clamp(8, 22);
     final off = e.localPosition - Offset(_size.width / 2, _size.height / 2);
     final k = 1 - before / _camera.scale;

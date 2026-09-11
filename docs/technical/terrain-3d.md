@@ -413,11 +413,11 @@ debug ビルドの数値もほぼ同じ（純 Dart 801² が 17〜19fps・UI 35m
   逆投影は逆行列で視線を作り、地上距離 stepMeters ずつ地形をなぞる（`intersectRayPerspective`）。隠れ判定は点から視点へなぞる
 - GPU の mvp は `toUnit × proj × view × diag(1,1,zScale)`。タイルの平行移動は M × T = 4 列目に M の 1・2 列 × 移動量（**w 行も**）
 - 靄: `terrain.frag` がクリップ w（視点からの奥行き）で視点距離 × 1.5〜4 を空色に溶かす。クリアも空色（地平線の上が空）。
-  面・線・点は靄を掛けない（遠くで浮くが、靄より遠いラベルは省く）
+  面・線は同じ距離で α を落として消える（`polygon.frag` / `line.frag` に `ShadeInfo`。空色に寄せると地形の靄と二重に掛かる）。点は掛けない。靄より遠いラベルは省く
 - タイル計画: `groundBounds` は 4 隅の視線と高さ平面の交点。地平線の上を向く隅と遠すぎる隅は靄の先（× 4）で打ち切る。
   傾けると画面に掛かるタイルが 30 枚まで増える（正射影は 12）。段は `visibleTileCount` の見積もりで下がる
 - Pixel 9 debug: 傾けた眺めで山並みが靄に溶ける。タップの情報カード（面・線）も効く。ドライブは欠けフレーム 0・UI 中央値 6〜18ms・最大 141ms（入った瞬間のタイル一斉読み込み）
-- 未対応: 2 本指の移動・拡縮は正射影の式（中心付近では同じ、端では速さが違う）、面・線の靄、透視中の純 Dart 経路（web）
+- 2 本指の移動・拡縮は透視でも指の下の地面（中心の高さの平面）を追う（`_groundUnder`）。純 Dart 経路は透視に対応しない（GPU が無い環境の逃げ道としてだけ残る）
 
 ## web の GPU（WebGL2、2026-09-11 午後・`feature/web-gpu`）
 
@@ -434,7 +434,7 @@ flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world
 - ⚠ `clear` は `depthMask` に従う。面・線で `depthMask(false)` にしたまま次のフレームの clear をすると深度が残り、回すと地形が欠ける。clear の前に true に戻す
 - ⚠ 属性配列はコンテキスト全体の状態。線（6 属性）の後に地形（3 属性）を描くと余りが別バッファを指したまま範囲検査に掛かるので、使わない属性は切る
 - 動作確認はスパイク画面の「world GPU」（本体の `TerrainWorldPainter` + このレンダラを 1 タイルで動かす）。切り分けチップ: 深度なし / MSAA なし / getError / flush。
-  地図ページの web は DEM をパスから読めないので（`kIsWeb` で読み込みを止めている）まだ地形が出ない。次はここ
+  地図ページの web も同じ経路で地形が出る（DEM は http で取れていた。`kIsWeb` で止めていたのはオーバーレイ画像で、これも `fs` 経由で読むようにした）
 - 本体の地図ページでも `HtmlElementView` はプラットフォームビューなので、Flutter の場面が canvas の上下に分かれる（オーバーレイ canvas）。ラベルの Canvas 描画はそのまま動いた
 
 ### 計測（2026-09-11・Surface Pro 9 の Chrome・`web-server --profile`・スパイク画面・ラベル 200）
@@ -452,7 +452,7 @@ flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world
 4. 等高線の描画コスト: 間引いた格子から引いても 1.7 万本で raster 30〜40ms（Impeller の細線）。
    ジェスチャ中はさらに間引くか、等高線だけ間隔を広げる
 5. DEM の dir 同梱・焼き込み CLI・タイルキャッシュからのテクスチャ合成
-6. web の地図ページで地形を出す（DEM の取得を web でも通す。WebGL2 の描画系は上の節で済み）。`--wasm` ビルドの比較
+6. `--wasm` ビルド: 動くが採らない（2026-09-11 計測: 純 Dart の LOD 回転が 43 → 60 fps になる一方、静止の raster が 6 → 16ms（skwasm）。WebGL2 で描く今は要らず、多スレッドには hosting の COOP/COEP も要る）
 
 ## 参考
 

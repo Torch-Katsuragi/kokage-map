@@ -638,19 +638,18 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   // 以下、処理メソッド（既存のコードから移植・調整）
   Future<void> _handleFileSelection() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final result = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions:
             _importExportService
                 .getSupportedImportExtensions()
                 .map((ext) => ext.substring(1))
                 .toList(),
-        allowMultiple: false,
       );
 
-      if (result.isEmpty) return;
+      if (result == null) return;
 
-      final file = result.first;
+      final file = result;
       // file_picker 12 の path は file:// のときだけ。Android の content:// は一時ファイルに写して同じ経路に載せる
       var path = file.path;
       if (path == null) {

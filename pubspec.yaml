@@ -36,14 +36,14 @@ dependencies:
   slang_flutter: ^4.5.0                 # i18n: Flutter統合（TranslationProvider等）
   flutter_riverpod: ^3.0.3 # 状態管理 (v3 + code generation)
   riverpod_annotation: ^4.0.0 # @riverpod アノテーション
-  latlong2: ^0.9.0 # 緯度経度座標型（maplibre 移行後も座標型として使い続けている）
+  latlong2: ^0.10.1 # 緯度経度座標型（maplibre 移行後も座標型として使い続けている）
   geolocator: ^14.0.0 # GPS位置情報取得
   file_picker: ^12.3.0 # ファイル・ディレクトリ選択用（最新版に更新）
   file_selector: ^1.0.3 # 新しいファイル選択・保存ダイアログ用
   sqflite: ^2.3.0 # GeoPackageファイル操作用（sqlite3から移行）
   sqflite_common_ffi_web: ^1.1.1     # web版: sqlite3 WASM でGeoPackageを開く
   path: ^1.8.3 # パス操作用
-  xml: ^6.6.1 # .qgs（QGISプロジェクト）の組み立て用
+  xml: ^7.0.1 # .qgs（QGISプロジェクト）の組み立て用
   archive: ^4.0.9 # .qgz（zip 形式の QGIS プロジェクト）の読み取り用
   nmea: ^3.3.3
   proj4dart: ^2.1.0  # 座標変換用（geobase ^1.5.0 が ^2.0.0 を要求するため据え置き）

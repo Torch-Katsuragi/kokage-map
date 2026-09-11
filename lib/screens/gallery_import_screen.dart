@@ -72,10 +72,7 @@ class GalleryImporter {
   }) async {
     await _ensureMediaLocationPermission();
 
-    final result = await FilePicker.pickFiles(
-      type: FileType.image,
-      allowMultiple: true,
-    );
+    final result = await FilePicker.pickFiles(type: FileType.image);
     if (result.isEmpty) return false;
 
     final folderPath = targetFolder.getAbsoluteFilePath();

@@ -244,7 +244,7 @@ class QgsDocument {
     treeRoot.children.addAll(keep);
     treeRoot.children.addAll(rebuilt);
     treeRoot.children.add(
-      customOrder ?? XmlElement(XmlName('custom-order'), [XmlAttribute(XmlName('enabled'), '0')]),
+      customOrder ?? XmlElement(XmlName.parts('custom-order'), [XmlAttribute(XmlName.parts('enabled'), '0')]),
     );
   }
 
@@ -514,10 +514,10 @@ class QgsDocument {
         option.setAttribute('value', entry.value);
       } else {
         map.children.add(
-          XmlElement(XmlName('Option'), [
-            XmlAttribute(XmlName('name'), entry.key),
-            XmlAttribute(XmlName('type'), 'QString'),
-            XmlAttribute(XmlName('value'), entry.value),
+          XmlElement(XmlName.parts('Option'), [
+            XmlAttribute(XmlName.parts('name'), entry.key),
+            XmlAttribute(XmlName.parts('type'), 'QString'),
+            XmlAttribute(XmlName.parts('value'), entry.value),
           ]),
         );
       }
@@ -548,13 +548,13 @@ class QgsDocument {
     order.children.clear();
     for (final id in project.orderedLayerIds) {
       order.children.add(
-        XmlElement(XmlName('layer'), [XmlAttribute(XmlName('id'), id)]),
+        XmlElement(XmlName.parts('layer'), [XmlAttribute(XmlName.parts('id'), id)]),
       );
     }
     for (final group in project.embeddedGroups) {
       for (final id in group.layerIds) {
         order.children.add(
-          XmlElement(XmlName('layer'), [XmlAttribute(XmlName('id'), id)]),
+          XmlElement(XmlName.parts('layer'), [XmlAttribute(XmlName.parts('id'), id)]),
         );
       }
     }
@@ -567,7 +567,7 @@ class QgsDocument {
   static XmlElement _ensureChild(XmlElement parent, String name) {
     final existing = parent.getElement(name);
     if (existing != null) return existing;
-    final created = XmlElement(XmlName(name));
+    final created = XmlElement(XmlName.parts(name));
     parent.children.add(created);
     return created;
   }

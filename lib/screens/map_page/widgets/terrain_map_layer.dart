@@ -142,24 +142,39 @@ class _ZoomButton extends StatelessWidget {
       );
 }
 
-/// 方位に合わせて回るコンパス。真上（pitch 0）でなければ縁を少し濃くして「傾いている」ことを示す
+/// 方位に合わせて回るコンパス。真上（pitch 0）でなければ縁を少し濃くして「傾いている」ことを示す。
+/// 長押しで眺めモード（透視）の切替（透視中は縁が空色）
 class _CompassButton extends StatelessWidget {
-  const _CompassButton({required this.bearingDeg, required this.pitchDeg, required this.onPressed});
+  const _CompassButton({
+    required this.bearingDeg,
+    required this.pitchDeg,
+    required this.onPressed,
+    this.perspective = false,
+    this.onLongPress,
+  });
 
   final double bearingDeg;
   final double pitchDeg;
+  final bool perspective;
   final VoidCallback onPressed;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) => Tooltip(
         message: t.map.terrain.resetView,
         child: Material(
-          color: Colors.white.withValues(alpha: 0.9),
-          shape: CircleBorder(side: BorderSide(color: pitchDeg > 1 ? Colors.blueGrey : Colors.black26, width: pitchDeg > 1 ? 2 : 1)),
+          color: perspective ? const Color(0xFFDDEBF8) : Colors.white.withValues(alpha: 0.9),
+          shape: CircleBorder(
+            side: BorderSide(
+              color: perspective ? Colors.lightBlue : (pitchDeg > 1 ? Colors.blueGrey : Colors.black26),
+              width: pitchDeg > 1 || perspective ? 2 : 1,
+            ),
+          ),
           elevation: 2,
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onPressed,
+            onLongPress: onLongPress,
             child: SizedBox(
               width: 44,
               height: 44,
@@ -564,6 +579,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _anim.forward(from: 0);
   }
 
+  /// 眺めモード（透視投影）の切替。コンパスの長押し。GPU 経路のみ（純 Dart は正射影の線形性に頼る）
+  void _togglePerspective() {
+    if (_gpu == null) return;
+    setState(() => _camera.perspective = !_camera.perspective);
+    _refresh();
+  }
+
   /// 1 本指を取るツール（真上ロックの対象）
   static bool _toolTakesDrag(String toolName) => toolName == 'Pen' || toolName == 'Overlay Transform';
 
@@ -667,6 +689,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       ..start();
     _meshSw.reset();
     _frameMs = DateTime.now().millisecondsSinceEpoch;
+    _camera.viewport = _size;
     final plan = _planner.plan(_camera, _size, gesturing: _gesturing);
     final planMs = sw.elapsedMilliseconds;
     _lastPlan = plan;
@@ -1698,7 +1721,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
               top: 8,
               child: ValueListenableBuilder<double>(
                 valueListenable: widget.mapBearingNotifier,
-                builder: (_, bearingDeg, _) => _CompassButton(bearingDeg: bearingDeg, pitchDeg: _camera.pitch * 180 / math.pi, onPressed: _resetView),
+                builder: (_, bearingDeg, _) => _CompassButton(
+                  bearingDeg: bearingDeg,
+                  pitchDeg: _camera.pitch * 180 / math.pi,
+                  perspective: _camera.perspective,
+                  onPressed: _resetView,
+                  onLongPress: _togglePerspective,
+                ),
               ),
             ),
             Positioned(

@@ -11,9 +11,11 @@ in float shade;
 
 out vec2 v_uv;
 out float v_shade;
+out float v_w;  // クリップ座標の w（透視なら視点からの奥行き。靄に使う）
 
 void main() {
   v_uv = uv;
   v_shade = shade;
   gl_Position = frame_info.mvp * vec4(position, 1.0);
+  v_w = gl_Position.w;
 }

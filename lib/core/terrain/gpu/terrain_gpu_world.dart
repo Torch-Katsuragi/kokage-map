@@ -272,60 +272,72 @@ class TerrainGpuWorldRenderer {
     }
     if (entries.isEmpty) return null;
 
-    // 2. カメラ中心基準の正射影。深度はタイルの箱（xy）× 標高の範囲で [0, 1] に正規化
-    final cosB = math.cos(camera.bearing);
-    final sinB = math.sin(camera.bearing);
-    final cosP = math.cos(camera.pitch);
-    final sinP = math.sin(camera.pitch);
+    // 2. カメラ中心基準の投影。正射影は深度をタイルの箱（xy）× 標高の範囲で [0, 1] に正規化、
+    //    透視は TerrainCamera の view × projection（NDC z を [0, 1] に畳む）
     final zs = camera.zScale;
-    final pc = camera.project(0, 0, centerHeight);
-    final kx = 2 * camera.scale / size.width;
-    final ky = 2 * camera.scale / size.height;
-    var dMin = double.infinity;
-    var dMax = -double.infinity;
-    var zLo = heightRange.$1;
-    var zHi = heightRange.$2;
-    for (final e in entries) {
-      if (e.terrain.minZ < zLo) zLo = e.terrain.minZ;
-      if (e.terrain.maxZ > zHi) zHi = e.terrain.maxZ;
-    }
-    final zPad = math.max(10.0, (zHi - zLo) * 0.05);
-    zLo -= zPad;
-    zHi += zPad;
-    for (final e in entries) {
-      final ox = e.tile.originX - camera.centerX;
-      final oy = e.tile.originY - camera.centerY;
-      final dem = e.tile.mesh.dem;
-      for (final x in [ox, ox + dem.width]) {
-        for (final y in [oy, oy + dem.height]) {
-          for (final z in [zLo, zHi]) {
-            final d = camera.depth(x, y, z);
-            if (d < dMin) dMin = d;
-            if (d > dMax) dMax = d;
+    final persp = camera.perspective && camera.viewport != ui.Size.zero;
+    final m = _base;
+    var kz = 0.0;
+    if (persp) {
+      final toUnit = vm.Matrix4.identity()
+        ..setEntry(2, 2, 0.5)
+        ..setEntry(2, 3, 0.5);
+      final model = vm.Matrix4.identity()..setEntry(2, 2, zs);
+      final mvp = toUnit * camera.perspectiveViewProjection(centerHeight) * model;
+      m.setAll(0, mvp.storage);
+    } else {
+      final cosB = math.cos(camera.bearing);
+      final sinB = math.sin(camera.bearing);
+      final cosP = math.cos(camera.pitch);
+      final sinP = math.sin(camera.pitch);
+      final pc = camera.project(0, 0, centerHeight);
+      final kx = 2 * camera.scale / size.width;
+      final ky = 2 * camera.scale / size.height;
+      var dMin = double.infinity;
+      var dMax = -double.infinity;
+      var zLo = heightRange.$1;
+      var zHi = heightRange.$2;
+      for (final e in entries) {
+        if (e.terrain.minZ < zLo) zLo = e.terrain.minZ;
+        if (e.terrain.maxZ > zHi) zHi = e.terrain.maxZ;
+      }
+      final zPad = math.max(10.0, (zHi - zLo) * 0.05);
+      zLo -= zPad;
+      zHi += zPad;
+      for (final e in entries) {
+        final ox = e.tile.originX - camera.centerX;
+        final oy = e.tile.originY - camera.centerY;
+        final dem = e.tile.mesh.dem;
+        for (final x in [ox, ox + dem.width]) {
+          for (final y in [oy, oy + dem.height]) {
+            for (final z in [zLo, zHi]) {
+              final d = camera.depth(x, y, z);
+              if (d < dMin) dMin = d;
+              if (d > dMax) dMax = d;
+            }
           }
         }
       }
+      final span = math.max(1e-3, dMax - dMin);
+      final pad = span * 0.02;
+      kz = 1 / (span + 2 * pad);
+      final d0 = dMin - pad;
+      m.fillRange(0, 16, 0);
+      m[0] = kx * cosB;
+      m[4] = -kx * sinB;
+      m[12] = -kx * pc.dx;
+      m[1] = ky * sinB * cosP;
+      m[5] = ky * cosB * cosP;
+      m[9] = ky * zs * sinP;
+      m[13] = ky * pc.dy;
+      m[2] = kz * sinB * sinP;
+      m[6] = kz * cosB * sinP;
+      m[10] = -kz * zs * cosP;
+      m[14] = -kz * d0;
+      m[15] = 1;
     }
-    final span = math.max(1e-3, dMax - dMin);
-    final pad = span * 0.02;
-    final kz = 1 / (span + 2 * pad);
-    final d0 = dMin - pad;
-    final m = _base;
-    m.fillRange(0, 16, 0);
-    m[0] = kx * cosB;
-    m[4] = -kx * sinB;
-    m[12] = -kx * pc.dx;
-    m[1] = ky * sinB * cosP;
-    m[5] = ky * cosB * cosP;
-    m[9] = ky * zs * sinP;
-    m[13] = ky * pc.dy;
-    m[2] = kz * sinB * sinP;
-    m[6] = kz * cosB * sinP;
-    m[10] = -kz * zs * cosP;
-    m[14] = -kz * d0;
-    m[15] = 1;
 
-    // 3. タイルごとの mvp（原点の平行移動を畳む）を host buffer に並べる
+    // 3. タイルごとの mvp（原点の平行移動を畳む: M × T は 4 列目に M の 1・2 列 × 移動量を足すだけ）を host buffer に並べる
     _hostBuffer.reset();
     for (final e in entries) {
       final ox = e.tile.originX - camera.centerX;
@@ -334,12 +346,14 @@ class TerrainGpuWorldRenderer {
       tm[12] += m[0] * ox + m[4] * oy;
       tm[13] += m[1] * ox + m[5] * oy;
       tm[14] += m[2] * ox + m[6] * oy;
+      tm[15] += m[3] * ox + m[7] * oy;
       e.terrainInfo = _hostBuffer.emplace(ByteData.view(Float32List.fromList(tm).buffer));
       // 面と線は地形と同じ高さにあるので、少し手前に寄せて z-fight を避ける。
-      // 面の頂点は細かい DEM で持ち上げ、地形は step で間引いているので、そのぶん（セル幅の半分）は食い違う
+      // 面の頂点は細かい DEM で持ち上げ、地形は step で間引いているので、そのぶん（セル幅の半分）は食い違う。
+      // 透視ではクリップ z を定数ぶんずらす（w で割られるので近いほど効く。スパイクと同じ）
       final dem = e.tile.mesh.dem;
       final biasMeters = 2 + dem.cellSize * e.tile.mesh.step * 0.5;
-      final bias = kz * biasMeters;
+      final bias = persp ? 0.0005 * camera.eyeDistance : kz * biasMeters;
       if (e.polygons != null || e.tile.dynamicPolygons.isNotEmpty) {
         tm[14] -= bias;
         e.polygonInfo = _hostBuffer.emplace(ByteData.view(Float32List.fromList(tm).buffer));
@@ -361,7 +375,8 @@ class TerrainGpuWorldRenderer {
     var draws = 0;
     final commandBuffer = gpu.gpuContext.createCommandBuffer();
     final frame = _surface!.acquireNextFrame();
-    final clear = vm.Vector4(0, 0, 0, 0);
+    // 透視は地平線の上が空になるので空色で塗る（靄と同じ色）。正射影は透明（下の 2D 地図が透ける）
+    final clear = persp ? vm.Vector4(0.78, 0.86, 0.95, 1) : vm.Vector4(0, 0, 0, 0);
     final color = _msaa
         ? gpu.ColorAttachment(
             texture: _msaaColor!,
@@ -380,9 +395,15 @@ class TerrainGpuWorldRenderer {
     final texSlot = _terrainPipeline.fragmentShader.getUniformSlot('tex');
     final terrainInfoSlot = _terrainPipeline.vertexShader.getUniformSlot('FrameInfo');
     final shadeInfoSlot = _terrainPipeline.fragmentShader.getUniformSlot('ShadeInfo');
-    // 陰影の重ね方（TerrainShading.blend）。ホットリロードで変えたら次のフレームから効く
+    // 陰影の重ね方（TerrainShading.blend）と靄（透視のときだけ。視点距離 × 1.5 〜 4 で空色に溶かす）
+    final eyeDist = persp ? camera.eyeDistance : 0.0;
     final shadeInfo = _hostBuffer.emplace(
-      ByteData.view(Float32List.fromList([TerrainShading.blend == TerrainShadeBlend.overlay ? 1 : 0, 0, 0, 0]).buffer),
+      ByteData.view(Float32List.fromList([
+        TerrainShading.blend == TerrainShadeBlend.overlay ? 1 : 0,
+        eyeDist * TerrainCamera.fogStartFactor,
+        eyeDist * TerrainCamera.fogEndFactor,
+        persp ? 1 : 0,
+      ]).buffer),
     );
     pass.bindPipeline(_terrainPipeline);
     pass.setDepthWriteEnable(true);

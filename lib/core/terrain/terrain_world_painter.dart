@@ -255,8 +255,14 @@ class TerrainWorldPainter extends CustomPainter {
   Offset _pcFor(TerrainTileDrawable t) =>
       camera.project(camera.centerX - t.originX, camera.centerY - t.originY, _centerHeight);
 
+  /// 透視で描いているか（GPU 経路のみ）
+  bool get _perspective => gpu != null && camera.perspective && camera.viewport != Size.zero;
+
   /// 世界座標 → 画面座標
   Offset toScreen(double x, double y, double z, Size size) {
+    if (_perspective) {
+      return camera.projectPerspective(x - camera.centerX, y - camera.centerY, z, _centerHeight) ?? const Offset(-1e6, -1e6);
+    }
     final p = camera.project(x - camera.centerX, y - camera.centerY, z - _centerHeight);
     return Offset(size.width / 2 + p.dx * camera.scale, size.height / 2 + p.dy * camera.scale);
   }
@@ -264,6 +270,17 @@ class TerrainWorldPainter extends CustomPainter {
   /// 画面座標 → 視線と地形の交点（世界座標）。地形の外なら null
   Offset? unproject(Offset screen, Size size) {
     final h0 = _centerHeight;
+    if (_perspective) {
+      final hit = camera.intersectRayPerspective(
+        screen,
+        h0,
+        (x, y) => elevationAt(camera.centerX + x, camera.centerY + y),
+        stepMeters: stepMeters,
+        maxHeight: heightRange.$2,
+      );
+      if (hit == null) return null;
+      return Offset(camera.centerX + hit.dx, camera.centerY + hit.dy);
+    }
     // 原点 = カメラ中心（高さ h0）の投影座標系で交点を求める
     final projected = Offset(
       (screen.dx - size.width / 2) / camera.scale,
@@ -283,6 +300,25 @@ class TerrainWorldPainter extends CustomPainter {
 
   /// 世界座標の点が手前の地形に隠れているか
   bool isOccluded(double x, double y, double z) {
+    if (_perspective) {
+      // 点から視点へ向かってなぞる
+      final eye = camera.eyeAt(_centerHeight);
+      final dx = camera.centerX + eye.x - x;
+      final dy = camera.centerY + eye.y - y;
+      final dz = eye.z / camera.zScale - z;
+      final dist = math.sqrt(dx * dx + dy * dy);
+      if (dist < 1e-3) return false;
+      final n = (dist / stepMeters).ceil().clamp(1, 4000);
+      final maxH = heightRange.$2;
+      for (var i = 1; i < n; i++) {
+        final k = i / n;
+        final zRay = z + dz * k;
+        if (zRay > maxH) return false;
+        final h = elevationAt(x + dx * k, y + dy * k);
+        if (h != null && h > zRay + 0.5) return true;
+      }
+      return false;
+    }
     final sinP = math.sin(camera.pitch);
     if (sinP < 1e-6) return false;
     final tanP = math.tan(camera.pitch);
@@ -612,11 +648,15 @@ class TerrainWorldPainter extends CustomPainter {
       final labels = t.labels;
       if (labels.isEmpty) continue;
       final base = indexBase[t]!;
-      // 投影は方位・傾きごとにキャッシュ（点と同じ）。標高はタイル自身の DEM から
+      // 投影は方位・傾きごとにキャッシュ（点と同じ）。標高はタイル自身の DEM から。
+      // 透視は線形でないので毎フレーム行列で落とす（ラベル 1 個 = 積和 12 回。1 万個で 1ms）
+      final persp = _perspective;
+      final dem = t.mesh.dem;
+      // 透視: 靄の始まりより遠いラベルは出さない（遠景で積み重なる）
+      final labelRange2 = persp ? math.pow(camera.eyeDistance * TerrainCamera.fogStartFactor, 2).toDouble() : double.infinity;
       var pl = _labelCache[labels];
-      if (pl == null || pl.bearing != camera.bearing || pl.pitch != camera.pitch || pl.count != labels.length) {
+      if (!persp && (pl == null || pl.bearing != camera.bearing || pl.pitch != camera.pitch || pl.count != labels.length)) {
         final xy = Float32List(labels.length * 2);
-        final dem = t.mesh.dem;
         for (var k = 0; k < labels.length; k++) {
           final wx = t.originX + labels[k].x;
           final wy = t.originY + labels[k].y;
@@ -628,10 +668,22 @@ class TerrainWorldPainter extends CustomPainter {
         _labelCache[labels] = pl;
       }
       for (var k = 0; k < labels.length; k++) {
-        final sp = Offset(
-          size.width / 2 + (pl.xy[k * 2] - pc.dx) * camera.scale,
-          size.height / 2 + (pl.xy[k * 2 + 1] - pc.dy) * camera.scale,
-        );
+        final Offset sp;
+        if (persp) {
+          final wx = t.originX + labels[k].x;
+          final wy = t.originY + labels[k].y;
+          final dx = wx - camera.centerX;
+          final dy = wy - camera.centerY;
+          if (dx * dx + dy * dy > labelRange2) continue;
+          final p = camera.projectPerspective(dx, dy, dem.elevationAt(wx, wy), _centerHeight);
+          if (p == null) continue;
+          sp = p;
+        } else {
+          sp = Offset(
+            size.width / 2 + (pl!.xy[k * 2] - pc.dx) * camera.scale,
+            size.height / 2 + (pl.xy[k * 2 + 1] - pc.dy) * camera.scale,
+          );
+        }
         if (!labelViewport.contains(sp)) continue;
         final label = labels[k];
         if (collideLabels && placed.length >= maxPlaced) {

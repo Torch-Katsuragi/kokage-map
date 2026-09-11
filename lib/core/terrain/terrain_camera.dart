@@ -16,6 +16,8 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:vector_math/vector_math.dart' as vm;
+
 import 'dem_grid.dart';
 import 'web_mercator.dart';
 
@@ -83,6 +85,138 @@ class TerrainCamera {
   double depth(double dx, double dy, double z) {
     final yr = dx * _sinB + dy * _cosB;
     return yr * _sinP - z * zScale * _cosP;
+  }
+
+  // ── 透視（眺め）モード ───────────────────────────
+  //
+  // 正射影と同じ方位・傾き・倍率のまま、画面中心（高さ centerHeight）で 1 m = [scale] px になる距離に
+  // 視点を置いた透視投影。GPU 経路だけ（純 Dart の描画は正射影の線形性に頼っている）。
+  // 投影は線形でないので、ラベル・点・ヒットテストは毎フレーム行列で落とす
+
+  /// 透視で描く
+  bool perspective = false;
+
+  /// 縦の画角（度）
+  double fovDeg = 50;
+
+  /// 画面サイズ（論理 px）。透視の投影に要る。レイヤが毎フレーム入れる
+  Size viewport = Size.zero;
+
+  /// far 面 = 視点距離 × これ
+  static const farFactor = 8.0;
+
+  /// 靄（遠くを空色に溶かす）の始まりと終わり = 視点距離 × これ。終わりより遠くのタイルは読まない
+  static const fogStartFactor = 1.5;
+  static const fogEndFactor = 4.0;
+
+  /// 視点から画面中心までの距離（m）
+  double get eyeDistance => (viewport.height / 2) / scale / math.tan(fovDeg * math.pi / 360);
+
+  /// 視点の位置（カメラ中心基準。z は zScale 倍した空間）
+  vm.Vector3 eyeAt(double centerHeight) {
+    final d = eyeDistance;
+    return vm.Vector3(-_sinB * d * _sinP, -_cosB * d * _sinP, centerHeight * zScale + d * _cosP);
+  }
+
+  /// 画面の「上」に当たる世界の向き（視線と直交。真上のときは方位の向き、横を向くほど鉛直に近づく）
+  vm.Vector3 get _screenUp => vm.Vector3(_sinB * _cosP, _cosB * _cosP, _sinP);
+
+  /// view × projection（座標: カメラ中心基準の (dx, dy, z·zScale)。NDC z ∈ [−1, 1]）。同じ状態なら使い回す
+  vm.Matrix4 perspectiveViewProjection(double centerHeight) {
+    final key = (centerHeight, bearing, pitch, scale, viewport.width, viewport.height, zScale, fovDeg);
+    final cached = _vp;
+    if (cached != null && _vpKey == key) return cached;
+    final d = eyeDistance;
+    final eye = eyeAt(centerHeight);
+    final target = vm.Vector3(0, 0, centerHeight * zScale);
+    final view = vm.makeViewMatrix(eye, target, _screenUp);
+    final aspect = viewport.height == 0 ? 1.0 : viewport.width / viewport.height;
+    final proj = vm.makePerspectiveMatrix(fovDeg * math.pi / 180, aspect, math.max(1.0, d * 0.02), d * farFactor);
+    final vp = proj * view;
+    _vp = vp;
+    _vpKey = key;
+    return vp;
+  }
+
+  vm.Matrix4? _vp;
+  Object? _vpKey;
+
+  /// 透視で画面座標（論理 px）に落とす。視点の裏側なら null。[dx], [dy] はカメラ中心基準、[z] は標高（生）
+  Offset? projectPerspective(double dx, double dy, double z, double centerHeight) {
+    final m = perspectiveViewProjection(centerHeight).storage;
+    final zz = z * zScale;
+    final cx = m[0] * dx + m[4] * dy + m[8] * zz + m[12];
+    final cy = m[1] * dx + m[5] * dy + m[9] * zz + m[13];
+    final cw = m[3] * dx + m[7] * dy + m[11] * zz + m[15];
+    if (cw <= 1e-6) return null;
+    return Offset(viewport.width / 2 * (1 + cx / cw), viewport.height / 2 * (1 - cy / cw));
+  }
+
+  /// 画面座標 → 視線（原点と単位方向。カメラ中心基準、z は標高の単位）
+  (vm.Vector3, vm.Vector3) rayPerspective(Offset screen, double centerHeight) {
+    final inv = vm.Matrix4.inverted(perspectiveViewProjection(centerHeight));
+    final nx = screen.dx / viewport.width * 2 - 1;
+    final ny = 1 - screen.dy / viewport.height * 2;
+    vm.Vector3 unproject(double nz) {
+      final v = inv.transform(vm.Vector4(nx, ny, nz, 1));
+      return vm.Vector3(v.x / v.w, v.y / v.w, v.z / v.w / zScale);
+    }
+
+    final a = unproject(-1);
+    final b = unproject(1);
+    final dir = (b - a)..normalize();
+    return (a, dir);
+  }
+
+  /// 透視の視線と地形の交点（カメラ中心基準の x, y）。視線に沿って地上距離 [stepMeters] ずつ進み、
+  /// 初めて地形の下に潜った区間で線形補間。[maxHeight] より上へ抜けたら null
+  Offset? intersectRayPerspective(
+    Offset screen,
+    double centerHeight,
+    double? Function(double x, double y) elevation, {
+    required double stepMeters,
+    required double maxHeight,
+    double? maxDistance,
+  }) {
+    final (o, dir) = rayPerspective(screen, centerHeight);
+    final horizontal = math.sqrt(dir.x * dir.x + dir.y * dir.y);
+    final dt = stepMeters / math.max(horizontal, 1e-3);
+    final tMax = maxDistance ?? eyeDistance * farFactor;
+    double? prevDiff;
+    var prevX = o.x;
+    var prevY = o.y;
+    for (var t = 0.0; t <= tMax; t += dt) {
+      final x = o.x + dir.x * t;
+      final y = o.y + dir.y * t;
+      final zr = o.z + dir.z * t;
+      if (dir.z >= 0 && zr > maxHeight) return null;
+      final h = elevation(x, y);
+      final diff = h == null ? null : zr - h;
+      if (diff != null && diff <= 0) {
+        if (prevDiff == null || prevDiff <= 0) return Offset(x, y);
+        final k = prevDiff / (prevDiff - diff);
+        return Offset(prevX + (x - prevX) * k, prevY + (y - prevY) * k);
+      }
+      prevDiff = diff;
+      prevX = x;
+      prevY = y;
+    }
+    return null;
+  }
+
+  /// 画面座標の視線が高さ [z] の平面に当たる点（カメラ中心基準）。
+  /// 当たらない（地平線の上）か、中心から [maxDistance] より遠ければ、その向きのまま [maxDistance] に打ち切る
+  Offset groundPointPerspective(Offset screen, double centerHeight, double z, {required double maxDistance}) {
+    final (o, dir) = rayPerspective(screen, centerHeight);
+    final Offset p;
+    if (dir.z < -1e-6) {
+      final t = math.max(0.0, (z - o.z) / dir.z);
+      p = Offset(o.x + dir.x * t, o.y + dir.y * t);
+    } else {
+      p = Offset(o.x + dir.x * 1e9, o.y + dir.y * 1e9);
+    }
+    final d = p.distance;
+    return d > maxDistance ? p * (maxDistance / d) : p;
   }
 
   /// 画面上の移動量（px）を世界座標の移動量（m）に戻す（地表面 z 一定として）

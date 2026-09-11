@@ -326,7 +326,30 @@ class TerrainWorld extends ChangeNotifier {
   ui.Rect groundBounds(TerrainCamera camera, ui.Size size, {double heightRange = 1500}) {
     final z0 = elevationAt(camera.centerX, camera.centerY) ?? 0;
     final pc = camera.project(0, 0, z0);
-    var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;
+    var minX = 0.0, minY = 0.0, maxX = 0.0, maxY = 0.0;
+    if (camera.perspective && camera.viewport != ui.Size.zero) {
+      // 透視: 4 隅の視線が高さ z0 ± の平面に当たる点。地平線の上を向く隅は靄の先（視点距離 × 4）で打ち切る
+      final maxDist = camera.eyeDistance * TerrainCamera.fogEndFactor;
+      for (final corner in [
+        ui.Offset.zero,
+        ui.Offset(size.width, 0),
+        ui.Offset(0, size.height),
+        ui.Offset(size.width, size.height),
+      ]) {
+        for (final z in [z0 - heightRange / 2, z0 + heightRange / 2]) {
+          final p = camera.groundPointPerspective(corner, z0, z, maxDistance: maxDist);
+          minX = math.min(minX, p.dx);
+          maxX = math.max(maxX, p.dx);
+          minY = math.min(minY, p.dy);
+          maxY = math.max(maxY, p.dy);
+        }
+      }
+      return ui.Rect.fromLTRB(camera.centerX + minX, camera.centerY + minY, camera.centerX + maxX, camera.centerY + maxY);
+    }
+    minX = double.infinity;
+    minY = double.infinity;
+    maxX = -double.infinity;
+    maxY = -double.infinity;
     for (final corner in [
       ui.Offset.zero,
       ui.Offset(size.width, 0),

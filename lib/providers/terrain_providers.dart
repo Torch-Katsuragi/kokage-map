@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'terrain_providers.g.dart';
@@ -24,10 +23,11 @@ part 'terrain_providers.g.dart';
 /// 自動で抜ける。閲覧・選択・位置ベースのデータ追加は 3D のままできる。
 @Riverpod(keepAlive: true)
 class Terrain3dMode extends _$Terrain3dMode {
-  /// 3D が正（2026-09-11 松本決定）。Android / desktop は最初から 3D（真上から始まる）。
-  /// web は純 Dart 経路の fps が未計測なので当面 MapLibre が既定で、ツールバーのボタンで 3D に入る
+  /// 3D が正（2026-09-11 松本決定）。全プラットフォームで最初から 3D（真上から始まる）。
+  /// web は純 Dart 経路（Surface Pro 9 の Chrome で 401² LOD 静止 59fps・801² 回転 LOD 43fps）。
+  /// web だけツールバーに ⛰ を残し、重い端末では MapLibre の 2D に逃げられる
   @override
-  bool build() => !kIsWeb;
+  bool build() => true;
 
   void set(bool enabled) => state = enabled;
 

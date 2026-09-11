@@ -72,8 +72,10 @@
   - [x] web も GPU（`feature/web-gpu`、2026-09-11 午後）: `package:web` で WebGL2 を直接叩く同 API のレンダラ。スパイク画面の「world GPU」で 801² 回転が 12 → 45〜60 fps。
         地図ページの web も 3D（同日夕）、オーバーレイ画像も web で読む、面・線にも靄。`--wasm` は測って見送り。手法は [[docs/technical/terrain-3d]]「web の GPU」
   - [x] v0.7.0+20 を master へ ff・web を本番へデプロイ（2026-09-11 夕）。release の新規インストールで位置情報の許可直後に落ちるバグ（`getBondedDevices`）も同時に修正
-  - [/] v0.7.0+20 を Play のクローズドテストへ: 署名済み AAB（106MB、`259e406`）を Surface で組み、`play.py upload ... --track alpha` の dry-run は通った
-        （versionCode 20・ja/en ノート。2026-09-11 夜）。`--apply`（審査に送信）は本人判断。ストアのスクショは 3D の新 UI で撮り直す
+  - [x] v0.7.0+20 を Play のクローズドテスト（alpha）へ送信（2026-09-11 20:40、審査中）。署名済み AAB（106MB、`259e406`）を Surface で組み
+        `play.py upload --track alpha --name 0.7.0+20 --apply`。⚠ 106MB の AAB は API のソケットが 98% で時間切れになることがある →
+        `socket.setdefaulttimeout(1800)` を掛けたラッパから呼ぶ（Surface の `C:/Users/mtmtk/play_upload.py`）
+  - [ ] ストアのスクショを 3D の新 UI で撮り直す（Pixel 9 が要る）
   - [ ] DEM の取得を速くした `d6e3a5a`（主力ソースを同時に取る・AWS は最後の砦・1 段上の親を先に・http.Client 使い回し）は
         Pixel 9 で体感を確かめてから master へ（一気に寄ったときに理想の段が最後に来る問題。松本 2026-09-11「4,5,6,7,8,9 と順番に読んでいる」）
   - [x] 3D を正とした UI の後半 ①（2026-09-11。決定: 長押し割り当てなし／pitch 上限 75°／起動時は真上）: Android / desktop は起動から 3D（真上）、

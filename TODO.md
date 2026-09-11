@@ -57,9 +57,8 @@
   - [x] 1 万面 + 1 万点の負荷（2026-09-09 夜）: profile で UI 中央値 5〜6ms・最大 60〜70ms・停止なし。手法は [[docs/technical/terrain-3d]] の「1 万面 + 1 万点の負荷」。
         ドライブ 4 本連続のソークも停止なし（PSS は 1.4GB で頭打ち。Graphics 600MB は 3D の世界を捨てても残るのでエンジン側のプール。4 分の連続描画で熱で絞られる）
   - [x] 3D 中は MapLibre を空のスタイルにしてタイルとソースを手放す（2026-09-09 夜。ウィジェットごと外すと maplibre_android がネイティブの地図を捨てず往復ごとに 170MB 漏れる）
-  - [ ] ⚠ maplibre 0.3.5 の Android は地図を create/dispose するたびにネイティブの地図が漏れる（feature_editor の地図も）。
-        0.3.6 で修正済みだが **Flutter ≥ 3.44 / Dart ≥ 3.12 が要る**（いまは 3.41.6）。Flutter を上げるときに maplibre も上げる。
-        当面は捨てる前に空のスタイルを読んでタイル・ソースぶんだけ手放す
+  - [x] ⚠ maplibre 0.3.5 の Android は地図を create/dispose するたびにネイティブの地図が漏れる（feature_editor の地図も）
+        → 2026-09-10 に Flutter 3.47.3 / maplibre 0.3.6 へ更新して解消（地図ページからは MapLibre 自体を撤去済み。残るのは feature_editor だけ）
   - [ ] 3D を正とした UI の後半: 切替ボタンを消して MapLibre を外す（インターフェース抽出と同時）、web のマウス操作の実機確認、
         web のオーバーレイ画像、クラスタ（引いた段の格子まとめは済み）。カメラ状態は保存しない（松本 2026-09-09。`.kmeta.json` は `.qgs` へ移す方針でもある）
   - [ ] 焼いた DEM タイル（地理院 DEM5A/10B・県点群 DTM）の配布先は **GitHub Releases**（データ用公開 repo 1 つ。認証なし・無料・
@@ -73,7 +72,10 @@
   - [x] web も GPU（`feature/web-gpu`、2026-09-11 午後）: `package:web` で WebGL2 を直接叩く同 API のレンダラ。スパイク画面の「world GPU」で 801² 回転が 12 → 45〜60 fps。
         地図ページの web も 3D（同日夕）、オーバーレイ画像も web で読む、面・線にも靄。`--wasm` は測って見送り。手法は [[docs/technical/terrain-3d]]「web の GPU」
   - [x] v0.7.0+20 を master へ ff・web を本番へデプロイ（2026-09-11 夕）。release の新規インストールで位置情報の許可直後に落ちるバグ（`getBondedDevices`）も同時に修正
-  - [ ] v0.7.0+20 を Play のクローズドテストへ（AAB は `tool/play/play.py upload`。本人操作）。ストアのスクショは 3D の新 UI で撮り直す
+  - [/] v0.7.0+20 を Play のクローズドテストへ: 署名済み AAB（106MB、`259e406`）を Surface で組み、`play.py upload ... --track alpha` の dry-run は通った
+        （versionCode 20・ja/en ノート。2026-09-11 夜）。`--apply`（審査に送信）は本人判断。ストアのスクショは 3D の新 UI で撮り直す
+  - [ ] DEM の取得を速くした `d6e3a5a`（主力ソースを同時に取る・AWS は最後の砦・1 段上の親を先に・http.Client 使い回し）は
+        Pixel 9 で体感を確かめてから master へ（一気に寄ったときに理想の段が最後に来る問題。松本 2026-09-11「4,5,6,7,8,9 と順番に読んでいる」）
   - [x] 3D を正とした UI の後半 ①（2026-09-11。決定: 長押し割り当てなし／pitch 上限 75°／起動時は真上）: Android / desktop は起動から 3D（真上）、
         切替ボタンは web だけ、MapLibre は空のスタイルで組む、`RMapController.jumpOverride` で移動系を 3D に流す（起動時の現在位置ジャンプ含む）
   - [x] 3D の間は MapLibre を組まない（2026-09-11 昼。Android / desktop はネイティブの地図を持たない。web は 3D を抜けたときに組み直す）

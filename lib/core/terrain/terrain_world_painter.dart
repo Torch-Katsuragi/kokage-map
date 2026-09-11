@@ -19,6 +19,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'gpu/terrain_gpu.dart';
 import 'terrain_camera.dart';
 import 'terrain_mesh.dart';
 import 'terrain_painter.dart';
@@ -31,6 +32,7 @@ class TerrainTileDrawable {
     required this.originY,
     required this.mesh,
     required this.texture,
+    this.builder,
     this.lines = const [],
     this.polygons = const [],
     this.dynamicLines = const [],
@@ -57,6 +59,9 @@ class TerrainTileDrawable {
   final double originX;
   final double originY;
   final TerrainMesh mesh;
+
+  /// [mesh] を作ったビルダー。GPU 経路はこれをキーに頂点バッファを持つ（縁が変わると別物になる）
+  final TerrainMeshBuilder? builder;
   final ui.Image? texture;
   final List<LiftedPolyline> lines;
   final List<LiftedPolygon> polygons;
@@ -189,6 +194,12 @@ class TerrainWorldPainter extends CustomPainter {
 
   /// 回転・傾けの最中（細い線を省く）
   bool gesturing = false;
+
+  /// 地形・面・線を GPU で描く（null なら純 Dart の `drawVertices`）。点とラベルはどちらでも Canvas
+  TerrainGpuWorldRenderer? gpu;
+
+  /// GPU のサーフェスの物理解像度（論理 px × これ）
+  double pixelRatio = 1;
 
   /// 面の束の投影キャッシュ。正射影なので方位・傾きが同じ間は投影が変わらず、
   /// 移動・拡縮は Canvas の変換だけで済む（毎フレーム 50 万頂点を投影し直さない）
@@ -377,6 +388,26 @@ class TerrainWorldPainter extends CustomPainter {
       canvas.translate(-pc.dx, -pc.dy);
     }
 
+    final gpu = this.gpu;
+    if (gpu != null) {
+      // 地形・面・線は GPU（深度バッファ。タイルの順も帯も要らない）。結果の画像を敷く
+      final image = gpu.render(
+        camera,
+        size,
+        tiles,
+        pixelRatio: pixelRatio,
+        heightRange: heightRange,
+        centerHeight: _centerHeight,
+      );
+      if (image != null) {
+        canvas.drawImageRect(
+          image,
+          Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+          Offset.zero & size,
+          Paint()..filterQuality = FilterQuality.low,
+        );
+      }
+    } else {
     // スカートは全タイルぶんを先に描く（地形の前に）。
     // タイルごとに「スカート → 地形」の順だと、手前のタイルのスカートが奥のタイルの斜面の上に乗る
     // （斜面が縁から下がっていく所では、縁から垂らした壁の方が手前に来る）。全部先に描けば、
@@ -492,6 +523,7 @@ class TerrainWorldPainter extends CustomPainter {
         }
       }
       canvas.restore();
+    }
     }
 
     // 点（画面座標）。隠れているものは描かない。

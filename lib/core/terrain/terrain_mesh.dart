@@ -18,6 +18,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'dem_grid.dart';
+import 'gpu/gpu_geometry.dart';
 import 'terrain_camera.dart';
 
 /// 奥行き順に並んだセルのひとかたまり（= チャンク 1 つ）
@@ -276,6 +277,7 @@ class TerrainMeshBuilder {
     final ly = math.cos(az) * math.cos(alt);
     final lz = math.sin(alt);
     final vertexColor = Int32List(cols * rows);
+    _shade = Float32List(cols * rows);
     for (var r = 0; r < rows; r++) {
       final rS = r == 0 ? 0 : r - 1;
       final rN = r == rows - 1 ? rows - 1 : r + 1;
@@ -287,6 +289,7 @@ class TerrainMeshBuilder {
         final len = math.sqrt(nx * nx + ny * ny + 1);
         final dot = (nx * lx + ny * ly + lz) / len;
         final shade = (0.35 + 0.65 * dot.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+        _shade[r * cols + c] = shade;
         final g = (shade * 255).round();
         vertexColor[r * cols + c] = 0xFF000000 | (g << 16) | (g << 8) | g;
       }
@@ -354,6 +357,9 @@ class TerrainMeshBuilder {
   late final double _texW;
   late final double _texH;
   late final Float32List _heights;
+
+  /// 頂点ごとの陰影（0〜1）。GPU 経路はこれをそのまま頂点に持たせる
+  late final Float32List _shade;
   late final int _cellCols;
   late final int _cellCount;
   late final Uint16List _cellBand;
@@ -367,6 +373,41 @@ class TerrainMeshBuilder {
   int? _orderedQuadrant;
 
   int get chunkCount => _chunks.length;
+
+  /// カメラに依らない骨組みだけの [TerrainMesh]（`bands` は空）
+  ///
+  /// GPU 経路（`TerrainGpuWorldRenderer`）では地形の投影はシェーダがやるので `Vertices` は要らないが、
+  /// フィーチャの貼り付け（`LiftedPolygon.byChunk` の [TerrainMesh.chunkOfCell]、線の [TerrainMesh.cellIndexAt]）は
+  /// 同じ骨組みを使う。象限に依らない並び（北東が奥）で `cellBand` / `bandChunk` を埋めておく
+  TerrainMesh buildStatic() {
+    if (_orderedQuadrant == null) {
+      _reorder(3);
+      _orderedQuadrant = 3;
+    }
+    return TerrainMesh._(
+      bands: const [],
+      cellBand: _cellBand,
+      bandChunk: _bandChunk,
+      chunkSize: chunkSize,
+      chunkCols: _chunkCols,
+      dem: dem,
+      step: step,
+      skirt: null,
+      timing: const TerrainMeshTiming(project: Duration.zero, sort: Duration.zero, assemble: Duration.zero, resorted: false),
+    );
+  }
+
+  /// GPU に上げる地形の頂点列（間引き済みの格子 + スカート）。カメラに依らないので一度作れば使い回せる
+  GpuTerrainGeometry gpuGeometry() => GpuTerrainGeometry.build(
+        heights: _heights,
+        cols: cols,
+        rows: rows,
+        cellSize: _cellSize,
+        width: dem.width,
+        height: dem.height,
+        shade: _shade,
+        skirtDepth: skirtDepth,
+      );
 
   TerrainMesh build(TerrainCamera camera) {
     final sw = Stopwatch()..start();

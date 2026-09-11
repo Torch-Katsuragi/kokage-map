@@ -14,5 +14,13 @@
   "PolygonFragment": {
     "type": "fragment",
     "file": "shaders/polygon.frag"
+  },
+  "LineVertex": {
+    "type": "vertex",
+    "file": "shaders/line.vert"
+  },
+  "LineFragment": {
+    "type": "fragment",
+    "file": "shaders/line.frag"
   }
 }

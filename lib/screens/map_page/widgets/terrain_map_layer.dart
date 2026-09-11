@@ -29,6 +29,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/terrain/dem_grid.dart';
 import '../../../core/terrain/dem_tiles.dart';
+import '../../../core/terrain/gpu/terrain_gpu.dart';
 import '../../../core/terrain/terrain_camera.dart';
 import '../../../core/terrain/terrain_frame.dart';
 import '../../../core/terrain/terrain_mesh.dart';
@@ -286,6 +287,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   late final TerrainWorld _world;
   late final TerrainFramePlanner _planner;
   late final TerrainWorldPainter _painter;
+
+  /// 地形・面・線を描く GPU 経路（flutter_gpu）。用意できるまで／web では null（純 Dart 経路）
+  TerrainGpuWorldRenderer? _gpu;
   @override
   TerrainFramePlan? _lastPlan;
 
@@ -456,7 +460,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
             labels += t.labels.length;
             points += t.points.length;
           }
-          debugPrint('[3D] paint ${d.inMilliseconds}ms (tiles ${_painter.tiles.length}, labels $labels, points $points)');
+          final g = _gpu;
+          final gpuInfo = g == null
+              ? ''
+              : ', gpu encode ${g.lastEncode.inMilliseconds}ms upload ${g.lastUpload.inMilliseconds}ms×${g.lastUploads} draws ${g.lastDrawCalls}';
+          debugPrint('[3D] paint ${d.inMilliseconds}ms (tiles ${_painter.tiles.length}, labels $labels, points $points$gpuInfo)');
         }
       },
     );
@@ -476,6 +484,34 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
     if (tool is DeviceTool) {
       _listenedDevice = tool..addListener(_scheduleRefresh);
+    }
+    unawaited(_initGpu());
+  }
+
+  /// flutter_gpu の描画系を用意する（シェーダ束の読み込みは非同期）。
+  /// 用意できるまでは純 Dart 経路で描き、できたら投影済みのメッシュを捨てて骨組みだけのメッシュに切り替える
+  /// （貼り付け済みのシーンはチャンクの骨組みが同じなのでそのまま）。失敗したら純 Dart 経路のまま
+  Future<void> _initGpu() async {
+    if (!TerrainGpuWorldRenderer.isSupported) return;
+    try {
+      final renderer = await TerrainGpuWorldRenderer.create();
+      if (!mounted) {
+        renderer.dispose();
+        return;
+      }
+      renderer.onTextureReady = _scheduleRefresh;
+      _gpu = renderer;
+      _painter.gpu = renderer;
+      for (final v in _meshes.values) {
+        v.$3.dispose();
+      }
+      _meshes.clear();
+      _meshUsed.clear();
+      _painter.disposeCaches();
+      debugPrint('[3D] flutter_gpu で描く');
+      _scheduleRefresh();
+    } catch (e) {
+      debugPrint('[3D] flutter_gpu 不可（純 Dart で描く）: $e');
     }
   }
 
@@ -572,6 +608,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
     _meshes.clear();
     _painter.disposeCaches();
+    _painter.gpu = null;
+    _gpu?.dispose();
+    _gpu = null;
     _repaint.dispose();
     super.dispose();
   }
@@ -727,7 +766,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final cached = _meshes[builder];
     final TerrainMesh mesh;
     _meshUsed[builder] = _frameMs;
-    if (cached != null && cached.$1 == _camera.bearing && cached.$2 == _camera.pitch) {
+    if (_gpu != null) {
+      // GPU 経路: 投影はシェーダ。骨組み（チャンク・セル）だけのメッシュを 1 回作って持つ（方位・傾きに依らない）
+      if (cached != null) {
+        mesh = cached.$3;
+      } else {
+        mesh = builder.buildStatic();
+        _meshes[builder] = (double.nan, double.nan, mesh);
+      }
+    } else if (cached != null && cached.$1 == _camera.bearing && cached.$2 == _camera.pitch) {
       mesh = cached.$3;
     } else {
       if (!_gesturing && step != 16 && _meshSw.elapsedMilliseconds > _meshBudgetMs) {
@@ -756,6 +803,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       originX: tile.bordered.originX,
       originY: tile.bordered.originY,
       mesh: mesh,
+      builder: builder,
       texture: tile.texture,
       lines: scene.lines,
       polygons: scene.polygons,
@@ -1607,6 +1655,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           _size = size;
           _scheduleRefresh();
         }
+        _painter.pixelRatio = MediaQuery.devicePixelRatioOf(context);
         final loading = _world.pendingCount > 0;
         return Stack(
           children: [

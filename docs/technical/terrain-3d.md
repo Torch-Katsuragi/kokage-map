@@ -306,6 +306,48 @@ debug ビルドの数値もほぼ同じ（純 Dart 801² が 17〜19fps・UI 35m
 - 見た目: 面は深度バッファで地形に正しく埋まり、painter's algorithm の帯分割・象限走査・pitch 上限（70°）は不要になった。透視投影も同じコードで出る（fov 50°）
 
 
+## flutter_gpu を TerrainWorld に（2026-09-11）
+
+スパイクの結果（上）を受けて、本体の地図面（`TerrainMapLayer` → `TerrainWorldPainter`）の地形・面・線を flutter_gpu で描くようにした。
+点とラベル・ヒットテスト・投影（`TerrainProjection`）は Dart 側のまま。web は従来の純 Dart 経路（`drawVertices` + 象限走査）がそのまま残る。
+
+| ファイル | 役割 |
+|---|---|
+| `gpu/gpu_geometry.dart` | 純 Dart の頂点パッカー（flutter_gpu 非依存・テスト可）。地形 `GpuTerrainGeometry`（position + uv + shade、32bit インデックス、スカート込み）、面 `GpuPolygonGeometry`（position + rgba、`LiftedPolygon` のリストから `from` 番目以降を増分で）、線 `GpuLineGeometry`（線分 1 本 = 頂点 4 + インデックス 6。両端 a, b・t・side・width・rgba） |
+| `gpu/terrain_gpu_world.dart` | `TerrainGpuWorldRenderer`: 複数タイルを 1 パスで描く。web は `terrain_gpu_world_stub.dart` |
+| `shaders/line.vert` / `line.frag` | 線の太さを画面空間で付ける頂点シェーダ（両端を mvp で落として直交方向に width/2、端も width/2 伸ばして角の欠けを隠す）。`FrameInfo` は mat4 + viewport(vec2) + pixel_ratio |
+| `TerrainMeshBuilder.buildStatic()` / `gpuGeometry()` | 投影しない骨組みだけの `TerrainMesh`（`bands` 空。貼り付けの `chunkOfCell` / `cellIndexAt` に使う）と、GPU に上げる頂点列 |
+| `TerrainWorldPainter.gpu` / `TerrainTileDrawable.builder` | `gpu` があれば地形・面・線を `render` の画像で敷き、無ければ従来どおり。ビルダーは GPU 側のバッファのキー |
+
+仕組み:
+
+- **タイルごとの mvp**: 頂点はタイルの DEM 原点基準のまま。カメラ中心基準の正射影（`_orthographicMvp` と同じ幾何）に
+  タイル原点の平行移動を畳んだ行列をタイルごとに host buffer へ置く（1 枚 64 バイト）。float32 で世界座標を直接持たないので Mercator 2×10⁷ m でも精度が足りる
+- **深度の正規化**: 描くタイルの箱（xy）× 標高の範囲（世界の `heightRange` とタイルの min/max、上下 5% の余白）の 8 隅で `camera.depth` の min/max を取り [0, 1] に
+- **バッファの寿命**: 地形はビルダー（縁が変わると別物）、テクスチャは `ui.Image`（`Texture.fromImage` で包む。コピー無し。包めなければ `toByteData` で別経路）、
+  面・線はシーンのリスト（`_TileScene.polygons` / `lines` の同一性）をキーに持ち、3 秒描いていないものは手放す（`DeviceBuffer` に dispose は無く GC 任せ）。
+  レイヤの `_meshes` は GPU 経路では骨組みメッシュを方位に依らず持ち続ける（`(NaN, NaN, mesh)`）
+- **育つ貼り付け**: 静的シーンは 1 フレーム数 ms ずつ育つので、`list.length` が伸びたぶんだけ新しいバッファを足す（1 回の追加 = 1 draw）。
+  1 秒育っていなければ 1 本に畳む。動的なもの（軌跡・向き・描画中）は毎フレーム host buffer に流す
+- **z-fight**: 面と線は深度を書かず、`2 + セル幅 × step / 2` m ぶん手前に寄せる（面の頂点は細かい DEM で持ち上げ、地形は step で間引くのでその差）。線はさらに 1.5 倍
+- **切り替え**: `TerrainGpuWorldRenderer.create()`（シェーダ束の読み込み）は非同期なので、できるまでは純 Dart 経路で描き、できたら投影済みメッシュを捨てて骨組みに差し替える。
+  失敗したら純 Dart のまま（ログ `[3D] flutter_gpu 不可`）
+- 帯分割・象限走査・スカートを先に描く順・pitch 上限は GPU 経路では要らない（深度バッファ）。コードは web のために残す
+
+### 計測（2026-09-11・Pixel 9・Kitayama-2026・ドライブ 48 秒）
+
+| ビルド | 場所 | UI 中央値 / 最大 | raster 中央値 / 最大 | 欠けフレーム |
+|---|---|---|---|---|
+| debug・GPU | 大沼（フィーチャ少） | 3〜7 / 8〜55ms | 3〜5 / 5〜14ms | 0 / 2,673 |
+| debug・GPU | 林班・林道・1 万点 1 万面の範囲 | 4〜18 / 12〜69ms | 4〜7 / 5〜14ms | 0 / 2,349 |
+| **profile・GPU** | 大沼 | **1〜5 / 7〜28ms** | **3〜5 / 4〜16ms** | 0 / 2,834 |
+| **profile・GPU** | 林班・林道・1 万点 1 万面の範囲 | **2〜17 / 7〜58ms** | **4〜15 / 7〜32ms** | 0 / 2,427 |
+| （参考）profile・純 Dart（9/9） | 同上 | 5〜6 / 60〜70ms | 8〜9 | 0 |
+
+- 40ms 超の `[3D] paint` は最初の 1 フレーム（パイプラインの温め 62ms）と、ラベル数千・点数千のタイルが入った 1 フレーム（45〜56ms、GPU 側は encode 0ms）だけ。
+  残る UI 時間はラベルの layout・点の投影と隠れ判定・貼り付け（GIS 側）。密な範囲で寄った瞬間の raster 15〜32ms も点・ラベルの Canvas 描画
+- 3D の出入り 2 往復・3D 中のタップ（情報カード）・GPS 軌跡（動的な線）・オーバーレイ画像（テクスチャ）は従来どおり
+
 ## 未着手
 
 1. `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）。いまは `TerrainMapLayer` が

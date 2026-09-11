@@ -14,6 +14,10 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-/// `TerrainGpuRenderer` の入口。ffi のある環境（Android / iOS / desktop）では本物、web では stub
+/// `package:flutter_gpu` は dart:ffi 依存なので、web では空実装に差し替える
+library;
+
+export 'gpu_geometry.dart';
 export 'terrain_gpu_renderer_stub.dart' if (dart.library.ffi) 'terrain_gpu_renderer.dart';
 export 'terrain_gpu_stats.dart';
+export 'terrain_gpu_world_stub.dart' if (dart.library.ffi) 'terrain_gpu_world.dart';

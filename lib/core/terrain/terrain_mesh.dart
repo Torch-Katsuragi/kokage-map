@@ -40,7 +40,7 @@ class TerrainShading {
   static double slopeMaxDeg = 50;
 
   /// 傾斜モード: 濃さ（1 = slopeMaxDeg で真っ黒のオーバーレイ、0 = 何もしない）
-  static double slopeStrength = 0.5;
+  static double slopeStrength = 0.8;
 
   /// 光源モード（従来）: 方位と高度
   static int lightAzimuthDeg = 315;

@@ -78,7 +78,7 @@
   - [x] web が起動時に真っ白（DeferredNotLoadedError）: slang_build_runner は build.yaml の options しか読まない → `build.yaml` に `lazy: false`（2026-09-11）
   - [ ] MapLibre のコード削除（`RMapWidget` / `MapSourceManager` / basemap・overlay mixin / party・DeviceTool の `ml.Layer`）: web の逃げ道が要らないと
         分かってから。feature_editor の地図は MapLibre のまま
-  - [ ] 眺めモードの残り: 2 本指の移動・拡縮を透視の式に、面・線にも靄、純 Dart 経路（web）の透視
+  - [ ] 眺めモードの残り: 面・線にも靄、純 Dart 経路（web）の透視。2 本指の移動・拡縮・ホイールは透視の式にした（指の下の地面を留める。実機のピンチは未確認）
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 
 ## リファクタリング（2026-09-07）

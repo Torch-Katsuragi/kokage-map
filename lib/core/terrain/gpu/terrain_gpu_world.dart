@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -23,6 +24,7 @@ import 'package:vector_math/vector_math.dart' as vm;
 import '../terrain_camera.dart';
 import '../terrain_mesh.dart';
 import '../terrain_painter.dart';
+import '../terrain_worker.dart';
 import '../terrain_world_painter.dart' show TerrainTileDrawable;
 import 'gpu_geometry.dart';
 
@@ -115,9 +117,27 @@ class TerrainGpuWorldRenderer {
 
   gpu.GpuImageSurface? _surface;
   gpu.Texture? _depth;
+
+  /// MSAA 4x の色バッファ（対応機種のみ）。毎フレーム `frame.colorTexture` に resolve する
+  gpu.Texture? _msaaColor;
+  static const _sampleCount = 4;
+  late final bool _msaa = gpu.gpuContext.doesSupportOffscreenMSAA;
   int _surfaceWidth = 0;
   int _surfaceHeight = 0;
   gpu.Texture? _white;
+
+  /// 地形テクスチャのサンプラ: 三線形（ミップ段の間も補間）＋異方性。
+  /// 傾けた遠くでテクセルを飛ばして拾うと回転中にちらつくので、ミップは必須
+  late final gpu.SamplerOptions _terrainSampler = gpu.SamplerOptions(
+    minFilter: gpu.MinMagFilter.linear,
+    magFilter: gpu.MinMagFilter.linear,
+    mipFilter: gpu.MipFilter.linear,
+    maxAnisotropy: math.max(1, math.min(4, gpu.gpuContext.maxSamplerAnisotropy)),
+  );
+
+  /// ミップ段を手で上げられる機種か（無理なら包んだテクスチャのまま）
+  late final bool _manualMips = gpu.gpuContext.doesSupportManuallyMippedTextures;
+  bool _loggedTexture = false;
 
   /// 地形の頂点（ビルダーごと。縁が変わるとビルダーが別物になるので自然に入れ替わる）
   final Map<TerrainMeshBuilder, _TerrainBuffers> _terrain = {};
@@ -170,8 +190,19 @@ class TerrainGpuWorldRenderer {
         w,
         h,
         format: depthFormat,
+        sampleCount: _msaa ? _sampleCount : 1,
         enableShaderReadUsage: false,
       );
+      _msaaColor = _msaa
+          ? gpu.gpuContext.createTexture(
+              gpu.StorageMode.deviceTransient,
+              w,
+              h,
+              format: _surface!.format,
+              sampleCount: _sampleCount,
+              enableShaderReadUsage: false,
+            )
+          : null;
       _surfaceWidth = w;
       _surfaceHeight = h;
     }
@@ -296,13 +327,22 @@ class TerrainGpuWorldRenderer {
     var draws = 0;
     final commandBuffer = gpu.gpuContext.createCommandBuffer();
     final frame = _surface!.acquireNextFrame();
+    final clear = vm.Vector4(0, 0, 0, 0);
+    final color = _msaa
+        ? gpu.ColorAttachment(
+            texture: _msaaColor!,
+            resolveTexture: frame.colorTexture,
+            storeAction: gpu.StoreAction.multisampleResolve,
+            clearValue: clear,
+          )
+        : gpu.ColorAttachment(texture: frame.colorTexture, clearValue: clear);
     final pass = commandBuffer.createRenderPass(
       gpu.RenderTarget.singleColor(
-        gpu.ColorAttachment(texture: frame.colorTexture, clearValue: vm.Vector4(0, 0, 0, 0)),
+        color,
         depthStencilAttachment: gpu.DepthStencilAttachment(texture: _depth!, depthClearValue: 1.0),
       ),
     );
-    final sampler = gpu.SamplerOptions(minFilter: gpu.MinMagFilter.linear, magFilter: gpu.MinMagFilter.linear);
+    final sampler = _terrainSampler;
     final texSlot = _terrainPipeline.fragmentShader.getUniformSlot('tex');
     final terrainInfoSlot = _terrainPipeline.vertexShader.getUniformSlot('FrameInfo');
     pass.bindPipeline(_terrainPipeline);
@@ -387,8 +427,8 @@ class TerrainGpuWorldRenderer {
     return _surface!.currentImage;
   }
 
-  /// タイルのテクスチャ。`ui.Image` を包めれば（`Picture.toImage` 由来）コピー無し。
-  /// 包めなければバイト列で別経路に上げ、届くまでは白
+  /// タイルのテクスチャ。まず `ui.Image` を包んで（`Picture.toImage` 由来ならコピー無し・ミップ無し）すぐ描き、
+  /// 裏でミップ段つきのテクスチャを作って差し替える（回転中のちらつき対策）。包めなければ届くまで白
   gpu.Texture _textureFor(ui.Image? image, int nowMs) {
     if (image == null) return _whiteTexture();
     var entry = _textures[image];
@@ -399,31 +439,56 @@ class TerrainGpuWorldRenderer {
         entry.texture = gpu.Texture.fromImage(gpu.gpuContext, image);
       } catch (_) {
         entry.texture = null;
-        _uploadTextureBytes(image, entry);
       }
+      unawaited(_uploadMipped(image, entry));
     }
     entry.lastUsed = nowMs;
     return entry.texture ?? _whiteTexture();
   }
 
-  Future<void> _uploadTextureBytes(ui.Image image, _TextureEntry entry) async {
+  /// バイト列を取り、isolate でミップ段を作り、段ごとに上げる。できたら [onTextureReady]
+  Future<void> _uploadMipped(ui.Image image, _TextureEntry entry) async {
     try {
       final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (bytes == null || !_textures.containsKey(image)) return;
+      final w = image.width;
+      final h = image.height;
+      final rgba = bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
+      final withMips = _manualMips;
+      final mips = withMips
+          ? await TerrainWorker.instance.run(buildMipChain, MipChainArgs(rgba: rgba, width: w, height: h))
+          : const <Uint8List>[];
+      if (!_textures.containsKey(image)) return;
+      // flutter_gpu の fullMipCount は buildMipChain の段数と数え方が違うことがある（512² で 9 と 10）。
+      // テクスチャ側の段数に合わせ、余った小さい段は捨てる
+      final levels = withMips ? math.min(gpu.Texture.fullMipCount(w, h), mips.length + 1) : 1;
       final tex = gpu.gpuContext.createTexture(
         gpu.StorageMode.hostVisible,
-        image.width,
-        image.height,
+        w,
+        h,
         format: gpu.PixelFormat.r8g8b8a8UNormInt,
         enableRenderTargetUsage: false,
+        mipLevelCount: levels,
       );
       tex.overwrite(bytes);
+      for (var i = 0; i + 1 < levels; i++) {
+        tex.overwrite(ByteData.view(mips[i].buffer), mipLevel: i + 1);
+      }
       entry.texture = tex;
+      entry.mipped = withMips;
+      if (!_loggedTexture) {
+        _loggedTexture = true;
+        debugPrint('[3D] gpu texture ${w}x$h mips $levels msaa ${_msaa ? _sampleCount : 1} aniso ${_terrainSampler.maxAnisotropy}');
+      }
       onTextureReady?.call();
     } catch (e) {
       lastError = 'texture: $e';
+      debugPrint('[3D] gpu texture の作成に失敗（包んだテクスチャのまま）: $e');
     }
   }
+
+  int get mippedTextureCount => _textures.values.where((e) => e.mipped).length;
+  bool get msaa => _msaa;
 
   gpu.Texture _whiteTexture() {
     return _white ??= () {
@@ -507,6 +572,7 @@ class TerrainGpuWorldRenderer {
     _lines.clear();
     _surface = null;
     _depth = null;
+    _msaaColor = null;
     _white = null;
   }
 }
@@ -524,6 +590,7 @@ class _TerrainBuffers {
 
 class _TextureEntry {
   gpu.Texture? texture;
+  bool mipped = false;
   int lastUsed = 0;
 }
 

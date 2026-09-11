@@ -333,6 +333,14 @@ debug ビルドの数値もほぼ同じ（純 Dart 801² が 17〜19fps・UI 35m
 - **切り替え**: `TerrainGpuWorldRenderer.create()`（シェーダ束の読み込み）は非同期なので、できるまでは純 Dart 経路で描き、できたら投影済みメッシュを捨てて骨組みに差し替える。
   失敗したら純 Dart のまま（ログ `[3D] flutter_gpu 不可`）
 - 帯分割・象限走査・スカートを先に描く順・pitch 上限は GPU 経路では要らない（深度バッファ）。コードは web のために残す
+- **ミップマップと MSAA（2026-09-11 昼・松本「回転中にテクスチャがギザギザ荒ぶる」）**: 包んだだけの `ui.Image` はミップ段が無く、
+  傾けた遠くでテクセルを飛ばして拾うので回転中にちらつく。`toByteData(rawRgba)` → isolate で 2×2 平均のミップ段（`buildMipChain`、純 Dart）→
+  `createTexture(mipLevelCount:)` に段ごと `overwrite` で上げ、包んだテクスチャと差し替える（届くまでは包んだ方で描く）。
+  サンプラは三線形 + 異方性 4。色バッファは MSAA 4x（`ColorAttachment.resolveTexture` に `frame.colorTexture`、`StoreAction.multisampleResolve`。
+  深度も sampleCount 4）。Pixel 9 debug のドライブで欠けフレーム 0・UI 中央値 4〜8ms・raster 3〜5ms のまま（増分なし）。
+  ⚠ `Texture.fullMipCount(512, 512)` は 9（1×1 を数えない）で `buildMipChain` は 10 段作る → テクスチャ側の段数に合わせて余りを捨てる。
+  flutter_gpu の Dart API に GPU 側でミップを作る口は無い（`doesSupportManuallyMippedTextures` で手上げ）。
+  メモリは包んだ画像 + ミップ付きの複製で 1 タイル +1.3MB（GPU 経路では `ui.Image` を捨てる整理が次の一手）
 
 ### 計測（2026-09-11・Pixel 9・Kitayama-2026・ドライブ 48 秒）
 

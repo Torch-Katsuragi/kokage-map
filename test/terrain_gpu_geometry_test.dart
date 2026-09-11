@@ -130,6 +130,38 @@ void main() {
     });
   });
 
+  group('buildMipChain', () {
+    test('2×2 の平均で 1×1 まで、段数は fullMipCount − 1', () {
+      // 4×4、左半分 (0,0,0,255)・右半分 (255,255,255,255)
+      final rgba = Uint8List(4 * 4 * 4);
+      for (var y = 0; y < 4; y++) {
+        for (var x = 0; x < 4; x++) {
+          final o = (y * 4 + x) * 4;
+          final v = x < 2 ? 0 : 255;
+          rgba[o] = v;
+          rgba[o + 1] = v;
+          rgba[o + 2] = v;
+          rgba[o + 3] = 255;
+        }
+      }
+      final mips = buildMipChain(MipChainArgs(rgba: rgba, width: 4, height: 4));
+      expect(mips.length, 2); // 2×2, 1×1
+      expect(mips[0].length, 2 * 2 * 4);
+      expect(mips[0].sublist(0, 4), [0, 0, 0, 255]); // 左上 = 黒
+      expect(mips[0].sublist(4, 8), [255, 255, 255, 255]); // 右上 = 白
+      expect(mips[1].length, 4);
+      expect(mips[1][0], closeTo(128, 1)); // 全体の平均
+      expect(mips[1][3], 255);
+    });
+
+    test('奇数サイズでも端を詰めて 1×1 まで', () {
+      final rgba = Uint8List(5 * 3 * 4)..fillRange(0, 5 * 3 * 4, 100);
+      final mips = buildMipChain(MipChainArgs(rgba: rgba, width: 5, height: 3));
+      expect(mips.map((m) => m.length ~/ 4).toList(), [2 * 1, 1 * 1]);
+      expect(mips.last, [100, 100, 100, 100]);
+    });
+  });
+
   group('TerrainMeshBuilder.buildStatic', () {
     test('帯は空、チャンクの骨組みは build と同じ', () {
       final builder = TerrainMeshBuilder(dem(), textureWidth: 8, textureHeight: 8, chunkSize: 4);

@@ -40,6 +40,8 @@ class TerrainGpuWorldRenderer {
   String? lastError;
   int get terrainBufferCount => 0;
   int get textureCount => 0;
+  int get mippedTextureCount => 0;
+  bool get msaa => false;
 
   ui.Image? render(
     TerrainCamera camera,

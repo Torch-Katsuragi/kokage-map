@@ -13,9 +13,58 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../terrain_painter.dart';
+
+/// [buildMipChain] の引数（isolate へ送る）
+class MipChainArgs {
+  const MipChainArgs({required this.rgba, required this.width, required this.height});
+
+  /// premultiplied RGBA（`ui.Image.toByteData(rawRgba)` の中身）
+  final Uint8List rgba;
+  final int width;
+  final int height;
+}
+
+/// テクスチャのミップ段（1 段目以降。0 段目 = 元画像は含まない）を 2×2 の平均で作る
+///
+/// 段数は `Texture.fullMipCount` と同じ（1 × 1 まで）。premultiplied なので単純平均で正しい。
+/// 512² で 10 段・合計 0.33 倍のバイト数。isolate で回す前提（`TerrainWorker.instance.run(buildMipChain, args)`）
+List<Uint8List> buildMipChain(MipChainArgs a) {
+  final out = <Uint8List>[];
+  var src = a.rgba;
+  var w = a.width;
+  var h = a.height;
+  while (w > 1 || h > 1) {
+    final nw = math.max(1, w >> 1);
+    final nh = math.max(1, h >> 1);
+    final dst = Uint8List(nw * nh * 4);
+    var o = 0;
+    for (var y = 0; y < nh; y++) {
+      final y0 = math.min(y * 2, h - 1) * w;
+      final y1 = math.min(y * 2 + 1, h - 1) * w;
+      for (var x = 0; x < nw; x++) {
+        final x0 = math.min(x * 2, w - 1);
+        final x1 = math.min(x * 2 + 1, w - 1);
+        final p00 = (y0 + x0) * 4;
+        final p01 = (y0 + x1) * 4;
+        final p10 = (y1 + x0) * 4;
+        final p11 = (y1 + x1) * 4;
+        for (var c = 0; c < 4; c++) {
+          dst[o + c] = (src[p00 + c] + src[p01 + c] + src[p10 + c] + src[p11 + c] + 2) >> 2;
+        }
+        o += 4;
+      }
+    }
+    out.add(dst);
+    src = dst;
+    w = nw;
+    h = nh;
+  }
+  return out;
+}
 
 /// GPU に上げる頂点列の組み立て（純 Dart。`package:flutter_gpu` に依らないのでテストとweb でも読める）
 ///

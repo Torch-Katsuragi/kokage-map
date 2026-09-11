@@ -383,9 +383,21 @@ debug ビルドの数値もほぼ同じ（純 Dart 801² が 17〜19fps・UI 35m
 - `RMapController.jumpOverride`: `move` / `moveAndRotate` / `animateTo` を 3D のカメラへ流す。**置いた瞬間に attach 前の保留分も流す**
   （3D 既定では `attachStyle` が来ず、起動時の現在位置ジャンプが永久に保留されていた）
 - `_pushFeaturesToSources` は MapLibre のソース初期化に関わらず 3D に先に流す（未初期化で早期 return して 3D にフィーチャが来なかった）
-- 3D 側で不足していた 2D 機能は無い（クラスタは格子まとめ、パーティは点とラベル、DeviceTool・描画プレビュー・投げ縄・変形ハンドル・画面外インジケータは済み）。
-  MapLibre のコード（`RMapWidget` / `MapSourceManager` / basemap・overlay mixin / `ml.Layer` を返す party・DeviceTool）は web の 2D のために残っている。
-  web も 3D 既定にできれば（純 Dart 経路の fps 次第）丸ごと消せる。feature_editor の地図は別（MapLibre のまま）
+- 3D 側で不足していた 2D 機能は無い（クラスタは格子まとめ、パーティは点とラベル、DeviceTool・描画プレビュー・投げ縄・変形ハンドル・画面外インジケータは済み）
+- **web も起動から 3D**（同日昼）。純 Dart 経路の fps（Surface Pro 9・Chrome・profile・terrain-spike・合成地形）:
+
+  | 条件 | fps | UI 中央値/最大 | raster 中央値/最大 |
+  |---|---|---|---|
+  | 401² LOD 静止 | 59 | 1 / 25ms | 9 / 13ms |
+  | 801² 回転（LOD、step 4） | 43 | 10 / 20ms | 10 / 20ms |
+  | 801² 回転（全解像度） | 12 | 52 / 67ms | 27 / 29ms |
+
+  本体はジェスチャ中 4 万セルの予算で間引くので、回転中は LOD の行に近い。重い端末の逃げ道として web だけツールバーの ⛰（MapLibre の 2D）を残す。
+  MapLibre のコード（`RMapWidget` / `MapSourceManager` / basemap・overlay mixin / `ml.Layer` を返す party・DeviceTool）はその逃げ道と feature_editor のために残る。
+  逃げ道が要らないと分かったら丸ごと消す
+- ⚠ **web が起動時に `DeferredNotLoadedError` で真っ白**（同日発覚）: `slang_build_runner` は `slang.yaml` を読まず `build.yaml` の options だけを見る。
+  `lazy` の既定 true で日本語が deferred import になり、`LocaleSettings.useDeviceLocaleSync()` が投げていた。`build.yaml` に slang の options を写して `lazy: false`。
+  Flutter 3.47 化（9/10）で codegen を build_runner 一本にしたときから壊れていた
 
 ## 眺めモード（透視投影、2026-09-11 昼）
 

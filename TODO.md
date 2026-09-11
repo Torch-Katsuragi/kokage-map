@@ -74,9 +74,10 @@
         切替ボタンは web だけ、MapLibre は空のスタイルで組む、`RMapController.jumpOverride` で移動系を 3D に流す（起動時の現在位置ジャンプ含む）
   - [x] 3D の間は MapLibre を組まない（2026-09-11 昼。Android / desktop はネイティブの地図を持たない。web は 3D を抜けたときに組み直す）
   - [x] 眺めモード（透視投影、2026-09-11 昼）: コンパス長押しで切替、靄と空、視線なぞりのヒットテスト。手法は [[docs/technical/terrain-3d]]「眺めモード」
-  - [ ] 3D を正とした UI の後半 ③: web の純 Dart 経路の fps を測り、web も 3D 既定にできれば MapLibre のコード（`RMapWidget` / `MapSourceManager` /
-        basemap・overlay mixin / party・DeviceTool の `ml.Layer`）を消す。feature_editor の地図は MapLibre のまま。
-        ⚠ web のリリースビルドを `python -m http.server` で開くと起動時に Dart 例外（2026-09-11、未調査）
+  - [x] web も起動から 3D（2026-09-11 昼。Surface の Chrome で 401² LOD 静止 59fps・801² 回転 LOD 43fps）。⛰ は web の逃げ道（MapLibre 2D）として残す
+  - [x] web が起動時に真っ白（DeferredNotLoadedError）: slang_build_runner は build.yaml の options しか読まない → `build.yaml` に `lazy: false`（2026-09-11）
+  - [ ] MapLibre のコード削除（`RMapWidget` / `MapSourceManager` / basemap・overlay mixin / party・DeviceTool の `ml.Layer`）: web の逃げ道が要らないと
+        分かってから。feature_editor の地図は MapLibre のまま
   - [ ] 眺めモードの残り: 2 本指の移動・拡縮を透視の式に、面・線にも靄、純 Dart 経路（web）の透視
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 

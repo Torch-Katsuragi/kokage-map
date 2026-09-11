@@ -43,6 +43,22 @@ subprojects {
     }
 }
 
+// AGP 9 と android.builtInKotlin=false（Flutter テンプレの opt-out）の間の橋渡し。
+// 「AGP 9 なら Kotlin は組み込み」と決め打ちして KGP を当てないプラグイン（device_info_plus 13 など。
+// android_file_picker のように property を見るものは自分で当てる）は、opt-out 中は Kotlin が一切
+// コンパイルされず GeneratedPluginRegistrant がクラスを見つけられない。Kotlin ソースを持つのに
+// KGP が無いライブラリにこちらから当てる。builtInKotlin を true にしたら不要になる
+subprojects {
+    plugins.withId("com.android.library") {
+        val builtIn = (findProperty("android.builtInKotlin") as String?)?.toBoolean() ?: true
+        val hasKotlinSources = file("src/main/kotlin").exists()
+        if (!builtIn && hasKotlinSources && !plugins.hasPlugin("org.jetbrains.kotlin.android")) {
+            logger.lifecycle("[kokage] apply org.jetbrains.kotlin.android to :${project.name} (builtInKotlin=false)")
+            apply(plugin = "org.jetbrains.kotlin.android")
+        }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(":app")
 }

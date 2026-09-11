@@ -419,6 +419,31 @@ debug ビルドの数値もほぼ同じ（純 Dart 801² が 17〜19fps・UI 35m
 - Pixel 9 debug: 傾けた眺めで山並みが靄に溶ける。タップの情報カード（面・線）も効く。ドライブは欠けフレーム 0・UI 中央値 6〜18ms・最大 141ms（入った瞬間のタイル一斉読み込み）
 - 未対応: 2 本指の移動・拡縮は正射影の式（中心付近では同じ、端では速さが違う）、面・線の靄、透視中の純 Dart 経路（web）
 
+## web の GPU（WebGL2、2026-09-11 午後・`feature/web-gpu`）
+
+flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world_web.dart` が `package:web` で WebGL2 を直接叩く。
+`terrain_gpu.dart` の条件 export で Android と同じクラス名 `TerrainGpuWorldRenderer`・同じ API になり、
+`TerrainWorldPainter` と `TerrainMapLayer` は分岐を持たない。
+
+- 頂点データは Android と同じ `gpu_geometry.dart` のパッカー。シェーダだけ GLSL ES 3.00 に書き直し（`terrain_gpu_world_web.dart` 末尾の Dart 文字列）。
+  uniform はプレーン（`u_mvp` / `u_viewport` / `u_pixel_ratio` / `u_params`）、Impeller の NDC z ∈ [0,1] を `z' = 2z − w` で [-1,1] に直す
+- 描画先は自前の `<canvas>`（`pointer-events: none`）。`platformViewType` を `HtmlElementView` に渡して `CustomPaint` の下に敷き、
+  Flutter は点（動的）とラベルをその上に描く。`render` は画像を返さない（`ui.Image` に包む往復が要らない）
+- MSAA 4x は multisample renderbuffer（RGBA8 + DEPTH_COMPONENT24）→ 既定の framebuffer へ `blitFramebuffer`。
+  ミップは `generateMipmap`（isolate の手作りは要らない）、`EXT_texture_filter_anisotropic` 4。テクスチャは `toByteData(rawRgba)` から `texImage2D`（非同期、できるまで白）
+- ⚠ `clear` は `depthMask` に従う。面・線で `depthMask(false)` にしたまま次のフレームの clear をすると深度が残り、回すと地形が欠ける。clear の前に true に戻す
+- ⚠ 属性配列はコンテキスト全体の状態。線（6 属性）の後に地形（3 属性）を描くと余りが別バッファを指したまま範囲検査に掛かるので、使わない属性は切る
+- 動作確認はスパイク画面の「world GPU」（本体の `TerrainWorldPainter` + このレンダラを 1 タイルで動かす）。切り分けチップ: 深度なし / MSAA なし / getError / flush。
+  地図ページの web は DEM をパスから読めないので（`kIsWeb` で読み込みを止めている）まだ地形が出ない。次はここ
+- 本体の地図ページでも `HtmlElementView` はプラットフォームビューなので、Flutter の場面が canvas の上下に分かれる（オーバーレイ canvas）。ラベルの Canvas 描画はそのまま動いた
+
+### 計測（2026-09-11・Surface Pro 9 の Chrome・`web-server --profile`・スパイク画面・ラベル 200）
+
+| 場面 | 純 Dart | WebGL2 |
+|---|---|---|
+| 401² 静止 | 59 fps | 60 fps（UI 1ms / raster 2〜4ms） |
+| 801² 全解像度・回転 | 12 fps | 60 fps（正射影）、45〜52 fps（透視。UI 中央値 10ms＝Dart 側のラベル・点） |
+
 ## 未着手
 
 1. `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）。いまは `TerrainMapLayer` が
@@ -427,7 +452,7 @@ debug ビルドの数値もほぼ同じ（純 Dart 801² が 17〜19fps・UI 35m
 4. 等高線の描画コスト: 間引いた格子から引いても 1.7 万本で raster 30〜40ms（Impeller の細線）。
    ジェスチャ中はさらに間引くか、等高線だけ間隔を広げる
 5. DEM の dir 同梱・焼き込み CLI・タイルキャッシュからのテクスチャ合成
-6. web の fps 計測（Chrome を前面にして）
+6. web の地図ページで地形を出す（DEM の取得を web でも通す。WebGL2 の描画系は上の節で済み）。`--wasm` ビルドの比較
 
 ## 参考
 

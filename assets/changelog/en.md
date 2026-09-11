@@ -15,7 +15,7 @@
 
 ### Web
 
-- The web app opens in the same 3D map. Controls match Android; with a mouse, left-drag pans, right-drag (or Ctrl + left) rotates and tilts, and the wheel zooms
+- The web app opens in the same 3D map, drawn on the GPU through WebGL2. Controls match Android; with a mouse, left-drag pans, right-drag (or Ctrl + left) rotates and tilts, and the wheel zooms
 
 ## v0.6.2 — 2026/09/07
 

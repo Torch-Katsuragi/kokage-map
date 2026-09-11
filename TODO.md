@@ -70,6 +70,8 @@
         ミップマップ（isolate で段を作って手上げ）＋ MSAA 4x ＋異方性 4 で回転中のちらつきを止めた（同日昼）。
         線の端を丸く・点を GPU に・複製ができたら `ui.Image` を手放す・陰影は傾斜依存（`TerrainShading`、濃さ 0.6）も同日。
         残: 透視の眺めモード、純 Dart 経路の整理（web にだけ要る）
+  - [x] web も GPU（`feature/web-gpu`、2026-09-11 午後）: `package:web` で WebGL2 を直接叩く同 API のレンダラ。スパイク画面の「world GPU」で 801² 回転が 12 → 45〜60 fps。
+        残: 地図ページの web で DEM を読む（`kIsWeb` で止めている）、`--wasm` 比較。手法は [[docs/technical/terrain-3d]]「web の GPU」
   - [x] 3D を正とした UI の後半 ①（2026-09-11。決定: 長押し割り当てなし／pitch 上限 75°／起動時は真上）: Android / desktop は起動から 3D（真上）、
         切替ボタンは web だけ、MapLibre は空のスタイルで組む、`RMapController.jumpOverride` で移動系を 3D に流す（起動時の現在位置ジャンプ含む）
   - [x] 3D の間は MapLibre を組まない（2026-09-11 昼。Android / desktop はネイティブの地図を持たない。web は 3D を抜けたときに組み直す）

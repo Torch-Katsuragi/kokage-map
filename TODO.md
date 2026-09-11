@@ -80,6 +80,10 @@
         分かってから。feature_editor の地図は MapLibre のまま
   - ⚠ release の APK は `--no-pub` を付けずに組む（2026-09-11）。debug の `flutter run` の後に `--no-pub` で release を組むと
     `GeneratedPluginRegistrant.java` が dev 依存（integration_test）入りのまま残り、`compileReleaseJavaWithJavac` で落ちる
+  - ⚠ release の署名: `android/key.properties`（master 側の checkout に在る。gitignore）の `storeFile=../k-maps-release.keystore` は
+    **`android/app` 基準**なので鍵は `android/k-maps-release.keystore` に置く（repo 直下だと `validateSigningRelease` で落ちる）。
+    鍵の正本は Vault `事業/ねむりぎ工房/K-Maps/google play console/`。worktree を増やしたら両方コピーする
+  - [x] release で 3D（GPU・眺めモード・ヒットテスト）と web release の起動を確認（2026-09-11 13:05、Pixel 9 / Surface Chrome）
   - [ ] 眺めモードの残り: 面・線にも靄、純 Dart 経路（web）の透視。2 本指の移動・拡縮・ホイールは透視の式にした（指の下の地面を留める。実機のピンチは未確認）
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 

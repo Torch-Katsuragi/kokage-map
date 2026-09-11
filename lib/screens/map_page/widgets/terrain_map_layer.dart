@@ -48,6 +48,7 @@ import '../../../models/party/party_room.dart';
 import '../../../providers/party_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
+import '../../../providers/ui_state_providers.dart';
 import '../../../services/basemap_service.dart';
 import '../../../services/map_source_manager.dart';
 import '../../../tools/gps_tool.dart';
@@ -577,12 +578,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   void _resetView() {
     _animateTo(bearing: 0, pitch: 0);
     _anim.forward(from: 0);
+    ref.read(mapFlashProvider.notifier).show(t.map.terrain.resetView);
   }
 
   /// 眺めモード（透視投影）の切替。コンパスの長押し。GPU 経路のみ（純 Dart は正射影の線形性に頼る）
   void _togglePerspective() {
     if (_gpu == null) return;
     setState(() => _camera.perspective = !_camera.perspective);
+    ref.read(mapFlashProvider.notifier).show(_camera.perspective ? t.map.flash.perspectiveOn : t.map.flash.perspectiveOff);
     _refresh();
   }
 
@@ -1773,7 +1776,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
                     _ZoomButton(
                       icon: _drive == null ? Icons.route : Icons.stop,
                       tooltip: 'ドライブ',
-                      onPressed: () => setState(_drive == null ? _startDrive : _stopDrive),
+                      onPressed: () {
+                        final starting = _drive == null;
+                        setState(starting ? _startDrive : _stopDrive);
+                        ref.read(mapFlashProvider.notifier).show(starting ? t.map.flash.driveStart : t.map.flash.driveStop);
+                      },
                     ),
                     const SizedBox(height: 6),
                   ],

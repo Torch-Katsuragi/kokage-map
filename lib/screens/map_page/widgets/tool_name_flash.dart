@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../i18n/strings.g.dart';
 import '../../../providers/tool_providers.dart';
+import '../../../providers/ui_state_providers.dart';
 import '../../../tools/map_tool.dart';
 
 class ToolNameFlash extends ConsumerStatefulWidget {
@@ -68,12 +69,21 @@ class _ToolNameFlashState extends ConsumerState<ToolNameFlash>
         _ => tool.name,
       };
 
+  void _flash(String label) {
+    setState(() => _label = label);
+    _controller.forward(from: 0);
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<MapTool>(currentToolProvider, (prev, next) {
       if (prev == null || prev == next) return;
-      setState(() => _label = labelOf(next));
-      _controller.forward(from: 0);
+      _flash(labelOf(next));
+    });
+    // ツール以外のモード切替（眺め・北上真上・3D/2D・ドライブ）も同じ演出で
+    ref.listen<(String, int)>(mapFlashProvider, (prev, next) {
+      if (prev == null || prev == next || next.$1.isEmpty) return;
+      _flash(next.$1);
     });
 
     return IgnorePointer(

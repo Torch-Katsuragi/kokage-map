@@ -568,6 +568,13 @@
     "terrain": {
       "resetView": "北を上に・真上から",
       "loading": "地形を読み込み中（$pending 枚）"
+    },
+    "flash": {
+      "perspectiveOn": "眺めモード",
+      "perspectiveOff": "眺めモード 解除",
+      "map2d": "2D 地図",
+      "driveStart": "ドライブ開始",
+      "driveStop": "ドライブ終了"
     }
   },
   "importExport": {

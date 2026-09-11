@@ -24,6 +24,7 @@ import '../providers/device_tool_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/terrain_providers.dart';
 import '../providers/tool_providers.dart';
+import '../providers/ui_state_providers.dart';
 
 /// 地図画面左側のツールバー
 ///
@@ -104,7 +105,9 @@ class MapToolbar extends ConsumerWidget {
                 tooltip: t.map.toolbar.terrain3d,
                 isSelected: ref.watch(terrain3dModeProvider),
                 onPressed: () {
-                  ref.read(terrain3dModeProvider.notifier).set(!ref.read(terrain3dModeProvider));
+                  final on = !ref.read(terrain3dModeProvider);
+                  ref.read(terrain3dModeProvider.notifier).set(on);
+                  ref.read(mapFlashProvider.notifier).show(on ? t.map.toolbar.terrain3d : t.map.flash.map2d);
                   onToolChanged();
                 },
               ),

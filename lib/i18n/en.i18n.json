@@ -568,6 +568,13 @@
     "terrain": {
       "resetView": "North up, top-down",
       "loading": "Loading terrain ($pending tiles)"
+    },
+    "flash": {
+      "perspectiveOn": "Perspective view",
+      "perspectiveOff": "Perspective view off",
+      "map2d": "2D map",
+      "driveStart": "Drive started",
+      "driveStop": "Drive stopped"
     }
   },
   "importExport": {

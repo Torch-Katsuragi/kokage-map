@@ -54,6 +54,19 @@ class UiScaleLevel extends _$UiScaleLevel {
 }
 
 /// GeoPackage タイル展開状態（不変値オブジェクト）
+/// 地図面のフラッシュ表示（さっと出て消える短い文言）。
+///
+/// ツールの切替と同じ演出を、モードが切り替わる操作すべてに徹底する（松本 2026-09-11）:
+/// 眺めモードの切替、北上・真上に戻す、3D/2D の切替（web）、ドライブの開始と終了など。
+/// 表示側は `ToolNameFlash`。同じ文言を続けて出せるように連番を添える
+@Riverpod(keepAlive: true)
+class MapFlash extends _$MapFlash {
+  @override
+  (String, int) build() => ('', 0);
+
+  void show(String label) => state = (label, state.$2 + 1);
+}
+
 @immutable
 class GpkgExpansionState {
   final Set<String> expandedPaths;

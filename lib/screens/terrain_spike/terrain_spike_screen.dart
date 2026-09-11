@@ -29,6 +29,7 @@ import '../../core/terrain/terrain_camera.dart';
 import '../../core/terrain/terrain_mesh.dart';
 import '../../core/terrain/terrain_painter.dart';
 import '../../core/terrain/terrain_scene.dart';
+import '../../core/terrain/terrain_world_painter.dart';
 import '../../core/terrain/web_mercator.dart';
 import 'spike_title_stub.dart'
     if (dart.library.js_interop) 'spike_title_web.dart';
@@ -104,7 +105,16 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   String _gpuStatus = '';
   bool _gpuBusy = false;
 
-  double get _maxPitchDeg => _useGpu ? 85 : 70;
+  // 本体の描画系（TerrainWorldPainter + TerrainGpuWorldRenderer）を 1 タイルで動かす。web の WebGL2 の検証用
+  bool _useWorld = false;
+  TerrainGpuWorldRenderer? _worldGpu;
+  TerrainWorldPainter? _worldPainter;
+  TerrainMesh? _worldMesh;
+  List<TerrainTileDrawable> _worldTiles = const [];
+  bool _worldTilesGeoJson = false;
+  (double, double) _worldHeightRange = (0, 0);
+
+  double get _maxPitchDeg => _useGpu || _useWorld ? 85 : 70;
 
   // 計測
   late final Ticker _ticker;
@@ -146,7 +156,80 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     SchedulerBinding.instance.removeTimingsCallback(_timingsCallback);
     _texture?.dispose();
     _gpu?.dispose();
+    _worldGpu?.dispose();
     super.dispose();
+  }
+
+  // ── 本体の描画系 ────────────────────────────────────
+
+  Future<void> _ensureWorldGpu() async {
+    if (_gpuBusy) return;
+    _gpuBusy = true;
+    try {
+      final sw = Stopwatch()..start();
+      final r = _worldGpu ??= await TerrainGpuWorldRenderer.create();
+      r.onTextureReady = () => _repaint.value++;
+      _worldPainter = null;
+      _worldMesh = null;
+      _worldTiles = const [];
+      _gpuStatus = 'world GPU 準備 ${sw.elapsedMilliseconds}ms (platform view: ${r.platformViewType != null})';
+    } catch (e) {
+      _gpuStatus = 'world GPU 不可: $e';
+      _useWorld = false;
+    } finally {
+      _gpuBusy = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  /// いまのシーンを 1 タイルの描き物にする（骨組みのメッシュは 1 回だけ組む）
+  List<TerrainTileDrawable> _buildWorldTiles() {
+    final dem = _dem!;
+    final builder = _builderFor(1);
+    final mesh = _worldMesh ??= builder.buildStatic();
+    if (_worldTiles.isNotEmpty && identical(_worldTiles.first.mesh, mesh) && _worldTilesGeoJson == _useGeoJson) return _worldTiles;
+    _worldTilesGeoJson = _useGeoJson;
+    var lo = double.infinity;
+    var hi = -double.infinity;
+    for (final v in dem.heights) {
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    _worldHeightRange = (lo, hi);
+    final scene = _useGeoJson ? (_sceneByStep[1] ??= _buildGeoJsonScene(mesh)) : null;
+    return _worldTiles = [
+      TerrainTileDrawable(
+        originX: dem.originX,
+        originY: dem.originY,
+        mesh: mesh,
+        builder: builder,
+        texture: _texture,
+        textureKey: _texture,
+        lines: scene == null ? _lines : [...scene.outlines, ...scene.lines],
+        polygons: scene == null ? _polygons : scene.polygons,
+        points: scene?.points ?? const [],
+        labels: scene?.labels ?? _labels,
+      ),
+    ];
+  }
+
+  TerrainWorldPainter _worldPainterFor(BuildContext context) {
+    final dem = _dem!;
+    final tiles = _buildWorldTiles();
+    final p = _worldPainter ??= TerrainWorldPainter(
+      camera: _camera,
+      tiles: tiles,
+      elevationAt: dem.elevationAt,
+      heightRange: _worldHeightRange,
+      stepMeters: dem.cellSize,
+      onPainted: (d) => _lastPaint = d,
+      repaint: _repaint,
+    )..gpu = _worldGpu;
+    p
+      ..tiles = tiles
+      ..heightRange = _worldHeightRange
+      ..pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    return p;
   }
 
   // ── flutter_gpu ────────────────────────────────────
@@ -326,6 +409,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     _sceneByStep.clear();
     _contoursByStep.clear();
     _builders.clear();
+    _worldMesh = null;
+    _worldTiles = const [];
     _extractContours();
     final cells = (dem.cols - 1) * (dem.rows - 1);
     _coarseStep = math.max(2, math.sqrt(cells / _gestureCellBudget).ceil());
@@ -368,6 +453,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
     _textureHeight = height;
     // テクスチャ座標はビルダーが持つので作り直す
     _builders.clear();
+    _worldMesh = null;
+    _worldTiles = const [];
     _painter?.texture = image;
     _rebuildMesh();
     if (_useGpu) _ensureGpu();
@@ -463,7 +550,7 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   void _rebuildMesh({bool coarse = false}) {
     // GPU 描画系では頂点を組み直さない（それを無くすのがスパイクの目的）。面・ラベルを持ち上げる土台の
     // メッシュは最初の 1 回だけ組む
-    if (_useGpu && _mesh != null) {
+    if ((_useGpu || _useWorld) && _mesh != null) {
       _repaint.value++;
       return;
     }
@@ -609,7 +696,8 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
           'contour=${_contourInterval.toStringAsFixed(0)}m/$_contourCount本/${_lastContour.inMilliseconds}ms '
           'step=${_mesh?.step} lod=$_lod chunk=$_chunkSize '
           'scene=${_sceneName.replaceAll(' ', '_')} labels=$_labelCount anim=$_animation'
-          '${_useGpu ? ' persp=$_perspective loadPolys=$_gpuLoadPolygons ${_gpu?.stats}' : ''}';
+          '${_useGpu ? ' persp=$_perspective loadPolys=$_gpuLoadPolygons ${_gpu?.stats}' : ''}'
+          '${_useWorld && _worldGpu != null ? ' world persp=$_perspective encode=${_worldGpu!.lastEncode.inMilliseconds}ms draws=${_worldGpu!.lastDrawCalls} tex=${_worldGpu!.mippedTextureCount}/${_worldGpu!.textureCount} err=${_worldGpu!.lastError}' : ''}';
       _uiMs.clear();
       _rasterMs.clear();
       setSpikeTitle(line);
@@ -665,7 +753,7 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
   }
 
   void _onTapUp(TapUpDetails d, Size size) {
-    if (_useGpu) {
+    if (_useGpu || _useWorld) {
       setState(() => _hitText = 'GPU 描画系: ヒットテストはスパイクの範囲外');
       return;
     }
@@ -710,8 +798,15 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                 : LayoutBuilder(
                     builder: (context, constraints) {
                       final size = constraints.biggest;
+                      _camera
+                        ..viewport = size
+                        ..perspective = _useWorld && _perspective;
+                      final worldGpu = _worldGpu;
                       return Stack(
                         children: [
+                          // 本体の描画系（web は WebGL2 の canvas を下に敷く）
+                          if (_useWorld && worldGpu != null && worldGpu.platformViewType != null)
+                            Positioned.fill(child: IgnorePointer(child: HtmlElementView(viewType: worldGpu.platformViewType!))),
                           GestureDetector(
                             onScaleStart: _onScaleStart,
                             onScaleUpdate: _onScaleUpdate,
@@ -719,7 +814,9 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                             onTapUp: (d) => _onTapUp(d, size),
                             child: ClipRect(
                               child: CustomPaint(
-                                painter: _useGpu && _gpu != null && _dem != null
+                                painter: _useWorld && worldGpu != null && _dem != null
+                                    ? _worldPainterFor(context)
+                                    : _useGpu && _gpu != null && _dem != null
                                     ? _GpuSpikePainter(
                                         renderer: _gpu!,
                                         camera: _camera,
@@ -909,9 +1006,60 @@ class _TerrainSpikeScreenState extends State<TerrainSpikeScreen>
                       : null,
                 ),
                 ChoiceChip(
+                  label: const Text('world GPU'),
+                  selected: _useWorld,
+                  onSelected: (v) {
+                    setState(() {
+                      _useWorld = v;
+                      _gpuStatus = v ? 'world GPU 準備中…' : '';
+                    });
+                    if (v) {
+                      _ensureWorldGpu();
+                    } else {
+                      _worldPainter = null;
+                      _camera.pitch = math.min(_camera.pitch, 70 * math.pi / 180);
+                      _rebuildMesh();
+                    }
+                  },
+                ),
+                if (_useWorld) ...[
+                  ChoiceChip(
+                    label: const Text('深度なし'),
+                    selected: TerrainGpuWorldRenderer.debugNoDepth,
+                    onSelected: (v) => setState(() {
+                      TerrainGpuWorldRenderer.debugNoDepth = v;
+                      _repaint.value++;
+                    }),
+                  ),
+                  ChoiceChip(
+                    label: const Text('getError'),
+                    selected: TerrainGpuWorldRenderer.debugCheckErrors,
+                    onSelected: (v) => setState(() {
+                      TerrainGpuWorldRenderer.debugCheckErrors = v;
+                      _repaint.value++;
+                    }),
+                  ),
+                  ChoiceChip(
+                    label: const Text('flush'),
+                    selected: TerrainGpuWorldRenderer.debugFlush,
+                    onSelected: (v) => setState(() {
+                      TerrainGpuWorldRenderer.debugFlush = v;
+                      _repaint.value++;
+                    }),
+                  ),
+                  ChoiceChip(
+                    label: const Text('MSAA なし'),
+                    selected: TerrainGpuWorldRenderer.debugDirect,
+                    onSelected: (v) => setState(() {
+                      TerrainGpuWorldRenderer.debugDirect = v;
+                      _repaint.value++;
+                    }),
+                  ),
+                ],
+                ChoiceChip(
                   label: const Text('透視'),
                   selected: _perspective,
-                  onSelected: _useGpu
+                  onSelected: _useGpu || _useWorld
                       ? (v) => setState(() {
                             _perspective = v;
                             _repaint.value++;

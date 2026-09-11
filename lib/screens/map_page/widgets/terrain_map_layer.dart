@@ -47,10 +47,10 @@ import '../../../models/nodes/overlay_image_node.dart';
 import '../../../models/party/party_room.dart';
 import '../../../providers/party_providers.dart';
 import '../../../providers/selection_providers.dart';
+import '../../../models/map_style_group.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/basemap_service.dart';
-import '../../../models/map_style_group.dart';
 import '../../../tools/gps_tool.dart';
 import '../../../tools/map_tool.dart';
 import '../../../tools/overlay_transform_tool.dart';
@@ -1744,7 +1744,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
                   child: ColoredBox(
                     // 最初に全面が揃うまでは透明にして下の 2D 地図を見せる（入った直後の白い一瞬を消す）
                     color: _everCovered ? const Color(0xFFE6E6E6) : Colors.transparent,
-                    child: CustomPaint(painter: _painter, child: const SizedBox.expand()),
+                    child: Stack(
+                      children: [
+                        // web の WebGL2 は自前の canvas に描く（platform view）。その上に点とラベルを Canvas で
+                        if (_gpu?.platformViewType case final viewType?)
+                          Positioned.fill(child: IgnorePointer(child: HtmlElementView(viewType: viewType))),
+                        CustomPaint(painter: _painter, child: const SizedBox.expand()),
+                      ],
+                    ),
                   ),
                 ),
               ),

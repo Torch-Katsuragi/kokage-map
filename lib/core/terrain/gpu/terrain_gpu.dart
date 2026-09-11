@@ -14,10 +14,13 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-/// `package:flutter_gpu` は dart:ffi 依存なので、web では空実装に差し替える
+/// GPU 描画系の差し替え: Android / desktop は `package:flutter_gpu`（dart:ffi 依存）、web は WebGL2（`package:web`）。
+/// どちらも同じクラス名 `TerrainGpuWorldRenderer` と同じ API を持つ
 library;
 
 export 'gpu_geometry.dart';
 export 'terrain_gpu_renderer_stub.dart' if (dart.library.ffi) 'terrain_gpu_renderer.dart';
 export 'terrain_gpu_stats.dart';
-export 'terrain_gpu_world_stub.dart' if (dart.library.ffi) 'terrain_gpu_world.dart';
+export 'terrain_gpu_world_stub.dart'
+    if (dart.library.ffi) 'terrain_gpu_world.dart'
+    if (dart.library.js_interop) 'terrain_gpu_world_web.dart';

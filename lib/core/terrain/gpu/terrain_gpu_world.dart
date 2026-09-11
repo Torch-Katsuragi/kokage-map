@@ -48,8 +48,17 @@ class TerrainGpuWorldRenderer {
 
   static const shaderBundleAsset = 'build/shaderbundles/terrain.shaderbundle';
 
-  /// このプラットフォームで使えるか（web は false）
+  /// このプラットフォームで使えるか
   static bool get isSupported => true;
+
+  /// web 版だけが持つ（`HtmlElementView` の viewType）。flutter_gpu は画像を返すので null
+  String? get platformViewType => null;
+
+  /// web 版の切り分け用フラグ（こちらでは何もしない）
+  static bool debugNoDepth = false;
+  static bool debugDirect = false;
+  static bool debugCheckErrors = false;
+  static bool debugFlush = false;
 
   /// シェーダ束を読んでパイプラインを組む。Impeller / Flutter GPU が無効なら例外
   static Future<TerrainGpuWorldRenderer> create() async {

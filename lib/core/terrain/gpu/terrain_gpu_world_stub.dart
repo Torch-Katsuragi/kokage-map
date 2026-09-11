@@ -29,6 +29,13 @@ class TerrainGpuWorldRenderer {
   static const shaderBundleAsset = 'build/shaderbundles/terrain.shaderbundle';
 
   static bool get isSupported => false;
+  String? get platformViewType => null;
+
+  /// web 版の切り分け用フラグ（こちらでは何もしない）
+  static bool debugNoDepth = false;
+  static bool debugDirect = false;
+  static bool debugCheckErrors = false;
+  static bool debugFlush = false;
 
   static Future<TerrainGpuWorldRenderer> create() async => throw UnsupportedError('flutter_gpu は web 非対応');
 

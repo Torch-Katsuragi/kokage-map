@@ -19,6 +19,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:location/location.dart';
+import 'package:permission_handler/permission_handler.dart' show Permission, PermissionCheckShortcuts;
 import 'package:root_maps/utils/app_logger.dart';
 
 import '../i18n/strings.g.dart';
@@ -265,6 +266,12 @@ class BluetoothGnssService extends ChangeNotifier {
       if (!isEnabled) {
         AppLogger.debug('$_logTag: Bluetoothが無効です');
         throw Exception(t.gps.bluetoothDisabled);
+      }
+
+      // ⚠ BLUETOOTH_CONNECT が無いまま getBondedDevices を呼ぶと、プラグインが位置情報の権限を要求し、
+      // その許可の直後にネイティブ側で SecurityException → アプリごと落ちる（Android 12+）。先に確かめる
+      if (!kIsWeb && !await Permission.bluetoothConnect.isGranted) {
+        throw Exception(t.gps.bluetoothPermRequired);
       }
 
       // ペアリング済みデバイスを取得

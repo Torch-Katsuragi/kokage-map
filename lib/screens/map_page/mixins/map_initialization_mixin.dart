@@ -22,6 +22,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:permission_handler/permission_handler.dart';
+
 import '../../../core/platform_capabilities.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../models/app_notification.dart';
@@ -393,8 +395,17 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   }
 
   /// 外部GNSS機器をバックグラウンドでスキャン
+  ///
+  /// ⚠ Bluetooth の権限が無いときは何もしない。`getBondedDevices` は flutter_bluetooth_serial が
+  /// 位置情報の権限を自分で要求し、許可の直後に BLUETOOTH_CONNECT 無しで getBondedDevices を呼んで
+  /// SecurityException で落ちる（初回起動で位置情報を許可した瞬間にアプリごと終了。2026-09-11 実機）。
+  /// 権限は GPS 設定 / 外部機器の画面で明示的に取る
   Future<void> scanGnssDevicesBackground() async {
     try {
+      if (!await Permission.bluetoothConnect.isGranted || !await Permission.bluetoothScan.isGranted) {
+        AppLogger.debug('[GPS] Bluetooth の権限が無いので起動時の GNSS スキャンは省く');
+        return;
+      }
       await gpsManager.scanExternalGnssDevices();
     } catch (e) {
       AppLogger.debug('[GPS] GNSS scan error: $e');

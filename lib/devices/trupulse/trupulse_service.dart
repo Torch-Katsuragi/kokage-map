@@ -25,6 +25,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../utils/app_logger.dart';
 import '../base/device_service.dart';
@@ -83,6 +84,8 @@ class TruPulseService extends ExternalDeviceService {
 
   @override
   Future<List<BluetoothDevice>> scanDevices() async {
+    // ⚠ BLUETOOTH_CONNECT 無しの getBondedDevices はプラグインの権限要求の直後にネイティブで落ちる（bluetooth_gnss_service と同じ）
+    if (!await Permission.bluetoothConnect.isGranted) return const [];
     final bonded = await FlutterBluetoothSerial.instance.getBondedDevices();
     return bonded.where((d) {
       final name = d.name?.toUpperCase() ?? '';

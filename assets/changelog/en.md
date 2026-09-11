@@ -1,5 +1,23 @@
 # Changelog
 
+## Next release
+
+### Fixes
+
+- Features of a hidden View could stay on the map. Fixed
+- The current-location dot is now translucent so points and short lines beneath it stay visible
+- Elevation tiles load faster: the three GSI sources are fetched together and, when zooming in, the nearest level fills first. AWS tiles are only fetched where Japan has no coverage
+
+### Usability
+
+- "Zoom to layer" was added to the layer ⋮ menu (double-tapping the row also works). It is the way in when your data is far from your location
+- Tapping "Selected folder" on the home screen reopens the map without picking the folder again
+- The Drive folder dialog is now translated
+
+### QGIS
+
+- GeoTIFF overlays are written to the QGIS project (`.qgs`) as raster layers, so QGIS opens them as they are. Non-GeoTIFF images are still left out
+
 ## v0.7.0 — 2026/09/11
 
 ### ⛰ The map is now 3D

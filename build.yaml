@@ -1,0 +1,22 @@
+# build_runner の設定。
+# ⚠ slang_build_runner は slang.yaml を読まず、ここの options だけを見る（slang 4.19 で確認）。
+#   slang.yaml と同じ内容をここにも書く。lazy: false が要る: true だと英語以外のロケールが deferred import になり、
+#   `LocaleSettings.useDeviceLocaleSync()`（main.dart）が web で DeferredNotLoadedError を投げて起動しない
+targets:
+  $default:
+    builders:
+      slang_build_runner:
+        options:
+          base_locale: en
+          fallback_strategy: base_locale
+          input_directory: lib/i18n
+          input_file_pattern: .i18n.json
+          output_directory: lib/i18n
+          output_file_name: strings.g.dart
+          translate_var: t
+          enum_name: AppLocale
+          class_name: Translations
+          key_case: camel
+          string_interpolation: dart
+          timestamp: false
+          lazy: false

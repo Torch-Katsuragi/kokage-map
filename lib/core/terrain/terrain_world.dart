@@ -89,9 +89,25 @@ class TerrainTile {
   /// 隣の有無の組み合わせ（東・北・北東）。変わったら [bordered] とビルダーを作り直す
   int borderMask = 0;
 
-  ui.Image? texture;
+  /// 背景のテクスチャ（`Picture.toImage` 由来）。GPU 経路はミップ付きの複製を作った後に [releaseImage] で手放す
+  ui.Image? get texture => _texture;
+  set texture(ui.Image? v) {
+    _texture = v;
+    if (v != null) textureKey = Object();
+  }
+
+  ui.Image? _texture;
+
+  /// テクスチャの世代の識別子（画像を差し替えるたびに新しくなる。GPU 側のキャッシュのキー）
+  Object textureKey = Object();
   int textureWidth = 1;
   int textureHeight = 1;
+
+  /// `ui.Image` を捨てる（GPU 側に複製がある間だけ。[textureKey] は変えないので GPU 側のキャッシュはそのまま効く）
+  void releaseImage() {
+    _texture?.dispose();
+    _texture = null;
+  }
 
   /// step ごとの描画メッシュ（isolate で作る）。隣が届いて縁が変わったら作り直す
   final Map<int, TerrainMeshBuilder> builders = {};
@@ -190,8 +206,7 @@ class TerrainTile {
   }
 
   void dispose() {
-    texture?.dispose();
-    texture = null;
+    releaseImage();
   }
 }
 

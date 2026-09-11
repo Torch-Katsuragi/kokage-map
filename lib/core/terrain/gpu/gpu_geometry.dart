@@ -17,6 +17,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../terrain_painter.dart';
+import '../terrain_scene.dart';
 
 /// [buildMipChain] の引数（isolate へ送る）
 class MipChainArgs {
@@ -276,6 +277,60 @@ class GpuPolygonGeometry {
       }
     }
     return data;
+  }
+}
+
+/// 点（画面に正対する円）の頂点列。点 1 つ = 頂点 4 つ（角 ±1）+ インデックス 6 つ。
+/// 頂点 = position(3) + corner(2) + size(1) + rgba(4) = 40 バイト。標高は [elevationAt]（タイルの DEM）で引く
+class GpuPointGeometry {
+  GpuPointGeometry._(this.vertices, this.indices, this.pointCount);
+
+  static const floatsPerVertex = 10;
+  static const strideInBytes = floatsPerVertex * 4;
+
+  final Float32List vertices;
+  final Uint32List indices;
+  final int pointCount;
+  int get vertexCount => pointCount * 4;
+  int get indexCount => indices.length;
+  bool get isEmpty => pointCount == 0;
+
+  static GpuPointGeometry pack(
+    List<TerrainPoint> points, {
+    int from = 0,
+    required double Function(double x, double y) elevationAt,
+  }) {
+    final n = points.length - from;
+    final data = Float32List(n * 4 * floatsPerVertex);
+    final indices = Uint32List(n * 6);
+    var o = 0;
+    for (var i = 0; i < n; i++) {
+      final p = points[from + i];
+      final z = elevationAt(p.x, p.y);
+      final c = p.color;
+      for (var corner = 0; corner < 4; corner++) {
+        data[o] = p.x;
+        data[o + 1] = p.y;
+        data[o + 2] = z;
+        data[o + 3] = (corner & 1) == 0 ? -1 : 1;
+        data[o + 4] = corner < 2 ? -1 : 1;
+        data[o + 5] = p.sizePx;
+        data[o + 6] = c.r;
+        data[o + 7] = c.g;
+        data[o + 8] = c.b;
+        data[o + 9] = c.a;
+        o += floatsPerVertex;
+      }
+      final v0 = i * 4;
+      final i0 = i * 6;
+      indices[i0] = v0;
+      indices[i0 + 1] = v0 + 1;
+      indices[i0 + 2] = v0 + 2;
+      indices[i0 + 3] = v0 + 1;
+      indices[i0 + 4] = v0 + 3;
+      indices[i0 + 5] = v0 + 2;
+    }
+    return GpuPointGeometry._(data, indices, n);
   }
 }
 

@@ -24,6 +24,7 @@ import 'package:vector_math/vector_math.dart' as vm;
 import '../terrain_camera.dart';
 import '../terrain_mesh.dart';
 import '../terrain_painter.dart';
+import '../terrain_scene.dart';
 import '../terrain_worker.dart';
 import '../terrain_world_painter.dart' show TerrainTileDrawable;
 import 'gpu_geometry.dart';
@@ -42,7 +43,7 @@ import 'gpu_geometry.dart';
 /// 描いた結果は `GpuImageSurface` の `ui.Image` で、Canvas に `drawImageRect` する。
 /// 設計は docs/technical/terrain-3d.md「flutter_gpu を TerrainWorld に」
 class TerrainGpuWorldRenderer {
-  TerrainGpuWorldRenderer._(this._terrainPipeline, this._polygonPipeline, this._linePipeline)
+  TerrainGpuWorldRenderer._(this._terrainPipeline, this._polygonPipeline, this._linePipeline, this._pointPipeline)
       : _hostBuffer = gpu.gpuContext.createHostBuffer(blockLengthInBytes: 64 * 1024);
 
   static const shaderBundleAsset = 'build/shaderbundles/terrain.shaderbundle';
@@ -107,12 +108,30 @@ class TerrainGpuWorldRenderer {
         ],
       ),
     );
-    return TerrainGpuWorldRenderer._(terrain, polygon, line);
+    final point = gpu.gpuContext.createRenderPipeline(
+      shader('PointVertex'),
+      shader('PointFragment'),
+      vertexLayout: const gpu.VertexLayout(
+        buffers: [
+          gpu.VertexBuffer(
+            strideInBytes: GpuPointGeometry.strideInBytes,
+            attributes: [
+              gpu.VertexAttribute(name: 'position', format: gpu.VertexFormat.float32x3),
+              gpu.VertexAttribute(name: 'corner', format: gpu.VertexFormat.float32x2, offsetInBytes: 12),
+              gpu.VertexAttribute(name: 'size', format: gpu.VertexFormat.float32, offsetInBytes: 20),
+              gpu.VertexAttribute(name: 'color', format: gpu.VertexFormat.float32x4, offsetInBytes: 24),
+            ],
+          ),
+        ],
+      ),
+    );
+    return TerrainGpuWorldRenderer._(terrain, polygon, line, point);
   }
 
   final gpu.RenderPipeline _terrainPipeline;
   final gpu.RenderPipeline _polygonPipeline;
   final gpu.RenderPipeline _linePipeline;
+  final gpu.RenderPipeline _pointPipeline;
   final gpu.HostBuffer _hostBuffer;
 
   gpu.GpuImageSurface? _surface;
@@ -142,18 +161,29 @@ class TerrainGpuWorldRenderer {
   /// 地形の頂点（ビルダーごと。縁が変わるとビルダーが別物になるので自然に入れ替わる）
   final Map<TerrainMeshBuilder, _TerrainBuffers> _terrain = {};
 
-  /// タイルのテクスチャ（`ui.Image` を包む。コピーしない）
-  final Map<ui.Image, _TextureEntry> _textures = {};
+  /// タイルのテクスチャ（[TerrainTileDrawable.textureKey] ごと）。まず `ui.Image` を包み、裏でミップ付きの複製に差し替える。
+  /// 複製ができたら [onTextureUploaded] で知らせるので、呼び出し側は `ui.Image` を手放してよい。
+  /// 時間では捨てない（手放した後の唯一の実体）。生きているキーは [pruneTextures] で伝える
+  final Map<Object, _TextureEntry> _textures = {};
 
-  /// 静的な面・線（シーンのリストごと。育ったぶんを足す）
+  /// 静的な面・線・点（シーンのリストごと。育ったぶんを足す）
   final Map<List<LiftedPolygon>, _Parts> _polygons = {};
   final Map<List<LiftedPolyline>, _Parts> _lines = {};
+  final Map<List<TerrainPoint>, _Parts> _points = {};
 
   static const _sweepMs = 3000;
   int _lastSweep = 0;
 
   /// テクスチャを別経路で上げ終えたとき（描き直しの合図）
   VoidCallback? onTextureReady;
+
+  /// ミップ付きの複製ができたとき（キー = [TerrainTileDrawable.textureKey]。`ui.Image` を手放してよい）
+  void Function(Object textureKey)? onTextureUploaded;
+
+  /// 生きているタイルの世代以外のテクスチャを手放す（タイルの出入りのたびに呼ぶ）
+  void pruneTextures(Set<Object> liveKeys) {
+    _textures.removeWhere((k, _) => !liveKeys.contains(k));
+  }
 
   /// 直近のフレームの計測
   Duration lastEncode = Duration.zero;
@@ -231,10 +261,14 @@ class TerrainGpuWorldRenderer {
         lastUploads++;
       }
       tb.lastUsed = nowMs;
-      final tex = _textureFor(t.texture, nowMs);
+      final tex = _textureFor(t.textureKey, t.texture);
       final polys = t.polygons.isEmpty ? null : _partsFor(_polygons, t.polygons, nowMs, _packPolygons);
       final lines = t.lines.isEmpty ? null : _partsFor(_lines, t.lines, nowMs, _packLines);
-      entries.add(_TileEntry(t, tb, tex, polys, lines));
+      final dem = t.mesh.dem;
+      final points = t.points.isEmpty
+          ? null
+          : _partsFor(_points, t.points, nowMs, (list, from) => _packPoints(list, from, (x, y) => dem.elevationAt(x + dem.originX, y + dem.originY)));
+      entries.add(_TileEntry(t, tb, tex, polys, lines, points));
     }
     if (entries.isEmpty) return null;
 
@@ -311,7 +345,7 @@ class TerrainGpuWorldRenderer {
         e.polygonInfo = _hostBuffer.emplace(ByteData.view(Float32List.fromList(tm).buffer));
         tm[14] += bias;
       }
-      if (e.lines != null || e.tile.dynamicLines.isNotEmpty) {
+      if (e.lines != null || e.points != null || e.tile.dynamicLines.isNotEmpty) {
         final li = _lineInfo;
         li.setAll(0, tm);
         li[14] -= bias * 1.5;
@@ -424,6 +458,27 @@ class TerrainGpuWorldRenderer {
         }
       }
     }
+
+    // 点（画面に正対する円）。深度テストで丘の裏は隠れる。線と同じ FrameInfo（viewport・pixel_ratio 入り）
+    pass.clearBindings();
+    pass.bindPipeline(_pointPipeline);
+    pass.setDepthWriteEnable(false);
+    pass.setDepthCompareOperation(gpu.CompareFunction.lessEqual);
+    pass.setCullMode(gpu.CullMode.none);
+    pass.setColorBlendEnable(true);
+    final pointInfoSlot = _pointPipeline.vertexShader.getUniformSlot('FrameInfo');
+    for (final e in entries) {
+      final parts = e.points;
+      final info = e.lineInfo;
+      if (parts == null || info == null) continue;
+      pass.bindUniform(pointInfoSlot, info);
+      for (final p in parts.parts) {
+        pass.bindVertexBuffer(gpu.BufferView(p.vertices, offsetInBytes: 0, lengthInBytes: p.vertices.sizeInBytes));
+        pass.bindIndexBuffer(gpu.BufferView(p.indices!, offsetInBytes: 0, lengthInBytes: p.indices!.sizeInBytes), gpu.IndexType.int32);
+        pass.drawIndexed(p.count);
+        draws++;
+      }
+    }
     frame.present(commandBuffer);
     commandBuffer.submit();
     sw.stop();
@@ -435,28 +490,27 @@ class TerrainGpuWorldRenderer {
 
   /// タイルのテクスチャ。まず `ui.Image` を包んで（`Picture.toImage` 由来ならコピー無し・ミップ無し）すぐ描き、
   /// 裏でミップ段つきのテクスチャを作って差し替える（回転中のちらつき対策）。包めなければ届くまで白
-  gpu.Texture _textureFor(ui.Image? image, int nowMs) {
-    if (image == null) return _whiteTexture();
-    var entry = _textures[image];
+  gpu.Texture _textureFor(Object key, ui.Image? image) {
+    var entry = _textures[key];
     if (entry == null) {
+      if (image == null) return _whiteTexture();
       entry = _TextureEntry();
-      _textures[image] = entry;
+      _textures[key] = entry;
       try {
         entry.texture = gpu.Texture.fromImage(gpu.gpuContext, image);
       } catch (_) {
         entry.texture = null;
       }
-      unawaited(_uploadMipped(image, entry));
+      unawaited(_uploadMipped(key, image, entry));
     }
-    entry.lastUsed = nowMs;
     return entry.texture ?? _whiteTexture();
   }
 
-  /// バイト列を取り、isolate でミップ段を作り、段ごとに上げる。できたら [onTextureReady]
-  Future<void> _uploadMipped(ui.Image image, _TextureEntry entry) async {
+  /// バイト列を取り、isolate でミップ段を作り、段ごとに上げる。できたら [onTextureReady] と [onTextureUploaded]
+  Future<void> _uploadMipped(Object key, ui.Image image, _TextureEntry entry) async {
     try {
       final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-      if (bytes == null || !_textures.containsKey(image)) return;
+      if (bytes == null || !identical(_textures[key], entry)) return;
       final w = image.width;
       final h = image.height;
       final rgba = bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
@@ -464,7 +518,7 @@ class TerrainGpuWorldRenderer {
       final mips = withMips
           ? await TerrainWorker.instance.run(buildMipChain, MipChainArgs(rgba: rgba, width: w, height: h))
           : const <Uint8List>[];
-      if (!_textures.containsKey(image)) return;
+      if (!identical(_textures[key], entry)) return;
       // flutter_gpu の fullMipCount は buildMipChain の段数と数え方が違うことがある（512² で 9 と 10）。
       // テクスチャ側の段数に合わせ、余った小さい段は捨てる
       final levels = withMips ? math.min(gpu.Texture.fullMipCount(w, h), mips.length + 1) : 1;
@@ -486,6 +540,7 @@ class TerrainGpuWorldRenderer {
         _loggedTexture = true;
         debugPrint('[3D] gpu texture ${w}x$h mips $levels msaa ${_msaa ? _sampleCount : 1} aniso ${_terrainSampler.maxAnisotropy}');
       }
+      onTextureUploaded?.call(key);
       onTextureReady?.call();
     } catch (e) {
       lastError = 'texture: $e';
@@ -547,6 +602,16 @@ class TerrainGpuWorldRenderer {
     );
   }
 
+  static _PartBuffers? _packPoints(List<TerrainPoint> points, int from, double Function(double, double) elevationAt) {
+    final g = GpuPointGeometry.pack(points, from: from, elevationAt: elevationAt);
+    if (g.isEmpty) return null;
+    return _PartBuffers(
+      vertices: gpu.gpuContext.createDeviceBufferWithCopy(ByteData.view(g.vertices.buffer)),
+      indices: gpu.gpuContext.createDeviceBufferWithCopy(ByteData.view(g.indices.buffer)),
+      count: g.indexCount,
+    );
+  }
+
   static _PartBuffers? _packLines(List<LiftedPolyline> lines, int from) {
     final g = GpuLineGeometry.pack(polylines: lines.getRange(from, lines.length));
     if (g.isEmpty) return null;
@@ -562,9 +627,9 @@ class TerrainGpuWorldRenderer {
     if (nowMs - _lastSweep < 1000) return;
     _lastSweep = nowMs;
     _terrain.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
-    _textures.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
     _polygons.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
     _lines.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
+    _points.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
   }
 
   int get terrainBufferCount => _terrain.length;
@@ -576,6 +641,7 @@ class TerrainGpuWorldRenderer {
     _textures.clear();
     _polygons.clear();
     _lines.clear();
+    _points.clear();
     _surface = null;
     _depth = null;
     _msaaColor = null;
@@ -597,7 +663,6 @@ class _TerrainBuffers {
 class _TextureEntry {
   gpu.Texture? texture;
   bool mipped = false;
-  int lastUsed = 0;
 }
 
 class _PartBuffers {
@@ -618,13 +683,14 @@ class _Parts {
 }
 
 class _TileEntry {
-  _TileEntry(this.tile, this.terrain, this.texture, this.polygons, this.lines);
+  _TileEntry(this.tile, this.terrain, this.texture, this.polygons, this.lines, this.points);
 
   final TerrainTileDrawable tile;
   final _TerrainBuffers terrain;
   final gpu.Texture texture;
   final _Parts? polygons;
   final _Parts? lines;
+  final _Parts? points;
   gpu.BufferView? terrainInfo;
   gpu.BufferView? polygonInfo;
   gpu.BufferView? lineInfo;

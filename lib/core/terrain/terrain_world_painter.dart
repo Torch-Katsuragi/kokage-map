@@ -33,6 +33,7 @@ class TerrainTileDrawable {
     required this.mesh,
     required this.texture,
     this.builder,
+    Object? textureKey,
     this.lines = const [],
     this.polygons = const [],
     this.dynamicLines = const [],
@@ -42,7 +43,11 @@ class TerrainTileDrawable {
     this.points = const [],
     this.labels = const [],
     Map<int, List<PolygonBatch>>? polygonBatches,
-  }) : polygonBatches = polygonBatches ?? {for (final e in PolygonBatch.byChunk(polygons).entries) e.key: [e.value]};
+  })  : polygonBatches = polygonBatches ?? {for (final e in PolygonBatch.byChunk(polygons).entries) e.key: [e.value]},
+        textureKey = textureKey ?? texture ?? mesh;
+
+  /// テクスチャの世代（GPU 側のキャッシュのキー。画像を手放した後も同じキーで GPU 側の複製を引く）
+  final Object textureKey;
 
   /// チャンク番号 → 面の束（シーン側で一度作って使い回す。投影はこの束ごとにキャッシュされる。
   /// 貼り付けが育つ間は 1 チャンクに束が複数ある）
@@ -539,7 +544,11 @@ class TerrainWorldPainter extends CustomPainter {
     var occlusionTests = 0;
     for (final t in tiles) {
       final pts = t.points;
-      if (pts.isEmpty) continue;
+      // GPU 経路では静的な点は GPU が描く（深度テストで隠れる）。動的な点（現在位置など）はここで
+      if (pts.isEmpty || gpu != null) {
+        _paintDynamicPoints(canvas, t, size, viewport, pointPaint, pointEdge);
+        continue;
+      }
       var pp = _pointCache[pts];
       if (pp == null || pp.bearing != camera.bearing || pp.pitch != camera.pitch || pp.count != pts.length) {
         final xy = Float32List(pts.length * 2);
@@ -574,17 +583,7 @@ class TerrainWorldPainter extends CustomPainter {
         canvas.drawCircle(sp, pt.sizePx, pointPaint);
         canvas.drawCircle(sp, pt.sizePx, pointEdge);
       }
-      for (final pt in t.dynamicPoints) {
-        final wx = t.originX + pt.x;
-        final wy = t.originY + pt.y;
-        final z = elevationAt(wx, wy) ?? 0;
-        final sp = toScreen(wx, wy, z, size);
-        if (!viewport.inflate(16).contains(sp)) continue;
-        if (!gesturing && isOccluded(wx, wy, z)) continue;
-        pointPaint.color = pt.color;
-        canvas.drawCircle(sp, pt.sizePx, pointPaint);
-        canvas.drawCircle(sp, pt.sizePx, pointEdge);
-      }
+      _paintDynamicPoints(canvas, t, size, viewport, pointPaint, pointEdge);
     }
 
     // ラベル（画面座標）。重なりは先勝ちで間引く。
@@ -673,6 +672,21 @@ class TerrainWorldPainter extends CustomPainter {
     _sweepCaches();
     sw.stop();
     onPainted?.call(sw.elapsed);
+  }
+
+  /// 動的な点（現在位置・描画中の点など）。毎フレーム投影し、隠れ判定は視線なぞり
+  void _paintDynamicPoints(Canvas canvas, TerrainTileDrawable t, Size size, Rect viewport, Paint pointPaint, Paint pointEdge) {
+    for (final pt in t.dynamicPoints) {
+      final wx = t.originX + pt.x;
+      final wy = t.originY + pt.y;
+      final z = elevationAt(wx, wy) ?? 0;
+      final sp = toScreen(wx, wy, z, size);
+      if (!viewport.inflate(16).contains(sp)) continue;
+      if (!gesturing && isOccluded(wx, wy, z)) continue;
+      pointPaint.color = pt.color;
+      canvas.drawCircle(sp, pt.sizePx, pointPaint);
+      canvas.drawCircle(sp, pt.sizePx, pointEdge);
+    }
   }
 
   /// しばらく描いていない投影キャッシュを捨てる（1 秒に 1 回）

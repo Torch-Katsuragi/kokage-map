@@ -9,6 +9,7 @@ import 'package:root_maps/core/terrain/gpu/gpu_geometry.dart';
 import 'package:root_maps/core/terrain/terrain_camera.dart';
 import 'package:root_maps/core/terrain/terrain_mesh.dart';
 import 'package:root_maps/core/terrain/terrain_painter.dart';
+import 'package:root_maps/core/terrain/terrain_scene.dart';
 
 void main() {
   DemGrid dem({int n = 9, double cell = 10}) => DemGrid(
@@ -125,9 +126,34 @@ void main() {
       }
     });
 
+    test('点 1 つ = 頂点 4・インデックス 6、角と半径と色、標高は elevationAt', () {
+      const pts = [
+        TerrainPoint(x: 10, y: 20, color: Color(0xFFFF0000), sizePx: 5),
+        TerrainPoint(x: 30, y: 40, color: Color(0x8000FF00), sizePx: 3),
+      ];
+      final g = GpuPointGeometry.pack(pts, elevationAt: (x, y) => x + y);
+      expect(g.pointCount, 2);
+      expect(g.vertexCount, 8);
+      expect(g.indexCount, 12);
+      const f = GpuPointGeometry.floatsPerVertex;
+      expect(g.vertices.sublist(0, 3), [10, 20, 30]);
+      expect([g.vertices[3], g.vertices[4]], [-1, -1]);
+      expect([g.vertices[f + 3], g.vertices[f + 4]], [1, -1]);
+      expect([g.vertices[2 * f + 3], g.vertices[2 * f + 4]], [-1, 1]);
+      expect([g.vertices[3 * f + 3], g.vertices[3 * f + 4]], [1, 1]);
+      expect(g.vertices[5], 5);
+      expect(g.vertices.sublist(6, 10), [1, 0, 0, 1]);
+      expect(g.indices.sublist(6, 12), [4, 5, 6, 5, 7, 6]);
+      // from で増分
+      final tail = GpuPointGeometry.pack(pts, from: 1, elevationAt: (x, y) => 0);
+      expect(tail.pointCount, 1);
+      expect(tail.vertices[5], 3);
+    });
+
     test('空なら空', () {
       expect(GpuLineGeometry.pack().isEmpty, isTrue);
       expect(GpuPolygonGeometry.packPolygons(const []), isEmpty);
+      expect(GpuPointGeometry.pack(const [], elevationAt: (x, y) => 0).isEmpty, isTrue);
     });
   });
 

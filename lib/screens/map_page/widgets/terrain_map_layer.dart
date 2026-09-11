@@ -260,7 +260,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   /// 傾きの上限。正射影では 90° で地面が線に潰れる（横顔になる）ので手前で止める。
   /// 寝かせるほど画面に掛かる地面が広がり、計画が段を下げて粗くなる（枚数は上限内に収まる）
-  static const _maxPitchDeg = 85.0;
+  static const _maxPitchDeg = 75.0;
 
   /// 標高タイルのソースごとの擬似プロバイダ（背景地図と同じ MBTiles キャッシュに入る。祖先フォールバックはしない）
   static final Map<String, BaseMapProvider> _terrainProviders = {
@@ -500,6 +500,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         return;
       }
       renderer.onTextureReady = _scheduleRefresh;
+      // GPU 側にミップ付きの複製ができたら `ui.Image` は手放す（1 タイル 1MB の二重持ちを解く）
+      renderer.onTextureUploaded = (key) {
+        for (final tile in _world.tiles) {
+          if (identical(tile.textureKey, key)) tile.releaseImage();
+        }
+      };
       _gpu = renderer;
       _painter.gpu = renderer;
       for (final v in _meshes.values) {
@@ -670,6 +676,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _staticProgress.removeWhere((k, _) => !_world.has(k.$1));
       _dynamicScenes.removeWhere((k, _) => !_world.has(k.$1));
       _pruneMeshes();
+      // GPU 側のテクスチャは生きているタイルの世代だけ残す（`ui.Image` を手放した後の唯一の実体なので時間では捨てない）
+      _gpu?.pruneTextures({for (final t in _world.tiles) t.textureKey});
       _worldRevisionSeen = _world.revision;
     }
     final drawables = <TerrainTileDrawable>[];
@@ -805,6 +813,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       mesh: mesh,
       builder: builder,
       texture: tile.texture,
+      textureKey: tile.textureKey,
       lines: scene.lines,
       polygons: scene.polygons,
       polygonBatches: scene.polygonBatches,

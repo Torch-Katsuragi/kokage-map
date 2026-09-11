@@ -33,6 +33,8 @@ class TerrainGpuWorldRenderer {
   static Future<TerrainGpuWorldRenderer> create() async => throw UnsupportedError('flutter_gpu は web 非対応');
 
   VoidCallback? onTextureReady;
+  void Function(Object textureKey)? onTextureUploaded;
+  void pruneTextures(Set<Object> liveKeys) {}
   Duration lastEncode = Duration.zero;
   Duration lastUpload = Duration.zero;
   int lastDrawCalls = 0;

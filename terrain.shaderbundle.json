@@ -22,5 +22,13 @@
   "LineFragment": {
     "type": "fragment",
     "file": "shaders/line.frag"
+  },
+  "PointVertex": {
+    "type": "vertex",
+    "file": "shaders/point.vert"
+  },
+  "PointFragment": {
+    "type": "fragment",
+    "file": "shaders/point.frag"
   }
 }

@@ -31,7 +31,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
-import 'package:maplibre/maplibre.dart' as ml;
 
 import '../../i18n/strings.g.dart';
 import '../../interfaces/map_state_interface.dart';
@@ -559,15 +558,6 @@ class TruPulseTool extends DeviceTool {
   @override
   LatLng? get overlayStation => _station?.point;
 
-  @override
-  List<ml.Layer> buildOverlayLayers() {
-    final lines = overlayLines();
-    if (lines.isEmpty) return [];
-    return [
-      ml.PolylineLayer(polylines: lines, color: Colors.red, width: 2),
-    ];
-  }
-
   /// 基準点 → 計測点の線（描画系に依らない形）
   @override
   List<geo.Feature<geo.LineString>> overlayLines() {
@@ -592,18 +582,6 @@ class TruPulseTool extends DeviceTool {
       ));
     }
     return lines;
-  }
-
-  @override
-  List<ml.Marker> buildOverlayMarkers() {
-    if (_station == null) return [];
-    return [
-      ml.Marker(
-        point: _station!.point.toGeographic(),
-        size: const Size.square(24),
-        child: const _StationMarker(),
-      ),
-    ];
   }
 
   @override
@@ -635,17 +613,3 @@ class TruPulseTool extends DeviceTool {
 // Marker widget
 // =========================================================
 
-class _StationMarker extends StatelessWidget {
-  const _StationMarker();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.blue.withValues(alpha: 0.8),
-        border: Border.all(color: Colors.white, width: 2),
-      ),
-      child: const Icon(Icons.my_location, color: Colors.white, size: 16),
-    );
-  }
-}

@@ -554,8 +554,7 @@
       "pen": "Pen",
       "select": "Select",
       "gpsTool": "GPS Tool",
-      "overlayTransform": "Overlay Transform",
-      "terrain3d": "3D terrain"
+      "overlayTransform": "Overlay Transform"
     },
     "jump": {
       "noLocation": "Current location is not available yet",
@@ -572,7 +571,6 @@
     "flash": {
       "perspectiveOn": "Perspective view",
       "perspectiveOff": "Perspective view off",
-      "map2d": "2D map",
       "driveStart": "Drive started",
       "driveStop": "Drive stopped"
     }

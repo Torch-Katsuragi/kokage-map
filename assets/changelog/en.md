@@ -15,7 +15,7 @@
 
 ### Web
 
-- The web app also opens in 3D. On slow devices, ⛰ on the left toolbar switches back to the classic 2D map
+- The web app opens in the same 3D map. Controls match Android; with a mouse, left-drag pans, right-drag (or Ctrl + left) rotates and tilts, and the wheel zooms
 
 ## v0.6.2 — 2026/09/07
 

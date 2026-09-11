@@ -392,9 +392,13 @@ debug ビルドの数値もほぼ同じ（純 Dart 801² が 17〜19fps・UI 35m
   | 801² 回転（LOD、step 4） | 43 | 10 / 20ms | 10 / 20ms |
   | 801² 回転（全解像度） | 12 | 52 / 67ms | 27 / 29ms |
 
-  本体はジェスチャ中 4 万セルの予算で間引くので、回転中は LOD の行に近い。重い端末の逃げ道として web だけツールバーの ⛰（MapLibre の 2D）を残す。
-  MapLibre のコード（`RMapWidget` / `MapSourceManager` / basemap・overlay mixin / `ml.Layer` を返す party・DeviceTool）はその逃げ道と feature_editor のために残る。
-  逃げ道が要らないと分かったら丸ごと消す
+  本体はジェスチャ中 4 万セルの予算で間引くので、回転中は LOD の行に近い
+- **MapLibre は地図ページから撤去した（同日午後）**。`MapSourceManager`、basemap／overlay の mixin、party・overlay の `ml.Layer` ビルダー、
+  DeviceTool の `buildOverlayLayers` / `buildOverlayMarkers`、`Terrain3dMode` provider、⛰ ボタンを削除。
+  `MapStyleGroup` と `kStyleProp` / `kLabelProp` は `lib/models/map_style_group.dart`、View 固有スタイルの束は `MapPageStateBase.styleGroups`。
+  MapLibre が残るのは feature_editor の地図（と、それが使う `RMapWidget` / `RMapController` の attach 部分）だけ。
+  `RMapController` は地図ページでは「カメラを覚える箱 + 3D への override」として使う。
+  web の逃げ道（2D）は無い。重い端末はジェスチャ中の間引きに頼る（web で GPU を使う道は WebGL2 を JS 相互運用で叩く案、未着手）
 - ⚠ **web が起動時に `DeferredNotLoadedError` で真っ白**（同日発覚）: `slang_build_runner` は `slang.yaml` を読まず `build.yaml` の options だけを見る。
   `lazy` の既定 true で日本語が deferred import になり、`LocaleSettings.useDeviceLocaleSync()` が投げていた。`build.yaml` に slang の options を写して `lazy: false`。
   Flutter 3.47 化（9/10）で codegen を build_runner 一本にしたときから壊れていた

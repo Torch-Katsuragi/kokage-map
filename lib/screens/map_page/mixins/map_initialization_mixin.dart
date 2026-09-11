@@ -38,7 +38,6 @@ import '../../../services/google_drive/index.dart';
 import '../../../services/qgis/qgs_read_back.dart';
 import '../../../services/tile_server.dart';
 import '../../../utils/app_logger.dart';
-import '../../../utils/geo_converter.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
 import '../map_page_state_base.dart';
 import 'map_jump_mixin.dart';
@@ -207,8 +206,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         basemapStyleUri = buildBasemapStyleJson();
       }
 
-      baseMapService.addListener(onBaseMapServiceUpdate);
-      if (mapControllerInstance.style != null) onBaseMapServiceUpdate();
+      // 基図の切替は 3D 地図面（TerrainMapLayer）が baseMapService を直接購読して追従する
       triggerSetState(() {});
       AppLogger.debug('[Init] BaseMap ready (port=${tileServer.port})');
     } catch (e) {
@@ -361,15 +359,10 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     }
   }
 
-  /// GPS履歴更新コールバック（未Consolidation分をkGpsTrackソースに更新）
+  /// GPS履歴更新コールバック（未Consolidation分を 3D 地図面の軌跡に流す）
   /// Consolidation済み分はGPKGレイヤツリー経由で表示される
   void _onGpsHistoryUpdate() {
-    if (mounted && sourceManager.isInitialized) {
-      sourceManager.updateGpsTrack(
-        gpsHistoryRecorder.todayPoints.toGeographics(),
-      );
-      terrainSceneRevision.value++; // 3D 地図面にも軌跡を流す
-    }
+    if (mounted) terrainSceneRevision.value++;
   }
 
   /// gps_tracks レイヤーのフィーチャを強制再読み込み
@@ -418,7 +411,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     AutoSyncService.instance.stop();
     tileServer.stop();
     gpsManager.removeListener(onGpsManagerUpdate);
-    baseMapService.removeListener(onBaseMapServiceUpdate);
     layerStyleSettings.removeListener(onLayerStyleChanged);
     gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);
     gpsHistoryRecorder.onConsolidated = null;

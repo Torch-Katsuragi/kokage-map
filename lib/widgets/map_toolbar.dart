@@ -14,7 +14,6 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // 地図画面の左側ツールバーウィジェット
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,9 +21,7 @@ import '../i18n/strings.g.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../providers/device_tool_providers.dart';
 import '../providers/selection_providers.dart';
-import '../providers/terrain_providers.dart';
 import '../providers/tool_providers.dart';
-import '../providers/ui_state_providers.dart';
 
 /// 地図画面左側のツールバー
 ///
@@ -97,21 +94,6 @@ class MapToolbar extends ConsumerWidget {
                 onToolChanged();
               },
             ),
-            // 3D は正（Android / desktop は常時 3D で、真上に戻すのはコンパス）。切替ボタンは web だけ
-            if (kIsWeb) ...[
-              const SizedBox(height: 8),
-              _ToolButton(
-                icon: Icons.terrain,
-                tooltip: t.map.toolbar.terrain3d,
-                isSelected: ref.watch(terrain3dModeProvider),
-                onPressed: () {
-                  final on = !ref.read(terrain3dModeProvider);
-                  ref.read(terrain3dModeProvider.notifier).set(on);
-                  ref.read(mapFlashProvider.notifier).show(on ? t.map.toolbar.terrain3d : t.map.flash.map2d);
-                  onToolChanged();
-                },
-              ),
-            ],
             // OverlayImageNode選択中のみ表示
             if (hasOverlaySelected) ...[
               const SizedBox(height: 8),

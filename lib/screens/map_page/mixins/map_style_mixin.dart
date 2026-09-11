@@ -19,7 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/nodes/layer_node.dart';
 import '../../../providers/ui_state_providers.dart';
-import '../../../services/map_source_manager.dart';
+import '../../../models/map_style_group.dart';
 import '../../layer_style_settings_screen.dart'
     show
         layerStyleSettings,
@@ -27,23 +27,11 @@ import '../../layer_style_settings_screen.dart'
         pointColorDef,
         lineWidthDef,
         lineColorDef,
-        lineVertexPointsEnabledDef,
-        lineVertexPointSizeFactorDef,
         polygonBorderWidthDef,
         polygonBorderColorDef,
         polygonFillColorDef,
         polygonFillOpacityDef,
-        polygonBorderOpacityDef,
-        polygonVertexPointsEnabledDef,
-        polygonVertexPointSizeFactorDef,
-        selectedColorDef,
-        selectedMultiplierDef,
-        clusteringEnabledDef,
-        clusteringDisableZoomDef,
-        labelFontSizeDef,
-        labelColorDef,
-        labelHaloColorDef,
-        labelOpacityDef;
+        polygonBorderOpacityDef;
 import '../map_page_state_base.dart';
 
 mixin MapStyleMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
@@ -73,20 +61,20 @@ mixin MapStyleMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
         groups.add(
           MapStyleGroup(
             key: entry.key,
-            fillHex: MapSourceManager.colorToHex(
+            fillHex: colorToHex(
               style.resolveColor(polygonFillColorDef, kmeta),
             ),
             fillOpacity: style.resolveDouble(polygonFillOpacityDef, kmeta),
-            outlineHex: MapSourceManager.colorToHex(
+            outlineHex: colorToHex(
               style.resolveColor(polygonBorderColorDef, kmeta),
             ),
             outlineOpacity: style.resolveDouble(polygonBorderOpacityDef, kmeta),
             borderWidth: style.resolveDouble(polygonBorderWidthDef, kmeta),
-            lineHex: MapSourceManager.colorToHex(
+            lineHex: colorToHex(
               style.resolveColor(lineColorDef, kmeta),
             ),
             lineWidth: style.resolveDouble(lineWidthDef, kmeta),
-            pointHex: MapSourceManager.colorToHex(
+            pointHex: colorToHex(
               style.resolveColor(pointColorDef, kmeta),
             ),
             pointSize: style.resolveDouble(pointSizeDef, kmeta),
@@ -102,35 +90,8 @@ mixin MapStyleMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
   /// [groups] を渡せば View 固有スタイルの再計算を省く（`_syncFeatureSources` が
   /// 直前に組んだものをそのまま使う）
   void applyLayerStyles({List<MapStyleGroup>? groups}) {
-    final style = layerStyleSettings;
-    sourceManager.setStyleGroups(groups ?? buildStyleGroups());
-    // クラスタリング設定を反映
-    final pointSize = style.getDouble(pointSizeDef);
-    sourceManager.configureClustering(
-      enabled: style.getBool(clusteringEnabledDef),
-      radius: (pointSize * 2).round(),
-      maxZoom: style.getInt(clusteringDisableZoomDef),
-    );
-    sourceManager.updateLayerStyles(
-      polygonFillColor: style.getColor(polygonFillColorDef),
-      polygonFillOpacity: style.getDouble(polygonFillOpacityDef),
-      polygonOutlineColor: style.getColor(polygonBorderColorDef),
-      polygonOutlineOpacity: style.getDouble(polygonBorderOpacityDef),
-      polygonBorderWidth: style.getDouble(polygonBorderWidthDef),
-      lineColor: style.getColor(lineColorDef),
-      lineWidth: style.getDouble(lineWidthDef),
-      pointColor: style.getColor(pointColorDef),
-      pointSize: pointSize,
-      selectedColor: style.getColor(selectedColorDef),
-      selectedMultiplier: style.getDouble(selectedMultiplierDef),
-      lineVertexEnabled: style.getBool(lineVertexPointsEnabledDef),
-      lineVertexSizeFactor: style.getDouble(lineVertexPointSizeFactorDef),
-      polygonVertexEnabled: style.getBool(polygonVertexPointsEnabledDef),
-      polygonVertexSizeFactor: style.getDouble(polygonVertexPointSizeFactorDef),
-      labelFontSize: style.getDouble(labelFontSizeDef),
-      labelColor: style.getColor(labelColorDef),
-      labelHaloColor: style.getColor(labelHaloColorDef),
-      labelOpacity: style.getDouble(labelOpacityDef),
-    );
+    // View 固有スタイルの束を持ち直す。全体設定の値は 3D 地図面（TerrainMapLayer）が layerStyleSettings から直接読む
+    setStyleGroups(groups ?? buildStyleGroups());
+    terrainSceneRevision.value++;
   }
 }

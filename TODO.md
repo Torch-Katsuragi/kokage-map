@@ -74,10 +74,12 @@
         切替ボタンは web だけ、MapLibre は空のスタイルで組む、`RMapController.jumpOverride` で移動系を 3D に流す（起動時の現在位置ジャンプ含む）
   - [x] 3D の間は MapLibre を組まない（2026-09-11 昼。Android / desktop はネイティブの地図を持たない。web は 3D を抜けたときに組み直す）
   - [x] 眺めモード（透視投影、2026-09-11 昼）: コンパス長押しで切替、靄と空、視線なぞりのヒットテスト。手法は [[docs/technical/terrain-3d]]「眺めモード」
-  - [x] web も起動から 3D（2026-09-11 昼。Surface の Chrome で 401² LOD 静止 59fps・801² 回転 LOD 43fps）。⛰ は web の逃げ道（MapLibre 2D）として残す
+  - [x] web も起動から 3D（2026-09-11 昼。Surface の Chrome で 401² LOD 静止 59fps・801² 回転 LOD 43fps）
   - [x] web が起動時に真っ白（DeferredNotLoadedError）: slang_build_runner は build.yaml の options しか読まない → `build.yaml` に `lazy: false`（2026-09-11）
-  - [ ] MapLibre のコード削除（`RMapWidget` / `MapSourceManager` / basemap・overlay mixin / party・DeviceTool の `ml.Layer`）: web の逃げ道が要らないと
-        分かってから。feature_editor の地図は MapLibre のまま
+  - [x] **MapLibre を地図ページから撤去**（2026-09-11 午後、松本「もちろん外すけど」）: `MapSourceManager` / basemap・overlay mixin /
+        party・overlay の `ml.Layer` ビルダー / DeviceTool の `buildOverlayLayers` `buildOverlayMarkers` / `Terrain3dMode` provider / ⛰ を削除。
+        `MapStyleGroup` と `kStyleProp` は `lib/models/map_style_group.dart` へ。View 固有スタイルは `MapPageStateBase.styleGroups`。
+        MapLibre が残るのは feature_editor の地図と `RMapWidget` / `RMapController` の attach 部分だけ（feature_editor 用）
   - ⚠ release の APK は `--no-pub` を付けずに組む（2026-09-11）。debug の `flutter run` の後に `--no-pub` で release を組むと
     `GeneratedPluginRegistrant.java` が dev 依存（integration_test）入りのまま残り、`compileReleaseJavaWithJavac` で落ちる
   - ⚠ release の署名: `android/key.properties`（master 側の checkout に在る。gitignore）の `storeFile=../k-maps-release.keystore` は

@@ -14,13 +14,11 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: map_page関連のmixinエクスポート
-export 'map_basemap_mixin.dart';
 export 'map_drawing_mixin.dart';
 export 'map_feature_cache_mixin.dart';
 export 'map_gps_survey_mixin.dart';
 export 'map_gps_tracking_mixin.dart';
 export 'map_initialization_mixin.dart';
 export 'map_jump_mixin.dart';
-export 'map_overlay_mixin.dart';
 export 'map_style_mixin.dart';
 

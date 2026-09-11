@@ -25,7 +25,6 @@ library;
 import 'package:flutter/widgets.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
-import 'package:maplibre/maplibre.dart' as ml;
 import '../../tools/map_tool.dart';
 import 'device_service.dart';
 
@@ -36,16 +35,10 @@ abstract class DeviceTool extends MapTool with ChangeNotifier {
   /// ツールが利用可能か（機器が接続されているか）
   bool get isAvailable => service.isConnected;
 
-  /// 地図上に描画するオーバーレイレイヤ（PolylineLayer等）
-  List<ml.Layer> buildOverlayLayers();
-
-  /// 描画系に依らない形のオーバーレイ（3D の地形にも載せる）: 線と基準点。
-  /// [buildOverlayLayers] / [buildOverlayMarkers] はこれを MapLibre 向けに包む
+  /// 地図面に載せるオーバーレイ（描画系に依らない形）: 基準点 → 計測点の線と基準点。
+  /// 地形（`TerrainMapLayer`）が持ち上げて描く
   List<geo.Feature<geo.LineString>> overlayLines() => const [];
   LatLng? get overlayStation => null;
-
-  /// 地図上に描画するウィジェットマーカー（BP標識等）
-  List<ml.Marker> buildOverlayMarkers();
 
   /// ステータスパネルウィジェット（機器状態・計測値表示）
   Widget buildStatusPanel(BuildContext context);

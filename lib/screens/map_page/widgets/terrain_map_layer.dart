@@ -50,7 +50,7 @@ import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/basemap_service.dart';
-import '../../../services/map_source_manager.dart';
+import '../../../models/map_style_group.dart';
 import '../../../tools/gps_tool.dart';
 import '../../../tools/map_tool.dart';
 import '../../../tools/overlay_transform_tool.dart';
@@ -949,7 +949,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           mesh: mesh,
           stylesByKey: styles,
           defaultStyle: def,
-          styleKeyProp: MapSourceManager.kStyleProp,
+          styleKeyProp: kStyleProp,
           labelProp: labelProp,
           labelTextStyle: labelStyle,
           polygonClipCells: clipCells,

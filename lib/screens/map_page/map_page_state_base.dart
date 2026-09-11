@@ -21,7 +21,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:maplibre/maplibre.dart' as ml;
 
 import '../../core/r_map_controller.dart';
 import '../../interfaces/map_state_interface.dart';
@@ -37,7 +36,7 @@ import '../../services/basemap_service.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../services/gps_manager_service.dart';
 import '../../services/internal_gps_location_store.dart';
-import '../../services/map_source_manager.dart';
+import '../../models/map_style_group.dart';
 import '../../services/tile_server.dart';
 import 'feature_geojson_cache.dart';
 
@@ -134,8 +133,6 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// ローカルタイルサーバー
   late final TileServer tileServer = TileServer(baseMapService);
 
-  /// GeoJSONソース直接管理（layersプロパティ経由のOOM回避）
-  final MapSourceManager sourceManager = MapSourceManager();
 
   /// 内蔵GPS位置情報ストア
   final InternalGpsLocationStore locationStore = InternalGpsLocationStore();
@@ -191,10 +188,6 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   @override
   List<OverlayImageNode> overlayImageNodes = [];
 
-  /// MapLibreに登録済みのオーバーレイソースID
-  @override
-  Set<String> activeOverlaySourceIds = {};
-
   // =============================================
   // レンダリングキャッシュ（パン/ズーム時の再構築を防止）
   // =============================================
@@ -202,8 +195,15 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 地図に流す GeoJSON（通常 / 選択済み）。組み立ては [FeatureGeoJsonCache]
   final geoJson = FeatureGeoJsonCache();
 
-  /// オーバーレイ用Widgetマーカー（現在位置、測量ポイント等）
-  List<ml.Marker> cachedOverlayMarkers = [];
+  /// View 固有スタイルの束（フィーチャの `k-style` と突き合わせる）。3D 地図面が見た目を決めるのに使う
+  List<MapStyleGroup> styleGroups = const [];
+
+  /// [styleGroups] を差し替える。変わったら true
+  bool setStyleGroups(List<MapStyleGroup> groups) {
+    if (styleGroupsEqual(styleGroups, groups)) return false;
+    styleGroups = List.unmodifiable(groups);
+    return true;
+  }
 
   /// キャッシュ再構築フラグ
   bool layerCacheDirty = true;
@@ -273,9 +273,6 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   /// GPS情報更新コールバック
   void onGpsManagerUpdate();
-
-  /// 背景地図サービス更新コールバック
-  void onBaseMapServiceUpdate();
 
   /// レイヤスタイル変更コールバック
   void onLayerStyleChanged();

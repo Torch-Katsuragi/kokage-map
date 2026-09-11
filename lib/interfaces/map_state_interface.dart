@@ -76,10 +76,6 @@ abstract class IMapState {
   /// キャッシュ済みオーバーレイ画像ノード
   List<OverlayImageNode> get overlayImageNodes;
 
-  /// MapLibreに登録済みのオーバーレイソースID
-  Set<String> get activeOverlaySourceIds;
-  set activeOverlaySourceIds(Set<String> value);
-
   /// レイヤキャッシュを無効化
   void invalidateLayerCache();
 

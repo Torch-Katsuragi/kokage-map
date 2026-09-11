@@ -4,7 +4,6 @@
 // 割り当てられるか**はここで固定できる。段4b の要はここ。
 //
 // 実物の GeoPackage を使う（メモリDBだと `getFeatureIds` の主キー解決を通せない）。
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -15,7 +14,6 @@ import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/models/nodes/view_node.dart';
-import 'package:root_maps/services/map_source_manager.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:turf/turf.dart' as turf;
 
@@ -151,7 +149,6 @@ void main() {
         reason: 'グループが無いのにキーだけ残ると、フィーチャに無駄な属性が載る');
   });
 
-  _clusterPathTests();
 }
 
 /// GeoPackage のジオメトリBLOB（ヘッダ + WKB Point）
@@ -167,44 +164,3 @@ Uint8List _gpkgPoint(double lon, double lat) {
   return Uint8List.fromList([...header.toBytes(), ...wkb.buffer.asUint8List()]);
 }
 
-/// クラスタリング経路で属性が落ちないこと
-///
-/// `k-points` はクラスタリングが有効なとき、[MapSourceManager.clusterPointJson]
-/// の出力で作り直される。ここで属性を写し忘れると
-/// **クラスタリングが有効なときだけ View のスタイルが効かない**という
-/// 分かりにくい壊れ方をする。2026-08-26 に実際に踏んだので固定しておく。
-void _clusterPathTests() {
-  group('クラスタリング経路', () {
-    test('スタイルグループのキーを落とさない', () {
-      final json = MapSourceManager.clusterPointJson(139.76, 35.68, {
-        'name': '地点01',
-        MapSourceManager.kStyleProp: 'a.gpkg/l/大きい',
-      });
-      final decoded = jsonDecode(json) as Map<String, dynamic>;
-      final props = decoded['properties'] as Map<String, dynamic>;
-      expect(props['name'], '地点01');
-      expect(props[MapSourceManager.kStyleProp], 'a.gpkg/l/大きい');
-    });
-
-    test('キーが無いときは属性を足さない', () {
-      final json = MapSourceManager.clusterPointJson(139.76, 35.68, {
-        'name': '地点01',
-      });
-      final props =
-          (jsonDecode(json) as Map<String, dynamic>)['properties']
-              as Map<String, dynamic>;
-      expect(props.containsKey(MapSourceManager.kStyleProp), isFalse,
-          reason: 'グループが無いのに属性が載ると、View導入前と同じにならない');
-    });
-
-    test('名前のエスケープが壊れない', () {
-      final json = MapSourceManager.clusterPointJson(139.76, 35.68, {
-        'name': r'"引用" \ と バックスラッシュ',
-      });
-      final props =
-          (jsonDecode(json) as Map<String, dynamic>)['properties']
-              as Map<String, dynamic>;
-      expect(props['name'], r'"引用" \ と バックスラッシュ');
-    });
-  });
-}

@@ -7,8 +7,10 @@ tags: [technical, design, 3d, architecture]
 
 > [!NOTE] 位置づけ
 > 3D 化の順1（Vault `3D化の詰め_2026-09-07` 6 節・7 節）。2026-09-08 夜に seam ①③ と ② の一部を
-> `TerrainMapLayer` として本体に接続した（[[terrain-3d]] の「本体への接続」）。インターフェース抽出はこれから。
-> 2026-09-08 に master@429f472 の map_page まわりを調査した結果に基づく。3D 描画系そのものは [[terrain-3d]]。
+> `TerrainMapLayer` として本体に接続した（[[terrain-3d]] の「本体への接続」）。
+> **2026-09-11 に MapLibre を地図ページから撤去したので、ここに書いた「2 モードの交代」と `SceneSink` / `MapSurfaceController` の抽出は不要になった**。
+> 地図面は `TerrainMapLayer` 1 つ、シーン投入は `FeatureGeoJsonCache` + `terrainSceneRevision`、カメラは `RMapController` の override。
+> 以下は 2026-09-08 時点の調査記録として残す。3D 描画系そのものは [[terrain-3d]]。
 
 ## 結論
 

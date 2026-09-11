@@ -2,13 +2,20 @@
 
 ## Next release (in development, feature/3d-map)
 
-### ⛰ 3D terrain mode (experimental)
+### ⛰ The map is now 3D
 
-- Tap ⛰ on the left toolbar and the usual map tilts over the terrain. Drag with one finger to rotate and tilt; use two fingers to pan and zoom. The slider on the right edge also tilts
-- Compartments, routes, survey points, photos, today's GPS track, your location and room members are draped on the terrain. Tap-to-select and info cards work in 3D
-- Drawing tools (Pen, GPS) return to the top-down 2D view automatically. The map position is kept when you leave 3D
-- Elevation comes from AWS Terrain Tiles (global, no key); the background is your selected basemap. ⚠ Elevation needs a network connection, so for now this is meant for the office
-- Not yet: overlay images (GeoTIFF), clustering, device tools
+- It opens top-down as before. Drag with one finger to rotate and tilt, use two fingers to pan and zoom. Tap the compass at the top right to return to north-up, top-down
+- Compartments, routes, survey points, photos, GPS tracks, your location, room members and overlay images (GeoTIFF) are draped on the terrain. Tap-to-select, info cards and TruPulse measurements work while tilted
+- Drawing (Pen, overlay transform) locks the view top-down automatically and restores the tilt when you finish
+- Elevation prefers the GSI DEM (1 m → 5 m → 10 m) and falls back to AWS Terrain Tiles. Areas you have viewed once work offline
+- Terrain shading follows slope rather than a light direction: steeper is darker, ridges and valley floors stay bright
+- Long-press the compass for the "view mode": a perspective view where the distance fades into haze. Long-press again to return
+- Rendering runs on the GPU, so rotating and tilting stay smooth
+- Like tool changes, switching the view mode or resetting to north-up briefly shows a label in the middle of the map
+
+### Web
+
+- The web app also opens in 3D. On slow devices, ⛰ on the left toolbar switches back to the classic 2D map
 
 ## v0.6.2 — 2026/09/07
 

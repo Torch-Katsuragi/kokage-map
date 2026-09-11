@@ -78,6 +78,8 @@
   - [x] web が起動時に真っ白（DeferredNotLoadedError）: slang_build_runner は build.yaml の options しか読まない → `build.yaml` に `lazy: false`（2026-09-11）
   - [ ] MapLibre のコード削除（`RMapWidget` / `MapSourceManager` / basemap・overlay mixin / party・DeviceTool の `ml.Layer`）: web の逃げ道が要らないと
         分かってから。feature_editor の地図は MapLibre のまま
+  - ⚠ release の APK は `--no-pub` を付けずに組む（2026-09-11）。debug の `flutter run` の後に `--no-pub` で release を組むと
+    `GeneratedPluginRegistrant.java` が dev 依存（integration_test）入りのまま残り、`compileReleaseJavaWithJavac` で落ちる
   - [ ] 眺めモードの残り: 面・線にも靄、純 Dart 経路（web）の透視。2 本指の移動・拡縮・ホイールは透視の式にした（指の下の地面を留める。実機のピンチは未確認）
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 

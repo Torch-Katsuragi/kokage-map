@@ -21,6 +21,68 @@ import 'dem_grid.dart';
 import 'gpu/gpu_geometry.dart';
 import 'terrain_camera.dart';
 
+/// 地形の陰影の付け方（2026-09-11 松本の提案: 光源の陰影ではなく、赤色立体図のように傾斜の濃淡をグレーで薄く重ねる）
+///
+/// 頂点の `shade` は「オーバーレイに使うグレー」（0.5 = 変化なし、小さいほど暗い）で統一する。
+/// GPU 経路はフラグメントシェーダで [blend] に従って重ね、純 Dart 経路（`drawVertices` の modulate）は
+/// 乗算しかできないので 2 × shade を掛ける（中間調ではオーバーレイと同じ結果）。
+/// 値はホットリロードで変えて 3D に入り直せば効く（ビルダーは 3D に入るたびに作り直す）
+class TerrainShading {
+  TerrainShading._();
+
+  /// 陰影の元
+  static TerrainShadeSource source = TerrainShadeSource.slope;
+
+  /// 重ね方（GPU 経路のみ。純 Dart は常に乗算）
+  static TerrainShadeBlend blend = TerrainShadeBlend.multiply;
+
+  /// 傾斜モード: この角度で最も濃い（それ以上は頭打ち）
+  static double slopeMaxDeg = 50;
+
+  /// 傾斜モード: 濃さ（1 = slopeMaxDeg で真っ黒のオーバーレイ、0 = 何もしない）
+  static double slopeStrength = 0.5;
+
+  /// 光源モード（従来）: 方位と高度
+  static int lightAzimuthDeg = 315;
+  static int lightAltitudeDeg = 45;
+
+  /// 法線の xy 成分（`nx = -dh/dx`, `ny = -dh/dy`）からオーバーレイ用のグレーを返す
+  static double grayFor(double nx, double ny) {
+    switch (source) {
+      case TerrainShadeSource.slope:
+        final slopeDeg = math.atan(math.sqrt(nx * nx + ny * ny)) * 180 / math.pi;
+        final t = (slopeDeg / slopeMaxDeg).clamp(0.0, 1.0);
+        return 0.5 - 0.5 * slopeStrength * t;
+      case TerrainShadeSource.hillshade:
+        final az = lightAzimuthDeg * math.pi / 180;
+        final alt = lightAltitudeDeg * math.pi / 180;
+        final lx = math.sin(az) * math.cos(alt);
+        final ly = math.cos(az) * math.cos(alt);
+        final lz = math.sin(alt);
+        final len = math.sqrt(nx * nx + ny * ny + 1);
+        final dot = (nx * lx + ny * ly + lz) / len;
+        final shade = (0.35 + 0.65 * dot.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+        return shade / 2; // 乗算の倍率 → オーバーレイ用のグレー
+    }
+  }
+}
+
+enum TerrainShadeSource {
+  /// 傾斜が急いほど暗い（光の向きに依らない。赤色立体図の傾斜成分）
+  slope,
+
+  /// 光源の向きと法線の内積（従来）
+  hillshade,
+}
+
+enum TerrainShadeBlend {
+  /// 乗算（暗くするだけ。白も暗くなる）
+  multiply,
+
+  /// オーバーレイ（中間調のコントラストを上げ、白と黒は残す。薄く重なる）
+  overlay,
+}
+
 /// 奥行き順に並んだセルのひとかたまり（= チャンク 1 つ）
 ///
 /// 帯ごとに `drawVertices` を 1 回呼び、その帯に落ちるベクタを続けて描くことで
@@ -270,12 +332,12 @@ class TerrainMeshBuilder {
     _cellCount = cellCols * cellRows;
     _cellBand = Uint16List(_cellCount);
 
-    // 頂点ごとの陰影（中央差分の法線 × 光源）
-    final az = lightAzimuthDeg * math.pi / 180;
-    final alt = lightAltitudeDeg * math.pi / 180;
-    final lx = math.sin(az) * math.cos(alt);
-    final ly = math.cos(az) * math.cos(alt);
-    final lz = math.sin(alt);
+    // 頂点ごとの陰影（中央差分の法線 → [TerrainShading]。傾斜の濃淡か光源）。
+    // `_shade` はオーバーレイ用のグレー（0.5 = 変化なし）、純 Dart 経路の頂点色は乗算なので 2 倍
+    if (lightAzimuthDeg != 315 || lightAltitudeDeg != 45) {
+      TerrainShading.lightAzimuthDeg = lightAzimuthDeg;
+      TerrainShading.lightAltitudeDeg = lightAltitudeDeg;
+    }
     final vertexColor = Int32List(cols * rows);
     _shade = Float32List(cols * rows);
     for (var r = 0; r < rows; r++) {
@@ -286,11 +348,9 @@ class TerrainMeshBuilder {
         final cE = c == cols - 1 ? cols - 1 : c + 1;
         final nx = -(_heights[r * cols + cE] - _heights[r * cols + cW]) / ((cE - cW) * cell);
         final ny = -(_heights[rN * cols + c] - _heights[rS * cols + c]) / ((rN - rS) * cell);
-        final len = math.sqrt(nx * nx + ny * ny + 1);
-        final dot = (nx * lx + ny * ly + lz) / len;
-        final shade = (0.35 + 0.65 * dot.clamp(0.0, 1.0)).clamp(0.0, 1.0);
-        _shade[r * cols + c] = shade;
-        final g = (shade * 255).round();
+        final gray = TerrainShading.grayFor(nx, ny);
+        _shade[r * cols + c] = gray;
+        final g = ((gray * 2).clamp(0.0, 1.0) * 255).round();
         vertexColor[r * cols + c] = 0xFF000000 | (g << 16) | (g << 8) | g;
       }
     }

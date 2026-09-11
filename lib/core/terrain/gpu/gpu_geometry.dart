@@ -179,18 +179,19 @@ class GpuTerrainGeometry {
         final u = x * invW;
         final v = 1 - y * invH;
         // 上（縁と同じ点）と下（skirtDepth 下）。テクスチャは縁の色を引き伸ばし、壁は暗くする
+        // （shade はオーバーレイ用のグレー。0.5 で変化なし）
         data[o] = x;
         data[o + 1] = y;
         data[o + 2] = h;
         data[o + 3] = u;
         data[o + 4] = v;
-        data[o + 5] = 0.7;
+        data[o + 5] = 0.35;
         data[o + 6] = x;
         data[o + 7] = y;
         data[o + 8] = h - skirtDepth;
         data[o + 9] = u;
         data[o + 10] = v;
-        data[o + 11] = 0.45;
+        data[o + 11] = 0.25;
         o += floatsPerVertex * 2;
         if (i + 1 < edgeCount) {
           final t0 = base + i * 2;

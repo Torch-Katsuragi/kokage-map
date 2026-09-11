@@ -1,4 +1,5 @@
 // GPU に上げる頂点列の組み立て（純 Dart 部分）と、骨組みだけのメッシュ
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -159,6 +160,46 @@ void main() {
       final mips = buildMipChain(MipChainArgs(rgba: rgba, width: 5, height: 3));
       expect(mips.map((m) => m.length ~/ 4).toList(), [2 * 1, 1 * 1]);
       expect(mips.last, [100, 100, 100, 100]);
+    });
+  });
+
+  group('TerrainShading', () {
+    tearDown(() {
+      TerrainShading.source = TerrainShadeSource.slope;
+      TerrainShading.slopeMaxDeg = 50;
+      TerrainShading.slopeStrength = 0.5;
+    });
+
+    test('傾斜: 平らは 0.5（変化なし）、急なほど暗く、slopeMaxDeg で頭打ち', () {
+      TerrainShading.source = TerrainShadeSource.slope;
+      TerrainShading.slopeMaxDeg = 45;
+      TerrainShading.slopeStrength = 1;
+      expect(TerrainShading.grayFor(0, 0), 0.5);
+      final g45 = TerrainShading.grayFor(1, 0); // tan 45° = 1
+      expect(g45, closeTo(0, 1e-6));
+      final g30 = TerrainShading.grayFor(math.tan(30 * math.pi / 180), 0);
+      expect(g30, closeTo(0.5 - 0.5 * 30 / 45, 1e-6));
+      expect(TerrainShading.grayFor(5, 5), 0); // 頭打ち
+      // 向きに依らない
+      expect(TerrainShading.grayFor(0, 1), closeTo(g45, 1e-9));
+      expect(TerrainShading.grayFor(-1, 0), closeTo(g45, 1e-9));
+    });
+
+    test('光源: 従来の倍率の半分（北西向きが明るく南東向きが暗い）', () {
+      TerrainShading.source = TerrainShadeSource.hillshade;
+      final flat = TerrainShading.grayFor(0, 0);
+      expect(flat * 2, closeTo(0.35 + 0.65 * math.sin(45 * math.pi / 180), 1e-6));
+      // nx = -dh/dx なので (-0.5, 0.5) は北西向きの斜面（光源 315° に向く）→ 明るい
+      expect(TerrainShading.grayFor(-0.5, 0.5), greaterThan(TerrainShading.grayFor(0.5, -0.5)));
+    });
+
+    test('ビルダーの頂点色は 2 × グレーの乗算', () {
+      TerrainShading.source = TerrainShadeSource.slope;
+      final builder = TerrainMeshBuilder(dem(), textureWidth: 8, textureHeight: 8, chunkSize: 4);
+      final g = builder.gpuGeometry();
+      // dem() は c + r の斜面（tan = √2 / 10）→ 全点同じ傾斜
+      final expected = TerrainShading.grayFor(-0.1, -0.1);
+      expect(g.vertices[5], closeTo(expected, 1e-6));
     });
   });
 

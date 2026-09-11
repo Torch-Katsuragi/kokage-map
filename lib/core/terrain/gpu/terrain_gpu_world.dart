@@ -345,6 +345,11 @@ class TerrainGpuWorldRenderer {
     final sampler = _terrainSampler;
     final texSlot = _terrainPipeline.fragmentShader.getUniformSlot('tex');
     final terrainInfoSlot = _terrainPipeline.vertexShader.getUniformSlot('FrameInfo');
+    final shadeInfoSlot = _terrainPipeline.fragmentShader.getUniformSlot('ShadeInfo');
+    // 陰影の重ね方（TerrainShading.blend）。ホットリロードで変えたら次のフレームから効く
+    final shadeInfo = _hostBuffer.emplace(
+      ByteData.view(Float32List.fromList([TerrainShading.blend == TerrainShadeBlend.overlay ? 1 : 0, 0, 0, 0]).buffer),
+    );
     pass.bindPipeline(_terrainPipeline);
     pass.setDepthWriteEnable(true);
     pass.setDepthCompareOperation(gpu.CompareFunction.lessEqual);
@@ -354,6 +359,7 @@ class TerrainGpuWorldRenderer {
       pass.bindVertexBuffer(gpu.BufferView(e.terrain.vertices, offsetInBytes: 0, lengthInBytes: e.terrain.vertices.sizeInBytes));
       pass.bindIndexBuffer(gpu.BufferView(e.terrain.indices, offsetInBytes: 0, lengthInBytes: e.terrain.indices.sizeInBytes), gpu.IndexType.int32);
       pass.bindUniform(terrainInfoSlot, e.terrainInfo!);
+      pass.bindUniform(shadeInfoSlot, shadeInfo);
       pass.bindTexture(texSlot, e.texture, sampler: sampler);
       pass.drawIndexed(e.terrain.indexCount);
       draws++;

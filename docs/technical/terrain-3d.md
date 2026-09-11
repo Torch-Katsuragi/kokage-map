@@ -341,6 +341,13 @@ debug ビルドの数値もほぼ同じ（純 Dart 801² が 17〜19fps・UI 35m
   ⚠ `Texture.fullMipCount(512, 512)` は 9（1×1 を数えない）で `buildMipChain` は 10 段作る → テクスチャ側の段数に合わせて余りを捨てる。
   flutter_gpu の Dart API に GPU 側でミップを作る口は無い（`doesSupportManuallyMippedTextures` で手上げ）。
   メモリは包んだ画像 + ミップ付きの複製で 1 タイル +1.3MB（GPU 経路では `ui.Image` を捨てる整理が次の一手）
+- **陰影を光源から傾斜に（2026-09-11 昼・松本「赤色立体図に近いものをグレースケールで薄く重ねる方がよくない？」）**: `TerrainShading`（`terrain_mesh.dart`）。
+  `source`（`slope` = 傾斜角 / `slopeMaxDeg` で濃さ、光の向きに依らない／`hillshade` = 従来）と `blend`（`multiply`／`overlay`）を独立に持つ。
+  頂点の `shade` は「オーバーレイ用のグレー（0.5 = 変化なし）」で統一し、GPU 経路は `terrain.frag` の `ShadeInfo` uniform で重ね方を選ぶ、
+  純 Dart 経路は 2 × shade の乗算。⚠ **オーバーレイは白い基図（地理院標準）では白を白のまま残すので、傾斜がほぼ見えない**
+  （等高線だけ濃くなる）→ 既定は `slope` × `multiply`、`slopeStrength 0.5`・`slopeMaxDeg 50`。
+  ⚠ これらは static なのでホットリロードでは初期値が変わらない（ホットリスタートで確認）。
+  赤色立体図のもう一方の成分（地上開度・地下開度 = 尾根を明るく谷を暗く）は未実装（近傍探索が要る。曲率で近似する案）
 
 ### 計測（2026-09-11・Pixel 9・Kitayama-2026・ドライブ 48 秒）
 

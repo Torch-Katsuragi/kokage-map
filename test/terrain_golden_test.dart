@@ -31,6 +31,9 @@ import 'package:root_maps/core/terrain/terrain_painter.dart';
 /// 違って一致しないので、Windows 以外では skip する。
 void main() {
   testWidgets('地形 + 線 + 面 + ラベルの描画', (tester) async {
+    // ゴールデンは光源の陰影で作ってある（既定は傾斜の濃淡。描画系の検証なので陰影は固定する）
+    TerrainShading.source = TerrainShadeSource.hillshade;
+    addTearDown(() => TerrainShading.source = TerrainShadeSource.slope);
     final dem = DemGrid.synthetic(cols: 81, rows: 81, cellSize: 10, relief: 200);
     final camera = TerrainCamera(
       centerX: 400,

@@ -79,6 +79,14 @@ class QgsWriter {
   XmlElement treeLayerElement(QgsLayer layer) =>
       _fragment((b) => _writeTreeNode(b, layer));
 
+  /// ラスタの `<maplayer>`
+  XmlElement rasterMapLayerElement(QgsRasterLayer layer) =>
+      _fragment((b) => _writeRasterMapLayer(b, layer));
+
+  /// ラスタの `<layer-tree-layer>`
+  XmlElement treeRasterLayerElement(QgsRasterLayer layer) =>
+      _fragment((b) => _writeTreeNode(b, layer));
+
   /// 子を持たない `<layer-tree-group>`
   XmlElement treeGroupElement(String name, {bool visible = true}) => _fragment(
     (b) => _writeTreeNode(b, QgsGroup(name: name, children: const [], visible: visible)),
@@ -205,6 +213,22 @@ class QgsWriter {
             builder.element('customproperties', nest: () {});
           },
         );
+      case QgsRasterLayer():
+        builder.element(
+          'layer-tree-layer',
+          attributes: {
+            'id': node.id,
+            'name': node.name,
+            'source': node.dataSourcePath,
+            'providerKey': 'gdal',
+            'expanded': '1',
+            'checked': _checked(node.visible),
+            'patch_size': '-1,-1',
+          },
+          nest: () {
+            builder.element('customproperties', nest: () {});
+          },
+        );
     }
   }
 
@@ -222,11 +246,38 @@ class QgsWriter {
         for (final layer in layers) {
           _writeMapLayer(builder, layer);
         }
+        for (final raster in project.rasterLayers) {
+          _writeRasterMapLayer(builder, raster);
+        }
         for (final group in project.embeddedGroups) {
           for (final id in group.layerIds) {
             _writeEmbeddedStub(builder, group.projectPath, id);
           }
         }
+      },
+    );
+  }
+
+  /// ラスタ（GeoTIFF）の `<maplayer>`。レンダラ（`<pipe>`）は書かない。
+  /// QGIS は読込時にプロバイダを作った段階で既定のレンダラを付けるので、無くても開ける
+  void _writeRasterMapLayer(XmlBuilder builder, QgsRasterLayer layer) {
+    builder.element(
+      'maplayer',
+      attributes: {
+        'type': 'raster',
+        'hasScaleBasedVisibilityFlag': '0',
+        'minScale': '1e+08',
+        'maxScale': '0',
+        'refreshOnNotifyEnabled': '0',
+        'autoRefreshMode': 'Disabled',
+        'styleCategories': 'AllStyleCategories',
+      },
+      nest: () {
+        builder.element('id', nest: layer.id);
+        builder.element('datasource', nest: layer.dataSourcePath);
+        builder.element('layername', nest: layer.name);
+        builder.element('srs', nest: () => _writeCrs(builder, layer.crs));
+        builder.element('provider', nest: 'gdal');
       },
     );
   }
@@ -288,8 +339,8 @@ class QgsWriter {
     builder.element(
       'layerorder',
       nest: () {
-        for (final layer in project.layers) {
-          builder.element('layer', attributes: {'id': layer.id});
+        for (final id in project.orderedLayerIds) {
+          builder.element('layer', attributes: {'id': id});
         }
         for (final group in project.embeddedGroups) {
           for (final id in group.layerIds) {

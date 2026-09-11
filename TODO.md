@@ -163,7 +163,7 @@
         祖先グループの checked を AND で畳む
 - [/] 段3（2026-09-06）: 展開状態（`layer-tree-group@expanded`）と簡易ラベル（`labeling type="simple"`・
       `labelsEnabled`）を出力。DOM 更新では `text-style` の管轄属性だけ差し替え、ルールベースは触らない
-  - [ ] ラスタ化オーバーレイ（GeoTIFF を `maplayer type="raster"` で）は未着手
+  - [x] ラスタ化オーバーレイ（GeoTIFF を `maplayer type="raster"` で）→ 2026-09-11 夜に実装（上の「オーバーレイ画像をラスタレイヤとして書く」）
 - [x] 段4（2026-09-06）: 自分の `.kmeta.json` を持つ子 dir は独立した `<dir名>.qgs` を持ち、親には
       `embedded="1" embedded_project` のグループと `<maplayer embedded="1">` スタブで載せる。
       読み戻しは子 dir も辿る。インポータは埋め込みスタブを飛ばす
@@ -242,7 +242,8 @@
         手順は [[docs/technical/qgis-interop]]、確認スクリプトは `tool/qgis/`
   - [x] Drive push の直前に自動生成する → `QgsAutoRefresh.flushNow()`（2026-09-06）。
         それ以前にメタデータ保存のたびに追従しているので、push 時は待ちの消化だけ
-  - [ ] 画像・オーバーレイをラスタレイヤとして書く（いまは除外して報告するだけ）
+  - [x] オーバーレイ画像（GeoTIFF）をラスタレイヤとして書く（2026-09-11 夜）: `QgsRasterLayer`（gdal・参照だけ、レンダラは QGIS 任せ）。DOM 更新でも足す・直す・外す。
+        写真と GeoTIFF でないオーバーレイは従来どおり報告して外す。⚠ QGIS での実開封は未確認（`test/qgs_raster_test.dart` は XML の形まで）
 - [x] `.qgs` インポータ（root外参照を破棄・グループはdir構造に置換・捨てたものを必ず報告）
   - 2026-08-26 実装。こかげマップ → `.qgs` → こかげマップ の往復を web で確認済み
   - QGIS 3.44.12 に書かせた `.qgs` を `test/fixtures/` に置き、それでテストしている。

@@ -187,6 +187,10 @@ class QgsImporter {
       final name = _text(maplayer, 'layername') ?? '(名前なし)';
       final provider = _text(maplayer, 'provider')?.toLowerCase();
 
+      // ラスタは取り込まない（自分が書いたオーバーレイの参照は .kmeta.json が正典。
+      // QGIS 側で足したラスタは扱えないが、毎回の読み戻しで「取り込めません」と騒がない）
+      if (maplayer.getAttribute('type') == 'raster') continue;
+
       if (provider != null && provider != 'ogr') {
         // PostGIS / WMS / メモリレイヤ等。ファイルとして持ち歩けない
         discarded.add('$name（$provider は取り込めません）');

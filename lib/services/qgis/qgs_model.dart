@@ -140,6 +140,35 @@ class QgsLayer extends QgsTreeNode {
   }
 }
 
+/// ラスタレイヤ（オーバーレイ画像の GeoTIFF）。
+///
+/// アプリはオーバーレイの位置・倍率・回転を `.kmeta.json` に持ち、`.tif` には GeoTIFF タグとして
+/// 焼き込んでいる（`GeoTiffWriteScheduler`）。QGIS はそのタグを gdal プロバイダで読むので、
+/// `.qgs` にはファイルの参照だけ書けばよい。見た目（レンダラ）は QGIS の既定に任せる。
+class QgsRasterLayer extends QgsTreeNode {
+  const QgsRasterLayer({
+    required this.id,
+    required this.name,
+    required this.dataSourcePath,
+    this.crs = QgsCrs.wgs84,
+    this.visible = true,
+  });
+
+  /// プロジェクト内で一意なID（決定的に作る。[QgsLayer.id] と同じ理由）
+  final String id;
+
+  /// QGIS 上のレイヤ名（既定はファイル名から拡張子を除いたもの）
+  final String name;
+
+  /// `.qgs` からの相対パス（例: `./ortho.tif`）
+  final String dataSourcePath;
+
+  /// GeoTIFF タグの CRS。アプリが焼き込むのは常に WGS84（`GeoTiffService`）
+  final QgsCrs crs;
+
+  final bool visible;
+}
+
 /// レイヤの座標参照系。gpkg から読んだものをそのまま渡す。
 class QgsCrs {
   const QgsCrs({
@@ -254,6 +283,7 @@ class QgsProject {
           case QgsEmbeddedGroup():
             result.add(node);
           case QgsLayer():
+          case QgsRasterLayer():
             break;
         }
       }
@@ -275,8 +305,53 @@ class QgsProject {
             walk(children);
           case QgsLayer():
             result.add(node);
+          case QgsRasterLayer():
+            break; // [rasterLayers]
           case QgsEmbeddedGroup():
             break; // 子プロジェクトのもの。自分のレイヤではない
+        }
+      }
+    }
+
+    walk(root);
+    return result;
+  }
+
+  /// ツリーを深さ優先で辿って、ラスタレイヤだけを順に返す
+  List<QgsRasterLayer> get rasterLayers {
+    final result = <QgsRasterLayer>[];
+    void walk(List<QgsTreeNode> nodes) {
+      for (final node in nodes) {
+        switch (node) {
+          case QgsGroup(:final children):
+            walk(children);
+          case QgsRasterLayer():
+            result.add(node);
+          case QgsLayer():
+          case QgsEmbeddedGroup():
+            break;
+        }
+      }
+    }
+
+    walk(root);
+    return result;
+  }
+
+  /// `<layerorder>` に書く順（ツリーの深さ優先。ベクタもラスタも同じ並びに載せる）
+  List<String> get orderedLayerIds {
+    final result = <String>[];
+    void walk(List<QgsTreeNode> nodes) {
+      for (final node in nodes) {
+        switch (node) {
+          case QgsGroup(:final children):
+            walk(children);
+          case QgsLayer(:final id):
+            result.add(id);
+          case QgsRasterLayer(:final id):
+            result.add(id);
+          case QgsEmbeddedGroup():
+            break;
         }
       }
     }

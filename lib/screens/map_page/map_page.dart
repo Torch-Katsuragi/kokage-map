@@ -502,6 +502,11 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     if (basemapStyleUri == null) {
       return const SizedBox.expand();
     }
+    // 3D が正の間は MapLibre を組まない（地図面は TerrainMapLayer。ネイティブの地図も Graphics メモリも持たない）。
+    // web は 3D を抜けたときにここで組み直す（カメラは RMapController が覚えている）
+    if (ref.read(terrain3dModeProvider)) {
+      return const SizedBox.expand();
+    }
 
     final selectedSet = ref.read(selectedFeaturesProvider).toSet();
     final drawingState = GlobalDrawingState.instance;

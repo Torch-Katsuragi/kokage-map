@@ -38,7 +38,7 @@ dependencies:
   riverpod_annotation: ^4.0.0 # @riverpod アノテーション
   latlong2: ^0.9.0 # 緯度経度座標型（maplibre 移行後も座標型として使い続けている）
   geolocator: ^14.0.0 # GPS位置情報取得
-  file_picker: ^11.0.0 # ファイル・ディレクトリ選択用（最新版に更新）
+  file_picker: ^12.3.0 # ファイル・ディレクトリ選択用（最新版に更新）
   file_selector: ^1.0.3 # 新しいファイル選択・保存ダイアログ用
   sqflite: ^2.3.0 # GeoPackageファイル操作用（sqlite3から移行）
   sqflite_common_ffi_web: ^1.1.1     # web版: sqlite3 WASM でGeoPackageを開く
@@ -95,7 +95,7 @@ dependencies:
   extension_google_sign_in_as_googleapis_auth: ^3.0.0  # google_sign_inとgoogleapisの連携
   # flutter_secure_storage: 削除（lib/内で未使用、win32バージョン競合の原因）
   mobile_scanner: ^7.1.4
-  package_info_plus: ^9.0.0         # win32 ^5 vs ^6 競合のため据え置き
+  package_info_plus: ^10.2.1         # win32 ^5 vs ^6 競合のため据え置き
   # 3D の flutter_gpu スパイク（Vault 3D化の詰め 12 節）。web は stub（lib/core/terrain/gpu/）
   flutter_gpu:
     sdk: flutter
@@ -111,7 +111,7 @@ dependencies:
   exif: ^3.3.0
   audioplayers: ^6.6.0
   markdown: ^7.0.0                         # カスタムMarkdownシンタックス用
-  device_info_plus: ^12.4.0         # win32 ^5 vs ^6 競合のため据え置き
+  device_info_plus: ^13.2.0         # win32 ^5 vs ^6 競合のため据え置き
   firebase_core: ^4.11.0
   firebase_database: ^12.4.4
   firebase_auth: ^6.5.4
@@ -121,6 +121,13 @@ dependencies:
   qr_flutter: ^4.1.0                    # Drive連携フォルダのQRコード表示（スキャン側は mobile_scanner）
   flutter_markdown_plus: ^1.0.12         # 更新履歴・使い方の表示用（flutter_markdown は 2026 に discontinued）
 
+
+# 手元コピーで差し替える依存（pub.dev 版が現行のビルド環境で壊れているもの）
+dependency_overrides:
+  # 0.4.0 の android/build.gradle が jcenter() と AGP 4.1 の buildscript を持ち、Gradle 9 で評価に失敗する。
+  # third_party/ の写しは build.gradle だけ書き直し（namespace・compileSdk 35・mavenCentral）。ソースは同じ
+  flutter_bluetooth_serial:
+    path: third_party/flutter_bluetooth_serial
 
 dev_dependencies:
   flutter_test:

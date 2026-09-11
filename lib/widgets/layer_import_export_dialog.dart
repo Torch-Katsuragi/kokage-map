@@ -16,7 +16,9 @@
 // Root Maps: Layer Import/Export Dialog Widget
 // レイヤー全体のインポート・エクスポート機能を提供するダイアログ
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +26,7 @@ import 'package:flutter/material.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../services/coordinate/epsg_registry.dart';
+import '../services/import_export/import_export_models.dart';
 import '../services/import_export/import_export_service.dart';
 
 /// レイヤー全体のImport/Export機能を提供するダイアログ
@@ -645,15 +648,23 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         allowMultiple: false,
       );
 
-      if (result == null || result.files.isEmpty) return;
+      if (result.isEmpty) return;
 
-      final file = result.files.first;
-      if (file.path == null) return;
+      final file = result.first;
+      // file_picker 12 の path は file:// のときだけ。Android の content:// は一時ファイルに写して同じ経路に載せる
+      var path = file.path;
+      if (path == null) {
+        final tmp = File('${Directory.systemTemp.path}${Platform.pathSeparator}${file.name}');
+        await tmp.writeAsBytes(await file.readAsBytes());
+        path = tmp.path;
+      }
+      // PlatformFile はサイズを持たないので実ファイルから
+      final size = await File(path).length();
 
       setState(() {
-        _selectedFilePath = file.path;
+        _selectedFilePath = path;
         _selectedFileName = file.name;
-        _selectedFileSize = file.size;
+        _selectedFileSize = size;
         _statusMessage = null;
         _lastResult = null;
       });
@@ -729,16 +740,10 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   Future<void> _handleExport() async {
     if (widget.exportLayer == null) return;
 
+    // file_picker 12 の saveFile は中身（bytes）を先に渡す作り（Android の SAF は「保存先を選んでから書く」ができない）。
+    // 一時フォルダに書き出してから保存ダイアログへ。Shapefile は .shp/.shx/.dbf/.prj の組なので zip にまとめる
+    Directory? tmpDir;
     try {
-      final result = await FilePicker.saveFile(
-        dialogTitle: 'Export Layer',
-        fileName: '${widget.exportLayer!.name}.${_exportFormat.name}',
-        type: FileType.custom,
-        allowedExtensions: [_exportFormat.name],
-      );
-
-      if (result == null) return;
-
       setState(() {
         _isProcessing = true;
         _statusMessage = null;
@@ -755,12 +760,44 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         includeRowNumber: _includeRowNumber,
       );
 
+      final ext = _exportFormat.extension.replaceFirst('.', '');
+      final baseName = widget.exportLayer!.name;
+      tmpDir = await Directory.systemTemp.createTemp('kokage_export_');
+      final tmpPath = '${tmpDir.path}${Platform.pathSeparator}$baseName.$ext';
+
       final exportResult = await _importExportService.exportLayer(
         widget.exportLayer!,
-        result,
+        tmpPath,
         format: _exportFormat,
         options: exportOptions,
       );
+      if (!exportResult.success) {
+        setState(() {
+          _isProcessing = false;
+          _lastResult = exportResult;
+          _statusMessage = exportResult.errorMessage ?? 'Export failed';
+        });
+        return;
+      }
+
+      _updateProgress(0.8, 'Saving...');
+      final isShapefile = _exportFormat == FileFormat.shapefile;
+      final bytes = isShapefile ? _zipDirectory(tmpDir) : await File(tmpPath).readAsBytes();
+      final saveExt = isShapefile ? 'zip' : ext;
+      final saved = await FilePicker.saveFile(
+        dialogTitle: 'Export Layer',
+        fileName: '$baseName.$saveExt',
+        bytes: bytes,
+        type: FileType.custom,
+        allowedExtensions: [saveExt],
+      );
+      if (saved == null) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = 'Export cancelled';
+        });
+        return;
+      }
 
       _updateProgress(1.0, 'Export completed!');
 
@@ -783,7 +820,22 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         _statusMessage = 'Export failed: $e';
         _lastResult = ImportExportResult.error(e.toString());
       });
+    } finally {
+      try {
+        tmpDir?.deleteSync(recursive: true);
+      } catch (_) {}
     }
+  }
+
+  /// フォルダの中のファイルを 1 つの zip に（Shapefile の組を 1 ファイルで保存するため）
+  static Uint8List _zipDirectory(Directory dir) {
+    final archive = Archive();
+    for (final entity in dir.listSync()) {
+      if (entity is! File) continue;
+      final data = entity.readAsBytesSync();
+      archive.addFile(ArchiveFile.bytes(entity.uri.pathSegments.last, data));
+    }
+    return ZipEncoder().encodeBytes(archive);
   }
 
   void _updateProgress(double value, String message) {

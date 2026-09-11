@@ -5,6 +5,7 @@ include: package:flutter_lints/flutter.yaml
 
 analyzer:
   exclude:
+    - third_party/**
     - "**/*.g.dart"
     - lib/i18n/strings*.g.dart
     - build/**

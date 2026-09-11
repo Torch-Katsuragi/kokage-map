@@ -1,0 +1,27 @@
+// こかげマップの手元コピー（pub.dev の flutter_bluetooth_serial 0.4.0 の android/build.gradle を差し替え）。
+// 元は buildscript に AGP 4.1 と jcenter() を書いていて Gradle 9 / AGP 9 では評価すら通らない。
+// AGP はルートの settings.gradle.kts が読み込むものを使い、リポジトリは mavenCentral に寄せた。
+// Java/Dart のソースは元のまま。上流には出さない（AI が人間のコミュニティに投稿しない方針）。
+group 'io.github.edufolly.flutterbluetoothserial'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'io.github.edufolly.flutterbluetoothserial'
+    compileSdk 35
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    defaultConfig {
+        minSdk 21
+    }
+    lint {
+        disable += ['InvalidPackage']
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+}

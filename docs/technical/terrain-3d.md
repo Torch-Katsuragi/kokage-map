@@ -340,7 +340,17 @@ debug ビルドの数値もほぼ同じ（純 Dart 801² が 17〜19fps・UI 35m
   深度も sampleCount 4）。Pixel 9 debug のドライブで欠けフレーム 0・UI 中央値 4〜8ms・raster 3〜5ms のまま（増分なし）。
   ⚠ `Texture.fullMipCount(512, 512)` は 9（1×1 を数えない）で `buildMipChain` は 10 段作る → テクスチャ側の段数に合わせて余りを捨てる。
   flutter_gpu の Dart API に GPU 側でミップを作る口は無い（`doesSupportManuallyMippedTextures` で手上げ）。
-  メモリは包んだ画像 + ミップ付きの複製で 1 タイル +1.3MB（GPU 経路では `ui.Image` を捨てる整理が次の一手）
+  メモリは包んだ画像 + ミップ付きの複製で 1 タイル +1.3MB → **複製ができたら `ui.Image` を手放す**（同日昼）:
+  `TerrainTile.textureKey`（画像を差し替えるたび新しくなる世代の識別子）を GPU 側のキャッシュのキーにし、
+  `onTextureUploaded(key)` で `tile.releaseImage()`。GPU 側のテクスチャは時間では捨てず、タイルの出入りで `pruneTextures(生きている世代)`
+- **線の端を丸く・点を GPU に（同日昼）**: `line.frag` は線分に沿った座標を受けて端からの距離で丸める（折れ線の角は隣の線分の丸い端で埋まる）。
+  点は `point.vert/frag` で画面に正対する円 + 白縁（`GpuPointGeometry`、静的な点だけ。動的な点は Canvas のまま）。
+  深度テストで丘の裏の点が隠れるので Dart 側の視線なぞり（1 フレーム 300 点上限）が要らなくなった。
+  林班・1 万点の範囲のドライブ（debug）: UI 中央値 4〜18ms → **3〜6ms**、raster 4〜5ms、欠けフレーム 0 / 2,452
+- **陰影は傾斜依存（同日昼・松本の提案）**: `TerrainShading`（source: slope / hillshade、blend: multiply / overlay）。
+  頂点の shade は「オーバーレイ用のグレー」で統一し、`terrain.frag` の `ShadeInfo` uniform で重ね方を選ぶ（純 Dart は 2 × shade の乗算）。
+  オーバーレイは白い基図で白が残って傾斜が見えないので、既定は傾斜 × 乗算・濃さ 0.6・50° で頭打ち（0.5 は薄く 0.8 は濃い、松本）。
+  ⚠ static の初期値はホットリロードで変わらない（ホットリスタート）。ゴールデンテストは光源に固定
 - **陰影を光源から傾斜に（2026-09-11 昼・松本「赤色立体図に近いものをグレースケールで薄く重ねる方がよくない？」）**: `TerrainShading`（`terrain_mesh.dart`）。
   `source`（`slope` = 傾斜角 / `slopeMaxDeg` で濃さ、光の向きに依らない／`hillshade` = 従来）と `blend`（`multiply`／`overlay`）を独立に持つ。
   頂点の `shade` は「オーバーレイ用のグレー（0.5 = 変化なし）」で統一し、GPU 経路は `terrain.frag` の `ShadeInfo` uniform で重ね方を選ぶ、

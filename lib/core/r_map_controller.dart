@@ -186,8 +186,26 @@ class RMapController {
   ///
   /// Returns: 即座に反映されたら true。attach 前だった場合は false を返し、
   /// attach 後に実行されるよう保留する（呼び出しは失われない）。
+  /// 3D 中の差し替え先（地形のカメラを動かす）。[move] / [moveAndRotate] / [animateTo] はこれを先に見る。
+  /// 設定した瞬間に attach 前の保留分（起動時の現在位置ジャンプなど）もこちらへ流す
+  /// （3D が既定の間、MapLibre は空のスタイルのままで `attachStyle` が来ず、保留が永久に残るため）
+  set jumpOverride(void Function(LatLng center, double zoom, double? bearing, {required bool animate})? f) {
+    _jumpOverride = f;
+    if (f == null) return;
+    final pending = _pendingCameraAction;
+    _pendingCameraAction = null;
+    pending?.call();
+  }
+
+  void Function(LatLng center, double zoom, double? bearing, {required bool animate})? _jumpOverride;
+
   bool move(LatLng center, double zoom) {
     rememberCamera(center, zoom, _lastBearing);
+    final override = _jumpOverride;
+    if (override != null) {
+      override(center, zoom, null, animate: false);
+      return true;
+    }
     final controller = _controller;
     if (controller == null) {
       _pendingCameraAction = () => move(center, zoom);
@@ -202,6 +220,11 @@ class RMapController {
   /// Returns: [move] と同じ。attach 前なら false を返して保留する。
   bool moveAndRotate(LatLng center, double zoom, double rotation) {
     rememberCamera(center, zoom, rotation);
+    final override = _jumpOverride;
+    if (override != null) {
+      override(center, zoom, rotation, animate: false);
+      return true;
+    }
     final controller = _controller;
     if (controller == null) {
       _pendingCameraAction = () => moveAndRotate(center, zoom, rotation);
@@ -224,6 +247,13 @@ class RMapController {
     double? bearing,
     double? pitch,
   }) async {
+    final override = _jumpOverride;
+    if (override != null) {
+      if (center != null || zoom != null) {
+        override(center ?? _lastCenter ?? const LatLng(35.681236, 139.767125), zoom ?? _lastZoom, bearing, animate: true);
+      }
+      return;
+    }
     if (_controller == null) {
       // attach 前。保留してから attach 時に実行する。
       _pendingCameraAction =

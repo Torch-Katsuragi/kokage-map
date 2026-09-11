@@ -256,7 +256,8 @@ class _StaticProgress {
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     with SingleTickerProviderStateMixin, _TerrainDrive
     implements TerrainProjection {
-  static const _defaultPitchDeg = 45.0;
+  /// 入ったときの傾き。起動時は真上（松本 2026-09-11 決定。2D と同じ絵で始まり、傾けたい人が傾ける）
+  static const _defaultPitchDeg = 0.0;
 
   /// 傾きの上限。正射影では 90° で地面が線に潰れる（横顔になる）ので手前で止める。
   /// 寝かせるほど画面に掛かる地面が広がり、計画が段を下げて粗くなる（枚数は上限内に収まる）

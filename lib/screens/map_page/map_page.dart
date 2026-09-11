@@ -16,6 +16,8 @@
 // Root Maps: Map and edit screen
 // Main UI for map display and layer/feature editing
 // maplibre移行: FlutterMap → MapLibreMap
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -409,9 +411,13 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                               gpsTrack: () => gpsHistoryRecorder.todayPoints,
                               onProjectionChanged: (p) {
                                 terrainProjection = p;
-                                // レイヤのダブルタップなど、ホルダー経由の「寄せる」も 3D に流す
+                                // レイヤのダブルタップなど、ホルダー経由の「寄せる」「移動」も 3D に流す
+                                // （fit → jump の順。jumpOverride を置いた瞬間に attach 前の保留分が流れる）
                                 mapControllerInstance.fitOverride =
                                     p == null ? null : (c, pad) => p.fitCoordinates(c, padding: pad);
+                                mapControllerInstance.jumpOverride = p == null
+                                    ? null
+                                    : (c, z, _, {required animate}) => unawaited(p.jumpTo(c, z, animate: animate));
                               },
                               mapBearingNotifier: mapBearingNotifier,
                               cameraTickNotifier: cameraTickNotifier,
@@ -504,7 +510,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     return RMapWidget(
       onDispose: _onMapLibreDisposed,
       options: ml.MapOptions(
-        initStyle: basemapStyleUri!,
+        // 3D が既定の間は空のスタイルで組む（タイルもソースも持たない。抜けるときに基図のスタイルを読む）
+        initStyle: ref.read(terrain3dModeProvider) ? kEmptyMapStyle : basemapStyleUri!,
         initCenter: (mapController.lastCenter ?? defaultCenter).toGeographic(),
         initZoom: mapController.lastZoom,
         initBearing: mapController.lastBearing,
@@ -797,6 +804,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
   /// 組み立て済みのGeoJSONをMapSourceManagerに送る（変わったソースだけ送信される）
   void _pushFeaturesToSources() {
+    // 3D 地図面には先に流す（3D が既定の間、MapLibre のソースは初期化されない）
+    terrainSceneRevision.value++;
     if (!sourceManager.isInitialized) {
       // ソース未初期化 → dirty フラグを復元して次回リトライ
       layerCacheDirty = true;
@@ -824,8 +833,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       );
     // クラスタリング: 現在のズームでクラスタ表示を更新
     _refreshPointClusters();
-    // 3D 地図面にも同じシーンを流す
-    terrainSceneRevision.value++;
   }
 
   /// 現在のズームレベルでクラスタ表示を更新

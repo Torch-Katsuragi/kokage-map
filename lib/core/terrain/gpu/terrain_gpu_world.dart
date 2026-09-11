@@ -436,10 +436,12 @@ class TerrainGpuWorldRenderer {
     pass.setCullMode(gpu.CullMode.none);
     pass.setColorBlendEnable(true);
     final polygonInfoSlot = _polygonPipeline.vertexShader.getUniformSlot('FrameInfo');
+    final polygonShadeSlot = _polygonPipeline.fragmentShader.getUniformSlot('ShadeInfo');
     for (final e in entries) {
       final info = e.polygonInfo;
       if (info == null) continue;
       pass.bindUniform(polygonInfoSlot, info);
+      pass.bindUniform(polygonShadeSlot, shadeInfo);
       final parts = e.polygons;
       if (parts != null) {
         for (final p in parts.parts) {
@@ -465,10 +467,12 @@ class TerrainGpuWorldRenderer {
     pass.setCullMode(gpu.CullMode.none);
     pass.setColorBlendEnable(true);
     final lineInfoSlot = _linePipeline.vertexShader.getUniformSlot('FrameInfo');
+    final lineShadeSlot = _linePipeline.fragmentShader.getUniformSlot('ShadeInfo');
     for (final e in entries) {
       final info = e.lineInfo;
       if (info == null) continue;
       pass.bindUniform(lineInfoSlot, info);
+      pass.bindUniform(lineShadeSlot, shadeInfo);
       final parts = e.lines;
       if (parts != null) {
         for (final p in parts.parts) {

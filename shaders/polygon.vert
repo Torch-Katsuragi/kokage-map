@@ -8,8 +8,10 @@ in vec3 position;
 in vec4 color;
 
 out vec4 v_color;
+out float v_w;  // クリップ w（透視では視点からの奥行き。靄用）
 
 void main() {
   v_color = color;
   gl_Position = frame_info.mvp * vec4(position, 1.0);
+  v_w = gl_Position.w;
 }

@@ -19,6 +19,7 @@ in vec4 color;
 out vec4 v_color;
 out vec2 v_local;   // 線分に沿った座標（px）: x = 線に沿って（a = 0）、y = 直交方向
 out vec2 v_extent;  // x = 線分の長さ（px）、y = 半分の太さ（px）
+out float v_w;      // クリップ w（靄用）
 
 void main() {
   vec4 pa = frame_info.mvp * vec4(a, 1.0);
@@ -39,4 +40,5 @@ void main() {
   v_color = color;
   v_local = vec2(t * len + along * half_width, side * half_width);
   v_extent = vec2(len, half_width);
+  v_w = p.w;
 }

@@ -118,8 +118,8 @@ class TerrainGpuWorldRenderer {
   void _setup() {
     final gl = _gl;
     _terrain = _Program(gl, _terrainVert, _terrainFrag, ['position', 'uv', 'shade'], ['u_mvp', 'u_params', 'tex']);
-    _polygon = _Program(gl, _polygonVert, _colorFrag, ['position', 'color'], ['u_mvp']);
-    _line = _Program(gl, _lineVert, _lineFrag, ['a', 'b', 't', 'side', 'width', 'color'], ['u_mvp', 'u_viewport', 'u_pixel_ratio']);
+    _polygon = _Program(gl, _polygonVert, _colorFrag, ['position', 'color'], ['u_mvp', 'u_params']);
+    _line = _Program(gl, _lineVert, _lineFrag, ['a', 'b', 't', 'side', 'width', 'color'], ['u_mvp', 'u_viewport', 'u_pixel_ratio', 'u_params']);
     _point = _Program(gl, _pointVert, _pointFrag, ['position', 'corner', 'size', 'color'], ['u_mvp', 'u_viewport', 'u_pixel_ratio']);
     _anisotropy = gl.getExtension('EXT_texture_filter_anisotropic') != null;
     gl.pixelStorei(_G.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
@@ -288,13 +288,13 @@ class TerrainGpuWorldRenderer {
     gl.depthMask(true);
     gl.disable(_G.BLEND);
     final eyeDist = persp ? camera.eyeDistance : 0.0;
-    gl.uniform4f(
-      _terrain.uniform('u_params'),
-      TerrainShading.blend == TerrainShadeBlend.overlay ? 1 : 0,
+    final params = (
+      TerrainShading.blend == TerrainShadeBlend.overlay ? 1.0 : 0.0,
       eyeDist * TerrainCamera.fogStartFactor,
       eyeDist * TerrainCamera.fogEndFactor,
-      persp ? 1 : 0,
+      persp ? 1.0 : 0.0,
     );
+    gl.uniform4f(_terrain.uniform('u_params'), params.$1, params.$2, params.$3, params.$4);
     gl.uniform1i(_terrain.uniform('tex'), 0);
     gl.activeTexture(_G.TEXTURE0);
     for (final e in entries) {
@@ -312,6 +312,7 @@ class TerrainGpuWorldRenderer {
     gl.enable(_G.BLEND);
     gl.blendFunc(_G.ONE, _G.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(_polygon.program);
+    gl.uniform4f(_polygon.uniform('u_params'), params.$1, params.$2, params.$3, params.$4);
     for (final e in entries) {
       if (e.polygons == null && e.tile.dynamicPolygons.isEmpty) continue;
       gl.uniformMatrix4fv(_polygon.uniform('u_mvp'), false, e.polygonMvp!.toJS);
@@ -340,6 +341,7 @@ class TerrainGpuWorldRenderer {
     gl.useProgram(_line.program);
     gl.uniform2f(_line.uniform('u_viewport'), w.toDouble(), h.toDouble());
     gl.uniform1f(_line.uniform('u_pixel_ratio'), pixelRatio);
+    gl.uniform4f(_line.uniform('u_params'), params.$1, params.$2, params.$3, params.$4);
     const lineAttribs = [('a', 3, 0), ('b', 3, 12), ('t', 1, 24), ('side', 1, 28), ('width', 1, 32), ('color', 4, 36)];
     for (final e in entries) {
       if (e.lines == null && e.tile.dynamicLines.isEmpty) continue;
@@ -750,18 +752,24 @@ uniform mat4 u_mvp;
 in vec3 position;
 in vec4 color;
 out vec4 v_color;
+out float v_w;
 void main() {
   v_color = color;
   gl_Position = u_mvp * vec4(position, 1.0);
+  v_w = gl_Position.w;
 }
 ''';
 
 const _colorFrag = '''#version 300 es
 precision mediump float;
+uniform vec4 u_params;
 in vec4 v_color;
+in float v_w;
 out vec4 frag_color;
 void main() {
-  frag_color = vec4(v_color.rgb * v_color.a, v_color.a);
+  float a = v_color.a;
+  if (u_params.w > 0.5) a *= 1.0 - smoothstep(u_params.y, u_params.z, v_w);
+  frag_color = vec4(v_color.rgb * a, a);
 }
 ''';
 
@@ -778,6 +786,7 @@ in vec4 color;
 out vec4 v_color;
 out vec2 v_local;
 out vec2 v_extent;
+out float v_w;
 void main() {
   vec4 pa = u_mvp * vec4(a, 1.0);
   vec4 pb = u_mvp * vec4(b, 1.0);
@@ -797,14 +806,17 @@ void main() {
   v_color = color;
   v_local = vec2(t * len + along * half_width, side * half_width);
   v_extent = vec2(len, half_width);
+  v_w = p.w;
 }
 ''';
 
 const _lineFrag = '''#version 300 es
 precision mediump float;
+uniform vec4 u_params;
 in vec4 v_color;
 in vec2 v_local;
 in vec2 v_extent;
+in float v_w;
 out vec4 frag_color;
 void main() {
   float len = v_extent.x;
@@ -814,6 +826,7 @@ void main() {
   float alpha = 1.0 - smoothstep(hw - 1.0, hw, d);
   if (alpha <= 0.0) discard;
   float a = v_color.a * alpha;
+  if (u_params.w > 0.5) a *= 1.0 - smoothstep(u_params.y, u_params.z, v_w);
   frag_color = vec4(v_color.rgb * a, a);
 }
 ''';

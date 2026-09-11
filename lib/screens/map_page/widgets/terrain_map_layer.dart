@@ -14,7 +14,6 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -25,8 +24,10 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geobase/geobase.dart' as geo;
+import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/fs/k_file_system.dart';
 import '../../../core/terrain/dem_grid.dart';
 import '../../../core/terrain/dem_tiles.dart';
 import '../../../core/terrain/gpu/terrain_gpu.dart';
@@ -43,11 +44,11 @@ import '../../../i18n/strings.g.dart';
 import '../../../interfaces/map_state_interface.dart';
 import '../../../interfaces/terrain_projection.dart';
 import '../../../models/basemap_provider.dart';
+import '../../../models/map_style_group.dart';
 import '../../../models/nodes/overlay_image_node.dart';
 import '../../../models/party/party_room.dart';
 import '../../../providers/party_providers.dart';
 import '../../../providers/selection_providers.dart';
-import '../../../models/map_style_group.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/basemap_service.dart';
@@ -531,7 +532,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _meshes.clear();
       _meshUsed.clear();
       _painter.disposeCaches();
-      debugPrint('[3D] flutter_gpu で描く');
+      debugPrint('[3D] GPU で描く（${kIsWeb ? 'WebGL2' : 'flutter_gpu'}）');
       _scheduleRefresh();
     } catch (e) {
       debugPrint('[3D] flutter_gpu 不可（純 Dart で描く）: $e');
@@ -1600,7 +1601,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   /// 見えているオーバーレイ画像の集合・位置が変わったら、画像を読み、テクスチャを作り直す（400ms にまとめる）
   void _syncOverlays() {
-    if (kIsWeb) return; // web はファイルパスで読めない（未対応）
     final nodes = widget.mapState.overlayImageNodes;
     final key = [
       for (final n in nodes)
@@ -1623,7 +1623,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     for (final n in nodes) {
       if (_overlayImages.containsKey(n.filePath) || _overlayLoading.contains(n.filePath)) continue;
       _overlayLoading.add(n.filePath);
-      _loadOverlayImage(n.filePath, n.imageUrl).then((im) {
+      _loadOverlayImage(n).then((im) {
         _overlayLoading.remove(n.filePath);
         if (im == null || !mounted) return;
         _overlayImages[n.filePath] = im;
@@ -1633,13 +1633,30 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _scheduleRetexture();
   }
 
-  Future<ui.Image?> _loadOverlayImage(String key, String url) async {
+  /// オーバーレイ画像を読む。Android は TIFF の PNG キャッシュ（`imageUrl`）、web は `fs` で元ファイルを読んで
+  /// TIFF なら `package:image` で解く（PNG キャッシュはアプリのキャッシュ領域に書くので web には無い）
+  Future<ui.Image?> _loadOverlayImage(OverlayImageNode n) async {
     try {
-      final path = url.startsWith('file:///') ? Uri.parse(url).toFilePath() : url;
-      final bytes = await File(path).readAsBytes();
+      final String path;
+      if (kIsWeb) {
+        path = n.getAbsoluteFilePath() ?? n.filePath;
+      } else {
+        final url = n.imageUrl;
+        path = url.startsWith('file:///') ? Uri.parse(url).toFilePath() : url;
+      }
+      final bytes = await fs.readAsBytes(path);
+      final lower = path.toLowerCase();
+      if (lower.endsWith('.tif') || lower.endsWith('.tiff')) {
+        final decoded = img.decodeImage(bytes);
+        if (decoded == null) return null;
+        final rgba = decoded.convert(numChannels: 4).getBytes(order: img.ChannelOrder.rgba);
+        final c = Completer<ui.Image>();
+        ui.decodeImageFromPixels(rgba, decoded.width, decoded.height, ui.PixelFormat.rgba8888, c.complete);
+        return await c.future;
+      }
       return await decodeImageFromList(bytes);
     } catch (e) {
-      AppLogger.debug('[3D] overlay $key を読めない: $e');
+      AppLogger.debug('[3D] overlay ${n.filePath} を読めない: $e');
       return null;
     }
   }

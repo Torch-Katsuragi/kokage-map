@@ -614,6 +614,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   double get _effectiveDrawerWidth {
     if (!drawerOpen) return 0;
     final maxWidth = MediaQuery.of(context).size.width * 0.67;
+    if (maxWidth <= minDrawerWidth) return maxWidth; // 起動直後の 0 幅など（clamp は下限 > 上限で落ちる）
     return drawerWidth.clamp(minDrawerWidth, maxWidth);
   }
 

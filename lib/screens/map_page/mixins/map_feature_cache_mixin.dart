@@ -15,6 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: フィーチャキャッシュMixin
 // 地図表示用のフィーチャキャッシュを効率的に管理
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/nodes/feature_node.dart';
@@ -102,9 +103,9 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
       '[Features] P:${newPointFeatures.length} L:${newLineFeatures.length} Pg:${newPolygonFeatures.length} Ph:${newPhotoNodes.length} Ov:${newOverlayNodes.length}',
     );
 
-    // GeoTIFFオーバーレイのPNGキャッシュを事前生成
-    // MapLibreはTIFF非対応のため、file://で参照できるPNGが必要
+    // GeoTIFF オーバーレイの PNG キャッシュを事前生成（3D の地図面はこれを読む。web はアプリのキャッシュ領域が無いので元ファイルを直接読む）
     for (final node in newOverlayNodes) {
+      if (kIsWeb) break;
       final absPath = node.getAbsoluteFilePath();
       if (absPath != null) {
         final lower = absPath.toLowerCase();

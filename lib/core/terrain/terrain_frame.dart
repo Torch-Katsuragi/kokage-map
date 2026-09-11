@@ -151,18 +151,25 @@ class TerrainFramePlanner {
     final zD = demZoomFor(camera, size);
     final range = TerrainWorld.tileRangeFor(bounds, zD);
     final prefetch = TerrainWorld.tileRangeFor(bounds, zD, margin: prefetchMargin);
-    // 読み込み順: 一番粗い親 → …→ 理想の段 → 1 周り外。ピラミッドは上から埋める。
-    // 親は 1 周り外の範囲 + さらに余白ぶん読む（引いている最中に広がる縁を、粗い親で先に埋めるため。親は枚数が少なく安い）
+    // 読み込み順: 1 段上の親（核の範囲だけ）→ 理想の段の核 → 1 周り外 → さらに上の親（余白つき、近い段から）。
+    // 1 段上の親は 1/4 の枚数で画面を覆えるので最初に取る（見た目が最短で埋まる）。
+    // さらに上の親は「引いたとき」と圏外の近似のためで、急ぎではない。
+    // ⚠ 以前は一番粗い親から 4 段ぶん（余白つきで 40 枚超）を核より先に読んでいて、一気に寄ると
+    //   中間の段を順に読み終えるまで理想の段が来なかった（松本 2026-09-11「4,5,6,7,8,9 と順番に読んでいる」）
     final tBounds = sw.elapsedMilliseconds;
-    world.ensureAncestors(
-      prefetch,
-      centerX: camera.centerX,
-      centerY: camera.centerY,
-      levels: ancestorLevels,
-      replaceQueue: true,
-    );
-    world.ensure(range, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
-    world.ensure(prefetch, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
+    final parents = world.ancestorRanges(range, levels: ancestorLevels, margin: 0).reversed.toList(); // 近い段から
+    final order = [
+      ...parents.take(1), // 1 段上（核の範囲）
+      range,
+      ...parents.skip(1), // さらに上（核の範囲だけ。1〜2 枚ずつで安い。引いたときの中心を先に押さえる）
+      ...world.ancestorRanges(prefetch, levels: ancestorLevels).reversed, // 余白つきの親（引いたときの縁。近い段から）
+      prefetch, // 1 周り外（寄ったまま動いたときの縁）
+    ];
+    var first = true;
+    for (final r in order) {
+      world.ensure(r, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: first);
+      first = false;
+    }
     // 寄る方向の先読み: 手が空いているときだけ、画面の内側半分（1 段寄ったときに見える範囲）を 1 段細かい段で読んでおく
     final inner = Rect.fromCenter(center: bounds.center, width: bounds.width / 2, height: bounds.height / 2);
     final children = zD < world.maxZoom ? TerrainWorld.tileRangeFor(inner, zD + 1) : null;

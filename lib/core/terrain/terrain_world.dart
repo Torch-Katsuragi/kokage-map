@@ -471,46 +471,68 @@ class TerrainWorld extends ChangeNotifier {
   /// 全部重ねても残った無効値は [fillInvalidHeights] で埋める
   Future<DemGrid?> _loadDem(TileKey key) async {
     final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
-    DemGrid? merged;
-    var holes = 0;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final misses = <String>[];
-    for (final source in demSources) {
-      if (key.z < source.minZoom || key.z > source.maxZoom) continue;
-      final missKey = '${source.id}/${key.z}/${key.x}/${key.y}';
-      final missedAt = _missing[missKey];
-      if (missedAt != null && nowMs - missedAt < _missingTtlMs) continue;
-      final dem = await DemTileLoader(source: source, fetcher: (z, x, y) => demFetcher(source, z, x, y))
-          .tryLoad(range, fillInvalid: false);
-      if (dem == null) {
-        misses.add(missKey);
-        continue;
-      }
-      // 無かったソースは覚えておく（タイルキャッシュは 404 を覚えないので、毎回ネットに聞くと 1 枚数秒掛かる）。
-      // ⚠ 取れなかった理由は 404 か通信失敗か分からないので、同じタイルで後ろのソースが取れたとき（= 通信は生きている）だけ覚える。
-      // 全部取れなかった（圏外）ときは覚えない
-      for (final k in misses) {
-        _missing[k] = nowMs;
-      }
-      misses.clear();
-      if (_missing.length > 4096) _missing.clear();
-      if (merged == null) {
-        merged = dem;
-        holes = _countNaN(dem.heights);
-      } else {
-        final a = merged.heights;
-        final b = dem.heights;
-        holes = 0;
-        for (var i = 0; i < a.length; i++) {
-          if (a[i].isNaN) {
-            a[i] = b[i];
-            if (a[i].isNaN) holes++;
+    bool usable(DemTileSource s) {
+      if (key.z < s.minZoom || key.z > s.maxZoom) return false;
+      final missedAt = _missing['${s.id}/${key.z}/${key.x}/${key.y}'];
+      return missedAt == null || nowMs - missedAt >= _missingTtlMs;
+    }
+
+    Future<DemGrid?> fetch(DemTileSource s) =>
+        DemTileLoader(source: s, fetcher: (z, x, y) => demFetcher(s, z, x, y)).tryLoad(range, fillInvalid: false);
+    final sw = Stopwatch()..start();
+    // 主力（地理院 1A / 5A / 10B）は同じサーバで安いので**同時に**取る。順に取ると 1 枚 = 往復の合計になる
+    // （Pixel 9 で 1 往復 0.4〜1.4 秒 × 3〜4 = 2〜3 秒。同時なら最も遅い 1 往復ぶん）
+    final primary = [for (final s in demSources) if (!s.lastResort && usable(s)) s];
+    final grids = await Future.wait(primary.map(fetch));
+    var merged = _mergeGrids(key, primary, grids, nowMs);
+    // 最後の砦（AWS。遠くて 1 秒掛かる）は主力が 1 枚も取れなかった（日本の外）ときだけ。
+    // 海や整備範囲の縁の穴は [fillInvalidHeights] で埋める（以前は穴があるたびに AWS を取りに行き、沿岸のタイルが 1 枚 +1 秒だった）
+    if (merged == null) {
+      final fallback = [for (final s in demSources) if (s.lastResort && usable(s)) s];
+      for (final s in fallback) {
+        final dem = await fetch(s);
+        if (dem != null) {
+          merged = dem;
+          // 主力が無かったのは通信のせいではない（最後の砦は取れた）ので覚える
+          for (final p in primary) {
+            _missing['${p.id}/${key.z}/${key.x}/${key.y}'] = nowMs;
           }
+          break;
         }
       }
-      if (holes == 0) return merged;
     }
-    if (merged != null && holes > 0) fillInvalidHeights(merged.heights);
+    if (sw.elapsedMilliseconds > 800) {
+      debugPrint('[3D] dem $key ${sw.elapsedMilliseconds}ms (${[for (var i = 0; i < primary.length; i++) '${primary[i].id}${grids[i] == null ? '×' : ''}'].join(' ')})');
+    }
+    if (merged != null && _countNaN(merged.heights) > 0) fillInvalidHeights(merged.heights);
+    return merged;
+  }
+
+  /// 同時に取った格子を細かい順に重ねる（細かいソースの無効な点を次のソースの値で埋める）。
+  /// 無かったソースは覚えておく（タイルキャッシュは 404 を覚えないので、毎回ネットに聞くと 1 枚数秒掛かる）。
+  /// ⚠ 取れなかった理由は 404 か通信失敗か分からないので、同じタイルで別のソースが取れたとき（= 通信は生きている）だけ覚える
+  DemGrid? _mergeGrids(TileKey key, List<DemTileSource> sources, List<DemGrid?> grids, int nowMs) {
+    DemGrid? merged;
+    for (var i = 0; i < sources.length; i++) {
+      final dem = grids[i];
+      if (dem == null) continue;
+      if (merged == null) {
+        merged = dem;
+        continue;
+      }
+      final a = merged.heights;
+      final b = dem.heights;
+      for (var j = 0; j < a.length; j++) {
+        if (a[j].isNaN) a[j] = b[j];
+      }
+    }
+    if (merged != null) {
+      for (var i = 0; i < sources.length; i++) {
+        if (grids[i] == null) _missing['${sources[i].id}/${key.z}/${key.x}/${key.y}'] = nowMs;
+      }
+      if (_missing.length > 4096) _missing.clear();
+    }
     return merged;
   }
 

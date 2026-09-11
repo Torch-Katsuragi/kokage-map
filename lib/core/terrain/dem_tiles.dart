@@ -47,10 +47,14 @@ class DemTileSource {
     required this.attribution,
     this.minZoom = 0,
     this.maxZoom = 15,
+    this.lastResort = false,
   });
 
   /// タイルキャッシュの擬似プロバイダ ID にも使う（重複不可）
   final String id;
+
+  /// 前のソースが 1 枚も取れなかったときだけ取りに行く（遠くて遅い。海や整備範囲の縁の穴は埋めない）
+  final bool lastResort;
 
   final String urlTemplate;
   final DemEncoding encoding;
@@ -65,6 +69,7 @@ class DemTileSource {
     encoding: DemEncoding.terrarium,
     attribution: 'Terrain Tiles (Mapzen / AWS Open Data)',
     maxZoom: 15,
+    lastResort: true,
   );
 
   /// 地理院 標高タイル DEM1A（航空レーザ 1m メッシュ、精度 0.3m 以内、整備範囲のみ。2025-03 に範囲拡大）

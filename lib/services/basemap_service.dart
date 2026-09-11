@@ -109,6 +109,10 @@ Future<Uint8List?> _processTileExtraction(Map<String, dynamic> params) async {
 
 /// 背景地図管理サービス
 class BaseMapService extends ChangeNotifier {
+  /// タイル取得用の HTTP クライアント。1 つを使い回して接続（TLS）を保つ。
+  /// `http.get` はそのたびに接続を張り直すので、Pixel 9 で 1 枚 0.4〜1.4 秒掛かっていた
+  final http.Client _http = http.Client();
+
   static final BaseMapService _instance = BaseMapService._internal();
   factory BaseMapService() => _instance;
   BaseMapService._internal();
@@ -597,9 +601,14 @@ class BaseMapService extends ChangeNotifier {
     bool allowNetworkAccess = true,
     int retryCount = 0,
   }) async {
+    final swTile = Stopwatch()..start();
     try {
       final cachedData = await _getCachedTile(provider.id, z, x, y);
-      if (cachedData != null) return cachedData;
+      final cacheMs = swTile.elapsedMilliseconds;
+      if (cachedData != null) {
+        if (cacheMs > 100) AppLogger.debug('[TILE] cache hit ${provider.id} $z/$x/$y ${cacheMs}ms');
+        return cachedData;
+      }
 
       // 明示的オフラインモードまたはネットワークアクセス禁止の場合のみ終了
       if (_isOfflineMode || !allowNetworkAccess) {
@@ -617,7 +626,7 @@ class BaseMapService extends ChangeNotifier {
           .replaceAll('{x}', x.toString())
           .replaceAll('{y}', y.toString());
 
-      final response = await http
+      final response = await _http
           .get(
             Uri.parse(url),
             headers: {
@@ -628,6 +637,7 @@ class BaseMapService extends ChangeNotifier {
           )
           .timeout(Duration(seconds: timeout));
 
+      final httpMs = swTile.elapsedMilliseconds - cacheMs;
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         _noteFetchSuccess();
         final data = response.bodyBytes;
@@ -646,9 +656,13 @@ class BaseMapService extends ChangeNotifier {
         }
 
         await _cacheTile(provider.id, z, x, y, data);
+        if (swTile.elapsedMilliseconds > 300) {
+          AppLogger.debug('[TILE] ${provider.id} $z/$x/$y cache ${cacheMs}ms http ${httpMs}ms write ${swTile.elapsedMilliseconds - cacheMs - httpMs}ms');
+        }
 
         return data;
       } else if (response.statusCode == 404) {
+        if (swTile.elapsedMilliseconds > 300) AppLogger.debug('[TILE] ${provider.id} $z/$x/$y 404 cache ${cacheMs}ms http ${httpMs}ms');
         // 無いものは無い（標高タイルの整備範囲外など）。粘ると 1 枚 1.5 秒になる
         _noteFetchSuccess();
         return null;
@@ -1104,6 +1118,7 @@ class BaseMapService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _http.close();
     _connectivitySubscription?.cancel();
     _tileCacheDb?.close();
     super.dispose();

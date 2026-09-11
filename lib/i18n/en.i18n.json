@@ -30,6 +30,11 @@
     "settings": "Settings",
     "menu": "Menu"
   },
+  "driveUrlDialog": {
+    "title": "Add Drive folder",
+    "urlTab": "Enter URL",
+    "qrTab": "Scan QR"
+  },
   "home": {
     "title": "Kokage Map",
     "subtitle": "GeoPackage-based geographic information management and editing application",

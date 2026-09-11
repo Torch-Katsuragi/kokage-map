@@ -230,11 +230,11 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.cloud, color: Colors.blue),
-          SizedBox(width: 8),
-          Text('Driveフォルダを追加'),
+          const Icon(Icons.cloud, color: Colors.blue),
+          const SizedBox(width: 8),
+          Text(t.driveUrlDialog.title),
         ],
       ),
       content: SizedBox(
@@ -246,8 +246,8 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
             TabBar(
               controller: _tabController,
               tabs: [
-                const Tab(text: 'URL入力'),
-                if (_hasQrTab) const Tab(text: 'QRスキャン'),
+                Tab(text: t.driveUrlDialog.urlTab),
+                if (_hasQrTab) Tab(text: t.driveUrlDialog.qrTab),
               ],
             ),
             const SizedBox(height: 16),

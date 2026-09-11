@@ -30,6 +30,11 @@
     "settings": "設定",
     "menu": "メニュー"
   },
+  "driveUrlDialog": {
+    "title": "Driveフォルダを追加",
+    "urlTab": "URL入力",
+    "qrTab": "QRスキャン"
+  },
   "home": {
     "title": "こかげマップ",
     "subtitle": "GeoPackageベースの地理情報管理・編集アプリケーション",

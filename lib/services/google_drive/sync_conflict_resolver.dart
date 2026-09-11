@@ -33,12 +33,10 @@ class SyncConflictResolver {
   final SyncFileOperations _fileOps;
 
   SyncConflictResolver({
-    required GoogleDriveService driveService,
-    required KMetaService kmetaService,
-    required SyncFileOperations fileOps,
-  })  : _driveService = driveService,
-        _kmetaService = kmetaService,
-        _fileOps = fileOps;
+    required this._driveService,
+    required this._kmetaService,
+    required this._fileOps,
+  });
 
   /// フォルダの同期状態をチェック
   /// ファイルID単位でDriveとローカルを比較

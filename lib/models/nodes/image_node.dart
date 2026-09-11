@@ -62,13 +62,11 @@ class ImageNode extends LayerTreeNode {
     this.metadata, {
     this.takenAt,
     this.direction,
-    bool visible = true,
-    LayerTreeNode? parent,
+    super.visible,
+    super.parent,
     bool isPhoto = true,
   }) : super(
          p.basename(filePath),
-         visible: visible,
-         parent: parent,
          nodeType: NodeType.image,
        );
   

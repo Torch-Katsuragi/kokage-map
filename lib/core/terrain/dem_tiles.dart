@@ -408,10 +408,9 @@ typedef TextureDecorator = void Function(ui.Canvas canvas, TileRange range);
 ///
 /// 設計どおり「表示範囲のタイルを 1 枚に合成してから ImageShader で貼る」。
 class RasterTileComposer {
-  RasterTileComposer({String? urlTemplate, TileFetcher? fetcher, TileImageCache? imageCache})
+  RasterTileComposer({String? urlTemplate, TileFetcher? fetcher, this._imageCache})
       : assert(urlTemplate != null || fetcher != null),
-        _fetch = fetcher ?? httpTileFetcher(urlTemplate!),
-        _imageCache = imageCache;
+        _fetch = fetcher ?? httpTileFetcher(urlTemplate!);
 
   final TileFetcher _fetch;
   final TileImageCache? _imageCache;

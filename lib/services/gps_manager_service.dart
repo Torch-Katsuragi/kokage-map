@@ -643,14 +643,14 @@ class GpsManagerService extends ChangeNotifier {
       'selectedDevice': _selectedGnssDevice?.name,
       'collectedAt': DateTime.now().toIso8601String(),
       // 外部GNSS機器の場合のみ衛星情報を追加
-      if (satelliteCount != null) 'satelliteCount': satelliteCount,
-      if (hdop != null) 'hdop': hdop,
-      if (pdop != null) 'pdop': pdop,
-      if (vdop != null) 'vdop': vdop,
-      if (gpsQuality != null) 'gpsQuality': gpsQuality,
-      if (fixType != null) 'fixType': fixType,
-      if (correctionSource != null) 'correctionSource': correctionSource,
-      if (nmea != null) 'nmea': nmea,
+      'satelliteCount': ?satelliteCount,
+      'hdop': ?hdop,
+      'pdop': ?pdop,
+      'vdop': ?vdop,
+      'gpsQuality': ?gpsQuality,
+      'fixType': ?fixType,
+      'correctionSource': ?correctionSource,
+      'nmea': ?nmea,
     };
 
     _continuousSurveyData.add(gpsData);

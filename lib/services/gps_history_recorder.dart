@@ -101,7 +101,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
   /// Consolidation済み分はGPKGレイヤツリー経由で表示される
   /// Consolidated末尾を先頭に1点含めて表示ギャップを防止
   List<LatLng> get todayPoints => List.unmodifiable([
-    if (_lastConsolidatedPosition != null) _lastConsolidatedPosition!,
+    ?_lastConsolidatedPosition,
     ..._pendingDetails.map((p) => LatLng(p.latitude, p.longitude)),
   ]);
 

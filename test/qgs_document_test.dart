@@ -210,17 +210,17 @@ void main() {
       // 手で足された（dir 構造に無い）埋め込みは外される
       final tree = doc.root.getElement('layer-tree-group')!;
       tree.children.add(
-        XmlElement(XmlName.parts('layer-tree-group'), [
-          XmlAttribute(XmlName.parts('name'), 'よそ'),
-          XmlAttribute(XmlName.parts('embedded'), '1'),
-          XmlAttribute(XmlName.parts('embedded_project'), '../よそ/よそ.qgs'),
+        XmlElement(const XmlName.parts('layer-tree-group'), [
+          XmlAttribute(const XmlName.parts('name'), 'よそ'),
+          XmlAttribute(const XmlName.parts('embedded'), '1'),
+          XmlAttribute(const XmlName.parts('embedded_project'), '../よそ/よそ.qgs'),
         ]),
       );
       doc.root.getElement('projectlayers')!.children.add(
-        XmlElement(XmlName.parts('maplayer'), [
-          XmlAttribute(XmlName.parts('embedded'), '1'),
-          XmlAttribute(XmlName.parts('project'), '../よそ/よそ.qgs'),
-          XmlAttribute(XmlName.parts('id'), 'yoso_1'),
+        XmlElement(const XmlName.parts('maplayer'), [
+          XmlAttribute(const XmlName.parts('embedded'), '1'),
+          XmlAttribute(const XmlName.parts('project'), '../よそ/よそ.qgs'),
+          XmlAttribute(const XmlName.parts('id'), 'yoso_1'),
         ]),
       );
 

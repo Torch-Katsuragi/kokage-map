@@ -561,12 +561,10 @@ abstract class LayerNode extends LayerTreeNode {
   LayerNode(
     this.geoPackageFile,
     this.layerName, {
-    bool visible = true,
-    LayerTreeNode? parent,
+    super.visible,
+    super.parent,
   }) : super(
          layerName,
-         visible: visible,
-         parent: parent,
          nodeType: NodeType.layer,
        );
 

@@ -26,6 +26,7 @@ import '../../core/r_map_controller.dart';
 import '../../interfaces/map_state_interface.dart';
 import '../../interfaces/terrain_projection.dart';
 import '../../models/gps_position_record.dart';
+import '../../models/map_style_group.dart';
 import '../../models/nodes/current_location_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
@@ -36,7 +37,6 @@ import '../../services/basemap_service.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../services/gps_manager_service.dart';
 import '../../services/internal_gps_location_store.dart';
-import '../../models/map_style_group.dart';
 import '../../services/tile_server.dart';
 import 'feature_geojson_cache.dart';
 

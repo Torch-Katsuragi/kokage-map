@@ -38,12 +38,10 @@ class GeoPackageNode extends LayerTreeNode {
   /// コンストラクタ
   GeoPackageNode(
     this.geoPackageFile, {
-    bool visible = true,
-    LayerTreeNode? parent,
+    super.visible,
+    super.parent,
   }) : super(
          geoPackageFile.pathList.isNotEmpty ? geoPackageFile.pathList.last : '',
-         visible: visible,
-         parent: parent,
          nodeType: NodeType.geopackage,
        );
   

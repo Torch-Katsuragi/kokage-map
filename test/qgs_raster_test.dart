@@ -124,7 +124,7 @@ void main() {
   test('フィクスチャ（QGIS 3.44 が書いた .qgs）にラスタを足しても他は壊れない', () {
     final doc = QgsDocument.parse(File('test/fixtures/qgis_3_44_written.qgs').readAsStringSync());
     final before = doc.mapLayers.length;
-    doc.apply(QgsProject(name: 'テスト', root: [QgsGroup(name: '林小班', children: [raster])]));
+    doc.apply(const QgsProject(name: 'テスト', root: [QgsGroup(name: '林小班', children: [raster])]));
     expect(doc.findMapLayer('raster_1'), isNotNull);
     expect(doc.mapLayers.length, lessThanOrEqualTo(before + 1));
   });

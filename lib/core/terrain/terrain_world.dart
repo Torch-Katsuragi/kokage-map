@@ -250,9 +250,8 @@ class TerrainWorld extends ChangeNotifier {
     this.concurrency = 4,
     this.chunkSize = 32,
     TileImageCache? imageCache,
-    TileLoader? tileLoader,
-  })  : _imageCache = imageCache ?? TileImageCache(capacity: 256),
-        _tileLoader = tileLoader;
+    this._tileLoader,
+  })  : _imageCache = imageCache ?? TileImageCache(capacity: 256);
 
   /// タイル 1 枚の読み込み（DEM とテクスチャ）。テストでは擬似タイルを遅延つきで返す
   final TileLoader? _tileLoader;

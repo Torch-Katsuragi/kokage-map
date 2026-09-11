@@ -36,12 +36,10 @@ class SyncPullHandler {
   static const int _downloadConcurrency = 5;
 
   SyncPullHandler({
-    required GoogleDriveService driveService,
-    required KMetaService kmetaService,
-    required SyncFileOperations fileOps,
-  })  : _driveService = driveService,
-        _kmetaService = kmetaService,
-        _fileOps = fileOps;
+    required this._driveService,
+    required this._kmetaService,
+    required this._fileOps,
+  });
 
   /// DriveからプロジェクトをPull（ダウンロード）
   /// [driveFolderId] DriveフォルダID

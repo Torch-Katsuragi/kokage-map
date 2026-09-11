@@ -17,9 +17,9 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../models/map_style_group.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../providers/ui_state_providers.dart';
-import '../../../models/map_style_group.dart';
 import '../../layer_style_settings_screen.dart'
     show
         layerStyleSettings,

@@ -103,9 +103,9 @@ class FeatureGeoJsonCache {
       return name == null ? null : {'name': name};
     }
     return {
-      if (name != null) 'name': name,
-      if (key != null) input.stylePropKey: key,
-      if (label != null) FeatureGeoJsonInput.labelPropKey: label,
+      'name': ?name,
+      input.stylePropKey: ?key,
+      FeatureGeoJsonInput.labelPropKey: ?label,
     };
   }
 

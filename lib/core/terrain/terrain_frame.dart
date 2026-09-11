@@ -177,7 +177,7 @@ class TerrainFramePlanner {
       world.ensure(children, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
     }
     final tEnsure = sw.elapsedMilliseconds;
-    world.trim(keep: prefetch, ancestorLevels: ancestorLevels, alsoKeep: [if (children != null) children]);
+    world.trim(keep: prefetch, ancestorLevels: ancestorLevels, alsoKeep: [?children]);
     final tTrim = sw.elapsedMilliseconds;
     final tiles = world.coverSet(range, camera);
     _lastTiles = tiles;

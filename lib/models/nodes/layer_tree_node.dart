@@ -45,16 +45,15 @@ abstract class LayerTreeNode {
   // lib/presentation/node_presenter.dart を参照
 
   /// コンストラクタ
-  /// [pathResolver] パスリゾルバ（省略時は親から継承またはProjectPathResolverを使用）
+  /// [_pathResolver] パスリゾルバ（省略時は親から継承またはProjectPathResolverを使用）
   LayerTreeNode(
     this.name, {
     this.visible = true,
     this.parent,
     List<LayerTreeNode>? children,
     required this.nodeType,
-    PathResolver? pathResolver,
-  }) : children = children ?? [],
-       _pathResolver = pathResolver;
+    this._pathResolver,
+  }) : children = children ?? [];
 
   /// パスリゾルバを取得
   /// 優先順位: 自身に設定 → 親から継承 → デフォルト（ProjectPathResolver）

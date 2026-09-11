@@ -41,12 +41,10 @@ class SyncPushHandler {
   static const int _uploadConcurrency = 3;
 
   SyncPushHandler({
-    required GoogleDriveService driveService,
-    required KMetaService kmetaService,
-    required SyncFileOperations fileOps,
-  })  : _driveService = driveService,
-        _kmetaService = kmetaService,
-        _fileOps = fileOps;
+    required this._driveService,
+    required this._kmetaService,
+    required this._fileOps,
+  });
 
   /// プロジェクトをDriveにPush（アップロード）
   /// [projectPath] ローカルプロジェクトフォルダのパス

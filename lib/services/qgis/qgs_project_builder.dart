@@ -35,6 +35,7 @@ import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
+import '../../models/nodes/overlay_image_node.dart';
 import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/stable_hash.dart';
@@ -229,11 +230,40 @@ class QgsProjectBuilder {
       return _convertGeoPackage(node, rootPath, skipped);
     }
 
-    // 画像・オーバーレイは QGIS のラスタレイヤに落とせるが、まだ対応していない。
-    // 黙って落とさず、必ず報告する。
+    // オーバーレイ画像は GeoTIFF ならラスタレイヤとして参照を書く（位置は .tif のタグに焼き込み済み）。
+    // ⚠ ImageNode（写真）はオーバーレイの親クラスなので、オーバーレイの判定を先にする
+    if (node is OverlayImageNode) {
+      return _convertOverlay(node, rootPath, skipped);
+    }
+
+    // 写真は点として扱うレイヤが無い（QGIS には写真の概念が無い）。黙って落とさず、必ず報告する。
     skipped.add('${node.name}（${node.nodeType.displayName}は未対応）');
     return null;
   }
+
+  /// オーバーレイ画像 → ラスタレイヤ。GeoTIFF 以外は QGIS に位置を伝えられないので報告して外す
+  QgsTreeNode? _convertOverlay(OverlayImageNode node, String? rootPath, List<String> skipped) {
+    final relPath = _relativeTo(rootPath, node.getAbsoluteFilePath());
+    if (relPath == null) {
+      skipped.add('${node.name}（プロジェクトフォルダの外を参照している）');
+      return null;
+    }
+    final ext = p.extension(relPath).toLowerCase();
+    if (ext != '.tif' && ext != '.tiff') {
+      skipped.add('${node.name}（GeoTIFF ではないので QGIS では位置が付かない）');
+      return null;
+    }
+    return QgsRasterLayer(
+      id: rasterLayerIdForPath(relPath),
+      name: p.basenameWithoutExtension(relPath),
+      dataSourcePath: relPath,
+      visible: node.visible,
+    );
+  }
+
+  /// ラスタレイヤの決定的な id（相対パスのハッシュ。[layerIdForViewKey] と同じ考え）
+  static String rasterLayerIdForPath(String relPath) =>
+      'raster_${stableHashHex(relPath.replaceAll(r'\', '/'))}';
 
   Future<QgsTreeNode?> _convertFolder(
     FolderNode folder,

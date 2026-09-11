@@ -305,6 +305,15 @@ class QgsDocument {
           el.setAttribute('providerKey', 'ogr');
           el.setAttribute('checked', QgsWriter.checkedValue(node.visible));
           result.add(el);
+        case QgsRasterLayer():
+          final old = oldLayers[node.id];
+          final el = old?.copy() ?? _writer.treeRasterLayerElement(node);
+          el.setAttribute('id', node.id);
+          el.setAttribute('name', node.name);
+          el.setAttribute('source', node.dataSourcePath);
+          el.setAttribute('providerKey', 'gdal');
+          el.setAttribute('checked', QgsWriter.checkedValue(node.visible));
+          result.add(el);
       }
     }
     return result;
@@ -314,7 +323,11 @@ class QgsDocument {
 
   void _applyMapLayers(QgsProject project, QgsApplyReport report) {
     final layers = project.layers;
-    final wanted = {for (final l in layers) l.id: l};
+    final rasters = project.rasterLayers;
+    final wanted = <String, QgsTreeNode>{
+      for (final l in layers) l.id: l,
+      for (final r in rasters) r.id: r,
+    };
     final container = _projectLayers;
 
     // 埋め込みスタブ: project の埋め込みグループに合わせて作り直す
@@ -354,7 +367,16 @@ class QgsDocument {
         _detach(e);
         continue;
       }
-      _patchMapLayer(e, layer, report);
+      switch (layer) {
+        case QgsLayer():
+          _patchMapLayer(e, layer, report);
+        case QgsRasterLayer():
+          // ラスタは参照と名前だけが管轄。レンダラ（pipe）は QGIS 側の設定を残す
+          _setText(e, 'datasource', layer.dataSourcePath);
+          _setText(e, 'layername', layer.name);
+        default:
+          break;
+      }
     }
 
     // 無かったものを足す（project の順に、末尾へ）
@@ -365,6 +387,10 @@ class QgsDocument {
     for (final layer in layers) {
       if (existing.contains(layer.id)) continue;
       container.children.add(_writer.mapLayerElement(layer));
+    }
+    for (final raster in rasters) {
+      if (existing.contains(raster.id)) continue;
+      container.children.add(_writer.rasterMapLayerElement(raster));
     }
   }
 
@@ -520,9 +546,9 @@ class QgsDocument {
   void _applyLayerOrder(QgsProject project) {
     final order = _ensureChild(root, 'layerorder');
     order.children.clear();
-    for (final layer in project.layers) {
+    for (final id in project.orderedLayerIds) {
       order.children.add(
-        XmlElement(XmlName('layer'), [XmlAttribute(XmlName('id'), layer.id)]),
+        XmlElement(XmlName('layer'), [XmlAttribute(XmlName('id'), id)]),
       );
     }
     for (final group in project.embeddedGroups) {

@@ -135,10 +135,10 @@ class AddressConverter {
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as List;
         if (data.isNotEmpty) {
-          final result = data.first;
+          final result = data.first as Map<String, dynamic>;
           return LatLng(
-            double.parse(result['lat']),
-            double.parse(result['lon']),
+            double.parse(result['lat'] as String),
+            double.parse(result['lon'] as String),
           );
         }
       }

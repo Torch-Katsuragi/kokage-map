@@ -105,6 +105,8 @@ class _Worker {
     inbox.listen((msg) {
       final (int id, Function fn, Object? arg) = msg as (int, Function, Object?);
       try {
+        // fn は run<Q, R> の R Function(Q) を Function に落として運んでいる（isolate の境界で型は消える）
+        // ignore: avoid_dynamic_calls
         reply.send((id, fn(arg), null));
       } catch (e) {
         reply.send((id, null, '$e'));

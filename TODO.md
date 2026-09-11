@@ -116,7 +116,8 @@
 - [x] 実機確認（2026-09-07・Pixel 11 Pro Fold）: `map_contract_test` 9 件 green。選択ハイライト（点・面）・
       画面外矢印のジャンプ・ベースマップ切替・更新履歴画面・パーティのダイアログを一巡、Dart 例外なし。
       ⚠パーティの実ルームとオーバーレイ画像の変形は実データが無く未確認
-- [ ] 残った候補: `avoid_dynamic_calls`（63 件・手作業）、`cascade_invocations`（411 件・好みの問題なので保留）、
+- [x] `avoid_dynamic_calls`（54 件）を型付けして lint を有効化（2026-09-11 夜）。残す 1 件は `terrain_worker_io.dart` の isolate 境界（型を消して運ぶ設計）で ignore
+- [ ] 残った候補: `cascade_invocations`（411 件・好みの問題なので保留）、
       `map_page.dart` の `build`（161 行）と `_buildMapLibreMap`（109 行）、`shapefile_exporter.dart`（914 行）、
       `settings_screen.dart`（1168 行）、`import_export/` の `SmartCoordinateSystemManager` の WKT 推定を `WktParser` へ寄せる
 

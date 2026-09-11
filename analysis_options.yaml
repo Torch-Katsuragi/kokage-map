@@ -14,6 +14,7 @@ analyzer:
 
 linter:
   rules:
+    avoid_dynamic_calls: true
     # 取りこぼすと実害（Future を捨てて例外が握り潰される）
     unawaited_futures: true
     # 機械的に直せる整理系

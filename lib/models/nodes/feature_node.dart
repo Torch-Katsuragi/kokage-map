@@ -255,7 +255,7 @@ abstract class FeatureNode extends LayerTreeNode {
       if (decoded is Map && decoded['type'] == 'FeatureCollection') {
         final features = decoded['features'] as List;
         for (final f in features) {
-          final props = f['properties'] as Map?;
+          final props = (f as Map)['properties'] as Map?;
           if (props == null) continue;
           final ts = props['timestamp'] ?? props['time'] ?? props['datetime'];
           if (ts is String && ts.isNotEmpty) {

@@ -336,7 +336,7 @@ class GpsTool extends MapTool {
       final gpsInfo = await _gpsManager.startGpsSurveyWithWait();
       AppLogger.debug('[GpsTool] 単発測量 gpsInfo: $gpsInfo');
 
-      if (gpsInfo == null || !gpsInfo['isActive']) {
+      if (gpsInfo == null || gpsInfo['isActive'] != true) {
         AppLogger.debug('[GpsTool] GPS位置情報が利用できません。位置情報の許可が必要です。');
         return false;
       }
@@ -466,7 +466,7 @@ class GpsTool extends MapTool {
       AppLogger.debug(
         '[GpsTool] GPS位置を記録: Lat ${latitude.toStringAsFixed(6)}, '
         'Lon ${longitude.toStringAsFixed(6)}, '
-        'Accuracy ${gpsInfo['accuracy']?.toStringAsFixed(1) ?? 'N/A'}m',
+        'Accuracy ${(gpsInfo['accuracy'] as num?)?.toStringAsFixed(1) ?? 'N/A'}m',
       );
 
       return true;

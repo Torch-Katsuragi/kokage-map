@@ -62,12 +62,13 @@ class GeometryConversionService {
       if (decoded is Map && decoded['type'] == 'FeatureCollection') {
         final features = decoded['features'] as List;
         return features.map((f) {
-          final geom = f['geometry'] as Map<String, dynamic>;
+          final m = f as Map<String, dynamic>;
+          final geom = m['geometry'] as Map<String, dynamic>;
           final coords = geom['coordinates'] as List;
           final lon = (coords[0] as num).toDouble();
           final lat = (coords[1] as num).toDouble();
           final props = Map<String, dynamic>.from(
-            (f['properties'] as Map?) ?? {},
+            (m['properties'] as Map?) ?? {},
           );
           return (point: LatLng(lat, lon), properties: props);
         }).toList();

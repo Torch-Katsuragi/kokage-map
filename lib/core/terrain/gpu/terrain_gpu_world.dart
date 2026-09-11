@@ -292,7 +292,7 @@ class TerrainGpuWorldRenderer {
         ..setEntry(2, 2, 0.5)
         ..setEntry(2, 3, 0.5);
       final model = vm.Matrix4.identity()..setEntry(2, 2, zs);
-      final mvp = toUnit * camera.perspectiveViewProjection(centerHeight) * model;
+      final mvp = toUnit.multiplied(camera.perspectiveViewProjection(centerHeight)).multiplied(model);
       m.setAll(0, mvp.storage);
     } else {
       final cosB = math.cos(camera.bearing);

@@ -59,14 +59,14 @@ class GpsTrackPoint {
 
   /// JSONから復元
   factory GpsTrackPoint.fromJson(Map<String, dynamic> json) => GpsTrackPoint(
-    latitude: json['latitude'].toDouble(),
-    longitude: json['longitude'].toDouble(),
-    altitude: json['altitude']?.toDouble(),
-    accuracy: json['accuracy']?.toDouble(),
-    speed: json['speed']?.toDouble(),
-    bearing: json['bearing']?.toDouble(),
-    timestamp: DateTime.parse(json['timestamp']),
-    sourceType: json['sourceType'] ?? 'GPS',
+    latitude: (json['latitude'] as num).toDouble(),
+    longitude: (json['longitude'] as num).toDouble(),
+    altitude: (json['altitude'] as num?)?.toDouble(),
+    accuracy: (json['accuracy'] as num?)?.toDouble(),
+    speed: (json['speed'] as num?)?.toDouble(),
+    bearing: (json['bearing'] as num?)?.toDouble(),
+    timestamp: DateTime.parse(json['timestamp'] as String),
+    sourceType: json['sourceType'] as String? ?? 'GPS',
   );
 }
 

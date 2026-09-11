@@ -22,6 +22,7 @@ library;
 import 'package:flutter/material.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/nodes/feature_node.dart';
+import '../../services/survey/survey_chain_resolver.dart';
 import 'trupulse_detail_screen.dart';
 import 'trupulse_tool.dart';
 
@@ -127,16 +128,16 @@ class TruPulseStatusPanel extends StatelessWidget {
 }
 
 class _TraversePrecisionBar extends StatelessWidget {
-  final dynamic chain; // TraverseChain
+  final TraverseChain chain;
 
   const _TraversePrecisionBar({required this.chain});
 
   @override
   Widget build(BuildContext context) {
-    final totalDist = chain.totalDistance as double;
-    final closureErr = chain.closureError as double;
-    final ratioN = chain.closureRatioN as double;
-    final pointCount = chain.length as int;
+    final totalDist = chain.totalDistance;
+    final closureErr = chain.closureError;
+    final ratioN = chain.closureRatioN;
+    final pointCount = chain.length;
 
     final isWarning = !ratioN.isInfinite && ratioN < _closureWarningThreshold;
     final ratioText = ratioN.isInfinite

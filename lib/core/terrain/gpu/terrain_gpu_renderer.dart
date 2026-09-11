@@ -438,7 +438,7 @@ class TerrainGpuRenderer {
       ..setEntry(2, 2, 0.5)
       ..setEntry(2, 3, 0.5);
     final model = vm.Matrix4.identity()..setEntry(2, 2, zs);
-    final mvp = toUnit * proj * view * model;
+    final mvp = toUnit.multiplied(proj).multiplied(view).multiplied(model); // operator* は dynamic を返す
     out.setAll(0, mvp.storage);
   }
 

@@ -440,13 +440,13 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${t.gps.position.latitude}: ${gpsInfo['latitude']?.toStringAsFixed(6) ?? t.common.unknown}',
+                    '${t.gps.position.latitude}: ${(gpsInfo['latitude'] as num?)?.toStringAsFixed(6) ?? t.common.unknown}',
                   ),
                   Text(
-                    '${t.gps.position.longitude}: ${gpsInfo['longitude']?.toStringAsFixed(6) ?? t.common.unknown}',
+                    '${t.gps.position.longitude}: ${(gpsInfo['longitude'] as num?)?.toStringAsFixed(6) ?? t.common.unknown}',
                   ),
                   Text(
-                    t.gps.accuracyLabel(value: '${gpsInfo['accuracy']?.toStringAsFixed(1) ?? t.common.unknown}'),
+                    t.gps.accuracyLabel(value: '${(gpsInfo['accuracy'] as num?)?.toStringAsFixed(1) ?? t.common.unknown}'),
                   ),
                   Text(t.gps.sourceLabel(name: gpsInfo['sourceName'] ?? t.common.unknown)),
                   Text('${t.gps.timestamp.lastUpdate}: ${gpsInfo['timestamp'] ?? t.common.unknown}'),

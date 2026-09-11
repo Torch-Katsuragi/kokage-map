@@ -187,7 +187,7 @@ class TerrainGpuWorldRenderer {
         ..setEntry(2, 3, 0.5);
       final model = vm.Matrix4.identity()..setEntry(2, 2, zs);
       // WebGL の NDC z は [-1, 1] なので toUnit は要らないが、深度バイアスの式を Android と揃えるため [0,1] に畳んでから戻す
-      final mvp = toUnit * camera.perspectiveViewProjection(centerHeight) * model;
+      final mvp = toUnit.multiplied(camera.perspectiveViewProjection(centerHeight)).multiplied(model);
       m.setAll(0, mvp.storage);
     } else {
       final cosB = math.cos(camera.bearing);
@@ -244,7 +244,7 @@ class TerrainGpuWorldRenderer {
     final toGl = vm.Matrix4.identity()
       ..setEntry(2, 2, 2)
       ..setEntry(2, 3, -1);
-    final mg = (toGl * vm.Matrix4.fromFloat32List(m)).storage;
+    final mg = toGl.multiplied(vm.Matrix4.fromFloat32List(m)).storage;
     m.setAll(0, mg);
 
     for (final e in entries) {

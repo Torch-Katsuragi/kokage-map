@@ -204,11 +204,11 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
                   style: const TextStyle(color: Colors.orange),
                 ),
                 Text(
-                  t.basemap.cacheValidation.removedTiles(count: result['removedTiles'].toString()),
+                  t.basemap.cacheValidation.removedTiles(count: '${result['removedTiles']}'),
                   style: const TextStyle(color: Colors.red),
                 ),
                 const SizedBox(height: 8),
-                if (result['removedTiles'] > 0)
+                if ((result['removedTiles'] as int) > 0)
                   Text(
                     t.basemap.cacheValidation.corruptedRemoved,
                     style: const TextStyle(fontWeight: FontWeight.bold),

@@ -154,7 +154,7 @@ class GpsManagerService extends ChangeNotifier {
 
   // 連続測量（長押し測量）関連
   bool _isContinuousSurvey = false;
-  Function? _onContinuousSurveyUpdate;
+  void Function()? _onContinuousSurveyUpdate;
   final List<Map<String, dynamic>> _continuousSurveyData = [];
   DateTime? _continuousSurveyStartTime;
 
@@ -1011,7 +1011,7 @@ class GpsManagerService extends ChangeNotifier {
   }
 
   /// 連続測量開始（位置更新ベース）
-  void startContinuousSurvey({Function? onPositionUpdate}) {
+  void startContinuousSurvey({void Function()? onPositionUpdate}) {
     AppLogger.debug('$_logTag: 連続測量開始（位置更新ベース）');
     _isContinuousSurvey = true;
     _onContinuousSurveyUpdate = onPositionUpdate;

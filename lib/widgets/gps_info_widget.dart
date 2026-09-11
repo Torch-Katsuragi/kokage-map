@@ -92,9 +92,9 @@ class GpsInfoWidget extends StatelessWidget {
   /// コンパクト表示ビュー
   Widget _buildCompactView(BuildContext context) {
     final isActive = gpsInfo['isActive'] == true;
-    final latitude = gpsInfo['latitude'];
-    final longitude = gpsInfo['longitude'];
-    final accuracy = gpsInfo['accuracy'];
+    final latitude = (gpsInfo['latitude'] as num?)?.toDouble();
+    final longitude = (gpsInfo['longitude'] as num?)?.toDouble();
+    final accuracy = (gpsInfo['accuracy'] as num?)?.toDouble();
 
     return Row(
       children: [
@@ -193,9 +193,9 @@ class GpsInfoWidget extends StatelessWidget {
 
   /// 位置情報セクション
   Widget _buildPositionSection() {
-    final latitude = gpsInfo['latitude'];
-    final longitude = gpsInfo['longitude'];
-    final altitude = gpsInfo['altitude'];
+    final latitude = (gpsInfo['latitude'] as num?)?.toDouble();
+    final longitude = (gpsInfo['longitude'] as num?)?.toDouble();
+    final altitude = (gpsInfo['altitude'] as num?)?.toDouble();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,12 +221,12 @@ class GpsInfoWidget extends StatelessWidget {
 
   /// 精度・信号情報セクション
   Widget _buildAccuracySection() {
-    final accuracy = gpsInfo['accuracy'];
-    final speed = gpsInfo['speed'];
-    final bearing = gpsInfo['bearing'];
-    final satelliteCount = gpsInfo['satelliteCount'];
-    final hdop = gpsInfo['hdop'];
-    final gpsQuality = gpsInfo['gpsQuality'];
+    final accuracy = (gpsInfo['accuracy'] as num?)?.toDouble();
+    final speed = (gpsInfo['speed'] as num?)?.toDouble();
+    final bearing = (gpsInfo['bearing'] as num?)?.toDouble();
+    final satelliteCount = gpsInfo['satelliteCount'] as int?;
+    final hdop = (gpsInfo['hdop'] as num?)?.toDouble();
+    final gpsQuality = gpsInfo['gpsQuality'] as int?;
     final sourceType = gpsInfo['sourceType'];
     final isExternalGnss = sourceType == 'GNSS';
 

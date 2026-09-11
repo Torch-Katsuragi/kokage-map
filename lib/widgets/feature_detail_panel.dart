@@ -26,6 +26,7 @@ import '../models/app_notification.dart';
 import '../models/nodes/current_location_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
+import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../providers/notification_providers.dart';
 import '../providers/project_providers.dart';
@@ -312,7 +313,8 @@ class FeatureDetailPanel extends ConsumerWidget {
 
     // 既存のFeatureNode用の処理
     if (feature is FeatureNode) {
-      final infoMap = feature.infoMap;
+      final node = feature as FeatureNode; // dynamic のフィールドは is で昇格しない
+      final infoMap = node.infoMap;
       const hiddenKeys = {'geom', 'sub_table'};
       final filteredEntries =
           infoMap.entries
@@ -454,7 +456,7 @@ class FeatureDetailPanel extends ConsumerWidget {
 
   /// フィーチャ/写真を削除
   Future<void> _handleDelete(WidgetRef ref) async {
-    final target = feature;
+    final target = feature as LayerTreeNode; // FeatureNode / ImageNode / OverlayImageNode はいずれも LayerTreeNode
     // 選択解除でウィジェットがアンマウントされるため、先にNotifier参照をキャプチャ
     final selectionNotifier = ref.read(selectedFeaturesProvider.notifier);
     final refreshNotifier = ref.read(featureRefreshTriggerProvider.notifier);

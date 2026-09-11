@@ -510,33 +510,32 @@
         スコープ同意画面は出る。9/1の「出ない」は既同意アカウントで見た誤り）。
         ⚠ 同意画面のアプリ名が **「ねむりぎ工房」**（GCP nemurigi-kobo の OAuth 同意画面設定）。検証申請前に
         Kokage Map へ変えるか説明するか決める
-  - [ ] 🐛 **初回起動時、オンボーディングより前に Google の「Sign in with Google / Choose an account」シートが出る**
-        （2026-09-03 Fold で確認。Credential Manager の起動時サインイン要求。Google アカウント0件の端末では出ない）。
-        審査官の端末では出るので、Drive設定を開くまで出さないようにする
-  - [ ] 🌐 `drive_url_input_dialog` の「Driveフォルダを追加」「URL入力」「QRスキャン」が未翻訳（英語UIで日本語のまま）
+  - [x] 🐛 **初回起動時、オンボーディングより前に Google の「Sign in with Google / Choose an account」シートが出る**
+        （2026-09-03 Fold で確認）→ 2026-09-07 の `restoreSessionSilently()` 化（`attemptLightweightAuthentication` をやめた）で解消。
+        2026-09-11 夜に Pixel 9 へ release / debug を新規インストールして確認: オンボーディングの前後とも Google のシートは出ない
+  - [x] 🌐 `drive_url_input_dialog` の「Driveフォルダを追加」「URL入力」「QRスキャン」が未翻訳 → `t.driveUrlDialog.*` に（2026-09-11 夜）
   - [ ] ~~カメラ: 写真マーカー撮影、QRコードスキャン~~ → 宣言フォーム対象外なので撮らない
   - [ ] ~~Bluetooth: TruPulse測量機器との接続・データ取得~~ → **撮らない**（2026-09-01）
         「近くのデバイス」（`BLUETOOTH_SCAN`/`_CONNECT`/`_ADVERTISE`）は制限付き権限ではなく、
         Play Console に宣言フォーム自体が無い（用途記載のみ）。OAuth検証もDriveスコープの話で
         BTは無関係。⚠ エミュでの代替は不可（AVDにホストのBTは通らない・rootcanalは
         emulator↔emulator専用）。そもそも提出動画は実機の実動作のみでモック不可
-- [ ] YouTubeに限定公開でアップロード
-- [ ] Play Console各権限セクション + GCPデータアクセスページにリンク登録
+- [x] YouTubeに限定公開でアップロード（2026-09-04。権限 `2F6B51H4DYs`／OAuth `R22vltqCmt4`）
+- [/] Play Console各権限セクションにリンク登録（2026-09-04 済み）。GCP データアクセスページは OAuth 検証（資金調達後）のとき
 
 **ストア掲載情報**
 
-- [ ] アプリ名・短い説明・詳しい説明
-- [ ] スクリーンショット（スマートフォン用: 最低2枚）
-- [ ] アプリアイコン（512x512 PNG）
-- [ ] フィーチャーグラフィック（1024x500 PNG）
-- [ ] カテゴリ設定（ツール or 地図＆ナビ）
-- [ ] 連絡先情報（`k-root@googlegroups.com`）
+- [x] アプリ名・短い説明・詳しい説明（2026-09-04。`play.py listing` で更新できる）
+- [x] スクリーンショット（2026-09-11 に 3D の新 UI で 5 枚に差し替え。`play.py images`）
+- [x] アプリアイコン・フィーチャーグラフィック（掲載済み。ja-JP の featureGraphic 1 枚を API で確認）
+- [ ] カテゴリ設定（ツール or 地図＆ナビ）— Play Console で要確認
+- [x] 連絡先情報（`k-root@googlegroups.com`）
 
 **クローズドテストトラック**
 
-- [ ] トラック作成・テスターリスト登録
-- [ ] AABアップロード・リリースノート入力
-- [ ] ロールアウト・参加リンク共有
+- [x] トラック作成・テスターリスト登録（クローズドテスト alpha。テスターは Google グループ方式、[[docs/technical/closed-test-invite]]）
+- [x] AABアップロード・リリースノート入力（0.6.0+17 → 0.7.0+20 まで `play.py upload`）
+- [x] ロールアウト・参加リンク共有（招待手順は [[docs/technical/closed-test-invite]]。残: テスター 12 人 × 14 日 → 本番アクセス申請）
 
 ---
 
@@ -560,9 +559,9 @@
 
 #### MapLibre
 
-- [ ] 3D terrain有効化（RasterDemSource + setTerrain + pitch/tiltコントロール）
-- [ ] 国土地理院DEMタイル → Terrain-RGB変換の実装・検証
-- [ ] Flutter SDKアップグレード（3.10+）→ maplibre_webview導入（Windows対応）
+- [x] ~~3D terrain有効化（RasterDemSource + setTerrain + pitch/tiltコントロール）~~ → MapLibre の terrain ではなく自前の 3D 描画系で実現（v0.7.0、`feature/3d-map`）
+- [x] ~~国土地理院DEMタイル → Terrain-RGB変換の実装・検証~~ → 変換せず地理院の標高 PNG を直接読む（DEM1A → 5A → 10B → AWS の連なり）
+- [x] ~~Flutter SDKアップグレード（3.10+）→ maplibre_webview導入（Windows対応）~~ → Flutter は 3.47.3。maplibre_webview と Windows 版は 2026-08-25 に撤去
   - **Windows対応一時中断**（2026/04/07）: maplibre_webviewのWebView2実装に起因する問題のため、当面Android特化。
 - [ ] MapLibre GL JS/CSS/pmtiles.jsのローカルバンドル化（CDN依存排除、オフライン起動対応）
   - 注: バンドル版pmtiles.jsがNode.js用ビルドでブラウザ非互換のため保留
@@ -579,7 +578,7 @@
 - [x] チェンジログ表示機能（CHANGELOG.md + アプリ内Markdown表示 + 未読通知バッジ）
 - [x] UIサイズ7段階調整機能（0.75x〜1.30x、設定 → 一般、MediaQuery.textScaler + Riverpod）
 - [x] フィードバックフォームにバージョン情報・端末モデルを事前入力（Google Forms URLパラメータ + PackageInfo + DeviceInfo）
-- [ ] ポイント詳細情報からGoogle Mapリンクをコピーする機能
+- [x] ポイント詳細情報からGoogle Mapリンクをコピーする機能（2026-09-07 の改善 15 項目「Google Maps はリンクコピー（長押しで開く）」）
 - [ ] 既存MapTool (PenTool/SelectTool/GpsTool) のChangeNotifier化統一
 - [x] 水準器（Spirit Level）機能（v0.6.0 — 加速度計/コンパス/GPS統合、直角三角形計算付き）
 

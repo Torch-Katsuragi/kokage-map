@@ -1,6 +1,6 @@
 # Changelog
 
-## Next release (in development, feature/3d-map)
+## v0.7.0 — 2026/09/11
 
 ### ⛰ The map is now 3D
 

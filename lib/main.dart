@@ -345,18 +345,15 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
           ),
         );
       },
-      // 起動ルートで最初の画面を決める（`home:` は onGenerateInitialRoutes と併用できない）。
-      // 素の `/map` と `/terrain-spike` は開発用の直行、`/map?project=...`（`LaunchRequest`）を含む
-      // それ以外はホームから始める。ホームが要求どおりにプロジェクトを開き、地図がカメラを合わせる
-      onGenerateInitialRoutes: (name) {
-        final page = switch (name) {
-          '/map' => const RootMapsHomePage(),
-          // 3D 描画スパイク（開発用）。web は URL `#/terrain-spike` で直接開ける
-          '/terrain-spike' => const TerrainSpikeScreen(),
-          _ => const HomeScreen(),
-        };
-        return [MaterialPageRoute<void>(builder: (_) => page, settings: RouteSettings(name: name))];
+      home: const HomeScreen(),
+      routes: {
+        '/map': (context) => const RootMapsHomePage(),
+        // 3D 描画スパイク（開発用）。web は URL `#/terrain-spike` で直接開ける
+        '/terrain-spike': (context) => const TerrainSpikeScreen(),
       },
+      // ⚠ `/map?project=...`（`LaunchRequest`）は routes に無いので、Navigator の既定の初期ルート生成が
+      //   `/` に落としてホームから始まる（それが狙い。ホームが要求どおりにプロジェクトを開き、地図がカメラを合わせる）。
+      //   onGenerateInitialRoutes で置き換えると home と併用できず、debug で assert に落ちた（2026-09-12）
     );
   }
 }

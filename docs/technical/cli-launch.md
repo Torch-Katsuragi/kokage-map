@@ -26,8 +26,10 @@
 ## 届き方
 
 - **Android・起動時**: Flutter の標準どおり `--route` / intent extra `route` → `defaultRouteName`。
-  `MaterialApp.onGenerateInitialRoutes` が `/map?...` をホーム画面から始め、ホームが `project` を開き、
-  地図がカメラを合わせる（`HomeScreen._maybeAutoOpenProjectDir`、`MapPage._applyLaunchRequest`）
+  `LaunchRequest.init()` がそれを読む。`/map?...` は `routes` に無いので Navigator の既定の初期ルート生成が
+  `/`（ホーム）に落とし、ホームが `project` を開き、地図がカメラを合わせる
+  （`HomeScreen._maybeAutoOpenProjectDir`、`MapPage._applyLaunchRequest`）。
+  ⚠ `onGenerateInitialRoutes` は `home:` と併用できない（debug で assert）ので使わない
 - **Android・起動中**: `MainActivity` は `singleTop` なので `onNewIntent` に同じ intent が来る。
   MethodChannel `com.k_root.k_maps/launch` の `route` で Dart に渡し、`LaunchRequest.incoming` に流れる
 - **web**: `#/map?...`。起動時は `window.location.hash`、起動中は `hashchange`

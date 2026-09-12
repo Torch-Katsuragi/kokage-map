@@ -54,20 +54,20 @@ mixin MapDrawingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
       builder: (context) {
         String text = '';
         return AlertDialog(
-          title: const Text('Attribute Input'),
+          title: Text(t.map.attributeInput.title),
           content: TextField(
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Attribute (Text)'),
+            decoration: InputDecoration(labelText: t.map.attributeInput.label),
             onChanged: (v) => text = v,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, null),
-              child: const Text('Cancel'),
+              child: Text(t.common.cancel),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, text),
-              child: const Text('OK'),
+              child: Text(t.common.ok),
             ),
           ],
         );

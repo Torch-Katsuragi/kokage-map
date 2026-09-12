@@ -13,6 +13,7 @@
 // integration_test 側の担当（[[docs/technical/qgis-interop]]）。
 import 'dart:io';
 
+import 'package:flutter/material.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/services/qgis/qgs_importer.dart';
@@ -271,6 +272,44 @@ void main() {
           reason: 'data_defined_properties の色に上書きされている');
       expect(style.pointSize, closeTo(4 * 96 / 25.4 / 2, 0.01),
           reason: 'data_defined_properties の size に上書きされている');
+    });
+  });
+
+  group('ラベルの読み戻し', () {
+    XmlElement layer(String inner, {String? enabled}) => XmlDocument.parse(
+          '<maplayer type="vector"${enabled == null ? '' : ' labelsEnabled="$enabled"'}>$inner</maplayer>',
+        ).rootElement;
+    const simple = '<labeling type="simple"><settings><text-style fieldName="FIELD" isExpression="EXPR" '
+        'fontSize="9" fontSizeUnit="Point" textColor="17,34,51,255">'
+        '<text-buffer bufferDraw="1" bufferColor="255,255,255,255"/></text-style></settings></labeling>';
+
+    test('isExpression=0 の列名は "列" の式に', () {
+      final style = const QgsImporter().readLabel(layer(simple.replaceAll('FIELD', 'name').replaceAll('EXPR', '0'), enabled: '1'))!;
+      expect(style.labelEnabled, isTrue);
+      expect(style.labelProperty, '"name"');
+      expect(style.labelFontSize, closeTo(12, 0.01), reason: '9pt → 12px');
+      expect(style.labelColor, const Color(0xFF112233));
+      expect(style.labelHaloColor, const Color(0xFFFFFFFF));
+    });
+
+    test('式はそのまま。labelsEnabled="0" は無効', () {
+      final xml = simple.replaceAll('FIELD', 'concat(&quot;a&quot;, ' ', &quot;b&quot;)').replaceAll('EXPR', '1');
+      final style = const QgsImporter().readLabel(layer(xml, enabled: '0'))!;
+      expect(style.labelEnabled, isFalse);
+      expect(style.labelProperty, 'concat("a", ' ', "b")');
+    });
+
+    test('ラベルが無ければ null、シンボルと合成される', () {
+      expect(const QgsImporter().readLabel(layer('')), isNull);
+      final withBoth = layer(
+        '<renderer-v2 type="singleSymbol"><symbols><symbol type="marker"><layer>'
+        '<Option type="Map"><Option name="color" value="255,0,0,255"/><Option name="size" value="4"/></Option>'
+        '</layer></symbol></symbols></renderer-v2>${simple.replaceAll('FIELD', 'name').replaceAll('EXPR', '0')}',
+        enabled: '1',
+      );
+      final style = const QgsImporter().readStyleWithLabel(withBoth)!;
+      expect(style.pointColor, const Color(0xFFFF0000));
+      expect(style.labelProperty, '"name"');
     });
   });
 }

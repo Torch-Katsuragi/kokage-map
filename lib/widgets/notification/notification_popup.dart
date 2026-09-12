@@ -15,6 +15,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
 
@@ -50,11 +52,11 @@ class NotificationPopup extends StatelessWidget {
             _buildHeader(context, notifications),
             const Divider(height: 1),
             if (notifications.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32),
+              Padding(
+                padding: const EdgeInsets.all(32),
                 child: Text(
-                  'No notifications',
-                  style: TextStyle(color: Colors.grey),
+                  t.notification.empty,
+                  style: const TextStyle(color: Colors.grey),
                 ),
               )
             else
@@ -92,7 +94,7 @@ class NotificationPopup extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            'Notifications',
+            t.notification.title,
             style: Theme.of(
               context,
             ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
@@ -119,15 +121,15 @@ class NotificationPopup extends StatelessWidget {
                       ref
                           .read(notificationCenterProvider.notifier)
                           .markAllAsRead(),
-              child: const Text(
-                'Mark all read',
-                style: TextStyle(fontSize: 12),
+              child: Text(
+                t.notification.markAllRead,
+                style: const TextStyle(fontSize: 12),
               ),
             ),
           if (notifications.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 18),
-              tooltip: 'Clear all',
+              tooltip: t.notification.clearAll,
               onPressed: () {
                 ref.read(notificationCenterProvider.notifier).clear();
                 onDismiss();
@@ -240,9 +242,9 @@ class _NotificationPanelState extends State<_NotificationPanel> {
   String _formatTime(DateTime dt) {
     final now = DateTime.now();
     final diff = now.difference(dt);
-    if (diff.inSeconds < 60) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inSeconds < 60) return t.notification.justNow;
+    if (diff.inMinutes < 60) return t.notification.minutesAgo(n: diff.inMinutes);
+    if (diff.inHours < 24) return t.notification.hoursAgo(n: diff.inHours);
     return '${dt.month}/${dt.day} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }

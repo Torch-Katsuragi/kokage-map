@@ -219,12 +219,12 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
       ref.read(featureRefreshTriggerProvider.notifier).trigger();
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'Moved "${source.name}" to ${target.name}',
+            title: t.layerDrawer.movedTo(source: source.name, target: target.name),
             level: NotificationLevel.info,
           );
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'Move failed: $e',
+            title: t.layerDrawer.moveFailed(error: '$e'),
             level: NotificationLevel.error,
           );
     }
@@ -342,8 +342,8 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
                   Flexible(
                     child: Text(
                       _isLayerDrag
-                          ? 'Drop layer on GeoPackage to migrate'
-                          : 'Drop here or on a folder to move',
+                          ? t.layerDrawer.dropOnGeoPackage
+                          : t.layerDrawer.dropToMove,
                       style: TextStyle(
                         color: _isLayerDrag ? Colors.blue : Colors.orange,
                         fontWeight: FontWeight.bold,
@@ -443,9 +443,9 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
   Future<void> _renameFolder(BuildContext context, FolderNode node) async {
     final result = await RenameDialog.show(
       context,
-      title: 'Rename Folder',
+      title: t.layerDrawer.renameFolder,
       currentName: node.name,
-      label: 'New name',
+      label: t.layerDrawer.newName,
     );
     if (result == null || result.isEmpty || result == node.name) return;
     try {
@@ -459,7 +459,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       triggerMapRefresh();
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'Rename failed: $e',
+            title: t.layerDrawer.renameFailed(error: '$e'),
             level: NotificationLevel.info,
           );
     }

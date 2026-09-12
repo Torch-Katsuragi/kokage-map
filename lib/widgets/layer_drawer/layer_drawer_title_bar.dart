@@ -206,7 +206,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
 
   Widget _buildAddButton() {
     return PopupMenuButton<AddAction>(
-      tooltip: 'Add',
+      tooltip: t.layerDrawer.add,
       onSelected: onAdd,
       offset: const Offset(0, 40),
       child: Container(

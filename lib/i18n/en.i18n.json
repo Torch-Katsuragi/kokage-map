@@ -398,6 +398,16 @@
     "connectionFailed": "Connection failed: $error"
   },
   "layerDrawer": {
+    "openDrawer": "Open layer list",
+    "closeDrawer": "Close layer list",
+    "add": "Add",
+    "movedTo": "Moved \"$source\" to $target",
+    "moveFailed": "Move failed: $error",
+    "dropOnGeoPackage": "Drop on a GeoPackage to migrate the layer",
+    "dropToMove": "Drop here or on a folder to move",
+    "renameFolder": "Rename folder",
+    "newName": "New name",
+    "renameFailed": "Rename failed: $error",
     "title": "Layers",
     "addFolder": "Add Folder",
     "rename": "Rename",
@@ -556,6 +566,15 @@
     }
   },
   "map": {
+    "drawing": {
+      "undo": "Undo",
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    },
+    "attributeInput": {
+      "title": "Attribute input",
+      "label": "Attribute (text)"
+    },
     "toolbar": {
       "pan": "Pan",
       "pen": "Pen",
@@ -595,6 +614,13 @@
     "noSupportedGeometry": "No features with supported geometry types"
   },
   "notification": {
+    "title": "Notifications",
+    "empty": "No notifications",
+    "markAllRead": "Mark all read",
+    "clearAll": "Clear all",
+    "justNow": "Just now",
+    "minutesAgo": "${n}m ago",
+    "hoursAgo": "${n}h ago",
     "levelInfo": "Info",
     "levelWarning": "Warning",
     "levelError": "Error",
@@ -860,6 +886,8 @@
     "secondsOnly": "${seconds}s"
   },
   "featureDetail": {
+    "scaleLabel": "Scale: ",
+    "rotationLabel": "Rot: ",
     "imageError": "Image Error",
     "nameLabel": "Name: ",
     "pathLabel": "Path: ",

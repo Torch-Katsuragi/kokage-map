@@ -13,78 +13,131 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// こかげマップ: ラベルのテンプレート
+// こかげマップ: ラベルの「部品」表現と、旧形式からの読み替え
 //
-// `{列名}` を属性値に置き換える。`{` を含まない文字列は列名そのもの
-// （旧形式。`labelProperty: "name"` など）として扱う。
-// 例: `{compartment} / {species}` → `12-b / hinoki`
-library;
+// ラベルの正体は QGIS の式（`label_expression.dart`）。ここはその上に載る薄い層で、
+//   - 部品（列／固定文字／そのままの式）の列 ⇄ 式 の往復（組み立てダイアログ用）
+//   - 旧形式（`{列}` テンプレート、列名だけ）を式に読み替える
+//   - 属性を流し込んで地図に出す文字を作る
+// を受け持つ。
+//
+// 2026-09-12 までは独自の `{列}` テンプレートだった。`.qgs` に `isExpression="0"` のまま
+// 書いていたので複数列のラベルが QGIS で壊れていた。以後は式で持つ。
 
-/// テンプレートを部品に分けたもの。UI（ラベル合成ダイアログ）と描画で共有する
+import 'label_expression.dart';
+
+/// ラベルの部品
 sealed class LabelToken {
   const LabelToken();
 }
 
+/// 列の値
 class FieldToken extends LabelToken {
   const FieldToken(this.column);
   final String column;
 }
 
+/// 固定文字
 class TextToken extends LabelToken {
   const TextToken(this.text);
   final String text;
 }
 
+/// 部品に分解できない式（関数など）。そのまま持ち回る
+class RawToken extends LabelToken {
+  const RawToken(this.expression);
+  final String expression;
+}
+
 final _placeholder = RegExp(r'\{([^{}]+)\}');
 
-/// テンプレート文字列 → 部品列。旧形式（列名だけ）は 1 つの [FieldToken] になる
-List<LabelToken> parseLabelTemplate(String? template) {
-  if (template == null || template.isEmpty) return const [];
-  if (!template.contains('{')) return [FieldToken(template)];
-  final tokens = <LabelToken>[];
-  var last = 0;
-  for (final m in _placeholder.allMatches(template)) {
-    if (m.start > last) tokens.add(TextToken(template.substring(last, m.start)));
-    tokens.add(FieldToken(m.group(1)!));
-    last = m.end;
+/// 保存されている文字列を式に読み替える。
+///
+/// - `{列} / {列2}`（旧テンプレート）→ `concat("列", ' / ', "列2")`
+/// - `列名`（さらに古い形式。引用符も演算子も無い）→ `"列名"`
+/// - それ以外は式としてそのまま（読めない式もそのまま返す。捨てない）
+String? normalizeLabelExpression(String? stored) {
+  if (stored == null || stored.trim().isEmpty) return null;
+  final s = stored.trim();
+  if (s.contains('{')) {
+    final tokens = <LabelToken>[];
+    var last = 0;
+    for (final m in _placeholder.allMatches(s)) {
+      if (m.start > last) tokens.add(TextToken(s.substring(last, m.start)));
+      tokens.add(FieldToken(m.group(1)!));
+      last = m.end;
+    }
+    if (last < s.length) tokens.add(TextToken(s.substring(last)));
+    return buildLabelTemplate(tokens);
   }
-  if (last < template.length) tokens.add(TextToken(template.substring(last)));
+  // 引用符も演算子も無い裸の名前は列名（`name` → `"name"`。空白や記号入りでも同じ）
+  if (!s.contains('"') && !s.contains("'") && !s.contains('(') && !s.contains('||')) {
+    return quoteField(s);
+  }
+  return s;
+}
+
+/// 式 → 部品列。`concat(...)` / `||` の平らな並びは部品に、それ以外は [RawToken] 1 つ
+List<LabelToken> parseLabelTemplate(String? stored) {
+  final expr = normalizeLabelExpression(stored);
+  if (expr == null) return const [];
+  final e = tryParseLabelExpression(expr);
+  if (e == null) return [RawToken(expr)];
+  List<LabelExpr>? parts;
+  switch (e) {
+    case FuncCall(name: 'concat', :final args):
+      parts = args;
+    case ConcatOp(parts: final p):
+      parts = p;
+    case FieldRef() || StringLit():
+      parts = [e];
+    default:
+      parts = null;
+  }
+  if (parts == null) return [RawToken(expr)];
+  final tokens = <LabelToken>[];
+  for (final p in parts) {
+    switch (p) {
+      case FieldRef(:final name):
+        tokens.add(FieldToken(name));
+      case StringLit(:final value):
+        tokens.add(TextToken(value));
+      default:
+        tokens.add(RawToken(formatLabelExpression(p)));
+    }
+  }
   return tokens;
 }
 
-/// 部品列 → テンプレート文字列（保存形式）
-String buildLabelTemplate(List<LabelToken> tokens) => tokens
-    .map((t) => switch (t) {
-          FieldToken(:final column) => '{$column}',
-          TextToken(:final text) => text,
-        })
-    .join();
-
-/// テンプレートに属性値を流し込む。
-///
-/// 置き換え先が全部空（列が無い・値が null）なら null を返す。固定文字だけの
-/// ラベルを全フィーチャに出してしまわないため。
-String? renderLabelTemplate(String? template, Map<String, Object?>? props) {
-  final tokens = parseLabelTemplate(template);
-  if (tokens.isEmpty) return null;
-  final buf = StringBuffer();
-  var anyValue = false;
-  for (final t in tokens) {
-    switch (t) {
-      case FieldToken(:final column):
-        final v = props?[column];
-        if (v == null) continue;
-        final s = v is double && v == v.roundToDouble()
-            ? v.toInt().toString()
-            : v.toString();
-        if (s.isEmpty) continue;
-        anyValue = true;
-        buf.write(s);
-      case TextToken(:final text):
-        buf.write(text);
-    }
+/// 部品列 → 式（保存形式）。列 1 つなら `"列"`、それ以外は NULL に強い `concat(...)`
+String buildLabelTemplate(List<LabelToken> tokens) {
+  if (tokens.isEmpty) return '';
+  if (tokens.length == 1) {
+    return switch (tokens.first) {
+      FieldToken(:final column) => quoteField(column),
+      TextToken(:final text) => quoteString(text),
+      RawToken(:final expression) => expression,
+    };
   }
-  if (!anyValue) return null;
-  final out = buf.toString().trim();
+  final parts = tokens.map((t) => switch (t) {
+        FieldToken(:final column) => quoteField(column),
+        TextToken(:final text) => quoteString(text),
+        RawToken(:final expression) => expression,
+      });
+  return 'concat(${parts.join(', ')})';
+}
+
+/// ラベルに属性を流し込む。
+///
+/// 列の値が 1 つも入らなければ null（固定文字だけのラベルを全フィーチャに出さないため）。
+/// 読めない式も null（地図には出さないが、設定は消さない）
+String? renderLabelTemplate(String? stored, Map<String, Object?>? props) {
+  final expr = normalizeLabelExpression(stored);
+  if (expr == null) return null;
+  final e = tryParseLabelExpression(expr);
+  if (e == null) return null;
+  final r = evalLabelExpression(e, props);
+  if (r.value == null || !r.usedField) return null;
+  final out = stringifyLabelValue(r.value!).trim();
   return out.isEmpty ? null : out;
 }

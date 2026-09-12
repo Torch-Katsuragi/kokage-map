@@ -165,7 +165,7 @@ class DrawingActionButtons extends ConsumerWidget {
             drawingState.undo(isLine: isLineDrawing);
             onTriggerSetState();
           },
-          tooltip: 'Undo',
+          tooltip: t.map.drawing.undo,
           child: const Icon(Icons.undo),
         ),
         const SizedBox(width: 12),
@@ -175,7 +175,7 @@ class DrawingActionButtons extends ConsumerWidget {
             drawingState.cancel(isLine: isLineDrawing);
             onTriggerSetState();
           },
-          tooltip: 'Cancel',
+          tooltip: t.map.drawing.cancel,
           child: const Icon(Icons.clear),
         ),
         const SizedBox(width: 12),
@@ -183,7 +183,7 @@ class DrawingActionButtons extends ConsumerWidget {
           heroTag: 'confirm',
           onPressed: onConfirmDrawing,
           icon: const Icon(Icons.check),
-          label: const Text('Confirm'),
+          label: Text(t.map.drawing.confirm),
         ),
       ],
     );

@@ -398,6 +398,16 @@
     "connectionFailed": "接続失敗: $error"
   },
   "layerDrawer": {
+    "openDrawer": "レイヤ一覧を開く",
+    "closeDrawer": "レイヤ一覧を閉じる",
+    "add": "追加",
+    "movedTo": "「$source」を $target に移動しました",
+    "moveFailed": "移動に失敗しました: $error",
+    "dropOnGeoPackage": "GeoPackage に落とすとレイヤを移植します",
+    "dropToMove": "ここかフォルダに落とすと移動します",
+    "renameFolder": "フォルダ名を変更",
+    "newName": "新しい名前",
+    "renameFailed": "名前の変更に失敗しました: $error",
     "title": "レイヤ",
     "addFolder": "フォルダ追加",
     "rename": "名前変更",
@@ -556,6 +566,15 @@
     }
   },
   "map": {
+    "drawing": {
+      "undo": "ひとつ戻す",
+      "cancel": "やめる",
+      "confirm": "確定"
+    },
+    "attributeInput": {
+      "title": "属性を入力",
+      "label": "属性（テキスト）"
+    },
     "toolbar": {
       "pan": "パン",
       "pen": "ペン",
@@ -595,6 +614,13 @@
     "noSupportedGeometry": "サポートされているジオメトリタイプのフィーチャがありません"
   },
   "notification": {
+    "title": "通知",
+    "empty": "通知はありません",
+    "markAllRead": "すべて既読に",
+    "clearAll": "すべて消す",
+    "justNow": "たった今",
+    "minutesAgo": "$n 分前",
+    "hoursAgo": "$n 時間前",
     "levelInfo": "情報",
     "levelWarning": "警告",
     "levelError": "エラー",
@@ -860,6 +886,8 @@
     "secondsOnly": "${seconds}秒"
   },
   "featureDetail": {
+    "scaleLabel": "縮尺: ",
+    "rotationLabel": "回転: ",
     "imageError": "画像エラー",
     "nameLabel": "名前: ",
     "pathLabel": "パス: ",

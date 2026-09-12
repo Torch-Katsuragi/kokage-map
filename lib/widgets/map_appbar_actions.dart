@@ -45,7 +45,7 @@ List<Widget> buildMapAppBarActions({
     // レイヤードロワーボタン（右端）
     IconButton(
       icon: Icon(Icons.layers, color: drawerOpen ? Colors.blue : null),
-      tooltip: drawerOpen ? 'Close Layer Drawer' : 'Open Layer Drawer',
+      tooltip: drawerOpen ? t.layerDrawer.closeDrawer : t.layerDrawer.openDrawer,
       onPressed: onDrawerToggle,
     ),
   ];

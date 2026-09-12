@@ -14,8 +14,11 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
 import 'notification_popup.dart';
@@ -142,7 +145,7 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
         ),
         child: const Icon(Icons.notifications_outlined),
       ),
-      tooltip: 'Notifications',
+      tooltip: t.notification.title,
       onPressed: _togglePopup,
     );
   }

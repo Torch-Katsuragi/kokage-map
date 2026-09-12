@@ -457,10 +457,12 @@ class QgsWriter {
     );
   }
 
-  /// `text-style` の、こかげマップ が管轄する属性
+  /// `text-style` の、こかげマップ が管轄する属性。
+  /// ラベルは QGIS の式（`label_expression.dart`）で持っているので常に `isExpression="1"`
+  /// （列 1 つでも `"列"` は正しい式）
   static Map<String, String> labelTextStyleAttributes(QgsStyle style) => {
     'fieldName': style.labelField ?? '',
-    'isExpression': '0',
+    'isExpression': '1',
     'fontSize': (style.labelFontSizePt ?? 10).toStringAsFixed(1),
     'fontSizeUnit': 'Point',
     'textColor': const QgsWriter()._color(style.labelColor ?? Colors.black),

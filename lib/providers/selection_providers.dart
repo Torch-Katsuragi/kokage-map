@@ -61,8 +61,11 @@ class SelectedFeatures extends _$SelectedFeatures {
 
     if (features.isEmpty) return;
 
+    // 選択を空にするだけ（描画側は選択の変化で選択ソースを作り直す）。
+    // ⚠ ここで更新トリガを鳴らさない。鳴らすと「削除前の一覧で組む更新」と
+    //   「削除後の一覧で組む更新」が並走し、前者の setState が後から着地して
+    //   消したはずのフィーチャが地図に残ることがある（消しゴムだけで起きた理由）
     state = [];
-    ref.read(featureRefreshTriggerProvider.notifier).trigger();
 
     final disposeFutures = features.map((node) async {
       try {

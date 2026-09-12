@@ -46,6 +46,7 @@ import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/label_expression.dart';
 
 /// px ⇄ mm（QGISのシンボル単位はMM）。96dpi 相当。[[qgs_writer]] の逆。
 const double _kMmToPx = 96 / 25.4;
@@ -236,7 +237,7 @@ class QgsImporter {
           name: _uniqueName(name, views),
           parent: layer,
           filter: source.subset,
-          style: readStyle(maplayer),
+          style: readStyleWithLabel(maplayer),
           visible: id == null ? true : (checkedById[id] ?? true),
         ),
       );
@@ -342,6 +343,55 @@ class QgsImporter {
   /// > 分類分け（categorizedSymbol 等）は最初のシンボルの色を採るだけ。
   /// > **完全再現は狙わない。** 狙うと「開けるファイルを選り好みする」方向に行く。
   @visibleForTesting
+  /// シンボルとラベルをまとめて読む（どちらも無ければ null）
+  KMetaLayerStyle? readStyleWithLabel(XmlElement maplayer) {
+    final symbol = readStyle(maplayer);
+    final label = readLabel(maplayer);
+    if (label == null) return symbol;
+    return (symbol ?? const KMetaLayerStyle()).mergeWith(label);
+  }
+
+  /// `<labeling type="simple">` のフィールド（式）・サイズ・色と `labelsEnabled`。
+  ///
+  /// QGIS が `isExpression="0"` で書いた列名は `"列"` の式に読み替える。
+  /// 式そのものは検証せずに持ち帰る（読めない式は地図に出ないだけで、消さない）
+  KMetaLayerStyle? readLabel(XmlElement maplayer) {
+    final enabledAttr = maplayer.getAttribute('labelsEnabled');
+    final labeling = maplayer.findElements('labeling').firstOrNull;
+    if (enabledAttr == null && labeling == null) return null;
+    String? expression;
+    double? fontPx;
+    Color? color;
+    Color? halo;
+    if (labeling != null && labeling.getAttribute('type') == 'simple') {
+      final textStyle = labeling.getElement('settings')?.getElement('text-style');
+      if (textStyle != null) {
+        final field = textStyle.getAttribute('fieldName');
+        if (field != null && field.isNotEmpty) {
+          expression = textStyle.getAttribute('isExpression') == '1' ? field : quoteField(field);
+        }
+        final size = double.tryParse(textStyle.getAttribute('fontSize') ?? '');
+        if (size != null) {
+          // Point → px（書き出しの逆: px * 0.75 = pt）
+          fontPx = textStyle.getAttribute('fontSizeUnit') == 'Point' ? size / 0.75 : size;
+        }
+        color = _color(textStyle.getAttribute('textColor'));
+        final buffer = textStyle.getElement('text-buffer');
+        if (buffer != null && buffer.getAttribute('bufferDraw') == '1') {
+          halo = _color(buffer.getAttribute('bufferColor'));
+        }
+      }
+    }
+    final enabled = enabledAttr == null ? (expression != null) : enabledAttr == '1';
+    return KMetaLayerStyle(
+      labelEnabled: enabled,
+      labelProperty: expression,
+      labelFontSize: fontPx,
+      labelColor: color,
+      labelHaloColor: halo,
+    );
+  }
+
   KMetaLayerStyle? readStyle(XmlElement maplayer) {
     final renderer = maplayer.findElements('renderer-v2').firstOrNull;
     if (renderer == null) return null;

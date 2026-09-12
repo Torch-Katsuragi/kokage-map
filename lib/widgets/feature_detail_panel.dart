@@ -115,10 +115,10 @@ class FeatureDetailPanel extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Scale: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(t.featureDetail.scaleLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
               Text('${params.scale.toStringAsFixed(3)} m/px', style: const TextStyle(fontSize: 11)),
               const SizedBox(width: 12),
-              const Text('Rot: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(t.featureDetail.rotationLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
               Text('${params.rotation.toStringAsFixed(1)}°', style: const TextStyle(fontSize: 11)),
             ],
           ),
@@ -301,6 +301,25 @@ class FeatureDetailPanel extends ConsumerWidget {
               ),
             ],
           ),
+          // 位置がある写真は点と同じく Google Maps のリンク（長押しで開く）
+          if (photo.hasLocation) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _copyGoogleMapsLink(ref, photo.location!.latitude, photo.location!.longitude),
+                onLongPress: () => _openInGoogleMaps(ref, photo.location!.latitude, photo.location!.longitude),
+                icon: const Icon(Icons.link, size: 16),
+                label: Text(t.featureDetail.copyGoogleMapsLink),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade50,
+                  foregroundColor: Colors.green.shade700,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+            ),
+          ],
           // 削除ボタン
           const SizedBox(height: 12),
           LongPressDeleteButton(

@@ -63,6 +63,10 @@ class GpsHistoryRecorder extends ChangeNotifier {
   // Consolidation間隔（秒）
   static const int _consolidationIntervalSeconds = 20;
 
+  /// これ以上記録が空いたら新しい区間（フィーチャ）にする。
+  /// 暦日だけで区切ると、アプリを閉じて別の場所で開いたときに前の末尾から直線で繋がる
+  static const Duration segmentGap = Duration(minutes: 10);
+
   // GeoPackageファイル
   GeoPackageFile? _historyFile;
   GeoPackageFile? _rawBufferFile;
@@ -70,6 +74,20 @@ class GpsHistoryRecorder extends ChangeNotifier {
   // 日付・状態管理
   String? _currentDateKey;
   int? _todayTrackFeatureId;
+
+  /// 今日の何本目の区間か（1 本目の名前は日付だけ、2 本目からは `2026_09_12 #2`）
+  int _segmentIndex = 1;
+
+  String get _segmentName =>
+      _segmentIndex <= 1 ? _currentDateKey! : '$_currentDateKey #$_segmentIndex';
+
+  /// フィーチャ名から区間番号を取り出す（`2026_09_12` → 1、`2026_09_12 #3` → 3、別の日は null）
+  static int? segmentIndexOf(String? name, String dateKey) {
+    if (name == null) return null;
+    if (name == dateKey) return 1;
+    if (!name.startsWith('$dateKey #')) return null;
+    return int.tryParse(name.substring(dateKey.length + 2));
+  }
   int _lastConsolidatedIndex = 0;
 
   // ストリーム・タイマー
@@ -270,6 +288,12 @@ class GpsHistoryRecorder extends ChangeNotifier {
       await _checkAndRotateDay();
       if (_currentDateKey == null) return;
 
+      // 前の記録から空きすぎていたら新しい区間へ（閉じていた間は繋がない）
+      if (_lastRecordedTime != null) {
+        final gap = record.timestamp.difference(_lastRecordedTime!);
+        if (gap >= segmentGap) await _startNewSegment(gap);
+      }
+
       final rawLayerName = _buildRawLayerName(_currentDateKey!);
 
       // Raw BufferにPoint INSERT（O(1)、高速）
@@ -408,6 +432,16 @@ class GpsHistoryRecorder extends ChangeNotifier {
     }
   }
 
+  /// 区間を切る: 溜まっている分を今の区間に反映してから、次の点は新しいフィーチャに
+  Future<void> _startNewSegment(Duration gap) async {
+    await _consolidate();
+    _segmentIndex++;
+    _todayTrackFeatureId = null;
+    _lastConsolidatedPosition = null; // 表示側でも前の区間と繋がないように
+    AppLogger.debug('$_logTag: ${gap.inMinutes} 分空いたので新しい区間 #$_segmentIndex');
+    notifyListeners();
+  }
+
   Future<void> _checkAndRotateDay() async {
     final newDateKey = _buildDateKey(DateTime.now());
     if (newDateKey == _currentDateKey) return;
@@ -419,6 +453,8 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
     _currentDateKey = newDateKey;
     _todayTrackFeatureId = null;
+    _segmentIndex = 1;
+    _lastRecordedTime = null;
     _lastConsolidatedIndex = 0;
     _pendingDetails.clear();
     _pendingRawIds.clear();
@@ -463,7 +499,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
           _todayTrackFeatureId = await _historyFile!.addLine(
             _tracksLayerName,
             currentLine,
-            name: _currentDateKey!,
+            name: _segmentName,
           );
           AppLogger.debug(
             '$_logTag: gps_tracks フィーチャ作成 (id=$_todayTrackFeatureId)',
@@ -475,7 +511,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
               _tracksLayerName,
               _todayTrackFeatureId!,
               currentLine,
-              name: _currentDateKey!,
+              name: _segmentName,
             );
           } catch (e) {
             AppLogger.debug(
@@ -485,7 +521,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
             _todayTrackFeatureId = await _historyFile!.addLine(
               _tracksLayerName,
               currentLine,
-              name: _currentDateKey!,
+              name: _segmentName,
             );
             AppLogger.debug(
               '$_logTag: gps_tracks フィーチャ再作成 '
@@ -612,17 +648,22 @@ class GpsHistoryRecorder extends ChangeNotifier {
       final existingLayers = await _historyFile!.getLayerNames();
       if (!existingLayers.contains(_tracksLayerName)) return;
 
-      // 当日のフィーチャを検索
+      // 当日のフィーチャのうち一番新しい区間を拾う（`日付` `日付 #2` …）
       final features = await _historyFile!.getFeatures(_tracksLayerName);
+      int? latestId;
+      var latestIndex = 0;
       for (final feature in features) {
-        final name = feature['name']?.toString();
-        if (name != _currentDateKey) continue;
-
+        final index = segmentIndexOf(feature['name']?.toString(), _currentDateKey!);
+        if (index == null || index <= latestIndex) continue;
         final id = feature['id'];
         if (id == null) continue;
-
-        final featureId = id is int ? id : int.tryParse(id.toString()) ?? 0;
+        latestIndex = index;
+        latestId = id is int ? id : int.tryParse(id.toString()) ?? 0;
+      }
+      if (latestId != null) {
+        final featureId = latestId;
         _todayTrackFeatureId = featureId;
+        _segmentIndex = latestIndex;
 
         // 空間フィルタ用に末尾座標を復元
         final detail = await _historyFile!.getFeature(
@@ -645,18 +686,18 @@ class GpsHistoryRecorder extends ChangeNotifier {
             }
           }
         }
-
-        break;
       }
 
-      // details テーブルから反映済みインデックスを算出
+      // details テーブルから反映済みインデックスと最後の記録時刻を算出
       final db = await _historyFile!.getDatabase();
       final countResult = await db.rawQuery(
-        'SELECT COUNT(*) as cnt FROM $_detailsTableName WHERE track_date = ?',
+        'SELECT COUNT(*) as cnt, MAX(timestamp) as last_ts FROM $_detailsTableName WHERE track_date = ?',
         [_currentDateKey],
       );
       _lastConsolidatedIndex =
           (countResult.first['cnt'] as int?) ?? 0;
+      final lastTs = countResult.first['last_ts']?.toString();
+      if (lastTs != null) _lastRecordedTime = DateTime.tryParse(lastTs);
 
       AppLogger.debug(
         '$_logTag: History復元完了 '
@@ -730,6 +771,11 @@ class GpsHistoryRecorder extends ChangeNotifier {
       }
 
       if (recovered > 0) {
+        // 復元した点は閉じる前の記録なので今の区間に繋ぐ。次の生の点との空きはここからの差で判定する
+        final lastTs = _pendingDetails.last.timestamp;
+        if (_lastRecordedTime == null || lastTs.isAfter(_lastRecordedTime!)) {
+          _lastRecordedTime = lastTs;
+        }
         AppLogger.debug('$_logTag: $recovered 点を復元、consolidation実行');
         await _consolidate();
       }

@@ -1,5 +1,21 @@
 # Changelog
 
+## Next release
+
+### Fixes
+
+- Features removed with the eraser could stay on the map. Fixed
+- GPS tracks start a new line after a gap of 10 minutes or more, so reopening the app somewhere else no longer draws a straight line (later segments are named with `#2`, `#3`, …)
+- Remaining English strings in notifications, the layer list and drawing buttons are now translated
+
+### Usability
+
+- The photo card also has a "copy Google Maps link" button
+
+### QGIS
+
+- Labels are now stored as QGIS expressions (`"field"`, `'text'`, `concat(...)`, …), written to `.qgs` as expressions and read back from QGIS. Existing settings are converted automatically
+
 ## v0.7.1 — 2026/09/12
 
 ### Fixes

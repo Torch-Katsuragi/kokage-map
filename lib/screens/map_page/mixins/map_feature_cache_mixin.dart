@@ -38,7 +38,12 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
   
   /// フィーチャデータを非同期で更新（キャッシュに保存）
   /// KMetaスタイル読み込みとDB読み込みを並列実行し、最後にフィーチャを分類
+  /// 実行の世代。await をまたぐ間に次の実行が始まったら、古いほうの結果は捨てる
+  /// （削除直後に 2 回呼ばれると、削除前の一覧で組んだ古い結果が後から着地しうる）
+  int _featuresRun = 0;
+
   Future<void> updateFeaturesImpl() async {
+    final run = ++_featuresRun;
     final folderTree = ref.read(folderTreeProvider);
     final visibleLayers =
         folderTree != null ? folderTree.getVisibleLayerNodes() : <LayerNode>[];
@@ -116,6 +121,10 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
       }
     }
 
+    if (run != _featuresRun) {
+      AppLogger.debug('[Features] 古い実行 #$run を捨てる（最新 #$_featuresRun）');
+      return;
+    }
     if (mounted) {
       triggerSetState(() {
         pointFeatures = newPointFeatures;

@@ -38,6 +38,7 @@ import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
 import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/label_template.dart';
 import '../../utils/stable_hash.dart';
 import '../coordinate/gpkg_crs_resolver.dart';
 import '../kmeta_service.dart';
@@ -431,7 +432,7 @@ class QgsProjectBuilder {
     if (style == null) return null;
     final converted = QgsStyle(
       labelEnabled: style.labelEnabled,
-      labelField: style.labelProperty,
+      labelField: normalizeLabelExpression(style.labelProperty),
       // こかげマップ のラベルは px、QGIS は pt。96dpi で 1px = 0.75pt
       labelFontSizePt: style.labelFontSize == null ? null : style.labelFontSize! * 0.75,
       labelColor: style.labelColor,

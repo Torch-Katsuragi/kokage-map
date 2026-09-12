@@ -833,7 +833,7 @@
     "resetAllConfirm": "すべての描画設定をデフォルト値に戻しますか？",
     "resetLayerConfirm": "このレイヤーの設定をグローバル設定に戻しますか？",
     "layerDrawingTitle": "レイヤ描画",
-    "styleTitle": "Style: $name"
+    "styleTitle": "スタイル: $name"
   },
   "surveyConversion": {
     "title": "測量データ変換",

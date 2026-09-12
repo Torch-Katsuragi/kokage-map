@@ -238,6 +238,12 @@ class TerrainSceneBuilder {
 
   List<Offset> _toLocal(geo.PositionSeries series) => [for (final p in series.positions) _toLocalPosition(p)];
 
+  /// 線の頂点列（LineString / MultiLineString）
+  static Iterable<geo.PositionSeries> chainsOf(geo.Geometry? g) => _chainsOf(g);
+
+  /// 面のリング（Polygon / MultiPolygon。各要素の先頭が外周）
+  static Iterable<List<geo.PositionSeries>> ringsOf(geo.Geometry? g) => _ringsOf(g);
+
   static Iterable<geo.PositionSeries> _chainsOf(geo.Geometry? g) => switch (g) {
         geo.LineString() => [g.chain],
         geo.MultiLineString() => g.chains,

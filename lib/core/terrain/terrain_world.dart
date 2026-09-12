@@ -611,11 +611,11 @@ class TerrainWorld extends ChangeNotifier {
 
   /// 読み込み済みタイルのテクスチャを作り直す（オーバーレイ画像が変わったとき）。
   /// [within]（Mercator）に掛かるタイルだけ。途中で再度呼ばれたら古い方は止まる
-  Future<void> retexture({ui.Rect? within}) async {
+  Future<void> retexture({ui.Rect? within, bool Function(TileKey key)? where}) async {
     final gen = ++_retextureGen;
     final targets = [
       for (final t in _tiles.values)
-        if (within == null || _intersects(t.key, within)) t,
+        if ((within == null || _intersects(t.key, within)) && (where == null || where(t.key))) t,
     ];
     for (final tile in targets) {
       if (gen != _retextureGen || !_tiles.containsKey(tile.key)) return;

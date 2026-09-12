@@ -283,6 +283,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// 入ったときの傾き。起動時は真上（松本 2026-09-11 決定。2D と同じ絵で始まり、傾けたい人が傾ける）
   static const _defaultPitchDeg = 0.0;
 
+  /// 引いた段の焼き込み: この段以下のタイルは、フィーチャ（面・線・点）を形として持ち上げず、
+  /// テクスチャに描き込む（真上からの投影。松本 2026-09-12「重いときはクラスタ省略でなく投影で」）。
+  /// 引いた段なので傾けても粗さは目立たず、描画は基図と同じ 1 枚のテクスチャで済む。
+  /// 選択・頂点・写真は形のまま（少ないし、光らせたい）。ヒットテストはデータから引くので影響しない
+  static const kBakeMaxZoom = 13;
+  static bool _bakesFeatures(TileKey key) => key.z <= kBakeMaxZoom;
+
+  /// 最後にテクスチャへ焼き込んだフィーチャの一覧（同一性で比べる）
+  List<Object?>? _bakedLists;
+
   /// 傾きの上限。正射影では 90° で地面が線に潰れる（横顔になる）ので手前で止める。
   /// 寝かせるほど画面に掛かる地面が広がり、計画が段を下げて粗くなる（枚数は上限内に収まる）
   static const _maxPitchDeg = 75.0;
@@ -683,7 +693,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   void _onWorldChanged() => _scheduleRefresh();
 
-  void _onSceneRevision() => _scheduleRefresh();
+  void _onSceneRevision() {
+    final g = widget.geoJson;
+    final lists = <Object?>[g.polygons, g.polylines, g.markers];
+    if (_bakedLists == null || !_sameKey(_bakedLists!, lists)) {
+      _bakedLists = lists;
+      if (_world.tiles.any((t) => _bakesFeatures(t.key))) _scheduleRetexture(bakedOnly: true);
+    }
+    _scheduleRefresh();
+  }
 
   /// 地形の見た目（色分け・等高線）の設定が変わった。等高線は作り直し、合成も捨てる
   void _onAppearanceChanged() {
@@ -1139,9 +1157,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           outlineWidth: 1, pointColor: Colors.amber, pointSize: 7,
         ), 'name').build(points: g.images, clipRect: clip),
       );
-      // 点フィーチャ。引いた段では格子（画面 60px 相当）でまとめて数を出す（1 万点を 1 点ずつ描かない）
-      final pointScene = builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey).build(points: g.markers, clipRect: clip);
-      if (coarse && pointScene.points.length > 50) {
+      // 点フィーチャ。焼き込む段はテクスチャに描いてあるので持ち上げない。
+      // それ以外の引いた段では格子（画面 60px 相当）でまとめて数を出す（1 万点を 1 点ずつ描かない）
+      final baked = _bakesFeatures(tile.key);
+      final pointScene = baked
+          ? TerrainScene.empty
+          : builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey).build(points: g.markers, clipRect: clip);
+      if (baked) {
+        // テクスチャ側で描いてある
+      } else if (coarse && pointScene.points.length > 50) {
         final cellM = tile.bordered.cellSize * step * 30; // 1 セル ≒ 2px → 60px
         final buckets = <(int, int), List<TerrainPoint>>{};
         for (final p in pointScene.points) {
@@ -1167,8 +1191,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         add(pointScene); // 引いた段でも点が少なければラベルは出す（多ければ上でまとめている）
       }
       final worldClip = clip.shift(Offset(tile.bordered.originX, tile.bordered.originY));
-      progress.polygonIdx = _featureIndexes(g.polygons, worldClip);
-      progress.lineIdx = _featureIndexes(g.polylines, worldClip);
+      progress.polygonIdx = baked ? const [] : _featureIndexes(g.polygons, worldClip);
+      progress.lineIdx = baked ? const [] : _featureIndexes(g.polylines, worldClip);
       progress.phase = 1;
       if (over()) return;
     }
@@ -1753,11 +1777,17 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
   }
 
-  void _scheduleRetexture() {
+  /// [bakedOnly] は焼き込む段のタイルだけ（フィーチャが変わったとき）。オーバーレイの変更は全部
+  bool _retextureBakedOnly = true;
+
+  void _scheduleRetexture({bool bakedOnly = false}) {
+    _retextureBakedOnly = _retextureBakedOnly && bakedOnly;
     _retextureTimer?.cancel();
     _retextureTimer = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
-      _world.retexture(within: _overlayBounds);
+      final baked = _retextureBakedOnly;
+      _retextureBakedOnly = true;
+      _world.retexture(within: baked ? null : _overlayBounds, where: baked ? _bakesFeatures : null);
       _overlayBounds = null;
     });
   }
@@ -1768,8 +1798,101 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _overlayKey = ''; // ホットリロードでオーバーレイを同期し直す
   }
 
-  /// テクスチャの上にオーバーレイ画像を描く（四隅の Mercator 座標 → テクスチャのピクセルへのアフィン変換）
+  /// テクスチャの上描き: オーバーレイ画像と、引いた段のフィーチャの焼き込み
   void _decorateTexture(ui.Canvas canvas, TileRange range) {
+    _drawOverlayImages(canvas, range);
+    if (range.z - _world.textureZoomOffset <= kBakeMaxZoom) _bakeFeatures(canvas, range);
+  }
+
+  /// 引いた段のフィーチャをテクスチャに描く（真上からの投影。座標は範囲左上原点のピクセル）
+  void _bakeFeatures(ui.Canvas canvas, TileRange range) {
+    final g = widget.geoJson;
+    if (g.polygons.isEmpty && g.polylines.isEmpty && g.markers.isEmpty) return;
+    const ts = WebMercator.tileSize;
+    final west = range.west;
+    final north = WebMercator.tileNorth(range.y0, range.z);
+    final span = WebMercator.tileSpan(range.z);
+    final pxPerM = range.width * ts / range.widthMeters;
+    final merc = Rect.fromLTRB(west, north - range.height * span, west + range.widthMeters, north);
+    Offset px(geo.Position p) => Offset(
+          (WebMercator.xFromLon(p.x) - west) * pxPerM,
+          (north - WebMercator.yFromLat(p.y)) * pxPerM,
+        );
+    final groups = {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
+    final def = _defaultStyle();
+    TerrainFeatureStyle styleOf(geo.Feature f) {
+      final k = f.properties[kStyleProp];
+      return k is String ? (groups[k] ?? def) : def;
+    }
+
+    final fill = Paint()..style = PaintingStyle.fill;
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+    final sw = Stopwatch()..start();
+    var n = 0;
+    for (final i in _featureIndexes(g.polygons, merc)) {
+      final f = g.polygons[i];
+      final st = styleOf(f);
+      final path = ui.Path()..fillType = ui.PathFillType.evenOdd;
+      for (final rings in TerrainSceneBuilder.ringsOf(f.geometry)) {
+        for (final ring in rings) {
+          var first = true;
+          for (final p in ring.positions) {
+            final o = px(p);
+            if (first) {
+              path.moveTo(o.dx, o.dy);
+              first = false;
+            } else {
+              path.lineTo(o.dx, o.dy);
+            }
+          }
+          path.close();
+        }
+      }
+      if (st.fillColor.a > 0) canvas.drawPath(path, fill..color = st.fillColor);
+      if (st.outlineColor.a > 0 && st.outlineWidth > 0) {
+        canvas.drawPath(path, stroke..color = st.outlineColor..strokeWidth = math.max(0.6, st.outlineWidth * 0.5));
+      }
+      n++;
+    }
+    for (final i in _featureIndexes(g.polylines, merc)) {
+      final f = g.polylines[i];
+      final st = styleOf(f);
+      final path = ui.Path();
+      for (final chain in TerrainSceneBuilder.chainsOf(f.geometry)) {
+        var first = true;
+        for (final p in chain.positions) {
+          final o = px(p);
+          if (first) {
+            path.moveTo(o.dx, o.dy);
+            first = false;
+          } else {
+            path.lineTo(o.dx, o.dy);
+          }
+        }
+      }
+      canvas.drawPath(path, stroke..color = st.lineColor..strokeWidth = math.max(0.8, st.lineWidth * 0.5));
+      n++;
+    }
+    for (final f in g.markers) {
+      final pos = f.geometry?.position;
+      if (pos == null) continue;
+      final x = WebMercator.xFromLon(pos.x);
+      final y = WebMercator.yFromLat(pos.y);
+      if (x < merc.left || x > merc.right || y < merc.top || y > merc.bottom) continue;
+      final st = styleOf(f);
+      canvas.drawCircle(px(pos), math.max(1.5, st.pointSize * 0.4), fill..color = st.pointColor);
+      n++;
+    }
+    if (sw.elapsedMilliseconds > 30) {
+      debugPrint('[3D] bake z${range.z - _world.textureZoomOffset} ${range.x0},${range.y0}: $n 件 ${sw.elapsedMilliseconds}ms');
+    }
+  }
+
+  /// テクスチャの上にオーバーレイ画像を描く（四隅の Mercator 座標 → テクスチャのピクセルへのアフィン変換）
+  void _drawOverlayImages(ui.Canvas canvas, TileRange range) {
     if (_overlayImages.isEmpty) return;
     const ts = WebMercator.tileSize;
     final west = range.west;

@@ -23,6 +23,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/map_layout.dart';
 import '../core/platform_capabilities.dart';
 import '../core/terrain/dem_tiles.dart';
 import '../i18n/strings.g.dart';
@@ -715,6 +716,9 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
           // UIサイズ調整セクション
           _buildUiScaleSection(),
 
+          // 画面の配置（プリセット）
+          _buildLayoutSection(),
+
           if (_hasGlobalFolder) SettingsSection(
             title: 'Global Folder',
             icon: Icons.folder_special,
@@ -838,6 +842,49 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
       ),
     );
   }
+  Widget _buildLayoutSection() {
+    final preset = ref.watch(mapLayoutPresetSettingProvider);
+    final tr = t.settings.general;
+    final names = {
+      MapLayoutPreset.auto: (tr.layoutAuto, tr.layoutAutoDesc),
+      MapLayoutPreset.portrait: (tr.layoutPortrait, tr.layoutPortraitDesc),
+      MapLayoutPreset.landscape: (tr.layoutLandscape, tr.layoutLandscapeDesc),
+      MapLayoutPreset.leftHanded: (tr.layoutLeftHanded, tr.layoutLeftHandedDesc),
+    };
+    return SettingsSection(
+      title: tr.layout,
+      icon: Icons.dashboard_customize_outlined,
+      iconColor: Colors.deepOrange,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            tr.layoutDesc,
+            style: TextStyle(fontSize: 13, color: Colors.grey[600], height: 1.4),
+          ),
+        ),
+        const SizedBox(height: 4),
+        RadioGroup<MapLayoutPreset>(
+          groupValue: preset,
+          onChanged: (v) {
+            if (v != null) ref.read(mapLayoutPresetSettingProvider.notifier).set(v);
+          },
+          child: Column(
+            children: [
+              for (final p in MapLayoutPreset.values)
+                RadioListTile<MapLayoutPreset>(
+                  value: p,
+                  dense: true,
+                  title: Text(names[p]!.$1),
+                  subtitle: Text(names[p]!.$2),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildUiScaleSection() {
     final scaleLevel = ref.watch(uiScaleLevelProvider);
     final labels = [

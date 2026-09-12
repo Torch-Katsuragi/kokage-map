@@ -121,6 +121,16 @@
       "dataSourcesElevation": "Elevation (3D terrain)"
     },
     "general": {
+      "layout": "Screen layout",
+      "layoutDesc": "Where the toolbar and the info panel go. The info panel and the attribute table slide up from the bottom and never show together",
+      "layoutAuto": "Auto",
+      "layoutAutoDesc": "Portrait when tall, Landscape when wide",
+      "layoutPortrait": "Portrait",
+      "layoutPortraitDesc": "Toolbar on the left; info and attribute table from the bottom",
+      "layoutLandscape": "Landscape",
+      "layoutLandscapeDesc": "PC / tablet in landscape. Info on the right, attribute table at the bottom",
+      "layoutLeftHanded": "Left-handed",
+      "layoutLeftHandedDesc": "Toolbar and buttons on the right",
       "title": "General",
       "language": "Language",
       "languageDesc": "Change the display language of the app",

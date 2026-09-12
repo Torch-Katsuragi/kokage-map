@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/launch_request.dart';
+import '../../core/map_layout.dart';
 import '../../devices/base/device_tool.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
@@ -52,6 +53,7 @@ import '../../utils/label_template.dart';
 import '../../widgets/attribute_table/attribute_table_widget.dart';
 import '../../widgets/feature_detail_panel.dart';
 import '../../widgets/feature_set_panel.dart';
+import '../../widgets/info_panel_card.dart';
 // gps_track.dart は不要に（GpsHistoryRecorder に統合）
 import '../../widgets/layer_drawer/layer_drawer.dart';
 import '../../widgets/left_bottom_fab.dart';
@@ -322,6 +324,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     currentNode ??= folderTree;
 
     final currentTool = ref.watch(currentToolProvider);
+    final layout = MapLayout.resolve(ref.watch(mapLayoutPresetSettingProvider), MediaQuery.of(context).size);
 
     return KeyboardShortcutWrapper(
       mapState: this,
@@ -361,11 +364,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
             Expanded(
               child: Stack(
                 children: [
-                  // 左側ツールバー
-                  MapToolbar(onToolChanged: () => triggerSetState(() {})),
+                  // ツールバー（左右は配置プリセットで決まる）
+                  MapToolbar(onToolChanged: () => triggerSetState(() {}), side: layout.toolbar),
                   // 地図本体
                   Positioned.fill(
-                    left: 44,
+                    left: layout.toolbarLeft ? 44 : 0,
+                    right: layout.toolbarLeft ? 0 : 44,
                     child: Stack(
                       children: [
                         // 地図面は TerrainMapLayer（3D）。MapLibre は 2026-09-11 に撤去
@@ -413,28 +417,26 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                   ),
                   // Layer Drawer Panel（右サイド — 属性テーブルとは独立）
                   if (drawerOpen) _buildLayerDrawerPanel(),
-                  // Feature detail panel
-                  if (selectedFeatures.length == 1)
+                  // 情報カード。置き場所は配置プリセット（浮かせる／右パネル。下パネルは Column 側）
+                  if (selectedFeatures.isNotEmpty && _infoFloats(layout))
                     Positioned(
-                      left: 60,
+                      left: layout.toolbarLeft ? 60 : null,
+                      right: layout.toolbarLeft ? null : 60,
                       top: 20,
-                      child: FeatureDetailPanel(feature: selectedFeatures.first),
-                    )
-                  else if (selectedFeatures.length > 1)
-                    Positioned(
-                      left: 60,
-                      top: 20,
-                      child: FeatureSetPanel(features: selectedFeatures),
+                      child: _buildInfoContent(selectedFeatures),
                     ),
+                  if (selectedFeatures.isNotEmpty && layout.info == InfoPlacement.side)
+                    _buildInfoSidePanel(selectedFeatures),
                   // 外部機器ツールのステータスパネル（DeviceTool抽象経由）
                   if (currentTool is DeviceTool)
                     ListenableBuilder(
                       listenable: currentTool,
                       builder: (ctx, _) => currentTool.buildStatusPanel(ctx),
                     ),
-                  // Left bottom floating buttons
+                  // 下のフローティングボタン列（ツールバーと同じ側）
                   Positioned(
-                    left: 56,
+                    left: layout.toolbarLeft ? 56 : null,
+                    right: layout.toolbarLeft ? null : 56,
                     bottom: 24,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -455,9 +457,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                 ],
               ),
             ),
-            // 属性テーブル（ボトムパネル — レイヤードロワーとは独立）
+            // 下パネル: 属性テーブルが開いていればそれ、閉じていれば情報カード（排他。
+            // 属性テーブルの行を選ぶ流れを切らないよう、表が開いている間の情報カードは地図の上に浮く）
             if (showAttributeTable && attributeTableLayer != null)
-              _buildAttributeTablePanel(),
+              _buildAttributeTablePanel()
+            else if (layout.info == InfoPlacement.bottom && selectedFeatures.isNotEmpty)
+              _buildInfoBottomPanel(selectedFeatures),
           ],
         ),
         floatingActionButton: DrawingActionButtons(
@@ -694,6 +699,49 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         ),
         semanticsLabel: t.map.jump.toCurrentLocation,
         onTap: jumpToCurrentLocation,
+      ),
+    );
+  }
+
+  /// 情報カードの高さ（下パネルのとき）
+  double infoPanelHeight = 240;
+
+  /// 情報カードを地図の上に浮かせるか（下パネルの配置で、属性テーブルが開いている間だけ）
+  bool _infoFloats(MapLayout layout) =>
+      layout.info == InfoPlacement.bottom && showAttributeTable && attributeTableLayer != null;
+
+  Widget _buildInfoContent(List<LayerTreeNode> selected) => selected.length == 1
+      ? FeatureDetailPanel(feature: selected.first)
+      : FeatureSetPanel(features: selected);
+
+  /// 情報カードを下から出す（属性テーブルと同じ動き。下へ引き切ると選択解除）
+  Widget _buildInfoBottomPanel(List<LayerTreeNode> selected) {
+    final maxHeight = MediaQuery.of(context).size.height * 0.6;
+    return ResizableBottomPanel(
+      initialHeight: infoPanelHeight.clamp(120.0, maxHeight),
+      minHeight: 120,
+      maxHeight: maxHeight,
+      backgroundColor: _panelBackgroundColor,
+      handleColor: Colors.black.withValues(alpha: 0.08),
+      onOpenChanged: (isOpen) {
+        if (!isOpen) ref.read(selectedFeaturesProvider.notifier).clear();
+      },
+      onHeightChanged: (height) => infoPanelHeight = height,
+      child: InfoPanelFill(child: _buildInfoContent(selected)),
+    );
+  }
+
+  /// 情報カードを右のサイドパネルに（横長。ドロワーが開いていればその手前）
+  Widget _buildInfoSidePanel(List<LayerTreeNode> selected) {
+    return Positioned(
+      right: _effectiveDrawerWidth,
+      top: 0,
+      bottom: 0,
+      width: 280,
+      child: Material(
+        color: _panelBackgroundColor,
+        elevation: 4,
+        child: InfoPanelFill(child: SingleChildScrollView(child: _buildInfoContent(selected))),
       ),
     );
   }

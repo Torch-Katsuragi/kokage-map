@@ -121,6 +121,16 @@
       "dataSourcesElevation": "標高（3D 地形）"
     },
     "general": {
+      "layout": "画面の配置",
+      "layoutDesc": "ツールバーと情報パネルの置き場所。情報パネルと属性テーブルは下から出て、同時には出ません",
+      "layoutAuto": "自動",
+      "layoutAutoDesc": "縦長なら「縦持ち」、横長なら「横長」",
+      "layoutPortrait": "縦持ち",
+      "layoutPortraitDesc": "ツールバーは左。情報と属性テーブルは下から",
+      "layoutLandscape": "横長",
+      "layoutLandscapeDesc": "PC・タブレット横向き。情報は右、属性テーブルは下",
+      "layoutLeftHanded": "左利き",
+      "layoutLeftHandedDesc": "ツールバーとボタンを右に",
       "title": "一般",
       "language": "言語",
       "languageDesc": "アプリの表示言語を変更します",

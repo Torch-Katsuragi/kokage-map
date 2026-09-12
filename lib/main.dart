@@ -216,6 +216,7 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
   Future<void> _initializeServices() async {
     // UIスケールを早期に読み込み
     await ref.read(uiScaleLevelProvider.notifier).load();
+    await ref.read(mapLayoutPresetSettingProvider.notifier).load();
 
     // シングルトンサービスにRefを注入（プロバイダ初回読み込みでsetRef()が呼ばれる）
     ref.read(drawingStateProvider);

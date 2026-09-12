@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart' show immutable;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/map_layout.dart';
 import '../core/r_map_controller.dart';
 import '../models/nodes/layer_tree_node.dart';
 
@@ -51,6 +52,31 @@ class UiScaleLevel extends _$UiScaleLevel {
 
   /// 現在のレベルに対応するスケール係数
   double get scaleFactor => _scaleFactors[state];
+}
+
+// ============================================================
+// 画面の配置（プリセット）
+// ============================================================
+
+/// 地図画面の配置プリセット（`MapLayout`）。SharedPreferences に永続化
+@Riverpod(keepAlive: true)
+class MapLayoutPresetSetting extends _$MapLayoutPresetSetting {
+  static const _key = 'map_layout_preset';
+
+  @override
+  MapLayoutPreset build() => MapLayoutPreset.auto;
+
+  Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final i = prefs.getInt(_key);
+    if (i != null && i >= 0 && i < MapLayoutPreset.values.length) state = MapLayoutPreset.values[i];
+  }
+
+  Future<void> set(MapLayoutPreset preset) async {
+    state = preset;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_key, preset.index);
+  }
 }
 
 /// GeoPackage タイル展開状態（不変値オブジェクト）

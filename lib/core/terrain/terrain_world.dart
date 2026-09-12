@@ -119,23 +119,51 @@ class TerrainTile {
   double get width => bordered.width;
   double get height => bordered.height;
 
+  /// 縁を借りてよい隣か。自分より粗い近似（親から補間したタイル）の縁は借りない。
+  /// 借りると本物の自分の縁が近似の高さに引っ張られて段差（断層）になる（2026-09-12 松本の再報告）。
+  /// 近似の隣が本物に差し替わったら [updateBorder] が借り直す
+  bool _canBorrow(TerrainTile? t) => t != null && t.sourceZoom >= sourceZoom;
+
+  /// 直近の縁の段差（m）。debug の記録用（[seamThresholdM] 超なら `[3D] seam` ログ）
+  double lastSeamM = 0;
+  static const seamThresholdM = 20.0;
+
   /// 隣の縁を借りて 257×257 を作る
-  DemGrid _makeBordered(TerrainTile? east, TerrainTile? north, TerrainTile? northEast) {
+  DemGrid _makeBordered(TerrainTile? eastIn, TerrainTile? northIn, TerrainTile? northEastIn) {
+    final east = _canBorrow(eastIn) ? eastIn : null;
+    final north = _canBorrow(northIn) ? northIn : null;
+    final northEast = _canBorrow(northEastIn) ? northEastIn : null;
     final n = raw.cols; // 256
     final out = Float32List((n + 1) * (n + 1));
+    var seam = 0.0;
     for (var r = 0; r < n; r++) {
       final src = r * n;
       final dst = r * (n + 1);
       out.setRange(dst, dst + n, raw.heights, src);
-      out[dst + n] = east != null ? east.raw.heightAtIndex(0, r) : raw.heightAtIndex(n - 1, r);
+      final own = raw.heightAtIndex(n - 1, r);
+      final v = east != null ? east.raw.heightAtIndex(0, r) : own;
+      out[dst + n] = v;
+      final d = (v - own).abs();
+      if (d > seam) seam = d;
     }
     final top = n * (n + 1);
     for (var c = 0; c < n; c++) {
-      out[top + c] = north != null ? north.raw.heightAtIndex(c, 0) : raw.heightAtIndex(c, n - 1);
+      final own = raw.heightAtIndex(c, n - 1);
+      final v = north != null ? north.raw.heightAtIndex(c, 0) : own;
+      out[top + c] = v;
+      final d = (v - own).abs();
+      if (d > seam) seam = d;
     }
     out[top + n] = northEast != null
         ? northEast.raw.heightAtIndex(0, 0)
         : (north != null ? north.raw.heightAtIndex(n - 1, 0) : (east != null ? east.raw.heightAtIndex(0, n - 1) : raw.heightAtIndex(n - 1, n - 1)));
+    lastSeamM = seam;
+    if (kDebugMode && seam > seamThresholdM) {
+      debugPrint(
+        '[3D] seam $key: 借りた縁と自分の縁の差 ${seam.toStringAsFixed(0)}m '
+        '(self z$sourceZoom, east z${eastIn?.sourceZoom}, north z${northIn?.sourceZoom})',
+      );
+    }
     return DemGrid(
       cols: n + 1,
       rows: n + 1,

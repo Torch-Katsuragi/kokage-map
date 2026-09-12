@@ -17,6 +17,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/map_layout.dart';
 import '../i18n/strings.g.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../providers/device_tool_providers.dart';
@@ -31,9 +32,13 @@ import '../providers/tool_providers.dart';
 class MapToolbar extends ConsumerWidget {
   final VoidCallback onToolChanged;
 
+  /// どちらの縁に置くか（`MapLayout`。左利きは右）
+  final ToolbarSide side;
+
   const MapToolbar({
     super.key,
     required this.onToolChanged,
+    this.side = ToolbarSide.left,
   });
 
   @override
@@ -44,7 +49,8 @@ class MapToolbar extends ConsumerWidget {
     final hasOverlaySelected = selectedFeatures.any((n) => n is OverlayImageNode);
 
     return Positioned(
-      left: 0,
+      left: side == ToolbarSide.left ? 0 : null,
+      right: side == ToolbarSide.right ? 0 : null,
       top: 0,
       bottom: 0,
       child: Container(

@@ -20,6 +20,17 @@
 
 import 'package:flutter/material.dart';
 
+/// 情報カードを下パネル／サイドパネルに埋めるとき、その中で「幅いっぱい・高さは親任せ」にする印
+class InfoPanelFill extends InheritedWidget {
+  const InfoPanelFill({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<InfoPanelFill>() != null;
+
+  @override
+  bool updateShouldNotify(InfoPanelFill oldWidget) => false;
+}
+
 class InfoPanelCard extends StatelessWidget {
   const InfoPanelCard({
     super.key,
@@ -40,17 +51,18 @@ class InfoPanelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fill = InfoPanelFill.of(context);
     return Material(
-      elevation: 4,
-      borderRadius: BorderRadius.circular(12),
-      color: Colors.white.withValues(alpha: 0.8),
+      elevation: fill ? 0 : 4,
+      borderRadius: BorderRadius.circular(fill ? 0 : 12),
+      color: fill ? Colors.white : Colors.white.withValues(alpha: 0.8),
       child: Container(
-        width: width,
-        constraints: BoxConstraints(maxHeight: maxHeight),
+        width: fill ? double.infinity : width,
+        constraints: fill ? const BoxConstraints() : BoxConstraints(maxHeight: maxHeight),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.black12),
+          borderRadius: BorderRadius.circular(fill ? 0 : 12),
+          border: fill ? null : Border.all(color: Colors.black12),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

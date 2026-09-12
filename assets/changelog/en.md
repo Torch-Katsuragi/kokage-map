@@ -4,12 +4,14 @@
 
 ### Fixes
 
+- 3D terrain no longer borrows edge heights from coarser, interpolated neighbour tiles, which produced step-like seams
 - Features removed with the eraser could stay on the map. Fixed
 - GPS tracks start a new line after a gap of 10 minutes or more, so reopening the app somewhere else no longer draws a straight line (later segments are named with `#2`, `#3`, …)
 - Remaining English strings in notifications, the layer list and drawing buttons are now translated
 
 ### Usability
 
+- Screen layout presets in Settings (Auto / Portrait / Landscape / Left-handed). The info card slides up from the bottom like the attribute table and the two never show together; Landscape puts the card on the right, Left-handed moves the toolbar and buttons to the right
 - The app can be driven from a CLI or URL: open a project, look at a place, reload from disk (`/map?project=…&lat=…&lon=…&zoom=…&reload=1`, `tool/kokage.py`). The map menu also has "Reload project from disk"
 - Label composition moved to the style screen (layer / View) and works for line and polygon layers too. Columns are ordered by how often they hold a value, and expressions can be typed directly
 - A View's style now holds only the items that differ from the layer, so layer changes reach the View for untouched items. "Follow the layer" resets it

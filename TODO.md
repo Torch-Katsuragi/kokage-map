@@ -356,6 +356,8 @@
   - [x] webではTileServerを起動しない（`HttpServer` が無く、かつ不要）
   - [x] `web/index.html` に maplibre-gl-js を追加（maplibre_web は script を注入しない）
   - [x] プロジェクトを開かずに地図だけ見る入口（web限定・段2までの暫定）
+    - [x] 🐛 その入口（`#/map` 直開きも同じ）でレイヤ一覧から GeoPackage を作れてしまい、IndexedDB にだけ残る幽霊になった
+          → `/map` はホームから始める・パスを解決できないフォルダでは追加ボタンを出さない（2026-09-12）
   - [x] `integration_test/support/harness.dart` の `hasMapBackend` に web を追加
 - [x] **web版の `map_contract_test`**（2026-08-26 全件PASS）
   - `tool/test_matrix.ps1` に `build:web` / `e2e:web` 段を追加（chromedriverの

@@ -288,10 +288,13 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
     final parent = widget.currentNode!.parent;
     final driveRoot = LayerDrawerService.findDriveRoot(widget.currentNode);
+    // ⚠ パスを解決できないフォルダ（プロジェクト未設定の仮ルート `Home`。web の地図プレビューや
+    //   `#/map` 直開き）には何も作らせない。作れてしまうと web では IndexedDB にだけ残る幽霊 gpkg になる
+    final canAddHere = widget.currentNode is FolderNode && widget.currentNode!.getAbsoluteFilePath() != null;
     Widget titleBar = LayerDrawerTitleBar(
       title: widget.currentNode!.name,
       currentNode: widget.currentNode!,
-      onAdd: widget.currentNode is FolderNode
+      onAdd: canAddHere
           ? (action) => switch (action) {
                 AddAction.folder => _addFolder(context),
                 AddAction.geoPackage => _addGeoPackage(context),
@@ -359,7 +362,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
             child: DragTarget<LayerTreeNode>(
               onWillAcceptWithDetails: (details) =>
                   details.data is! LayerNode &&
-                  widget.currentNode is FolderNode &&
+                  canAddHere &&
                   details.data.parent != widget.currentNode,
               onAcceptWithDetails: (details) {
                 if (widget.currentNode case final FolderNode folder) {

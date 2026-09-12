@@ -35,7 +35,6 @@ import 'providers/selection_providers.dart';
 import 'providers/service_providers.dart';
 import 'providers/ui_state_providers.dart';
 import 'screens/home_screen.dart';
-import 'screens/map_page/map_page.dart';
 import 'screens/terrain_spike/terrain_spike_screen.dart';
 import 'services/google_drive/index.dart';
 import 'services/internal_gps_location_store.dart';
@@ -347,12 +346,16 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
       },
       home: const HomeScreen(),
       routes: {
-        '/map': (context) => const RootMapsHomePage(),
         // 3D 描画スパイク（開発用）。web は URL `#/terrain-spike` で直接開ける
         '/terrain-spike': (context) => const TerrainSpikeScreen(),
       },
-      // ⚠ `/map?project=...`（`LaunchRequest`）は routes に無いので、Navigator の既定の初期ルート生成が
-      //   `/` に落としてホームから始まる（それが狙い。ホームが要求どおりにプロジェクトを開き、地図がカメラを合わせる）。
+      // ⚠ `/map` は routes に**置かない**。`/map?project=...`（`LaunchRequest`）も素の `/map` も
+      //   Navigator の既定の初期ルート生成が `/` に落としてホームから始まる（それが狙い。ホームが要求どおりに
+      //   プロジェクトを開き、地図がカメラを合わせる）。
+      //   以前は `/map` → 地図ページ直行だったが、プロジェクト未設定の仮ルート（`FolderNode('Home')`）のまま
+      //   GeoPackage を作れてしまい、web ではブラウザの IndexedDB にしか残らない幽霊ファイルになった
+      //   （2026-09-12、`#/map` で発覚）。routes に `/map` を置いてホームを返すと、初期ルート生成が
+      //   `/` と `/map` の 2 段を積んでホームが二重になる（戻る矢印が出る）ので、置かないのが正しい。
       //   onGenerateInitialRoutes で置き換えると home と併用できず、debug で assert に落ちた（2026-09-12）
     );
   }

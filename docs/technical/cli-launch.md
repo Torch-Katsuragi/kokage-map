@@ -33,6 +33,9 @@
 - **Android・起動中**: `MainActivity` は `singleTop` なので `onNewIntent` に同じ intent が来る。
   MethodChannel `com.k_root.k_maps/launch` の `route` で Dart に渡し、`LaunchRequest.incoming` に流れる
 - **web**: `#/map?...`。起動時は `window.location.hash`、起動中は `hashchange`
+- ⚠ 素の `/map`（`#/map`）も**ホームから始まる**（`/map` は routes に置かない。置くと初期ルートが `/`+`/map` の 2 段になりホームが二重に積まれる）。地図ページへ直行させると、プロジェクト未設定の
+  仮ルートのまま GeoPackage が作れてしまい、web ではブラウザの IndexedDB にしか残らない幽霊になった
+  （2026-09-12）。プロジェクト未設定のときはレイヤ一覧の追加ボタンも出さない
 - 地図メニューの「プロジェクトを読み直す」は `reload=1` と同じ処理（`MapPage.reloadProjectFromDisk`）
 
 ## CLI

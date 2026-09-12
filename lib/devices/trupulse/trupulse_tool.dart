@@ -318,7 +318,7 @@ class TruPulseTool extends DeviceTool {
       actions: [
         RadialAction(
           icon: Icons.my_location,
-          label: 'Station',
+          label: t.trupulse.menu.station,
           color: Colors.blue.shade100,
           onTap: () {
             _station = target;
@@ -328,7 +328,7 @@ class TruPulseTool extends DeviceTool {
         ),
         RadialAction(
           icon: Icons.delete,
-          label: 'Delete',
+          label: t.common.delete,
           color: Colors.red.shade100,
           onTap: () {
             if (dependents.isEmpty) {
@@ -340,13 +340,13 @@ class TruPulseTool extends DeviceTool {
               : [
                   RadialAction(
                     icon: Icons.link,
-                    label: 'Bridge',
+                    label: t.trupulse.menu.bridge,
                     color: Colors.orange.shade100,
                     onTap: () => _bridgeDelete(target, dependents),
                   ),
                   RadialAction(
                     icon: Icons.open_with,
-                    label: 'Shift',
+                    label: t.trupulse.menu.shift,
                     color: Colors.purple.shade100,
                     onTap: () => _shiftDelete(target, dependents),
                   ),

@@ -122,7 +122,7 @@ class DrawingActionButtons extends ConsumerWidget {
             drawingState.undo(isLine: gpsTool.surveyLine.isNotEmpty);
             onTriggerSetState();
           },
-          tooltip: 'GPS測量の最後のポイントを取り消し',
+          tooltip: t.gps.undoLastPointTooltip,
           child: const Icon(Icons.undo),
         ),
         const SizedBox(width: 12),
@@ -134,11 +134,11 @@ class DrawingActionButtons extends ConsumerWidget {
             ref
                 .read(notificationCenterProvider.notifier)
                 .add(
-                  title: 'GPS測量をキャンセルしました',
+                  title: t.gps.surveyCancelled,
                   level: NotificationLevel.warning,
                 );
           },
-          tooltip: 'GPS測量をキャンセル',
+          tooltip: t.gps.cancelSurveyTooltip,
           child: const Icon(Icons.clear),
         ),
         const SizedBox(width: 12),
@@ -146,7 +146,7 @@ class DrawingActionButtons extends ConsumerWidget {
           heroTag: 'gps_confirm',
           onPressed: onConfirmGpsSurvey,
           icon: const Icon(Icons.check),
-          label: const Text('GPS測量確定'),
+          label: Text(t.gps.confirmSurvey),
         ),
       ],
     );

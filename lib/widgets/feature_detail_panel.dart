@@ -415,13 +415,13 @@ class FeatureDetailPanel extends ConsumerWidget {
       ]);
 
       // タイトルをシンプルに（PointFeatureNode → Point等）
-      String displayTitle = 'Feature';
+      String displayTitle = t.featureDetail.typeFeature;
       if (feature is PointFeatureNode) {
-        displayTitle = 'Point';
+        displayTitle = t.featureDetail.typePoint;
       } else if (feature is LineFeatureNode) {
-        displayTitle = 'Line';
+        displayTitle = t.featureDetail.typeLine;
       } else if (feature is PolygonFeatureNode) {
-        displayTitle = 'Polygon';
+        displayTitle = t.featureDetail.typePolygon;
       }
       
       return _buildPanel(

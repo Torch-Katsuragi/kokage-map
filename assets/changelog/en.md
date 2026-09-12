@@ -7,7 +7,7 @@
 - 3D terrain no longer borrows edge heights from coarser, interpolated neighbour tiles, which produced step-like seams
 - Features removed with the eraser could stay on the map. Fixed
 - GPS tracks start a new line after a gap of 10 minutes or more, so reopening the app somewhere else no longer draws a straight line (later segments are named with `#2`, `#3`, …)
-- Remaining English strings in notifications, the layer list and drawing buttons are now translated
+- Remaining untranslated strings (notifications, layer list, drawing buttons, import/export, settings, TruPulse screens) now follow the app language
 
 ### Usability
 

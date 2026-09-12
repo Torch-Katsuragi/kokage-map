@@ -23,6 +23,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../i18n/strings.g.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../services/coordinate/epsg_registry.dart';
@@ -107,7 +108,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(isImportMode ? 'Import Layer' : 'Export Layer'),
+      title: Text(isImportMode ? t.importExport.importTitle : t.importExport.exportTitle),
       content: SizedBox(
         width: 450,
         child: SingleChildScrollView(
@@ -145,14 +146,14 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.file_download),
-            label: Text(_isProcessing ? 'Exporting...' : 'Export Layer'),
+            label: Text(_isProcessing ? t.importExport.exporting : t.importExport.exportTitle),
           )
         else
           const SizedBox.shrink(), // インポートモード時はプレースホルダー
         // Closeボタン（右寄せ）
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(t.common.close),
         ),
       ],
     );
@@ -168,14 +169,17 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isImportMode ? 'Import Target' : 'Export Source',
+              isImportMode ? t.importExport.importTarget : t.importExport.exportSource,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 4),
             Text(
               isImportMode
-                  ? 'GeoPackage: ${widget.targetGeoPackage!.name}'
-                  : 'Layer: ${widget.exportLayer!.name} (${widget.exportLayer!.runtimeType})',
+                  ? t.importExport.geoPackageLabel(name: widget.targetGeoPackage!.name)
+                  : t.importExport.layerLabel(
+                      name: widget.exportLayer!.name,
+                      type: '${widget.exportLayer!.runtimeType}',
+                    ),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -189,7 +193,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
     return [
       // サポート形式表示
       Text(
-        'Supported Import Formats:',
+        t.importExport.supportedImportFormats,
         style: Theme.of(context).textTheme.titleSmall,
       ),
       const SizedBox(height: 4),
@@ -218,7 +222,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         child: ElevatedButton.icon(
           onPressed: _isProcessing ? null : _handleFileSelection,
           icon: const Icon(Icons.folder_open),
-          label: const Text('Select Layer File'),
+          label: Text(t.importExport.selectLayerFile),
         ),
       ),
 
@@ -247,7 +251,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                   : const Icon(Icons.file_upload),
-          label: Text(_isProcessing ? 'Importing...' : 'Import Layer'),
+          label: Text(_isProcessing ? t.importExport.importing : t.importExport.importTitle),
         ),
       ),
     ];
@@ -257,13 +261,13 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   List<Widget> _buildExportUI() {
     return [
       // エクスポート形式選択
-      Text('Export Format:', style: Theme.of(context).textTheme.titleSmall),
+      Text(t.importExport.exportFormat, style: Theme.of(context).textTheme.titleSmall),
       const SizedBox(height: 8),
       DropdownButtonFormField<FileFormat>(
         initialValue: _exportFormat,
-        decoration: const InputDecoration(
-          border: OutlineInputBorder(),
-          labelText: 'Select Export Format',
+        decoration: InputDecoration(
+          border: const OutlineInputBorder(),
+          labelText: t.importExport.selectExportFormat,
         ),
         items:
             _importExportService
@@ -293,26 +297,22 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Shapefile Export Options',
+                  t.importExport.shapefileOptions,
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 // Point Cloudオプション（Line/Polygonレイヤーのみ）
                 if (widget.exportLayer is! PointLayerNode)
                   CheckboxListTile(
-                    title: const Text('Export as Point Cloud'),
-                    subtitle: const Text(
-                      'Convert line/polygon vertices to individual points',
-                    ),
+                    title: Text(t.importExport.exportAsPointCloud),
+                    subtitle: Text(t.importExport.exportAsPointCloudDesc),
                     value: _exportAsPointCloud,
                     onChanged: (value) {
                       setState(() => _exportAsPointCloud = value ?? false);
                     },
                   ),
                 CheckboxListTile(
-                  title: const Text('Include Row Number'),
-                  subtitle: const Text(
-                    'Add ROW_NUM column (like # in attribute table)',
-                  ),
+                  title: Text(t.importExport.includeRowNumber),
+                  subtitle: Text(t.importExport.includeRowNumberDesc),
                   value: _includeRowNumber,
                   onChanged: (value) {
                     setState(() => _includeRowNumber = value ?? false);
@@ -359,8 +359,8 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
             const SizedBox(height: 4),
             Text(
               _isDragging
-                  ? 'Drop layer file here'
-                  : 'Drag & Drop layer file here',
+                  ? t.importExport.dropHere
+                  : t.importExport.dragDropHere,
               style: TextStyle(
                 color: _isDragging ? Colors.blue : Colors.grey[600],
                 fontWeight: FontWeight.w500,
@@ -382,14 +382,14 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Selected File:',
+              t.importExport.selectedFile,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 4),
-            Text('Name: $_selectedFileName'),
+            Text(t.importExport.fileName(name: _selectedFileName ?? '')),
             if (_selectedFileSize != null)
               Text(
-                'Size: ${(_selectedFileSize! / 1024).toStringAsFixed(1)} KB',
+                t.importExport.fileSize(size: (_selectedFileSize! / 1024).toStringAsFixed(1)),
               ),
           ],
         ),
@@ -412,7 +412,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Coordinate Reference System (CRS)',
+              t.importExport.crsTitle,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 8),
@@ -431,7 +431,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _selectedCrs?.displayString ?? 'WGS 84 (EPSG:4326) - Default',
+                      _selectedCrs?.displayString ?? t.importExport.crsDefault,
                       style: TextStyle(
                         fontWeight: FontWeight.w500,
                         color: _selectedCrs == null ? Colors.grey[600] : Colors.black,
@@ -442,7 +442,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                     IconButton(
                       icon: const Icon(Icons.clear, size: 18),
                       onPressed: () => setState(() => _selectedCrs = null),
-                      tooltip: 'Reset to WGS84',
+                      tooltip: t.importExport.resetToWgs84,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -453,11 +453,11 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
             
             // CRS検索
             TextField(
-              decoration: const InputDecoration(
-                hintText: 'Search CRS (e.g., 6677, Tokyo, IX)',
-                prefixIcon: Icon(Icons.search, size: 20),
+              decoration: InputDecoration(
+                hintText: t.importExport.crsSearchHint,
+                prefixIcon: const Icon(Icons.search, size: 20),
                 isDense: true,
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
                 filled: true,
                 fillColor: Colors.white,
               ),
@@ -521,7 +521,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      'Coordinates will be transformed from WGS84 to ${_selectedCrs!.code}',
+                      t.importExport.crsTransformNote(code: _selectedCrs!.code),
                       style: TextStyle(fontSize: 11, color: Colors.blue[700]),
                     ),
                   ),
@@ -540,7 +540,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       color: Colors.grey[50],
       child: ExpansionTile(
         leading: const Icon(Icons.settings),
-        title: const Text('Import Options'),
+        title: Text(t.importExport.importOptions),
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -548,7 +548,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
               children: [
                 Row(
                   children: [
-                    const Text('Max Features: '),
+                    Text(t.importExport.maxFeatures),
                     Expanded(
                       child: Slider(
                         value: _maxFeaturesToImport.toDouble(),
@@ -583,14 +583,14 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isImportMode ? 'Import Progress' : 'Export Progress',
+              isImportMode ? t.importExport.importProgress : t.importExport.exportProgress,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 8),
             LinearProgressIndicator(value: _progressValue),
             const SizedBox(height: 8),
             Text(_progressMessage),
-            Text('${(_progressValue * 100).toInt()}% completed'),
+            Text(t.importExport.percentCompleted(percent: (_progressValue * 100).toInt())),
           ],
         ),
       ),
@@ -616,14 +616,14 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                       _lastResult?.success == true ? Colors.green : Colors.red,
                 ),
                 const SizedBox(width: 8),
-                Text(_lastResult?.success == true ? 'Success' : 'Error'),
+                Text(_lastResult?.success == true ? t.importExport.success : t.common.error),
               ],
             ),
             const SizedBox(height: 4),
             Text(_statusMessage!),
             if (_lastResult?.metadata != null) ...[
               const SizedBox(height: 8),
-              Text('Details:', style: Theme.of(context).textTheme.labelSmall),
+              Text(t.importExport.details, style: Theme.of(context).textTheme.labelSmall),
               ...(_lastResult!.metadata!.entries.map(
                 (e) => Text('• ${e.key}: ${e.value}'),
               )),
@@ -668,7 +668,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       });
     } catch (e) {
       setState(() {
-        _statusMessage = 'File selection failed: $e';
+        _statusMessage = t.importExport.fileSelectionFailed(error: e.toString());
       });
     }
   }
@@ -692,7 +692,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       });
     } catch (e) {
       setState(() {
-        _statusMessage = 'Failed to process dropped file: $e';
+        _statusMessage = t.importExport.dropFailed(error: e.toString());
       });
     }
   }
@@ -704,11 +704,11 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       _isProcessing = true;
       _statusMessage = null;
       _progressValue = 0.0;
-      _progressMessage = 'Starting import...';
+      _progressMessage = t.importExport.startingImport;
     });
 
     try {
-      _updateProgress(0.2, 'Reading file...');
+      _updateProgress(0.2, t.importExport.readingFile);
 
       final importResult = await _importExportService
           .importFileFromCurrentLayer(
@@ -716,20 +716,20 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
             widget.targetGeoPackage,
           );
 
-      _updateProgress(1.0, 'Import completed!');
+      _updateProgress(1.0, t.importExport.importCompleted);
 
       setState(() {
         _isProcessing = false;
         _lastResult = importResult;
         _statusMessage =
             importResult.success
-                ? 'Import completed successfully!'
-                : importResult.errorMessage ?? 'Import failed';
+                ? t.importExport.importCompletedSuccess
+                : importResult.errorMessage ?? t.importExport.importFailedShort;
       });
     } catch (e) {
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Import failed: $e';
+        _statusMessage = t.importExport.importFailed(error: e.toString());
         _lastResult = ImportExportResult.error(e.toString());
       });
     }
@@ -746,10 +746,10 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         _isProcessing = true;
         _statusMessage = null;
         _progressValue = 0.0;
-        _progressMessage = 'Starting export...';
+        _progressMessage = t.importExport.startingExport;
       });
 
-      _updateProgress(0.3, 'Analyzing layer...');
+      _updateProgress(0.3, t.importExport.analyzingLayer);
 
       // エクスポートオプションを作成
       final exportOptions = ExportOptions(
@@ -773,17 +773,17 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         setState(() {
           _isProcessing = false;
           _lastResult = exportResult;
-          _statusMessage = exportResult.errorMessage ?? 'Export failed';
+          _statusMessage = exportResult.errorMessage ?? t.importExport.exportFailedShort;
         });
         return;
       }
 
-      _updateProgress(0.8, 'Saving...');
+      _updateProgress(0.8, t.importExport.saving);
       final isShapefile = _exportFormat == FileFormat.shapefile;
       final bytes = isShapefile ? _zipDirectory(tmpDir) : await File(tmpPath).readAsBytes();
       final saveExt = isShapefile ? 'zip' : ext;
       final saved = await FilePicker.saveFile(
-        dialogTitle: 'Export Layer',
+        dialogTitle: t.importExport.exportTitle,
         fileName: '$baseName.$saveExt',
         bytes: bytes,
         type: FileType.custom,
@@ -792,12 +792,12 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       if (saved == null) {
         setState(() {
           _isProcessing = false;
-          _statusMessage = 'Export cancelled';
+          _statusMessage = t.importExport.exportCancelled;
         });
         return;
       }
 
-      _updateProgress(1.0, 'Export completed!');
+      _updateProgress(1.0, t.importExport.exportCompleted);
 
       // 成功時は選択したCRSを保持
       if (exportResult.success) {
@@ -809,13 +809,13 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         _lastResult = exportResult;
         _statusMessage =
             exportResult.success
-                ? 'Export completed successfully!'
-                : exportResult.errorMessage ?? 'Export failed';
+                ? t.importExport.exportCompletedSuccess
+                : exportResult.errorMessage ?? t.importExport.exportFailedShort;
       });
     } catch (e) {
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Export failed: $e';
+        _statusMessage = t.importExport.exportFailed(error: e.toString());
         _lastResult = ImportExportResult.error(e.toString());
       });
     } finally {

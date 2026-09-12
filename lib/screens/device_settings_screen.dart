@@ -228,7 +228,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
 
           // Help
           SettingsSection(
-            title: 'Info',
+            title: t.settings.info,
             icon: Icons.info_outline,
             iconColor: Colors.grey,
             children: [

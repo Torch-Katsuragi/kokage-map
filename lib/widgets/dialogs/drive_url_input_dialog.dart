@@ -303,7 +303,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
           TextField(
             controller: _urlController,
             decoration: InputDecoration(
-              labelText: 'Google Drive URL',
+              labelText: t.driveUrlDialog.urlLabel,
               hintText: 'https://drive.google.com/drive/folders/...',
               border: const OutlineInputBorder(),
               suffixIcon: IconButton(

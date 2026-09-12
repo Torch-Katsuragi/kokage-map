@@ -616,7 +616,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
 
   Future<void> _pickFolder() async {
     final dir = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Select Global Folder',
+      dialogTitle: t.settings.globalFolder.selectFolder,
     );
     if (dir == null) return;
 
@@ -638,7 +638,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
     ref.read(globalFolderPathProvider.notifier).set(dir);
 
     ref.read(notificationCenterProvider.notifier).add(
-          title: 'Global folder updated. Restart the app to take full effect.',
+          title: t.settings.globalFolder.updated,
           level: NotificationLevel.info,
         );
   }
@@ -650,7 +650,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
     ref.read(globalFolderPathProvider.notifier).set(_defaultPath);
 
     ref.read(notificationCenterProvider.notifier).add(
-          title: 'Global folder reset to default. Restart the app to take full effect.',
+          title: t.settings.globalFolder.resetDone,
           level: NotificationLevel.info,
         );
   }
@@ -660,7 +660,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
-        title: const Text('Folder Containment Warning'),
+        title: Text(t.settings.globalFolder.containmentWarning),
         content: Text(message),
         actions: [
           TextButton(
@@ -669,7 +669,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Use Anyway'),
+            child: Text(t.settings.globalFolder.useAnyway),
           ),
         ],
       ),
@@ -727,15 +727,14 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
           _buildLayoutSection(),
 
           if (_hasGlobalFolder) SettingsSection(
-            title: 'Global Folder',
+            title: t.settings.globalFolder.title,
             icon: Icons.folder_special,
             iconColor: Colors.blue,
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
-                  'The global folder is shared across all projects.\n'
-                  'GPS history, shared GeoPackages, and other global data are stored here.',
+                  t.settings.globalFolder.description,
                   style: TextStyle(fontSize: 13, color: Colors.grey[600], height: 1.4),
                 ),
               ),
@@ -745,7 +744,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
                   _isCustom ? Icons.folder : Icons.folder_outlined,
                   color: _isCustom ? Colors.blue : Colors.blueGrey,
                 ),
-                title: Text(_isCustom ? 'Custom Path' : 'Default Path'),
+                title: Text(_isCustom ? t.settings.globalFolder.customPath : t.settings.globalFolder.defaultPath),
                 subtitle: Text(
                   _effectivePath,
                   style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
@@ -762,7 +761,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
                       child: ElevatedButton.icon(
                         onPressed: _pickFolder,
                         icon: const Icon(Icons.folder_open),
-                        label: const Text('Change Folder'),
+                        label: Text(t.settings.globalFolder.changeFolder),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,
@@ -774,7 +773,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
                       OutlinedButton.icon(
                         onPressed: _resetToDefault,
                         icon: const Icon(Icons.restore),
-                        label: const Text('Reset'),
+                        label: Text(t.common.reset),
                       ),
                     ],
                   ],
@@ -782,19 +781,16 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
               ),
             ],
           ),
-          if (_hasGlobalFolder) const SettingsSection(
-            title: 'Info',
+          if (_hasGlobalFolder) SettingsSection(
+            title: t.settings.info,
             icon: Icons.info_outline,
             iconColor: Colors.grey,
             children: [
               Padding(
-                padding: EdgeInsets.all(12),
+                padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Changing the global folder does not migrate existing data.\n'
-                  'The new folder will be created automatically if it does not exist.\n\n'
-                  'The global folder and project folder must not overlap '
-                  '(one containing the other).',
-                  style: TextStyle(height: 1.5, color: Colors.grey),
+                  t.settings.globalFolder.infoText,
+                  style: const TextStyle(height: 1.5, color: Colors.grey),
                 ),
               ),
             ],
@@ -1116,14 +1112,14 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
               _buildAccountSection(),
               // Auto Sync セクション
               SettingsSection(
-                title: 'Auto Sync',
+                title: t.settings.autoSync.title,
                 icon: Icons.sync,
                 iconColor: Colors.blue,
                 children: [
                   SwitchListTile(
                     secondary: const Icon(Icons.wifi, color: Colors.blue),
-                    title: const Text('WiFi Auto Sync'),
-                    subtitle: const Text('Sync automatically when connected to WiFi'),
+                    title: Text(t.settings.autoSync.wifiAutoSync),
+                    subtitle: Text(t.settings.autoSync.wifiAutoSyncDesc),
                     value: _autoSyncEnabled,
                     onChanged: (v) async {
                       setState(() => _autoSyncEnabled = v);
@@ -1133,17 +1129,17 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
                   const Divider(),
                   ListTile(
                     leading: const Icon(Icons.timer, color: Colors.blueGrey),
-                    title: const Text('Sync Interval'),
-                    subtitle: Text('Every $_intervalMinutes min'),
+                    title: Text(t.settings.autoSync.interval),
+                    subtitle: Text(t.settings.autoSync.everyMinutes(minutes: _intervalMinutes)),
                     trailing: DropdownButton<int>(
                       value: _intervalMinutes,
                       underline: const SizedBox.shrink(),
-                      items: const [
-                        DropdownMenuItem(value: 1, child: Text('1 min')),
-                        DropdownMenuItem(value: 3, child: Text('3 min')),
-                        DropdownMenuItem(value: 5, child: Text('5 min')),
-                        DropdownMenuItem(value: 10, child: Text('10 min')),
-                        DropdownMenuItem(value: 30, child: Text('30 min')),
+                      items: [
+                        for (final m in const [1, 3, 5, 10, 30])
+                          DropdownMenuItem(
+                            value: m,
+                            child: Text(t.settings.autoSync.minutes(count: m)),
+                          ),
                       ],
                       onChanged: (v) async {
                         if (v == null) return;
@@ -1155,19 +1151,16 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
                   ),
                 ],
               ),
-              const SettingsSection(
-                title: 'Info',
+              SettingsSection(
+                title: t.settings.info,
                 icon: Icons.info_outline,
                 iconColor: Colors.grey,
                 children: [
                   Padding(
-                    padding: EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(12),
                     child: Text(
-                      'Auto sync runs only over WiFi to save mobile data.\n\n'
-                      'When both local and Drive have changes to the same file '
-                      '(conflict), sync pauses and shows a warning on the folder. '
-                      'Tap the subtitle to resolve manually.',
-                      style: TextStyle(height: 1.5, color: Colors.grey),
+                      t.settings.autoSync.infoText,
+                      style: const TextStyle(height: 1.5, color: Colors.grey),
                     ),
                   ),
                 ],

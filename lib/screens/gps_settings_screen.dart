@@ -130,7 +130,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       );
     } catch (e) {
       setState(() {
-        _errorMessage = 'GNSS機器スキャンエラー: $e';
+        _errorMessage = t.gps.gnssScanError(error: e.toString());
       });
     } finally {
       setState(() {
@@ -434,7 +434,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              title: const Text('GPS位置取得テスト結果'),
+              title: Text(t.gps.positionTestResult),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -455,7 +455,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('OK'),
+                  child: Text(t.common.ok),
                 ),
               ],
             );
@@ -463,7 +463,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
         ));
       } else if (gpsInfo == null) {
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'GPS位置取得がタイムアウトしました',
+              title: t.gps.positionTestTimeout,
               level: NotificationLevel.warning,
             );
       }

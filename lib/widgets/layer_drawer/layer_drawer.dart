@@ -195,7 +195,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
     if (await fs.exists(newPath)) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: '"$baseName" already exists in ${target.name}',
+            title: t.layerDrawer.alreadyExists(name: baseName, target: target.name),
             level: NotificationLevel.info,
           );
       return;
@@ -493,7 +493,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     final currentName = p.basenameWithoutExtension(node.name);
     final result = await RenameDialog.show(
       context,
-      title: 'GeoPackageのリネーム',
+      title: t.layerDrawer.renameGeoPackage,
       currentName: currentName,
       label: t.layerDrawer.newFileName,
     );
@@ -525,7 +525,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
       triggerMapRefresh();
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'GeoPackageをリネームしました: $newFileName',
+            title: t.layerDrawer.gpkgRenamed(name: newFileName),
             level: NotificationLevel.info,
           );
     } catch (e) {
@@ -565,9 +565,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(t.layerDrawer.folder.unlinkDrive),
-        content: Text(
-          '${driveRoot.name} のDrive連携を解除しますか？\n\nローカルファイルは削除されません。',
-        ),
+        content: Text(t.layerDrawer.unlinkDriveConfirm(name: driveRoot.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -630,7 +628,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     if (urlResult == null) return;
 
     ref.read(notificationCenterProvider.notifier).add(
-          title: '${urlResult.folderName} をクローン中...',
+          title: t.layerDrawer.cloningDrive(name: urlResult.folderName),
           level: NotificationLevel.info,
         );
 
@@ -646,7 +644,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       if (node != null) {
         triggerMapRefresh();
         ref.read(notificationCenterProvider.notifier).add(
-              title: '${urlResult.folderName} をクローンしました',
+              title: t.layerDrawer.cloneSuccess(name: urlResult.folderName),
               level: NotificationLevel.success,
             );
       } else {
@@ -678,7 +676,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       final newNode = await LayerDrawerService.createGeoPackage(widget.currentNode as FolderNode, result);
       if (newNode == null) {
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'GeoPackageファイルの作成に失敗しました',
+              title: t.layerDrawer.gpkgCreateFailed,
               level: NotificationLevel.info,
             );
         return;

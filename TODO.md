@@ -23,7 +23,7 @@
 検討の全文は Vault `K-Maps/プレイレポート対応_2026-09-12.md`。ここは実装の帳簿。
 
 - [x] 写真の情報カードにも Google Maps リンク（2026-09-12）
-- [/] 日本語なのに英語が残る（2026-09-12: ドロワー・通知・描画ボタン・スタイル画面は済み。残: インポート/エクスポートダイアログ・設定のグローバルフォルダ/自動同期・TruPulse 画面）: ドロワーの開閉 tooltip・通知（Notifications / Mark all read / Clear all / Just now）・`Add`・
+- [x] 日本語なのに英語が残る（2026-09-12: 全部 slang に。残っているのは `!kReleaseMode` の開発節と TruPulse のシリアル記法だけ）: ドロワーの開閉 tooltip・通知（Notifications / Mark all read / Clear all / Just now）・`Add`・
       ルート `Home`・ドロワーの移動/改名メッセージ・インポート/エクスポートダイアログ全部・描画の Undo/Cancel/Confirm・
       設定のグローバルフォルダ/自動同期・**スタイル画面**（節名で分岐しているので先にキーを enum に）・TruPulse 画面全部
 - [x] 🐛 `.qgs` のラベル: `{a} / {b}` を `fieldName` にそのまま書き `isExpression="0"`（複数列のラベルが QGIS で壊れる）→ 式として書き、読み戻しも（2026-09-12）。

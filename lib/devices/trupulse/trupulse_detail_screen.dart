@@ -23,6 +23,7 @@ library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import '../../widgets/settings_widgets.dart';
 import 'trupulse_calibration_guide.dart';
 import 'trupulse_service.dart';
@@ -89,7 +90,7 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh),
-          tooltip: 'Refresh Info',
+          tooltip: t.trupulse.detail.refreshInfo,
           onPressed: connected ? _fetchDeviceInfo : null,
         ),
       ],
@@ -111,15 +112,15 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
 
   Widget _buildInfoSection() {
     return SettingsSection(
-      title: 'Device Info',
+      title: t.trupulse.detail.deviceInfo,
       icon: Icons.info_outline,
       iconColor: Colors.blue,
       collapsible: true,
       children: [
-        _infoTile('Device', _svc.connectedDevice?.name ?? '-'),
-        _infoTile('Address', _svc.connectedDevice?.address ?? '-'),
-        _infoTile('ID', _deviceId ?? '-'),
-        _infoTile('Measurements', '${_svc.measurementCount}'),
+        _infoTile(t.trupulse.detail.device, _svc.connectedDevice?.name ?? '-'),
+        _infoTile(t.trupulse.detail.address, _svc.connectedDevice?.address ?? '-'),
+        _infoTile(t.trupulse.detail.id, _deviceId ?? '-'),
+        _infoTile(t.trupulse.detail.measurements, '${_svc.measurementCount}'),
       ],
     );
   }
@@ -132,7 +133,7 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
     final entries = _svc.log;
     final connected = _svc.isConnected;
     return SettingsSection(
-      title: 'Terminal',
+      title: t.trupulse.detail.terminal,
       icon: Icons.terminal,
       iconColor: Colors.grey,
       collapsible: true,
@@ -140,7 +141,7 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
           ? null
           : IconButton(
               icon: const Icon(Icons.delete_outline, size: 18),
-              tooltip: 'Clear',
+              tooltip: t.common.clear,
               onPressed: () => setState(() => _svc.clearLog()),
               visualDensity: VisualDensity.compact,
             ),
@@ -156,9 +157,9 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
             ),
           ),
           child: entries.isEmpty
-              ? const Center(
-                  child: Text('No data yet',
-                      style: TextStyle(
+              ? Center(
+                  child: Text(t.trupulse.detail.noDataYet,
+                      style: const TextStyle(
                           color: Colors.grey,
                           fontFamily: 'monospace',
                           fontSize: 12)),
@@ -226,35 +227,28 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
 
   Widget _buildCalibrationSection(bool connected) {
     return SettingsSection(
-      title: 'Calibration',
+      title: t.trupulse.detail.calibration,
       icon: Icons.tune,
       iconColor: Colors.orange,
       collapsible: true,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
           child: Text(
-            'Calibration is performed on the device itself. '
-            'These guides walk you through each step.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
+            t.trupulse.detail.calibrationDesc,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ),
         _guideTile(
           icon: Icons.screen_rotation,
-          title: 'Tilt Calibration',
-          subtitle:
-              'Corrects the tilt sensor. '
-              'Menu: DOWN 4s → "inC" → FIRE → "YES CAL" → FIRE. '
-              '8 positions on a flat surface.',
+          title: t.trupulse.detail.tiltCalibration,
+          subtitle: t.trupulse.detail.tiltCalibrationDesc,
           onTap: () => _openCalGuide(CalibrationType.tilt),
         ),
         _guideTile(
           icon: Icons.explore,
-          title: 'Compass Calibration',
-          subtitle:
-              'Aligns the compass sensor. '
-              'Menu: DOWN 4s → "H_Ang" → FIRE → "HACAL" → FIRE → "YES CAL" → FIRE. '
-              'Outdoors, 8 positions facing North.',
+          title: t.trupulse.detail.compassCalibration,
+          subtitle: t.trupulse.detail.compassCalibrationDesc,
           onTap: () => _openCalGuide(CalibrationType.compass),
         ),
       ],
@@ -265,18 +259,17 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
 
   Widget _buildMeasurementModeSection(bool connected) {
     return SettingsSection(
-      title: 'Measurement Mode',
+      title: t.trupulse.detail.measurementMode,
       icon: Icons.straighten,
       iconColor: Colors.teal,
       collapsible: true,
       initiallyExpanded: false,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
           child: Text(
-            'Choose what value the device displays and returns '
-            'when you take a measurement.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
+            t.trupulse.detail.measurementModeDesc,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ),
         for (final mm in _MeasurementMode.values)
@@ -300,17 +293,16 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
 
   Widget _buildRemoteSection(bool connected) {
     return SettingsSection(
-      title: 'Remote Control',
+      title: t.trupulse.detail.remoteControl,
       icon: Icons.play_circle_outline,
       iconColor: Colors.green,
       collapsible: true,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
           child: Text(
-            'Trigger measurement remotely from the app '
-            'without pressing the device button.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
+            t.trupulse.detail.remoteControlDesc,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ),
         Row(
@@ -319,7 +311,7 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
               child: FilledButton.icon(
                 onPressed: connected ? _svc.remoteFire : null,
                 icon: const Icon(Icons.play_arrow),
-                label: const Text('Fire'),
+                label: Text(t.trupulse.detail.fire),
               ),
             ),
             const SizedBox(width: 8),
@@ -327,7 +319,7 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
               child: OutlinedButton.icon(
                 onPressed: connected ? _svc.stopMeasurement : null,
                 icon: const Icon(Icons.stop),
-                label: const Text('Stop'),
+                label: Text(t.trupulse.detail.stop),
               ),
             ),
           ],
@@ -340,7 +332,7 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
 
   Widget _buildConnectionSection(bool connected) {
     return SettingsSection(
-      title: 'Connection',
+      title: t.trupulse.detail.connection,
       icon: Icons.bluetooth,
       collapsible: true,
       initiallyExpanded: false,
@@ -355,7 +347,7 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
                   }
                 : null,
             icon: const Icon(Icons.bluetooth_disabled),
-            label: const Text('Disconnect'),
+            label: Text(t.devices.disconnect),
             style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
           ),
         ),
@@ -514,55 +506,34 @@ class _TerminalViewState extends State<_TerminalView> {
 // Index matches $MM,n values from TruPulse 360R manual Section 8
 
 enum _MeasurementMode {
-  hd(
-    icon: Icons.straighten,
-    label: 'Horizontal Distance (HD)',
-    description: 'Flat map distance to the target, ignoring elevation. '
-        'Most common for surveying.',
-  ),
-  vd(
-    icon: Icons.height,
-    label: 'Vertical Distance (VD)',
-    description: 'Height difference between device and target. '
-        'Positive = target is above, negative = below.',
-  ),
-  sd(
-    icon: Icons.trending_up,
-    label: 'Slope Distance (SD)',
-    description: 'Direct line-of-sight distance from device to target. '
-        'The raw distance the laser measures.',
-  ),
-  inc(
-    icon: Icons.rotate_right,
-    label: 'Inclination (INC)',
-    description: 'Vertical angle to the target in degrees. '
-        '0° = level, positive = uphill, negative = downhill.',
-  ),
-  ht(
-    icon: Icons.swap_vert,
-    label: 'Height (HT)',
-    description: 'Measures height of an object by shooting its top and base. '
-        'Requires two measurements.',
-  ),
-  az(
-    icon: Icons.explore,
-    label: 'Azimuth (AZ)',
-    description: 'Compass bearing to the target (0°–360°). '
-        'North = 0°, East = 90°, South = 180°, West = 270°.',
-  ),
-  ml(
-    icon: Icons.linear_scale,
-    label: 'Missing Line (ML)',
-    description: 'Distance between two remote points. '
-        'Shoot both points from the same position to calculate.',
-  );
+  hd(Icons.straighten),
+  vd(Icons.height),
+  sd(Icons.trending_up),
+  inc(Icons.rotate_right),
+  ht(Icons.swap_vert),
+  az(Icons.explore),
+  ml(Icons.linear_scale);
 
   final IconData icon;
-  final String label;
-  final String description;
-  const _MeasurementMode({
-    required this.icon,
-    required this.label,
-    required this.description,
-  });
+  const _MeasurementMode(this.icon);
+
+  String get label => switch (this) {
+        hd => t.trupulse.mode.hd,
+        vd => t.trupulse.mode.vd,
+        sd => t.trupulse.mode.sd,
+        inc => t.trupulse.mode.inc,
+        ht => t.trupulse.mode.ht,
+        az => t.trupulse.mode.az,
+        ml => t.trupulse.mode.ml,
+      };
+
+  String get description => switch (this) {
+        hd => t.trupulse.mode.hdDesc,
+        vd => t.trupulse.mode.vdDesc,
+        sd => t.trupulse.mode.sdDesc,
+        inc => t.trupulse.mode.incDesc,
+        ht => t.trupulse.mode.htDesc,
+        az => t.trupulse.mode.azDesc,
+        ml => t.trupulse.mode.mlDesc,
+      };
 }

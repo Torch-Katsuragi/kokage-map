@@ -840,7 +840,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
         closeButton: true,
         dialogActionButtons: true,
         dialogOkButtonType: ColorPickerActionButtonType.elevated,
-        dialogOkButtonLabel: 'OK',
+        dialogOkButtonLabel: t.common.ok,
         dialogCancelButtonLabel: t.common.cancel,
       ),
     );

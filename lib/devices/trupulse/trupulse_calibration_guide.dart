@@ -21,6 +21,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import 'trupulse_service.dart';
 
 enum CalibrationType { tilt, compass }
@@ -48,161 +49,42 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
 
   // ======== Tilt Cal: マニュアル p.24-26 ========
 
-  static const _tiltSteps = [
-    _Step(
-      icon: Icons.settings,
-      title: 'Enter Tilt Calibration mode',
-      detail: 'On the device:\n'
-          '1. Press-and-hold DOWN 4 sec → "UnitS" appears\n'
-          '2. Press DOWN until "inC" appears\n'
-          '3. Press FIRE → "no CAL" appears\n'
-          '4. Press UP or DOWN → "YES CAL" appears\n'
-          '5. Press FIRE → "C1_Fd" appears (calibration starts)',
-    ),
-    _Step(
-      icon: Icons.phone_android,
-      title: 'Place on a flat, level surface',
-      detail: 'Put the TruPulse on a flat, stable surface '
-          '(within 15° of level).\n'
-          'Lenses facing forward. '
-          'Make sure buttons are accessible for each position.',
-    ),
-    _Step(
-      icon: Icons.looks_one,
-      title: 'C1: Lenses FORWARD → FIRE',
-      detail: 'Lenses face forward (away from you).\n'
-          'Wait ~1 sec until steady, then press FIRE.\n'
-          'LCD shows "C2_Fd".',
-    ),
-    _Step(
-      icon: Icons.looks_two,
-      title: 'C2: Lenses DOWN → FIRE',
-      detail: 'Rotate 90° so lenses face DOWN.\n'
-          'Wait ~1 sec, press FIRE.\n'
-          'LCD shows "C3_Fd".',
-    ),
-    _Step(
-      icon: Icons.looks_3,
-      title: 'C3: Lenses BACK → FIRE  /  C4: Lenses UP → FIRE',
-      detail: 'C3: Rotate 90° → lenses face BACK (toward you).\n'
-          '⚠ 360R: Hang buttons over edge of surface.\n'
-          'Wait ~1 sec, press FIRE (short press!).\n\n'
-          'C4: Rotate 90° → lenses face UP.\n'
-          'Wait ~1 sec, press FIRE. LCD shows "C5_Fd".',
-    ),
-    _Step(
-      icon: Icons.looks_4,
-      title: 'C5: Rotate along optical axis → Lenses FORWARD → FIRE',
-      detail: 'Rotate 90° ALONG the optical axis (roll the device).\n'
-          'Lenses should face forward again, but the device is now '
-          'rotated 90° from Position 1.\n'
-          'Wait ~1 sec, press FIRE. LCD shows "C6_Fd".',
-    ),
-    _Step(
-      icon: Icons.looks_5,
-      title: 'C6–C8: DOWN → BACK → UP → FIRE each',
-      detail: 'Same rotation as C2–C4, but in the rolled orientation:\n\n'
-          'C6: Rotate 90° → lenses DOWN → wait, FIRE.\n'
-          'C7: Rotate 90° → lenses BACK → wait, FIRE.\n'
-          'C8: Rotate 90° → lenses UP → FIRE.\n\n'
-          'Device calculates result.',
-    ),
-    _Step(
-      icon: Icons.check_circle_outline,
-      title: 'Check the result',
-      detail: 'PASS → Press FIRE to save and return.\n\n'
-          'FAiL1: Excessive motion (not held steady)\n'
-          'FAiL2: Magnetic saturation\n'
-          'FAiL3: Mathematical fit error\n'
-          'FAiL4: Convergence error\n'
-          'FAiL6: Wrong orientations\n\n'
-          'On FAIL → press FIRE, repeat from C1.\n'
-          'Abort anytime: long-press UP or DOWN '
-          '(previous calibration restored).',
-    ),
-  ];
+  List<_Step> get _tiltSteps {
+    final g = t.trupulse.guide.tilt;
+    return [
+      _Step(icon: Icons.settings, title: g.step1Title, detail: g.step1Detail),
+      _Step(icon: Icons.phone_android, title: g.step2Title, detail: g.step2Detail),
+      _Step(icon: Icons.looks_one, title: g.step3Title, detail: g.step3Detail),
+      _Step(icon: Icons.looks_two, title: g.step4Title, detail: g.step4Detail),
+      _Step(icon: Icons.looks_3, title: g.step5Title, detail: g.step5Detail),
+      _Step(icon: Icons.looks_4, title: g.step6Title, detail: g.step6Detail),
+      _Step(icon: Icons.looks_5, title: g.step7Title, detail: g.step7Detail),
+      _Step(icon: Icons.check_circle_outline, title: g.step8Title, detail: g.step8Detail),
+    ];
+  }
 
   // ======== Compass Cal: マニュアル p.32-34 ========
 
-  static const _compassSteps = [
-    _Step(
-      icon: Icons.warning_amber,
-      title: 'Go outdoors, away from metal',
-      detail: 'Compass calibration must be performed outdoors.\n'
-          'Stand away from vehicles, fences, buildings,\n'
-          'electronics, and any metal objects.\n\n'
-          'Face towards Magnetic North (±15°).',
-    ),
-    _Step(
-      icon: Icons.settings,
-      title: 'Enter Compass Calibration mode',
-      detail: 'On the device:\n'
-          '1. Press-and-hold DOWN 4 sec → "UnitS" appears\n'
-          '2. Press DOWN until "H_Ang" appears\n'
-          '3. Press FIRE → "dECLn" appears\n'
-          '4. Press DOWN → "HACAL" appears\n'
-          '5. Press FIRE → "no CAL" appears\n'
-          '6. Press UP or DOWN → "YES CAL" appears\n'
-          '7. Press FIRE → "C1_Fd" appears (calibration starts)',
-    ),
-    _Step(
-      icon: Icons.looks_one,
-      title: 'C1: Facing North, lenses FORWARD → FIRE',
-      detail: 'Hold the device facing North, lenses forward.\n'
-          'Wait ~1 sec until steady, press FIRE.\n'
-          'LCD shows "C2_Fd".',
-    ),
-    _Step(
-      icon: Icons.looks_two,
-      title: 'C2: Lenses DOWN → FIRE',
-      detail: 'Rotate 90° so lenses face DOWN.\n'
-          'Wait ~1 sec, press FIRE.\n'
-          'LCD shows "C3_Fd".',
-    ),
-    _Step(
-      icon: Icons.looks_3,
-      title: 'C3: Lenses BACK → FIRE  /  C4: Lenses UP → FIRE',
-      detail: 'C3: Rotate 90° → lenses face BACK (toward you).\n'
-          'Wait ~1 sec, press FIRE.\n\n'
-          'C4: Rotate 90° → lenses face UP.\n'
-          'Wait ~1 sec, press FIRE. LCD shows "C5_Fd".',
-    ),
-    _Step(
-      icon: Icons.looks_4,
-      title: 'C5: Rotate along optical axis → Lenses FORWARD → FIRE',
-      detail: 'Rotate 90° ALONG the optical axis (roll the device).\n'
-          'Lenses forward again, serial port pointing UP.\n'
-          'Wait ~1 sec, press FIRE. LCD shows "C6_Fd".',
-    ),
-    _Step(
-      icon: Icons.looks_5,
-      title: 'C6–C8: DOWN → BACK → UP → FIRE each',
-      detail: 'Same rotation as C2–C4, in the rolled orientation:\n\n'
-          'C6: Rotate 90° → lenses DOWN → wait, FIRE.\n'
-          'C7: Rotate 90° → lenses BACK → wait, FIRE.\n'
-          'C8: Rotate 90° → lenses UP → FIRE.\n\n'
-          'Device calculates result.',
-    ),
-    _Step(
-      icon: Icons.check_circle_outline,
-      title: 'Check the result',
-      detail: 'PASS → Press FIRE to save and return.\n\n'
-          'FAiL1: Excessive motion (not held steady)\n'
-          'FAiL2: Magnetic saturation (field too strong)\n'
-          'FAiL3: Mathematical fit error\n'
-          'FAiL4: Convergence error\n'
-          'FAiL6: Wrong orientations\n\n'
-          'On FAIL → press FIRE, repeat from C1.\n'
-          'If it fails repeatedly, do Tilt Cal first.\n'
-          'Abort anytime: long-press UP or DOWN '
-          '(previous calibration restored).',
-    ),
-  ];
+  List<_Step> get _compassSteps {
+    final g = t.trupulse.guide.compass;
+    return [
+      _Step(icon: Icons.warning_amber, title: g.step1Title, detail: g.step1Detail),
+      _Step(icon: Icons.settings, title: g.step2Title, detail: g.step2Detail),
+      _Step(icon: Icons.looks_one, title: g.step3Title, detail: g.step3Detail),
+      _Step(icon: Icons.looks_two, title: g.step4Title, detail: g.step4Detail),
+      _Step(icon: Icons.looks_3, title: g.step5Title, detail: g.step5Detail),
+      _Step(icon: Icons.looks_4, title: g.step6Title, detail: g.step6Detail),
+      _Step(icon: Icons.looks_5, title: g.step7Title, detail: g.step7Detail),
+      _Step(icon: Icons.check_circle_outline, title: g.step8Title, detail: g.step8Detail),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = _isTilt ? 'Tilt Calibration' : 'Compass Calibration';
+    final title = _isTilt
+        ? t.trupulse.detail.tiltCalibration
+        : t.trupulse.detail.compassCalibration;
     final step = _steps[_currentStep];
     final isFirst = _currentStep == 0;
     final isLast = _currentStep == _steps.length - 1;
@@ -242,7 +124,7 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Step ${_currentStep + 1} of ${_steps.length}',
+                        t.trupulse.guide.stepOf(current: _currentStep + 1, total: _steps.length),
                         style: TextStyle(
                           fontSize: 12,
                           color: theme.colorScheme.onSurfaceVariant,
@@ -287,7 +169,7 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
                   // Overview: all steps (mini list)
                   const SizedBox(height: 24),
                   Text(
-                    'All Steps',
+                    t.trupulse.guide.allSteps,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -313,7 +195,7 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
                       onPressed: () =>
                           setState(() => _currentStep--),
                       icon: const Icon(Icons.arrow_back),
-                      label: const Text('Back'),
+                      label: Text(t.trupulse.guide.back),
                     ),
                   ),
                 if (!isFirst && !isLast) const SizedBox(width: 12),
@@ -323,7 +205,7 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
                       onPressed: () =>
                           setState(() => _currentStep++),
                       icon: const Icon(Icons.arrow_forward),
-                      label: const Text('Next'),
+                      label: Text(t.trupulse.guide.next),
                     ),
                   ),
                 if (isLast)
@@ -331,7 +213,7 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
                     child: FilledButton.icon(
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(Icons.check),
-                      label: const Text('Done'),
+                      label: Text(t.trupulse.guide.done),
                     ),
                   ),
               ],

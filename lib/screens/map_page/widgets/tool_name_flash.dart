@@ -66,6 +66,7 @@ class _ToolNameFlashState extends ConsumerState<ToolNameFlash>
         'Select' => t.map.toolbar.select,
         'GPS' => t.map.toolbar.gpsTool,
         'Overlay Transform' => t.map.toolbar.overlayTransform,
+        'Compass' => t.trupulse.toolName,
         _ => tool.name,
       };
 

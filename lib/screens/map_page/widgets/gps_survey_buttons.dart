@@ -17,6 +17,8 @@
 // GPS測量と軌跡抽出のためのボタン群
 import 'package:flutter/material.dart';
 
+import '../../../i18n/strings.g.dart';
+
 /// GPS測量ボタンウィジェット
 /// GPS測量ボタン（長押し対応）とGPS軌跡抽出ボタンを含む
 class GpsSurveyButtons extends StatelessWidget {
@@ -79,7 +81,7 @@ class GpsSurveyButtons extends StatelessWidget {
                     ],
                   ),
                   child: Text(
-                    '$longPressGpsCount点',
+                    t.gps.longPressCount(count: longPressGpsCount),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -141,7 +143,7 @@ class GpsSurveyButtons extends StatelessWidget {
             onPressed: onOpenTrackExtraction,
             backgroundColor: Colors.green,
             foregroundColor: Colors.white,
-            tooltip: 'GPS軌跡の抽出',
+            tooltip: t.gps.trackExtractTooltip,
             child: const Icon(
               Icons.timeline,
               size: 28,

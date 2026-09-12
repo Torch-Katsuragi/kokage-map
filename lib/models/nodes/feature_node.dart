@@ -26,6 +26,7 @@ import 'package:turf/turf.dart' as turf;
 
 import '../../converters/turf_converter.dart';
 import '../../core/node_types.dart';
+import '../../i18n/strings.g.dart';
 import '../geopackage/geopackage_file.dart';
 import 'layer_node.dart';
 import 'layer_tree_node.dart';
@@ -156,8 +157,8 @@ abstract class FeatureNode extends LayerTreeNode {
   /// 名前のgetter（turf_dartのpropertiesから取得）
   @override
   String get name {
-    if (_isDisposed || parent.isDisposed) return 'Disposed Feature';
-    return turfFeature.properties?['name'] as String? ?? 'Unnamed Feature';
+    if (_isDisposed || parent.isDisposed) return t.featureDetail.disposed;
+    return turfFeature.properties?['name'] as String? ?? t.featureDetail.unnamed;
   }
 
   /// 名前のsetter（親のMapを更新）
@@ -527,7 +528,7 @@ abstract class FeatureNode extends LayerTreeNode {
   FeatureNode(Map<String, dynamic> row, this.parent, String geometryType)
     : _rowId = row['id'] as int? ?? 0,
       super(
-        row['name'] as String? ?? 'Unnamed Feature',
+        row['name'] as String? ?? t.featureDetail.unnamed,
         visible: parent.visible,
         parent: parent,
         children: [],
@@ -546,7 +547,7 @@ abstract class FeatureNode extends LayerTreeNode {
   FeatureNode.fromTurfFeature(turf.Feature feature, this.parent)
     : _rowId = feature.properties?['id'] as int? ?? 0,
       super(
-        feature.properties?['name'] as String? ?? 'Unnamed Feature',
+        feature.properties?['name'] as String? ?? t.featureDetail.unnamed,
         visible: parent.visible,
         parent: parent,
         children: [],

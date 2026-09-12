@@ -90,10 +90,10 @@ class TruPulseStatusPanel extends StatelessWidget {
                 _InfoRow(
                   label: 'STN',
                   value: stn != null
-                      ? '${stn.name.isNotEmpty ? stn.name : "Point"} '
+                      ? '${stn.name.isNotEmpty ? stn.name : t.trupulse.panel.point} '
                           '(${stn.point.latitude.toStringAsFixed(5)}, '
                           '${stn.point.longitude.toStringAsFixed(5)})'
-                      : 'Tap a point to set station',
+                      : t.trupulse.panel.tapToSetStation,
                 ),
                 if (_isBacksightCorrected(stn))
                   const Padding(

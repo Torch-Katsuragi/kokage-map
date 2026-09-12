@@ -18,6 +18,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../i18n/strings.g.dart';
 import '../../../models/app_notification.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../widgets/track_extraction_dialog.dart';
@@ -33,7 +34,7 @@ mixin MapGpsTrackingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<
     if (!gpsHistoryRecorder.isInitialized) {
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: 'GPS履歴が初期化されていません',
+          title: t.gps.historyNotInitialized,
           level: NotificationLevel.warning,
         );
       }

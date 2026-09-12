@@ -34,4 +34,8 @@ abstract class TerrainProjection {
 
   /// [coordinates] が画面に収まるように動かす（レイヤのダブルタップなど）。2D の fitCoordinates と同じ約束
   Future<void> fitCoordinates(List<LatLng> coordinates, {EdgeInsets padding = EdgeInsets.zero});
+
+  /// 外からの指示でカメラを合わせる（`LaunchRequest`）。null の項目は今のまま。
+  /// [bearingDeg] は北が 0・時計回り、[pitchDeg] は 0 が真上
+  Future<void> lookAt({LatLng? center, double? zoom, double? bearingDeg, double? pitchDeg, bool animate = true});
 }

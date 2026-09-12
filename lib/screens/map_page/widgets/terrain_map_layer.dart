@@ -1431,6 +1431,25 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   }
 
   @override
+  Future<void> lookAt({LatLng? center, double? zoom, double? bearingDeg, double? pitchDeg, bool animate = true}) async {
+    final x = center == null ? null : WebMercator.xFromLon(center.longitude);
+    final y = center == null ? null : WebMercator.yFromLat(center.latitude);
+    final b = bearingDeg == null ? null : bearingDeg * math.pi / 180;
+    final p = pitchDeg == null ? null : (pitchDeg.clamp(0.0, _maxPitchDeg)) * math.pi / 180;
+    if (!animate) {
+      if (x != null) _camera.centerX = x;
+      if (y != null) _camera.centerY = y;
+      if (zoom != null) _camera.zoom = zoom;
+      if (b != null) _camera.bearing = b;
+      if (p != null) _camera.pitch = p;
+      _refresh();
+      return;
+    }
+    _animateTo(centerX: x, centerY: y, zoom: zoom, bearing: b, pitch: p);
+    await _anim.forward(from: 0);
+  }
+
+  @override
   Future<void> fitCoordinates(List<LatLng> coordinates, {EdgeInsets padding = EdgeInsets.zero}) async {
     if (coordinates.isEmpty) return;
     var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;

@@ -24,6 +24,7 @@ import 'package:root_maps/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/db/database_factory_setup.dart';
+import 'core/launch_request.dart';
 import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
 import 'i18n/strings.g.dart';
@@ -46,6 +47,8 @@ import 'widgets/debug_log_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 起動ルート（`/map?project=...&lat=...`）と、起動中に届く要求の受け口
+  LaunchRequest.init();
   _setupErrorHandlers();
   _setupDebugPrintFilter();
 
@@ -346,6 +349,16 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
         '/map': (context) => const RootMapsHomePage(),
         // 3D 描画スパイク（開発用）。web は URL `#/terrain-spike` で直接開ける
         '/terrain-spike': (context) => const TerrainSpikeScreen(),
+      },
+      // 起動ルートに問い合わせが付いていたら（`/map?project=...`）ホームから始める。
+      // ホームが要求どおりにプロジェクトを開き、地図がカメラを合わせる（`LaunchRequest`）
+      onGenerateInitialRoutes: (name) {
+        final page = switch (name) {
+          '/map' => const RootMapsHomePage(),
+          '/terrain-spike' => const TerrainSpikeScreen(),
+          _ => const HomeScreen(),
+        };
+        return [MaterialPageRoute<void>(builder: (_) => page, settings: RouteSettings(name: name))];
       },
     );
   }

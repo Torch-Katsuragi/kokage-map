@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ContentUris
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -21,6 +22,17 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "com.k_root.k_maps/media_copy"
+        private const val LAUNCH_CHANNEL = "com.k_root.k_maps/launch"
+    }
+
+    private var launchChannel: MethodChannel? = null
+
+    // 起動中に `am start --es route "/map?..."` が来たとき（singleTop）。Dart 側の LaunchRequest に流す
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val route = intent.getStringExtra("route") ?: return
+        Log.d("MainActivity", "onNewIntent route=$route")
+        launchChannel?.invokeMethod("route", route)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,6 +57,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        launchChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LAUNCH_CHANNEL)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->

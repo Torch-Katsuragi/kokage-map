@@ -32,9 +32,13 @@ import 'party_controls.dart';
 /// パーティが参加中のときは ≡ アイコンに接続状態色のバッジ（人数）を出し、
 /// 大きなFABを置かずに状態を一目で分かるようにする。
 class MapMenuButton extends ConsumerWidget {
-  const MapMenuButton({super.key});
+  const MapMenuButton({super.key, this.onReload});
+
+  /// プロジェクトをディスクから読み直す（QGIS や AI が書き換えたあとに）
+  final Future<void> Function()? onReload;
 
   static const String _party = 'party';
+  static const String _reload = 'reload';
   static const String _level = 'level';
   static const String _settings = 'settings';
 
@@ -60,6 +64,8 @@ class MapMenuButton extends ConsumerWidget {
         switch (value) {
           case _party:
             showPartyEntry(context, ref);
+          case _reload:
+            onReload?.call();
           case _level:
             Navigator.push(
               context,
@@ -86,6 +92,11 @@ class MapMenuButton extends ConsumerWidget {
                   ? partyConnectionLabel(session.connection)
                   : null,
             ),
+          ),
+        if (onReload != null)
+          PopupMenuItem<String>(
+            value: _reload,
+            child: _MenuRow(icon: Icons.refresh, label: t.map.reload),
           ),
         PopupMenuItem<String>(
           value: _level,

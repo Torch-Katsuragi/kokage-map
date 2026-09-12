@@ -27,6 +27,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/fs/project_folder_picker.dart';
 import '../core/launch_options.dart';
+import '../core/launch_request.dart';
 import '../core/platform_capabilities.dart';
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
@@ -71,6 +72,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    LaunchRequest.incoming.addListener(_onLaunchRequest);
     _initPermissions();
     _checkChangelogUnread();
     _loadLastFolderName();
@@ -160,32 +162,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _openMapWithoutProject();
   }
 
-  /// `--dart-define=PROJECT_DIR=...` が指定されていれば、フォルダ選択を挟まずに開く。
+  /// フォルダ選択を挟まずに開く。指示は 2 通り:
+  /// - `--dart-define=PROJECT_DIR=...`（開発・デバッグ用）
+  /// - 起動ルート `/map?project=<絶対パス>`（CLI・AI から。`LaunchRequest`）
   ///
-  /// 開発・デバッグ用。起動〜地図描画までを一発で通したいときに使う。
   /// 指定が無い／パスが存在しない／権限が無い場合は何もしない（通常の選択画面のまま）。
   Future<void> _maybeAutoOpenProjectDir() async {
     if (_autoOpenAttempted) return;
     _autoOpenAttempted = true;
 
-    if (!LaunchOptions.hasProjectDir) return;
+    final requested = LaunchRequest.pending?.project;
+    final dir = LaunchOptions.hasProjectDir ? LaunchOptions.projectDir : requested;
+    if (dir == null) return;
+    await _openRequestedProject(dir);
+  }
+
+  Future<void> _openRequestedProject(String dir) async {
     if (!_permissionsGranted) {
-      AppLogger.debug('[HomeScreen] PROJECT_DIR: 権限が無いため自動オープンを見送り');
+      AppLogger.debug('[HomeScreen] 自動オープン: 権限が無いため見送り ($dir)');
       return;
     }
-
-    const dir = LaunchOptions.projectDir;
-    if (!Directory(dir).existsSync()) {
-      AppLogger.debug('[HomeScreen] PROJECT_DIR: パスが存在しない ($dir)');
+    if (PlatformCapabilities.isWeb || !Directory(dir).existsSync()) {
+      AppLogger.debug('[HomeScreen] 自動オープン: パスが存在しない ($dir)');
       return;
     }
-
-    AppLogger.debug('[HomeScreen] PROJECT_DIR: 自動オープン ($dir)');
+    AppLogger.debug('[HomeScreen] 自動オープン ($dir)');
     await _openProjectDir(dir);
+  }
+
+  /// 起動中に `/map?project=...` が届いた（ホームにいる間だけ受ける。地図にいる間は MapPage が受ける）
+  void _onLaunchRequest() {
+    final req = LaunchRequest.incoming.value;
+    if (req?.project == null || _navigatedToMapPage || _isOpeningProject) return;
+    _openRequestedProject(req!.project!);
   }
 
   @override
   void dispose() {
+    LaunchRequest.incoming.removeListener(_onLaunchRequest);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

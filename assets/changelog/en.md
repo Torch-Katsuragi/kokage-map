@@ -10,6 +10,10 @@
 
 ### Usability
 
+- The app can be driven from a CLI or URL: open a project, look at a place, reload from disk (`/map?project=…&lat=…&lon=…&zoom=…&reload=1`, `tool/kokage.py`). The map menu also has "Reload project from disk"
+- Label composition moved to the style screen (layer / View) and works for line and polygon layers too. Columns are ordered by how often they hold a value, and expressions can be typed directly
+- A View's style now holds only the items that differ from the layer, so layer changes reach the View for untouched items. "Follow the layer" resets it
+- The View row is shown even when a layer has only one View
 - The photo card also has a "copy Google Maps link" button
 
 ### QGIS

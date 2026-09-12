@@ -566,6 +566,8 @@
     }
   },
   "map": {
+    "reload": "Reload project from disk",
+    "reloaded": "Project reloaded",
     "drawing": {
       "undo": "Undo",
       "cancel": "Cancel",

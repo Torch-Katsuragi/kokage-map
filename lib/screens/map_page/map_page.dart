@@ -23,11 +23,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/launch_request.dart';
 import '../../devices/base/device_tool.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../models/map_style_group.dart';
 import '../../models/nodes/feature_node.dart';
+import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
@@ -38,6 +40,7 @@ import '../../providers/project_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../services/kmeta_service.dart';
 import '../../services/party/party_invite.dart';
 import '../../tools/gps_tool.dart';
 import '../../tools/pen_tool.dart';
@@ -111,11 +114,55 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       if (inviteCode != null && mounted) {
         showPartyEntry(context, ref, initialCode: inviteCode);
       }
+      // 起動ルートのカメラ指定（`/map?lat=...`）。3D が attach したら合わせる
+      _applyLaunchRequest(LaunchRequest.consumePending());
     });
+    LaunchRequest.incoming.addListener(_onLaunchRequest);
+  }
+
+  /// 3D が attach するまで待たせるカメラ指定
+  LaunchRequest? _pendingLaunchCamera;
+
+  void _onLaunchRequest() => _applyLaunchRequest(LaunchRequest.incoming.value);
+
+  /// 外からの要求（起動時・起動中）を地図に反映する。
+  /// プロジェクトの切替はここではしない（ホームに戻ってから開き直す。今のところ手動）
+  void _applyLaunchRequest(LaunchRequest? req) {
+    if (req == null || !mounted) return;
+    if (req.reload) unawaited(reloadProjectFromDisk());
+    if (!req.hasCamera) return;
+    final p = terrainProjection;
+    if (p == null) {
+      _pendingLaunchCamera = req; // attach 時（onProjectionChanged）に流す
+      return;
+    }
+    unawaited(p.lookAt(center: req.center, zoom: req.zoom, bearingDeg: req.bearing, pitchDeg: req.pitch, animate: false));
+  }
+
+  /// プロジェクトをディスクから読み直す（メニューの「読み直す」・`/map?reload=1`）。
+  /// AI や QGIS が .gpkg / .kmeta.json / .qgs を書き換えたあとに、開き直さずに追いつく
+  Future<void> reloadProjectFromDisk() async {
+    AppLogger.debug('[MapPage] プロジェクトを読み直す');
+    KMetaService.instance.clearCache();
+    final root = ref.read(folderTreeProvider);
+    if (root is FolderNode) root.invalidateMetaCache();
+    for (final layer in ref.read(folderTreeProvider)?.getVisibleLayerNodes().whereType<LayerNode>() ?? const <LayerNode>[]) {
+      layer.invalidateKmetaStyleCache();
+      await layer.updateChildren();
+    }
+    await initializeProjectTree();
+    ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    if (mounted) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.map.reloaded,
+            level: NotificationLevel.success,
+          );
+    }
   }
 
   @override
   void dispose() {
+    LaunchRequest.incoming.removeListener(_onLaunchRequest);
     WidgetsBinding.instance.removeObserver(this);
     disposeAllServices();
     super.dispose();
@@ -304,7 +351,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                 });
               },
               // ≡ メニュー（パーティ・水準器・設定を集約）はレイヤ一覧の左
-              beforeLayerButton: const [MapMenuButton()],
+              beforeLayerButton: [MapMenuButton(onReload: reloadProjectFromDisk)],
             ),
           ],
         ),
@@ -337,6 +384,14 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                               gpsTrack: () => gpsHistoryRecorder.todayPoints,
                               onProjectionChanged: (p) {
                                 terrainProjection = p;
+                                final pendingLaunch = _pendingLaunchCamera;
+                                if (p != null && pendingLaunch != null) {
+                                  _pendingLaunchCamera = null;
+                                  unawaited(p.lookAt(
+                                    center: pendingLaunch.center, zoom: pendingLaunch.zoom,
+                                    bearingDeg: pendingLaunch.bearing, pitchDeg: pendingLaunch.pitch, animate: false,
+                                  ));
+                                }
                                 // レイヤのダブルタップなど、ホルダー経由の「寄せる」「移動」も 3D に流す
                                 // （fit → jump の順。jumpOverride を置いた瞬間に attach 前の保留分が流れる）
                                 mapControllerInstance.fitOverride =

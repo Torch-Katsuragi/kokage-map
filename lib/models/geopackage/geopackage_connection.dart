@@ -222,12 +222,16 @@ class GeoPackageConnection {
     try {
       WidgetsFlutterBinding.ensureInitialized();
 
-      _database = await openDatabase(
-        _databaseKey(absPath),
-        version: 1,
-        onCreate: _createDatabase,
-        onUpgrade: _upgradeDatabase,
-      );
+      // ⚠ sqflite の `version:` は使わない。あれは `PRAGMA user_version` を
+      //    自分の版数で上書きする仕組みで、GeoPackage では user_version が
+      //    規格の版（10200=1.2, 10300=1.3, 10301=1.3.1, 10400=1.4）を表す。
+      //    以前は `version: 1` にしていたため、QGIS が作った .gpkg を開くだけで
+      //    版が 1 に書き換わり、GDAL が「unrecognized user_version=0x00000001」
+      //    と警告していた（2026-09-12 QGIS 4.2.0 で確認）
+      _database = await openDatabase(_databaseKey(absPath));
+      if (!await _hasGeoPackageCore(_database!)) {
+        await _createDatabase(_database!);
+      }
 
       // GeoPackageファイルの基本構造をチェック
       await _validateGeoPackageStructure();
@@ -252,8 +256,20 @@ class GeoPackageConnection {
     }
   }
 
-  /// データベース作成時のコールバック（OGC GeoPackage仕様準拠）
-  Future<void> _createDatabase(Database db, int version) async {
+  /// gpkg_contents があるか（無ければ新規の .gpkg として基本テーブルを作る）
+  Future<bool> _hasGeoPackageCore(Database db) async {
+    final rows = await db.rawQuery(
+      "SELECT 1 FROM sqlite_master WHERE type='table' AND name='gpkg_contents'",
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// 新規 .gpkg の基本テーブルと版マーカー（OGC GeoPackage 1.3.1）
+  Future<void> _createDatabase(Database db) async {
+    // 'GPKG' と 1.3.1。GDAL/QGIS はこれを見て GeoPackage と認識する
+    await db.execute('PRAGMA application_id = 0x47504B47');
+    await db.execute('PRAGMA user_version = 10301');
+
     // 空間参照系テーブル
     await db.execute('''
       CREATE TABLE gpkg_spatial_ref_sys (
@@ -328,15 +344,6 @@ class GeoPackageConnection {
       'definition': 'undefined',
       'description': 'undefined cartesian coordinate reference system',
     });
-  }
-
-  /// データベースアップグレード時のコールバック
-  Future<void> _upgradeDatabase(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {
-    AppLogger.debug('データベースをバージョン $oldVersion から $newVersion にアップグレード');
   }
 
   /// GeoPackageファイルの基本構造を検証

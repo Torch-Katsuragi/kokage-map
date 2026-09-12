@@ -47,7 +47,7 @@ dependencies:
   archive: ^4.0.9 # .qgz（zip 形式の QGIS プロジェクト）の読み取り用
   nmea: ^3.3.3
   proj4dart: ^2.1.0  # 座標変換用（geobase ^1.5.0 が ^2.0.0 を要求するため据え置き）
-  desktop_drop: ^0.7.0  # デスクトップでのファイルドラッグ&ドロップ用
+  desktop_drop: ^0.8.4  # デスクトップでのファイルドラッグ&ドロップ用
   charset_converter: ^2.3.0  # Shift_JIS等の文字コード変換用（ネイティブAPI使用）
   charset: ^2.0.1  # 純粋Dart実装の文字コード変換（Shift-JIS, EUC-JP対応）
   
@@ -85,13 +85,13 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   connectivity_plus: ^7.0.0
-  flex_color_picker: ^3.7.2
+  flex_color_picker: ^4.0.0
   url_launcher: ^6.3.2              # 外部URL起動用
   
   # Google Drive連携用パッケージ
   google_sign_in: ^7.0.0            # Google OAuth認証用
   google_sign_in_web: ^1.1.0        # webのサインインボタン（renderButton）を直接使う
-  googleapis: ^16.0.0               # Google APIs（Drive API含む）
+  googleapis: ^17.0.0               # Google APIs（Drive API含む）
   extension_google_sign_in_as_googleapis_auth: ^3.0.0  # google_sign_inとgoogleapisの連携
   # flutter_secure_storage: 削除（lib/内で未使用、win32バージョン競合の原因）
   mobile_scanner: ^7.1.4

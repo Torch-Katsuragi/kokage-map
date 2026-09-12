@@ -23,7 +23,8 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.k_root.k_maps"
-    compileSdk = flutter.compileSdkVersion
+    // permission_handler 13 が 37 を要求する（Flutter 3.47 の既定は 36）。SDK platform は android-37.0
+    compileSdk = 37
     ndkVersion = "28.2.13676358"
 
     compileOptions {

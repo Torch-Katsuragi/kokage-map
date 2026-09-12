@@ -496,7 +496,7 @@ class TerrainWorld extends ChangeNotifier {
   /// [key] の DEM を、ソースを細かい方から順に重ねて作る。
   /// 細かいソースの無効な点（整備範囲外・水面）は次のソースの値で埋める（同じタイル座標なので点ごとに重ねられる）。
   /// 全部重ねても残った無効値は [fillInvalidHeights] で埋める
-  Future<DemGrid?> _loadDem(TileKey key) async {
+  Future<DemGrid?> _loadDem(TileKey key, {bool fillFromAncestor = true}) async {
     final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     bool usable(DemTileSource s) {
@@ -532,8 +532,36 @@ class TerrainWorld extends ChangeNotifier {
     if (sw.elapsedMilliseconds > 800) {
       debugPrint('[3D] dem $key ${sw.elapsedMilliseconds}ms (${[for (var i = 0; i < primary.length; i++) '${primary[i].id}${grids[i] == null ? '×' : ''}'].join(' ')})');
     }
-    if (merged != null && _countNaN(merged.heights) > 0) fillInvalidHeights(merged.heights);
+    if (merged != null) {
+      final nan = _countNaN(merged.heights);
+      if (nan > 0) {
+        // 主力を重ねても残った穴（整備範囲の縁・水面）。行の前の値で埋めると台地や縞になり、
+        // 隣のタイルとの縁で数百 m の段差（断層）が出る（2026-09-12 に `[3D] seam` で 329m を観測）。
+        // まず親の近似（高さ空間で補間）で埋め、それでも残ればこれまでの埋め方
+        final filled = fillFromAncestor ? await _fillFromAncestor(key, merged) : 0;
+        final left = _countNaN(merged.heights);
+        if (left > 0) fillInvalidHeights(merged.heights);
+        if (kDebugMode) debugPrint('[3D] dem $key: 無効 $nan 点（親の近似で $filled、残り $left は前の値）');
+      }
+    }
     return merged;
+  }
+
+  /// [grid] の無効な点を、親から補間した近似で埋める。埋めた点の数を返す
+  Future<int> _fillFromAncestor(TileKey key, DemGrid grid) async {
+    final approx = await _approximateFromAncestor(key);
+    if (approx == null) return 0;
+    final src = approx.$1.heights;
+    final dst = grid.heights;
+    if (src.length != dst.length) return 0;
+    var n = 0;
+    for (var i = 0; i < dst.length; i++) {
+      if (dst[i].isNaN && !src[i].isNaN) {
+        dst[i] = src[i];
+        n++;
+      }
+    }
+    return n;
   }
 
   /// 同時に取った格子を細かい順に重ねる（細かいソースの無効な点を次のソースの値で埋める）。
@@ -582,7 +610,7 @@ class TerrainWorld extends ChangeNotifier {
       final pz = key.z - k;
       final px = key.x >> k;
       final py = key.y >> k;
-      final parent = _tiles[TileKey(pz, px, py)]?.raw ?? await _loadDem(TileKey(pz, px, py));
+      final parent = _tiles[TileKey(pz, px, py)]?.raw ?? await _loadDem(TileKey(pz, px, py), fillFromAncestor: false);
       if (parent == null || parent.cols != WebMercator.tileSize) continue;
       final heights = await TerrainWorker.instance.run(
         upsampleFromParent,

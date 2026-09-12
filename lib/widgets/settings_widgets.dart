@@ -664,6 +664,10 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
     final ColorDef c => _buildColorTile(c),
     final IntDef i => _buildIntTile(i),
     final StringDef s => _buildStringTile(s),
+    final CustomDef c => c.builder(context, _store, () {
+        _notifyChange();
+        setState(() {});
+      }),
   };
 
   Widget _buildDoubleTile(DoubleDef def) {

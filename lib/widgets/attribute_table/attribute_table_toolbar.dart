@@ -30,8 +30,8 @@ import '../../screens/layer_style_settings_screen.dart' show layerStyleSettings,
 import '../../services/coordinate/index.dart';
 import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
+import '../label_composer_dialog.dart';
 import 'attribute_table_controller.dart';
-import 'label_composer_dialog.dart';
 
 /// 属性テーブルツールバー
 class AttributeTableToolbar extends ConsumerStatefulWidget {
@@ -676,19 +676,19 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
     final folderPath = layer.folderNode?.getAbsoluteFilePath();
     if (folderPath == null) return;
     final current = await layer.getKmetaStyle();
-    final sample = layer.children
+    final rows = layer.children
         .whereType<FeatureNode>()
-        .firstOrNull
-        ?.turfFeature
-        .properties
-        ?.cast<String, Object?>();
+        .map((f) => f.turfFeature.properties?.cast<String, Object?>())
+        .toList();
+    final columns = widget.controller.columnNames.where((c) => !c.startsWith('_')).toList();
     if (!context.mounted) return;
     final result = await showLabelComposerDialog(
       context,
-      columns: widget.controller.columnNames.where((c) => !c.startsWith('_')).toList(),
+      columns: columns,
       initialTemplate: layerStyleSettings.resolveString(labelPropertyDef, current),
       initialEnabled: layerStyleSettings.resolveBool(labelEnabledDef, current),
-      sampleProps: sample,
+      sampleProps: rows.firstOrNull,
+      fillRates: rows.isEmpty ? null : columnFillRates(rows, columns),
     );
     if (result == null) return;
 

@@ -117,6 +117,19 @@ class IntDef extends SettingDef {
   String formatValue(int v) => formatter?.call(v) ?? v.toString();
 }
 
+/// 画面側が自由に描く項目（ストアには値を持たない）。
+/// [builder] の第 3 引数は「値を変えた」の通知（保存と再描画）
+class CustomDef extends SettingDef {
+  final Widget Function(BuildContext context, SettingsStore store, VoidCallback onChanged) builder;
+
+  const CustomDef({
+    required super.key,
+    required super.title,
+    super.description,
+    required this.builder,
+  });
+}
+
 /// String値設定
 class StringDef extends SettingDef {
   final String defaultValue;
@@ -137,6 +150,8 @@ class StringDef extends SettingDef {
 
 /// 設定セクションの定義
 class SettingSectionDef {
+  /// 画面側が「どの節か」を見分けるためのキー（表示名は翻訳で変わるので使わない）
+  final String? id;
   final String title;
   final IconData? icon;
   final Color? iconColor;
@@ -147,6 +162,7 @@ class SettingSectionDef {
   final bool globalOnly;
 
   const SettingSectionDef({
+    this.id,
     required this.title,
     this.icon,
     this.iconColor,
@@ -320,6 +336,8 @@ class SettingsStore extends ChangeNotifier {
           await setInt(i, i.defaultValue);
         case final StringDef s:
           await setString(s, s.defaultValue);
+        case CustomDef():
+          break; // 値を持たない
       }
     }
   }
@@ -340,7 +358,7 @@ class SettingsStore extends ChangeNotifier {
         final SwitchDef s => s.kmetaGetter?.call(style),
         final ColorDef c => c.kmetaGetter?.call(style),
         final StringDef s => s.kmetaGetter?.call(style),
-        IntDef _ => null,
+        IntDef _ || CustomDef _ => null,
       };
       if (kmetaVal != null) {
         _overlay![def.key] = kmetaVal;
@@ -364,6 +382,7 @@ class SettingsStore extends ChangeNotifier {
         _prefs?.getInt(c.key) != null ? Color(_prefs!.getInt(c.key)!) : c.defaultColor,
     final IntDef i => _prefs?.getInt(i.key) ?? i.defaultValue,
     final StringDef s => _prefs?.getString(s.key) ?? s.defaultValue,
+    CustomDef _ => null,
   };
 
   /// overlayにグローバル値を充填

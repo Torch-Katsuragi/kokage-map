@@ -230,7 +230,8 @@ abstract class LayerNode extends LayerTreeNode {
 
     for (final view in views) {
       if (!view.visible) continue;
-      final style = view.style ?? layerStyle;
+      // View に指定が無い項目はレイヤの値（項目ごとの合成。丸ごと差し替えではない）
+      final style = view.style == null ? layerStyle : view.style!.mergeWith(layerStyle);
       if (style == null || style.isEmpty) continue;
 
       final key = view.viewKey;

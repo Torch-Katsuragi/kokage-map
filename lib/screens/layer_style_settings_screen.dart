@@ -27,10 +27,14 @@ import 'package:flutter/material.dart';
 import '../core/settings_schema.dart';
 import '../i18n/strings.g.dart';
 import '../models/kmeta.dart';
+import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/view_node.dart';
 import '../services/kmeta_service.dart';
 import '../utils/app_logger.dart';
+import '../utils/label_expression.dart';
+import '../utils/label_template.dart';
+import '../widgets/label_composer_dialog.dart';
 import '../widgets/settings_widgets.dart';
 
 // ============================================================
@@ -40,7 +44,7 @@ import '../widgets/settings_widgets.dart';
 // --- Point ---
 final pointSizeDef = DoubleDef(
   key: 'layer_style_point_size',
-  title: 'Size',
+  title: t.styleScreen.size,
   defaultValue: 3.0,
   min: 1,
   max: 30,
@@ -50,7 +54,7 @@ final pointSizeDef = DoubleDef(
 );
 final pointColorDef = ColorDef(
   key: 'layer_style_point_color',
-  title: 'Color',
+  title: t.styleScreen.color,
   defaultArgb: 0xFFF44336,
   kmetaGetter: (k) => k.pointColor,
 );
@@ -58,7 +62,7 @@ final pointColorDef = ColorDef(
 // --- Line ---
 final lineWidthDef = DoubleDef(
   key: 'layer_style_line_width',
-  title: 'Width',
+  title: t.styleScreen.width,
   defaultValue: 3.0,
   min: 1,
   max: 10,
@@ -68,20 +72,20 @@ final lineWidthDef = DoubleDef(
 );
 final lineColorDef = ColorDef(
   key: 'layer_style_line_color',
-  title: 'Color',
+  title: t.styleScreen.color,
   defaultArgb: 0xFF4CAF50,
   kmetaGetter: (k) => k.lineColor,
 );
-const lineVertexPointsEnabledDef = SwitchDef(
+final lineVertexPointsEnabledDef = SwitchDef(
   key: 'layer_style_line_vertex_points_enabled',
-  title: 'Draw Vertex Points',
-  description: 'Overlay points at each vertex (color follows line)',
+  title: t.styleScreen.drawVertexPoints,
+  description: t.styleScreen.drawVertexPointsLineDesc,
   defaultValue: false,
   icon: Icons.scatter_plot_outlined,
 );
 final lineVertexPointSizeFactorDef = DoubleDef(
   key: 'layer_style_line_vertex_point_size_factor',
-  title: 'Vertex Point Size Factor',
+  title: t.styleScreen.vertexPointSizeFactor,
   defaultValue: 2.0,
   min: 0.5,
   max: 6.0,
@@ -92,7 +96,7 @@ final lineVertexPointSizeFactorDef = DoubleDef(
 // --- Polygon ---
 final polygonBorderWidthDef = DoubleDef(
   key: 'layer_style_polygon_border_width',
-  title: 'Border Width',
+  title: t.styleScreen.borderWidth,
   defaultValue: 2.0,
   min: 0,
   max: 8,
@@ -102,19 +106,19 @@ final polygonBorderWidthDef = DoubleDef(
 );
 final polygonBorderColorDef = ColorDef(
   key: 'layer_style_polygon_border_color',
-  title: 'Border Color',
+  title: t.styleScreen.borderColor,
   defaultArgb: 0xFF000000,
   kmetaGetter: (k) => k.polygonBorderColor,
 );
 final polygonFillColorDef = ColorDef(
   key: 'layer_style_polygon_fill_color',
-  title: 'Fill Color',
+  title: t.styleScreen.fillColor,
   defaultArgb: 0xFF000000,
   kmetaGetter: (k) => k.polygonFillColor,
 );
 final polygonFillOpacityDef = DoubleDef(
   key: 'layer_style_polygon_fill_opacity',
-  title: 'Fill Opacity',
+  title: t.styleScreen.fillOpacity,
   defaultValue: 0.1,
   min: 0.0,
   max: 1.0,
@@ -124,7 +128,7 @@ final polygonFillOpacityDef = DoubleDef(
 );
 final polygonBorderOpacityDef = DoubleDef(
   key: 'layer_style_polygon_border_opacity',
-  title: 'Border Opacity',
+  title: t.styleScreen.borderOpacity,
   defaultValue: 1.0,
   min: 0.0,
   max: 1.0,
@@ -132,16 +136,16 @@ final polygonBorderOpacityDef = DoubleDef(
   formatter: (v) => '${(v * 100).toInt()}%',
   kmetaGetter: (k) => k.polygonBorderOpacity,
 );
-const polygonVertexPointsEnabledDef = SwitchDef(
+final polygonVertexPointsEnabledDef = SwitchDef(
   key: 'layer_style_polygon_vertex_points_enabled',
-  title: 'Draw Vertex Points',
-  description: 'Overlay points at each vertex (color follows border)',
+  title: t.styleScreen.drawVertexPoints,
+  description: t.styleScreen.drawVertexPointsPolygonDesc,
   defaultValue: false,
   icon: Icons.scatter_plot_outlined,
 );
 final polygonVertexPointSizeFactorDef = DoubleDef(
   key: 'layer_style_polygon_vertex_point_size_factor',
-  title: 'Vertex Point Size Factor',
+  title: t.styleScreen.vertexPointSizeFactor,
   defaultValue: 2.0,
   min: 0.5,
   max: 6.0,
@@ -152,21 +156,29 @@ final polygonVertexPointSizeFactorDef = DoubleDef(
 // --- Label ---
 final labelEnabledDef = SwitchDef(
   key: 'layer_style_label_enabled',
-  title: 'Show Label',
-  description: 'Display property value next to point markers',
+  title: t.styleScreen.showLabel,
+  description: t.styleScreen.showLabelDesc,
   defaultValue: true,
   icon: Icons.text_fields,
   kmetaGetter: (k) => k.labelEnabled,
 );
+
+/// ラベルの中身（QGIS の式。`label_expression.dart`）。
+/// 画面には出さず、[labelExpressionTileDef] が組み立てダイアログ経由で書き換える
 final labelPropertyDef = StringDef(
   key: 'layer_style_label_property',
-  title: 'Property',
+  title: t.styleScreen.labelExpression,
   defaultValue: 'name',
   kmetaGetter: (k) => k.labelProperty,
 );
+final labelExpressionTileDef = CustomDef(
+  key: 'layer_style_label_expression_tile',
+  title: t.styleScreen.labelExpression,
+  builder: _buildLabelExpressionTile,
+);
 final labelFontSizeDef = DoubleDef(
   key: 'layer_style_label_font_size',
-  title: 'Font Size',
+  title: t.styleScreen.fontSize,
   defaultValue: 12.0,
   min: 8,
   max: 24,
@@ -176,19 +188,19 @@ final labelFontSizeDef = DoubleDef(
 );
 final labelColorDef = ColorDef(
   key: 'layer_style_label_color',
-  title: 'Text Color',
+  title: t.styleScreen.textColor,
   defaultArgb: 0xFF000000,
   kmetaGetter: (k) => k.labelColor,
 );
 final labelHaloColorDef = ColorDef(
   key: 'layer_style_label_halo_color',
-  title: 'Halo Color',
+  title: t.styleScreen.haloColor,
   defaultArgb: 0xFFFFFFFF,
   kmetaGetter: (k) => k.labelHaloColor,
 );
 final labelOpacityDef = DoubleDef(
   key: 'layer_style_label_opacity',
-  title: 'Opacity',
+  title: t.styleScreen.labelOpacity,
   defaultValue: 1.0,
   min: 0.0,
   max: 1.0,
@@ -198,16 +210,16 @@ final labelOpacityDef = DoubleDef(
 );
 
 // --- Clustering (グローバル専用) ---
-const clusteringEnabledDef = SwitchDef(
+final clusteringEnabledDef = SwitchDef(
   key: 'layer_style_clustering_enabled',
-  title: 'Enable Clustering',
-  description: 'Nearby markers are grouped into clusters',
+  title: t.styleScreen.enableClustering,
+  description: t.styleScreen.enableClusteringDesc,
   defaultValue: true,
   icon: Icons.workspaces_outlined,
 );
 final clusteringRadiusDef = IntDef(
   key: 'layer_style_clustering_radius',
-  title: 'Cluster Radius',
+  title: t.styleScreen.clusterRadius,
   defaultValue: 12,
   min: 1,
   max: 150,
@@ -215,22 +227,22 @@ final clusteringRadiusDef = IntDef(
 );
 final clusteringDisableZoomDef = IntDef(
   key: 'layer_style_clustering_disable_zoom',
-  title: 'Disable at Zoom',
+  title: t.styleScreen.disableAtZoom,
   defaultValue: 18,
   min: 14,
   max: 20,
-  formatter: (v) => 'Zoom $v',
+  formatter: (v) => t.styleScreen.zoomN(n: v),
 );
 
 // --- Selection (グローバル専用) ---
-const selectedColorDef = ColorDef(
+final selectedColorDef = ColorDef(
   key: 'layer_style_selected_color',
-  title: 'Color',
+  title: t.styleScreen.color,
   defaultArgb: 0xFFE91E63,
 );
 final selectedMultiplierDef = DoubleDef(
   key: 'layer_style_selected_multiplier',
-  title: 'Size Multiplier',
+  title: t.styleScreen.sizeMultiplier,
   defaultValue: 1.5,
   min: 1.0,
   max: 3.0,
@@ -242,28 +254,26 @@ final selectedMultiplierDef = DoubleDef(
 // ストア（グローバルシングルトン）
 // ============================================================
 
+/// 節のキー（表示名は翻訳で変わるので、絞り込みはこちらで）
+abstract final class StyleSection {
+  static const point = 'point';
+  static const label = 'label';
+  static const line = 'line';
+  static const polygon = 'polygon';
+  static const clustering = 'clustering';
+  static const selection = 'selection';
+}
+
 final layerStyleSettings = SettingsStore([
   SettingSectionDef(
-    title: 'Point Style',
+    id: StyleSection.point,
+    title: t.styleScreen.point,
     icon: Icons.place,
     items: [pointSizeDef, pointColorDef],
   ),
   SettingSectionDef(
-    title: 'Label Style',
-    icon: Icons.label_outline,
-    collapsible: true,
-    initiallyExpanded: false,
-    items: [
-      labelEnabledDef,
-      labelPropertyDef,
-      labelFontSizeDef,
-      labelColorDef,
-      labelHaloColorDef,
-      labelOpacityDef,
-    ],
-  ),
-  SettingSectionDef(
-    title: 'Line Style',
+    id: StyleSection.line,
+    title: t.styleScreen.line,
     icon: Icons.show_chart,
     items: [
       lineWidthDef,
@@ -273,7 +283,8 @@ final layerStyleSettings = SettingsStore([
     ],
   ),
   SettingSectionDef(
-    title: 'Polygon Style',
+    id: StyleSection.polygon,
+    title: t.styleScreen.polygon,
     icon: Icons.crop_square,
     items: [
       polygonBorderWidthDef,
@@ -286,7 +297,23 @@ final layerStyleSettings = SettingsStore([
     ],
   ),
   SettingSectionDef(
-    title: 'Marker Clustering',
+    id: StyleSection.label,
+    title: t.styleScreen.label,
+    icon: Icons.label_outline,
+    collapsible: true,
+    initiallyExpanded: true,
+    items: [
+      labelEnabledDef,
+      labelExpressionTileDef,
+      labelFontSizeDef,
+      labelColorDef,
+      labelHaloColorDef,
+      labelOpacityDef,
+    ],
+  ),
+  SettingSectionDef(
+    id: StyleSection.clustering,
+    title: t.styleScreen.clustering,
     icon: Icons.workspaces_outlined,
     iconColor: Colors.blue,
     collapsible: true,
@@ -295,7 +322,8 @@ final layerStyleSettings = SettingsStore([
     items: [clusteringEnabledDef, clusteringDisableZoomDef],
   ),
   SettingSectionDef(
-    title: 'Selection Highlight',
+    id: StyleSection.selection,
+    title: t.styleScreen.selection,
     icon: Icons.highlight_alt,
     collapsible: true,
     initiallyExpanded: false,
@@ -303,6 +331,88 @@ final layerStyleSettings = SettingsStore([
     items: [selectedColorDef, selectedMultiplierDef],
   ),
 ]);
+
+// ============================================================
+// ラベルの中身（組み立てダイアログへの入口）
+// ============================================================
+
+/// スタイル画面が「どのレイヤ／View を編集しているか」を、節の中の項目に伝える
+class LabelEditorScope extends InheritedWidget {
+  const LabelEditorScope({
+    super.key,
+    required this.layer,
+    required this.view,
+    required super.child,
+  });
+
+  final LayerNode? layer;
+  final ViewNode? view;
+
+  static LabelEditorScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<LabelEditorScope>();
+
+  @override
+  bool updateShouldNotify(LabelEditorScope old) => old.layer != layer || old.view != view;
+}
+
+Widget _buildLabelExpressionTile(BuildContext context, SettingsStore store, VoidCallback onChanged) {
+  final tr = t.styleScreen;
+  final expression = normalizeLabelExpression(store.getString(labelPropertyDef));
+  final readable = expression == null || tryParseLabelExpression(expression) != null;
+  final layer = LabelEditorScope.maybeOf(context)?.layer;
+
+  Future<void> compose() async {
+    List<String> columns = const [];
+    Map<String, Object?>? sample;
+    Map<String, double>? rates;
+    if (layer != null) {
+      columns = (await layer.geoPackageFile.getColumnNames(layer.layerName, getAll: true))
+          .where((c) => !c.startsWith('_'))
+          .toList();
+      final rows = layer.children
+          .whereType<FeatureNode>()
+          .map((f) => f.turfFeature.properties?.cast<String, Object?>())
+          .toList();
+      sample = rows.firstOrNull;
+      rates = rows.isEmpty ? null : columnFillRates(rows, columns);
+    }
+    if (!context.mounted) return;
+    final result = await showLabelComposerDialog(
+      context,
+      columns: columns,
+      initialTemplate: expression,
+      initialEnabled: store.getBool(labelEnabledDef),
+      sampleProps: sample,
+      fillRates: rates,
+    );
+    if (result == null) return;
+    await store.setString(labelPropertyDef, result.template);
+    await store.setBool(labelEnabledDef, result.enabled);
+    onChanged();
+  }
+
+  return ListTile(
+    title: Text(tr.labelExpression),
+    subtitle: Text(
+      expression == null
+          ? tr.labelExpressionEmpty
+          : readable
+              ? expression
+              : '$expression\n${tr.labelExpressionInvalid}',
+      style: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        color: readable ? null : Theme.of(context).colorScheme.error,
+      ),
+    ),
+    trailing: FilledButton.tonalIcon(
+      onPressed: compose,
+      icon: const Icon(Icons.edit_outlined, size: 18),
+      label: Text(tr.compose),
+    ),
+    onTap: compose,
+  );
+}
 
 // ============================================================
 // 画面
@@ -316,7 +426,8 @@ class LayerStyleSettingsScreen extends StatefulWidget {
   /// View 単位でスタイルを編集するときに渡す。
   ///
   /// 渡すと保存先が `styles.layers[layerKey]` ではなく
-  /// `views[layerKey][i].style` になる。それ以外の見た目は同じ。
+  /// `views[layerKey][i].style` になる。View に無い項目はレイヤの値を見せ、
+  /// 保存はレイヤと**違う項目だけ**（項目ごとの合成。`LayerNode.refreshStyleGroups` と同じ規則）
   final ViewNode? targetView;
 
   const LayerStyleSettingsScreen({
@@ -340,6 +451,9 @@ class LayerStyleSettingsScreen extends StatefulWidget {
 class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
   bool get _isGlobalMode => !widget.isLayerMode;
 
+  /// View モードのときの、レイヤ側の解決済みスタイル（差分を取る基準）
+  KMetaLayerStyle? _layerStyle;
+
   String get _title =>
       _isGlobalMode
           ? t.settingsWidget.layerDrawingTitle
@@ -350,14 +464,15 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
                     : widget.targetLayer!.layerName,
           );
 
-  /// レイヤータイプに応じてセクションをフィルタ
+  /// レイヤの型に合う節だけ出す（ラベルは点・線・面のどれにも出る）
   bool _sectionFilter(SettingSectionDef section) {
     if (_isGlobalMode) return true;
     final layer = widget.targetLayer;
-    return switch (section.title) {
-      'Point Style' || 'Label Style' => layer is PointLayerNode,
-      'Line Style' => layer is LineLayerNode,
-      'Polygon Style' => layer is PolygonLayerNode,
+    return switch (section.id) {
+      StyleSection.point => layer is PointLayerNode,
+      StyleSection.line => layer is LineLayerNode,
+      StyleSection.polygon => layer is PolygonLayerNode,
+      StyleSection.label => true,
       _ => false,
     };
   }
@@ -365,20 +480,14 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
   /// KMeta初期化（個別レイヤーモード）
   Future<void> _onInit() async {
     if (widget.isViewMode) {
-      // View に指定が無ければレイヤのスタイルを初期値として見せる
-      final meta = await KMetaService.instance.getMeta(
-        widget.folderPath!,
-      );
-      layerStyleSettings.loadOverlay(
-        widget.targetView!.style ??
-            meta.getLayerStyle(widget.targetLayer!.layerKey),
-      );
+      final meta = await KMetaService.instance.getMeta(widget.folderPath!);
+      _layerStyle = meta.getLayerStyle(widget.targetLayer!.layerKey);
+      // View に指定が無い項目はレイヤの値を見せる
+      final view = widget.targetView!.style;
+      layerStyleSettings.loadOverlay(view == null ? _layerStyle : view.mergeWith(_layerStyle));
     } else if (widget.isLayerMode) {
-      final meta = await KMetaService.instance.getMeta(
-        widget.folderPath!,
-      );
-      final layerStyle = meta.getLayerStyle(widget.targetLayer!.layerKey);
-      layerStyleSettings.loadOverlay(layerStyle);
+      final meta = await KMetaService.instance.getMeta(widget.folderPath!);
+      layerStyleSettings.loadOverlay(meta.getLayerStyle(widget.targetLayer!.layerKey));
     } else {
       layerStyleSettings.clearOverlay();
     }
@@ -390,33 +499,57 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     _saveToKMeta();
   }
 
+  KMetaLayerStyle _styleFromStore() => KMetaLayerStyle(
+        pointSize: layerStyleSettings.getDouble(pointSizeDef),
+        pointColor: layerStyleSettings.getColor(pointColorDef),
+        lineWidth: layerStyleSettings.getDouble(lineWidthDef),
+        lineColor: layerStyleSettings.getColor(lineColorDef),
+        polygonBorderWidth: layerStyleSettings.getDouble(polygonBorderWidthDef),
+        polygonBorderColor: layerStyleSettings.getColor(polygonBorderColorDef),
+        polygonFillColor: layerStyleSettings.getColor(polygonFillColorDef),
+        polygonFillOpacity: layerStyleSettings.getDouble(polygonFillOpacityDef),
+        polygonBorderOpacity: layerStyleSettings.getDouble(polygonBorderOpacityDef),
+        labelEnabled: layerStyleSettings.getBool(labelEnabledDef),
+        labelProperty: normalizeLabelExpression(layerStyleSettings.getString(labelPropertyDef)),
+        labelFontSize: layerStyleSettings.getDouble(labelFontSizeDef),
+        labelColor: layerStyleSettings.getColor(labelColorDef),
+        labelHaloColor: layerStyleSettings.getColor(labelHaloColorDef),
+        labelOpacity: layerStyleSettings.getDouble(labelOpacityDef),
+      );
+
+  /// [full] のうち [base] と同じ項目を null にする（View はレイヤと違う項目だけ持つ）
+  static KMetaLayerStyle _diff(KMetaLayerStyle full, KMetaLayerStyle? base) {
+    if (base == null) return full;
+    T? d<T>(T? a, T? b) => a == b ? null : a;
+    return KMetaLayerStyle(
+      pointSize: d(full.pointSize, base.pointSize),
+      pointColor: d(full.pointColor, base.pointColor),
+      lineWidth: d(full.lineWidth, base.lineWidth),
+      lineColor: d(full.lineColor, base.lineColor),
+      polygonBorderWidth: d(full.polygonBorderWidth, base.polygonBorderWidth),
+      polygonBorderColor: d(full.polygonBorderColor, base.polygonBorderColor),
+      polygonFillColor: d(full.polygonFillColor, base.polygonFillColor),
+      polygonFillOpacity: d(full.polygonFillOpacity, base.polygonFillOpacity),
+      polygonBorderOpacity: d(full.polygonBorderOpacity, base.polygonBorderOpacity),
+      labelEnabled: d(full.labelEnabled, base.labelEnabled),
+      labelProperty: d(full.labelProperty, base.labelProperty),
+      labelFontSize: d(full.labelFontSize, base.labelFontSize),
+      labelColor: d(full.labelColor, base.labelColor),
+      labelHaloColor: d(full.labelHaloColor, base.labelHaloColor),
+      labelOpacity: d(full.labelOpacity, base.labelOpacity),
+    );
+  }
+
   /// overlay値をKMetaに保存
   Future<void> _saveToKMeta() async {
-    final style = KMetaLayerStyle(
-      pointSize: layerStyleSettings.getDouble(pointSizeDef),
-      pointColor: layerStyleSettings.getColor(pointColorDef),
-      lineWidth: layerStyleSettings.getDouble(lineWidthDef),
-      lineColor: layerStyleSettings.getColor(lineColorDef),
-      polygonBorderWidth: layerStyleSettings.getDouble(polygonBorderWidthDef),
-      polygonBorderColor: layerStyleSettings.getColor(polygonBorderColorDef),
-      polygonFillColor: layerStyleSettings.getColor(polygonFillColorDef),
-      polygonFillOpacity: layerStyleSettings.getDouble(polygonFillOpacityDef),
-      polygonBorderOpacity: layerStyleSettings.getDouble(
-        polygonBorderOpacityDef,
-      ),
-      labelEnabled: layerStyleSettings.getBool(labelEnabledDef),
-      labelProperty: layerStyleSettings.getString(labelPropertyDef),
-      labelFontSize: layerStyleSettings.getDouble(labelFontSizeDef),
-      labelColor: layerStyleSettings.getColor(labelColorDef),
-      labelHaloColor: layerStyleSettings.getColor(labelHaloColorDef),
-      labelOpacity: layerStyleSettings.getDouble(labelOpacityDef),
-    );
+    final style = _styleFromStore();
     if (widget.isViewMode) {
-      widget.targetView!.style = style;
+      final diff = _diff(style, _layerStyle);
+      widget.targetView!.style = diff.isEmpty ? null : diff;
       await widget.targetLayer!.persistViews();
       widget.targetLayer!.folderNode?.invalidateMetaCache();
       await widget.targetLayer!.refreshStyleGroups();
-      AppLogger.debug('[LayerStyle] View設定を保存: ${widget.targetView!.viewKey}');
+      AppLogger.debug('[LayerStyle] View設定を保存: ${widget.targetView!.viewKey}（差分 ${diff.isEmpty ? '無し' : 'あり'}）');
       return;
     }
 
@@ -434,16 +567,18 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     );
   }
 
-  /// リセット処理
+  /// リセット処理（View なら「レイヤに従う」に戻す）
   Future<void> _resetSettings() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(t.settingsWidget.resetSettings),
+        title: Text(widget.isViewMode ? t.styleScreen.followLayer : t.settingsWidget.resetSettings),
         content: Text(
-          _isGlobalMode
-              ? t.settingsWidget.resetAllConfirm
-              : t.settingsWidget.resetLayerConfirm,
+          widget.isViewMode
+              ? t.styleScreen.followLayerConfirm
+              : _isGlobalMode
+                  ? t.settingsWidget.resetAllConfirm
+                  : t.settingsWidget.resetLayerConfirm,
         ),
         actions: [
           TextButton(
@@ -459,6 +594,15 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     );
     if (confirm != true) return;
 
+    if (widget.isViewMode) {
+      widget.targetView!.style = null;
+      await widget.targetLayer!.persistViews();
+      widget.targetLayer!.folderNode?.invalidateMetaCache();
+      await widget.targetLayer!.refreshStyleGroups();
+      layerStyleSettings.loadOverlay(_layerStyle);
+      AppLogger.debug('[LayerStyle] View をレイヤに従わせた: ${widget.targetView!.viewKey}');
+      return;
+    }
     if (_isGlobalMode) {
       await layerStyleSettings.resetAll();
     } else {
@@ -493,22 +637,36 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return DataDrivenSettingsScreen(
-      title: _title,
-      store: layerStyleSettings,
-      isEmbedded: widget.isEmbedded,
-      onInit: _onInit,
-      onReset: _resetSettings,
-      onValueChanged: _onValueChanged,
-      sectionFilter: _sectionFilter,
-      customSections: (store) => [_buildPreviewSection(store)],
+    return LabelEditorScope(
+      layer: widget.targetLayer,
+      view: widget.targetView,
+      child: DataDrivenSettingsScreen(
+        title: _title,
+        store: layerStyleSettings,
+        isEmbedded: widget.isEmbedded,
+        onInit: _onInit,
+        onReset: _resetSettings,
+        onValueChanged: _onValueChanged,
+        sectionFilter: _sectionFilter,
+        customSections: (store) => [
+          if (widget.isViewMode)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(
+                t.styleScreen.followingLayer,
+                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+              ),
+            ),
+          _buildPreviewSection(store),
+        ],
+      ),
     );
   }
 
   /// プレビューセクション
   Widget _buildPreviewSection(SettingsStore store) {
     return SettingsSection(
-      title: 'Preview',
+      title: t.styleScreen.preview,
       icon: Icons.preview,
       iconColor: Colors.purple,
       collapsible: true,

@@ -97,11 +97,11 @@ class LayerTile extends ConsumerWidget {
       child: tileContent,
     );
 
-    // View が「既定1枚だけ」のレイヤは、View 行を出さない。
-    // 導入前と同じ見た目に保つため（既定Viewはファイルにも書かれていない）。
+    // View は既定 1 枚だけでも出す（松本 2026-09-12: 隠すとかえって分かりにくい。
+    // 「レイヤ＝データ、View＝見え方」の型を最初から見せておく）。
+    // 既定 1 枚は引き続きファイルには書かれない（`LayerNode.persistViews`）
     final views = node.views;
-    final showViews = views.length > 1 || (views.length == 1 && !views.first.isDefaultView);
-    if (!showViews) return draggable;
+    if (views.isEmpty) return draggable;
 
     return Column(
       mainAxisSize: MainAxisSize.min,

@@ -340,7 +340,7 @@ class QgsProjectBuilder {
           crs: crs,
           subset: view.filter,
           // View に指定が無ければレイヤのスタイルに落ちる
-          style: _toQgsStyle(view.style ?? layerStyle),
+          style: _toQgsStyle(view.style == null ? layerStyle : view.style!.mergeWith(layerStyle)),
           visible: view.visible,
         ),
     ];

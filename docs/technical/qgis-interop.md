@@ -104,7 +104,17 @@ View だけがレイヤになるので **1:1 対応**が成立する。View の�
 
 ### QGISで確かめる手順
 
-開発機にはQGISが**インストールされていない**（管理者権限が要るため）。
+メイン PC（DESKTOP-16MQHHF）には 2026-09-12 に QGIS 4.2.0 を普通にインストールした
+（`C:\Program Files\QGIS 4.2.0`）。こちらは pwsh から直接呼べる:
+
+```powershell
+& 'C:\Program Files\QGIS 4.2.0in\python-qgis.bat' tool/qgis/check_qgs.py <project.qgs>
+& 'C:\Program Files\QGIS 4.2.0in\python-qgis.bat' tool/qgis/edit_qgs.py <in.qgs> <out.qgs>
+```
+
+⚠ `cmd //c` 経由だと Git Bash がパスを壊す。pwsh の `&` で呼ぶ。
+
+Surface（開発機）には QGIS が**インストールされていない**（管理者権限が要るため）。
 代わりにMSIを展開しただけのものを使っている。
 
 ```powershell
@@ -133,7 +143,28 @@ msiexec /a .temp\QGIS-LTR.msi /qn TARGETDIR=C:\Users\<user>\qgis-extract
 位置は `.tif` の GeoTIFF タグに焼き込み済み（`GeoTiffWriteScheduler`）なので、`.qgs` には
 `provider=gdal` の参照（相対パス）だけを書き、レンダラ（`<pipe>`）は書かない。QGIS は読込時に既定の
 レンダラを付ける。DOM 保持型の更新では参照と名前だけ直し、QGIS が付けた `<pipe>` は残す。
-読み戻し（インポータ）はラスタを黙って飛ばす。⚠ QGIS での実開封は未確認（XML の形は `test/qgs_raster_test.dart`）
+読み戻し（インポータ）はラスタを黙って飛ばす（XML の形は `test/qgs_raster_test.dart`）。
+
+> [!NOTE] QGIS 4.2.0 で実開封を確認済み（2026-09-12、開発機に `C:\Program Files\QGIS 4.2.0` を入れて headless）
+> 実機（Pixel 9）から pull した `Kitayama-2026/` に `test_overlay.tif` を `QgsRasterLayer` で足した `.qgs` を
+> `python-qgis.bat` の `QgsProject.read()` で開き、そのまま QGIS 側で編集して保存し直し、アプリ側で読み戻した。
+> ```
+> read() = True   badLayers = []
+> raster 'test_overlay'  valid=True  crs=EPSG:4326  bands=3  400x300
+>        extent 135.5696,33.8969 : 135.5740,33.8996   ← GeoTIFF タグどおり
+> tree: [group] Kitayama-2026 → 3 vector + raster、順序も `orderedLayerIds` どおり
+> QGIS 側で編集して write(): saveUser / version="4.2.0-Belém do Pará" / subset `area_ha > 5` → 6 件 / 道レイヤ消灯 / ラスタ opacity 0.5
+> アプリ側 QgsDocument.apply(): 名前と参照は直し、QGIS の <pipe>（opacity 0.5）と <projectCrs> は残る
+> アプリ側 QgsImporter.import(): 3 View（subset は filter に、消灯はレイヤ可視に）、ラスタは報告せずに飛ばす
+> ```
+> 見つかった問題（同日修正）:
+> - GDAL が `GPKG: unrecognized user_version=0x00000001` と警告。sqflite の `openDatabase(version: 1)` が
+>   `PRAGMA user_version` を 1 に上書きしていた（外部の .gpkg を開くだけでも書き換わる）。
+>   `version:` をやめ、新規作成時に `application_id=GPKG` / `user_version=10301` を書く（`test/geopackage_version_marker_test.dart`）
+> - `<projectCrs>` が空（アプリは書かない）。QGIS は最初のレイヤの CRS を採用するので実害なし。書くなら EPSG:4326
+> - `GeoTiffService` は GeoKey 2048（GeographicTypeGeoKey）を書いているが、古い実機の `.tif` には無く
+>   QGIS が CRS を「不明」にする。書き直せば直る（`GeoTiffWriteScheduler` の再書き込み）
+> 確認スクリプトは `tool/qgis/check_qgs.py`（読み）と `tool/qgis/edit_qgs.py`（QGIS 側で編集して保存）。
 - プロジェクトフォルダの**外**を参照する `.gpkg`
   （渡された相手の環境には無いので、残すと「レイヤはあるが表示されない」になる）
 

@@ -1,12 +1,13 @@
 """RootMap が書いた .qgs を QGIS 本体に開かせて確かめる。
 
     <QGIS>/bin/python-qgis-ltr.bat tool/qgis/check_qgs.py <project.qgs>
+    （QGIS 4.x は python-qgis.bat）
 
 レイヤが valid か、subset が効いているか、レンダラが読まれたかを出す。
 終了コードは 0=OK / 1=NG。
 """
 import sys
-from qgis.core import QgsApplication, QgsProject, QgsVectorLayer
+from qgis.core import QgsApplication, QgsProject, QgsRasterLayer, QgsVectorLayer
 
 path = sys.argv[1]
 
@@ -39,6 +40,10 @@ for lid, layer in layers.items():
         if renderer and renderer.type() == 'singleSymbol':
             sym = renderer.symbol()
             print(f'    symbol  = {sym.symbolLayer(0).layerType()} color={sym.color().name()}')
+    if isinstance(layer, QgsRasterLayer):
+        print(f'    crs     = {layer.crs().authid()}')
+        print(f'    bands   = {layer.bandCount()} size={layer.width()}x{layer.height()}')
+        print(f'    extent  = {layer.extent().toString(4)}')
     if not valid:
         failed += 1
 

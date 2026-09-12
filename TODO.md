@@ -165,8 +165,9 @@
   - [x] **自動更新**（2026-09-06）: `.kmeta.json` が保存されるたびに root の `<dir名>.qgs` を
         3秒デバウンスで DOM 保持型更新する（`QgsAutoRefresh`）。Drive push と手動書き出しの前に flush。
         `.kmeta.json` が正典のまま、QGIS から見える状態を常に最新にする途中経過
-  - [ ] ⚠ QGIS での実開封は未確認（開発機に QGIS 無し）。確認手順は [[docs/technical/qgis-interop]]。
-        特に「QGIS で保存 → アプリで書き出し → QGIS で開き直して設定が残っているか」
+  - [x] ⚠ QGIS での実開封（2026-09-12、開発機に QGIS 4.2.0 を入れて headless で確認）。
+        「QGIS で保存 → アプリで DOM 更新 → QGIS の pipe / projectCrs が残る」「アプリで読み戻し → subset と消灯が入る」まで。
+        副産物: gpkg の `user_version` を sqflite が 1 に潰していたのを修正。詳細は [[docs/technical/qgis-interop]]
 - [ ] 段2: `KMetaService` の裏を `QgsDocument` に差し替え（`KMeta` モデルは残す。35ファイルの呼び出し側を動かさない）
 - [/] 段2（実用形・2026-09-06）: **QGIS 側で保存された `.qgs` をプロジェクトを開いたときに読み戻す**
       （`QgsReadBack`。印と `saveDateTime` の不一致で判定 → 寛容インポータで View・スタイル・可視性を取り込み →
@@ -259,7 +260,7 @@
   - [x] Drive push の直前に自動生成する → `QgsAutoRefresh.flushNow()`（2026-09-06）。
         それ以前にメタデータ保存のたびに追従しているので、push 時は待ちの消化だけ
   - [x] オーバーレイ画像（GeoTIFF）をラスタレイヤとして書く（2026-09-11 夜）: `QgsRasterLayer`（gdal・参照だけ、レンダラは QGIS 任せ）。DOM 更新でも足す・直す・外す。
-        写真と GeoTIFF でないオーバーレイは従来どおり報告して外す。⚠ QGIS での実開封は未確認（`test/qgs_raster_test.dart` は XML の形まで）
+        写真と GeoTIFF でないオーバーレイは従来どおり報告して外す。QGIS 4.2.0 で実開封を確認（2026-09-12、ラスタ valid・EPSG:4326・範囲一致）
 - [x] `.qgs` インポータ（root外参照を破棄・グループはdir構造に置換・捨てたものを必ず報告）
   - 2026-08-26 実装。こかげマップ → `.qgs` → こかげマップ の往復を web で確認済み
   - QGIS 3.44.12 に書かせた `.qgs` を `test/fixtures/` に置き、それでテストしている。

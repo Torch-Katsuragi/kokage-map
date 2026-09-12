@@ -1,6 +1,6 @@
 # Changelog
 
-## Next release
+## v0.7.1 — 2026/09/12
 
 ### Fixes
 
@@ -17,6 +17,8 @@
 ### QGIS
 
 - GeoTIFF overlays are written to the QGIS project (`.qgs`) as raster layers, so QGIS opens them as they are. Non-GeoTIFF images are still left out
+- Verified the export/read-back round trip in QGIS 4.2 itself
+- GeoPackages created by the app no longer make QGIS warn about an unknown version (applies to newly created files)
 
 ## v0.7.0 — 2026/09/11
 

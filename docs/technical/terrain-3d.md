@@ -458,3 +458,41 @@ flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world
 
 - Vault `3D化の詰め_2026-09-07`（設計の正典）、`3D地形と陰影_2026-08-25`（陰影・DEM プリセットの話は生きている）
 - MapLibre terrain の手法（Mercator の xy に `1/cos(φ)` を掛けた標高）と同じ座標系
+
+## 地形の見た目と焼き込み（2026-09-12、プレイレポート対応）
+
+### 色分け（傾斜・標高）はシェーダで
+
+テクスチャを作って貼るのではなく、頂点が持つ傾斜（`slope`、0〜1 = 度/90。`TerrainMesh` が法線から出す）と
+標高（`position.z`）からフラグメントシェーダで色を引く（`shaders/terrain.frag`、web は同じ式の GLSL ES）。
+解像度はメッシュに依るので、傾けて横から見ても粗くならない（テクスチャ投影の弱点がそのまま消える）。
+色の帯は 256×1 の ramp テクスチャ（`TerrainAppearance.rampBytes()`、3 色の補間。設定が変わると作り直す）。
+`ColorInfo`（flutter_gpu）／`u_color_a`・`u_color_b`（WebGL）で種類・強さ・見えている範囲の標高・傾斜の上限を渡す。
+強さ 100% で基図を使わない「地形だけ」の絵になる（圏外でも成り立つ）。
+
+- 設定は「地形の見た目」（`TerrainSettingsScreen` → `terrainSettings` → `syncTerrainAppearance()` → `TerrainAppearance`）。
+  描画側は毎フレーム `TerrainAppearance` の静的な値を読む（widget 木を通さない）
+- 頂点は position(3) + uv(2) + shade(1) + slope(1) = 28 バイト（`GpuTerrainGeometry`）
+
+### 等高線は DEM から線として
+
+`ContourExtractor`（marching squares、スパイク由来）を isolate で回し（`extractContourSegments`）、
+`LiftedSegments` にして線シェーダで描く（`TerrainTileDrawable.segmentSets`。両 GPU 経路とも線パスで描く）。
+テクスチャでなく形なので、傾けても細いまま。タイル・段ごとにキャッシュ（`_contourCache`）、
+引いた段（セル 30m 以上）では引かない。主曲線（N 本ごと）は倍の太さ。
+
+### 引いた段の焼き込み（真上からの投影）
+
+z ≤ 13（`kBakeMaxZoom`）のタイルは、面・線・点を形として持ち上げず、**テクスチャに描き込む**
+（`_bakeFeatures`。`TerrainWorld.textureDecorator` の中、オーバーレイ画像の次）。
+描画コストは基図と同じ 1 枚で済み、1 万面でも回る。寄せた段は今までどおり形で描く。
+選択・頂点・写真は形のまま（少ないし光らせたい）。ヒットテストはデータから引くので影響しない。
+フィーチャが変わったら（`sceneRevision` で一覧の同一性が変わったとき）焼き込む段のタイルだけ
+`retexture(where: _bakesFeatures)` で作り直す（400ms にまとめる）。
+
+⚠ 焼き込みは真上からの投影なので傾けると粗い。引いた段なので目立たない、という割り切り。
+
+### 断層（縁の段差）
+
+隣が自分より粗い近似（親から補間したタイル）なら、その縁は借りない（`TerrainTile._canBorrow`）。
+借りた縁と自分の縁の差が 20m を超えたら debug で `[3D] seam` ログ（`lastSeamM`）。

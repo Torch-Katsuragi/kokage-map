@@ -492,6 +492,13 @@ z ≤ 13（`kBakeMaxZoom`）のタイルは、面・線・点を形として持�
 
 ⚠ 焼き込みは真上からの投影なので傾けると粗い。引いた段なので目立たない、という割り切り。
 
+### web のマウス操作とコンテキストメニュー
+
+右ドラッグ = 回転・傾き（MapLibre の慣例）。ブラウザは右ボタンを離すと `contextmenu` を出すので、
+`TerrainMapLayer` が載っている間だけ `BrowserContextMenu.disableContextMenu()`（`flutter/services`）で止め、
+`dispose` で戻す。アプリ全体で止めないのは、テキスト欄などでブラウザのメニューを使えるようにするため
+（止めている間、Flutter のテキスト欄は自前の選択ツールバーを出す）。
+
 ### 断層（縁の段差）
 
 隣が自分より粗い近似（親から補間したタイル）なら、その縁は借りない（`TerrainTile._canBorrow`）。

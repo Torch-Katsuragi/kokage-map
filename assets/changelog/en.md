@@ -9,6 +9,7 @@
 - GPS tracks start a new line after a gap of 10 minutes or more, so reopening the app somewhere else no longer draws a straight line (later segments are named with `#2`, `#3`, …)
 - Remaining untranslated strings (notifications, layer list, drawing buttons, import/export, settings, TruPulse screens) now follow the app language
 - Web: opening the map URL (`#/map`) without choosing a folder let you create a GeoPackage that was never saved anywhere. It now starts from the folder picker, and the layer list hides its add button until a folder is chosen
+- Web: rotating the map with a right-drag no longer pops up the browser context menu
 
 ### Usability
 

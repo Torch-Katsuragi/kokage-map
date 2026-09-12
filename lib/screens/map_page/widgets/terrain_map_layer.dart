@@ -454,6 +454,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   @override
   void initState() {
     super.initState();
+    // web: 右ドラッグ = 回転なので、ブラウザのコンテキストメニューを地図の間だけ止める
+    // （右ボタンを離すたびにメニューが出ていた。松本 2026-09-12）
+    if (kIsWeb) BrowserContextMenu.disableContextMenu();
     final cam = widget.mapState.mapController.camera;
     final center = cam.center;
     _camera = TerrainCamera(
@@ -638,6 +641,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   @override
   void dispose() {
+    if (kIsWeb) BrowserContextMenu.enableContextMenu();
     _listenedDevice?.removeListener(_scheduleRefresh);
     widget.baseMapService.removeListener(_onBasemapChanged);
     _anim.dispose();

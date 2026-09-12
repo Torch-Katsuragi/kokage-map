@@ -21,7 +21,6 @@ import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
-
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/platform_capabilities.dart';
@@ -41,6 +40,7 @@ import '../../../services/qgis/qgs_read_back.dart';
 import '../../../services/tile_server.dart';
 import '../../../utils/app_logger.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
+import '../../terrain_settings_screen.dart';
 import '../map_page_state_base.dart';
 import 'map_jump_mixin.dart';
 
@@ -77,6 +77,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // ブランチ1: プロジェクトツリー + フィーチャ
       () async {
         await layerStyleSettings.load();
+        await terrainSettings.load();
+        syncTerrainAppearance();
         layerStyleSettings.addListener(onLayerStyleChanged);
         await initializeProjectTree();
       }(),

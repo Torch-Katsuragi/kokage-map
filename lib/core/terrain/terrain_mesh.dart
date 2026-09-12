@@ -340,6 +340,7 @@ class TerrainMeshBuilder {
     }
     final vertexColor = Int32List(cols * rows);
     _shade = Float32List(cols * rows);
+    _slope = Float32List(cols * rows);
     for (var r = 0; r < rows; r++) {
       final rS = r == 0 ? 0 : r - 1;
       final rN = r == rows - 1 ? rows - 1 : r + 1;
@@ -350,6 +351,8 @@ class TerrainMeshBuilder {
         final ny = -(_heights[rN * cols + c] - _heights[rS * cols + c]) / ((rN - rS) * cell);
         final gray = TerrainShading.grayFor(nx, ny);
         _shade[r * cols + c] = gray;
+        // 傾斜（度）を 0〜1 に（90° で 1）。色分け（TerrainAppearance）用
+        _slope[r * cols + c] = math.atan(math.sqrt(nx * nx + ny * ny)) * 2 / math.pi;
         final g = ((gray * 2).clamp(0.0, 1.0) * 255).round();
         vertexColor[r * cols + c] = 0xFF000000 | (g << 16) | (g << 8) | g;
       }
@@ -420,6 +423,7 @@ class TerrainMeshBuilder {
 
   /// 頂点ごとの陰影（0〜1）。GPU 経路はこれをそのまま頂点に持たせる
   late final Float32List _shade;
+  late final Float32List _slope;
   late final int _cellCols;
   late final int _cellCount;
   late final Uint16List _cellBand;
@@ -466,6 +470,7 @@ class TerrainMeshBuilder {
         width: dem.width,
         height: dem.height,
         shade: _shade,
+        slope: _slope,
         skirtDepth: skirtDepth,
       );
 

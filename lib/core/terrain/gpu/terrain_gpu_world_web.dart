@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import 'package:web/web.dart' as web;
 
+import '../terrain_appearance.dart';
 import '../terrain_camera.dart';
 import '../terrain_mesh.dart';
 import '../terrain_painter.dart';
@@ -82,6 +83,7 @@ class TerrainGpuWorldRenderer {
   final Map<List<LiftedPolygon>, _Parts> _polygons = {};
   final Map<List<LiftedPolyline>, _Parts> _lines = {};
   final Map<List<TerrainPoint>, _Parts> _points = {};
+  final Map<List<LiftedSegments>, _Parts> _segments = {};
   static const _sweepMs = 3000;
   int _lastSweep = 0;
 
@@ -117,7 +119,7 @@ class TerrainGpuWorldRenderer {
 
   void _setup() {
     final gl = _gl;
-    _terrain = _Program(gl, _terrainVert, _terrainFrag, ['position', 'uv', 'shade'], ['u_mvp', 'u_params', 'tex']);
+    _terrain = _Program(gl, _terrainVert, _terrainFrag, ['position', 'uv', 'shade', 'slope'], ['u_mvp', 'u_params', 'tex', 'ramp', 'u_color_a', 'u_color_b']);
     _polygon = _Program(gl, _polygonVert, _colorFrag, ['position', 'color'], ['u_mvp', 'u_params']);
     _line = _Program(gl, _lineVert, _lineFrag, ['a', 'b', 't', 'side', 'width', 'color'], ['u_mvp', 'u_viewport', 'u_pixel_ratio', 'u_params']);
     _point = _Program(gl, _pointVert, _pointFrag, ['position', 'corner', 'size', 'color'], ['u_mvp', 'u_viewport', 'u_pixel_ratio']);
@@ -172,7 +174,8 @@ class TerrainGpuWorldRenderer {
       final points = t.points.isEmpty
           ? null
           : _partsFor(_points, t.points, nowMs, (list, from) => _packPoints(list, from, (x, y) => dem.elevationAt(x + dem.originX, y + dem.originY)));
-      entries.add(_TileEntry(t, tb, tex, polys, lines, points));
+      final segments = t.segmentSets.isEmpty ? null : _partsFor(_segments, t.segmentSets, nowMs, _packSegments);
+      entries.add(_TileEntry(t, tb, tex, polys, lines, points, segments));
     }
     if (entries.isEmpty) return null;
 
@@ -296,10 +299,28 @@ class TerrainGpuWorldRenderer {
     );
     gl.uniform4f(_terrain.uniform('u_params'), params.$1, params.$2, params.$3, params.$4);
     gl.uniform1i(_terrain.uniform('tex'), 0);
+    // 色分け（TerrainAppearance）
+    var zMin = double.infinity;
+    var zMax = -double.infinity;
+    for (final e in entries) {
+      if (e.terrain.minZ < zMin) zMin = e.terrain.minZ;
+      if (e.terrain.maxZ > zMax) zMax = e.terrain.maxZ;
+    }
+    gl.uniform4f(
+      _terrain.uniform('u_color_a'),
+      TerrainAppearance.colored ? TerrainAppearance.colorMode.index.toDouble() : 0,
+      TerrainAppearance.colorStrength,
+      zMin.isFinite ? zMin : 0,
+      zMax.isFinite ? zMax : 1,
+    );
+    gl.uniform4f(_terrain.uniform('u_color_b'), TerrainAppearance.slopeMaxDeg, 0, 0, 0);
+    gl.uniform1i(_terrain.uniform('ramp'), 1);
+    gl.activeTexture(_G.TEXTURE1);
+    gl.bindTexture(_G.TEXTURE_2D, _rampTexture());
     gl.activeTexture(_G.TEXTURE0);
     for (final e in entries) {
       gl.bindBuffer(_G.ARRAY_BUFFER, e.terrain.vertices);
-      _terrain.attribs(gl, GpuTerrainGeometry.strideInBytes, [('position', 3, 0), ('uv', 2, 12), ('shade', 1, 20)]);
+      _terrain.attribs(gl, GpuTerrainGeometry.strideInBytes, [('position', 3, 0), ('uv', 2, 12), ('shade', 1, 20), ('slope', 1, 24)]);
       gl.bindBuffer(_G.ELEMENT_ARRAY_BUFFER, e.terrain.indices);
       gl.uniformMatrix4fv(_terrain.uniform('u_mvp'), false, e.terrainMvp!.toJS);
       gl.bindTexture(_G.TEXTURE_2D, e.texture);
@@ -344,10 +365,10 @@ class TerrainGpuWorldRenderer {
     gl.uniform4f(_line.uniform('u_params'), params.$1, params.$2, params.$3, params.$4);
     const lineAttribs = [('a', 3, 0), ('b', 3, 12), ('t', 1, 24), ('side', 1, 28), ('width', 1, 32), ('color', 4, 36)];
     for (final e in entries) {
-      if (e.lines == null && e.tile.dynamicLines.isEmpty) continue;
+      if (e.lines == null && e.segments == null && e.tile.dynamicLines.isEmpty) continue;
       gl.uniformMatrix4fv(_line.uniform('u_mvp'), false, e.lineMvp!.toJS);
-      final parts = e.lines;
-      if (parts != null) {
+      for (final parts in [e.segments, e.lines]) {
+        if (parts == null) continue;
         for (final p in parts.parts) {
           gl.bindBuffer(_G.ARRAY_BUFFER, p.vertices);
           _line.attribs(gl, GpuLineGeometry.strideInBytes, lineAttribs);
@@ -520,6 +541,38 @@ class TerrainGpuWorldRenderer {
     return _PartBuffers(vertices: _upload(_gl, _G.ARRAY_BUFFER, packed.toJS), count: GpuPolygonGeometry.vertexCountOf(packed));
   }
 
+  _PartBuffers? _packSegments(List<LiftedSegments> sets, int from) {
+    final g = GpuLineGeometry.pack(segmentSets: sets.getRange(from, sets.length));
+    if (g.isEmpty) return null;
+    return _PartBuffers(
+      vertices: _upload(_gl, _G.ARRAY_BUFFER, g.vertices.toJS),
+      indices: _upload(_gl, _G.ELEMENT_ARRAY_BUFFER, g.indices.toJS),
+      count: g.indexCount,
+    );
+  }
+
+  /// 色分けのランプ（256×1）。設定が変わったら作り直す
+  web.WebGLTexture? _ramp;
+  int _rampRevision = -1;
+
+  web.WebGLTexture _rampTexture() {
+    final rev = TerrainAppearance.revision.value;
+    if (_ramp == null || _rampRevision != rev) {
+      final gl = _gl;
+      if (_ramp != null) gl.deleteTexture(_ramp);
+      final tex = gl.createTexture()!;
+      gl.bindTexture(_G.TEXTURE_2D, tex);
+      gl.texImage2D(_G.TEXTURE_2D, 0, _G.RGBA, 256.toJS, 1.toJS, 0.toJS, _G.RGBA, _G.UNSIGNED_BYTE, TerrainAppearance.rampBytes().toJS);
+      gl.texParameteri(_G.TEXTURE_2D, _G.TEXTURE_MIN_FILTER, _G.LINEAR);
+      gl.texParameteri(_G.TEXTURE_2D, _G.TEXTURE_MAG_FILTER, _G.LINEAR);
+      gl.texParameteri(_G.TEXTURE_2D, _G.TEXTURE_WRAP_S, _G.CLAMP_TO_EDGE);
+      gl.texParameteri(_G.TEXTURE_2D, _G.TEXTURE_WRAP_T, _G.CLAMP_TO_EDGE);
+      _ramp = tex;
+      _rampRevision = rev;
+    }
+    return _ramp!;
+  }
+
   _PartBuffers? _packLines(List<LiftedPolyline> lines, int from) {
     final g = GpuLineGeometry.pack(polylines: lines.getRange(from, lines.length));
     if (g.isEmpty) return null;
@@ -557,7 +610,7 @@ class TerrainGpuWorldRenderer {
       gl.deleteBuffer(v.indices);
       return true;
     });
-    for (final cache in [_polygons, _lines, _points]) {
+    for (final cache in [_polygons, _lines, _points, _segments]) {
       cache.removeWhere((_, v) {
         if (nowMs - v.lastUsed <= _sweepMs) return false;
         for (final p in v.parts) {
@@ -579,7 +632,7 @@ class TerrainGpuWorldRenderer {
       if (v.texture != null) gl.deleteTexture(v.texture);
     }
     _textures.clear();
-    for (final cache in [_polygons, _lines, _points]) {
+    for (final cache in [_polygons, _lines, _points, _segments]) {
       for (final v in cache.values) {
         for (final p in v.parts) {
           p.dispose(gl);
@@ -687,13 +740,14 @@ class _Parts {
 }
 
 class _TileEntry {
-  _TileEntry(this.tile, this.terrain, this.texture, this.polygons, this.lines, this.points);
+  _TileEntry(this.tile, this.terrain, this.texture, this.polygons, this.lines, this.points, this.segments);
   final TerrainTileDrawable tile;
   final _TerrainBuffers terrain;
   final web.WebGLTexture texture;
   final _Parts? polygons;
   final _Parts? lines;
   final _Parts? points;
+  final _Parts? segments;
   Float32List? terrainMvp;
   Float32List? polygonMvp;
   Float32List? lineMvp;
@@ -709,12 +763,17 @@ uniform mat4 u_mvp;
 in vec3 position;
 in vec2 uv;
 in float shade;
+in float slope;
 out vec2 v_uv;
 out float v_shade;
 out float v_w;
+out float v_slope;
+out float v_height;
 void main() {
   v_uv = uv;
   v_shade = shade;
+  v_slope = slope;
+  v_height = position.z;
   gl_Position = u_mvp * vec4(position, 1.0);
   v_w = gl_Position.w;
 }
@@ -723,16 +782,28 @@ void main() {
 const _terrainFrag = '''#version 300 es
 precision mediump float;
 uniform sampler2D tex;
+uniform sampler2D ramp;
 uniform vec4 u_params;
+uniform vec4 u_color_a;
+uniform vec4 u_color_b;
 in vec2 v_uv;
 in float v_shade;
 in float v_w;
+in float v_slope;
+in float v_height;
 out vec4 frag_color;
 const vec3 kSky = vec3(0.78, 0.86, 0.95);
 void main() {
   vec4 c = texture(tex, v_uv);
   float a = max(c.a, 1e-4);
   vec3 base = c.rgb / a;
+  if (u_color_a.x > 0.5) {
+    float t = u_color_a.x > 1.5
+        ? clamp((v_height - u_color_a.z) / max(u_color_a.w - u_color_a.z, 1.0), 0.0, 1.0)
+        : clamp(v_slope * 90.0 / max(u_color_b.x, 1.0), 0.0, 1.0);
+    vec3 rc = texture(ramp, vec2(t, 0.5)).rgb;
+    base = mix(base, rc, u_color_a.y);
+  }
   vec3 g = vec3(v_shade);
   vec3 lo = 2.0 * base * g;
   vec3 hi = 1.0 - 2.0 * (1.0 - base) * (1.0 - g);

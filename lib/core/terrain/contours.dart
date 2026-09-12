@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'dem_grid.dart';
@@ -103,4 +104,64 @@ class ContourExtractor {
         14 => const [3, 0],
         _ => const [],
       };
+}
+
+/// isolate に渡す引数（`TerrainWorker.instance.run(extractContourSegments, args)`）
+class ContourArgs {
+  const ContourArgs({
+    required this.heights,
+    required this.cols,
+    required this.rows,
+    required this.cellSize,
+    required this.interval,
+    this.step = 1,
+  });
+
+  final Float32List heights;
+  final int cols;
+  final int rows;
+  final double cellSize;
+  final double interval;
+  final int step;
+}
+
+/// 線分の束（isolate から送り返す形）。[xy] は x1,y1,x2,y2 の並び、[levels] は線分ごとの高さ
+class ContourSegments {
+  const ContourSegments({required this.xy, required this.levels});
+
+  final Float32List xy;
+  final Float32List levels;
+
+  int get count => levels.length;
+}
+
+/// [ContourExtractor.extract] を isolate 向けに平らな配列で返す
+ContourSegments extractContourSegments(ContourArgs a) {
+  final dem = DemGrid(
+    cols: a.cols,
+    rows: a.rows,
+    originX: 0,
+    originY: 0,
+    cellSize: a.cellSize,
+    heights: a.heights,
+  );
+  final byLevel = ContourExtractor.extract(dem, interval: a.interval, step: a.step);
+  var n = 0;
+  for (final segs in byLevel.values) {
+    n += segs.length;
+  }
+  final xy = Float32List(n * 4);
+  final levels = Float32List(n);
+  var i = 0;
+  for (final e in byLevel.entries) {
+    for (final seg in e.value) {
+      xy[i * 4] = seg[0].dx;
+      xy[i * 4 + 1] = seg[0].dy;
+      xy[i * 4 + 2] = seg[1].dx;
+      xy[i * 4 + 3] = seg[1].dy;
+      levels[i] = e.key;
+      i++;
+    }
+  }
+  return ContourSegments(xy: xy, levels: levels);
 }

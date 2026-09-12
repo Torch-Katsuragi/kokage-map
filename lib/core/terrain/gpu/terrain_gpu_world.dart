@@ -21,6 +21,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:vector_math/vector_math.dart' as vm;
 
+import '../terrain_appearance.dart';
 import '../terrain_camera.dart';
 import '../terrain_mesh.dart';
 import '../terrain_painter.dart';
@@ -179,6 +180,33 @@ class TerrainGpuWorldRenderer {
   final Map<List<LiftedPolygon>, _Parts> _polygons = {};
   final Map<List<LiftedPolyline>, _Parts> _lines = {};
   final Map<List<TerrainPoint>, _Parts> _points = {};
+  final Map<List<LiftedSegments>, _Parts> _segments = {};
+
+  /// 色分けのランプ（256×1）。設定が変わったら作り直す（TerrainAppearance.revision）
+  gpu.Texture? _ramp;
+  int _rampRevision = -1;
+  late final gpu.SamplerOptions _rampSampler = gpu.SamplerOptions(
+    minFilter: gpu.MinMagFilter.linear,
+    magFilter: gpu.MinMagFilter.linear,
+    mipFilter: gpu.MipFilter.nearest,
+  );
+
+  gpu.Texture _rampTexture() {
+    final rev = TerrainAppearance.revision.value;
+    if (_ramp == null || _rampRevision != rev) {
+      final tex = gpu.gpuContext.createTexture(
+        gpu.StorageMode.hostVisible,
+        256,
+        1,
+        format: gpu.PixelFormat.r8g8b8a8UNormInt,
+        enableRenderTargetUsage: false,
+      );
+      tex.overwrite(ByteData.view(TerrainAppearance.rampBytes().buffer));
+      _ramp = tex;
+      _rampRevision = rev;
+    }
+    return _ramp!;
+  }
 
   static const _sweepMs = 3000;
   int _lastSweep = 0;
@@ -277,7 +305,8 @@ class TerrainGpuWorldRenderer {
       final points = t.points.isEmpty
           ? null
           : _partsFor(_points, t.points, nowMs, (list, from) => _packPoints(list, from, (x, y) => dem.elevationAt(x + dem.originX, y + dem.originY)));
-      entries.add(_TileEntry(t, tb, tex, polys, lines, points));
+      final segments = t.segmentSets.isEmpty ? null : _partsFor(_segments, t.segmentSets, nowMs, _packSegments);
+      entries.add(_TileEntry(t, tb, tex, polys, lines, points, segments));
     }
     if (entries.isEmpty) return null;
 
@@ -414,6 +443,28 @@ class TerrainGpuWorldRenderer {
         persp ? 1 : 0,
       ]).buffer),
     );
+    // 色分け（TerrainAppearance）: 種類・強さ・見えている範囲の標高・傾斜の上限
+    final colorInfoSlot = _terrainPipeline.fragmentShader.getUniformSlot('ColorInfo');
+    final rampSlot = _terrainPipeline.fragmentShader.getUniformSlot('ramp');
+    var zMin = double.infinity;
+    var zMax = -double.infinity;
+    for (final e in entries) {
+      if (e.terrain.minZ < zMin) zMin = e.terrain.minZ;
+      if (e.terrain.maxZ > zMax) zMax = e.terrain.maxZ;
+    }
+    final colorInfo = _hostBuffer.emplace(
+      ByteData.view(Float32List.fromList([
+        TerrainAppearance.colored ? TerrainAppearance.colorMode.index.toDouble() : 0,
+        TerrainAppearance.colorStrength,
+        zMin.isFinite ? zMin : 0,
+        zMax.isFinite ? zMax : 1,
+        TerrainAppearance.slopeMaxDeg,
+        0,
+        0,
+        0,
+      ]).buffer),
+    );
+    final ramp = _rampTexture();
     pass.bindPipeline(_terrainPipeline);
     pass.setDepthWriteEnable(true);
     pass.setDepthCompareOperation(gpu.CompareFunction.lessEqual);
@@ -424,7 +475,9 @@ class TerrainGpuWorldRenderer {
       pass.bindIndexBuffer(gpu.BufferView(e.terrain.indices, offsetInBytes: 0, lengthInBytes: e.terrain.indices.sizeInBytes), gpu.IndexType.int32);
       pass.bindUniform(terrainInfoSlot, e.terrainInfo!);
       pass.bindUniform(shadeInfoSlot, shadeInfo);
+      pass.bindUniform(colorInfoSlot, colorInfo);
       pass.bindTexture(texSlot, e.texture, sampler: sampler);
+      pass.bindTexture(rampSlot, ramp, sampler: _rampSampler);
       pass.drawIndexed(e.terrain.indexCount);
       draws++;
     }
@@ -473,8 +526,9 @@ class TerrainGpuWorldRenderer {
       if (info == null) continue;
       pass.bindUniform(lineInfoSlot, info);
       pass.bindUniform(lineShadeSlot, shadeInfo);
-      final parts = e.lines;
-      if (parts != null) {
+      // 等高線などの線分の束は線の前（面の上、線の下）
+      for (final parts in [e.segments, e.lines]) {
+        if (parts == null) continue;
         for (final p in parts.parts) {
           pass.bindVertexBuffer(gpu.BufferView(p.vertices, offsetInBytes: 0, lengthInBytes: p.vertices.sizeInBytes));
           pass.bindIndexBuffer(gpu.BufferView(p.indices!, offsetInBytes: 0, lengthInBytes: p.indices!.sizeInBytes), gpu.IndexType.int32);
@@ -646,6 +700,16 @@ class TerrainGpuWorldRenderer {
     );
   }
 
+  static _PartBuffers? _packSegments(List<LiftedSegments> sets, int from) {
+    final g = GpuLineGeometry.pack(segmentSets: sets.getRange(from, sets.length));
+    if (g.isEmpty) return null;
+    return _PartBuffers(
+      vertices: gpu.gpuContext.createDeviceBufferWithCopy(ByteData.view(g.vertices.buffer)),
+      indices: gpu.gpuContext.createDeviceBufferWithCopy(ByteData.view(g.indices.buffer)),
+      count: g.indexCount,
+    );
+  }
+
   static _PartBuffers? _packLines(List<LiftedPolyline> lines, int from) {
     final g = GpuLineGeometry.pack(polylines: lines.getRange(from, lines.length));
     if (g.isEmpty) return null;
@@ -664,6 +728,7 @@ class TerrainGpuWorldRenderer {
     _polygons.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
     _lines.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
     _points.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
+    _segments.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
   }
 
   int get terrainBufferCount => _terrain.length;
@@ -676,6 +741,7 @@ class TerrainGpuWorldRenderer {
     _polygons.clear();
     _lines.clear();
     _points.clear();
+    _segments.clear();
     _surface = null;
     _depth = null;
     _msaaColor = null;
@@ -717,7 +783,7 @@ class _Parts {
 }
 
 class _TileEntry {
-  _TileEntry(this.tile, this.terrain, this.texture, this.polygons, this.lines, this.points);
+  _TileEntry(this.tile, this.terrain, this.texture, this.polygons, this.lines, this.points, this.segments);
 
   final TerrainTileDrawable tile;
   final _TerrainBuffers terrain;
@@ -725,6 +791,7 @@ class _TileEntry {
   final _Parts? polygons;
   final _Parts? lines;
   final _Parts? points;
+  final _Parts? segments;
   gpu.BufferView? terrainInfo;
   gpu.BufferView? polygonInfo;
   gpu.BufferView? lineInfo;

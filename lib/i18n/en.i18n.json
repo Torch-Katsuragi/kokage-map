@@ -74,6 +74,8 @@
   "settings": {
     "title": "Settings",
     "categories": {
+      "terrain": "Terrain look",
+      "terrainDesc": "Slope / elevation coloring, contour lines",
       "general": "General",
       "generalDesc": "Global folder settings",
       "basemap": "Map & Tiles",
@@ -1256,6 +1258,31 @@
     "followLayer": "Follow the layer",
     "followLayerConfirm": "Discard this View's own style and follow the layer?",
     "followingLayer": "Following the layer's style. Only the items you change become this View's own"
+  },
+  "terrainSettings": {
+    "title": "Terrain look",
+    "colorSection": "Coloring",
+    "contourSection": "Contour lines",
+    "colorMode": "Coloring",
+    "colorModeDesc": "Colors come from the mesh's slope and elevation, so they stay sharp from any angle",
+    "colorNone": "None (base map)",
+    "colorSlope": "Slope",
+    "colorElevation": "Elevation",
+    "colorStrength": "Blend over base map",
+    "colorStrengthDesc": "100% hides the base map and shows the coloring alone",
+    "colorLow": "Low / gentle color",
+    "colorMid": "Middle color",
+    "colorHigh": "High / steep color",
+    "slopeMax": "Steepest slope",
+    "slopeMaxDesc": "This angle gets the steep-side color",
+    "contours": "Draw contour lines",
+    "contoursDesc": "Lines generated from the elevation tiles (not drawn when zoomed out)",
+    "contourInterval": "Interval",
+    "contourMajor": "Index every",
+    "contourMajorDesc": "Every Nth line is drawn thicker",
+    "everyN": "every $n",
+    "contourColor": "Line color",
+    "contourWidth": "Line width"
   },
   "labelComposer": {
     "columnsSorted": "Columns (most filled first)",

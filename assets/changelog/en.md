@@ -11,6 +11,7 @@
 
 ### Usability
 
+- New "Terrain look" settings: color the terrain by slope or elevation (pick your own three colors; blend it over the base map, or set 100% for terrain only) and draw contour lines from the elevation tiles. Both come from the terrain mesh itself, so they stay sharp when tilted
 - Screen layout presets in Settings (Auto / Portrait / Landscape / Left-handed). The info card slides up from the bottom like the attribute table and the two never show together; Landscape puts the card on the right, Left-handed moves the toolbar and buttons to the right
 - The app can be driven from a CLI or URL: open a project, look at a place, reload from disk (`/map?project=…&lat=…&lon=…&zoom=…&reload=1`, `tool/kokage.py`). The map menu also has "Reload project from disk"
 - Label composition moved to the style screen (layer / View) and works for line and polygon layers too. Columns are ordered by how often they hold a value, and expressions can be typed directly

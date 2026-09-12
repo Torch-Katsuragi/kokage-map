@@ -40,7 +40,7 @@ void main() {
       // 南西の角: 原点、uv は左下（画像は北が上なので v = 1）
       expect(g.vertices.sublist(0, 6), [0, 0, 0, 0, 1, 0.5]);
       // 北東の角
-      const ne = 80 * 6;
+      const ne = 80 * GpuTerrainGeometry.floatsPerVertex;
       expect(g.vertices[ne], 80);
       expect(g.vertices[ne + 1], 80);
       expect(g.vertices[ne + 2], 16);
@@ -72,9 +72,9 @@ void main() {
       expect(g.vertexCount, 81 + edge * 2);
       expect(g.indexCount, (64 + edge - 1) * 6);
       // 最初の縁の点（南西）: 上は格子と同じ高さ、下は 5 下
-      const o = 81 * 6;
+      const o = 81 * GpuTerrainGeometry.floatsPerVertex;
       expect(g.vertices[o + 2], 0);
-      expect(g.vertices[o + 6 + 2], -5);
+      expect(g.vertices[o + GpuTerrainGeometry.floatsPerVertex + 2], -5);
       expect(g.vertices[o + 5], lessThan(1)); // 壁は暗い
       for (final i in g.indices) {
         expect(i, lessThan(g.vertexCount));

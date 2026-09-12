@@ -28,14 +28,17 @@ import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/fs/k_file_system.dart';
+import '../../../core/terrain/contours.dart';
 import '../../../core/terrain/dem_grid.dart';
 import '../../../core/terrain/dem_tiles.dart';
 import '../../../core/terrain/gpu/terrain_gpu.dart';
+import '../../../core/terrain/terrain_appearance.dart';
 import '../../../core/terrain/terrain_camera.dart';
 import '../../../core/terrain/terrain_frame.dart';
 import '../../../core/terrain/terrain_mesh.dart';
 import '../../../core/terrain/terrain_painter.dart';
 import '../../../core/terrain/terrain_scene.dart';
+import '../../../core/terrain/terrain_worker.dart';
 import '../../../core/terrain/terrain_world.dart';
 import '../../../core/terrain/terrain_world_painter.dart';
 import '../../../core/terrain/web_mercator.dart';
@@ -200,9 +203,13 @@ class _TileScene {
     this.dynamicLines = const [],
     this.dynamicPolygons = const [],
     this.dynamicPoints = const [],
+    this.segmentSets = const [],
     this.staticSource,
     this.complete = true,
   });
+
+  /// 等高線などの線分の束（タイル単位で作る。静的シーンとは別に持つ）
+  final List<LiftedSegments> segmentSets;
 
   /// まだ持ち上げていないフィーチャがある（時間を分けて育てる静的シーン）
   bool complete;
@@ -487,6 +494,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       },
     );
     widget.sceneRevision.addListener(_onSceneRevision);
+    TerrainAppearance.revision.addListener(_onAppearanceChanged);
     widget.heading?.addListener(_scheduleRefresh);
     widget.onProjectionChanged(this);
     _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 350))
@@ -630,6 +638,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _stopDrive();
     widget.heading?.removeListener(_scheduleRefresh);
     widget.sceneRevision.removeListener(_onSceneRevision);
+    TerrainAppearance.revision.removeListener(_onAppearanceChanged);
     widget.onProjectionChanged(null);
     // 真上に戻して MapLibre へ書き戻す
     widget.mapState.mapController.moveAndRotate(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);
@@ -676,6 +685,65 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   void _onSceneRevision() => _scheduleRefresh();
 
+  /// 地形の見た目（色分け・等高線）の設定が変わった。等高線は作り直し、合成も捨てる
+  void _onAppearanceChanged() {
+    _contourCache.clear();
+    _contourPending.clear();
+    _scenes.clear();
+    _scheduleRefresh();
+  }
+
+  // ── 等高線（タイルごと・isolate で抽出） ──────────────────
+
+  final Map<(TileKey, int, int, int), List<LiftedSegments>> _contourCache = {};
+  final Set<(TileKey, int, int, int)> _contourPending = {};
+
+  /// このタイル・段の等高線。無ければ isolate に頼んで空を返す（届いたら描き直す）。
+  /// 引いた段（セル 30m 以上）では引かない（本数が多すぎて意味も無い）
+  List<LiftedSegments> _contoursFor(TerrainTile tile, TerrainMesh mesh, int step) {
+    if (!TerrainAppearance.contours || tile.bordered.cellSize * step >= 30) return const [];
+    final key = (tile.key, step, tile.borderMask, tile.sourceZoom);
+    final cached = _contourCache[key];
+    if (cached != null) return cached;
+    if (_contourPending.add(key)) {
+      final dem = tile.bordered;
+      final interval = TerrainAppearance.contourIntervalM;
+      final args = ContourArgs(
+        heights: dem.heights,
+        cols: dem.cols,
+        rows: dem.rows,
+        cellSize: dem.cellSize,
+        interval: interval,
+        step: step,
+      );
+      TerrainWorker.instance.run(extractContourSegments, args).then((res) {
+        if (!mounted) return;
+        _contourPending.remove(key);
+        if (!TerrainAppearance.contours || TerrainAppearance.contourIntervalM != interval) return;
+        _contourCache[key] = _liftContours(res, mesh);
+        _scenes.remove(key);
+        _scheduleRefresh();
+      });
+    }
+    return const [];
+  }
+
+  /// 抽出結果を主曲線／計曲線の 2 束に分けて持ち上げる
+  List<LiftedSegments> _liftContours(ContourSegments res, TerrainMesh mesh) {
+    final minor = <List<Offset>>[];
+    final major = <List<Offset>>[];
+    for (var i = 0; i < res.count; i++) {
+      final seg = [Offset(res.xy[i * 4], res.xy[i * 4 + 1]), Offset(res.xy[i * 4 + 2], res.xy[i * 4 + 3])];
+      (TerrainAppearance.isMajor(res.levels[i]) ? major : minor).add(seg);
+    }
+    final color = TerrainAppearance.contourColor;
+    final w = TerrainAppearance.contourWidthPx;
+    return [
+      if (minor.isNotEmpty) LiftedSegments.lift(minor, mesh, color: color, widthPx: w),
+      if (major.isNotEmpty) LiftedSegments.lift(major, mesh, color: color, widthPx: w * 2),
+    ];
+  }
+
   // ── フレームの組み立て ──────────────────────────────
 
   /// 見える範囲のタイルを揃え、描けるものを描画順に painter へ渡す
@@ -701,6 +769,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       // タイルの出入り: 消えたタイルのぶんだけ捨てる（縁が変わったタイルはキーが変わるので自然に入れ替わる）
       _scenes.removeWhere((k, _) => !_world.has(k.$1));
       _staticScenes.removeWhere((k, _) => !_world.has(k.$1));
+      _contourCache.removeWhere((k, _) => !_world.has(k.$1));
       _staticProgress.removeWhere((k, _) => !_world.has(k.$1));
       _dynamicScenes.removeWhere((k, _) => !_world.has(k.$1));
       _pruneMeshes();
@@ -848,6 +917,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       dynamicLines: scene.dynamicLines,
       dynamicPolygons: scene.dynamicPolygons,
       dynamicPoints: scene.dynamicPoints,
+      segmentSets: scene.segmentSets,
       points: scene.points,
       labels: scene.labels,
     );
@@ -916,6 +986,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images,
       g.lineVertices, g.polygonVertices,
     ];
+    final contours = _contoursFor(tile, mesh, step);
     final drawing = GlobalDrawingState.instance;
     final tool = ref.read(currentToolProvider);
     final selectedOverlays = <OverlayImageNode>[
@@ -932,7 +1003,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       overlayFrameKey, tool is OverlayTransformTool ? tool.rotationHandlePosition : null,
       deviceLines.length, deviceStation, headingKey, tool.name,
     ];
-    final key = <Object?>[...staticKey, ...dynamicKey];
+    final key = <Object?>[...staticKey, ...dynamicKey, contours];
     final cached = _scenes[cacheKey];
     if (cached != null && _sameKey(cached.key, key)) return cached;
 
@@ -993,6 +1064,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       dynamicLines: dyn.lines,
       dynamicPolygons: dyn.polygons,
       dynamicPoints: dyn.points,
+      segmentSets: contours,
       points: stat.points,
       // 動的なラベルが無ければ静的のリストをそのまま（同一性を保つ → 描画側のラベル投影キャッシュが効く）
       labels: dyn.labels.isEmpty ? stat.labels : [...stat.labels, ...dyn.labels],

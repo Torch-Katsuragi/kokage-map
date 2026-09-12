@@ -42,6 +42,7 @@ import 'basemap_settings_screen.dart';
 import 'device_settings_screen.dart';
 import 'gps_settings_screen.dart';
 import 'layer_style_settings_screen.dart';
+import 'terrain_settings_screen.dart';
 import 'terrain_spike/terrain_spike_screen.dart';
 
 /// グローバルフォルダのカスタムパス用SharedPreferencesキー
@@ -54,6 +55,7 @@ enum SettingsCategory {
   gps,
   devices,
   layerStyle,
+  terrain,
   sync,
   feedback,
   appInfo,
@@ -66,6 +68,7 @@ extension SettingsCategoryExt on SettingsCategory {
     SettingsCategory.gps => t.settings.categories.gps,
     SettingsCategory.devices => t.settings.categories.devices,
     SettingsCategory.layerStyle => t.settings.categories.layerStyle,
+    SettingsCategory.terrain => t.settings.categories.terrain,
     SettingsCategory.sync => t.settings.categories.sync,
     SettingsCategory.feedback => t.settings.categories.feedback,
     SettingsCategory.appInfo => t.settings.categories.appInfo,
@@ -77,6 +80,7 @@ extension SettingsCategoryExt on SettingsCategory {
     SettingsCategory.gps => Icons.gps_fixed,
     SettingsCategory.devices => Icons.bluetooth_connected,
     SettingsCategory.layerStyle => Icons.palette,
+    SettingsCategory.terrain => Icons.terrain,
     SettingsCategory.sync => Icons.sync,
     SettingsCategory.feedback => Icons.feedback,
     SettingsCategory.appInfo => Icons.info_outline,
@@ -88,6 +92,7 @@ extension SettingsCategoryExt on SettingsCategory {
     SettingsCategory.gps => t.settings.categories.gpsDesc,
     SettingsCategory.devices => t.settings.categories.devicesDesc,
     SettingsCategory.layerStyle => t.settings.categories.layerStyleDesc,
+    SettingsCategory.terrain => t.settings.categories.terrainDesc,
     SettingsCategory.sync => t.settings.categories.syncDesc,
     SettingsCategory.feedback => t.settings.categories.feedbackDesc,
     SettingsCategory.appInfo => t.settings.categories.appInfoDesc,
@@ -266,6 +271,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return DeviceSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.layerStyle:
         return LayerStyleSettingsScreen(key: key, isEmbedded: isEmbedded);
+      case SettingsCategory.terrain:
+        return TerrainSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.sync:
         return SyncSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.feedback:

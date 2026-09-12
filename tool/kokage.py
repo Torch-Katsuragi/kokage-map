@@ -11,8 +11,11 @@
 
 Android は `am start --es route "/map?..."`（MainActivity は singleTop なので、起動中なら
 onNewIntent で同じ文字列が届く）。`-s <serial>` で端末を選ぶ。`ADB_SERVER_SOCKET` はそのまま効く。
+⚠ Git Bash から呼ぶときは `MSYS_NO_PATHCONV=1` を付ける（`--project /storage/...` の `/` 始まりを
+Windows のパスに変換されてしまう）。
 """
 import argparse
+import shlex
 import subprocess
 import sys
 from urllib.parse import urlencode
@@ -48,7 +51,8 @@ def adb_start(route: str, serial: str | None) -> int:
     cmd = ["adb"]
     if serial:
         cmd += ["-s", serial]
-    cmd += ["shell", "am", "start", "-n", ACTIVITY, "--es", "route", route]
+    # 端末側の shell が `&` や `?` を解釈しないように、route は 1 つの引用文字列で渡す
+    cmd += ["shell", f"am start -n {ACTIVITY} --es route {shlex.quote(route)}"]
     print(" ".join(cmd))
     return subprocess.call(cmd)
 

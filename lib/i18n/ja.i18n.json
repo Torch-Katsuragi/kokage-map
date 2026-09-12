@@ -74,6 +74,8 @@
   "settings": {
     "title": "設定",
     "categories": {
+      "terrain": "地形の見た目",
+      "terrainDesc": "傾斜・標高の色分け、等高線",
       "general": "一般",
       "generalDesc": "グローバルフォルダ設定",
       "basemap": "地図・タイル",
@@ -1256,6 +1258,31 @@
     "followLayer": "レイヤに従う",
     "followLayerConfirm": "この View の設定を消して、レイヤの設定に従わせますか？",
     "followingLayer": "レイヤの設定に従っています。変えた項目だけがこの View の設定になります"
+  },
+  "terrainSettings": {
+    "title": "地形の見た目",
+    "colorSection": "色分け",
+    "contourSection": "等高線",
+    "colorMode": "色分けの種類",
+    "colorModeDesc": "頂点の傾斜・標高から色を引くので、横から見ても粗くなりません",
+    "colorNone": "なし（基図のまま）",
+    "colorSlope": "傾斜",
+    "colorElevation": "標高",
+    "colorStrength": "基図に被せる強さ",
+    "colorStrengthDesc": "100% で基図を使わず色分けだけにします",
+    "colorLow": "低い／緩い側の色",
+    "colorMid": "中間の色",
+    "colorHigh": "高い／急な側の色",
+    "slopeMax": "傾斜の上限",
+    "slopeMaxDesc": "この角度で「急な側の色」になります",
+    "contours": "等高線を描く",
+    "contoursDesc": "標高タイルから線を作って描きます（引いた地図では描きません）",
+    "contourInterval": "間隔",
+    "contourMajor": "太くする本数",
+    "contourMajorDesc": "この本数ごとに太い線（主曲線）にします",
+    "everyN": "$n 本ごと",
+    "contourColor": "線の色",
+    "contourWidth": "線の太さ"
   },
   "labelComposer": {
     "columnsSorted": "列（値が入っている順）",

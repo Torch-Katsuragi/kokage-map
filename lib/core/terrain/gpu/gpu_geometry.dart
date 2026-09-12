@@ -74,7 +74,8 @@ List<Uint8List> buildMipChain(MipChainArgs a) {
 
 /// 地形（DEM 格子 + スカート）の頂点列
 ///
-/// 頂点 = position(3) + uv(2) + shade(1) = 24 バイト。インデックスは 32bit（257² = 66,049 頂点は 16bit に収まらない）
+/// 頂点 = position(3) + uv(2) + shade(1) + slope(1) = 28 バイト。インデックスは 32bit（257² = 66,049 頂点は 16bit に収まらない）。
+/// slope は傾斜（0〜1 = 度/90）。標高は position.z。フラグメントシェーダの色分け（TerrainAppearance）が読む
 class GpuTerrainGeometry {
   GpuTerrainGeometry._({
     required this.vertices,
@@ -84,7 +85,7 @@ class GpuTerrainGeometry {
     required this.maxZ,
   });
 
-  static const floatsPerVertex = 6;
+  static const floatsPerVertex = 7;
   static const strideInBytes = floatsPerVertex * 4;
 
   final Float32List vertices;
@@ -107,9 +108,11 @@ class GpuTerrainGeometry {
     required double width,
     required double height,
     required Float32List shade,
+    Float32List? slope,
     double skirtDepth = 0,
   }) {
     assert(heights.length == cols * rows && shade.length == cols * rows);
+    assert(slope == null || slope.length == cols * rows);
     final gridVertices = cols * rows;
     final edgeCount = skirtDepth > 0 ? 2 * (cols + rows) : 0;
     final total = gridVertices + edgeCount * 2;
@@ -131,6 +134,7 @@ class GpuTerrainGeometry {
         data[o + 3] = x * invW;
         data[o + 4] = v;
         data[o + 5] = shade[r * cols + c];
+        data[o + 6] = slope == null ? 0 : slope[r * cols + c];
         o += floatsPerVertex;
         if (h < minZ) minZ = h;
         if (h > maxZ) maxZ = h;
@@ -187,12 +191,14 @@ class GpuTerrainGeometry {
         data[o + 3] = u;
         data[o + 4] = v;
         data[o + 5] = 0.35;
-        data[o + 6] = x;
-        data[o + 7] = y;
-        data[o + 8] = h - skirtDepth;
-        data[o + 9] = u;
-        data[o + 10] = v;
-        data[o + 11] = 0.25;
+        data[o + 6] = 0; // 壁は色分けしない（傾斜 0）
+        data[o + 7] = x;
+        data[o + 8] = y;
+        data[o + 9] = h - skirtDepth;
+        data[o + 10] = u;
+        data[o + 11] = v;
+        data[o + 12] = 0.25;
+        data[o + 13] = 0;
         o += floatsPerVertex * 2;
         if (i + 1 < edgeCount) {
           final t0 = base + i * 2;

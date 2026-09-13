@@ -334,9 +334,8 @@ class TerrainWorld extends ChangeNotifier {
       return cached;
     }
     final running = _demLoading[key];
-    if (running != null) return await running;
-    final future = _loadDem(key);
-    _demLoading[key] = future;
+    if (running != null) return running;
+    final future = _demLoading[key] = _loadDem(key);
     try {
       final dem = await future;
       if (dem != null) {

@@ -591,9 +591,8 @@ class BaseMapService extends ChangeNotifier {
     // キャッシュに書く前に次が来るとみんなネットへ行くので、進行中の要求は 1 本にまとめる（2026-09-13 に同じ DEM が 4〜5 回）
     final inflightKey = '${provider.id}/$z/$x/$y';
     final running = _inflight[inflightKey];
-    if (running != null) return await running;
-    final future = _getTileUncoalesced(provider, z, x, y);
-    _inflight[inflightKey] = future;
+    if (running != null) return running;
+    final future = _inflight[inflightKey] = _getTileUncoalesced(provider, z, x, y);
     try {
       return await future;
     } finally {

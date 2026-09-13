@@ -587,6 +587,23 @@ class BaseMapService extends ChangeNotifier {
     int x,
     int y,
   ) async {
+    // 同じタイルが同時に何度も頼まれる（等高線の生成が同じ DEM を 4 回、テクスチャの層が同じ地図を…）。
+    // キャッシュに書く前に次が来るとみんなネットへ行くので、進行中の要求は 1 本にまとめる（2026-09-13 に同じ DEM が 4〜5 回）
+    final inflightKey = '${provider.id}/$z/$x/$y';
+    final running = _inflight[inflightKey];
+    if (running != null) return await running;
+    final future = _getTileUncoalesced(provider, z, x, y);
+    _inflight[inflightKey] = future;
+    try {
+      return await future;
+    } finally {
+      _inflight.remove(inflightKey);
+    }
+  }
+
+  final Map<String, Future<Uint8List?>> _inflight = {};
+
+  Future<Uint8List?> _getTileUncoalesced(BaseMapProvider provider, int z, int x, int y) async {
     // 標高タイル（Terrarium）は親を拡大して返さない。RGB を拡大すると高さがブロック状の階段になり、
     // 3D の崖にギザギザの溝が出る（Pixel 9 で実測）。3D 側は自前のピラミッドで親タイルを正しい形で描く
     if (provider.type == BaseMapType.generated) {

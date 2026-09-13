@@ -322,8 +322,38 @@ class TerrainWorld extends ChangeNotifier {
 
   List<TextureLayer> _textureLayers() => textureLayers?.call() ?? [(textureFetcher, 1.0, ui.BlendMode.srcOver)];
 
-  /// [key] の DEM。読み込み済みなら縁を借りた格子（[TerrainTile.bordered]）、無ければ取りに行く（近似はしない）
-  Future<DemGrid?> demFor(TileKey key) async => _tiles[key]?.bordered ?? await _loadDem(key);
+  /// [key] の DEM。読み込み済みなら縁を借りた格子（[TerrainTile.bordered]）、無ければ取りに行く（近似はしない）。
+  /// 等高線タイルは 1 枚の DEM から 4 枚（k = 2 なら 16 枚）作るので、取りに行った DEM は小さな LRU に置き、同時の要求は 1 本にまとめる
+  /// （2026-09-13: 同じ DEM1A を 4 回ずつ取っていた）
+  Future<DemGrid?> demFor(TileKey key) async {
+    final loaded = _tiles[key]?.bordered;
+    if (loaded != null) return loaded;
+    final cached = _demLru.remove(key);
+    if (cached != null) {
+      _demLru[key] = cached; // 末尾へ（最近使った）
+      return cached;
+    }
+    final running = _demLoading[key];
+    if (running != null) return await running;
+    final future = _loadDem(key);
+    _demLoading[key] = future;
+    try {
+      final dem = await future;
+      if (dem != null) {
+        _demLru[key] = dem;
+        while (_demLru.length > _demLruCapacity) {
+          _demLru.remove(_demLru.keys.first);
+        }
+      }
+      return dem;
+    } finally {
+      _demLoading.remove(key);
+    }
+  }
+
+  final LinkedHashMap<TileKey, DemGrid> _demLru = LinkedHashMap();
+  final Map<TileKey, Future<DemGrid?>> _demLoading = {};
+  static const _demLruCapacity = 24; // 256² × 4 B ≈ 0.26 MB × 24
 
   /// テクスチャは DEM より何段細かいラスタで作るか（1 = 512²）
   final int textureZoomOffset;

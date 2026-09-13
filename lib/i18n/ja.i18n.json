@@ -226,6 +226,7 @@
       "hide": "隠す",
       "remove": "レイヤを外す",
       "summary": "$count 枚",
+      "preview": "プレビュー（ズーム $zoom）",
       "blendModes": {
         "normal": "通常",
         "multiply": "乗算",

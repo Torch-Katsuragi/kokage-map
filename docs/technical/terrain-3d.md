@@ -544,4 +544,5 @@ web は新しい世代の GPU 転送が非同期で、終わるまで白だっ�
 - web 2D（feature_editor の MapLibre）は `raster-opacity` だけ（ラスタに合成モードは無い）。生成プロバイダは TileServer 経由でしか出せない
 - 出典は地図面から消し、設定「地図・タイル」の「出典」節（いま見えているレイヤ + 標高）に。**OSM が見えているときだけ地図面にも出す**
   （OSM の attribution guideline は対話型地図で地図上のクレジットを求める。地理院タイル・Terrain Tiles は「出典の明示」で置き場所は問わない）
+- 設定画面のプレビュー `BaseMapPreview`（`lib/widgets/basemap_preview.dart`）: 地図の中心のタイル 1 枚を同じ `composeLayers` で合成して見せる（設定変更から 300 ms 待って作り直し）
 - 一括ダウンロードは一番下の見えているレイヤ（`currentProvider`）だけ。重ねた層ぶんもまとめて落とすのは未

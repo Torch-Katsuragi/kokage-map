@@ -30,6 +30,7 @@ import '../models/basemap_provider.dart';
 import '../providers/notification_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/basemap_service.dart';
+import '../widgets/basemap_preview.dart';
 import '../widgets/settings_widgets.dart';
 
 class BaseMapSettingsScreen extends ConsumerStatefulWidget {
@@ -422,9 +423,29 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         style: const TextStyle(fontSize: 14, color: Colors.grey),
       ),
       children: [
+        // プレビュー（地図の中心のタイル 1 枚をいまの設定で合成）と説明
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Text(t.basemap.layers.hint, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              BaseMapPreview(service: svc, center: _previewCenter, zoom: _previewZoom),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      t.basemap.layers.preview(zoom: _previewZoom.toString()),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(t.basemap.layers.hint, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         ReorderableListView.builder(
           shrinkWrap: true,
@@ -473,6 +494,23 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         ),
       ],
     );
+  }
+
+  /// プレビューのタイル: 地図の中心（無ければ東京）、ズームは地図のもの（12〜17 に収める）
+  LatLng get _previewCenter {
+    try {
+      final c = ref.read(mapControllerHolderProvider)?.camera.center;
+      if (c != null) return c;
+    } catch (_) {}
+    return const LatLng(35.681236, 139.767125);
+  }
+
+  int get _previewZoom {
+    try {
+      final z = ref.read(mapControllerHolderProvider)?.camera.zoom;
+      if (z != null) return z.round().clamp(12, 17);
+    } catch (_) {}
+    return 15;
   }
 
   /// 追加する地図を選ぶ（一覧にまだ無いものだけ）

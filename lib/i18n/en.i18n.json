@@ -226,6 +226,7 @@
       "hide": "Hide",
       "remove": "Remove layer",
       "summary": "$count layers",
+      "preview": "Preview (zoom $zoom)",
       "blendModes": {
         "normal": "Normal",
         "multiply": "Multiply",

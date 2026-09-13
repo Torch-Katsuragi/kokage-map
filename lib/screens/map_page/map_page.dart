@@ -134,7 +134,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     if (req.reload) unawaited(reloadProjectFromDisk());
     if (!req.hasCamera) return;
     // 位置を指定されたら、GPS の初回フィックスで現在位置へ飛ぶ動きは要らない（上書きされてしまう）
-    if (req.hasCenter) movedToCurrentLocationOnce = true;
+    if (req.hasCenter) {
+      movedToCurrentLocationOnce = true;
+      initialViewDecided = true;
+    }
     final p = terrainProjection;
     if (p == null) {
       _pendingLaunchCamera = req; // attach 時（onProjectionChanged）に流す

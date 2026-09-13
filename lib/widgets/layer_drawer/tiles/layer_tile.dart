@@ -214,7 +214,7 @@ class LayerTile extends ConsumerWidget {
   }
 
   /// レイヤの全フィーチャが入る範囲へ寄せる（行のダブルタップと ⋮ の「レイヤへ寄せる」）。
-  /// 地図は現在地で開くので、遠方のデータを持つ gpkg を開いた人には「何も出ない」に見える。その導線
+  /// 起動時はフィーチャ全体が入る範囲で開く（2026-09-13〜）が、遠くのレイヤへ寄せる導線としても残す
   void _zoomToLayer(WidgetRef ref) {
     final coords = node.getAllCoordinates();
     if (coords.isEmpty) return;

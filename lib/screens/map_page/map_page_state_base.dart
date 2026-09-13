@@ -73,6 +73,10 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 初回の現在位置移動フラグ
   bool movedToCurrentLocationOnce = false;
 
+  /// 起動時のカメラが決まったか（CLI / URL の位置指定、またはフィーチャ全体への寄せ）。
+  /// 決まっていない間だけ、GPS の初回フィックスで現在位置へ飛ぶ（フィーチャが無いプロジェクト＝東京から始まる場合）
+  bool initialViewDecided = false;
+
   /// 地図コントローラー（旧 flutter_map 互換ラッパー）
   final RMapController mapControllerInstance = RMapController();
 

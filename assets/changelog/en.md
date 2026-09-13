@@ -1,5 +1,11 @@
 # Changelog
 
+## Next release
+
+### Usability
+
+- On opening, the map starts at the extent of all features in the project (it no longer jumps to your location). Only when there are no features does it start in Tokyo and move to your location once known
+
 ## v0.7.2 — 2026/09/13
 
 ### Fixes

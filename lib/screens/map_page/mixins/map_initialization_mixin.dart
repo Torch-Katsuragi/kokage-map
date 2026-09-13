@@ -17,6 +17,7 @@
 // MapPageの各種サービス初期化処理を分離
 import 'dart:async';
 
+import 'package:flutter/widgets.dart' show EdgeInsets;
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -140,6 +141,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       try {
         await updateFeatures();
         triggerSetState(() {});
+        fitToFeaturesAtStart();
       } catch (e) {
         AppLogger.debug('[Init] updateFeatures error: $e');
       }
@@ -394,6 +396,29 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       if (found != null) return found;
     }
     return null;
+  }
+
+  /// 起動時のカメラ（松本 2026-09-13。「GPS が無いと東京」をやめる）:
+  /// フィーチャがあれば全部が入る位置・ズームで始め、GPS の初回フィックスへは飛ばない。
+  /// 無ければ東京で始め、GPS が取れたときだけそこへ飛ぶ。CLI / URL で位置が指定されていればそちら（何もしない）。
+  /// GPS の初回フィックスがフィーチャの読み込みより先に来ても、ここで上書きする（フィーチャ優先）
+  void fitToFeaturesAtStart() {
+    if (initialViewDecided) return;
+    final coords = <LatLng>[];
+    final tree = ref.read(folderTreeProvider);
+    if (tree != null) {
+      for (final layer in tree.getVisibleLayerNodes().whereType<LayerNode>()) {
+        coords.addAll(layer.getAllCoordinates());
+      }
+    }
+    if (coords.isEmpty) {
+      AppLogger.debug('[Init] フィーチャ無し: 東京から始めて GPS を待つ');
+      return;
+    }
+    initialViewDecided = true;
+    movedToCurrentLocationOnce = true;
+    AppLogger.debug('[Init] フィーチャ ${coords.length} 点が入る範囲から始める');
+    mapControllerInstance.fitCoordinates(coords, padding: const EdgeInsets.all(50));
   }
 
   /// 外部GNSS機器をバックグラウンドでスキャン

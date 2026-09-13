@@ -290,8 +290,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   static const kBakeMaxZoom = 13;
   static bool _bakesFeatures(TileKey key) => key.z <= kBakeMaxZoom;
 
-  /// 最後にテクスチャへ焼き込んだフィーチャの一覧（同一性で比べる）
-  List<Object?>? _bakedLists;
+  /// 最後にテクスチャへ焼き込んだフィーチャの中身の世代（`FeatureGeoJsonCache.contentRevision`）。
+  /// ⚠ リストの同一性で比べると、GPS 軌跡の統合などで中身が同じまま全件が組み直されるたびに全部焼き直していた
+  int? _bakedContentRevision;
 
   /// 焼き込みの世代。フィーチャの一覧が変わるたびに進む。タイルごとに「どの世代で焼いたか」を [_bakedGen] に記録し、
   /// 世代が古いタイルは焼き直す（[_checkBakes]）。
@@ -302,6 +303,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   final Map<TileKey, int> _bakedGen = {};
   final Map<TileKey, int> _bakeRequested = {};
   Timer? _bakeCheckTimer;
+
+  /// フィーチャが変わった出来事（世代, 範囲 Mercator。null は全部）。この範囲に掛かる、古い世代のタイルだけ焼き直す
+  /// （記録中の GPS 軌跡は 30 秒ごとに伸びるので、全部焼き直すと 46 枚 × 40〜90ms が毎回来る）
+  final List<(int, ui.Rect?)> _bakeEvents = [];
+  static const _bakeEventsKept = 64;
 
   /// 傾きの上限。正射影では 90° で地面が線に潰れる（横顔になる）ので手前で止める。
   /// 寝かせるほど画面に掛かる地面が広がり、計画が段を下げて粗くなる（枚数は上限内に収まる）
@@ -713,10 +719,21 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   void _onSceneRevision() {
     final g = widget.geoJson;
-    final lists = <Object?>[g.polygons, g.polylines, g.markers];
-    if (_bakedLists == null || !_sameKey(_bakedLists!, lists)) {
-      _bakedLists = lists;
+    final rev = g.contentRevision;
+    if (_bakedContentRevision != rev) {
+      _bakedContentRevision = rev;
       _bakeGen++;
+      final ll = g.lastChangeLonLat;
+      final merc = ll == null
+          ? null
+          : ui.Rect.fromLTRB(
+              WebMercator.xFromLon(ll.left),
+              WebMercator.yFromLat(ll.top),
+              WebMercator.xFromLon(ll.right),
+              WebMercator.yFromLat(ll.bottom),
+            ).inflate(50);
+      _bakeEvents.add((_bakeGen, merc));
+      if (_bakeEvents.length > _bakeEventsKept) _bakeEvents.removeRange(0, _bakeEvents.length - _bakeEventsKept);
     }
     _scheduleBakeCheck();
     _scheduleRefresh();
@@ -734,10 +751,26 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final live = {for (final t in _world.tiles) t.key};
     _bakedGen.removeWhere((k, _) => !live.contains(k));
     _bakeRequested.removeWhere((k, _) => !live.contains(k));
+    final oldest = _bakeEvents.isEmpty ? gen : _bakeEvents.first.$1;
+    bool touched(TileKey k, int bakedAt) {
+      if (bakedAt < oldest - 1) return true; // 出来事の記録より古い（安全側）
+      for (final (g, r) in _bakeEvents) {
+        if (g <= bakedAt) continue;
+        if (r == null) return true;
+        if (k.west < r.right && k.west + k.span > r.left && k.south < r.bottom && k.south + k.span > r.top) return true;
+      }
+      return false;
+    }
     final stale = <TileKey>{
       for (final k in live)
-        if (_bakesFeatures(k) && _bakedGen[k] != gen && _bakeRequested[k] != gen) k,
+        if (_bakesFeatures(k) && _bakedGen[k] != gen && _bakeRequested[k] != gen && touched(k, _bakedGen[k] ?? -1)) k,
     };
+    // 触れていないタイルは今の世代で焼けているのと同じ扱い（次の出来事まで見ない）
+    for (final k in live) {
+      if (_bakesFeatures(k) && !stale.contains(k) && _bakedGen.containsKey(k) && _bakedGen[k] != gen && _bakeRequested[k] != gen) {
+        _bakedGen[k] = gen;
+      }
+    }
     if (stale.isEmpty) return;
     for (final k in stale) {
       _bakeRequested[k] = gen;

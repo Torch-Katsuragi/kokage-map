@@ -596,7 +596,7 @@ class BaseMapService extends ChangeNotifier {
     try {
       return await future;
     } finally {
-      _inflight.remove(inflightKey);
+      final _ = _inflight.remove(inflightKey); // Map.remove は Future を返す（unawaited_futures 避け）
     }
   }
 

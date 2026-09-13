@@ -346,7 +346,7 @@ class TerrainWorld extends ChangeNotifier {
       }
       return dem;
     } finally {
-      _demLoading.remove(key);
+      final _ = _demLoading.remove(key); // Map.remove は Future を返す（unawaited_futures 避け）
     }
   }
 

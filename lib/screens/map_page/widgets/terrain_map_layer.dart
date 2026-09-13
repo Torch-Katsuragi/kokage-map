@@ -326,7 +326,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   };
 
   /// デコード済みタイル画像。3D を出入りしても使い回す（256 枚 ≒ 64MB 上限）
-  static final _tileImages = TileImageCache(capacity: 128); // 256² RGBA × 128 ≈ 32MB
+  static final _tileImages = TileImageCache(capacity: 256); // 256² RGBA × 256 ≈ 64MB（細かい段は 1 タイル 16 枚 × 層）
 
   @override
   late final TerrainCamera _camera;
@@ -696,6 +696,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _animateTo(pitch: _pitchBeforePen ?? _defaultPitchDeg * math.pi / 180);
       _anim.forward(from: 0);
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 画面密度 2 以上なら、細かい段（z15 以上 = テクスチャ z17 以上）だけテクスチャを 2 段上で作る（1024²）。
+    // 読み込み済みのタイルは貼り直さない（密度は途中で変わらない）
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    _world.textureZoomOffsetFor = (z) => dpr >= 2 && z >= 15 ? 2 : 1;
   }
 
   @override
@@ -1879,19 +1888,19 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _overlayKey = ''; // ホットリロードでオーバーレイを同期し直す
   }
 
-  /// テクスチャの上描き: オーバーレイ画像と、引いた段のフィーチャの焼き込み
-  void _decorateTexture(ui.Canvas canvas, TileRange range) {
+  /// テクスチャの上描き: オーバーレイ画像と、引いた段のフィーチャの焼き込み（[demZoom] はタイルの段、range はテクスチャの段）
+  void _decorateTexture(ui.Canvas canvas, TileRange range, int demZoom) {
     _drawOverlayImages(canvas, range);
-    final off = _world.textureZoomOffset;
-    if (range.z - off <= kBakeMaxZoom) {
-      _bakeFeatures(canvas, range);
+    final off = range.z - demZoom;
+    if (demZoom <= kBakeMaxZoom) {
+      _bakeFeatures(canvas, range, demZoom);
       // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）
-      _bakedGen[TileKey(range.z - off, range.x0 >> off, range.y0 >> off)] = _bakeGen;
+      _bakedGen[TileKey(demZoom, range.x0 >> off, range.y0 >> off)] = _bakeGen;
     }
   }
 
   /// 引いた段のフィーチャをテクスチャに描く（真上からの投影。座標は範囲左上原点のピクセル）
-  void _bakeFeatures(ui.Canvas canvas, TileRange range) {
+  void _bakeFeatures(ui.Canvas canvas, TileRange range, int demZoom) {
     final g = widget.geoJson;
     if (g.polygons.isEmpty && g.polylines.isEmpty && g.markers.isEmpty) return;
     const ts = WebMercator.tileSize;
@@ -1973,7 +1982,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       n++;
     }
     if (sw.elapsedMilliseconds > 30) {
-      debugPrint('[3D] bake z${range.z - _world.textureZoomOffset} ${range.x0},${range.y0}: $n 件 ${sw.elapsedMilliseconds}ms');
+      debugPrint('[3D] bake z$demZoom ${range.x0},${range.y0}: $n 件 ${sw.elapsedMilliseconds}ms');
     }
   }
 

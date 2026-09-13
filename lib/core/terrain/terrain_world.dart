@@ -298,7 +298,18 @@ class TerrainWorld extends ChangeNotifier {
   final DemFetcher demFetcher;
 
   /// テクスチャに上描きする手（オーバーレイ画像）。変えたら [retexture]
-  TextureDecorator? textureDecorator;
+  /// テクスチャに上描きする手（オーバーレイ画像・焼き込み）。[demZoom] はそのタイルの段（テクスチャの段は range.z）
+  void Function(ui.Canvas canvas, TileRange range, int demZoom)? textureDecorator;
+
+  TextureDecorator? _decorateFor(int demZoom) {
+    final d = textureDecorator;
+    return d == null ? null : (canvas, range) => d(canvas, range, demZoom);
+  }
+
+  /// タイルの段 → テクスチャを何段上で作るか。既定は [textureZoomOffset] 一律。
+  /// 画面密度の高い端末では細かい段だけ 2 段上（1024²）にして、貼ったときの引き伸ばしを 2.6 倍 → 1.3 倍に
+  /// （松本 2026-09-13「ズーム最大でも背景地図が粗い」。地理院タイルは z18 までなので、それより寄った分は変わらない）
+  late int Function(int demZoom) textureZoomOffsetFor = (_) => textureZoomOffset;
 
   /// 段の範囲は連なり全体で見る（一番細かいソースの maxZoom まで）
   int get minZoom => demSources.map((s) => s.minZoom).reduce(math.min);
@@ -498,9 +509,9 @@ class TerrainWorld extends ChangeNotifier {
       sourceZoom = approx.$2;
     }
     final demMs = sw.elapsedMilliseconds;
-    final texRange = range.zoomIn(textureZoomOffset);
+    final texRange = range.zoomIn(textureZoomOffsetFor(key.z));
     final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
-        .composeLayers(texRange, _textureLayers(), decorate: textureDecorator);
+        .composeLayers(texRange, _textureLayers(), decorate: _decorateFor(key.z));
     if (sw.elapsedMilliseconds > 800) debugPrint('[3D] tile $key load ${sw.elapsedMilliseconds}ms (dem $demMs)');
     return TerrainTile(key: key, raw: dem, sourceZoom: sourceZoom)
       ..texture = tex
@@ -665,7 +676,7 @@ class TerrainWorld extends ChangeNotifier {
       if (gen != _retextureGen || !_tiles.containsKey(tile.key)) return;
       final range = TileRange(z: tile.key.z, x0: tile.key.x, y0: tile.key.y, x1: tile.key.x, y1: tile.key.y);
       final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
-          .composeLayers(range.zoomIn(textureZoomOffset), _textureLayers(), decorate: textureDecorator);
+          .composeLayers(range.zoomIn(textureZoomOffsetFor(tile.key.z)), _textureLayers(), decorate: _decorateFor(tile.key.z));
       if (gen != _retextureGen || !_tiles.containsKey(tile.key)) {
         tex.dispose();
         return;

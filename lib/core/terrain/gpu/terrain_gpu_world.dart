@@ -166,7 +166,8 @@ class TerrainGpuWorldRenderer {
 
   /// ミップ段を手で上げられる機種か（無理なら包んだテクスチャのまま）
   late final bool _manualMips = gpu.gpuContext.doesSupportManuallyMippedTextures;
-  bool _loggedTexture = false;
+  /// 大きさごとに 1 度だけログ（512² と 1024² が混ざる）
+  final Set<int> _loggedTextureSizes = {};
 
   /// 地形の頂点（ビルダーごと。縁が変わるとビルダーが別物になるので自然に入れ替わる）
   final Map<TerrainMeshBuilder, _TerrainBuffers> _terrain = {};
@@ -627,8 +628,7 @@ class TerrainGpuWorldRenderer {
       }
       entry.texture = tex;
       entry.mipped = withMips;
-      if (!_loggedTexture) {
-        _loggedTexture = true;
+      if (_loggedTextureSizes.add(w)) {
         debugPrint('[3D] gpu texture ${w}x$h mips $levels msaa ${_msaa ? _sampleCount : 1} aniso ${_terrainSampler.maxAnisotropy}');
       }
       onTextureUploaded?.call(key);

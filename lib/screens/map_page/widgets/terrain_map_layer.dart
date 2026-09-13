@@ -1737,7 +1737,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _focalStart = d.focalPoint;
   }
 
-  /// 3D: 1 本指 = 回転（左右で方位、上下で傾き）、2 本指 = 平面移動と拡縮（松本の指定・2026-09-08）。
+  /// 3D: 1 本指 = 回転（左右で方位、上下で傾き）、2 本指 = 平面移動と拡縮と回転（松本の指定・2026-09-08、回転は 2026-09-13）。
   /// 2D: 1 本指 = 移動、2 本指 = 移動・拡縮・回転（3D 導入前と同じ。松本 2026-09-13）
   void _onScaleUpdate(ScaleUpdateDetails d) {
     if (_toolDrag) {
@@ -1765,16 +1765,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         final move = _camera.unprojectPan(d.focalPointDelta);
         _camera.centerX -= move.dx;
         _camera.centerY -= move.dy;
-        if (_flat && d.rotation.abs() > 1e-6) {
-          // 2D の 2 本指回転: 指の下の地面を留めたまま方位を回す（画面の時計回り = 地図も時計回り）
-          final off = d.localFocalPoint - Offset(_size.width / 2, _size.height / 2);
-          final under = _camera.unprojectPan(off);
-          _camera.bearing = _bearingStart - d.rotation;
-          final after = _camera.unprojectPan(off);
-          _camera.centerX += under.dx - after.dx;
-          _camera.centerY += under.dy - after.dy;
-          _gesturing = true;
-        }
+      }
+      if (d.rotation.abs() > 1e-6 && _size != Size.zero) {
+        // 2 本指の回転（2D / 3D 共通）: 指の下の地面を留めたまま方位を回す（画面の時計回り = 地図も時計回り）
+        final off = d.localFocalPoint - Offset(_size.width / 2, _size.height / 2);
+        final under = _camera.perspective ? _groundUnder(d.localFocalPoint) : _camera.unprojectPan(off);
+        _camera.bearing = _bearingStart - d.rotation;
+        final after = _camera.perspective ? _groundUnder(d.localFocalPoint) : _camera.unprojectPan(off);
+        _camera.centerX += under.dx - after.dx;
+        _camera.centerY += under.dy - after.dy;
+        _gesturing = true;
       }
     } else if (_flat || (_mouse && !HardwareKeyboard.instance.isControlPressed)) {
       // マウスの左ドラッグは移動（回転は右ドラッグか Ctrl + 左）

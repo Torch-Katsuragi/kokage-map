@@ -1,6 +1,6 @@
 # Changelog
 
-## Next release
+## v0.7.2 — 2026/09/13
 
 ### Fixes
 

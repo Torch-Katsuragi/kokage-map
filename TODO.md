@@ -124,7 +124,8 @@
     **`android/app` 基準**なので鍵は `android/k-maps-release.keystore` に置く（repo 直下だと `validateSigningRelease` で落ちる）。
     鍵の正本は Vault `事業/ねむりぎ工房/K-Maps/google play console/`。worktree を増やしたら両方コピーする
   - [x] release で 3D（GPU・眺めモード・ヒットテスト）と web release の起動を確認（2026-09-11 13:05、Pixel 9 / Surface Chrome）
-  - [ ] 眺めモードの残り: 面・線にも靄、純 Dart 経路（web）の透視。2 本指の移動・拡縮・ホイールは透視の式にした（指の下の地面を留める。実機のピンチは未確認）
+  - [/] 眺めモードの残り: 面・線の靄は入れた（2026-09-11 夕）。残るのは純 Dart 経路（web の GPU 無し環境）の透視。2 本指の移動・拡縮・ホイールは透視の式にした（指の下の地面を留める。実機のピンチは未確認）
+  - [x] web の「地図を開く」（picker 無し）で地図が真っ白だった件: master の web-server ビルドを 127.0.0.1 で `showDirectoryPicker` を消して再現を試みたが、地形も基図も出た（2026-09-13）。index.html を差し替えた静的配信の副作用とみて閉じる
 - [ ] 更新履歴の運用: v0.6.0 以前の節も開発ログ調のまま。読み直すなら v0.6.0 節から
 
 ## Android のビルド環境（2026-09-11 夜）

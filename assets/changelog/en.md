@@ -13,6 +13,9 @@
 
 ### Fixes
 
+- 3D loading is lighter. When zoomed in, basemap textures appear quickly at a coarser level and are upgraded when idle; elevation data is fetched only as needed and duplicate tile requests are merged. On slow connections waits drop by more than half
+- Contours on the coarse tiles seen during loading are drawn fainter so the patchwork with fine tiles is less distracting
+- Bulk map download now saves every stacked layer (contours included); only OpenStreetMap is skipped
 - The heading indicator on the location marker is a fan again (it had become a line when the map went 3D)
 - Rivers and lakes could show up as rectangular plateaus with vertical walls in the 3D terrain. Water surfaces without elevation data are now filled from a secondary elevation source and interpolated from their surroundings
 

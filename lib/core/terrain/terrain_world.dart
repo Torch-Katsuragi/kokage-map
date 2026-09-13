@@ -101,6 +101,10 @@ class TerrainTile {
 
   ui.Image? _texture;
 
+  /// まだ粗いテクスチャ（1 段上）で貼っていて、この段数のテクスチャに差し替える予定（null なら最終）。
+  /// 細かいタイルは地図 16 枚 × 層を待たずに 4 枚で先に出す（松本 2026-09-13「読み込み中のテクスチャが乱れる」）
+  int? pendingTextureOffset;
+
   /// テクスチャの世代の識別子（画像を差し替えるたびに新しくなる。GPU 側のキャッシュのキー）
   Object textureKey = Object();
 
@@ -504,6 +508,8 @@ class TerrainWorld extends ChangeNotifier {
       return (cx - centerX) * (cx - centerX) + (cy - centerY) * (cy - centerY);
     }
     wanted.sort((a, b) => dist(a).compareTo(dist(b)));
+    _lastCenterX = centerX;
+    _lastCenterY = centerY;
     if (replaceQueue) {
       _queue = wanted;
     } else {
@@ -521,8 +527,75 @@ class TerrainWorld extends ChangeNotifier {
       unawaited(_load(key).whenComplete(() {
         _inFlight.remove(key);
         _pump();
+        _pumpUpgrades();
       }));
     }
+    if (_queue.isEmpty) _pumpUpgrades();
+  }
+
+  // ── テクスチャの差し替え（段階読み込みの 2 段目）。本体の読み込みが空いているときだけ、中心に近い順に 2 枚ずつ ──
+  final List<TileKey> _upgradeQueue = [];
+  final Set<TileKey> _upgrading = {};
+  double _lastCenterX = 0;
+  double _lastCenterY = 0;
+
+  void _scheduleUpgrade(TileKey key) {
+    if (!_upgradeQueue.contains(key)) _upgradeQueue.add(key);
+    _pumpUpgrades();
+  }
+
+  void _pumpUpgrades() {
+    if (_inFlight.isNotEmpty || _queue.isNotEmpty) return; // 見えるものを揃えるのが先
+    _upgradeQueue.removeWhere((k) => _tiles[k]?.pendingTextureOffset == null);
+    double dist(TileKey k) {
+      final cx = k.west + k.span / 2 - _lastCenterX;
+      final cy = k.south + k.span / 2 - _lastCenterY;
+      return cx * cx + cy * cy;
+    }
+    _upgradeQueue.sort((a, b) => dist(a).compareTo(dist(b)));
+    while (_upgrading.length < 2 && _upgradeQueue.isNotEmpty) {
+      final key = _upgradeQueue.removeAt(0);
+      if (_upgrading.contains(key)) continue;
+      _upgrading.add(key);
+      unawaited(_upgradeTexture(key).whenComplete(() {
+        _upgrading.remove(key);
+        _pumpUpgrades();
+      }));
+    }
+  }
+
+  Future<void> _upgradeTexture(TileKey key) async {
+    final tile = _tiles[key];
+    final off = tile?.pendingTextureOffset;
+    if (tile == null || off == null) return;
+    final gen = _retextureGen;
+    final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
+    ui.Image tex;
+    try {
+      tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
+          .composeLayers(range.zoomIn(off), _textureLayers(), decorate: _decorateFor(key.z));
+    } catch (e) {
+      debugPrint('[3D] tile $key のテクスチャ差し替えに失敗: $e');
+      return;
+    }
+    if (gen != _retextureGen || !identical(_tiles[key], tile) || tile.pendingTextureOffset != off) {
+      tex.dispose();
+      return;
+    }
+    tile.texture?.dispose();
+    tile
+      ..texture = tex
+      ..textureWidth = tex.width
+      ..textureHeight = tex.height
+      ..pendingTextureOffset = null;
+    revision++;
+    notifyListeners();
+  }
+
+  /// テクスチャを何段上で作るか。まず 1 段上（地図 4 枚）で出し、2 段上以上は後で差し替える（[pendingTextureOffset]）
+  (int first, int? later) _textureOffsets(int demZoom) {
+    final off = textureZoomOffsetFor(demZoom);
+    return off > 1 ? (1, off) : (off, null);
   }
 
   Future<TerrainTile?> _defaultLoad(TileKey key) async {
@@ -538,14 +611,15 @@ class TerrainWorld extends ChangeNotifier {
       sourceZoom = approx.$2;
     }
     final demMs = sw.elapsedMilliseconds;
-    final texRange = range.zoomIn(textureZoomOffsetFor(key.z));
+    final (first, later) = _textureOffsets(key.z);
     final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
-        .composeLayers(texRange, _textureLayers(), decorate: _decorateFor(key.z));
+        .composeLayers(range.zoomIn(first), _textureLayers(), decorate: _decorateFor(key.z));
     if (sw.elapsedMilliseconds > 800) debugPrint('[3D] tile $key load ${sw.elapsedMilliseconds}ms (dem $demMs)');
     return TerrainTile(key: key, raw: dem, sourceZoom: sourceZoom)
       ..texture = tex
       ..textureWidth = tex.width
-      ..textureHeight = tex.height;
+      ..textureHeight = tex.height
+      ..pendingTextureOffset = later;
   }
 
   /// [key] の DEM を、ソースを細かい方から順に試して取る（その段を持たないソースは飛ばす）
@@ -564,11 +638,28 @@ class TerrainWorld extends ChangeNotifier {
     Future<DemGrid?> fetch(DemTileSource s) =>
         DemTileLoader(source: s, fetcher: (z, x, y) => demFetcher(s, z, x, y)).tryLoad(range, fillInvalid: false);
     final sw = Stopwatch()..start();
-    // 主力（地理院 1A / 5A / 10B）は同じサーバで安いので**同時に**取る。順に取ると 1 枚 = 往復の合計になる
-    // （Pixel 9 で 1 往復 0.4〜1.4 秒 × 3〜4 = 2〜3 秒。同時なら最も遅い 1 往復ぶん）
+    // 主力（地理院 1A / 5A / 10B）は細かい方から**順に**取り、穴が無くなったらそこで止める。
+    // 以前は同時に取っていた（往復の合計を避けるため）が、DEM1A 1 枚 100 KB に対して 5A / 10B も毎回取るとバイト数が倍になり、
+    // 遅い回線（2026-09-13 の freespot: 約 100 KB/s）では待ちがそのまま倍になった。速い回線でも穴があるタイルだけ +1 往復（0.15 秒）
     final primary = [for (final s in demSources) if (!s.lastResort && usable(s)) s];
-    final grids = await Future.wait(primary.map(fetch));
-    var merged = _mergeGrids(key, primary, grids, nowMs);
+    final grids = <DemGrid?>[];
+    var fetched = 0;
+    for (final s in primary) {
+      grids.add(await fetch(s));
+      fetched++;
+      final probe = _mergeGrids(key, primary.sublist(0, grids.length), grids, nowMs, remember: false);
+      if (probe != null && _countNaN(probe.heights) == 0) break;
+    }
+    while (grids.length < primary.length) {
+      grids.add(null); // 取らなかった（無かったのではない）
+    }
+    var merged = _mergeGrids(key, primary, grids, nowMs, remember: false);
+    // 「無かった」の記憶は実際に取りに行ったものだけ（別のソースが取れた = 通信は生きている、のとき）
+    if (merged != null) {
+      for (var i = 0; i < fetched; i++) {
+        if (grids[i] == null) _missing['${primary[i].id}/${key.z}/${key.x}/${key.y}'] = nowMs;
+      }
+    }
     // 最後の砦（AWS。遠くて 1 秒掛かる）は主力が 1 枚も取れなかった（日本の外）ときだけ。
     // 海や整備範囲の縁の穴は [fillInvalidHeights] で埋める（以前は穴があるたびに AWS を取りに行き、沿岸のタイルが 1 枚 +1 秒だった）
     if (merged == null) {
@@ -644,13 +735,21 @@ class TerrainWorld extends ChangeNotifier {
   /// 同時に取った格子を細かい順に重ねる（細かいソースの無効な点を次のソースの値で埋める）。
   /// 無かったソースは覚えておく（タイルキャッシュは 404 を覚えないので、毎回ネットに聞くと 1 枚数秒掛かる）。
   /// ⚠ 取れなかった理由は 404 か通信失敗か分からないので、同じタイルで別のソースが取れたとき（= 通信は生きている）だけ覚える
-  DemGrid? _mergeGrids(TileKey key, List<DemTileSource> sources, List<DemGrid?> grids, int nowMs) {
+  DemGrid? _mergeGrids(TileKey key, List<DemTileSource> sources, List<DemGrid?> grids, int nowMs, {bool remember = true}) {
     DemGrid? merged;
     for (var i = 0; i < sources.length; i++) {
       final dem = grids[i];
       if (dem == null) continue;
       if (merged == null) {
-        merged = dem;
+        // 最初の格子は複製して重ねる（順に取って途中で確かめるので、元を汚さない）
+        merged = DemGrid(
+          cols: dem.cols,
+          rows: dem.rows,
+          originX: dem.originX,
+          originY: dem.originY,
+          cellSize: dem.cellSize,
+          heights: Float32List.fromList(dem.heights),
+        );
         continue;
       }
       final a = merged.heights;
@@ -659,14 +758,15 @@ class TerrainWorld extends ChangeNotifier {
         if (a[j].isNaN) a[j] = b[j];
       }
     }
-    if (merged != null) {
+    if (merged != null && remember) {
       for (var i = 0; i < sources.length; i++) {
         if (grids[i] == null) _missing['${sources[i].id}/${key.z}/${key.x}/${key.y}'] = nowMs;
       }
-      if (_missing.length > 4096) _missing.clear();
     }
+    if (_missing.length > 4096) _missing.clear();
     return merged;
   }
+
 
   static int _countNaN(Float32List h) {
     var n = 0;
@@ -725,8 +825,10 @@ class TerrainWorld extends ChangeNotifier {
     for (final tile in targets) {
       if (gen != _retextureGen || !_tiles.containsKey(tile.key)) return;
       final range = TileRange(z: tile.key.z, x0: tile.key.x, y0: tile.key.y, x1: tile.key.x, y1: tile.key.y);
+      // 貼り直しも段階で（まず 1 段上、細かい分は空いたときに差し替え）
+      final (first, later) = _textureOffsets(tile.key.z);
       final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
-          .composeLayers(range.zoomIn(textureZoomOffsetFor(tile.key.z)), _textureLayers(), decorate: _decorateFor(tile.key.z));
+          .composeLayers(range.zoomIn(first), _textureLayers(), decorate: _decorateFor(tile.key.z));
       if (gen != _retextureGen || !_tiles.containsKey(tile.key)) {
         tex.dispose();
         return;
@@ -735,9 +837,11 @@ class TerrainWorld extends ChangeNotifier {
       tile
         ..texture = tex
         ..textureWidth = tex.width
-        ..textureHeight = tex.height;
+        ..textureHeight = tex.height
+        ..pendingTextureOffset = later;
       revision++;
       notifyListeners();
+      if (later != null) _scheduleUpgrade(tile.key);
     }
   }
 
@@ -787,6 +891,7 @@ class TerrainWorld extends ChangeNotifier {
       _refreshBorders(key);
       revision++;
       notifyListeners();
+      if (tile.pendingTextureOffset != null) _scheduleUpgrade(key);
       if (sw.elapsedMilliseconds > 200) debugPrint('[3D] tile $key arrival ${sw.elapsedMilliseconds}ms (borders + listeners)');
     } catch (e) {
       lastError = '$e';

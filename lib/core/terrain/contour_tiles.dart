@@ -43,7 +43,7 @@ class ContourTiles {
   static const majorEvery = 5;
 
   /// 絵を変えたら上げる（タイルキャッシュのプロバイダ ID に入る。古い絵が残らないように）
-  static const version = 4; // v1 は z16 が 5 m、v2 は z12〜14 が 20〜100 m で地理院より密だった、v3 は半セル南西にずれていた（2026-09-13）
+  static const version = 5; // v1 は z16 が 5 m、v2 は z12〜14 が 20〜100 m で地理院より密だった、v3 は半セル南西にずれていた、v4 は粗い段が濃かった（2026-09-13）
 }
 
 /// isolate へ渡す引数（DEM の格子の一部を、要求されたタイルの範囲として描く）
@@ -58,6 +58,7 @@ class ContourTileArgs {
     required this.cells,
     required this.interval,
     this.size = 256,
+    this.alpha = 1.0,
   });
 
   /// DEM の格子（南が 0 行目）
@@ -73,6 +74,10 @@ class ContourTileArgs {
 
   final double interval;
   final int size;
+
+  /// 線の濃さの倍率（0〜1）。粗い段（テクスチャ z ≤ 13）は薄く: 読み込み中に親タイルの絵が細かい子と継ぎはぎになるとき、
+  /// 濃い 100〜200 m の線が一番うるさい（松本 2026-09-13）。引いた眺めでも線が地図を塗りつぶさない
+  final double alpha;
 }
 
 /// 等高線のタイルを PNG（RGBA、線以外は透明）にする。isolate で走る（純 Dart）
@@ -94,8 +99,8 @@ Uint8List renderContourTilePng(ContourTileArgs a) {
   final extentM = a.cells * a.cellSize;
   // DEM の格子点はピクセルの中心（`TerrainWorld` の originX = west + mpp / 2）。線の座標は格子点 0 を 0 としているので半セル足す
   final half = a.cellSize / 2;
-  final minor = img.ColorRgba8(0x6D, 0x4C, 0x41, 170);
-  final major = img.ColorRgba8(0x5D, 0x40, 0x37, 230);
+  final minor = img.ColorRgba8(0x6D, 0x4C, 0x41, (170 * a.alpha).round().clamp(0, 255));
+  final major = img.ColorRgba8(0x5D, 0x40, 0x37, (230 * a.alpha).round().clamp(0, 255));
   for (final e in byLevel.entries) {
     final isMajor = ((e.key / a.interval).round() % ContourTiles.majorEvery) == 0;
     for (final seg in e.value) {

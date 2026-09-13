@@ -264,7 +264,8 @@
       "successDownloaded": "Downloaded",
       "skipped": "Skipped",
       "errors": "Errors",
-      "osmNotAllowed": "OpenStreetMap cannot be bulk-downloaded (prohibited by its tile usage policy). Switch to a GSI map before downloading."
+      "osmNotAllowed": "OpenStreetMap cannot be bulk-downloaded (prohibited by its tile usage policy). Switch to a GSI map before downloading.",
+      "osmSkipped": "OpenStreetMap is skipped (it cannot be bulk-downloaded); the other layers are saved"
     },
     "cacheDialog": {
       "title": "Clear Cache",

@@ -17,6 +17,7 @@
 /// 背景地図プロバイダーの選択とオフライン機能の管理
 library;
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -240,13 +241,21 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
 
   /// ダウンロード設定ダイアログを表示
   Future<void> _showDownloadDialog() async {
-    // OSMは一括ダウンロード禁止（タイル利用ポリシー: prefetchはブロック対象）
-    if (_baseMapService.currentProvider.type == BaseMapType.openStreetMap) {
+    // 見えているレイヤ全部を落とす。OSM は一括ダウンロード禁止（タイル利用ポリシー: prefetchはブロック対象）なので除く
+    final providers = _baseMapService.downloadableProviders;
+    final hasOsm = _baseMapService.activeLayers.any((e) => e.$1.type == BaseMapType.openStreetMap);
+    if (providers.isEmpty) {
       ref.read(notificationCenterProvider.notifier).add(
             title: t.basemap.download.osmNotAllowed,
             level: NotificationLevel.warning,
           );
       return;
+    }
+    if (hasOsm) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.basemap.download.osmSkipped,
+            level: NotificationLevel.info,
+          );
     }
 
     // 現在の地図中心座標を取得
@@ -262,8 +271,10 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
       center = const LatLng(35.681236, 139.767125);
     }
 
-    final provider = _baseMapService.currentProvider;
-    
+    // 段の範囲はプロバイダの和（等高線の z19 は地理院の切り出しになるので 18 で止める）
+    final zMinAll = providers.map((p) => p.minZoom).reduce(math.min);
+    final zMaxAll = math.min(18, providers.map((p) => p.maxZoom).reduce(math.max));
+
     // デフォルト設定
     // 初期ズーム範囲: 現在のズームレベル前後
     double currentZoom = 15.0;
@@ -274,8 +285,8 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
       }
     } catch (_) {}
 
-    double minZoom = (currentZoom - 2).clamp(provider.minZoom.toDouble(), provider.maxZoom.toDouble());
-    final double maxZoom = (currentZoom + 2).clamp(provider.minZoom.toDouble(), provider.maxZoom.toDouble());
+    double minZoom = (currentZoom - 2).clamp(zMinAll.toDouble(), zMaxAll.toDouble());
+    final double maxZoom = (currentZoom + 2).clamp(zMinAll.toDouble(), zMaxAll.toDouble());
     if (minZoom > maxZoom) minZoom = maxZoom;
 
     final RangeValues zoomRange = RangeValues(minZoom, maxZoom);
@@ -287,7 +298,9 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
       barrierDismissible: false,
       builder: (context) => _DownloadSettingsDialog(
         center: center,
-        provider: provider,
+        providers: providers,
+        zoomMin: zMinAll,
+        zoomMax: zMaxAll,
         initialRadius: radius,
         initialZoomRange: zoomRange,
         baseMapService: _baseMapService,
@@ -676,7 +689,9 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
 /// ダウンロード設定ダイアログ
 class _DownloadSettingsDialog extends StatefulWidget {
   final LatLng center;
-  final BaseMapProvider provider;
+  final List<BaseMapProvider> providers;
+  final int zoomMin;
+  final int zoomMax;
   final double initialRadius;
   final RangeValues initialZoomRange;
   final BaseMapService baseMapService;
@@ -684,7 +699,9 @@ class _DownloadSettingsDialog extends StatefulWidget {
 
   const _DownloadSettingsDialog({
     required this.center,
-    required this.provider,
+    required this.providers,
+    required this.zoomMin,
+    required this.zoomMax,
     required this.initialRadius,
     required this.initialZoomRange,
     required this.baseMapService,
@@ -716,7 +733,7 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
       maxZoom: _zoomRange.end.round(),
     );
     setState(() {
-      _estimatedTiles = result['totalTiles'] ?? 0;
+      _estimatedTiles = (result['totalTiles'] ?? 0) * widget.providers.length;
     });
   }
 
@@ -729,7 +746,7 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(t.basemapExtra.mapName(name: widget.provider.name)),
+            Text(t.basemapExtra.mapName(name: widget.providers.map((p) => p.name).join(' + '))),
             const SizedBox(height: 4),
             Text(t.basemapExtra.center(lat: widget.center.latitude.toStringAsFixed(4), lng: widget.center.longitude.toStringAsFixed(4))),
             const Divider(),
@@ -759,9 +776,9 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
             Text(t.basemap.download.zoomRange, style: const TextStyle(fontWeight: FontWeight.bold)),
             RangeSlider(
               values: _zoomRange,
-              min: widget.provider.minZoom.toDouble(),
-              max: widget.provider.maxZoom.toDouble(),
-              divisions: widget.provider.maxZoom - widget.provider.minZoom,
+              min: widget.zoomMin.toDouble(),
+              max: widget.zoomMax.toDouble(),
+              divisions: widget.zoomMax - widget.zoomMin,
               labels: RangeLabels(
                 _zoomRange.start.round().toString(),
                 _zoomRange.end.round().toString(),

@@ -264,7 +264,8 @@
       "successDownloaded": "成功 (ダウンロード)",
       "skipped": "済み (スキップ)",
       "errors": "エラー",
-      "osmNotAllowed": "OpenStreetMapは一括ダウンロードできません（タイル利用ポリシーで禁止されています）。国土地理院の地図に切り替えてからダウンロードしてください"
+      "osmNotAllowed": "OpenStreetMapは一括ダウンロードできません（タイル利用ポリシーで禁止されています）。国土地理院の地図に切り替えてからダウンロードしてください",
+      "osmSkipped": "OpenStreetMap は一括ダウンロードできないので除きます（ほかのレイヤは保存します）"
     },
     "cacheDialog": {
       "title": "キャッシュクリア",

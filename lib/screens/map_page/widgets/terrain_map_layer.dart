@@ -410,6 +410,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       row0: WebMercator.tileSize - ((y & mask) + 1) * cells, // 行は南が 0
       cells: cells,
       interval: ContourTiles.intervalForZoom(z),
+      alpha: z <= 13 ? 0.55 : 1.0, // 粗い段は薄く（親タイルの継ぎはぎがうるさくない）
     );
     return TerrainWorker.instance.run(renderContourTilePng, args);
   }

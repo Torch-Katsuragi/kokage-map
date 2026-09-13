@@ -975,11 +975,17 @@ class BaseMapService extends ChangeNotifier {
   }
 
   /// エリア一括ダウンロード実行 (並列処理対応)
+  /// 一括ダウンロードの対象: 見えているレイヤのプロバイダ（OSM は方針で除外。等高線などの生成プロバイダは作ってキャッシュに入れる）
+  List<BaseMapProvider> get downloadableProviders =>
+      [for (final (p, _) in activeLayers) if (p.type != BaseMapType.openStreetMap) p];
+
+  /// [providers] を省くと [downloadableProviders]（見えているレイヤ全部）。タイル数は 枚数 × プロバイダ数
   Stream<Map<String, dynamic>> downloadArea({
     required LatLng center,
     required double radiusMeters,
     required int minZoom,
     required int maxZoom,
+    List<BaseMapProvider>? providers,
   }) async* {
     if (_isDownloading) {
       yield {'status': 'error', 'message': t.services.downloadInProgress};
@@ -1018,7 +1024,8 @@ class BaseMapService extends ChangeNotifier {
       }
     }
 
-    final totalTiles = tilesToDownload.length;
+    final targets = providers ?? downloadableProviders;
+    final totalTiles = tilesToDownload.length * targets.length;
     int processedTiles = 0;
     int downloadedTiles = 0;
     int skippedTiles = 0;
@@ -1030,14 +1037,12 @@ class BaseMapService extends ChangeNotifier {
       'processed': 0,
     };
 
-    final provider = _currentProvider;
-    
     // 並列処理の設定
     // OpenStreetMapの推奨は最大2スレッドだが、ユーザーの要望により4スレッドまで許可
     // 待機時間を短くしてスループットを上げる
     const int maxConcurrentDownloads = 4;
     final activeFutures = <Future<void>>[];
-    final queue = List<_TileRequest>.from(tilesToDownload);
+    final queue = [for (final p in targets) for (final t in tilesToDownload) (p, t)];
 
     try {
       while (queue.isNotEmpty || activeFutures.isNotEmpty) {
@@ -1045,8 +1050,7 @@ class BaseMapService extends ChangeNotifier {
 
         // キューから取り出して並列実行数までタスクを追加
         while (activeFutures.length < maxConcurrentDownloads && queue.isNotEmpty) {
-          final tile = queue.removeAt(0);
-          
+          final (provider, tile) = queue.removeAt(0);
           late final Future<void> future;
           future = _processSingleTile(
             provider, 
@@ -1118,14 +1122,23 @@ class BaseMapService extends ChangeNotifier {
     Function(String) onComplete,
   ) async {
     try {
+      // その段を持たないプロバイダは飛ばす（等高線は z9〜、地理院は z18 まで）
+      if (tile.z < provider.minZoom || tile.z > provider.maxZoom) {
+        onComplete('skipped');
+        return;
+      }
       // キャッシュ確認
-      final cached = await _getCachedTile(provider.id, tile.z, tile.x, tile.y);
-      
+      final cached = await _getCachedTile(provider.cacheId, tile.z, tile.x, tile.y);
       if (cached != null) {
         onComplete('skipped');
         return;
       }
-      
+      // 生成プロバイダ（等高線）は作ってキャッシュに入れる（DEM は取りに行く）
+      if (provider.type == BaseMapType.generated) {
+        final made = await getTile(provider, tile.z, tile.x, tile.y);
+        onComplete(made != null ? 'downloaded' : 'error');
+        return;
+      }
       // ダウンロード実行
       final data = await _getTileInternal(
         provider, 

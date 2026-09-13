@@ -70,7 +70,7 @@ class BaseMapProvider {
   });
 
   /// 等高線（生成プロバイダ）。生成器の登録先
-  static BaseMapProvider get contourOverlay => availableProviders.firstWhere((p) => p.id == 'contours_v2');
+  static BaseMapProvider get contourOverlay => availableProviders.firstWhere((p) => p.id == 'contours_v3');
 
   /// 利用可能な背景地図プロバイダーのリスト
   static const List<BaseMapProvider> availableProviders = [
@@ -166,11 +166,11 @@ class BaseMapProvider {
     // 等高線（標高タイルからアプリ内で作る。`contour_tiles.dart`）。他の背景地図と重ねて使う（高度な設定）。
     // 内部では生成プロバイダ（BaseMapType.generated）だが、一覧では普通の背景地図として振る舞う（松本 2026-09-13）
     BaseMapProvider(
-      id: 'contours_v2', // ⚠ `ContourTiles.version` と合わせる（絵を変えたら上げる。古いキャッシュと混ざらない）
+      id: 'contours_v3', // ⚠ `ContourTiles.version` と合わせる（絵を変えたら上げる。古いキャッシュと混ざらない）
       name: '等高線',
       description: '標高タイルから作る等高線（他の地図と重ねて使う）',
       urlTemplate: '',
-      minZoom: 10,
+      minZoom: 9,
       maxZoom: 19,
       attribution: '',
       type: BaseMapType.generated,

@@ -5,7 +5,7 @@
 ### Usability
 
 - On opening, the map starts at the extent of all features in the project (it no longer jumps to your location). Only when there are no features does it start in Tokyo and move to your location once known
-- Contours are now one of the basemaps: blend them with the standard map or photos in the advanced basemap settings. Contour tiles are generated from the elevation tiles and kept in the tile cache, so they appear instantly the second time and offline. The interval follows the GSI map scale (about 1 m zoomed in, 100 m zoomed out). The contour settings under Terrain appearance (interval, color, width) are gone
+- Contours are now one of the basemaps: blend them with the standard map or photos in the advanced basemap settings. Contour tiles are generated from the elevation tiles and kept in the tile cache, so they appear instantly the second time and offline. The interval matches the GSI standard map: 2 m at zoom 18, 10 m at 15–17, 100 m at 12–14, 200 m at 9–11. The contour settings under Terrain appearance (interval, color, width) are gone
 
 ## v0.7.2 — 2026/09/13
 

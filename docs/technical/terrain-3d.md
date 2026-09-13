@@ -482,8 +482,10 @@ flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world
 
 - `contour_tiles.dart`: 標高タイル（DEM）から marching squares で線を引き、256×256 の透明 PNG にする（`renderContourTilePng`、
   純 Dart で isolate）。テクスチャの段 z の 1 段下の DEM タイル（読み込み済みなら縁を借りた格子 `bordered`、無ければ `TerrainWorld.demFor`）の
-  該当する 1/4 を描く。間隔はズームで固定（`ContourTiles.intervalForZoom`: z19 = 1 m、z18 = 2、z17 = 5、z15〜16 = 10、z14 = 20、z13 = 50、z12 = 100、それ以下 200。地理院地図の刻み）、5 本ごとに主曲線
-- 生成プロバイダ `BaseMapProvider.contourOverlay`（`BaseMapType.generated`、id `contours_v2`。`availableProviders` の 1 つで、一覧では普通の背景地図として振る舞う）: `BaseMapService.registerTileGenerator` で
+  該当する 1/4 を描く。間隔はズームで固定（`ContourTiles.intervalForZoom`）。**地理院地図「標準地図」の出典に合わせる**（地理院タイル一覧: ZL18 = 電子国土基本図 2500 図式、ZL15〜17 = 同 25000 図式、ZL12〜14 = 20 万分 1、ZL9〜11 = 100 万分 1）:
+  ZL18 以上 = 2 m（計曲線 10 m）、ZL15〜17 = 10 m（50 m）、ZL12〜14 = 100 m（500 m）、ZL9〜11 = 200 m。5 本ごとに主曲線。
+  凡例 PDF（`cyberjapandata.gsi.go.jp/legend/std_*_legend.pdf`）には数値が無く、各図式（2 万 5 千分 1 地形図・20 万分 1 地勢図）の等高線間隔から
+- 生成プロバイダ `BaseMapProvider.contourOverlay`（`BaseMapType.generated`、id `contours_v3`。`availableProviders` の 1 つで、一覧では普通の背景地図として振る舞う）: `BaseMapService.registerTileGenerator` で
   生成器を登録し、`getTile` は キャッシュ → 生成 → キャッシュ（MBTiles）。背景地図と同じ経路なので一度作れば圏外でも出る。
   絵を変えたら `ContourTiles.version` を上げて id を変える（古い絵が残らない）
 - 3D のテクスチャ合成は `TerrainWorld.textureOverlayFetchers`（基図 + 高度な設定の 2 枚目以降 + 等高線）を `composeLayers` で重ねる。

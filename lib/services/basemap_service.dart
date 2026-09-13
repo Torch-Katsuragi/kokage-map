@@ -165,19 +165,36 @@ class BaseMapService extends ChangeNotifier {
     if (identical(_generators[providerId], generate)) _generators.remove(providerId);
   }
 
-  /// 生成プロバイダのタイル: キャッシュ → 生成器 → キャッシュへ
+  /// 生成プロバイダのタイル: キャッシュ → 生成器 → キャッシュへ（キャッシュは [BaseMapProvider.cacheId]。絵の版ごとに別）
   Future<Uint8List?> _getGeneratedTile(BaseMapProvider provider, int z, int x, int y) async {
-    final cached = await _getCachedTile(provider.id, z, x, y);
+    final cached = await _getCachedTile(provider.cacheId, z, x, y);
     if (cached != null) return cached;
     final generate = _generators[provider.id];
     if (generate == null) return null;
     try {
       final data = await generate(z, x, y);
-      if (data != null && data.length >= 100) await _cacheTile(provider.id, z, x, y, data);
+      if (data != null && data.length >= 100) await _cacheTile(provider.cacheId, z, x, y, data);
       return data;
     } catch (e) {
       AppLogger.debug('[TILE] ${provider.id} $z/$x/$y の生成に失敗: $e');
       return null;
+    }
+  }
+
+  /// 生成プロバイダの古い版のキャッシュ（`contours_v3.mbtiles` など）を消す。版が上がると [BaseMapProvider.cacheId] が変わり、
+  /// 古いファイルは誰も引かないまま残るので
+  Future<void> _dropStaleGeneratedCaches() async {
+    final db = _tileCacheDb;
+    if (db == null) return;
+    for (final p in BaseMapProvider.availableProviders) {
+      if (p.type != BaseMapType.generated || p.cacheId == p.id) continue;
+      for (final name in db.cachedProviderIds()) {
+        // 本体が無く -wal などの残骸だけのものも拾う（cachedProviderIds は .mbtiles だけ見る）
+        if (name != p.cacheId && name.startsWith('${p.id}_v')) {
+          AppLogger.debug('[BaseMapService] 古い生成キャッシュを消す: $name');
+          await db.clearCache(providerId: name);
+        }
+      }
     }
   }
 
@@ -340,6 +357,7 @@ class BaseMapService extends ChangeNotifier {
 
       _tileCacheDb = TileCacheMBTiles();
       await _tileCacheDb!.initialize(_cacheDirectory!);
+      await _dropStaleGeneratedCaches();
       final total = await _tileCacheDb!.getTotalTileCount();
       AppLogger.debug('[BaseMapService] Cache: $total tiles');
     } catch (e) {
@@ -427,6 +445,11 @@ class BaseMapService extends ChangeNotifier {
       if (weightsJson != null) {
         final decoded = json.decode(weightsJson) as Map<String, dynamic>;
         _providerWeights = decoded.map((k, v) => MapEntry(k, v as int));
+        // 2026-09-13 の等高線は id に版が入っていた（contours_v2〜v4）。今の id に読み替える
+        for (final k in _providerWeights.keys.where((k) => RegExp(r'^contours_v\d+$').hasMatch(k)).toList()) {
+          final w = _providerWeights.remove(k)!;
+          _providerWeights.putIfAbsent('contours', () => w);
+        }
       }
 
       // 後方互換: 旧設定のみ存在する場合はマイグレーション
@@ -885,7 +908,7 @@ class BaseMapService extends ChangeNotifier {
       for (final entry in stats.entries) {
         detailedStats[entry.key] = {
           'count': entry.value,
-          'provider': BaseMapProvider.getProviderById(entry.key)?.name ?? entry.key,
+          'provider': (BaseMapProvider.getProviderByCacheId(entry.key) ?? BaseMapProvider.getProviderById(entry.key))?.name ?? entry.key,
         };
       }
       

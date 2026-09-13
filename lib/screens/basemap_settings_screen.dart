@@ -417,7 +417,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         if (!isAdvanced)
           ...BaseMapProvider.availableProviders.map((provider) {
             final isSelected = provider.id == currentProvider.id;
-            final cachedTileCount = _cacheStats[provider.id] ?? 0;
+            final cachedTileCount = _cacheStats[provider.cacheId] ?? 0;
             final subtitleText = cachedTileCount > 0
                 ? '${provider.description}\n${t.basemap.cacheCount(count: cachedTileCount.toString())}'
                 : provider.description;
@@ -436,7 +436,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         if (isAdvanced)
           ...BaseMapProvider.availableProviders.map((provider) {
             final weight = weights[provider.id] ?? 0;
-            final cachedTileCount = _cacheStats[provider.id] ?? 0;
+            final cachedTileCount = _cacheStats[provider.cacheId] ?? 0;
 
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -597,7 +597,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
           )
         else
           ..._cacheStats.entries.map((entry) {
-            final provider = BaseMapProvider.getProviderById(entry.key);
+            final provider = BaseMapProvider.getProviderByCacheId(entry.key);
             if (provider == null) return const SizedBox.shrink();
 
             return SettingsTile(

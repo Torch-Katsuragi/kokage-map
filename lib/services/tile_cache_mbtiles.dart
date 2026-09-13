@@ -303,6 +303,23 @@ class TileCacheMBTiles {
     }
   }
 
+  /// キャッシュがあるプロバイダー（`.mbtiles` のファイル名）
+  List<String> cachedProviderIds() {
+    if (_cacheDirectory == null) return const [];
+    try {
+      return Directory(_cacheDirectory!)
+          .listSync()
+          .whereType<File>()
+          .map((f) => path.basename(f.path))
+          .where((n) => RegExp(r'\.mbtiles(-wal|-shm|-journal)?$').hasMatch(n))
+          .map((n) => n.replaceFirst(RegExp(r'\.mbtiles(-wal|-shm|-journal)?$'), ''))
+          .toSet()
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// プロバイダー別のタイル数を取得
   Future<Map<String, int>> getStatistics() async {
     if (_cacheDirectory == null) return {};
@@ -378,10 +395,10 @@ class TileCacheMBTiles {
           await _databases[providerId]!.database.close();
           _databases.remove(providerId);
         }
-        final filePath = path.join(_cacheDirectory!, '$providerId.mbtiles');
-        final file = File(filePath);
-        if (file.existsSync()) {
-          await file.delete();
+        // WAL の相方（-wal / -shm / -journal）も一緒に消す（本体だけ消すと残骸が溜まる）
+        for (final suffix in const ['', '-wal', '-shm', '-journal']) {
+          final file = File(path.join(_cacheDirectory!, '$providerId.mbtiles$suffix'));
+          if (file.existsSync()) await file.delete();
         }
       } else {
         // 全プロバイダーのキャッシュをクリア

@@ -18,6 +18,8 @@
 library;
 import 'package:flutter/material.dart';
 
+import '../core/terrain/contour_tiles.dart' show ContourTiles;
+
 /// タイル取得時の User-Agent（Android/iOS のみ。webはブラウザが付ける）。
 ///
 /// ⚠ OSMのタイル利用ポリシーは「アプリを特定できる固有のUA＋連絡先」を要求し、
@@ -57,6 +59,10 @@ class BaseMapProvider {
   final BaseMapType type;
   final IconData icon;
 
+  /// タイルキャッシュ（MBTiles）の名前。普通は [id] と同じ。生成プロバイダは絵を変えたら版を上げて古いキャッシュと混ぜない
+  /// （[id] は設定の重ね合わせの鍵なので変えない）
+  final String cacheId;
+
   const BaseMapProvider({
     required this.id,
     required this.name,
@@ -67,10 +73,11 @@ class BaseMapProvider {
     required this.attribution,
     required this.type,
     required this.icon,
-  });
+    String? cacheId,
+  }) : cacheId = cacheId ?? id;
 
   /// 等高線（生成プロバイダ）。生成器の登録先
-  static BaseMapProvider get contourOverlay => availableProviders.firstWhere((p) => p.id == 'contours_v4');
+  static BaseMapProvider get contourOverlay => availableProviders.firstWhere((p) => p.id == 'contours');
 
   /// 利用可能な背景地図プロバイダーのリスト
   static const List<BaseMapProvider> availableProviders = [
@@ -166,7 +173,8 @@ class BaseMapProvider {
     // 等高線（標高タイルからアプリ内で作る。`contour_tiles.dart`）。他の背景地図と重ねて使う（高度な設定）。
     // 内部では生成プロバイダ（BaseMapType.generated）だが、一覧では普通の背景地図として振る舞う（松本 2026-09-13）
     BaseMapProvider(
-      id: 'contours_v4', // ⚠ `ContourTiles.version` と合わせる（絵を変えたら上げる。古いキャッシュと混ざらない）
+      id: 'contours',
+      cacheId: 'contours_v${ContourTiles.version}', // 絵を変えたら版が上がり、古いキャッシュは `BaseMapService` が消す
       name: '等高線',
       description: '標高タイルから作る等高線（他の地図と重ねて使う）',
       urlTemplate: '',
@@ -177,6 +185,14 @@ class BaseMapProvider {
       icon: Icons.stacked_line_chart,
     ),
   ];
+
+  /// タイルキャッシュの名前（[cacheId]）から。キャッシュ一覧の表示用。版の古い生成プロバイダのキャッシュは null
+  static BaseMapProvider? getProviderByCacheId(String cacheId) {
+    for (final p in availableProviders) {
+      if (p.cacheId == cacheId) return p;
+    }
+    return null;
+  }
 
   /// IDから背景地図プロバイダーを取得
   static BaseMapProvider? getProviderById(String id) {

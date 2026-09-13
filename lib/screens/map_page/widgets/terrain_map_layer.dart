@@ -804,15 +804,19 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   final Set<(TileKey, int, int, int)> _contourPending = {};
 
   /// このタイル・段の等高線。無ければ isolate に頼んで空を返す（届いたら描き直す）。
-  /// 引いた段（セル 30m 以上）では引かない（本数が多すぎて意味も無い）
+  /// 間隔が固定なら引いた段（セル 30m 以上）では引かない（本数が多すぎて意味も無い）。
+  /// 自動（[TerrainAppearance.contourIntervalFor]）ならセル幅に合わせて粗くするので、かなり引くまで引く
   List<LiftedSegments> _contoursFor(TerrainTile tile, TerrainMesh mesh, int step) {
-    if (!TerrainAppearance.contours || tile.bordered.cellSize * step >= 30) return const [];
+    if (!TerrainAppearance.contours) return const [];
+    final cell = tile.bordered.cellSize * step;
+    final setting = TerrainAppearance.contourIntervalM;
+    if (setting > 0 ? cell >= 30 : cell >= 400) return const [];
     final key = (tile.key, step, tile.borderMask, tile.sourceZoom);
     final cached = _contourCache[key];
     if (cached != null) return cached;
     if (_contourPending.add(key)) {
       final dem = tile.bordered;
-      final interval = TerrainAppearance.contourIntervalM;
+      final interval = TerrainAppearance.contourIntervalFor(cell);
       final args = ContourArgs(
         heights: dem.heights,
         cols: dem.cols,
@@ -824,8 +828,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       TerrainWorker.instance.run(extractContourSegments, args).then((res) {
         if (!mounted) return;
         _contourPending.remove(key);
-        if (!TerrainAppearance.contours || TerrainAppearance.contourIntervalM != interval) return;
-        _contourCache[key] = _liftContours(res, mesh);
+        if (!TerrainAppearance.contours || TerrainAppearance.contourIntervalM != setting) return;
+        _contourCache[key] = _liftContours(res, mesh, interval);
         _scenes.remove(key);
         _scheduleRefresh();
       });
@@ -834,12 +838,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   }
 
   /// 抽出結果を主曲線／計曲線の 2 束に分けて持ち上げる
-  List<LiftedSegments> _liftContours(ContourSegments res, TerrainMesh mesh) {
+  List<LiftedSegments> _liftContours(ContourSegments res, TerrainMesh mesh, double interval) {
     final minor = <List<Offset>>[];
     final major = <List<Offset>>[];
     for (var i = 0; i < res.count; i++) {
       final seg = [Offset(res.xy[i * 4], res.xy[i * 4 + 1]), Offset(res.xy[i * 4 + 2], res.xy[i * 4 + 3])];
-      (TerrainAppearance.isMajor(res.levels[i]) ? major : minor).add(seg);
+      (TerrainAppearance.isMajor(res.levels[i], interval) ? major : minor).add(seg);
     }
     final color = TerrainAppearance.contourColor;
     final w = TerrainAppearance.contourWidthPx;

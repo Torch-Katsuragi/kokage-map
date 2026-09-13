@@ -68,10 +68,11 @@ final terrainContoursDef = SwitchDef(
 final terrainContourIntervalDef = IntDef(
   key: 'terrain_contour_interval',
   title: t.terrainSettings.contourInterval,
-  defaultValue: 10,
-  min: 1,
+  description: t.terrainSettings.contourIntervalDesc,
+  defaultValue: 0, // 0 = 自動
+  min: 0,
   max: 50,
-  formatter: (v) => '$v m',
+  formatter: (v) => v == 0 ? t.terrainSettings.contourAuto : '$v m',
 );
 final terrainContourMajorDef = IntDef(
   key: 'terrain_contour_major',

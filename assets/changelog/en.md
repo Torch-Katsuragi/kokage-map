@@ -5,6 +5,7 @@
 ### Usability
 
 - On opening, the map starts at the extent of all features in the project (it no longer jumps to your location). Only when there are no features does it start in Tokyo and move to your location once known
+- Contour interval has a new default, "Auto": it follows the GSI map scale, about 1 m when zoomed in and 100 m when zoomed out, and contours now show when zoomed out too
 
 ## v0.7.2 — 2026/09/13
 

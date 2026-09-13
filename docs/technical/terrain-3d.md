@@ -478,8 +478,11 @@ flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world
 
 `ContourExtractor`（marching squares、スパイク由来）を isolate で回し（`extractContourSegments`）、
 `LiftedSegments` にして線シェーダで描く（`TerrainTileDrawable.segmentSets`。両 GPU 経路とも線パスで描く）。
-テクスチャでなく形なので、傾けても細いまま。タイル・段ごとにキャッシュ（`_contourCache`）、
-引いた段（セル 30m 以上）では引かない。主曲線（N 本ごと）は倍の太さ。
+テクスチャでなく形なので、傾けても細いまま。タイル・段ごとにキャッシュ（`_contourCache`）。主曲線（N 本ごと）は倍の太さ。
+間隔は既定で**自動**（`TerrainAppearance.contourIntervalFor`、2026-09-13）: 間引き後のセル幅の 2 倍前後を 1 / 2 / 5 の刻みに丸める
+（セル 1.2 m → 1 m、2.4 → 2、4.8 → 5、9.5 → 10、19 → 20、38 → 50、76 → 100、それ以上 200）。地理院地図の刻み（2 万 5 千分 1 = 10 m、
+5 千分 1 = 5 m、2 千 5 百分 1 = 2 m）に寄せた。自動ならセル 400 m まで引く。固定の間隔（設定で m を選ぶ）なら従来どおりセル 30 m 以上では引かない。
+主曲線の判定はその段の間隔で（`isMajor(level, interval)`）。
 
 ### 引いた段の焼き込み（真上からの投影）
 

@@ -55,9 +55,24 @@ class TerrainAppearance {
 
   static bool contours = false;
 
-  /// 等高線の間隔（m）と、何本ごとに主曲線（太く）にするか
-  static double contourIntervalM = 10;
+  /// 等高線の間隔（m）。**0 は自動**（[contourIntervalFor]。寄ると細かく、引くと粗く）。何本ごとに主曲線（太く）にするかは [contourMajorEvery]
+  static double contourIntervalM = 0;
   static int contourMajorEvery = 5;
+
+  /// 格子のセル幅（m。間引き後）に対する等高線の間隔。固定なら [contourIntervalM] そのまま。
+  /// 自動は地理院地図の刻みに寄せる（2 万 5 千分 1 = 10 m、5 千分 1 = 5 m、2 千 5 百分 1 = 2 m、引くと 20〜100 m）:
+  /// セル幅の 2 倍前後を 1 / 2 / 5 の刻みに丸める。松本 2026-09-13「寄ると 1 m が見やすいが、離れたらただ灰色になる」
+  static double contourIntervalFor(double cellSizeM) {
+    if (contourIntervalM > 0) return contourIntervalM;
+    if (cellSizeM <= 1.5) return 1;
+    if (cellSizeM <= 3) return 2;
+    if (cellSizeM <= 6) return 5;
+    if (cellSizeM <= 12) return 10;
+    if (cellSizeM <= 25) return 20;
+    if (cellSizeM <= 50) return 50;
+    if (cellSizeM <= 100) return 100;
+    return 200;
+  }
   static Color contourColor = const Color(0xCC6D4C41);
   static double contourWidthPx = 1;
 
@@ -83,9 +98,9 @@ class TerrainAppearance {
     return out;
   }
 
-  /// 主曲線か（[level] は等高線の高さ）
-  static bool isMajor(double level) {
-    final n = (level / contourIntervalM).round();
+  /// 主曲線か（[level] は等高線の高さ、[interval] はその段の間隔）
+  static bool isMajor(double level, double interval) {
+    final n = (level / interval).round();
     return contourMajorEvery > 0 && n % contourMajorEvery == 0;
   }
 }

@@ -258,6 +258,16 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     }
   }
 
+  /// web の `#/map?...`（hashchange）は Navigator に渡さない。`/map` は routes に無いので
+  /// `pushNamed` が `onUnknownRoute`（未設定）の null 参照で落ちる（v0.7.2 の release で発覚。v0.7.1 は `/map` が routes にあった）。
+  /// 要求そのものは `LaunchRequest` が hashchange で拾ってホーム／地図に渡す。
+  /// このオブザーバは MaterialApp のものより先に登録されるので、true を返せばそこで止まる
+  @override
+  Future<bool> didPushRouteInformation(RouteInformation routeInformation) async {
+    final path = routeInformation.uri.path;
+    return path == '/map' || path.startsWith('/map/');
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);

@@ -11,6 +11,10 @@
 - The attribution line at the bottom-left of the map is gone; sources are listed under Maps & Tiles → Data sources (it still appears on the map while OpenStreetMap is in use)
 - Contours are now one of the basemaps: stack them over the standard map or photos in the layers list. Contour tiles are generated from the elevation tiles and kept in the tile cache, so they appear instantly the second time and offline. The interval matches the GSI standard map: 2 m at zoom 18, 10 m at 15–17, 100 m at 12–14, 200 m at 9–11. The contour settings under Terrain appearance (interval, color, width) are gone
 
+### Fixes
+
+- Rivers and lakes could show up as rectangular plateaus with vertical walls in the 3D terrain. Water surfaces without elevation data are now filled from a secondary elevation source and interpolated from their surroundings
+
 ## v0.7.2 — 2026/09/13
 
 ### Fixes

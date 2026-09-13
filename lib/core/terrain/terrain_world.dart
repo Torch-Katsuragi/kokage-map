@@ -564,11 +564,32 @@ class TerrainWorld extends ChangeNotifier {
       if (nan > 0) {
         // 主力を重ねても残った穴（整備範囲の縁・水面）。行の前の値で埋めると台地や縞になり、
         // 隣のタイルとの縁で数百 m の段差（断層）が出る（2026-09-12 に `[3D] seam` で 329m を観測）。
-        // まず親の近似（高さ空間で補間）で埋め、それでも残ればこれまでの埋め方
+        // まず親の近似（高さ空間で補間）で埋める
         final filled = fillFromAncestor ? await _fillFromAncestor(key, merged) : 0;
-        final left = _countNaN(merged.heights);
-        if (left > 0) fillInvalidHeights(merged.heights);
-        if (kDebugMode) debugPrint('[3D] dem $key: 無効 $nan 点（親の近似で $filled、残り $left は前の値）');
+        var left = _countNaN(merged.heights);
+        // 川や湖は地理院の 3 ソース全部が無効なので親を辿っても埋まらない（2026-09-13 に北山川で台地を観測）。
+        // 残った穴は最後の砦（AWS。水面にも値がある）を点ごとに重ねる。z ≤ 15 だけ（それより細かい段は親の近似がこれを受け継ぐ）
+        var resort = 0;
+        if (left > 0) {
+          for (final s in demSources) {
+            if (!s.lastResort || !usable(s)) continue;
+            final dem = await fetch(s);
+            if (dem == null || dem.heights.length != merged.heights.length) continue;
+            final a = merged.heights;
+            final b = dem.heights;
+            for (var j = 0; j < a.length; j++) {
+              if (a[j].isNaN && !b[j].isNaN) {
+                a[j] = b[j];
+                resort++;
+              }
+            }
+            break;
+          }
+          left = _countNaN(merged.heights);
+        }
+        // それでも残れば周りから補間（台地にはならない）
+        if (left > 0) fillInvalidHeights(merged.heights, cols: merged.cols);
+        if (kDebugMode) debugPrint('[3D] dem $key: 無効 $nan 点（親の近似で $filled、最後の砦で $resort、残り $left は補間）');
       }
     }
     return merged;

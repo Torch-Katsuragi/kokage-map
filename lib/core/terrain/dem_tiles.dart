@@ -274,7 +274,7 @@ class DemTileLoader {
     if (sw.elapsedMilliseconds > 800) {
       debugPrint('[3D] dem ${range.z}/${range.x0}/${range.y0} fetch ${fetchMs}ms assemble ${sw.elapsedMilliseconds - fetchMs}ms');
     }
-    if (fillInvalid) fillInvalidHeights(heights);
+    if (fillInvalid) fillInvalidHeights(heights, cols: range.width * WebMercator.tileSize);
     const ts = WebMercator.tileSize;
     final cols = range.width * ts;
     final rows = range.height * ts;
@@ -379,24 +379,92 @@ Float32List _assembleHeights(_AssembleArgs a) {
   return heights;
 }
 
-/// 無効値（NaN。地理院タイルの海・データなし・水面）を埋める: 直前の有効値。先頭が無効なら最初の有効値、全部無効なら 0（海面）
+/// 無効値（NaN。地理院タイルの海・データなし・水面）を周りから補間して埋める。
+/// [cols] を渡すと格子として扱う: 行の中は左右の有効値の間を線形補間（片側しか無ければその値）、
+/// 行ごと無効なら上下の有効な行の間を列ごとに補間。全部無効なら 0（海面）。
+/// [cols] が無ければ従来の「直前の有効値」（先頭が無効なら最初の有効値）。
 ///
-/// ⚠ 整備範囲の縁のタイルは大半が無効で、これで埋めると行ごとの縞と巨大な台地になる。
-/// 世界（TerrainWorld）は先に次のソースで埋め（[TerrainWorld] の連なり）、残りだけこれで埋める
-void fillInvalidHeights(Float32List h) {
-  var last = 0.0;
-  for (var i = 0; i < h.length; i++) {
-    if (!h[i].isNaN) {
-      last = h[i];
-      break;
+/// ⚠ 「直前の値」で埋めると、タイルの先頭（南）の行が丸ごと無効なとき（川が南の縁を横切る等）に
+/// タイルの最初の有効値の**台地**（垂直の壁つき）になる（2026-09-13 に北山川で観測）。
+/// 世界（TerrainWorld）は先に次のソース・親の近似・最後の砦で埋め、残りだけこれで埋める
+void fillInvalidHeights(Float32List h, {int cols = 0}) {
+  if (cols <= 0 || h.length % cols != 0) {
+    var last = 0.0;
+    for (var i = 0; i < h.length; i++) {
+      if (!h[i].isNaN) {
+        last = h[i];
+        break;
+      }
+    }
+    for (var i = 0; i < h.length; i++) {
+      final v = h[i];
+      if (v.isNaN) {
+        h[i] = last;
+      } else {
+        last = v;
+      }
+    }
+    return;
+  }
+  final rows = h.length ~/ cols;
+  final rowValid = List<bool>.filled(rows, false);
+  // 1. 行の中で左右から補間
+  for (var r = 0; r < rows; r++) {
+    final base = r * cols;
+    var c = 0;
+    while (c < cols) {
+      if (!h[base + c].isNaN) {
+        rowValid[r] = true;
+        c++;
+        continue;
+      }
+      final start = c;
+      while (c < cols && h[base + c].isNaN) {
+        c++;
+      }
+      final end = c; // [start, end) が無効
+      final left = start > 0 ? h[base + start - 1] : double.nan;
+      final right = end < cols ? h[base + end] : double.nan;
+      if (left.isNaN && right.isNaN) continue; // 行ごと無効（2 で埋める）
+      rowValid[r] = true;
+      for (var i = start; i < end; i++) {
+        if (left.isNaN) {
+          h[base + i] = right;
+        } else if (right.isNaN) {
+          h[base + i] = left;
+        } else {
+          final t = (i - start + 1) / (end - start + 1);
+          h[base + i] = left + (right - left) * t;
+        }
+      }
     }
   }
-  for (var i = 0; i < h.length; i++) {
-    final v = h[i];
-    if (v.isNaN) {
-      h[i] = last;
-    } else {
-      last = v;
+  // 2. 行ごと無効: 上下の有効な行の間を列ごとに補間（片側しか無ければ写す。1 行も無ければ 0）
+  if (!rowValid.any((v) => v)) {
+    h.fillRange(0, h.length, 0);
+    return;
+  }
+  var r = 0;
+  while (r < rows) {
+    if (rowValid[r]) {
+      r++;
+      continue;
+    }
+    final start = r;
+    while (r < rows && !rowValid[r]) {
+      r++;
+    }
+    final end = r; // [start, end) が無効な行
+    final above = start > 0 ? start - 1 : -1;
+    final below = end < rows ? end : -1;
+    for (var rr = start; rr < end; rr++) {
+      final t = (rr - start + 1) / (end - start + 1);
+      for (var c = 0; c < cols; c++) {
+        final a = above >= 0 ? h[above * cols + c] : double.nan;
+        final b = below >= 0 ? h[below * cols + c] : double.nan;
+        h[rr * cols + c] = a.isNaN ? b : (b.isNaN ? a : a + (b - a) * t);
+      }
+      rowValid[rr] = true;
     }
   }
 }

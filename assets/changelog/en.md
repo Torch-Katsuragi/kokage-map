@@ -13,6 +13,7 @@
 
 ### Fixes
 
+- The heading indicator on the location marker is a fan again (it had become a line when the map went 3D)
 - Rivers and lakes could show up as rectangular plateaus with vertical walls in the 3D terrain. Water surfaces without elevation data are now filled from a secondary elevation source and interpolated from their surroundings
 
 ## v0.7.2 — 2026/09/13

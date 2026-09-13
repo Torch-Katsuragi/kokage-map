@@ -63,13 +63,16 @@ class TerrainFeatureStyle {
 
 /// DEM に持ち上げた点（ビルボードの丸）
 class TerrainPoint {
-  const TerrainPoint({required this.x, required this.y, required this.color, required this.sizePx});
+  const TerrainPoint({required this.x, required this.y, required this.color, required this.sizePx, this.headingDeg});
 
   /// DEM 原点基準の Mercator m
   final double x;
   final double y;
   final Color color;
   final double sizePx;
+
+  /// 端末の向き（度、北から時計回り）。現在位置の点だけ持ち、画面上に 60° の扇（2D と同じ）を描く
+  final double? headingDeg;
 }
 
 /// 地形に載せるもの一式

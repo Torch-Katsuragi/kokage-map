@@ -730,19 +730,41 @@ class TerrainWorldPainter extends CustomPainter {
     onPainted?.call(sw.elapsed);
   }
 
-  /// 動的な点（現在位置・描画中の点など）。毎フレーム投影し、隠れ判定は視線なぞり
+  /// 動的な点（現在位置・描画中の点など）。毎フレーム投影し、隠れ判定は視線なぞり。
+  /// 向きを持つ点（現在位置）はその手前に 60°・半径 30 px の扇（2D の `CompassFanPainter` と同じ見た目・画面座標）
   void _paintDynamicPoints(Canvas canvas, TerrainTileDrawable t, Size size, Rect viewport, Paint pointPaint, Paint pointEdge) {
     for (final pt in t.dynamicPoints) {
       final wx = t.originX + pt.x;
       final wy = t.originY + pt.y;
       final z = elevationAt(wx, wy) ?? 0;
       final sp = toScreen(wx, wy, z, size);
-      if (!viewport.inflate(16).contains(sp)) continue;
+      if (!viewport.inflate(40).contains(sp)) continue;
       if (!gesturing && isOccluded(wx, wy, z)) continue;
+      final heading = pt.headingDeg;
+      if (heading != null) _paintHeadingFan(canvas, sp, heading);
       pointPaint.color = pt.color;
       canvas.drawCircle(sp, pt.sizePx, pointPaint);
       canvas.drawCircle(sp, pt.sizePx, pointEdge);
     }
+  }
+
+  static final _fanFill = Paint()..color = Colors.lightBlue.withValues(alpha: 0.3);
+  static final _fanEdge = Paint()
+    ..color = Colors.lightBlue.withValues(alpha: 0.6)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2;
+
+  /// 端末の向きの扇。画面上の向き = 向き − 地図の方位（コンパスの針と同じ換算）
+  void _paintHeadingFan(Canvas canvas, Offset center, double headingDeg) {
+    const radius = 30.0;
+    const sweep = 60 * math.pi / 180;
+    final mid = headingDeg * math.pi / 180 - camera.bearing - math.pi / 2;
+    final path = Path()
+      ..moveTo(center.dx, center.dy)
+      ..arcTo(Rect.fromCircle(center: center, radius: radius), mid - sweep / 2, sweep, false)
+      ..close();
+    canvas.drawPath(path, _fanFill);
+    canvas.drawPath(path, _fanEdge);
   }
 
   /// しばらく描いていない投影キャッシュを捨てる（1 秒に 1 回）

@@ -109,7 +109,7 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   /// 今日の GPS 軌跡（未 Consolidation 分。Consolidation 済みはレイヤ経由で届く）
   final List<LatLng> Function() gpsTrack;
 
-  /// 端末の向き（度）。現在位置から向きの線を引く（2D のコンパス扇に相当）
+  /// 端末の向き（度）。現在位置の扇（2D のコンパス扇と同じ）
   final ValueListenable<double?>? heading;
 
   /// 投影の登録 / 解除（3D に入るとき / 出るとき）
@@ -1464,37 +1464,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         clipRect: clip,
       ),
     );
-    // 3. 現在位置（青）と端末の向き（青い線、30m。2D のコンパス扇に相当）
+    // 3. 現在位置（青）と端末の向き（画面上の 60° の扇。2D と同じ。描くのは painter の `_paintHeadingFan`）
     if (loc != null) {
       final x = WebMercator.xFromLon(loc.longitude) - dem.originX;
       final y = WebMercator.yFromLat(loc.latitude) - dem.originY;
       if (clip.contains(Offset(x, y))) {
         // 半透明: 不透明だと真下の点や短い線を隠す（2026-09-01 実機で確認）
-        points.add(TerrainPoint(x: x, y: y, color: Colors.blue.withValues(alpha: 0.55), sizePx: 9));
-      }
-      if (headingDeg != null) {
-        const len = 30.0;
-        final rad = headingDeg * math.pi / 180;
-        final tip = LatLng(
-          loc.latitude + len * math.cos(rad) / 111320.0,
-          loc.longitude + len * math.sin(rad) / (111320.0 * math.cos(loc.latitude * math.pi / 180)),
-        );
-        add(
-          builder(const {}, const TerrainFeatureStyle(
-            lineColor: Colors.blue, lineWidth: 4, fillColor: Color(0x00000000),
-            outlineColor: Color(0x00000000), outlineWidth: 0, pointColor: Colors.blue, pointSize: 4,
-          ), '__no_label__').build(
-            lines: [
-              geo.Feature<geo.Geometry>(
-                geometry: geo.LineString.from([
-                  geo.Geographic(lon: loc.longitude, lat: loc.latitude),
-                  geo.Geographic(lon: tip.longitude, lat: tip.latitude),
-                ]),
-              ),
-            ],
-            clipRect: clip,
-          ),
-        );
+        points.add(TerrainPoint(x: x, y: y, color: Colors.blue.withValues(alpha: 0.55), sizePx: 9, headingDeg: headingDeg));
       }
     }
     // 4. 描画中の線・面・点（ペン）。2D の描画プレビューと同じ赤

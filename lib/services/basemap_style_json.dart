@@ -62,8 +62,10 @@ String buildBasemapStyleJson({
   String glyphsUrl = _kFallbackGlyphs,
 }) {
   final sources = <String, dynamic>{
+    // 生成プロバイダ（等高線）は URL が無い（web の MapLibre には出せない）
     for (final provider in providers)
-      basemapSourceId(provider.id): {
+      if (provider.urlTemplate.isNotEmpty)
+        basemapSourceId(provider.id): {
         'type': 'raster',
         'tiles': [provider.urlTemplate],
         'tileSize': 256,

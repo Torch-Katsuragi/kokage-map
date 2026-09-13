@@ -1443,7 +1443,6 @@
   "terrainSettings": {
     "title": "Terrain look",
     "colorSection": "Coloring",
-    "contourSection": "Contour lines",
     "colorMode": "Coloring",
     "colorModeDesc": "Colors come from the mesh's slope and elevation, so they stay sharp from any angle",
     "colorNone": "None (base map)",
@@ -1455,17 +1454,7 @@
     "colorMid": "Middle color",
     "colorHigh": "High / steep color",
     "slopeMax": "Steepest slope",
-    "slopeMaxDesc": "This angle gets the steep-side color",
-    "contours": "Draw contour lines",
-    "contoursDesc": "Lines generated from the elevation tiles",
-    "contourInterval": "Interval",
-    "contourIntervalDesc": "\"Auto\" follows the GSI map scale: about 1 m when zoomed in, 100 m when zoomed out",
-    "contourAuto": "Auto",
-    "contourMajor": "Index every",
-    "contourMajorDesc": "Every Nth line is drawn thicker",
-    "everyN": "every $n",
-    "contourColor": "Line color",
-    "contourWidth": "Line width"
+    "slopeMaxDesc": "This angle gets the steep-side color"
   },
   "labelComposer": {
     "columnsSorted": "Columns (most filled first)",

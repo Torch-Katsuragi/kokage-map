@@ -1443,7 +1443,6 @@
   "terrainSettings": {
     "title": "地形の見た目",
     "colorSection": "色分け",
-    "contourSection": "等高線",
     "colorMode": "色分けの種類",
     "colorModeDesc": "頂点の傾斜・標高から色を引くので、横から見ても粗くなりません",
     "colorNone": "なし（基図のまま）",
@@ -1455,17 +1454,7 @@
     "colorMid": "中間の色",
     "colorHigh": "高い／急な側の色",
     "slopeMax": "傾斜の上限",
-    "slopeMaxDesc": "この角度で「急な側の色」になります",
-    "contours": "等高線を描く",
-    "contoursDesc": "標高タイルから線を作って描きます",
-    "contourInterval": "間隔",
-    "contourIntervalDesc": "「自動」は地理院地図の刻みに合わせ、寄ると 1 m・引くと 100 m のように変わります",
-    "contourAuto": "自動",
-    "contourMajor": "太くする本数",
-    "contourMajorDesc": "この本数ごとに太い線（主曲線）にします",
-    "everyN": "$n 本ごと",
-    "contourColor": "線の色",
-    "contourWidth": "線の太さ"
+    "slopeMaxDesc": "この角度で「急な側の色」になります"
   },
   "labelComposer": {
     "columnsSorted": "列（値が入っている順）",

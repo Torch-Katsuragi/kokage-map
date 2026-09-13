@@ -28,7 +28,7 @@ import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/fs/k_file_system.dart';
-import '../../../core/terrain/contours.dart';
+import '../../../core/terrain/contour_tiles.dart';
 import '../../../core/terrain/dem_grid.dart';
 import '../../../core/terrain/dem_tiles.dart';
 import '../../../core/terrain/gpu/terrain_gpu.dart';
@@ -203,13 +203,9 @@ class _TileScene {
     this.dynamicLines = const [],
     this.dynamicPolygons = const [],
     this.dynamicPoints = const [],
-    this.segmentSets = const [],
     this.staticSource,
     this.complete = true,
   });
-
-  /// 等高線などの線分の束（タイル単位で作る。静的シーンとは別に持つ）
-  final List<LiftedSegments> segmentSets;
 
   /// まだ持ち上げていないフィーチャがある（時間を分けて育てる静的シーン）
   bool complete;
@@ -356,6 +352,42 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     return layers.isNotEmpty ? layers.first.$1 : null;
   }
 
+  /// 基図の重ね層の署名（変わったらテクスチャを貼り直す）: 各層の id と不透明度
+  String _textureLayersKey() =>
+      [for (final (p, o) in widget.baseMapService.activeLayerConfig) '${p.id}:${o.toStringAsFixed(3)}'].join(',');
+  String _textureKey = '';
+
+  /// 基図の上に合成する層（高度な設定の 2 枚目以降。等高線もその 1 つで、生成プロバイダのタイルは
+  /// キャッシュに無ければ [_renderContourTile] が作る）
+  List<(TileFetcher, double)> _overlayFetchers() {
+    final svc = widget.baseMapService;
+    return [for (final (p, o) in svc.activeLayerConfig.skip(1)) ((z, x, y) => svc.getTile(p, z, x, y), o)];
+  }
+
+  /// 等高線タイルを作る（`contour_tiles.dart`）。テクスチャの段 z の 1 段下の DEM タイルの、該当する 1/4 を描く。
+  /// DEM の段が足りなければ（z > 18）さらに上の段から
+  Future<Uint8List?> _renderContourTile(int z, int x, int y) async {
+    final zDem = math.min(z - 1, _world.maxZoom);
+    final k = z - zDem;
+    if (zDem < _world.minZoom || k < 1 || k > 4) return null;
+    final key = TileKey(zDem, x >> k, y >> k);
+    final dem = await _world.demFor(key);
+    if (dem == null || !mounted) return null;
+    final cells = WebMercator.tileSize >> k;
+    final mask = (1 << k) - 1;
+    final args = ContourTileArgs(
+      heights: dem.heights,
+      cols: dem.cols,
+      rows: dem.rows,
+      cellSize: dem.cellSize,
+      col0: (x & mask) * cells,
+      row0: WebMercator.tileSize - ((y & mask) + 1) * cells, // 行は南が 0
+      cells: cells,
+      interval: ContourTiles.intervalForZoom(z),
+    );
+    return TerrainWorker.instance.run(renderContourTilePng, args);
+  }
+
   String _attributionFor(BaseMapProvider? basemap) => [
         if (basemap != null) basemap.attribution,
         ...{for (final s in DemTileSource.defaultCascade) s.attribution},
@@ -363,8 +395,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   /// 基図の設定が変わった（3D 中は MapLibre が無いので、地形のテクスチャを貼り直す）
   void _onBasemapChanged() {
+    final key = _textureLayersKey();
+    if (key == _textureKey) return;
+    _textureKey = key;
     final b = _currentBasemap();
-    if (b?.id == _basemap?.id) return;
     _basemap = b;
     _attribution = _attributionFor(b);
     _tileImages.clear(); // 画像 LRU は層番号で引くので、前の基図の絵が混ざる
@@ -484,8 +518,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       zScale: WebMercator.zScaleAt(center.latitude),
     );
     _basemap = _currentBasemap();
+    _textureKey = _textureLayersKey();
     _attribution = _attributionFor(_basemap);
     widget.baseMapService.addListener(_onBasemapChanged);
+    widget.baseMapService.registerTileGenerator(BaseMapProvider.contourOverlay.id, _renderContourTile);
     _world = TerrainWorld(
       demSources: DemTileSource.defaultCascade,
       demFetcher: (source, z, x, y) => widget.baseMapService.getTile(_terrainProviders[source.id]!, z, x, y),
@@ -496,6 +532,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       },
       imageCache: _tileImages,
     )
+      ..textureOverlayFetchers = _overlayFetchers
       ..addListener(_onWorldChanged)
       ..textureDecorator = _decorateTexture;
     _planner = TerrainFramePlanner(_world);
@@ -660,6 +697,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     if (kIsWeb) BrowserContextMenu.enableContextMenu();
     _listenedDevice?.removeListener(_scheduleRefresh);
     widget.baseMapService.removeListener(_onBasemapChanged);
+    widget.baseMapService.unregisterTileGenerator(BaseMapProvider.contourOverlay.id, _renderContourTile);
     _anim.dispose();
     _retextureTimer?.cancel();
     _bakeCheckTimer?.cancel();
@@ -790,68 +828,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }));
   }
 
-  /// 地形の見た目（色分け・等高線）の設定が変わった。等高線は作り直し、合成も捨てる
+  /// 地形の見た目（色分け）の設定が変わった。合成を捨てる
   void _onAppearanceChanged() {
-    _contourCache.clear();
-    _contourPending.clear();
     _scenes.clear();
     _scheduleRefresh();
   }
 
   // ── 等高線（タイルごと・isolate で抽出） ──────────────────
-
-  final Map<(TileKey, int, int, int), List<LiftedSegments>> _contourCache = {};
-  final Set<(TileKey, int, int, int)> _contourPending = {};
-
-  /// このタイル・段の等高線。無ければ isolate に頼んで空を返す（届いたら描き直す）。
-  /// 間隔が固定なら引いた段（セル 30m 以上）では引かない（本数が多すぎて意味も無い）。
-  /// 自動（[TerrainAppearance.contourIntervalFor]）ならセル幅に合わせて粗くするので、かなり引くまで引く
-  List<LiftedSegments> _contoursFor(TerrainTile tile, TerrainMesh mesh, int step) {
-    if (!TerrainAppearance.contours) return const [];
-    final cell = tile.bordered.cellSize * step;
-    final setting = TerrainAppearance.contourIntervalM;
-    if (setting > 0 ? cell >= 30 : cell >= 400) return const [];
-    final key = (tile.key, step, tile.borderMask, tile.sourceZoom);
-    final cached = _contourCache[key];
-    if (cached != null) return cached;
-    if (_contourPending.add(key)) {
-      final dem = tile.bordered;
-      final interval = TerrainAppearance.contourIntervalFor(cell);
-      final args = ContourArgs(
-        heights: dem.heights,
-        cols: dem.cols,
-        rows: dem.rows,
-        cellSize: dem.cellSize,
-        interval: interval,
-        step: step,
-      );
-      TerrainWorker.instance.run(extractContourSegments, args).then((res) {
-        if (!mounted) return;
-        _contourPending.remove(key);
-        if (!TerrainAppearance.contours || TerrainAppearance.contourIntervalM != setting) return;
-        _contourCache[key] = _liftContours(res, mesh, interval);
-        _scenes.remove(key);
-        _scheduleRefresh();
-      });
-    }
-    return const [];
-  }
-
-  /// 抽出結果を主曲線／計曲線の 2 束に分けて持ち上げる
-  List<LiftedSegments> _liftContours(ContourSegments res, TerrainMesh mesh, double interval) {
-    final minor = <List<Offset>>[];
-    final major = <List<Offset>>[];
-    for (var i = 0; i < res.count; i++) {
-      final seg = [Offset(res.xy[i * 4], res.xy[i * 4 + 1]), Offset(res.xy[i * 4 + 2], res.xy[i * 4 + 3])];
-      (TerrainAppearance.isMajor(res.levels[i], interval) ? major : minor).add(seg);
-    }
-    final color = TerrainAppearance.contourColor;
-    final w = TerrainAppearance.contourWidthPx;
-    return [
-      if (minor.isNotEmpty) LiftedSegments.lift(minor, mesh, color: color, widthPx: w),
-      if (major.isNotEmpty) LiftedSegments.lift(major, mesh, color: color, widthPx: w * 2),
-    ];
-  }
 
   // ── フレームの組み立て ──────────────────────────────
 
@@ -878,7 +861,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       // タイルの出入り: 消えたタイルのぶんだけ捨てる（縁が変わったタイルはキーが変わるので自然に入れ替わる）
       _scenes.removeWhere((k, _) => !_world.has(k.$1));
       _staticScenes.removeWhere((k, _) => !_world.has(k.$1));
-      _contourCache.removeWhere((k, _) => !_world.has(k.$1));
       _staticProgress.removeWhere((k, _) => !_world.has(k.$1));
       _dynamicScenes.removeWhere((k, _) => !_world.has(k.$1));
       _pruneMeshes();
@@ -1036,7 +1018,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       dynamicLines: scene.dynamicLines,
       dynamicPolygons: scene.dynamicPolygons,
       dynamicPoints: scene.dynamicPoints,
-      segmentSets: scene.segmentSets,
       points: scene.points,
       labels: scene.labels,
     );
@@ -1105,7 +1086,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images,
       g.lineVertices, g.polygonVertices,
     ];
-    final contours = _contoursFor(tile, mesh, step);
     final drawing = GlobalDrawingState.instance;
     final tool = ref.read(currentToolProvider);
     final selectedOverlays = <OverlayImageNode>[
@@ -1122,7 +1102,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       overlayFrameKey, tool is OverlayTransformTool ? tool.rotationHandlePosition : null,
       deviceLines.length, deviceStation, headingKey, tool.name,
     ];
-    final key = <Object?>[...staticKey, ...dynamicKey, contours];
+    final key = <Object?>[...staticKey, ...dynamicKey];
     final cached = _scenes[cacheKey];
     if (cached != null && _sameKey(cached.key, key)) return cached;
 
@@ -1183,7 +1163,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       dynamicLines: dyn.lines,
       dynamicPolygons: dyn.polygons,
       dynamicPoints: dyn.points,
-      segmentSets: contours,
       points: stat.points,
       // 動的なラベルが無ければ静的のリストをそのまま（同一性を保つ → 描画側のラベル投影キャッシュが効く）
       labels: dyn.labels.isEmpty ? stat.labels : [...stat.labels, ...dyn.labels],

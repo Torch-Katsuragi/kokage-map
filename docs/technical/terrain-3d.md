@@ -474,15 +474,23 @@ flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world
   描画側は毎フレーム `TerrainAppearance` の静的な値を読む（widget 木を通さない）
 - 頂点は position(3) + uv(2) + shade(1) + slope(1) = 28 バイト（`GpuTerrainGeometry`）
 
-### 等高線は DEM から線として
+### 等高線はラスタタイル（2026-09-13 に形からタイルへ）
 
-`ContourExtractor`（marching squares、スパイク由来）を isolate で回し（`extractContourSegments`）、
-`LiftedSegments` にして線シェーダで描く（`TerrainTileDrawable.segmentSets`。両 GPU 経路とも線パスで描く）。
-テクスチャでなく形なので、傾けても細いまま。タイル・段ごとにキャッシュ（`_contourCache`）。主曲線（N 本ごと）は倍の太さ。
-間隔は既定で**自動**（`TerrainAppearance.contourIntervalFor`、2026-09-13）: 間引き後のセル幅の 2 倍前後を 1 / 2 / 5 の刻みに丸める
-（セル 1.2 m → 1 m、2.4 → 2、4.8 → 5、9.5 → 10、19 → 20、38 → 50、76 → 100、それ以上 200）。地理院地図の刻み（2 万 5 千分 1 = 10 m、
-5 千分 1 = 5 m、2 千 5 百分 1 = 2 m）に寄せた。自動ならセル 400 m まで引く。固定の間隔（設定で m を選ぶ）なら従来どおりセル 30 m 以上では引かない。
-主曲線の判定はその段の間隔で（`isMajor(level, interval)`）。
+松本「メッシュから計算した後はタイルとしてキャッシュして、地図・タイル側で背景地図として扱う。等高線の細かい設定は大胆に切り捨て」。
+以前は タイル・段ごとに marching squares で線を作って形（`LiftedSegments`）として持ち上げていた（メモリのキャッシュだけ、web は同じスレッド、
+設定は間隔・主曲線・色・太さ）。今は:
+
+- `contour_tiles.dart`: 標高タイル（DEM）から marching squares で線を引き、256×256 の透明 PNG にする（`renderContourTilePng`、
+  純 Dart で isolate）。テクスチャの段 z の 1 段下の DEM タイル（読み込み済みなら縁を借りた格子 `bordered`、無ければ `TerrainWorld.demFor`）の
+  該当する 1/4 を描く。間隔はズームで固定（`ContourTiles.intervalForZoom`: z19 = 1 m、z18 = 2、z17 = 5、z15〜16 = 10、z14 = 20、z13 = 50、z12 = 100、それ以下 200。地理院地図の刻み）、5 本ごとに主曲線
+- 生成プロバイダ `BaseMapProvider.contourOverlay`（`BaseMapType.generated`、id `contours_v2`。`availableProviders` の 1 つで、一覧では普通の背景地図として振る舞う）: `BaseMapService.registerTileGenerator` で
+  生成器を登録し、`getTile` は キャッシュ → 生成 → キャッシュ（MBTiles）。背景地図と同じ経路なので一度作れば圏外でも出る。
+  絵を変えたら `ContourTiles.version` を上げて id を変える（古い絵が残らない）
+- 3D のテクスチャ合成は `TerrainWorld.textureOverlayFetchers`（基図 + 高度な設定の 2 枚目以降 + 等高線）を `composeLayers` で重ねる。
+  以前は `activeLayerConfig` の先頭 1 枚しか使っていなかった
+- 設定は背景地図の一覧に「等高線」が並ぶだけ（松本「カード分けなくてよくね？重ね合わせ機能ももともとある」）。高度な設定の重ね合わせで標準地図 + 等高線のように混ぜる。地形の見た目 から等高線の節は消した。
+  web の MapLibre（feature_editor）には URL が無いので出ない（`buildBasemapStyleJson` が飛ばす）
+- 絵なので傾けると粗い（引いた段では気にならない）。線として持ち上げたい場面（真横から見る等）が出たら、そのときに考える
 
 ### 引いた段の焼き込み（真上からの投影）
 

@@ -305,6 +305,14 @@ class TerrainWorld extends ChangeNotifier {
   int get maxZoom => demSources.map((s) => s.maxZoom).reduce(math.max);
   final TileFetcher textureFetcher;
 
+  /// 基図の上に合成する層（等高線など）。取りに行くたびに今のものを見る（設定で変わる）
+  List<(TileFetcher, double)> Function()? textureOverlayFetchers;
+
+  List<(TileFetcher, double)> _textureLayers() => [(textureFetcher, 1.0), ...?textureOverlayFetchers?.call()];
+
+  /// [key] の DEM。読み込み済みなら縁を借りた格子（[TerrainTile.bordered]）、無ければ取りに行く（近似はしない）
+  Future<DemGrid?> demFor(TileKey key) async => _tiles[key]?.bordered ?? await _loadDem(key);
+
   /// テクスチャは DEM より何段細かいラスタで作るか（1 = 512²）
   final int textureZoomOffset;
   final int maxTiles;
@@ -491,7 +499,7 @@ class TerrainWorld extends ChangeNotifier {
     final demMs = sw.elapsedMilliseconds;
     final texRange = range.zoomIn(textureZoomOffset);
     final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
-        .compose(texRange, decorate: textureDecorator);
+        .composeLayers(texRange, _textureLayers(), decorate: textureDecorator);
     if (sw.elapsedMilliseconds > 800) debugPrint('[3D] tile $key load ${sw.elapsedMilliseconds}ms (dem $demMs)');
     return TerrainTile(key: key, raw: dem, sourceZoom: sourceZoom)
       ..texture = tex
@@ -656,7 +664,7 @@ class TerrainWorld extends ChangeNotifier {
       if (gen != _retextureGen || !_tiles.containsKey(tile.key)) return;
       final range = TileRange(z: tile.key.z, x0: tile.key.x, y0: tile.key.y, x1: tile.key.x, y1: tile.key.y);
       final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
-          .compose(range.zoomIn(textureZoomOffset), decorate: textureDecorator);
+          .composeLayers(range.zoomIn(textureZoomOffset), _textureLayers(), decorate: textureDecorator);
       if (gen != _retextureGen || !_tiles.containsKey(tile.key)) {
         tex.dispose();
         return;

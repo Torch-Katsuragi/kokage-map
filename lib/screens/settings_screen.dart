@@ -518,7 +518,7 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
               ListTile(
                 leading: const Icon(Icons.map, color: Colors.green),
                 title: Text(t.settings.appInfo.dataSourcesBasemap),
-                subtitle: Text({for (final p in BaseMapProvider.availableProviders) p.attribution}.join('\n')),
+                subtitle: Text({for (final p in BaseMapProvider.availableProviders) if (p.attribution.isNotEmpty) p.attribution}.join('\n')),
               ),
               ListTile(
                 leading: const Icon(Icons.terrain, color: Colors.green),

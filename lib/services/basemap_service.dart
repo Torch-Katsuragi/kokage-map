@@ -154,6 +154,33 @@ class BaseMapService extends ChangeNotifier {
   /// オフラインモードかどうか
   bool get isOfflineMode => _isOfflineMode;
 
+  /// アプリ内でタイルを作るプロバイダ（[BaseMapType.generated]）の生成器。キャッシュに無ければこれで作って入れる
+  final Map<String, Future<Uint8List?> Function(int z, int x, int y)> _generators = {};
+
+  void registerTileGenerator(String providerId, Future<Uint8List?> Function(int z, int x, int y) generate) {
+    _generators[providerId] = generate;
+  }
+
+  void unregisterTileGenerator(String providerId, Future<Uint8List?> Function(int z, int x, int y) generate) {
+    if (identical(_generators[providerId], generate)) _generators.remove(providerId);
+  }
+
+  /// 生成プロバイダのタイル: キャッシュ → 生成器 → キャッシュへ
+  Future<Uint8List?> _getGeneratedTile(BaseMapProvider provider, int z, int x, int y) async {
+    final cached = await _getCachedTile(provider.id, z, x, y);
+    if (cached != null) return cached;
+    final generate = _generators[provider.id];
+    if (generate == null) return null;
+    try {
+      final data = await generate(z, x, y);
+      if (data != null && data.length >= 100) await _cacheTile(provider.id, z, x, y, data);
+      return data;
+    } catch (e) {
+      AppLogger.debug('[TILE] ${provider.id} $z/$x/$y の生成に失敗: $e');
+      return null;
+    }
+  }
+
   /// ネットワークが利用可能かどうか
   /// ネットが使えるか。「インターフェイスがある」かつ「実際に届いている」
   bool get isNetworkAvailable => _isNetworkAvailable && _reachable;
@@ -575,6 +602,9 @@ class BaseMapService extends ChangeNotifier {
   ) async {
     // 標高タイル（Terrarium）は親を拡大して返さない。RGB を拡大すると高さがブロック状の階段になり、
     // 3D の崖にギザギザの溝が出る（Pixel 9 で実測）。3D 側は自前のピラミッドで親タイルを正しい形で描く
+    if (provider.type == BaseMapType.generated) {
+      return z < provider.minZoom || z > provider.maxZoom ? null : _getGeneratedTile(provider, z, x, y);
+    }
     final noFallback = provider.type == BaseMapType.terrain;
 
     // プロバイダーの最大ズームレベルを超えている場合は直接フォールバック

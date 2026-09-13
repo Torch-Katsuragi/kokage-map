@@ -671,10 +671,13 @@
       "cancel": "消しゴムの候補を取り消す"
     },
     "terrain": {
-      "resetView": "北を上に・真上から",
+      "compassTip": "タップで 2D / 3D 切替、ダブルタップで北を上に、長押しで眺めモード",
       "loading": "地形を読み込み中（$pending 枚）"
     },
     "flash": {
+      "mode2d": "2D（真上）",
+      "mode3d": "3D",
+      "northUp": "北を上に",
       "perspectiveOn": "眺めモード",
       "perspectiveOff": "眺めモード 解除",
       "driveStart": "ドライブ開始",

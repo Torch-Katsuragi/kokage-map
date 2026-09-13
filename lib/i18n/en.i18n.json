@@ -671,10 +671,13 @@
       "cancel": "Discard eraser candidates"
     },
     "terrain": {
-      "resetView": "North up, top-down",
+      "compassTip": "Tap: 2D / 3D, double-tap: north up, long press: perspective view",
       "loading": "Loading terrain ($pending tiles)"
     },
     "flash": {
+      "mode2d": "2D (top-down)",
+      "mode3d": "3D",
+      "northUp": "North up",
       "perspectiveOn": "Perspective view",
       "perspectiveOff": "Perspective view off",
       "driveStart": "Drive started",

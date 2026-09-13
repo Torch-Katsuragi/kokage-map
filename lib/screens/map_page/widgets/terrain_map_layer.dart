@@ -147,26 +147,33 @@ class _ZoomButton extends StatelessWidget {
       );
 }
 
-/// 方位に合わせて回るコンパス。真上（pitch 0）でなければ縁を少し濃くして「傾いている」ことを示す。
-/// 長押しで眺めモード（透視）の切替（透視中は縁が空色）
+/// 方位に合わせて回るコンパス = **2D / 3D の切替の入り口**（松本 2026-09-13「移動じゃなくてモード変更の入り口に」）。
+/// タップで 2D（真上固定）⇄ 3D、ダブルタップで北を上に、長押しで眺めモード（透視。3D のときだけ、透視中は縁が空色）。
+/// 3D で傾いていれば縁を少し濃くする。下に今のモードを小さく書く
 class _CompassButton extends StatelessWidget {
   const _CompassButton({
     required this.bearingDeg,
     required this.pitchDeg,
+    required this.flat,
     required this.onPressed,
+    required this.onDoubleTap,
     this.perspective = false,
     this.onLongPress,
   });
 
   final double bearingDeg;
   final double pitchDeg;
+
+  /// 2D（真上固定）か
+  final bool flat;
   final bool perspective;
   final VoidCallback onPressed;
+  final VoidCallback onDoubleTap;
   final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) => Tooltip(
-        message: t.map.terrain.resetView,
+        message: t.map.terrain.compassTip,
         child: Material(
           color: perspective ? const Color(0xFFDDEBF8) : Colors.white.withValues(alpha: 0.9),
           shape: CircleBorder(
@@ -179,13 +186,29 @@ class _CompassButton extends StatelessWidget {
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onPressed,
+            onDoubleTap: onDoubleTap,
             onLongPress: onLongPress,
             child: SizedBox(
               width: 44,
               height: 44,
-              child: Transform.rotate(
-                angle: -bearingDeg * math.pi / 180,
-                child: const Icon(Icons.navigation, size: 24, color: Colors.redAccent),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Transform.translate(
+                    offset: const Offset(0, -3),
+                    child: Transform.rotate(
+                      angle: -bearingDeg * math.pi / 180,
+                      child: const Icon(Icons.navigation, size: 22, color: Colors.redAccent),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 3,
+                    child: Text(
+                      flat ? '2D' : '3D',
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: flat ? Colors.black54 : Colors.blueGrey, height: 1),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -484,7 +507,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   ({double bearing, double pitch, double centerX, double centerY, double zoom})? _animFrom;
   ({double bearing, double pitch, double centerX, double centerY, double zoom})? _animTo;
 
-  /// ペン選択中: 真上に寄せて 1 本指をツール（描画）に渡す。離れたら元の傾きに戻す
+  /// 2D モード（真上固定。1 本指 = 移動、2 本指 = 移動・拡縮・回転。3D 導入前のパンと同じ）。
+  /// 中身は 3D を真上から見ているだけ。3D モードは 1 本指 = 回転・傾き、2 本指 = 移動・拡縮。
+  /// 起動は 2D（真上）。切替はコンパスのタップ（松本 2026-09-13）
+  bool _flat = true;
+
+  /// 3D に戻したときの傾き（2D に入る前のもの。無ければ [_default3dPitchDeg]）
+  double? _pitchBefore2d;
+  static const _default3dPitchDeg = 50.0;
+
+  /// ペン選択中: 真上に寄せて 1 本指をツール（描画）に渡す。離れたら元の傾きに戻す（2D モードなら真上のまま）
   bool _penLock = false;
   double? _pitchBeforePen;
 
@@ -655,16 +687,39 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _refresh();
   }
 
-  /// コンパスのタップ: 北を上に・真上から
-  void _resetView() {
-    _animateTo(bearing: 0, pitch: 0);
-    _anim.forward(from: 0);
-    ref.read(mapFlashProvider.notifier).show(t.map.terrain.resetView);
+  /// コンパスのタップ: 2D ⇄ 3D。2D は真上に固定（眺めモードも解く）。3D は 2D に入る前の傾きに戻す
+  void _toggleMode() {
+    if (_flat) {
+      _flat = false;
+      final p = _pitchBefore2d ?? _default3dPitchDeg * math.pi / 180;
+      if (_penLock) {
+        _pitchBeforePen = p; // ペンを離したときにこの傾きへ
+      } else {
+        _animateTo(pitch: p);
+        _anim.forward(from: 0);
+      }
+    } else {
+      _flat = true;
+      _pitchBefore2d = _camera.pitch > 0.02 ? _camera.pitch : null;
+      _camera.perspective = false;
+      _pitchBeforePen = 0;
+      _animateTo(pitch: 0);
+      _anim.forward(from: 0);
+    }
+    ref.read(mapFlashProvider.notifier).show(_flat ? t.map.flash.mode2d : t.map.flash.mode3d);
+    setState(() {});
   }
 
-  /// 眺めモード（透視投影）の切替。コンパスの長押し。GPU 経路のみ（純 Dart は正射影の線形性に頼る）
+  /// コンパスのダブルタップ: 北を上に（モードはそのまま）
+  void _resetNorth() {
+    _animateTo(bearing: 0);
+    _anim.forward(from: 0);
+    ref.read(mapFlashProvider.notifier).show(t.map.flash.northUp);
+  }
+
+  /// 眺めモード（透視投影）の切替。コンパスの長押し（3D のときだけ）。GPU 経路のみ（純 Dart は正射影の線形性に頼る）
   void _togglePerspective() {
-    if (_gpu == null) return;
+    if (_gpu == null || _flat) return;
     setState(() => _camera.perspective = !_camera.perspective);
     ref.read(mapFlashProvider.notifier).show(_camera.perspective ? t.map.flash.perspectiveOn : t.map.flash.perspectiveOff);
     _refresh();
@@ -693,7 +748,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     } else if (!pen && _penLock) {
       _penLock = false;
       _toolDrag = false;
-      _animateTo(pitch: _pitchBeforePen ?? _defaultPitchDeg * math.pi / 180);
+      _animateTo(pitch: _flat ? 0 : (_pitchBeforePen ?? _defaultPitchDeg * math.pi / 180));
       _anim.forward(from: 0);
     }
   }
@@ -1627,6 +1682,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final y = center == null ? null : WebMercator.yFromLat(center.latitude);
     final b = bearingDeg == null ? null : bearingDeg * math.pi / 180;
     final p = pitchDeg == null ? null : (pitchDeg.clamp(0.0, _maxPitchDeg)) * math.pi / 180;
+    if (p != null && p > 0.02 && _flat) _flat = false; // 傾きを頼まれたら 3D（CLI / URL の pitch）
+    if (p != null && _flat) return lookAt(center: center, zoom: zoom, bearingDeg: bearingDeg, animate: animate);
     if (!animate) {
       if (x != null) _camera.centerX = x;
       if (y != null) _camera.centerY = y;
@@ -1680,7 +1737,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _focalStart = d.focalPoint;
   }
 
-  /// 1 本指 = 3D の回転（左右で方位、上下で傾き）。2 本指 = 平面移動と拡縮（松本の指定・2026-09-08）
+  /// 3D: 1 本指 = 回転（左右で方位、上下で傾き）、2 本指 = 平面移動と拡縮（松本の指定・2026-09-08）。
+  /// 2D: 1 本指 = 移動、2 本指 = 移動・拡縮・回転（3D 導入前と同じ。松本 2026-09-13）
   void _onScaleUpdate(ScaleUpdateDetails d) {
     if (_toolDrag) {
       if (d.pointerCount == 1) ref.read(currentToolProvider).onScaleUpdate(d, widget.mapState);
@@ -1707,8 +1765,18 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         final move = _camera.unprojectPan(d.focalPointDelta);
         _camera.centerX -= move.dx;
         _camera.centerY -= move.dy;
+        if (_flat && d.rotation.abs() > 1e-6) {
+          // 2D の 2 本指回転: 指の下の地面を留めたまま方位を回す（画面の時計回り = 地図も時計回り）
+          final off = d.localFocalPoint - Offset(_size.width / 2, _size.height / 2);
+          final under = _camera.unprojectPan(off);
+          _camera.bearing = _bearingStart - d.rotation;
+          final after = _camera.unprojectPan(off);
+          _camera.centerX += under.dx - after.dx;
+          _camera.centerY += under.dy - after.dy;
+          _gesturing = true;
+        }
       }
-    } else if (_mouse && !HardwareKeyboard.instance.isControlPressed) {
+    } else if (_flat || (_mouse && !HardwareKeyboard.instance.isControlPressed)) {
       // マウスの左ドラッグは移動（回転は右ドラッグか Ctrl + 左）
       if (_camera.perspective && _size != Size.zero) {
         final from = _groundUnder(d.localFocalPoint - d.focalPointDelta);
@@ -1777,10 +1845,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     return _camera.groundPointPerspective(screen, ch, ch, maxDistance: _camera.eyeDistance * TerrainCamera.fogEndFactor);
   }
 
-  /// 画面上の移動量 [delta] を方位・傾きに（1 本指・右ドラッグ・Ctrl + 左ドラッグで共通）
+  /// 画面上の移動量 [delta] を方位・傾きに（1 本指・右ドラッグ・Ctrl + 左ドラッグで共通）。2D では方位だけ
   void _rotateBy(Offset delta) {
     _camera.bearing += delta.dx * 0.006;
-    _camera.pitch = (_camera.pitch - delta.dy * 0.004).clamp(0.0, _maxPitchDeg * math.pi / 180);
+    if (!_flat) _camera.pitch = (_camera.pitch - delta.dy * 0.004).clamp(0.0, _maxPitchDeg * math.pi / 180);
     _gesturing = true;
     _refresh();
   }
@@ -2084,7 +2152,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
               ),
               ),
             ),
-            // コンパス: 方位に合わせて回る。タップで北を上に・真上から
+            // コンパス: 方位に合わせて回る。タップで 2D ⇄ 3D、ダブルタップで北を上に、長押しで眺めモード
             Positioned(
               right: 8,
               top: 8,
@@ -2093,9 +2161,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
                 builder: (_, bearingDeg, _) => _CompassButton(
                   bearingDeg: bearingDeg,
                   pitchDeg: _camera.pitch * 180 / math.pi,
+                  flat: _flat,
                   perspective: _camera.perspective,
-                  onPressed: _resetView,
-                  onLongPress: _togglePerspective,
+                  onPressed: _toggleMode,
+                  onDoubleTap: _resetNorth,
+                  onLongPress: _flat ? null : _togglePerspective,
                 ),
               ),
             ),

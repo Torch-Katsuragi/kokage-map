@@ -218,6 +218,9 @@ class TerrainGpuWorldRenderer {
   void Function(Object textureKey)? onTextureUploaded;
 
   /// 生きているタイルの世代以外のテクスチャを手放す（タイルの出入りのたびに呼ぶ）
+  /// flutter_gpu は `Texture.fromImage` で同期に包むので、キャッシュにあれば描ける
+  bool isTextureReady(Object key) => _textures.containsKey(key);
+
   void pruneTextures(Set<Object> liveKeys) {
     _textures.removeWhere((k, _) => !liveKeys.contains(k));
   }

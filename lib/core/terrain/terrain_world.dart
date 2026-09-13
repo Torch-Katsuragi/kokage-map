@@ -93,13 +93,20 @@ class TerrainTile {
   ui.Image? get texture => _texture;
   set texture(ui.Image? v) {
     _texture = v;
-    if (v != null) textureKey = Object();
+    if (v != null) {
+      previousTextureKey = textureKey;
+      textureKey = Object();
+    }
   }
 
   ui.Image? _texture;
 
   /// テクスチャの世代の識別子（画像を差し替えるたびに新しくなる。GPU 側のキャッシュのキー）
   Object textureKey = Object();
+
+  /// 1 つ前の世代のキー。web は新しい画像の GPU 転送が非同期なので、終わるまで前の世代を描く
+  /// （無いと差し替えのたびに基図ごと白く抜ける）。転送が終わったら GPU 側が捨ててよい
+  Object? previousTextureKey;
   int textureWidth = 1;
   int textureHeight = 1;
 

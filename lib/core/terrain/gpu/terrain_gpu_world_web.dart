@@ -167,7 +167,7 @@ class TerrainGpuWorldRenderer {
         lastUploads++;
       }
       tb.lastUsed = nowMs;
-      final tex = _textureFor(t.textureKey, t.texture);
+      final tex = _textureFor(t.textureKey, t.texture, t.previousTextureKey);
       final polys = t.polygons.isEmpty ? null : _partsFor(_polygons, t.polygons, nowMs, _packPolygons);
       final lines = t.lines.isEmpty ? null : _partsFor(_lines, t.lines, nowMs, _packLines);
       final dem = t.mesh.dem;
@@ -453,7 +453,7 @@ class TerrainGpuWorldRenderer {
     gl.bindFramebuffer(_G.FRAMEBUFFER, null);
   }
 
-  web.WebGLTexture _textureFor(Object key, ui.Image? image) {
+  web.WebGLTexture _textureFor(Object key, ui.Image? image, Object? previousKey) {
     var entry = _textures[key];
     if (entry == null) {
       if (image == null) return _whiteTexture();
@@ -461,8 +461,12 @@ class TerrainGpuWorldRenderer {
       _textures[key] = entry;
       unawaited(_uploadTexture(key, image, entry));
     }
-    return entry.texture ?? _whiteTexture();
+    // 転送中は前の世代を描く（焼き直しのたびに基図ごと白く抜けない）。前の世代も無ければ白
+    return entry.texture ?? _textures[previousKey]?.texture ?? _whiteTexture();
   }
+
+  /// [key] の世代が GPU に上がっているか（呼び出し側が前の世代を捨ててよいかの判断に使う）
+  bool isTextureReady(Object key) => _textures[key]?.ready ?? false;
 
   Future<void> _uploadTexture(Object key, ui.Image image, _TextureEntry entry) async {
     try {

@@ -293,6 +293,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// 最後にテクスチャへ焼き込んだフィーチャの一覧（同一性で比べる）
   List<Object?>? _bakedLists;
 
+  /// 焼き込みの世代。フィーチャの一覧が変わるたびに進む。タイルごとに「どの世代で焼いたか」を [_bakedGen] に記録し、
+  /// 世代が古いタイルは焼き直す（[_checkBakes]）。
+  /// ⚠ 以前は「一覧が変わった瞬間に読み込み済みのタイル」だけ焼き直していたので、その瞬間に読み込み中だった親タイルは
+  ///   フィーチャ無しのテクスチャのまま残り、寄せる最中に親と子が入れ替わるたびにフィーチャが出たり消えたりした
+  ///   （松本 2026-09-13「地形読み込み中だけフィーチャが表示されたりされなかったり」。web で目立つ）
+  int _bakeGen = 0;
+  final Map<TileKey, int> _bakedGen = {};
+  final Map<TileKey, int> _bakeRequested = {};
+  Timer? _bakeCheckTimer;
+
   /// 傾きの上限。正射影では 90° で地面が線に潰れる（横顔になる）ので手前で止める。
   /// 寝かせるほど画面に掛かる地面が広がり、計画が段を下げて粗くなる（枚数は上限内に収まる）
   static const _maxPitchDeg = 75.0;
@@ -646,6 +656,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     widget.baseMapService.removeListener(_onBasemapChanged);
     _anim.dispose();
     _retextureTimer?.cancel();
+    _bakeCheckTimer?.cancel();
     for (final im in _overlayImages.values) {
       im.dispose();
     }
@@ -695,16 +706,55 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   LatLng _centerLatLng() =>
       LatLng(WebMercator.latFromY(_camera.centerY), WebMercator.lonFromX(_camera.centerX));
 
-  void _onWorldChanged() => _scheduleRefresh();
+  void _onWorldChanged() {
+    _scheduleRefresh();
+    _scheduleBakeCheck();
+  }
 
   void _onSceneRevision() {
     final g = widget.geoJson;
     final lists = <Object?>[g.polygons, g.polylines, g.markers];
     if (_bakedLists == null || !_sameKey(_bakedLists!, lists)) {
       _bakedLists = lists;
-      if (_world.tiles.any((t) => _bakesFeatures(t.key))) _scheduleRetexture(bakedOnly: true);
+      _bakeGen++;
     }
+    _scheduleBakeCheck();
     _scheduleRefresh();
+  }
+
+  /// 古い世代で焼かれた（またはフィーチャが届く前に焼かれた）タイルを見つけて焼き直す（400ms にまとめる）
+  void _scheduleBakeCheck() {
+    _bakeCheckTimer?.cancel();
+    _bakeCheckTimer = Timer(const Duration(milliseconds: 400), _checkBakes);
+  }
+
+  void _checkBakes() {
+    if (!mounted) return;
+    final gen = _bakeGen;
+    final live = {for (final t in _world.tiles) t.key};
+    _bakedGen.removeWhere((k, _) => !live.contains(k));
+    _bakeRequested.removeWhere((k, _) => !live.contains(k));
+    final stale = <TileKey>{
+      for (final k in live)
+        if (_bakesFeatures(k) && _bakedGen[k] != gen && _bakeRequested[k] != gen) k,
+    };
+    if (stale.isEmpty) return;
+    for (final k in stale) {
+      _bakeRequested[k] = gen;
+    }
+    debugPrint('[3D] bake: ${stale.length} 枚を世代 $gen で焼き直す');
+    unawaited(_world.retexture(where: stale.contains).then((_) {
+      if (!mounted) return;
+      // 途中で別の作り直しに打ち切られた分は要求を取り下げ、少し置いてまた見る
+      var left = false;
+      for (final k in stale) {
+        if (_bakedGen[k] != gen && _world.tiles.any((t) => t.key == k)) {
+          _bakeRequested.remove(k);
+          left = true;
+        }
+      }
+      if (left) _scheduleBakeCheck();
+    }));
   }
 
   /// 地形の見た目（色分け・等高線）の設定が変わった。等高線は作り直し、合成も捨てる
@@ -796,7 +846,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _dynamicScenes.removeWhere((k, _) => !_world.has(k.$1));
       _pruneMeshes();
       // GPU 側のテクスチャは生きているタイルの世代だけ残す（`ui.Image` を手放した後の唯一の実体なので時間では捨てない）
-      _gpu?.pruneTextures({for (final t in _world.tiles) t.textureKey});
+      final gpu = _gpu;
+      if (gpu != null) {
+        // 新しい世代の転送が終わるまでは前の世代も生かしておく（web）。終わったら捨てる
+        gpu.pruneTextures({
+          for (final t in _world.tiles) ...[
+            t.textureKey,
+            if (t.previousTextureKey != null && !gpu.isTextureReady(t.textureKey)) t.previousTextureKey!,
+          ],
+        });
+      }
       _worldRevisionSeen = _world.revision;
     }
     final drawables = <TerrainTileDrawable>[];
@@ -933,6 +992,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       builder: builder,
       texture: tile.texture,
       textureKey: tile.textureKey,
+      previousTextureKey: tile.previousTextureKey,
       lines: scene.lines,
       polygons: scene.polygons,
       polygonBatches: scene.polygonBatches,
@@ -1781,17 +1841,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
   }
 
-  /// [bakedOnly] は焼き込む段のタイルだけ（フィーチャが変わったとき）。オーバーレイの変更は全部
-  bool _retextureBakedOnly = true;
-
-  void _scheduleRetexture({bool bakedOnly = false}) {
-    _retextureBakedOnly = _retextureBakedOnly && bakedOnly;
+  /// オーバーレイ画像が変わった範囲のテクスチャを作り直す（400ms にまとめる）。フィーチャの焼き直しは [_checkBakes]
+  void _scheduleRetexture() {
     _retextureTimer?.cancel();
     _retextureTimer = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
-      final baked = _retextureBakedOnly;
-      _retextureBakedOnly = true;
-      _world.retexture(within: baked ? null : _overlayBounds, where: baked ? _bakesFeatures : null);
+      _world.retexture(within: _overlayBounds);
       _overlayBounds = null;
     });
   }
@@ -1805,7 +1860,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// テクスチャの上描き: オーバーレイ画像と、引いた段のフィーチャの焼き込み
   void _decorateTexture(ui.Canvas canvas, TileRange range) {
     _drawOverlayImages(canvas, range);
-    if (range.z - _world.textureZoomOffset <= kBakeMaxZoom) _bakeFeatures(canvas, range);
+    final off = _world.textureZoomOffset;
+    if (range.z - off <= kBakeMaxZoom) {
+      _bakeFeatures(canvas, range);
+      // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）
+      _bakedGen[TileKey(range.z - off, range.x0 >> off, range.y0 >> off)] = _bakeGen;
+    }
   }
 
   /// 引いた段のフィーチャをテクスチャに描く（真上からの投影。座標は範囲左上原点のピクセル）

@@ -42,6 +42,7 @@ class TerrainGpuWorldRenderer {
   VoidCallback? onTextureReady;
   void Function(Object textureKey)? onTextureUploaded;
   void pruneTextures(Set<Object> liveKeys) {}
+  bool isTextureReady(Object key) => false;
   Duration lastEncode = Duration.zero;
   Duration lastUpload = Duration.zero;
   int lastDrawCalls = 0;

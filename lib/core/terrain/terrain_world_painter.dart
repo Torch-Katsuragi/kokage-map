@@ -34,6 +34,7 @@ class TerrainTileDrawable {
     required this.texture,
     this.builder,
     Object? textureKey,
+    this.previousTextureKey,
     this.lines = const [],
     this.polygons = const [],
     this.dynamicLines = const [],
@@ -48,6 +49,9 @@ class TerrainTileDrawable {
 
   /// テクスチャの世代（GPU 側のキャッシュのキー。画像を手放した後も同じキーで GPU 側の複製を引く）
   final Object textureKey;
+
+  /// 1 つ前の世代のキー（web: 新しい世代の転送が終わるまでこちらを描く）
+  final Object? previousTextureKey;
 
   /// チャンク番号 → 面の束（シーン側で一度作って使い回す。投影はこの束ごとにキャッシュされる。
   /// 貼り付けが育つ間は 1 チャンクに束が複数ある）

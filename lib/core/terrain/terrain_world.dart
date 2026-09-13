@@ -305,10 +305,11 @@ class TerrainWorld extends ChangeNotifier {
   int get maxZoom => demSources.map((s) => s.maxZoom).reduce(math.max);
   final TileFetcher textureFetcher;
 
-  /// 基図の上に合成する層（等高線など）。取りに行くたびに今のものを見る（設定で変わる）
-  List<(TileFetcher, double)> Function()? textureOverlayFetchers;
+  /// テクスチャの層（下から上へ。等高線も 1 層）。設定の背景地図レイヤをそのまま渡す。取りに行くたびに今のものを見る。
+  /// null なら [textureFetcher] 1 枚
+  List<TextureLayer> Function()? textureLayers;
 
-  List<(TileFetcher, double)> _textureLayers() => [(textureFetcher, 1.0), ...?textureOverlayFetchers?.call()];
+  List<TextureLayer> _textureLayers() => textureLayers?.call() ?? [(textureFetcher, 1.0, ui.BlendMode.srcOver)];
 
   /// [key] の DEM。読み込み済みなら縁を借りた格子（[TerrainTile.bordered]）、無ければ取りに行く（近似はしない）
   Future<DemGrid?> demFor(TileKey key) async => _tiles[key]?.bordered ?? await _loadDem(key);

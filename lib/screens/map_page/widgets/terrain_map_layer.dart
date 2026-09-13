@@ -347,21 +347,24 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// いま貼っている基図（設定で変わる）
   BaseMapProvider? _basemap;
 
+  /// 一番下の見えているレイヤ（基図）
   BaseMapProvider? _currentBasemap() {
-    final layers = widget.baseMapService.activeLayerConfig;
+    final layers = widget.baseMapService.activeLayers;
     return layers.isNotEmpty ? layers.first.$1 : null;
   }
 
-  /// 基図の重ね層の署名（変わったらテクスチャを貼り直す）: 各層の id と不透明度
+  /// 背景地図レイヤの署名（変わったらテクスチャを貼り直す）: 各層の id・不透明度・合成モード
   String _textureLayersKey() =>
-      [for (final (p, o) in widget.baseMapService.activeLayerConfig) '${p.id}:${o.toStringAsFixed(3)}'].join(',');
+      [for (final (p, l) in widget.baseMapService.activeLayers) '${p.id}:${l.opacity}:${l.blend.name}'].join(',');
   String _textureKey = '';
 
-  /// 基図の上に合成する層（高度な設定の 2 枚目以降。等高線もその 1 つで、生成プロバイダのタイルは
+  /// テクスチャに合成する層（設定の背景地図レイヤ、下から上へ。等高線もその 1 つで、生成プロバイダのタイルは
   /// キャッシュに無ければ [_renderContourTile] が作る）
-  List<(TileFetcher, double)> _overlayFetchers() {
+  List<TextureLayer> _layerFetchers() {
     final svc = widget.baseMapService;
-    return [for (final (p, o) in svc.activeLayerConfig.skip(1)) ((z, x, y) => svc.getTile(p, z, x, y), o)];
+    return [
+      for (final (p, l) in svc.activeLayers) ((z, x, y) => svc.getTile(p, z, x, y), l.opacity / 100, l.blend.mode),
+    ];
   }
 
   /// 等高線タイルを作る（`contour_tiles.dart`）。テクスチャの段 z の 1 段下の DEM タイルの、該当する 1/4 を描く。
@@ -388,10 +391,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     return TerrainWorker.instance.run(renderContourTilePng, args);
   }
 
-  String _attributionFor(BaseMapProvider? basemap) => [
-        if (basemap != null) basemap.attribution,
-        ...{for (final s in DemTileSource.defaultCascade) s.attribution},
-      ].join(' / ');
+  /// 地図面に出す出典。普段は出さず（出典は設定の「地図・タイル」にまとめた。松本 2026-09-13）、
+  /// OpenStreetMap が見えているときだけ出す（OSM の表示ガイドラインは対話型地図では地図上のクレジットを求める。
+  /// 地理院タイルと Terrain Tiles は「出典を明示」で、置き場所は問わない）
+  String _attributionFor(BaseMapProvider? basemap) => {
+        for (final (p, _) in widget.baseMapService.activeLayers)
+          if (p.type == BaseMapType.openStreetMap) p.attribution,
+      }.join(' / ');
 
   /// 基図の設定が変わった（3D 中は MapLibre が無いので、地形のテクスチャを貼り直す）
   void _onBasemapChanged() {
@@ -532,7 +538,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       },
       imageCache: _tileImages,
     )
-      ..textureOverlayFetchers = _overlayFetchers
+      ..textureLayers = _layerFetchers
       ..addListener(_onWorldChanged)
       ..textureDecorator = _decorateTexture;
     _planner = TerrainFramePlanner(_world);
@@ -2111,14 +2117,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
                 ],
               ),
             ),
-            Positioned(
-              left: 6,
-              bottom: 4,
-              child: Text(
-                _attribution,
-                style: const TextStyle(fontSize: 10, color: Colors.black87, backgroundColor: Colors.white70),
+            if (_attribution.isNotEmpty)
+              Positioned(
+                left: 6,
+                bottom: 4,
+                child: Text(
+                  _attribution,
+                  style: const TextStyle(fontSize: 10, color: Colors.black87, backgroundColor: Colors.white70),
+                ),
               ),
-            ),
             if (loading)
               Positioned(
                 left: 8,

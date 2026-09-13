@@ -85,7 +85,7 @@ abstract class SceneSink {
 - 入口は **`BaseMapService.getTile(provider, z, x, y) → Uint8List?`**（`lib/services/basemap_service.dart`）。
   キャッシュ → ネット → 保存 → 祖先タイルからの切り出しフォールバックまで込み。
   3D のテクスチャ合成（`RasterTileComposer`）はいま http 直叩きなので、これに差し替えれば **同じ絵・同じオフライン挙動**になる
-- 複数プロバイダのブレンド（`activeLayerConfig` の累積補正済み opacity）は合成時に同じ式で重ねる
+- 複数プロバイダの重ね（`BaseMapService.activeLayers`: 下から上へ、不透明度と合成モード）は合成時にそのまま重ねる（`composeLayers`）
 - オーバーレイ画像（GeoTIFF・写真）はラスタなので、`LngLatQuad` → 合成テクスチャに `drawImage`（行列変換）で焼く。
   設計どおり「ラスタはテクスチャ」
 - web はソースを初期スタイル JSON に焼き込む作りで、後からラスタソースを足せない（maplibre_web 0.3.5）。

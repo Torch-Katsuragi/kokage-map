@@ -214,6 +214,36 @@
     "perProviderCache": "プロバイダー別キャッシュ",
     "noCacheData": "キャッシュされた地図データはありません",
     "clearProviderCache": "このプロバイダーのキャッシュをクリア",
+    "layers": {
+      "title": "レイヤ",
+      "hint": "上にあるものが手前。お絵描きソフトのレイヤと同じで、並び・表示・不透明度・合成モードを持ちます",
+      "add": "レイヤを追加",
+      "addTitle": "追加する地図",
+      "alreadyAdded": "追加済み",
+      "opacity": "不透明度",
+      "blend": "合成",
+      "show": "表示",
+      "hide": "隠す",
+      "remove": "レイヤを外す",
+      "summary": "$count 枚",
+      "blendModes": {
+        "normal": "通常",
+        "multiply": "乗算",
+        "screen": "スクリーン",
+        "overlay": "オーバーレイ",
+        "darken": "比較（暗）",
+        "lighten": "比較（明）",
+        "softLight": "ソフトライト",
+        "hardLight": "ハードライト",
+        "difference": "差の絶対値"
+      }
+    },
+    "sources": {
+      "title": "出典",
+      "hint": "いま表示している地図と標高のデータの出典です。地図面には OpenStreetMap を使っているときだけ出します",
+      "basemap": "背景地図",
+      "elevation": "標高（3D 地形）"
+    },
     "download": {
       "title": "地図の一括ダウンロード",
       "description": "現在表示している場所を中心に、指定した範囲の地図データを一括で保存します。オフライン環境に行く前に実行してください。",

@@ -22,8 +22,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 
+import '../core/terrain/dem_tiles.dart' show DemTileSource;
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
+import '../models/basemap_layer.dart';
 import '../models/basemap_provider.dart';
 import '../providers/notification_providers.dart';
 import '../providers/ui_state_providers.dart';
@@ -74,23 +76,6 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
           _isLoading = false;
         });
       }
-    }
-  }
-
-  /// プロバイダー変更
-  Future<void> _changeProvider(BaseMapProvider provider) async {
-    try {
-      await _baseMapService.setProvider(provider);
-
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.basemap.notifications.changed(name: provider.name),
-            level: NotificationLevel.success,
-          );
-    } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.basemap.notifications.changeFailed(error: e.toString()),
-            level: NotificationLevel.error,
-          );
     }
   }
 
@@ -348,8 +333,9 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         spacing: 24,
         sections: [
           _buildCurrentSettingsSection(),
+          _buildLayersSection(),
+          _buildSourcesSection(),
           _buildDownloadSection(),
-          _buildProviderSelectionSection(),
           _buildOfflineSettingsSection(),
           _buildCacheManagementSection(),
         ],
@@ -378,18 +364,25 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     );
   }
 
-  /// 現在の設定セクション
+  /// 現在の設定セクション（見えているレイヤの要約。上から）
   Widget _buildCurrentSettingsSection() {
-    final currentProvider = _baseMapService.currentProvider;
+    final active = _baseMapService.activeLayers.reversed.toList();
+    final base = _baseMapService.currentProvider;
+    final summary = active.isEmpty
+        ? base.description
+        : [
+            for (final (p, l) in active)
+              '${p.name} ${l.opacity}%${l.blend == BaseMapBlend.normal ? '' : ' ${_blendLabel(l.blend)}'}',
+          ].join(' / ');
 
     return SettingsSection(
       title: t.basemap.currentSettings,
       children: [
         SettingsTile(
-          leadingIcon: currentProvider.icon,
+          leadingIcon: base.icon,
           leadingIconColor: Colors.blue,
-          title: currentProvider.name,
-          subtitle: currentProvider.description,
+          title: active.isEmpty ? base.name : [for (final (p, _) in active) p.name].join(' + '),
+          subtitle: summary,
           trailing: _baseMapService.isOfflineMode
               ? Chip(
                   label: Text(t.basemap.offline),
@@ -404,120 +397,145 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     );
   }
 
-  /// 背景地図選択セクション
-  Widget _buildProviderSelectionSection() {
-    final currentProvider = _baseMapService.currentProvider;
-    final isAdvanced = _baseMapService.isAdvancedMode;
-    final weights = _baseMapService.providerWeights;
+  String _blendLabel(BaseMapBlend b) => switch (b) {
+        BaseMapBlend.normal => t.basemap.layers.blendModes.normal,
+        BaseMapBlend.multiply => t.basemap.layers.blendModes.multiply,
+        BaseMapBlend.screen => t.basemap.layers.blendModes.screen,
+        BaseMapBlend.overlay => t.basemap.layers.blendModes.overlay,
+        BaseMapBlend.darken => t.basemap.layers.blendModes.darken,
+        BaseMapBlend.lighten => t.basemap.layers.blendModes.lighten,
+        BaseMapBlend.softLight => t.basemap.layers.blendModes.softLight,
+        BaseMapBlend.hardLight => t.basemap.layers.blendModes.hardLight,
+        BaseMapBlend.difference => t.basemap.layers.blendModes.difference,
+      };
+
+  /// レイヤセクション（松本 2026-09-13「イメージはお絵描きソフトのレイヤ。順番・可視・透明度・合成モード」）。
+  /// サービスは下から上に持つが、ここでは上（手前）から並べる
+  Widget _buildLayersSection() {
+    final svc = _baseMapService;
+    final layers = svc.layers.reversed.toList();
 
     return SettingsSection(
-      title: t.basemap.selectBasemap,
+      title: t.basemap.layers.title,
+      trailing: Text(
+        t.basemap.layers.summary(count: layers.length.toString()),
+        style: const TextStyle(fontSize: 14, color: Colors.grey),
+      ),
       children: [
-        // 通常モード: ラジオボタン式
-        if (!isAdvanced)
-          ...BaseMapProvider.availableProviders.map((provider) {
-            final isSelected = provider.id == currentProvider.id;
-            final cachedTileCount = _cacheStats[provider.cacheId] ?? 0;
-            final subtitleText = cachedTileCount > 0
-                ? '${provider.description}\n${t.basemap.cacheCount(count: cachedTileCount.toString())}'
-                : provider.description;
-
-            return SettingsSelectionTile(
-              leadingIcon: provider.icon,
-              leadingIconColor: Colors.blue,
-              title: provider.name,
-              subtitle: subtitleText,
-              isSelected: isSelected,
-              onTap: () => _changeProvider(provider),
-            );
-          }),
-
-        // 高度モード: スライダー式
-        if (isAdvanced)
-          ...BaseMapProvider.availableProviders.map((provider) {
-            final weight = weights[provider.id] ?? 0;
-            final cachedTileCount = _cacheStats[provider.cacheId] ?? 0;
-
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
-                children: [
-                  Icon(
-                    provider.icon,
-                    color: weight > 0
-                        ? Colors.blue
-                        : Colors.grey.withValues(alpha: 0.4),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          provider.name,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: weight > 0 ? null : Colors.grey,
-                          ),
-                        ),
-                        if (cachedTileCount > 0)
-                          Text(
-                            t.basemap.cacheCount(count: cachedTileCount.toString()),
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 5,
-                    child: Slider(
-                      value: weight.toDouble(),
-                      min: 0,
-                      max: 100,
-                      divisions: 20,
-                      label: weight.toString(),
-                      onChanged: (value) {
-                        _baseMapService.setProviderWeight(
-                          provider.id,
-                          value.round(),
-                        );
-                        setState(() {});
-                      },
-                    ),
-                  ),
-                  SizedBox(
-                    width: 32,
-                    child: Text(
-                      '$weight',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: weight > 0 ? Colors.blue : Colors.grey,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-
-        const Divider(),
-
-        // 高度な設定チェックボックス
-        SettingsSwitchTile(
-          leadingIcon: Icons.tune,
-          activeIconColor: Colors.deepPurple,
-          inactiveIconColor: Colors.grey,
-          title: '高度な設定',
-          subtitle: '複数の背景地図を重ねて表示',
-          value: isAdvanced,
-          onChanged: (value) async {
-            await _baseMapService.setAdvancedMode(value);
-            setState(() {});
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(t.basemap.layers.hint, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        ),
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: layers.length,
+          onReorderItem: (oldIndex, newIndex) async {
+            // 上から数えた番号 → サービス（下から）の番号
+            final n = svc.layers.length;
+            await svc.moveLayer(n - 1 - oldIndex, n - 1 - newIndex);
+            if (mounted) setState(() {});
           },
+          itemBuilder: (context, i) {
+            final layer = layers[i];
+            final provider = layer.provider!;
+            return _LayerRow(
+              key: ValueKey(layer.providerId),
+              index: i,
+              layer: layer,
+              provider: provider,
+              isBottom: i == layers.length - 1,
+              blendLabel: _blendLabel,
+              onChanged: (l) async {
+                await svc.updateLayer(l.providerId, (_) => l);
+                if (mounted) setState(() {});
+              },
+              onRemove: layers.length > 1
+                  ? () async {
+                      await svc.removeLayer(layer.providerId);
+                      if (mounted) setState(() {});
+                    }
+                  : null,
+            );
+          },
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _showAddLayerSheet,
+              icon: const Icon(Icons.add),
+              label: Text(t.basemap.layers.add),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 追加する地図を選ぶ（一覧にまだ無いものだけ）
+  Future<void> _showAddLayerSheet() async {
+    final svc = _baseMapService;
+    final have = {for (final l in svc.layers) l.providerId};
+    final picked = await showModalBottomSheet<BaseMapProvider>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(t.basemap.layers.addTitle, style: Theme.of(context).textTheme.titleMedium),
+            ),
+            for (final p in BaseMapProvider.availableProviders)
+              ListTile(
+                leading: Icon(p.icon, color: have.contains(p.id) ? Colors.grey : Colors.blue),
+                title: Text(p.name),
+                subtitle: Text([
+                  p.description,
+                  if ((_cacheStats[p.cacheId] ?? 0) > 0) t.basemap.cacheCount(count: _cacheStats[p.cacheId].toString()),
+                ].join('\n')),
+                trailing: have.contains(p.id) ? Text(t.basemap.layers.alreadyAdded, style: const TextStyle(color: Colors.grey)) : null,
+                enabled: !have.contains(p.id),
+                onTap: () => Navigator.of(context).pop(p),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null) return;
+    // 等高線のように「重ねる前提」の地図は乗算で足す（白地に線だけなので、通常でもほぼ同じ）
+    await svc.addLayer(picked.id, blend: picked.type == BaseMapType.generated ? BaseMapBlend.multiply : BaseMapBlend.normal);
+    if (mounted) setState(() {});
+  }
+
+  /// 出典（地図面に出すのをやめてここにまとめた。松本 2026-09-13。OSM だけは地図面にも出す）
+  Widget _buildSourcesSection() {
+    final basemaps = {for (final (p, _) in _baseMapService.activeLayers) if (p.attribution.isNotEmpty) p.attribution};
+    final dems = {for (final s in DemTileSource.defaultCascade) s.attribution};
+    return SettingsSection(
+      title: t.basemap.sources.title,
+      icon: Icons.public,
+      iconColor: Colors.green,
+      collapsible: true,
+      initiallyExpanded: false,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Text(t.basemap.sources.hint, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        ),
+        ListTile(
+          leading: const Icon(Icons.map, color: Colors.green),
+          title: Text(t.basemap.sources.basemap),
+          subtitle: Text(basemaps.isEmpty ? '—' : basemaps.join('\n')),
+        ),
+        ListTile(
+          leading: const Icon(Icons.terrain, color: Colors.green),
+          title: Text(t.basemap.sources.elevation),
+          subtitle: Text(dems.join('\n')),
         ),
       ],
     );
@@ -912,3 +930,100 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
   }
 }
 
+/// レイヤ 1 行: 持ち手・目・名前・合成モード・外す、下に不透明度
+class _LayerRow extends StatelessWidget {
+  const _LayerRow({
+    super.key,
+    required this.index,
+    required this.layer,
+    required this.provider,
+    required this.isBottom,
+    required this.blendLabel,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final int index;
+  final BaseMapLayer layer;
+  final BaseMapProvider provider;
+
+  /// 一番下の層（合成モードは効かない）
+  final bool isBottom;
+  final String Function(BaseMapBlend) blendLabel;
+  final ValueChanged<BaseMapLayer> onChanged;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final on = layer.visible;
+    final dim = on ? null : Colors.grey;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 2, 8, 2),
+      child: Column(
+        children: [
+          // 持ち手・目・名前・外す
+          Row(
+            children: [
+              ReorderableDragStartListener(
+                index: index,
+                child: const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Icon(Icons.drag_handle, color: Colors.grey),
+                ),
+              ),
+              IconButton(
+                icon: Icon(on ? Icons.visibility : Icons.visibility_off, color: on ? Colors.blue : Colors.grey),
+                tooltip: on ? t.basemap.layers.hide : t.basemap.layers.show,
+                onPressed: () => onChanged(layer.copyWith(visible: !on)),
+              ),
+              Icon(provider.icon, color: dim ?? Colors.blue, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(provider.name, style: TextStyle(fontSize: 14, color: dim), overflow: TextOverflow.ellipsis)),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                color: Colors.grey,
+                tooltip: t.basemap.layers.remove,
+                onPressed: onRemove,
+              ),
+            ],
+          ),
+          // 合成モード・不透明度
+          Row(
+            children: [
+              const SizedBox(width: 48),
+              DropdownButton<BaseMapBlend>(
+                value: layer.blend,
+                isDense: true,
+                underline: const SizedBox.shrink(),
+                style: TextStyle(fontSize: 12, color: isBottom ? Colors.grey : Theme.of(context).textTheme.bodyMedium?.color),
+                items: [
+                  for (final b in BaseMapBlend.values) DropdownMenuItem(value: b, child: Text(blendLabel(b))),
+                ],
+                onChanged: isBottom ? null : (b) => b == null ? null : onChanged(layer.copyWith(blend: b)),
+              ),
+              Expanded(
+                child: Slider(
+                  value: layer.opacity.toDouble(),
+                  min: 0,
+                  max: 100,
+                  divisions: 20,
+                  label: '${layer.opacity}%',
+                  onChanged: (v) => onChanged(layer.copyWith(opacity: v.round())),
+                ),
+              ),
+              SizedBox(
+                width: 40,
+                child: Text(
+                  '${layer.opacity}%',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: dim ?? Colors.blue),
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 4),
+        ],
+      ),
+    );
+  }
+}

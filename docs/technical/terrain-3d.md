@@ -209,7 +209,7 @@ DEM の組み立て 1.4 秒 → 21ms（常駐 isolate）。縮小 4 段のスク
   ③DEM の PNG デコードとメッシュの前計算を isolate（`compute`）に
   ④デコード済みタイル画像の LRU（192 枚・3D の出入りで使い回す）→ 2 回目の背景合成 663ms → 47ms。
   結果: 1 回目 1.2 秒（UI を塞ぐのは 85ms）、2 回目以降 0.4 秒（同 55ms）
-  背景: `BaseMapService.getTile` をアクティブなプロバイダの累積補正済み opacity で合成（MapLibre と同じ式）
+  背景: `BaseMapService.getTile` を背景地図レイヤ（`activeLayers`）の不透明度・合成モードで合成
 - 未対応: パーティの他メンバー・頂点マーカー・クラスタ・オーバーレイ画像（GeoTIFF）・描画プレビュー・
   外部機器ツールのオーバーレイ・等高線。DeviceTool（TruPulse）は 3D 中は選べない
 
@@ -487,9 +487,9 @@ flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world
   凡例 PDF（`cyberjapandata.gsi.go.jp/legend/std_*_legend.pdf`）には数値が無く、各図式（2 万 5 千分 1 地形図・20 万分 1 地勢図）の等高線間隔から
 - 生成プロバイダ `BaseMapProvider.contourOverlay`（`BaseMapType.generated`、id `contours`、タイルキャッシュは `cacheId` = `contours_v{ContourTiles.version}`。絵を変えたら `ContourTiles.version` を上げる（id は設定の鍵なので変えない。古い版のキャッシュは `BaseMapService._dropStaleGeneratedCaches` が起動時に消す）。`availableProviders` の 1 つで、一覧では普通の背景地図として振る舞う）: `BaseMapService.registerTileGenerator` で
   生成器を登録し、`getTile` は キャッシュ → 生成 → キャッシュ（MBTiles）。背景地図と同じ経路なので一度作れば圏外でも出る。
-- 3D のテクスチャ合成は `TerrainWorld.textureOverlayFetchers`（基図 + 高度な設定の 2 枚目以降 + 等高線）を `composeLayers` で重ねる。
-  以前は `activeLayerConfig` の先頭 1 枚しか使っていなかった
-- 設定は背景地図の一覧に「等高線」が並ぶだけ（松本「カード分けなくてよくね？重ね合わせ機能ももともとある」）。高度な設定の重ね合わせで標準地図 + 等高線のように混ぜる。地形の見た目 から等高線の節は消した。
+- 3D のテクスチャ合成は `TerrainWorld.textureLayers`（設定の背景地図レイヤそのまま。等高線もその 1 層）を `composeLayers` で重ねる。
+  以前は先頭 1 枚しか使っていなかった
+- 設定は背景地図のレイヤに「等高線」が並ぶだけ（松本「カード分けなくてよくね？重ね合わせ機能ももともとある」）。標準地図の上に等高線（乗算）のように重ねる。地形の見た目 から等高線の節は消した。
   web の MapLibre（feature_editor）には URL が無いので出ない（`buildBasemapStyleJson` が飛ばす）
 - 絵なので傾けると粗い（引いた段では気にならない）。線として持ち上げたい場面（真横から見る等）が出たら、そのときに考える
 
@@ -531,3 +531,17 @@ web は新しい世代の GPU 転送が非同期で、終わるまで白だっ�
 
 隣が自分より粗い近似（親から補間したタイル）なら、その縁は借りない（`TerrainTile._canBorrow`）。
 借りた縁と自分の縁の差が 20m を超えたら debug で `[3D] seam` ログ（`lastSeamM`）。
+
+### 背景地図はレイヤ（2026-09-13 午後）
+
+松本「お絵描きソフトのレイヤ。順番と可視状態と透明度と合成モード」。重みの比で混ぜる旧式（`basemap_weights`、累積補正 α_i = w_i / Σw）はやめた。
+
+- モデル `BaseMapLayer`（`lib/models/basemap_layer.dart`）: `providerId` / `visible` / `opacity` 0〜100 / `blend`（`BaseMapBlend` → `ui.BlendMode`）。
+  `BaseMapService.layers` は**下から上**、設定画面は上から並べる。同じプロバイダは 1 枚まで。保存は prefs `basemap_layers`（JSON 配列）。
+  旧 `basemap_weights` は `BaseMapLayer.fromLegacyWeights` で読み替え（α をそのまま不透明度にすると同じ絵）
+- 合成 `RasterTileComposer.composeLayers(range, List<TextureLayer>)`: 灰色の下地 → `saveLayer` の透明な板に下から `drawImage(paint..color.alpha = opacity ..blendMode = blend)` → `restore`。
+  一番下の層の合成モードは透明な板に対して効かない（お絵描きソフトと同じ）。設定画面でも一番下は選べない
+- web 2D（feature_editor の MapLibre）は `raster-opacity` だけ（ラスタに合成モードは無い）。生成プロバイダは TileServer 経由でしか出せない
+- 出典は地図面から消し、設定「地図・タイル」の「出典」節（いま見えているレイヤ + 標高）に。**OSM が見えているときだけ地図面にも出す**
+  （OSM の attribution guideline は対話型地図で地図上のクレジットを求める。地理院タイル・Terrain Tiles は「出典の明示」で置き場所は問わない）
+- 一括ダウンロードは一番下の見えているレイヤ（`currentProvider`）だけ。重ねた層ぶんもまとめて落とすのは未

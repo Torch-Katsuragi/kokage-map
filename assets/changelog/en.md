@@ -5,7 +5,9 @@
 ### Usability
 
 - On opening, the map starts at the extent of all features in the project (it no longer jumps to your location). Only when there are no features does it start in Tokyo and move to your location once known
-- Contours are now one of the basemaps: blend them with the standard map or photos in the advanced basemap settings. Contour tiles are generated from the elevation tiles and kept in the tile cache, so they appear instantly the second time and offline. The interval matches the GSI standard map: 2 m at zoom 18, 10 m at 15–17, 100 m at 12–14, 200 m at 9–11. The contour settings under Terrain appearance (interval, color, width) are gone
+- Base maps are now layers. In Maps & Tiles you can reorder, show/hide, and set opacity and blend mode (multiply, screen, …) like in a paint app. Existing blends from the old advanced settings carry over unchanged
+- The attribution line at the bottom-left of the map is gone; sources are listed under Maps & Tiles → Data sources (it still appears on the map while OpenStreetMap is in use)
+- Contours are now one of the basemaps: stack them over the standard map or photos in the layers list. Contour tiles are generated from the elevation tiles and kept in the tile cache, so they appear instantly the second time and offline. The interval matches the GSI standard map: 2 m at zoom 18, 10 m at 15–17, 100 m at 12–14, 200 m at 9–11. The contour settings under Terrain appearance (interval, color, width) are gone
 
 ## v0.7.2 — 2026/09/13
 

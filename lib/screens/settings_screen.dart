@@ -509,7 +509,7 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
               ),
             ],
           ),
-          // 地図データの出典（地図面の左下にも出しているが、ここにもまとめて載せる）
+          // 地図データの出典（全プロバイダ分。いま使っている分は「地図・タイル」の出典に。地図面には OSM のときだけ）
           SettingsSection(
             title: t.settings.appInfo.dataSources,
             icon: Icons.public,

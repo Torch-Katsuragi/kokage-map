@@ -214,6 +214,36 @@
     "perProviderCache": "Cache by Provider",
     "noCacheData": "No cached map data",
     "clearProviderCache": "Clear cache for this provider",
+    "layers": {
+      "title": "Layers",
+      "hint": "Top of the list is in front. Like layers in a paint app: order, visibility, opacity and blend mode",
+      "add": "Add layer",
+      "addTitle": "Map to add",
+      "alreadyAdded": "Already added",
+      "opacity": "Opacity",
+      "blend": "Blend",
+      "show": "Show",
+      "hide": "Hide",
+      "remove": "Remove layer",
+      "summary": "$count layers",
+      "blendModes": {
+        "normal": "Normal",
+        "multiply": "Multiply",
+        "screen": "Screen",
+        "overlay": "Overlay",
+        "darken": "Darken",
+        "lighten": "Lighten",
+        "softLight": "Soft light",
+        "hardLight": "Hard light",
+        "difference": "Difference"
+      }
+    },
+    "sources": {
+      "title": "Data sources",
+      "hint": "Sources of the maps and elevation currently shown. On the map itself the credit appears only while OpenStreetMap is in use",
+      "basemap": "Base maps",
+      "elevation": "Elevation (3D terrain)"
+    },
     "download": {
       "title": "Bulk Map Download",
       "description": "Download map data for the area around the current view. Run this before going to an offline environment.",

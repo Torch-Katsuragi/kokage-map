@@ -404,6 +404,9 @@ void fillInvalidHeights(Float32List h) {
 /// テクスチャに上描きする手（オーバーレイ画像など）。canvas は [range] の左上が原点、1 タイル = 256px
 typedef TextureDecorator = void Function(ui.Canvas canvas, TileRange range);
 
+/// 合成する 1 層: タイルの取り方・不透明度（0〜1）・合成モード（お絵描きソフトのレイヤと同じ。一番下の層のモードは効かない）
+typedef TextureLayer = (TileFetcher fetch, double opacity, ui.BlendMode blend);
+
 /// ラスタタイル（背景地図）を 1 枚の画像に合成する
 ///
 /// 設計どおり「表示範囲のタイルを 1 枚に合成してから ImageShader で貼る」。
@@ -417,28 +420,28 @@ class RasterTileComposer {
 
   /// [range] のタイルを敷き詰めた画像を返す（幅 = width×256）
   Future<ui.Image> compose(TileRange range, {TileProgress? onProgress, TextureDecorator? decorate}) =>
-      composeLayers(range, [(_fetch, 1.0)], onProgress: onProgress, decorate: decorate);
+      composeLayers(range, [(_fetch, 1.0, ui.BlendMode.srcOver)], onProgress: onProgress, decorate: decorate);
 
-  /// 複数のタイル層を opacity で重ねて 1 枚にする（背景地図のブレンド。MapLibre 側と同じ累積補正済み opacity を渡す）。
-  /// [decorate] は最後に呼ばれ、オーバーレイ画像などを上に描ける（座標は範囲左上原点のピクセル）
+  /// 複数のタイル層を下から順に不透明度と合成モードで重ねて 1 枚にする（背景地図のレイヤ）。
+  /// 層は透明な板の上に重ね（一番下の層の合成モードは効かない。お絵描きソフトと同じ）、最後に灰色の下地に載せる
+  /// （タイルが無い所は灰色）。[decorate] は最後に呼ばれ、オーバーレイ画像などを上に描ける（座標は範囲左上原点のピクセル）
   Future<ui.Image> composeLayers(
     TileRange range,
-    List<(TileFetcher, double)> layers, {
+    List<TextureLayer> layers, {
     TileProgress? onProgress,
     TextureDecorator? decorate,
   }) async {
     const ts = WebMercator.tileSize;
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(recorder);
-    canvas.drawRect(
-      ui.Rect.fromLTWH(0, 0, range.width * ts * 1.0, range.height * ts * 1.0),
-      ui.Paint()..color = const ui.Color(0xFFDDDDDD),
-    );
+    final bounds = ui.Rect.fromLTWH(0, 0, range.width * ts * 1.0, range.height * ts * 1.0);
+    canvas.drawRect(bounds, ui.Paint()..color = const ui.Color(0xFFDDDDDD));
+    canvas.saveLayer(bounds, ui.Paint());
     final owned = <ui.Image>[]; // キャッシュに入れなかった画像（合成後に捨てる）
     var doneTotal = 0;
     final total = range.count * layers.length;
     for (var li = 0; li < layers.length; li++) {
-      final (fetch, opacity) = layers[li];
+      final (fetch, opacity, blend) = layers[li];
       final cache = _imageCache;
       // キャッシュに無いタイルだけ取る
       final missing = <(int, int)>[];
@@ -465,7 +468,9 @@ class RasterTileComposer {
         await Future.wait([for (var k = 0; k < 8; k++) worker()]);
       }
       doneTotal += range.count;
-      final paint = ui.Paint()..color = ui.Color.fromRGBO(255, 255, 255, opacity.clamp(0.0, 1.0));
+      final paint = ui.Paint()
+        ..color = ui.Color.fromRGBO(255, 255, 255, opacity.clamp(0.0, 1.0))
+        ..blendMode = blend;
       for (var ty = range.y0; ty <= range.y1; ty++) {
         for (var tx = range.x0; tx <= range.x1; tx++) {
           var image = cache?.get(li, range.z, tx, ty);
@@ -493,6 +498,7 @@ class RasterTileComposer {
         }
       }
     }
+    canvas.restore();
     decorate?.call(canvas, range);
     final picture = recorder.endRecording();
     final image = await picture.toImage(range.width * ts, range.height * ts);

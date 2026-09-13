@@ -34,6 +34,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../core/platform_capabilities.dart';
 import '../i18n/strings.g.dart';
+import '../models/basemap_layer.dart';
 import '../models/basemap_provider.dart';
 import 'tile_cache_mbtiles.dart';
 
@@ -142,13 +143,11 @@ class BaseMapService extends ChangeNotifier {
   bool _isDownloading = false;
   bool _cancelDownload = false;
 
-  // --- ブレンドモード ---
-  /// プロバイダID → weight（0〜100）。0は非表示。
-  Map<String, int> _providerWeights = {};
-  /// 高度な設定モード（スライダー表示）
-  bool _advancedMode = false;
+  // --- レイヤ（お絵描きソフトのレイヤと同じ: 並び・可視・不透明度・合成モード） ---
+  /// 先頭が一番下。設定画面は上から並べて見せる
+  List<BaseMapLayer> _layers = [];
 
-  /// 現在の背景地図プロバイダー（互換用: 最大weightのプロバイダ）
+  /// 一番下の見えているレイヤのプロバイダ（互換用。一括ダウンロード・TileServer の既定 URL など）
   BaseMapProvider get currentProvider => _currentProvider;
 
   /// オフラインモードかどうか
@@ -253,29 +252,19 @@ class BaseMapService extends ChangeNotifier {
   List<BaseMapProvider> get availableProviders =>
       BaseMapProvider.availableProviders;
 
-  /// プロバイダ重みマップ
-  Map<String, int> get providerWeights => Map.unmodifiable(_providerWeights);
+  /// 背景地図のレイヤ（下から上へ）。変更は [setLayers] / [updateLayer] / [addLayer] / [removeLayer] / [moveLayer]
+  List<BaseMapLayer> get layers => List.unmodifiable(_layers);
 
-  /// 高度な設定モードかどうか
-  bool get isAdvancedMode => _advancedMode;
+  /// 絵に効くレイヤ（見えていて不透明度 > 0）とそのプロバイダ。下から上へ。3D のテクスチャ合成と web 2D はこれを重ねる
+  List<(BaseMapProvider, BaseMapLayer)> get activeLayers => [
+        for (final l in _layers)
+          if (l.effective && l.provider != null) (l.provider!, l),
+      ];
 
-  /// アクティブな背景地図レイヤ設定（プロバイダ + 累積補正済みopacity）
-  ///
-  /// 累積補正式: α_i = w_i / (w_1 + w_2 + ... + w_i)
-  /// この方式ではPainter's Algorithmの重ね塗り効果を補正し、
-  /// 各レイヤの実効表示が weight比率どおりになる。
-  List<(BaseMapProvider, double)> get activeLayerConfig {
-    final active = BaseMapProvider.availableProviders
-        .where((p) => (_providerWeights[p.id] ?? 0) > 0)
-        .toList();
-    final result = <(BaseMapProvider, double)>[];
-    double cumSum = 0;
-    for (final p in active) {
-      final w = (_providerWeights[p.id] ?? 0).toDouble();
-      cumSum += w;
-      result.add((p, w / cumSum));
-    }
-    return result;
+  /// 一括ダウンロード等の「いま使っている地図」。一番下の見えているレイヤ（無ければ既定）
+  void _syncCurrentProvider() {
+    final active = activeLayers;
+    _currentProvider = active.isNotEmpty ? active.first.$1 : BaseMapProvider.defaultProvider;
   }
 
   /// サービス初期化
@@ -284,7 +273,7 @@ class BaseMapService extends ChangeNotifier {
       // タイルキャッシュはローカルファイルシステムが前提。
       // web には無いので飛ばす（ブラウザのHTTPキャッシュに任せる）。
       // ⚠ ここで例外を投げると _loadSettings まで到達せず、
-      //   _providerWeights が空＝背景地図が1枚も出なくなる。
+      //   _layers が空＝背景地図が1枚も出なくなる。
       if (PlatformCapabilities.hasTileCache) {
         // キャッシュディレクトリの設定
         await _initializeCacheDirectory();
@@ -438,38 +427,27 @@ class BaseMapService extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _isOfflineMode = prefs.getBool('basemap_offline_mode') ?? false;
-      _advancedMode = prefs.getBool('basemap_advanced_mode') ?? false;
 
-      // ブレンド重みの読み込み
-      final weightsJson = prefs.getString('basemap_weights');
-      if (weightsJson != null) {
-        final decoded = json.decode(weightsJson) as Map<String, dynamic>;
-        _providerWeights = decoded.map((k, v) => MapEntry(k, v as int));
-        // 2026-09-13 の等高線は id に版が入っていた（contours_v2〜v4）。今の id に読み替える
-        for (final k in _providerWeights.keys.where((k) => RegExp(r'^contours_v\d+$').hasMatch(k)).toList()) {
-          final w = _providerWeights.remove(k)!;
-          _providerWeights.putIfAbsent('contours', () => w);
+      final layersJson = prefs.getString('basemap_layers');
+      if (layersJson != null) {
+        final decoded = json.decode(layersJson) as List<dynamic>;
+        _layers = [
+          for (final e in decoded)
+            if (e is Map<String, Object?>) ?BaseMapLayer.fromJson(e),
+        ];
+      } else {
+        // 2026-09-13 まで: プロバイダ → 重み（比で混ぜる）。その前: プロバイダ 1 つ
+        final weightsJson = prefs.getString('basemap_weights');
+        if (weightsJson != null) {
+          final decoded = json.decode(weightsJson) as Map<String, dynamic>;
+          _layers = BaseMapLayer.fromLegacyWeights(decoded.map((k, v) => MapEntry(k, (v as num).toInt())));
+        }
+        if (_layers.isEmpty) {
+          final id = prefs.getString('basemap_provider_id');
+          if (id != null && BaseMapProvider.getProviderById(id) != null) _layers = [BaseMapLayer(providerId: id)];
         }
       }
-
-      // 後方互換: 旧設定のみ存在する場合はマイグレーション
-      if (_providerWeights.isEmpty) {
-        final providerId = prefs.getString('basemap_provider_id');
-        if (providerId != null) {
-          final provider = BaseMapProvider.getProviderById(providerId);
-          if (provider != null) {
-            _providerWeights = {provider.id: 100};
-            _currentProvider = provider;
-          }
-        }
-      }
-
-      // weightsがまだ空ならデフォルトプロバイダ
-      if (_providerWeights.isEmpty) {
-        _providerWeights = {BaseMapProvider.defaultProvider.id: 100};
-      }
-
-      // _currentProviderを最大weightのプロバイダに同期
+      if (_layers.isEmpty) _layers = [BaseMapLayer(providerId: BaseMapProvider.defaultProvider.id)];
       _syncCurrentProvider();
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Settings load error: $e');
@@ -482,62 +460,48 @@ class BaseMapService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('basemap_provider_id', _currentProvider.id);
       await prefs.setBool('basemap_offline_mode', _isOfflineMode);
-      await prefs.setBool('basemap_advanced_mode', _advancedMode);
-      await prefs.setString('basemap_weights', json.encode(_providerWeights));
+      await prefs.setString('basemap_layers', json.encode([for (final l in _layers) l.toJson()]));
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Settings save error: $e');
     }
   }
 
-  /// 最大weightのプロバイダを_currentProviderに同期
-  void _syncCurrentProvider() {
-    String? maxId;
-    int maxWeight = 0;
-    for (final entry in _providerWeights.entries) {
-      if (entry.value > maxWeight) {
-        maxWeight = entry.value;
-        maxId = entry.key;
-      }
-    }
-    if (maxId != null) {
-      _currentProvider = BaseMapProvider.getProviderById(maxId)
-          ?? BaseMapProvider.defaultProvider;
-    }
-  }
-
-  /// 背景地図プロバイダーを変更（通常モード用: 選択=100、他=0）
-  Future<void> setProvider(BaseMapProvider provider) async {
-    _providerWeights = {provider.id: 100};
-    _currentProvider = provider;
-    await _saveSettings();
-    notifyListeners();
-  }
-
-  /// 個別プロバイダのweightを設定（高度モード用）
-  Future<void> setProviderWeight(String providerId, int weight) async {
-    final clamped = weight.clamp(0, 100);
-    if ((_providerWeights[providerId] ?? 0) == clamped) return;
-    if (clamped == 0) {
-      _providerWeights.remove(providerId);
-    } else {
-      _providerWeights[providerId] = clamped;
-    }
+  Future<void> _commitLayers(List<BaseMapLayer> layers) async {
+    _layers = layers;
     _syncCurrentProvider();
     await _saveSettings();
     notifyListeners();
   }
 
-  /// 高度な設定モードの切り替え
-  Future<void> setAdvancedMode(bool enabled) async {
-    if (_advancedMode == enabled) return;
-    _advancedMode = enabled;
-    if (!enabled) {
-      // 高度→通常: 最大weightのプロバイダのみ残す
-      _syncCurrentProvider();
-      _providerWeights = {_currentProvider.id: 100};
-    }
-    await _saveSettings();
-    notifyListeners();
+  /// 背景地図を 1 枚だけにする（そのプロバイダの不透明度 100）
+  Future<void> setProvider(BaseMapProvider provider) => setLayers([BaseMapLayer(providerId: provider.id)]);
+
+  /// レイヤの並びを丸ごと差し替える（下から上へ）。同じプロバイダが 2 枚あれば後のを落とす
+  Future<void> setLayers(List<BaseMapLayer> layers) async {
+    final seen = <String>{};
+    final cleaned = [for (final l in layers) if (l.provider != null && seen.add(l.providerId)) l];
+    if (listEquals(cleaned, _layers)) return;
+    await _commitLayers(cleaned);
+  }
+
+  /// 一番上に足す（既にあれば何もしない）
+  Future<void> addLayer(String providerId, {BaseMapBlend blend = BaseMapBlend.normal, int opacity = 100}) async {
+    if (_layers.any((l) => l.providerId == providerId)) return;
+    await setLayers([..._layers, BaseMapLayer(providerId: providerId, blend: blend, opacity: opacity)]);
+  }
+
+  Future<void> removeLayer(String providerId) => setLayers([for (final l in _layers) if (l.providerId != providerId) l]);
+
+  Future<void> updateLayer(String providerId, BaseMapLayer Function(BaseMapLayer) change) =>
+      setLayers([for (final l in _layers) l.providerId == providerId ? change(l) : l]);
+
+  /// [from] 番目を [to] 番目へ（どちらも下からの番号）
+  Future<void> moveLayer(int from, int to) async {
+    if (from < 0 || from >= _layers.length || to < 0 || to >= _layers.length || from == to) return;
+    final next = [..._layers];
+    final l = next.removeAt(from);
+    next.insert(to, l);
+    await setLayers(next);
   }
 
   /// オフラインモードの切り替え

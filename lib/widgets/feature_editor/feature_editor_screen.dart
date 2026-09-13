@@ -170,8 +170,11 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
         _mapController.attach(controller.raw!);
       },
       onStyleLoaded: (_, style) async {
-        final layers = baseMapService.activeLayerConfig;
-        for (final (provider, opacity) in layers) {
+        // 背景地図レイヤ（下から上へ）。MapLibre のラスタは合成モードを持たないので不透明度だけ。
+        // 生成プロバイダ（等高線）は TileServer 経由でしか出せない（URL が無い）
+        for (final (provider, layer) in baseMapService.activeLayers) {
+          if (!ts.isRunning && provider.urlTemplate.isEmpty) continue;
+          final opacity = layer.opacity / 100;
           final url = ts.isRunning
               ? ts.urlTemplate(provider.id)
               : provider.urlTemplate;

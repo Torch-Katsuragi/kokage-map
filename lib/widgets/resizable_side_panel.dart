@@ -123,7 +123,8 @@ class _ResizableSidePanelState extends State<ResizableSidePanel> {
           ),
           // パネル本体
           Expanded(
-            child: Container(
+            // Material で塗る（Container だと中の ListTile の押した色や波紋が隠れ、debug では毎フレーム assertion が出る）
+            child: Material(
               color: widget.backgroundColor ??
                   Theme.of(context).colorScheme.surface,
               child: widget.child,

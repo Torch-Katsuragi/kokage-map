@@ -43,7 +43,7 @@ class ContourTiles {
   static const majorEvery = 5;
 
   /// 絵を変えたら上げる（タイルキャッシュのプロバイダ ID に入る。古い絵が残らないように）
-  static const version = 3; // v1 は z16 が 5 m、v2 は z12〜14 が 20〜100 m で地理院より密だった（2026-09-13）
+  static const version = 4; // v1 は z16 が 5 m、v2 は z12〜14 が 20〜100 m で地理院より密だった、v3 は半セル南西にずれていた（2026-09-13）
 }
 
 /// isolate へ渡す引数（DEM の格子の一部を、要求されたタイルの範囲として描く）
@@ -92,6 +92,8 @@ Uint8List renderContourTilePng(ContourTileArgs a) {
   final image = img.Image(width: a.size, height: a.size, numChannels: 4);
   final scale = a.size / (a.cells * a.cellSize); // m → px
   final extentM = a.cells * a.cellSize;
+  // DEM の格子点はピクセルの中心（`TerrainWorld` の originX = west + mpp / 2）。線の座標は格子点 0 を 0 としているので半セル足す
+  final half = a.cellSize / 2;
   final minor = img.ColorRgba8(0x6D, 0x4C, 0x41, 170);
   final major = img.ColorRgba8(0x5D, 0x40, 0x37, 230);
   for (final e in byLevel.entries) {
@@ -99,10 +101,10 @@ Uint8List renderContourTilePng(ContourTileArgs a) {
     for (final seg in e.value) {
       img.drawLine(
         image,
-        x1: (seg[0].dx * scale).round(),
-        y1: ((extentM - seg[0].dy) * scale).round(),
-        x2: (seg[1].dx * scale).round(),
-        y2: ((extentM - seg[1].dy) * scale).round(),
+        x1: ((seg[0].dx + half) * scale).round(),
+        y1: ((extentM - seg[0].dy - half) * scale).round(),
+        x2: ((seg[1].dx + half) * scale).round(),
+        y2: ((extentM - seg[1].dy - half) * scale).round(),
         color: isMajor ? major : minor,
         antialias: true,
         thickness: isMajor ? 2 : 1,

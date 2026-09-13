@@ -194,7 +194,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void _onLaunchRequest() {
     final req = LaunchRequest.incoming.value;
     if (req?.project == null || _navigatedToMapPage || _isOpeningProject) return;
-    _openRequestedProject(req!.project!);
+    if (req!.hasCamera) LaunchRequest.defer(req); // カメラは次に組まれる MapPage が拾う
+    _openRequestedProject(req.project!);
   }
 
   @override

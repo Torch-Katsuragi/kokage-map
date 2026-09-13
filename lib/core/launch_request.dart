@@ -134,6 +134,13 @@ class LaunchRequest {
   static LaunchRequest? get pending => _pending;
 
   /// 起動時の要求を取り出す（2 回目からは null）
+  /// 起動中に届いた要求を「起動時の要求」として置き直す（ホームにいる間に `/map?project=…&lat=…` が届いたとき、
+  /// HomeScreen がプロジェクトを開き、次に組まれる MapPage が [consumePending] でカメラを合わせる。
+  /// [incoming] の値は MapPage が購読する前に立つので、それだけでは届かない。2026-09-13 に実機で観測）
+  static void defer(LaunchRequest req) {
+    _pending = req;
+  }
+
   static LaunchRequest? consumePending() {
     final p = _pending;
     _pending = null;

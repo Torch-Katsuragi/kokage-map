@@ -34,6 +34,8 @@ python tool/play/play.py upload ... --apply
 python tool/play/play.py upload ... --apply --hold
 ```
 
+- ⚠ `--hold`（保存だけ）は **このアプリでは API が 400 で拒む**（「Changes are sent for review automatically. changesNotSentForReview must not be set」、2026-09-13）。
+  送るか送らないかの二択。実機確認を済ませてから `--apply`
 - `--track`: `internal`（内部テスト）/ `alpha`（クローズドテスト）/ `beta` / `production`
 - 国の指定（countryTargeting）は同じトラックの直前リリースから引き継ぐ
 - 結果は `python tool/play/play.py status` で確認する

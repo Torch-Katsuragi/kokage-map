@@ -125,6 +125,7 @@
     鍵の正本は Vault `事業/ねむりぎ工房/K-Maps/google play console/`。worktree を増やしたら両方コピーする
   - [x] release で 3D（GPU・眺めモード・ヒットテスト）と web release の起動を確認（2026-09-11 13:05、Pixel 9 / Surface Chrome）
   - [/] 眺めモードの残り: 面・線の靄は入れた（2026-09-11 夕）。残るのは純 Dart 経路（web の GPU 無し環境）の透視。2 本指の移動・拡縮・ホイールは透視の式にした（指の下の地面を留める。実機のピンチは未確認）
+  - [x] v0.7.2+22 を release（2026-09-13）: master ff・web デプロイ・Play alpha へ送信。Pixel 9 はネット無しだったので実機は新規インストール → 権限 → SAF → 地図ページ → 眺めモードの生存確認まで（地形の描画は 9/12 の debug で確認済み）
   - [x] web の `#/map?...` hashchange で「Null check operator used on a null value」（v0.7.2 の release で発覚、v0.7.1 には無い）: `/map` を routes から外した副作用。
         `_RootMapsAppState.didPushRouteInformation` で `/map` を飲み込む（MaterialApp のオブザーバより先に登録される）。要求は `LaunchRequest` の hashchange 側が拾う（2026-09-13）
   - [x] web の「地図を開く」（picker 無し）で地図が真っ白だった件: master の web-server ビルドを 127.0.0.1 で `showDirectoryPicker` を消して再現を試みたが、地形も基図も出た（2026-09-13）。index.html を差し替えた静的配信の副作用とみて閉じる

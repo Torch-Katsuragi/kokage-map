@@ -1054,10 +1054,21 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
   Future<void> _handleSignIn() async {
     setState(() => _isAccountLoading = true);
     try {
-      await _driveService.signIn();
+      if (!await _driveService.signIn()) _showAuthError();
     } finally {
       if (mounted) setState(() => _isAccountLoading = false);
     }
+  }
+
+  /// サインイン／アカウント切替の失敗を出す
+  ///
+  /// 本当のユーザーキャンセルなら `errorMessage` が null なので何も出さない。
+  void _showAuthError() {
+    final message = _driveService.authState.errorMessage;
+    if (message == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Future<void> _handleSignOut() async {
@@ -1092,7 +1103,7 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
   Future<void> _handleSwitchAccount() async {
     setState(() => _isAccountLoading = true);
     try {
-      await _driveService.switchAccount();
+      if (!await _driveService.switchAccount()) _showAuthError();
     } finally {
       if (mounted) setState(() => _isAccountLoading = false);
     }

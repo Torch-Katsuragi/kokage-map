@@ -580,7 +580,8 @@
       "noChanges": "変更はありません",
       "localLabel": "端末",
       "cloudLabel": "クラウド",
-      "syncExecute": "同期実行"
+      "syncExecute": "同期実行",
+      "mergeLabel": "端末とクラウドを行ごとに合わせる"
     },
     "photo": {
       "overlay": "オーバーレイ",
@@ -1107,6 +1108,9 @@
     "foldersCreated": "${count}フォルダを作成しました",
     "noChanges": "変更はありません",
     "syncComplete": "同期完了 (↑${uploaded} ↓${downloaded} ×${deleted} →${moved})",
+    "mergedFiles": "$count ファイルを行ごとに合わせました",
+    "mergeConflicts": "$count 行は両方で変えていたので、この端末の値を残しました",
+    "mergeConflictLine": "$table #$fid: クラウド「$theirs」→ 端末「$mine」",
     "unlinkDrive": "Drive連携を解除",
     "unlinkConfirm": "${name} のDrive連携を解除しますか？\n\nローカルファイルは削除されません。",
     "unlink": "解除",

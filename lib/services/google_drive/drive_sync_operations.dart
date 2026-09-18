@@ -160,7 +160,7 @@ class DriveSyncOperations {
       if (result.success) {
         node.syncStatus = SyncStatus.synced;
 
-        if (result.downloadedCount > 0 || result.deletedCount > 0 || result.movedCount > 0) {
+        if (result.downloadedCount > 0 || result.deletedCount > 0 || result.movedCount > 0 || result.mergedCount > 0) {
           await updateChildrenRecursive(node);
           onMapRefresh?.call();
           onStateChanged();
@@ -175,6 +175,26 @@ class DriveSyncOperations {
                 ),
               level: NotificationLevel.success,
             );
+        if (result.mergedCount > 0) {
+          ref.read(notificationCenterProvider.notifier).add(
+                title: t.drive.mergedFiles(count: result.mergedCount.toString()),
+                level: NotificationLevel.success,
+              );
+        }
+        if (result.conflicts.isNotEmpty) {
+          ref.read(notificationCenterProvider.notifier).add(
+                title: t.drive.mergeConflicts(count: result.conflicts.length.toString()),
+                detail: result.conflicts
+                    .map((c) => t.drive.mergeConflictLine(
+                          table: c.table,
+                          fid: c.fid,
+                          theirs: '${c.theirs}',
+                          mine: '${c.mine}',
+                        ))
+                    .join('\n'),
+                level: NotificationLevel.warning,
+              );
+        }
       } else {
         node.syncStatus = SyncStatus.error;
         ref.read(notificationCenterProvider.notifier).add(

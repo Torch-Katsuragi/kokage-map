@@ -73,6 +73,11 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
   void _initChoices() {
     _choices = {};
     for (final entry in widget.entries) {
+      if (entry.mergeable) {
+        // 両方が変えた gpkg は、行単位で合わせるのを既定にする
+        _choices[entry.relativePath] = MergeChoice.merge;
+        continue;
+      }
       // モードに応じて初期値を設定
       if (widget.mode == SyncMode.upload) {
         // アップロードモード: ローカル変更があればローカル、なければリモート
@@ -188,11 +193,13 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
   Widget _buildFileRow(MergeFileEntry entry) {
     final choice = _choices[entry.relativePath] ?? MergeChoice.local;
     final isLocalSelected = choice == MergeChoice.local;
+    final isRemoteSelected = choice == MergeChoice.remote;
+    final isMergeSelected = choice == MergeChoice.merge;
     final hasLocalChange = entry.localChange != MergeChangeType.none;
     final hasRemoteChange = entry.remoteChange != MergeChangeType.none;
     final isConflict = hasLocalChange && hasRemoteChange;
 
-    return Padding(
+    final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
@@ -222,7 +229,7 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
                 ? _buildFileMarker(
                     entry.relativePath,
                     entry.remoteChange,
-                    isChecked: !isLocalSelected,
+                    isChecked: isRemoteSelected,
                     onTap: () {
                       setState(() {
                         if (isConflict) {
@@ -238,6 +245,42 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
           ),
         ],
       ),
+    );
+    if (!entry.mergeable) return row;
+
+    // 両方が変えた gpkg: 行単位で合わせる選択肢（既定）
+    const mergeColor = Colors.purple;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        row,
+        Padding(
+          padding: const EdgeInsets.only(left: 18, bottom: 6),
+          child: InkWell(
+            onTap: () => setState(() => _choices[entry.relativePath] = MergeChoice.merge),
+            child: Opacity(
+              opacity: isMergeSelected ? 1.0 : 0.6,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildSelectionIndicator(isMergeSelected, mergeColor),
+                  Flexible(
+                    child: Text(
+                      t.layerDrawer.folder.mergeLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isMergeSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.call_merge, size: 14, color: mergeColor),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

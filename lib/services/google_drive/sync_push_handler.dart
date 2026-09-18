@@ -29,6 +29,7 @@ import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import '../qgis/qgs_auto_refresh.dart';
 import 'google_drive_service.dart';
+import 'sync_base_store.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
 
@@ -243,6 +244,7 @@ class SyncPushHandler {
               driveFileId: result.id!,
               lastSyncedTime: DateTime.now(),
             );
+            await SyncBaseStore.saveBase(projectPath, relativePath);
           } else {
             skippedCount++;
           }

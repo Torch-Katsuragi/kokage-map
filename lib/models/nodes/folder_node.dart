@@ -20,6 +20,7 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
+import '../../services/google_drive/sync_base_store.dart';
 import '../../services/kmeta_service.dart';
 import '../kmeta.dart';
 import 'drive_folder_node.dart';
@@ -188,6 +189,7 @@ class FolderNode extends LayerTreeNode {
 
     final directories = (entries ?? await fs.list(absPath))
         .where((e) => e.isDirectory)
+        .where((e) => e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 

@@ -21,8 +21,11 @@ import 'package:path/path.dart' as p;
 import '../../core/fs/k_file_system.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
+import '../geodiff/geodiff.dart';
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
+import 'gpkg_merger.dart';
+import 'sync_base_store.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
 
@@ -343,6 +346,10 @@ class SyncConflictResolver {
         }
 
         if (localChange != MergeChangeType.none || remoteChange != MergeChangeType.none) {
+          // 両方 modified の gpkg で base が残っていれば、行単位で合わせられる
+          final mergeable = localChange == MergeChangeType.modified &&
+              remoteChange == MergeChangeType.modified &&
+              await SyncBaseStore.hasBase(localPath, syncedPath);
           entries.add(MergeFileEntry(
             relativePath: syncedPath,
             localChange: localChange,
@@ -351,6 +358,7 @@ class SyncConflictResolver {
             remoteModifiedTime: remoteModTime,
             moveInfo: moveInfo,
             driveFileId: syncInfo.driveFileId,
+            mergeable: mergeable,
           ));
         }
 
@@ -399,6 +407,7 @@ class SyncConflictResolver {
     String localPath,
     List<MergeDecision> decisions,
   ) async {
+    Geodiff? geodiff;
     try {
       final meta = await _kmetaService.getMeta(localPath);
       final driveId = meta.sync.driveId;
@@ -414,6 +423,8 @@ class SyncConflictResolver {
       int downloadedCount = 0;
       int deletedCount = 0;
       int movedCount = 0;
+      int mergedCount = 0;
+      final conflicts = <GpkgConflict>[];
 
       final folderIdCache = <String, String>{};
 
@@ -431,6 +442,28 @@ class SyncConflictResolver {
         AppLogger.debug('  remoteChange: ${entry.remoteChange}');
         AppLogger.debug('  driveFileId: ${entry.driveFileId}');
 
+        if (choice == MergeChoice.merge) {
+          geodiff ??= Geodiff();
+          final merged = await _mergeGpkg(
+            localPath: localPath,
+            entry: entry,
+            localFilePath: localFilePath,
+            driveId: driveId,
+            folderIdCache: folderIdCache,
+            geodiff: geodiff,
+          );
+          if (merged == null) {
+            AppLogger.debug('  → 行単位で合わせられなかった。衝突のまま残す');
+            continue;
+          }
+          mergedCount++;
+          conflicts.addAll(merged.conflicts);
+          syncedFiles[relativePath] = KMetaSyncFile(
+            driveFileId: merged.driveFileId,
+            lastSyncedTime: DateTime.now(),
+          );
+          continue;
+        }
         if (choice == MergeChoice.local) {
           switch (entry.localChange) {
             case MergeChangeType.added:
@@ -454,6 +487,7 @@ class SyncConflictResolver {
                     driveFileId: result.id!,
                     lastSyncedTime: DateTime.now(),
                   );
+                  await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                 }
               }
             case MergeChangeType.deleted:
@@ -485,6 +519,7 @@ class SyncConflictResolver {
                         driveFileId: result.id!,
                         lastSyncedTime: DateTime.now(),
                       );
+                      await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                     }
                   }
                 case MergeChangeType.added:
@@ -530,6 +565,7 @@ class SyncConflictResolver {
                         driveFileId: result.id!,
                         lastSyncedTime: DateTime.now(),
                       );
+                      await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                     }
                   }
                 case MergeChangeType.moved:
@@ -573,6 +609,7 @@ class SyncConflictResolver {
                     driveFileId: entry.driveFileId!,
                     lastSyncedTime: DateTime.now(),
                   );
+                  await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                 }
               }
             case MergeChangeType.deleted:
@@ -613,6 +650,7 @@ class SyncConflictResolver {
                         driveFileId: entry.driveFileId!,
                         lastSyncedTime: DateTime.now(),
                       );
+                      await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                     }
                   }
                 case MergeChangeType.added:
@@ -633,6 +671,7 @@ class SyncConflictResolver {
                         driveFileId: entry.driveFileId!,
                         lastSyncedTime: DateTime.now(),
                       );
+                      await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                     }
                   }
                 case MergeChangeType.moved:
@@ -665,10 +704,76 @@ class SyncConflictResolver {
         downloadedCount: downloadedCount,
         deletedCount: deletedCount,
         movedCount: movedCount,
+        mergedCount: mergedCount,
+        conflicts: conflicts,
       );
     } catch (e) {
       AppLogger.error('[SyncEngine] Merge エラー: $e');
       return SyncResult.failure(e.toString());
+    } finally {
+      geodiff?.dispose();
+    }
+  }
+
+  /// 両方が変えた gpkg を行単位で合わせて Drive に上げる（docs/technical/drive-geodiff-sync.md）。
+  ///
+  /// リモートを一時ファイルに落とし、`rebase(base, remote, local)` でローカルに両方の変更を載せ、
+  /// ローカルを上げて base を写し直す。どこかで失敗したら null（呼び手は衝突のまま残す）。
+  /// ⚠ rebase 済みなのに上げられなかったときは、ローカルには相手の変更が載ったまま base は古い。
+  ///   次の同期でもう一度 merge になる。
+  Future<({String driveFileId, List<GpkgConflict> conflicts})?> _mergeGpkg({
+    required String localPath,
+    required MergeFileEntry entry,
+    required String localFilePath,
+    required String driveId,
+    required Map<String, String> folderIdCache,
+    required Geodiff geodiff,
+  }) async {
+    final relativePath = entry.relativePath;
+    final fileId = entry.driveFileId;
+    if (fileId == null) return null;
+    final base = SyncBaseStore.basePath(localPath, relativePath);
+    if (!await fs.exists(base) || !await fs.exists(localFilePath)) {
+      AppLogger.debug('  base かローカルが無い: base=$base');
+      return null;
+    }
+    final tmp = SyncBaseStore.tmpPath(localPath, relativePath);
+    try {
+      await fs.createDirectory(p.dirname(tmp));
+      if (!await _driveService.downloadFile(fileId, tmp)) {
+        AppLogger.debug('  リモートを落とせなかった');
+        return null;
+      }
+      final r = await GpkgMerger(geodiff).rebase(base: base, theirs: tmp, mine: localFilePath);
+      if (!r.success) {
+        AppLogger.debug('  rebase 失敗: ${r.error}');
+        return null;
+      }
+      // この間に Drive が動いていたら上げない（次の同期で載せ直す）
+      final meta = await _driveService.getFileMetadata(fileId);
+      final remoteAt = entry.remoteModifiedTime;
+      if (meta?.modifiedTime != null && remoteAt != null && meta!.modifiedTime!.isAfter(remoteAt)) {
+        AppLogger.debug('  Drive 側が同期開始後に動いた。上げずに次回へ');
+        return null;
+      }
+      final relativeDir = p.dirname(relativePath);
+      String targetFolderId = driveId;
+      if (relativeDir != '.' && relativeDir.isNotEmpty) {
+        final folderId = await _fileOps.getDriveFolderIdForRelativeDir(driveId, relativeDir, folderIdCache);
+        if (folderId != null) targetFolderId = folderId;
+      }
+      final uploaded = await _driveService.uploadFileById(localFilePath, targetFolderId, existingFileId: fileId);
+      if (uploaded == null) {
+        AppLogger.debug('  上げられなかった');
+        return null;
+      }
+      await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff);
+      AppLogger.debug('  → 行単位で合わせた（衝突 ${r.conflicts.length} 件）');
+      return (driveFileId: uploaded.id ?? fileId, conflicts: r.conflicts);
+    } finally {
+      try {
+        if (await fs.exists(tmp)) await fs.delete(tmp);
+      } catch (_) {}
     }
   }
 
@@ -724,6 +829,7 @@ class SyncConflictResolver {
         final relativePath = _fileOps.normalizeRelativePath(
           p.relative(dir.path, from: localPath),
         );
+        if (SyncBaseStore.isInside(relativePath)) continue;
         if (driveFolderPaths.contains(relativePath)) continue;
         if ((await fs.list(dir.path)).isEmpty) {
           await fs.delete(dir.path);

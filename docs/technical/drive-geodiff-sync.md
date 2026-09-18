@@ -91,6 +91,20 @@ geodiff は同じ行・同じ列の衝突を**ローカル優先**で解き、`c
   `changesCount` `listChangesSummary` `rebase` `makeCopySqlite` `version` くらい。
   戻り値は `0 成功 / 1 失敗 / 2 衝突あり / 3 未対応の変更`
 
+## 実装状況（2026-09-18）
+
+| 段 | 状態 | どこ |
+|---|---|---|
+| 1 ビルド | 済 | `third_party/geodiff/`、`android/app/src/main/jniLibs/arm64-v8a/libgeodiff.so`、`third_party/geodiff/windows/geodiff.dll` |
+| 2 バインディング | 済 | `lib/services/geodiff/`（ffi + web stub）。`test/geodiff_rebase_test.dart`、`integration_test/geodiff_smoke_test.dart` |
+| 3 base と差し込み | 済 | `SyncBaseStore`（`.sync/base/`）、`GpkgMerger`、`MergeChoice.merge`、`SyncConflictResolver._mergeGpkg()`。`test/gpkg_merger_test.dart` |
+| 4 後処理 | 未 | rtree 再構築・extent 更新・強制再読込 |
+| 5 2 台で往復 | 未 | |
+
+base は「gpkg を Drive と上げ下ろしした直後」に写す（push / pull / executeMerge の upload・download・merge の全経路）。
+base が無い gpkg（この版より前に同期したもの）は、次に上げ下ろしした時点から持てるようになる。
+それまでは両方 modified でも `mergeable=false` で、いままでどおり端末／クラウドの二択。
+
 ## 段取り
 
 1. Android で `libgeodiff.so` をビルドし、アプリから `GEODIFF_version()` を呼ぶ（ビルドが本丸）

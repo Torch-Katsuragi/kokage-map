@@ -580,7 +580,8 @@
       "noChanges": "No changes",
       "localLabel": "Local",
       "cloudLabel": "Cloud",
-      "syncExecute": "Sync"
+      "syncExecute": "Sync",
+      "mergeLabel": "Merge both, row by row"
     },
     "photo": {
       "overlay": "Overlay",
@@ -1107,6 +1108,9 @@
     "foldersCreated": "${count} folders created",
     "noChanges": "No changes",
     "syncComplete": "Sync complete (↑${uploaded} ↓${downloaded} ×${deleted} →${moved})",
+    "mergedFiles": "Merged $count file(s) row by row",
+    "mergeConflicts": "$count row(s) were changed on both sides; kept this device's values",
+    "mergeConflictLine": "$table #$fid: cloud \"$theirs\" → this device \"$mine\"",
     "unlinkDrive": "Unlink Drive",
     "unlinkConfirm": "Unlink Drive for ${name}?\n\nLocal files will not be deleted.",
     "unlink": "Unlink",

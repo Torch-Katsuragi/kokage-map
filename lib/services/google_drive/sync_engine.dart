@@ -21,6 +21,7 @@ import 'package:path/path.dart' as p;
 
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
+import 'gpkg_merger.dart';
 import 'sync_conflict_resolver.dart';
 import 'sync_file_operations.dart';
 import 'sync_pull_handler.dart';
@@ -49,6 +50,12 @@ class SyncResult {
   /// 移動したファイル数
   final int movedCount;
 
+  /// 行単位で合わせたファイル数
+  final int mergedCount;
+
+  /// 行単位マージで、同じ行・同じ列を両方が変えていた記録（この端末の値が残っている）
+  final List<GpkgConflict> conflicts;
+
   const SyncResult({
     required this.success,
     this.errorMessage,
@@ -57,6 +64,8 @@ class SyncResult {
     this.skippedCount = 0,
     this.deletedCount = 0,
     this.movedCount = 0,
+    this.mergedCount = 0,
+    this.conflicts = const [],
   });
 
   factory SyncResult.success({
@@ -65,6 +74,8 @@ class SyncResult {
     int skippedCount = 0,
     int deletedCount = 0,
     int movedCount = 0,
+    int mergedCount = 0,
+    List<GpkgConflict> conflicts = const [],
   }) {
     return SyncResult(
       success: true,
@@ -73,6 +84,8 @@ class SyncResult {
       skippedCount: skippedCount,
       deletedCount: deletedCount,
       movedCount: movedCount,
+      mergedCount: mergedCount,
+      conflicts: conflicts,
     );
   }
 
@@ -363,6 +376,9 @@ enum MergeChangeType {
 enum MergeChoice {
   local,
   remote,
+
+  /// 両方の変更を行単位で合わせる（gpkg で base があるときだけ。geodiff の rebase）
+  merge,
 }
 
 /// マージ決定情報
@@ -399,6 +415,9 @@ class MergeFileEntry {
   /// DriveファイルID（既存ファイルの場合）
   final String? driveFileId;
 
+  /// 行単位で合わせられるか（両方 modified の gpkg で、この端末に base があるとき）
+  final bool mergeable;
+
   const MergeFileEntry({
     required this.relativePath,
     required this.localChange,
@@ -407,6 +426,7 @@ class MergeFileEntry {
     this.remoteModifiedTime,
     this.moveInfo,
     this.driveFileId,
+    this.mergeable = false,
   });
 
   /// ローカルの方が新しいか

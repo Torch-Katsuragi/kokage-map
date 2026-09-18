@@ -609,8 +609,12 @@
 - [/] 行単位マージを geodiff で（設計は [[docs/technical/drive-geodiff-sync]]。ops.log 案は取り下げ）
   - [x] 段1: `libgeodiff.so`（arm64-v8a）と `geodiff.dll` を焼く（2026-09-18。vcpkg 無し、`third_party/geodiff/`）。Pixel 9 で version 2.3.1
   - [x] 段2: `lib/services/geodiff/`（ffi + web stub）とテスト（ホスト VM 4 本・実機 2 本、2026-09-18 通過。web ビルドも通る）
-  - [ ] 段3: base の保持（`.sync/base/`）と `SyncConflictResolver.executeMerge()` の「両方 modified」への差し込み
-  - [ ] 段4: rebase 後の rtree 再構築・extent 更新・強制再読込、衝突の通知
+  - [x] 段3: base の保持（`.sync/base/`）と `executeMerge()` の `MergeChoice.merge`（2026-09-18）。
+        push/pull/merge で gpkg を上げ下ろしした直後に `SyncBaseStore.saveBase()`。`.sync/` は scan・push・pull の削除・空フォルダ掃除・レイヤツリーから除外。
+        自動同期は両方 modified の gpkg で base があれば merge を選ぶ。手動の同期ダイアログは merge を既定にして端末／クラウドも選べる。
+        衝突（同じ行・同じ列）はローカル優先で `conflict.json` → 通知（テーブル・fid・クラウド値→端末値）。
+        ⚠ `executeMerge` の merge 枝は単体テスト無し（`GoogleDriveService` が private ctor のシングルトンで fake を差せない）。`GpkgMerger` / `SyncBaseStore` は `test/gpkg_merger_test.dart` で 6 本
+  - [ ] 段4: rebase 後の rtree 再構築・extent 更新・強制再読込（衝突の通知は段3で入れた。自動同期側は AppLogger のみ）
   - [ ] 段5: Android 2 台で同じ gpkg を同時編集して往復
 
 #### MapLibre

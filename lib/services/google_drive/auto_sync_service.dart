@@ -277,6 +277,12 @@ class AutoSyncService {
 
     for (final entry in entries) {
       if (entry.isConflict) {
+        if (entry.mergeable) {
+          // 同じ gpkg を両方で変更 → 行単位で合わせる（base があるときだけ）
+          autoDecisions.add(MergeDecision(entry: entry, choice: MergeChoice.merge));
+          needsTreeRefresh = true;
+          continue;
+        }
         // 同一ファイルが両方で変更 → ユーザーに委ねる
         hasRealConflict = true;
         continue;
@@ -300,8 +306,11 @@ class AutoSyncService {
       if (result.success) {
         AppLogger.debug(
           '[AutoSync] ${node.name}: auto-merged ${autoDecisions.length} file(s) '
-          '(↑${result.uploadedCount} ↓${result.downloadedCount})',
+          '(↑${result.uploadedCount} ↓${result.downloadedCount} ⇄${result.mergedCount})',
         );
+        if (result.conflicts.isNotEmpty) {
+          AppLogger.debug('[AutoSync] ${node.name}: 行の衝突 ${result.conflicts.length} 件（この端末の値を残した）: ${result.conflicts}');
+        }
         if (needsTreeRefresh) await onTreeRefreshNeeded?.call(node);
       } else {
         AppLogger.debug('[AutoSync] ${node.name}: auto-merge failed - ${result.errorMessage}');

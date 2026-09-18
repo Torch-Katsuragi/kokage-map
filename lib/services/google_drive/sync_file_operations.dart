@@ -23,6 +23,7 @@ import '../../core/fs/k_file_system.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import 'google_drive_service.dart';
+import 'sync_base_store.dart';
 import 'sync_engine.dart';
 
 /// 同期用ファイル操作ヘルパー
@@ -53,6 +54,7 @@ class SyncFileOperations {
         p.relative(entry.path, from: projectPath),
       );
 
+      if (SyncBaseStore.isInside(relativePath)) continue; // 3-way マージの base は同期しない
       if (!matchesSyncPattern(fileName)) continue;
       if (fileName == '.ksync-state.json') continue;
 
@@ -192,6 +194,7 @@ class SyncFileOperations {
       final relativePath = normalizeRelativePath(
         p.relative(entry.path, from: localPath),
       );
+      if (SyncBaseStore.isInside(relativePath)) continue; // 3-way マージの base は同期しない
       localFiles[relativePath] = modified;
     }
     return localFiles;

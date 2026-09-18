@@ -24,6 +24,7 @@ import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
+import 'sync_base_store.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
 
@@ -137,6 +138,7 @@ class SyncPullHandler {
               driveFileId: driveFile.id!,
               lastSyncedTime: DateTime.now(),
             );
+            await SyncBaseStore.saveBase(localPath, driveEntry.relativePath);
           } else {
             skippedCount++;
           }
@@ -166,6 +168,7 @@ class SyncPullHandler {
           final relativePath = _fileOps.normalizeRelativePath(
             p.relative(entity.path, from: localPath),
           );
+          if (SyncBaseStore.isInside(relativePath)) continue;
           if (!driveFilePaths.contains(relativePath)) {
             await fs.delete(entity.path);
             deletedCount++;

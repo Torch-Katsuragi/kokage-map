@@ -41,6 +41,7 @@ dependencies:
   file_picker: ^12.3.0 # ファイル・ディレクトリ選択用（最新版に更新）
   file_selector: ^1.0.3 # 新しいファイル選択・保存ダイアログ用
   sqflite: ^2.3.0 # GeoPackageファイル操作用（sqlite3から移行）
+  ffi: ^2.1.0 # geodiff（GeoPackage の行単位マージ）の dart:ffi バインディング。web は stub
   sqflite_common_ffi_web: ^1.1.1     # web版: sqlite3 WASM でGeoPackageを開く
   path: ^1.8.3 # パス操作用
   xml: ^7.0.1 # .qgs（QGISプロジェクト）の組み立て用

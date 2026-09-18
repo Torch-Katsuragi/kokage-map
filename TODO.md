@@ -606,7 +606,12 @@
 
 #### Google Drive連携
 
-- [ ] 行単位マージを geodiff で（2026-09-18 に PC で PoC 通過。設計は [[docs/technical/drive-geodiff-sync]]。ops.log 案は取り下げ）
+- [/] 行単位マージを geodiff で（設計は [[docs/technical/drive-geodiff-sync]]。ops.log 案は取り下げ）
+  - [x] 段1: `libgeodiff.so`（arm64-v8a）と `geodiff.dll` を焼く（2026-09-18。vcpkg 無し、`third_party/geodiff/`）。Pixel 9 で version 2.3.1
+  - [x] 段2: `lib/services/geodiff/`（ffi + web stub）とテスト（ホスト VM 4 本・実機 2 本、2026-09-18 通過。web ビルドも通る）
+  - [ ] 段3: base の保持（`.sync/base/`）と `SyncConflictResolver.executeMerge()` の「両方 modified」への差し込み
+  - [ ] 段4: rebase 後の rtree 再構築・extent 更新・強制再読込、衝突の通知
+  - [ ] 段5: Android 2 台で同じ gpkg を同時編集して往復
 
 #### MapLibre
 

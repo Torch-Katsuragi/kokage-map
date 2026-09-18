@@ -606,7 +606,7 @@
 
 #### Google Drive連携
 
-- [ ] レイヤ単位での競合解決（GeoPackage内のレイヤレベルマージ、ops.logによる競合検出）
+- [ ] 行単位マージを geodiff で（2026-09-18 に PC で PoC 通過。設計は [[docs/technical/drive-geodiff-sync]]。ops.log 案は取り下げ）
 
 #### MapLibre
 

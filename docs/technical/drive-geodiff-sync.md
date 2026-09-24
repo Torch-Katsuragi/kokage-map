@@ -91,19 +91,67 @@ geodiff は同じ行・同じ列の衝突を**ローカル優先**で解き、`c
   `changesCount` `listChangesSummary` `rebase` `makeCopySqlite` `version` くらい。
   戻り値は `0 成功 / 1 失敗 / 2 衝突あり / 3 未対応の変更`
 
-## 実装状況（2026-09-18）
+## 実装状況（2026-09-24）
 
 | 段 | 状態 | どこ |
 |---|---|---|
 | 1 ビルド | 済 | `third_party/geodiff/`、`android/app/src/main/jniLibs/arm64-v8a/libgeodiff.so`、`third_party/geodiff/windows/geodiff.dll` |
 | 2 バインディング | 済 | `lib/services/geodiff/`（ffi + web stub）。`test/geodiff_rebase_test.dart`、`integration_test/geodiff_smoke_test.dart` |
-| 3 base と差し込み | 済 | `SyncBaseStore`（`.sync/base/`）、`GpkgMerger`、`MergeChoice.merge`、`SyncConflictResolver._mergeGpkg()`。`test/gpkg_merger_test.dart` |
-| 4 後処理 | 未 | rtree 再構築・extent 更新・強制再読込 |
-| 5 2 台で往復 | 未 | |
+| 3 base と差し込み | 済 | `SyncBaseStore`（`.sync/base/`）、`GpkgMerger`、`MergeChoice.merge`、`SyncConflictResolver._mergeGpkg()` |
+| 4 後処理 | 済 | `GeoPackageConnection.closeAllFor()`、`GpkgIndexRepair`、`GeoPackageNode.reloadLoadedLayers()` |
+| 5 2 台で往復 | 済（偽 Drive） | Pixel 9 + Pixel 11 Pro Fold で `tool/sync_relay/run_two_device.sh`。本物の Drive での往復は未 |
 
 base は「gpkg を Drive と上げ下ろしした直後」に写す（push / pull / executeMerge の upload・download・merge の全経路）。
 base が無い gpkg（この版より前に同期したもの）は、次に上げ下ろしした時点から持てるようになる。
 それまでは両方 modified でも `mergeable=false` で、いままでどおり端末／クラウドの二択。
+
+### 後処理（段4）
+
+- **接続を閉じてから geodiff に触らせる。** geodiff は SQLite を静的リンクしているので、同じプロセスに
+  アプリ側（Android の SQLite）と 2 つの SQLite が同居する。同じファイルを両方で開いていると、片方が閉じた瞬間に
+  もう片方のロックが外れる（https://sqlite.org/howtocorrupt.html 2.2.1）。`GeoPackageConnection` に開いている
+  接続の台帳を持ち、rebase・base の写し・Drive からの上書きダウンロードの前に `closeAllFor()` で閉じる。
+  閉じた接続は次の `getDatabase()` で開き直る
+- **rtree と範囲を焼き直す。** アプリは書き込みのために rtree の ST_ トリガーを落としているので、rebase で入った行は
+  rtree に載らない。描画は rtree を使わないが QGIS は使う（行が消えて見える）。`GpkgIndexRepair` が rtree を
+  実データから焼き直し、`gpkg_contents` の範囲（rtree から出している）と `gpkg_ogr_contents` の件数を合わせる
+- **フィーチャを読み直す。** 同期後のツリー更新はレイヤ構造しか見ず、既存の LayerNode を使い回していた。
+  読み込み済みレイヤだけ `updateChildren()` を呼び直す。merge だけでなく、既存の上書きダウンロードでも古いフィーチャが残っていた
+
+### リモートの変更判定は Drive の時刻どうしで（2026-09-24）
+
+以前は Drive の `modifiedTime`（サーバーの時計）と帳簿の `lastSyncedTime`（端末の `DateTime.now()`）を比べていた。
+端末の時計が Δ 秒進んでいると、同期の直後 Δ 秒以内に別の端末が上げた変更を「変わっていない」と見落とし、
+次にこちらが上げたときに**相手の変更を上書きして消す**。行単位マージは「両方変わった」を検出できて初めて働くので、ここが崩れると働かない。
+
+帳簿（`KMetaSyncFile`）に `remoteModifiedTime`（同期したときの Drive 側の `modifiedTime`）を持ち、
+Drive の時刻どうしで比べる（`isRemoteNewer()`）。upload の応答に `modifiedTime` を含めるよう `$fields` を指定した。
+この値を持たない古い帳簿は従来の比較にフォールバックする。ローカルの変更判定（ファイルの mtime と `lastSyncedTime`）はどちらも端末の時計なので変えていない。
+
+### テスト
+
+| どこで | ファイル | 中身 |
+|---|---|---|
+| ホスト VM | `test/geodiff_sync_roundtrip_test.dart` | 下の 6 本（偽 Drive、2 台を 1 プロセスで模す。端末ごとの帳簿は差し替える） |
+| 実機 1 台 | `integration_test/geodiff_sync_roundtrip_test.dart` | 同じ 6 本を Android の sqflite と `libgeodiff.so` で |
+| 実機 2 台 | `integration_test/geodiff_two_device_test.dart` | PC 上の偽 Drive（`tool/sync_relay/relay_server.dart`）を 2 台で共有して往復 |
+| ホスト VM | `test/gpkg_index_repair_test.dart` ほか | 索引の焼き直し・`closeAllFor`・帳簿の時刻・同期ダイアログ |
+
+6 本: 別々の行の変更／同じ行・同じ列の衝突（後から合わせた端末の値が残る）／両端末の追加で fid がぶつかる／
+端末の時計が Drive より進んでいる／base が無い gpkg は mergeable にならない／merge の前にアプリの接続を閉じる。
+シナリオ本体は `test/support/geodiff_roundtrip_scenarios.dart`、偽 Drive は `test/support/fake_google_drive.dart`
+（`GoogleDriveService` を `implements` + `noSuchMethod`。同期層が呼ばないメソッドを呼ぶと落ちる）。
+
+2 台の実機:
+
+```bash
+tool/sync_relay/run_two_device.sh <端末A> <端末B>
+```
+
+テスト用ビルドは applicationId に `.geodifftest` を付けて既存のアプリと並べて入れる（普段使いの端末のデータを置き換えない）。
+そのためにスクリプトが `build.gradle.kts` と `google-services.json` を一時的に書き換え、終了時に必ず戻す。
+2026-09-24 に Pixel 9（A）＋ Pixel 11 Pro Fold（B）で通過：B が `local=modified remote=modified mergeable=true` を検出して
+行単位で合わせ（衝突 1 件＝B の値が残る）、A が取り込み、両端末の中身が一致した。
 
 ## 段取り
 
@@ -115,6 +163,8 @@ base が無い gpkg（この版より前に同期したもの）は、次に上�
 
 ## 未決
 
-- base の置き場（`.sync/base/` 案）と Drive 除外の実装
 - `gps_history.gpkg`（グローバルフォルダ）にも使うか
-- 衝突 UI（通知止まりか、相手の値を選べるようにするか）
+- 衝突 UI（通知止まりか、相手の値を選べるようにするか）。いまは後から合わせた端末の値を残して通知だけ
+- 本物の Drive での 2 台往復（Drive のサインインが要るので人の手が要る）
+- ⚠ 同期の帳簿（`SyncLedger`）のキーが `drive:<driveId>` なので、**1 台の端末で同じ Drive フォルダを
+  2 つのローカル dir にクローンすると帳簿が衝突する**（2 台テストを 1 プロセスで模したときに踏んだ。実運用では稀）

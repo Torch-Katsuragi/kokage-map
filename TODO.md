@@ -614,8 +614,13 @@
         自動同期は両方 modified の gpkg で base があれば merge を選ぶ。手動の同期ダイアログは merge を既定にして端末／クラウドも選べる。
         衝突（同じ行・同じ列）はローカル優先で `conflict.json` → 通知（テーブル・fid・クラウド値→端末値）。
         ⚠ `executeMerge` の merge 枝は単体テスト無し（`GoogleDriveService` が private ctor のシングルトンで fake を差せない）。`GpkgMerger` / `SyncBaseStore` は `test/gpkg_merger_test.dart` で 6 本
-  - [ ] 段4: rebase 後の rtree 再構築・extent 更新・強制再読込（衝突の通知は段3で入れた。自動同期側は AppLogger のみ）
-  - [ ] 段5: Android 2 台で同じ gpkg を同時編集して往復
+  - [x] 段4: 接続を閉じてから geodiff に触らせる（`GeoPackageConnection.closeAllFor`）、rebase 後の rtree・範囲の焼き直し（`GpkgIndexRepair`）、
+        同期後に読み込み済みレイヤのフィーチャを読み直す（`GeoPackageNode.reloadLoadedLayers`。既存の上書きダウンロードでも古いまま残っていた）（2026-09-24）
+  - [x] 🐛 リモートの変更判定が Drive の時刻と端末の時計の比較で、端末の時計が進んでいると相手の変更を見落として上書きしていた
+        → 帳簿に `remoteModifiedTime` を持ち Drive の時刻どうしで比べる（2026-09-24、偽 Drive で再現→修正）
+  - [x] 段5（偽 Drive）: Pixel 9 + Fold の 2 台で往復（`tool/sync_relay/run_two_device.sh`、2026-09-24 通過）。ホスト VM と実機 1 台で同じ 6 本
+  - [ ] 段5（本物の Drive）: 2 台とも Drive にサインインして手で往復（人の手が要る）
+  - [ ] ⚠ `SyncLedger` のキーが `drive:<driveId>` なので、1 台で同じ Drive フォルダを 2 つの dir にクローンすると帳簿が衝突する
 
 #### MapLibre
 

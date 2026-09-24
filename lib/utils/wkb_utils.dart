@@ -206,6 +206,42 @@ Iterable<geo.Position> _allPositions(geo.Geometry geom) sync* {
   }
 }
 
+/// GeoPackage blob の範囲（rtree に入れる値）。空ジオメトリ・壊れた blob は null。
+///
+/// ヘッダーに範囲があればそれを読み、無ければ WKB を解いて座標から出す。
+({double minX, double maxX, double minY, double maxY})? gpkgEnvelope(Uint8List blob) {
+  if (blob.length >= 8 && blob[0] == 0x47 && blob[1] == 0x50) {
+    final flags = blob[3];
+    if ((flags >> 4) & 0x01 == 1) return null; // 空ジオメトリ
+    final envelopeType = (flags >> 1) & 0x07;
+    if (envelopeType >= 1 && envelopeType <= 4 && blob.length >= 8 + 32) {
+      final endian = (flags & 0x01) == 1 ? Endian.little : Endian.big;
+      final bd = ByteData.sublistView(blob, 8, 8 + 32);
+      final minX = bd.getFloat64(0, endian);
+      final maxX = bd.getFloat64(8, endian);
+      final minY = bd.getFloat64(16, endian);
+      final maxY = bd.getFloat64(24, endian);
+      if (!minX.isNaN && !maxX.isNaN && !minY.isNaN && !maxY.isNaN) {
+        return (minX: minX, maxX: maxX, minY: minY, maxY: maxY);
+      }
+    }
+  }
+  final geom = parseGpkgGeometry(blob);
+  if (geom == null) return null;
+  double? minX, maxX, minY, maxY;
+  for (final pos in _allPositions(geom)) {
+    final x = pos.x;
+    final y = pos.y;
+    if (x.isNaN || y.isNaN) continue;
+    minX = minX == null || x < minX ? x : minX;
+    maxX = maxX == null || x > maxX ? x : maxX;
+    minY = minY == null || y < minY ? y : minY;
+    maxY = maxY == null || y > maxY ? y : maxY;
+  }
+  if (minX == null || maxX == null || minY == null || maxY == null) return null;
+  return (minX: minX, maxX: maxX, minY: minY, maxY: maxY);
+}
+
 // ============================================================
 // レガシーAPI互換（既存呼び出し元の移行が完了するまで維持）
 // ============================================================

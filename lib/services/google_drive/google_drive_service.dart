@@ -710,6 +710,8 @@ class GoogleDriveService {
           existingFile.id!,
           uploadMedia: media,
           supportsAllDrives: true,
+          // 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
+          $fields: 'id, name, modifiedTime, size, parents',
         );
         AppLogger.debug('[GoogleDriveService] ファイル更新: $fileName');
       } else {
@@ -722,6 +724,8 @@ class GoogleDriveService {
           driveFile,
           uploadMedia: media,
           supportsAllDrives: true,
+          // 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
+          $fields: 'id, name, modifiedTime, size, parents',
         );
         AppLogger.debug('[GoogleDriveService] ファイルアップロード: $fileName');
       }
@@ -756,6 +760,8 @@ class GoogleDriveService {
           existingFileId,
           uploadMedia: media,
           supportsAllDrives: true,
+          // 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
+          $fields: 'id, name, modifiedTime, size, parents',
         );
         AppLogger.debug('[GoogleDriveService] ファイル更新(byId): $fileName');
         return result;
@@ -767,6 +773,8 @@ class GoogleDriveService {
           driveFile,
           uploadMedia: media,
           supportsAllDrives: true,
+          // 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
+          $fields: 'id, name, modifiedTime, size, parents',
         );
         AppLogger.debug('[GoogleDriveService] ファイル新規作成(byId): $fileName');
         return result;

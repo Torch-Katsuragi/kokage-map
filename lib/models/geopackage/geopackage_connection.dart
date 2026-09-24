@@ -53,6 +53,42 @@ class GeoPackageConnection {
   /// 初期化完了かどうか
   bool get isInitialized => _isInitialized;
 
+  /// 開いている接続（正規化した絶対パス → 接続）。
+  ///
+  /// geodiff（sqlite を静的リンク）が同じファイルを読み書きする前に、こちらの接続を閉じるため。
+  /// ⚠ 同じプロセスで別々の SQLite が同じファイルを開いていると、片方が閉じた瞬間に
+  /// もう片方のロックも外れる（https://sqlite.org/howtocorrupt.html 2.2.1）。
+  static final Map<String, Set<GeoPackageConnection>> _openConnections = {};
+
+  /// 台帳に載せたときのキー（dispose で外すため）
+  String? _registeredKey;
+
+  static String _registryKey(String path) => p.canonicalize(path);
+
+  /// [absPath] を開いている接続をすべて閉じる。閉じた数を返す。
+  ///
+  /// 閉じた接続は、次に [getDatabase] を呼んだときに開き直る（呼び手の作り直しは要らない）。
+  /// geodiff の rebase / 写し取り、Drive からの上書きダウンロードの前に呼ぶ。
+  static Future<int> closeAllFor(String absPath) async {
+    final set = _openConnections.remove(_registryKey(absPath));
+    if (set == null || set.isEmpty) return 0;
+    var closed = 0;
+    for (final c in set.toList()) {
+      try {
+        await c.dispose();
+        closed++;
+      } catch (e) {
+        AppLogger.debug('[GeoPackageConnection] closeAllFor: 閉じられなかった $absPath - $e');
+      }
+    }
+    AppLogger.debug('[GeoPackageConnection] closeAllFor: $closed 本を閉じた $absPath');
+    return closed;
+  }
+
+  /// テスト用: いま [absPath] を開いている接続の数
+  @visibleForTesting
+  static int openCountFor(String absPath) => _openConnections[_registryKey(absPath)]?.length ?? 0;
+
   /// コンストラクタ
   GeoPackageConnection(this.pathList, {this.absolutePath, this.projectRootDir});
 
@@ -237,6 +273,8 @@ class GeoPackageConnection {
       await _validateGeoPackageStructure();
 
       _isInitialized = true;
+      _registeredKey = _registryKey(absPath);
+      (_openConnections[_registeredKey!] ??= <GeoPackageConnection>{}).add(this);
 
       // web: 以降の書き込みを監視して元ファイルへ書き戻す
       _startCheckInWatcher();
@@ -454,9 +492,19 @@ class GeoPackageConnection {
 
   /// データベースのクローズ処理
   Future<void> dispose() async {
+    final key = _registeredKey;
+    if (key != null) {
+      final set = _openConnections[key];
+      set?.remove(this);
+      if (set != null && set.isEmpty) _openConnections.remove(key);
+      _registeredKey = null;
+    }
     if (_database != null) {
-      await _database!.close();
+      final db = _database!;
       _database = null;
+      // sqflite の singleInstance で同じパスの接続は1つの Database を共有している。
+      // 先に誰かが閉じていれば、ここは閉じ済みのものを閉じるだけ
+      if (db.isOpen) await db.close();
     }
     _checkInTimer?.cancel();
     _checkInTimer = null;

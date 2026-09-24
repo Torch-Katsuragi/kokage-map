@@ -8,6 +8,7 @@
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
+import '../../models/geopackage/geopackage_connection.dart';
 import '../../utils/app_logger.dart';
 import '../geodiff/geodiff.dart';
 
@@ -54,6 +55,8 @@ abstract final class SyncBaseStore {
     try {
       if (!await fs.exists(src)) return false;
       await fs.createDirectory(p.dirname(dst));
+      // geodiff の SQLite が読む前に、アプリの接続を閉じる（別の SQLite 同士で同じファイルを開かない）
+      await GeoPackageConnection.closeAllFor(src);
       // sqlite のバックアップ API で写す（書き込み途中でも一貫した写しになる）
       final g = geodiff ?? Geodiff();
       try {
@@ -70,6 +73,13 @@ abstract final class SyncBaseStore {
       AppLogger.debug('[SyncBase] base の写しで例外: $relativePath - $e');
       return false;
     }
+  }
+
+  /// Drive から gpkg を上書きダウンロードする前に呼ぶ。開いている接続を閉じる
+  /// （開いたまま下で中身が入れ替わるのを避ける）。gpkg 以外・web では何もしない。
+  static Future<void> releaseBeforeOverwrite(String absPath) async {
+    if (!fs.hasRealPaths || !isGpkg(absPath)) return;
+    await GeoPackageConnection.closeAllFor(absPath);
   }
 
   static Future<void> removeBase(String localPath, String relativePath) async {

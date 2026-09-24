@@ -422,13 +422,28 @@ class KMetaSyncFile {
   /// DriveファイルID
   final String driveFileId;
 
-  /// 最終同期時刻（同期完了時点のDateTime.now()）
+  /// 最終同期時刻（同期完了時点のDateTime.now()）。ローカルの変更判定（ファイルの mtime と比べる）に使う
   final DateTime? lastSyncedTime;
+
+  /// 最後に同期したときの Drive 側の `modifiedTime`（Drive サーバーの時計）。
+  /// リモートの変更判定はこれと比べる。端末の時計（[lastSyncedTime]）と比べると、
+  /// 端末の時計が進んでいる分だけ相手の変更を見落とし、上書きして消す（2026-09-24）
+  final DateTime? remoteModifiedTime;
 
   const KMetaSyncFile({
     required this.driveFileId,
     this.lastSyncedTime,
+    this.remoteModifiedTime,
   });
+
+  /// 最後の同期より後に Drive 側が変わったか（Drive の時刻どうしで比べる）。
+  /// [remoteModifiedTime] の無い古い帳簿は、以前どおり [lastSyncedTime] と比べる
+  bool isRemoteNewer(DateTime driveModified) {
+    final r = remoteModifiedTime;
+    if (r != null) return driveModified.isAfter(r);
+    final l = lastSyncedTime;
+    return l != null && driveModified.isAfter(l);
+  }
 
   factory KMetaSyncFile.fromJson(Map<String, dynamic> json) {
     // 後方互換性：古いlastSyncedModifiedTimeも読み込む
@@ -443,6 +458,9 @@ class KMetaSyncFile {
           json['lastSyncedTime'] != null
               ? DateTime.tryParse(json['lastSyncedTime'] as String)
               : legacyTime, // フォールバック
+      remoteModifiedTime: json['remoteModifiedTime'] != null
+          ? DateTime.tryParse(json['remoteModifiedTime'] as String)
+          : null,
     );
   }
 
@@ -451,6 +469,10 @@ class KMetaSyncFile {
     if (lastSyncedTime != null) {
       json['lastSyncedTime'] = lastSyncedTime!.toIso8601String();
     }
+    if (remoteModifiedTime != null) {
+      // Drive の時刻は UTC のまま持つ（端末のタイムゾーンに引きずられない）
+      json['remoteModifiedTime'] = remoteModifiedTime!.toUtc().toIso8601String();
+    }
     return json;
   }
 
@@ -458,10 +480,12 @@ class KMetaSyncFile {
   KMetaSyncFile copyWith({
     String? driveFileId,
     DateTime? lastSyncedTime,
+    DateTime? remoteModifiedTime,
   }) {
     return KMetaSyncFile(
       driveFileId: driveFileId ?? this.driveFileId,
       lastSyncedTime: lastSyncedTime ?? this.lastSyncedTime,
+      remoteModifiedTime: remoteModifiedTime ?? this.remoteModifiedTime,
     );
   }
 }

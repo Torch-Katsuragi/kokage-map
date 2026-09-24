@@ -19,6 +19,8 @@
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
+import '../../models/geopackage/geopackage_connection.dart';
+import '../../models/geopackage/gpkg_index_repair.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../geodiff/geodiff.dart';
@@ -122,9 +124,8 @@ class SyncConflictResolver {
           final driveFile = driveEntry.file;
 
           if (syncedPath != drivePath) {
-            final alsoModified = lastSyncedTime != null &&
-                driveFile.modifiedTime != null &&
-                driveFile.modifiedTime!.isAfter(lastSyncedTime);
+            final alsoModified = driveFile.modifiedTime != null &&
+                syncInfo.isRemoteNewer(driveFile.modifiedTime!);
 
             remoteMoved++;
             remoteMovedFiles.add(FileChangeInfo(
@@ -142,7 +143,7 @@ class SyncConflictResolver {
               remoteModified++;
               remoteModifiedFiles.add(syncedPath);
             } else if (driveFile.modifiedTime != null &&
-                driveFile.modifiedTime!.isAfter(lastSyncedTime)) {
+                syncInfo.isRemoteNewer(driveFile.modifiedTime!)) {
               remoteModified++;
               remoteModifiedFiles.add(syncedPath);
             }
@@ -327,9 +328,8 @@ class SyncConflictResolver {
             );
             movedFileIds.add(syncInfo.driveFileId);
             movedToPathSet.add(drivePath);
-          } else if (lastSyncedTime != null &&
-              driveEntry.file.modifiedTime != null &&
-              driveEntry.file.modifiedTime!.isAfter(lastSyncedTime)) {
+          } else if (driveEntry.file.modifiedTime != null &&
+              syncInfo.isRemoteNewer(driveEntry.file.modifiedTime!)) {
             remoteChange = MergeChangeType.modified;
           }
         }
@@ -461,6 +461,7 @@ class SyncConflictResolver {
           syncedFiles[relativePath] = KMetaSyncFile(
             driveFileId: merged.driveFileId,
             lastSyncedTime: DateTime.now(),
+            remoteModifiedTime: merged.remoteModifiedTime,
           );
           continue;
         }
@@ -486,6 +487,7 @@ class SyncConflictResolver {
                   syncedFiles[relativePath] = KMetaSyncFile(
                     driveFileId: result.id!,
                     lastSyncedTime: DateTime.now(),
+                    remoteModifiedTime: result.modifiedTime,
                   );
                   await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                 }
@@ -518,6 +520,7 @@ class SyncConflictResolver {
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: result.id!,
                         lastSyncedTime: DateTime.now(),
+                        remoteModifiedTime: result.modifiedTime,
                       );
                       await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                     }
@@ -564,6 +567,7 @@ class SyncConflictResolver {
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: result.id!,
                         lastSyncedTime: DateTime.now(),
+                        remoteModifiedTime: result.modifiedTime,
                       );
                       await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                     }
@@ -599,6 +603,8 @@ class SyncConflictResolver {
               if (entry.driveFileId != null) {
                 await fs.createDirectory(p.dirname(localFilePath));
 
+                await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
+
                 final success = await _driveService.downloadFile(
                   entry.driveFileId!,
                   localFilePath,
@@ -608,6 +614,7 @@ class SyncConflictResolver {
                   syncedFiles[relativePath] = KMetaSyncFile(
                     driveFileId: entry.driveFileId!,
                     lastSyncedTime: DateTime.now(),
+                    remoteModifiedTime: entry.remoteModifiedTime,
                   );
                   await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                 }
@@ -630,6 +637,7 @@ class SyncConflictResolver {
                   syncedFiles[entry.moveInfo!.movedTo ?? relativePath] = KMetaSyncFile(
                     driveFileId: entry.driveFileId!,
                     lastSyncedTime: DateTime.now(),
+                    remoteModifiedTime: entry.remoteModifiedTime,
                   );
                   movedCount++;
                 }
@@ -640,6 +648,8 @@ class SyncConflictResolver {
                   if (entry.driveFileId != null) {
                     await fs.createDirectory(p.dirname(localFilePath));
 
+                    await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
+
                     final success = await _driveService.downloadFile(
                       entry.driveFileId!,
                       localFilePath,
@@ -649,6 +659,7 @@ class SyncConflictResolver {
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: entry.driveFileId!,
                         lastSyncedTime: DateTime.now(),
+                        remoteModifiedTime: entry.remoteModifiedTime,
                       );
                       await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                     }
@@ -661,6 +672,7 @@ class SyncConflictResolver {
                   }
                 case MergeChangeType.modified:
                   if (entry.driveFileId != null) {
+                    await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
                     final success = await _driveService.downloadFile(
                       entry.driveFileId!,
                       localFilePath,
@@ -670,6 +682,7 @@ class SyncConflictResolver {
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: entry.driveFileId!,
                         lastSyncedTime: DateTime.now(),
+                        remoteModifiedTime: entry.remoteModifiedTime,
                       );
                       await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
                     }
@@ -721,7 +734,7 @@ class SyncConflictResolver {
   /// ローカルを上げて base を写し直す。どこかで失敗したら null（呼び手は衝突のまま残す）。
   /// ⚠ rebase 済みなのに上げられなかったときは、ローカルには相手の変更が載ったまま base は古い。
   ///   次の同期でもう一度 merge になる。
-  Future<({String driveFileId, List<GpkgConflict> conflicts})?> _mergeGpkg({
+  Future<({String driveFileId, DateTime? remoteModifiedTime, List<GpkgConflict> conflicts})?> _mergeGpkg({
     required String localPath,
     required MergeFileEntry entry,
     required String localFilePath,
@@ -744,11 +757,16 @@ class SyncConflictResolver {
         AppLogger.debug('  リモートを落とせなかった');
         return null;
       }
+      // geodiff の SQLite が書く前に、アプリの接続を閉じる（次の getDatabase() で開き直る）
+      await GeoPackageConnection.closeAllFor(localFilePath);
       final r = await GpkgMerger(geodiff).rebase(base: base, theirs: tmp, mine: localFilePath);
       if (!r.success) {
         AppLogger.debug('  rebase 失敗: ${r.error}');
         return null;
       }
+      // geodiff は rtree_* / gpkg_* を触らない。QGIS が読む索引と範囲を実データに合わせる
+      final repaired = await GpkgIndexRepair.rebuildFile(localFilePath);
+      AppLogger.debug('  索引の焼き直し: $repaired テーブル');
       // この間に Drive が動いていたら上げない（次の同期で載せ直す）
       final meta = await _driveService.getFileMetadata(fileId);
       final remoteAt = entry.remoteModifiedTime;
@@ -769,7 +787,7 @@ class SyncConflictResolver {
       }
       await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff);
       AppLogger.debug('  → 行単位で合わせた（衝突 ${r.conflicts.length} 件）');
-      return (driveFileId: uploaded.id ?? fileId, conflicts: r.conflicts);
+      return (driveFileId: uploaded.id ?? fileId, remoteModifiedTime: uploaded.modifiedTime, conflicts: r.conflicts);
     } finally {
       try {
         if (await fs.exists(tmp)) await fs.delete(tmp);

@@ -62,6 +62,22 @@ class GeoPackageNode extends LayerTreeNode {
   }
 
   /// このGeoPackage内のLayerNodeのみ生成（非同期化）
+  /// 読み込み済みのレイヤだけフィーチャを読み直す（同期でファイルが入れ替わったあと）。
+  ///
+  /// [updateChildren] はレイヤ構造しか見ず、既存の LayerNode は使い回すので、
+  /// ダウンロードや行単位マージで中身が変わってもフィーチャは古いまま残る。
+  /// まだ読んでいないレイヤは、表示されたときに読むので触らない。
+  Future<void> reloadLoadedLayers() async {
+    for (final layer in children.whereType<LayerNode>().toList()) {
+      if (!layer.featuresLoaded) continue;
+      try {
+        await layer.updateChildren();
+      } catch (e) {
+        AppLogger.debug('[GeoPackageNode] reloadLoadedLayers: ${layer.name} - $e');
+      }
+    }
+  }
+
   @override
   Future<void> updateChildren() async {
     // DBから現在のレイヤ構造を取得

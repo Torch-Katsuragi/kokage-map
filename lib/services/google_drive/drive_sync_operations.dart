@@ -412,6 +412,7 @@ class DriveSyncOperations {
         await updateChildrenRecursive(child);
       } else if (child is GeoPackageNode) {
         await child.updateChildren();
+        await child.reloadLoadedLayers();
       }
     }
   }

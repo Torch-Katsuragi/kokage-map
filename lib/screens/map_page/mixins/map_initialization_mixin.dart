@@ -166,6 +166,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         await _updateChildrenRecursive(child);
       } else if (child is GeoPackageNode) {
         await child.updateChildren();
+        await child.reloadLoadedLayers();
       }
     }
   }

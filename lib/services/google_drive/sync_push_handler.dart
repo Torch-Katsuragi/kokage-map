@@ -187,6 +187,7 @@ class SyncPushHandler {
             syncedFiles[relativePath] = KMetaSyncFile(
               driveFileId: kmetaFile.id!,
               lastSyncedTime: DateTime.now(),
+              remoteModifiedTime: kmetaFile.modifiedTime,
             );
           }
         } else {
@@ -243,6 +244,7 @@ class SyncPushHandler {
             syncedFiles[relativePath] = KMetaSyncFile(
               driveFileId: result.id!,
               lastSyncedTime: DateTime.now(),
+              remoteModifiedTime: result.modifiedTime,
             );
             await SyncBaseStore.saveBase(projectPath, relativePath);
           } else {

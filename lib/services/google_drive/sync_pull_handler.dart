@@ -127,6 +127,7 @@ class SyncPullHandler {
           final localFilePath =
               _fileOps.relativePathToLocalPath(localPath, driveEntry.relativePath);
 
+          await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
           final success = await _driveService.downloadFile(
             driveFile.id!,
             localFilePath,
@@ -137,6 +138,7 @@ class SyncPullHandler {
             syncedFiles[driveEntry.relativePath] = KMetaSyncFile(
               driveFileId: driveFile.id!,
               lastSyncedTime: DateTime.now(),
+              remoteModifiedTime: driveFile.modifiedTime,
             );
             await SyncBaseStore.saveBase(localPath, driveEntry.relativePath);
           } else {

@@ -67,3 +67,6 @@ KEYSTORE_HINT.txt
 analyze_output.txt
 test_results.json
 test_results.txt
+
+# geodiff の Linux 版（CI で third_party/geodiff/build_linux.sh が焼く）
+third_party/geodiff/linux/

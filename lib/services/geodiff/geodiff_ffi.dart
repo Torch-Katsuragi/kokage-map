@@ -69,7 +69,12 @@ class Geodiff {
     if (o != null) return DynamicLibrary.open(o);
     if (Platform.isAndroid) return DynamicLibrary.open('libgeodiff.so');
     if (Platform.isWindows) return DynamicLibrary.open('third_party/geodiff/windows/geodiff.dll');
-    if (Platform.isLinux) return DynamicLibrary.open('libgeodiff.so');
+    if (Platform.isLinux) {
+      // ホスト VM テスト（CI の ubuntu）は third_party/geodiff/build_linux.sh が焼いたものを使う
+      const repoLib = 'third_party/geodiff/linux/libgeodiff.so';
+      if (File(repoLib).existsSync()) return DynamicLibrary.open(repoLib);
+      return DynamicLibrary.open('libgeodiff.so');
+    }
     if (Platform.isMacOS) return DynamicLibrary.open('libgeodiff.dylib');
     throw UnsupportedError('geodiff はこのプラットフォームでは使えない');
   }

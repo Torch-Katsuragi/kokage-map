@@ -5,8 +5,8 @@
 // 手順:
 //   1. dart run tool/sync_relay/relay_server.dart
 //   2. 両端末で adb reverse tcp:8799 tcp:8799
-//   3. 端末 A: flutter test integration_test/geodiff_two_device_test.dart -d <A> --dart-define=ROLE=A
-//      端末 B: flutter test integration_test/geodiff_two_device_test.dart -d <B> --dart-define=ROLE=B
+//   3. 端末 A: flutter test integration_test/device/geodiff_two_device_test.dart -d <A> --dart-define=ROLE=A
+//      端末 B: flutter test integration_test/device/geodiff_two_device_test.dart -d <B> --dart-define=ROLE=B
 //      （同時に走らせる。バリアで手順を合わせる）
 // Drive はサーバー上の偽物で、端末の Drive・アプリの設定には触らない。
 import 'dart:io';

@@ -1,7 +1,7 @@
 // geodiff の 3-way rebase（ホスト VM、third_party/geodiff/windows/geodiff.dll）
 //
 // このアプリが作った gpkg を base に、A と B が独立に編集したものを rebase で 1 つに載せる。
-// 実機版は integration_test/geodiff_smoke_test.dart。
+// 実機版は integration_test/device/geodiff_smoke_test.dart。
 import 'dart:convert';
 import 'dart:io';
 

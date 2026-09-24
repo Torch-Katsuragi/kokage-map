@@ -1,7 +1,7 @@
 // Android 本体の SQLite（sqflite）には rtree モジュールが無い。
 // QGIS 製（rtree 付き）の gpkg の索引を、geodiff に入っている SQLite で焼き直せるかを実機で確かめる。
 //
-// 実行: flutter test integration_test/gpkg_rtree_android_test.dart -d <device>
+// 実行: flutter test integration_test/device/gpkg_rtree_android_test.dart -d <device>
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';

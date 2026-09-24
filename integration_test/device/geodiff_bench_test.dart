@@ -1,11 +1,11 @@
 // geodiff の行単位マージの速さ（実機）。ホスト VM 版は test/geodiff_bench_test.dart
-// 実行: flutter test integration_test/geodiff_bench_test.dart -d <device>
+// 実行: flutter test integration_test/device/geodiff_bench_test.dart -d <device>
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import '../test/support/geodiff_bench.dart';
+import '../../test/support/geodiff_bench.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

@@ -1,6 +1,6 @@
 // libgeodiff.so の実機スモーク: 読めるか・version が返るか・A/B の 3-way rebase が通るか
 //
-// 実行: flutter test integration_test/geodiff_smoke_test.dart -d <device>
+// 実行: flutter test integration_test/device/geodiff_smoke_test.dart -d <device>
 // 同じ筋のホスト VM 版は test/geodiff_rebase_test.dart（geodiff.dll）。
 // 2026-09-18 Pixel 9（Android 17）で 2/2 通過。
 import 'dart:convert';

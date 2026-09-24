@@ -39,7 +39,14 @@ jobs:
       #    strings*.g.dart があると Asset already exists で落ちる（i18n も build_runner が作る）
       - name: コード生成（riverpod + i18n）
         run: dart run build_runner build --delete-conflicting-outputs
+      # pubspec の assets にあるシェーダ束はビルド時に hook/build.dart が作るので、analyze の時点では無い
+      # （asset_does_not_exist の warning で落ちる。2026-09-13 から）。無ければ空で置き、ビルドやテストで hook が上書きする
+      - name: シェーダ束の仮置き（analyze 用）
+        run: mkdir -p build/shaderbundles && [ -f build/shaderbundles/terrain.shaderbundle ] || touch build/shaderbundles/terrain.shaderbundle
       - run: flutter analyze
+      # geodiff（行単位マージ）のホスト VM テスト用に Linux 版を焼く（third_party/geodiff/README.md）
+      - name: geodiff を焼く（Linux）
+        run: bash third_party/geodiff/build_linux.sh
       - run: flutter test
 
   build-web:

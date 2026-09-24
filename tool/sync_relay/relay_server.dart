@@ -5,7 +5,7 @@
 // サーバーの時計で付ける。端末どうしの手順合わせ（バリア）と結果の報告も受ける。
 //
 // 使い方: dart run tool/sync_relay/relay_server.dart [port]
-// テスト: integration_test/geodiff_two_device_test.dart
+// テスト: integration_test/device/geodiff_two_device_test.dart
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';

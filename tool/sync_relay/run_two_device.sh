@@ -61,10 +61,10 @@ for _ in $(seq 1 60); do grep -q listening "$LOGDIR/relay.log" 2>/dev/null && br
 for d in "$A" "$B"; do "$ADB" -s "$d" reverse "tcp:$PORT" "tcp:$PORT" >/dev/null; done
 
 # A を先に（ビルドして push し、B を待つ）。A が push を終えたら B
-flutter test integration_test/geodiff_two_device_test.dart -d "$A" --dart-define=ROLE=A --dart-define=RUN="$RUN" >"$LOGDIR/A.log" 2>&1 &
+flutter test integration_test/device/geodiff_two_device_test.dart -d "$A" --dart-define=ROLE=A --dart-define=RUN="$RUN" >"$LOGDIR/A.log" 2>&1 &
 PA=$!
 for _ in $(seq 1 300); do grep -q "done 1-pushed" "$LOGDIR/relay.log" && break; kill -0 $PA 2>/dev/null || break; sleep 2; done
-flutter test integration_test/geodiff_two_device_test.dart -d "$B" --dart-define=ROLE=B --dart-define=RUN="$RUN" >"$LOGDIR/B.log" 2>&1 &
+flutter test integration_test/device/geodiff_two_device_test.dart -d "$B" --dart-define=ROLE=B --dart-define=RUN="$RUN" >"$LOGDIR/B.log" 2>&1 &
 PB=$!
 RA=0; RB=0
 wait $PA || RA=$?

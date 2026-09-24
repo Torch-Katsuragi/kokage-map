@@ -7,6 +7,7 @@
 |---|---|---|
 | `libgeodiff.so`（Android arm64-v8a / armeabi-v7a / x86_64） | `android/app/src/main/jniLibs/<abi>/` | `ABI=<abi> build_android.sh`（既定は arm64-v8a） |
 | `geodiff.dll`（Windows x64、ホスト VM テスト用） | `third_party/geodiff/windows/` | `build_windows.cmd` |
+| `libgeodiff.so`（Linux x64、CI のホスト VM テスト用。コミットしない） | `third_party/geodiff/linux/` | `build_linux.sh`（CI が毎回焼く） |
 
 ## 方針
 
@@ -30,5 +31,5 @@ C API は `geodiff/src/geodiff.h`。戻り値は `0` 成功・`1` 失敗・`2` �
 
 ## 確認
 
-`integration_test/geodiff_smoke_test.dart`（実機）: version が返る／このアプリの gpkg で A・B の独立編集が rebase で 1 つに載り、
+`integration_test/device/geodiff_smoke_test.dart`（実機）: version が返る／このアプリの gpkg で A・B の独立編集が rebase で 1 つに載り、
 同じ行の衝突だけ `conflict.json` に出る。

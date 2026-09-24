@@ -1,4 +1,4 @@
-// geodiff の行単位マージの速さ（ホスト VM）。実機版は integration_test/geodiff_bench_test.dart
+// geodiff の行単位マージの速さ（ホスト VM）。実機版は integration_test/device/geodiff_bench_test.dart
 // 時間がかかるので既定では飛ばす: BENCH=1 flutter test test/geodiff_bench_test.dart
 import 'dart:io';
 

@@ -618,9 +618,12 @@
         同期後に読み込み済みレイヤのフィーチャを読み直す（`GeoPackageNode.reloadLoadedLayers`。既存の上書きダウンロードでも古いまま残っていた）（2026-09-24）
   - [x] 🐛 リモートの変更判定が Drive の時刻と端末の時計の比較で、端末の時計が進んでいると相手の変更を見落として上書きしていた
         → 帳簿に `remoteModifiedTime` を持ち Drive の時刻どうしで比べる（2026-09-24、偽 Drive で再現→修正）
-  - [x] 段5（偽 Drive）: Pixel 9 + Fold の 2 台で往復（`tool/sync_relay/run_two_device.sh`、2026-09-24 通過）。ホスト VM と実機 1 台で同じ 6 本
-  - [ ] 段5（本物の Drive）: 2 台とも Drive にサインインして手で往復（人の手が要る）
-  - [ ] ⚠ `SyncLedger` のキーが `drive:<driveId>` なので、1 台で同じ Drive フォルダを 2 つの dir にクローンすると帳簿が衝突する
+  - [x] 段5（偽 Drive）: Pixel 9 + Fold の 2 台で往復（`tool/sync_relay/run_two_device.sh`、2026-09-24 通過）。ホスト VM と実機 1 台で同じ 13 本
+  - [ ] 段5（本物の Drive）: Fold（合わせる側）と web（相手側）で手で往復（サインインが要る。Pixel 9 にはアカウントが無い）
+  - [x] 片側だけの列の追加はそろえてから合わせる（`GpkgSchemaAligner`、2026-09-24 統合）
+  - [x] 衝突の UI: 同期は止めず通知に「クラウドの値に戻す」ボタン（`ConflictRestorer`、2026-09-24）
+  - [x] `SyncLedger` のキーの取り合い: 1 台で同じ Drive フォルダを 2 つの dir にクローンしたら帳簿を分ける（`SyncLedger.resolveKey`、2026-09-24）
+  - [x] 実機専用のテストを `integration_test/device/` へ（CI の web e2e から外す）。CI のホストテスト用に Linux の `libgeodiff.so` を焼く（`build_linux.sh`）
   - [x] Android の SQLite に rtree が無いので、`GpkgIndexRepair` は rtree を geodiff の SQLite で書く（`Geodiff.execSql`、2026-09-24 実機で確認）
   - [x] 🐛 同じ理由で、既存の `SpatialIndexManager.updateRTreeIndex` と `QgisInterop.updateContentsBounds` が Android では効いていなかった
         （QGIS 製の gpkg を Android で編集すると、足した地物が QGIS の空間索引に載らない。実機で再現）

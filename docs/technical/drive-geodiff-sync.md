@@ -69,7 +69,7 @@ base は端末ごとにローカルで持つ。
 ### 衝突
 
 geodiff は同じ行・同じ列の衝突を**ローカル優先**で解き、`conflict.json` に残す。
-アプリはそれを通知（テーブル・fid・列・base/old/new）に出す。「相手の値を採用」は後回し。
+アプリはそれを通知（テーブル・fid・列・base/old/new）に出す。取り消し方は下の「衝突の UI」。
 
 ## 対象外
 
@@ -96,7 +96,7 @@ geodiff は同じ行・同じ列の衝突を**ローカル優先**で解き、`c
 | 段 | 状態 | どこ |
 |---|---|---|
 | 1 ビルド | 済 | `third_party/geodiff/`、`android/app/src/main/jniLibs/arm64-v8a/libgeodiff.so`、`third_party/geodiff/windows/geodiff.dll` |
-| 2 バインディング | 済 | `lib/services/geodiff/`（ffi + web stub）。`test/geodiff_rebase_test.dart`、`integration_test/geodiff_smoke_test.dart` |
+| 2 バインディング | 済 | `lib/services/geodiff/`（ffi + web stub）。`test/geodiff_rebase_test.dart`、`integration_test/device/geodiff_smoke_test.dart` |
 | 3 base と差し込み | 済 | `SyncBaseStore`（`.sync/base/`）、`GpkgMerger`、`MergeChoice.merge`、`SyncConflictResolver._mergeGpkg()` |
 | 4 後処理 | 済 | `GeoPackageConnection.closeAllFor()`、`GpkgIndexRepair`、`GeoPackageNode.reloadLoadedLayers()` |
 | 5 2 台で往復 | 済（偽 Drive） | Pixel 9 + Pixel 11 Pro Fold で `tool/sync_relay/run_two_device.sh`。本物の Drive での往復は未 |
@@ -123,7 +123,7 @@ base が無い gpkg（この版より前に同期したもの）は、次に上�
 Android 本体の SQLite（sqflite が使う）は rtree モジュールを持っていない（Pixel 9 / Android 17 で `no such module: rtree`）。
 地物テーブルは読み書きできるが、QGIS 製の gpkg の `rtree_*` には触れない。`GpkgIndexRepair` は行と範囲を sqflite で読み、
 rtree への書き込みだけ geodiff に入っている SQLite（`SQLITE_ENABLE_RTREE` 付き、`libgeodiff.so` が `sqlite3_*` を外に出している）で行う
-（`Geodiff.execSql()`）。範囲も rtree から読まず、Dart で出した値を書く。実機で確認（`integration_test/gpkg_rtree_android_test.dart`）。
+（`Geodiff.execSql()`）。範囲も rtree から読まず、Dart で出した値を書く。実機で確認（`integration_test/device/gpkg_rtree_android_test.dart`）。
 
 同じ理由で、**既存の `SpatialIndexManager.updateRTreeIndex`（編集のたびの rtree 更新）と
 `QgisInterop.updateContentsBounds`（範囲を rtree から出す）も Android では効いていなかった**。
@@ -186,17 +186,40 @@ rebase の前に 3 つ（base・相手・こちら）の列を見比べ、片側
 `ALTER TABLE ADD COLUMN` で足してから rebase する（`GpkgSchemaAligner`）。両側が同じ列を足したなら base にだけ足す。
 両側が別々の列を足した、列を消した・変えた、既定値の無い NOT NULL 列、テーブルの増減は触らず、今までどおり衝突に退く。
 
+### 衝突の UI（2026-09-24 採用）
+
+同期は止めず、後から合わせた端末の値を残したまま通知する。通知に「クラウドの値に戻す」ボタンを 1 つ付ける。
+
+- 押すと、衝突した列を相手（クラウド）の値に書き戻す（`ConflictRestorer`）。ジオメトリも戻す（geodiff の JSON では base64）
+- 戻した値はローカルの変更になり、次の同期でクラウドにも上がる
+- 削除がらみ（相手が消した／こちらが消した）は行全体が要るので戻さない。どれも削除がらみならボタンを出さない
+- 書き戻しは `FeatureRepository.setColumnValue`。QGIS の `ST_` トリガーは外して書き、閉じるときに戻して索引を焼き直す
+- ボタンは一度だけ押せて、押したら「済み」になる
+- 行ごとに端末かクラウドかを選ぶ画面は作らない。衝突は稀で、選ぶ画面は現場で重い
+
+### 同じ Drive フォルダを 1 台で 2 か所にクローンしたとき（2026-09-24）
+
+同期の帳簿（`SyncLedger`）のキーは `drive:<driveId>` で、ローカルの dir を動かしても帳簿がついてくる。
+そのせいで 1 台で同じ Drive フォルダを 2 つの dir にクローンすると、2 つが 1 つの帳簿を取り合っていた。
+
+帳簿に持ち主の dir（`owner`）を持たせ、`SyncLedger.resolveKey` で分ける。
+
+- 持ち主の dir がまだあり、同じ Drive を指していれば、後から来た dir は `drive:<driveId>@<dir のハッシュ>` を使う
+- 持ち主の dir が消えた・動いた・リンクを外したなら、今までどおり `drive:<driveId>` を引き継ぐ
+- 持ち主を持たない古い帳簿は `drive:<driveId>` のまま（`test/sync_ledger_owner_test.dart`）
+
 ### テスト
 
 | どこで | ファイル | 中身 |
 |---|---|---|
-| ホスト VM | `test/geodiff_sync_roundtrip_test.dart` | 下の 11 本（偽 Drive、2 台を 1 プロセスで模す。端末ごとの帳簿は差し替える） |
-| 実機 1 台 | `integration_test/geodiff_sync_roundtrip_test.dart` | 同じ 11 本を Android の sqflite と `libgeodiff.so` で |
-| 実機 2 台 | `integration_test/geodiff_two_device_test.dart` | PC 上の偽 Drive（`tool/sync_relay/relay_server.dart`）を 2 台で共有して往復 |
-| ホスト VM | `test/gpkg_index_repair_test.dart` ほか | 索引の焼き直し・`closeAllFor`・帳簿の時刻・同期ダイアログ |
+| ホスト VM | `test/geodiff_sync_roundtrip_test.dart` | 下の 13 本（偽 Drive、2 台を 1 プロセスで模す。端末ごとの帳簿は差し替える） |
+| 実機 1 台 | `integration_test/device/geodiff_sync_roundtrip_test.dart` | 同じ 13 本を Android の sqflite と `libgeodiff.so` で |
+| 実機 2 台 | `integration_test/device/geodiff_two_device_test.dart` | PC 上の偽 Drive（`tool/sync_relay/relay_server.dart`）を 2 台で共有して往復 |
+| ホスト VM | `test/gpkg_index_repair_test.dart` ほか | 索引の焼き直し・`closeAllFor`・帳簿の時刻・同期ダイアログ・クラウドの値に戻す・帳簿の持ち主 |
 
-11 本: 別々の行の変更／同じ行・同じ列の衝突（後から合わせた端末の値が残る）／両端末の追加で fid がぶつかる／
-端末の時計が Drive より進んでいる／片方が列を足す（合わせられず衝突に退く）／片方がレイヤを足す（同）／
+13 本: 別々の行の変更／同じ行・同じ列の衝突（後から合わせた端末の値が残る）／衝突をクラウドの値に戻して同期し直す／
+両端末の追加で fid がぶつかる／端末の時計が Drive より進んでいる／片方が列を足す（そろえて合わせる）／
+両側が別々の列を足す（衝突に退く）／片方がレイヤを足す（同）／
 同じ行でジオメトリと属性／片方が消し片方が直す／両方が同じ行を消す／
 base が無い gpkg は mergeable にならない／merge の前にアプリの接続を閉じる。
 シナリオ本体は `test/support/geodiff_roundtrip_scenarios.dart`、偽 Drive は `test/support/fake_google_drive.dart`
@@ -224,7 +247,5 @@ tool/sync_relay/run_two_device.sh <端末A> <端末B>
 ## 未決
 
 - `gps_history.gpkg`（グローバルフォルダ）にも使うか
-- 衝突 UI（通知止まりか、相手の値を選べるようにするか）。いまは後から合わせた端末の値を残して通知だけ
-- 本物の Drive での 2 台往復（Drive のサインインが要るので人の手が要る）
-- ⚠ 同期の帳簿（`SyncLedger`）のキーが `drive:<driveId>` なので、**1 台の端末で同じ Drive フォルダを
-  2 つのローカル dir にクローンすると帳簿が衝突する**（2 台テストを 1 プロセスで模したときに踏んだ。実運用では稀）
+- 本物の Drive での往復（Drive のサインインが要るので人の手が要る）。Pixel 9 にはアカウントが無いので、
+  合わせる側は Fold、相手側は web（web は geodiff を持たないのでファイルごと上げるだけ。相手役には足りる）

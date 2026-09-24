@@ -167,6 +167,15 @@ class SyncPushHandler {
         final relativeDir = p.posix.dirname(relativePath);
         final fileSize = localFile.size;
 
+        final unchanged = await _unchangedSince(localFile, previousSyncedFiles, driveIdToEntry);
+        if (unchanged != null) {
+          syncedFiles[relativePath] = unchanged;
+          skippedCount++;
+          processedBytes += fileSize;
+          completedCount++;
+          continue;
+        }
+
         final targetFolderForFile = await _fileOps.getDriveFolderIdForRelativeDir(
           targetFolderId, relativeDir, folderIdCache,
         );
@@ -225,6 +234,15 @@ class SyncPushHandler {
 
           final targetFolderForFile = resolvedFolders[i];
           if (targetFolderForFile == null) {
+            skippedCount++;
+            processedBytes += fileSize;
+            completedCount++;
+            return;
+          }
+
+          final unchanged = await _unchangedSince(localFile, previousSyncedFiles, driveIdToEntry);
+          if (unchanged != null) {
+            syncedFiles[relativePath] = unchanged;
             skippedCount++;
             processedBytes += fileSize;
             completedCount++;
@@ -343,6 +361,25 @@ class SyncPushHandler {
   }
 
   /// フォルダ単位でPush
+  /// 前回の同期から変わっていないなら、その同期の記録を返す（上げ直さない）。
+  ///
+  /// 以前は変わったファイルが 1 つでもあるとフォルダの全ファイルを上げ直していた。
+  /// 変わっていない gpkg も Drive の更新時刻が進むので、他の端末が毎回「Drive で変更あり」と見て
+  /// ダウンロードや行単位マージを繰り返していた（2026-09-24、本物の Drive で見つけた）。
+  /// 変更の判定は同期状態の判定と同じ（更新時刻と最後に同期した時刻）。Drive から消えていれば上げる
+  static Future<KMetaSyncFile?> _unchangedSince(
+    LocalSyncFile file,
+    Map<String, KMetaSyncFile> previous,
+    Map<String, DriveFileEntry> onDrive,
+  ) async {
+    final synced = previous[file.relativePath];
+    final at = synced?.lastSyncedTime;
+    if (synced == null || at == null || !onDrive.containsKey(synced.driveFileId)) return null;
+    final modified = await fs.lastModified(file.path);
+    if (modified == null || modified.isAfter(at)) return null;
+    return synced;
+  }
+
   Future<SyncResult> pushFolder(String localPath) async {
     final meta = await _kmetaService.getMeta(localPath);
     final driveId = meta.sync.driveId;

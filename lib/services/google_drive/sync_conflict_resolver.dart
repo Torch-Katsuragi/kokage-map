@@ -27,6 +27,7 @@ import '../geodiff/geodiff.dart';
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
 import 'gpkg_merger.dart';
+import 'gpkg_schema_aligner.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
@@ -762,6 +763,9 @@ class SyncConflictResolver {
       }
       // geodiff の SQLite が書く前に、アプリの接続を閉じる（次の getDatabase() で開き直る）
       await GeoPackageConnection.closeAllFor(localFilePath);
+      // 片側だけが列を足していれば、3 つのスキーマをそろえてから（geodiff はスキーマの変更をまたげない）
+      final aligned = await GpkgSchemaAligner.align(base: base, theirs: tmp, mine: localFilePath);
+      if (aligned.added.isNotEmpty) AppLogger.debug('  列をそろえた: ${aligned.added}');
       final r = await GpkgMerger(geodiff).rebase(base: base, theirs: tmp, mine: localFilePath);
       if (!r.success) {
         AppLogger.debug('  rebase 失敗: ${r.error}');

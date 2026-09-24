@@ -252,7 +252,7 @@ void defineGeodiffRoundtripTests() {
     expect(await rows(p.join(b, 'data.gpkg')), expected);
   });
 
-  test('片方が列を足すと行単位では合わせられず、衝突として残る（落ちない・黙らない）', () async {
+  test('片方だけが列を足したら、スキーマをそろえて行単位で合わせる', () async {
     await share();
 
     final gA = GeoPackageFile(const ['data.gpkg'], absolutePath: p.join(a, 'data.gpkg'));
@@ -265,9 +265,45 @@ void defineGeodiffRoundtripTests() {
     await syncOnce(a);
     await tick();
     final rb = await syncOnce(b);
-    expect(rb.mergedCount, 0, reason: '列の増減をまたいでは合わせられない');
+    expect(rb.failedMerges, isEmpty);
+    expect(rb.mergedCount, 1);
+    await tick();
+    await syncOnce(a);
+
+    Future<List<Map<String, Object?>>> rowsH(String path) async {
+      final db = await openDatabase(path, readOnly: true, singleInstance: false);
+      try {
+        return await db.rawQuery('SELECT fid, name, height FROM trees ORDER BY fid');
+      } finally {
+        await db.close();
+      }
+    }
+
+    final expected = [
+      {'fid': 1, 'name': 'スギ1', 'height': 21.5},
+      {'fid': 2, 'name': 'スギ2(B)', 'height': null},
+    ];
+    expect(await rowsH(p.join(a, 'data.gpkg')), expected);
+    expect(await rowsH(p.join(b, 'data.gpkg')), expected);
+  });
+
+  test('両側が別々の列を足したら、合わせられず衝突として残る（落ちない・黙らない）', () async {
+    await share();
+
+    final gA = GeoPackageFile(const ['data.gpkg'], absolutePath: p.join(a, 'data.gpkg'));
+    await gA.addAttributeColumn('trees', 'height', 'REAL');
+    await gA.dispose();
+    final gB = GeoPackageFile(const ['data.gpkg'], absolutePath: p.join(b, 'data.gpkg'));
+    await gB.addAttributeColumn('trees', 'owner', 'TEXT');
+    await gB.dispose();
+    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = 'スギ2(B)' WHERE fid = 2");
+    await tick();
+
+    await syncOnce(a);
+    await tick();
+    final rb = await syncOnce(b);
+    expect(rb.mergedCount, 0, reason: '両側が別々の列を足したらそろえない');
     expect(rb.failedMerges, ['data.gpkg'], reason: '合わせられなかったことを呼び手に返す');
-    // B の手元は変わらず、衝突のまま（次の同期でも両方 modified）
     expect((await rows(p.join(b, 'data.gpkg')))[1]['name'], 'スギ2(B)');
     await asDevice(b);
     final again = await engine.getMergeEntries(b);

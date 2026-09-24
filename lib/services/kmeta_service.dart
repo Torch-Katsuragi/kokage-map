@@ -65,11 +65,11 @@ class KMetaService {
 
     // 帳簿（端末ごとの同期状態）はアプリ私有領域から重ねる。
     // 旧版が共有ファイルに書いた帳簿が残っていれば、それを引き取って共有ファイルから剥がす
-    final key = SyncLedger.keyFor(driveId: loaded.sync.driveId, folderPath: folderPath);
+    final key = await SyncLedger.instance.resolveKey(driveId: loaded.sync.driveId, folderPath: folderPath);
     var ledger = await SyncLedger.instance.read(key);
     var needsStrip = false;
     if (ledger == null && loaded.sync.hasBookkeeping) {
-      ledger = SyncLedgerEntry.fromSync(loaded.sync);
+      ledger = SyncLedgerEntry.fromSync(loaded.sync).withOwner(folderPath);
       await SyncLedger.instance.write(key, ledger);
       needsStrip = true;
     }
@@ -106,8 +106,8 @@ class KMetaService {
     final prevRaw = _rawCache[folderPath];
     _rawCache[folderPath] = meta;
 
-    final key = SyncLedger.keyFor(driveId: meta.sync.driveId, folderPath: folderPath);
-    await SyncLedger.instance.write(key, SyncLedgerEntry.fromSync(meta.sync));
+    final key = await SyncLedger.instance.resolveKey(driveId: meta.sync.driveId, folderPath: folderPath);
+    await SyncLedger.instance.write(key, SyncLedgerEntry.fromSync(meta.sync).withOwner(folderPath));
 
     final success = await meta.copyWith(sync: meta.sync.linkOnly()).saveToFile(folderPath);
     if (!success) {

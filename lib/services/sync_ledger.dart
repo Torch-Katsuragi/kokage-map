@@ -28,6 +28,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/fs/k_file_system.dart';
 import '../models/kmeta.dart';
 import '../utils/app_logger.dart';
 import '../utils/stable_hash.dart';
@@ -39,12 +40,25 @@ class SyncLedgerEntry {
     this.driveRevisionId,
     this.deviceId,
     this.files = const {},
+    this.owner,
   });
 
   final DateTime? lastSynced;
   final String? driveRevisionId;
   final String? deviceId;
   final Map<String, KMetaSyncFile> files;
+
+  /// この帳簿を使っているローカルの dir（[SyncLedger.resolveKey] が、同じ Drive フォルダを
+  /// 1 台で 2 か所にクローンしたかを見分けるのに使う）。古い帳簿には無い
+  final String? owner;
+
+  SyncLedgerEntry withOwner(String folderPath) => SyncLedgerEntry(
+    lastSynced: lastSynced,
+    driveRevisionId: driveRevisionId,
+    deviceId: deviceId,
+    files: files,
+    owner: folderPath,
+  );
 
   bool get isEmpty =>
       lastSynced == null && driveRevisionId == null && deviceId == null && files.isEmpty;
@@ -74,6 +88,7 @@ class SyncLedgerEntry {
     if (driveRevisionId != null) 'driveRevisionId': driveRevisionId,
     if (deviceId != null) 'deviceId': deviceId,
     if (files.isNotEmpty) 'files': files.map((k, v) => MapEntry(k, v.toJson())),
+    if (owner != null) 'owner': owner,
   };
 
   factory SyncLedgerEntry.fromJson(Map<String, dynamic> json) {
@@ -87,6 +102,7 @@ class SyncLedgerEntry {
           : filesJson.map(
               (k, v) => MapEntry(k, KMetaSyncFile.fromJson(v as Map<String, dynamic>)),
             ),
+      owner: json['owner'] as String?,
     );
   }
 }
@@ -106,6 +122,31 @@ class SyncLedger {
       driveId != null && driveId.isNotEmpty
           ? 'drive:$driveId'
           : 'path:${stableHashHex(folderPath, length: 16)}';
+
+  /// [folderPath] の帳簿のキー。
+  ///
+  /// 普段は [keyFor] の `drive:<driveId>`（ローカルの dir を動かしても帳簿がついてくる）。
+  /// ただし同じ Drive フォルダを**この端末の別の dir にもクローンしていて**、そちらがまだ
+  /// 同じ Drive を指しているときだけ、dir ごとのキー `drive:<driveId>@<dir のハッシュ>` に分ける。
+  /// 以前は 2 つの dir が 1 つの帳簿を取り合い、互いの「最後に同期した時刻」を上書きしていた（2026-09-24）。
+  /// 持ち主の dir が消えた・動いた・リンクを外したなら、今までどおり引き継ぐ。
+  Future<String> resolveKey({String? driveId, required String folderPath}) async {
+    final base = keyFor(driveId: driveId, folderPath: folderPath);
+    if (driveId == null || driveId.isEmpty) return base;
+    final scoped = '$base@${stableHashHex(folderPath, length: 16)}';
+    if (await read(scoped) != null) return scoped;
+    final owner = (await read(base))?.owner;
+    if (owner == null || owner == folderPath) return base;
+    try {
+      if (!await fs.isDirectory(owner)) return base;
+      final ownerMeta = await KMeta.loadFromFile(owner);
+      if (ownerMeta?.sync.driveId != driveId) return base;
+    } on Object catch (_) {
+      return base;
+    }
+    AppLogger.debug('[SyncLedger] 同じ Drive フォルダが $owner にもある。$folderPath は別の帳簿にする');
+    return scoped;
+  }
 
   Future<SyncLedgerEntry?> read(String key) async {
     if (_cache.containsKey(key)) return _cache[key];

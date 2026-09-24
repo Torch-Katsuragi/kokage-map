@@ -200,6 +200,10 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
   void _restoreDriveOnce() {
     if (_driveRestoreInFlight) return;
     if (!PlatformCapabilities.supportsDriveSync) return;
+    // ⚠ プロジェクトを開くまでは便乗しない。GIS のポップアップがクリックの権利（user activation）を
+    // 使い切り、同じクリックの「フォルダを選択」（showDirectoryPicker）が SecurityError で断られていた
+    // （2026-09-24、読み込み直後の 1 回目が必ず失敗）。Drive が要るのはプロジェクトを開いてから
+    if (PlatformCapabilities.isWeb && ref.read(projectRootDirProvider) == null) return;
     final service = GoogleDriveService();
     if (service.isDriveApiAvailable) return;
     _driveRestoreInFlight = true;

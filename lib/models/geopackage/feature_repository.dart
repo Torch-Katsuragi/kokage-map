@@ -121,6 +121,25 @@ class FeatureRepository {
   /// sqfliteでは実行できない。書き込み前に検出・除去する。
   ///
   /// 将来の前処理もここに追加可能。
+  /// 1 行の 1 列にそのまま値を書く（同期の衝突を相手の値に戻すとき）。
+  /// 書く前に ST_ トリガーを外す（[_prepareForWrite]）。値の型は呼び手が合わせる（ジオメトリは GPKG の blob）
+  Future<bool> setColumnValue(
+    String tableName,
+    String pkColumn,
+    Object pk,
+    String column,
+    Object? value,
+  ) async {
+    await _prepareForWrite(tableName);
+    final db = await connection.getDatabase();
+    String q(String i) => '"${i.replaceAll('"', '""')}"';
+    final n = await db.rawUpdate(
+      'UPDATE ${q(tableName)} SET ${q(column)} = ? WHERE ${q(pkColumn)} = ?',
+      [value, pk],
+    );
+    return n > 0;
+  }
+
   Future<void> _prepareForWrite(String tableName) async {
     if (_cleanedTables.contains(tableName)) return;
 

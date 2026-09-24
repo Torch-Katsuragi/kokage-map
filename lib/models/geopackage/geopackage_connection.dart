@@ -103,7 +103,12 @@ class GeoPackageConnection {
   /// データベース初期化（遅延初期化・Completerで二重実行防止）
   Future<void> _initializeDatabase() async {
     if (_isInitialized && _database != null) {
-      return;
+      if (_database!.isOpen) return;
+      // sqflite の singleInstance で同じパスの接続は共有している。別の GeoPackageFile が
+      // 閉じると、こちらは閉じた接続を掴んだままになるので開き直す
+      AppLogger.debug('[GeoPackageConnection] 共有の接続が閉じられていたので開き直す');
+      _database = null;
+      _isInitialized = false;
     }
 
     // 別の呼び出しが初期化中なら、その完了を待つ

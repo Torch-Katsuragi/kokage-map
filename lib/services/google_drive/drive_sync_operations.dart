@@ -35,6 +35,7 @@ import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
 import '../../widgets/dialogs/drive_sign_in_prompt.dart';
 import '../../widgets/layer_drawer/sync_merge_dialog.dart';
+import 'conflict_restorer.dart';
 import 'index.dart';
 
 /// Drive同期操作を提供するサービスクラス
@@ -176,7 +177,10 @@ class DriveSyncOperations {
                 ),
               level: NotificationLevel.success,
             );
-        notifyMerge(ref, result);
+        notifyMerge(ref, result, afterRestore: () async {
+          await updateChildrenRecursive(node);
+          onMapRefresh?.call();
+        });
       } else {
         node.syncStatus = SyncStatus.error;
         ref.read(notificationCenterProvider.notifier).add(
@@ -196,7 +200,8 @@ class DriveSyncOperations {
   }
 
   /// 行単位マージの結果を通知する（手動の同期と自動同期で共通）
-  static void notifyMerge(WidgetRef ref, SyncResult result) {
+  /// [afterRestore] は「クラウドの値に戻す」を押して書き戻したあとに呼ぶ（地図の読み直しなど）
+  static void notifyMerge(WidgetRef ref, SyncResult result, {Future<void> Function()? afterRestore}) {
     if (result.failedMerges.isNotEmpty) {
       ref.read(notificationCenterProvider.notifier).add(
             title: t.drive.mergeFailed(count: result.failedMerges.length.toString()),
@@ -226,6 +231,24 @@ class DriveSyncOperations {
                       ))
                 .join('\n'),
             level: NotificationLevel.warning,
+            actionLabel: result.conflicts.any((c) => c.restorable) ? t.drive.restoreTheirs : null,
+            onAction: result.conflicts.any((c) => c.restorable)
+                ? () async {
+                    try {
+                      final n = await ConflictRestorer.restoreTheirs(result.conflicts);
+                      await afterRestore?.call();
+                      ref.read(notificationCenterProvider.notifier).add(
+                            title: t.drive.restoredTheirs(count: n.toString()),
+                            level: NotificationLevel.success,
+                          );
+                    } catch (e) {
+                      ref.read(notificationCenterProvider.notifier).add(
+                            title: t.drive.restoreTheirsFailed(error: '$e'),
+                            level: NotificationLevel.error,
+                          );
+                    }
+                  }
+                : null,
           );
     }
   }

@@ -1,7 +1,7 @@
 // Drive 同期の行単位マージ（geodiff）を、2 台の端末で往復させるシナリオ。
 //
 // ホスト VM（test/geodiff_sync_roundtrip_test.dart、geodiff.dll + sqflite_common_ffi）と
-// 実機（integration_test/geodiff_sync_roundtrip_test.dart、libgeodiff.so + Android の sqflite）で
+// 実機（integration_test/device/geodiff_sync_roundtrip_test.dart、libgeodiff.so + Android の sqflite）で
 // 同じものを回す。Drive はメモリ上の偽物、SyncEngine の push / pull / getMergeEntries / executeMerge は本物。
 // 設計: docs/technical/drive-geodiff-sync.md
 import 'dart:io';
@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_connection.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
+import 'package:root_maps/services/google_drive/conflict_restorer.dart';
 import 'package:root_maps/services/google_drive/sync_base_store.dart';
 import 'package:root_maps/services/google_drive/sync_engine.dart';
 import 'package:root_maps/services/kmeta_service.dart';
@@ -198,6 +199,30 @@ void defineGeodiffRoundtripTests() {
     ];
     expect(await rows(p.join(a, 'data.gpkg')), expected);
     expect(await rows(p.join(b, 'data.gpkg')), expected);
+  });
+
+  test('衝突をあとからクラウドの値に戻して同期すると、両端末がクラウドの値でそろう', () async {
+    await share();
+
+    await sql(p.join(a, 'data.gpkg'), 'UPDATE trees SET dbh = 33 WHERE fid = 1');
+    await sql(p.join(b, 'data.gpkg'), 'UPDATE trees SET dbh = 31 WHERE fid = 1');
+    await tick();
+
+    await syncOnce(a);
+    await tick();
+    final rb = await syncOnce(b);
+    expect(rb.conflicts.single.restorable, isTrue);
+    expect((await rows(p.join(b, 'data.gpkg')))[0]['dbh'], 31, reason: 'まずは後から合わせた B の値');
+
+    // 通知の「クラウドの値に戻す」
+    expect(await ConflictRestorer.restoreTheirs(rb.conflicts), 1);
+    await tick();
+    await syncOnce(b); // 戻した値が B のローカル変更として上がる
+    await tick();
+    await syncOnce(a);
+
+    expect((await rows(p.join(a, 'data.gpkg')))[0]['dbh'], 33);
+    expect((await rows(p.join(b, 'data.gpkg')))[0]['dbh'], 33);
   });
 
   test('両端末の追加は fid がぶつかっても両方残る', () async {

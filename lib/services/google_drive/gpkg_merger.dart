@@ -26,6 +26,7 @@ class GpkgConflict {
     this.mine,
     this.theirsDeleted = false,
     this.mineDeleted = false,
+    this.filePath,
   });
 
   final String table;
@@ -42,6 +43,24 @@ class GpkgConflict {
 
   /// 相手が直したこの行を、こちらが消していた（行は消えている）
   final bool mineDeleted;
+
+  /// どの gpkg の衝突か（端末上の絶対パス）。[ConflictRestorer] が使う
+  final String? filePath;
+
+  GpkgConflict withFile(String path) => GpkgConflict(
+        table: table,
+        fid: fid,
+        column: column,
+        base: base,
+        theirs: theirs,
+        mine: mine,
+        theirsDeleted: theirsDeleted,
+        mineDeleted: mineDeleted,
+        filePath: path,
+      );
+
+  /// 相手の値に戻せるか（削除がらみは行全体が要るので戻せない）
+  bool get restorable => !theirsDeleted && !mineDeleted && filePath != null && column >= 0;
 
   @override
   String toString() => theirsDeleted

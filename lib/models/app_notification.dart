@@ -36,6 +36,11 @@ class AppNotification {
   final DateTime timestamp;
   bool isRead;
 
+  /// 通知から押せる操作（例: 衝突をクラウドの値に戻す）。一度だけ押せる
+  final String? actionLabel;
+  final Future<void> Function()? onAction;
+  bool actionDone = false;
+
   AppNotification({
     required this.id,
     required this.title,
@@ -43,6 +48,8 @@ class AppNotification {
     this.level = NotificationLevel.info,
     DateTime? timestamp,
     this.isRead = false,
+    this.actionLabel,
+    this.onAction,
   }) : timestamp = timestamp ?? DateTime.now();
 
   bool get isExpandable => detail != null && detail!.isNotEmpty;

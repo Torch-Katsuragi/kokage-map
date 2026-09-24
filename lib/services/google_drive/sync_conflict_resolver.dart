@@ -794,7 +794,11 @@ class SyncConflictResolver {
       }
       await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff);
       AppLogger.debug('  → 行単位で合わせた（衝突 ${r.conflicts.length} 件）');
-      return (driveFileId: uploaded.id ?? fileId, remoteModifiedTime: uploaded.modifiedTime, conflicts: r.conflicts);
+      return (
+        driveFileId: uploaded.id ?? fileId,
+        remoteModifiedTime: uploaded.modifiedTime,
+        conflicts: [for (final c in r.conflicts) c.withFile(localFilePath)],
+      );
     } finally {
       try {
         if (await fs.exists(tmp)) await fs.delete(tmp);

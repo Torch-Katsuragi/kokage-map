@@ -151,8 +151,12 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
           root: rootNode,
           onStatusChanged: () => triggerSetState(() {}),
           onRefreshNeeded: _updateChildrenRecursive,
-          onMerged: (_, result) {
-            if (mounted) DriveSyncOperations.notifyMerge(ref, result);
+          onMerged: (node, result) {
+            if (!mounted) return;
+            DriveSyncOperations.notifyMerge(ref, result, afterRestore: () async {
+              await _updateChildrenRecursive(node);
+              if (mounted) ref.read(featureRefreshTriggerProvider.notifier).trigger();
+            });
           },
         ));
       }

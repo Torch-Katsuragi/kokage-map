@@ -120,6 +120,10 @@ class GeoPackageFile {
     return result;
   }
 
+  /// 1 行の 1 列にそのまま値を書く（同期の衝突を相手の値に戻すとき）
+  Future<bool> setColumnValue(String tableName, String pkColumn, Object pk, String column, Object? value) =>
+      _features.setColumnValue(tableName, pkColumn, pk, column, value);
+
   /// データベースのクローズ処理
   Future<void> dispose() async {
     // 保留中の変更を全て保存

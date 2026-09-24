@@ -31,12 +31,16 @@ class NotificationCenter extends _$NotificationCenter {
     required String title,
     String? detail,
     NotificationLevel level = NotificationLevel.info,
+    String? actionLabel,
+    Future<void> Function()? onAction,
   }) {
     final notification = AppNotification(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       title: title,
       detail: detail,
       level: level,
+      actionLabel: actionLabel,
+      onAction: onAction,
     );
     state = [notification, ...state.take(_maxNotifications - 1)];
   }

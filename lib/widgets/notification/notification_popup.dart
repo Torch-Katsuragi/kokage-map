@@ -158,6 +158,18 @@ class _NotificationPanel extends StatefulWidget {
 
 class _NotificationPanelState extends State<_NotificationPanel> {
   bool _expanded = false;
+  bool _running = false;
+
+  Future<void> _runAction(AppNotification n) async {
+    setState(() => _running = true);
+    try {
+      await n.onAction!();
+      n.actionDone = true;
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+    if (!n.isRead) widget.onMarkAsRead();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -217,6 +229,22 @@ class _NotificationPanelState extends State<_NotificationPanel> {
                 style: const TextStyle(fontSize: 11, color: Colors.grey),
               ),
             ),
+            // 通知から押せる操作（一度だけ）
+            if (n.onAction != null && n.actionLabel != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 18, top: 2),
+                child: TextButton(
+                  onPressed: n.actionDone || _running ? null : () => _runAction(n),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: Text(
+                    n.actionDone ? t.notification.actionDone : n.actionLabel!,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
             // 展開時の詳細
             AnimatedCrossFade(
               firstChild: const SizedBox.shrink(),

@@ -648,6 +648,9 @@ class AttributeTableController extends ChangeNotifier {
     };
   }
 
+  /// 列の SQLite の型（大文字）。分からなければ空文字
+  String columnSqlType(String columnName) => _columnTypeMap[columnName] ?? '';
+
   /// SQLiteのカラム型からTrinaColumnTypeにマッピング
   TrinaColumnType _determineColumnType(String columnName) {
     final sqlType = _columnTypeMap[columnName] ?? '';

@@ -16,6 +16,8 @@
 // Root Maps: 属性フォームビュー
 // 個別フィーチャの属性をフォーム形式で表示・編集
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -44,6 +46,9 @@ class AttributeFormView extends ConsumerStatefulWidget {
 class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
   int _currentIndex = 0;
   final Map<String, TextEditingController> _fieldControllers = {};
+
+  /// 読み込んだときの値。欄を離れたとき、これと違えば保存する
+  final Map<String, String> _loaded = {};
 
   AttributeTableController get ctrl => widget.controller;
 
@@ -79,6 +84,7 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
 
   @override
   void dispose() {
+    _commitAll(); // 閉じる前の入力を捨てない
     _disposeControllers();
     super.dispose();
   }
@@ -95,6 +101,7 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
       } catch (_) {
         _fieldControllers[col]?.text = '';
       }
+      _loaded[col] = _fieldControllers[col]?.text ?? '';
     }
     if (mounted) setState(() {});
   }
@@ -104,15 +111,33 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
     final feature = ctrl.features[_currentIndex];
     final error = await ctrl.saveAttributeChange(feature, field, value);
     if (error != null) {
-      ref.read(notificationCenterProvider.notifier).add(
-        title: error,
-        level: NotificationLevel.error,
-      );
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(title: error, level: NotificationLevel.error);
+    }
+  }
+
+  /// 変わっていれば保存する。以前は Enter を押したときしか保存せず、
+  /// 欄を離れたりレコードを移ったりすると入力が捨てられていた（2026-09-24、Fold で気づいた）
+  void _commit(String col) {
+    final text = _fieldControllers[col]?.text;
+    if (text == null || text == _loaded[col]) return;
+    final value = isNumericSqlType(ctrl.columnSqlType(col))
+        ? toHalfWidthNumber(text)
+        : text;
+    _loaded[col] = text;
+    unawaited(_saveField(col, value));
+  }
+
+  void _commitAll() {
+    for (final col in _fieldControllers.keys) {
+      _commit(col);
     }
   }
 
   void _goTo(int index) {
     if (index < 0 || index >= ctrl.features.length) return;
+    _commitAll();
     _currentIndex = index;
     _loadCurrentFeature();
   }
@@ -155,8 +180,9 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                 icon: const Icon(Icons.chevron_left),
-                onPressed:
-                    _currentIndex > 0 ? () => _goTo(_currentIndex - 1) : null,
+                onPressed: _currentIndex > 0
+                    ? () => _goTo(_currentIndex - 1)
+                    : null,
               ),
               Text(
                 '${_currentIndex + 1} / ${ctrl.features.length}  (ID: $featureId)',
@@ -170,20 +196,18 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                 icon: const Icon(Icons.chevron_right),
-                onPressed:
-                    _currentIndex < ctrl.features.length - 1
-                        ? () => _goTo(_currentIndex + 1)
-                        : null,
+                onPressed: _currentIndex < ctrl.features.length - 1
+                    ? () => _goTo(_currentIndex + 1)
+                    : null,
               ),
               IconButton(
                 iconSize: 14,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                 icon: const Icon(Icons.last_page),
-                onPressed:
-                    _currentIndex < ctrl.features.length - 1
-                        ? () => _goTo(ctrl.features.length - 1)
-                        : null,
+                onPressed: _currentIndex < ctrl.features.length - 1
+                    ? () => _goTo(ctrl.features.length - 1)
+                    : null,
               ),
             ],
           ),
@@ -203,45 +227,45 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
                   col.toLowerCase() != 'geom' &&
                   col.toLowerCase() != 'geometry';
 
+              final numeric = isNumericSqlType(ctrl.columnSqlType(col));
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: TextField(
-                  controller: _fieldControllers[col],
-                  readOnly: !isEditable,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isEditable ? null : Colors.grey.shade600,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: col,
-                    labelStyle: TextStyle(
+                child: Focus(
+                  onFocusChange: (focused) {
+                    if (!focused && isEditable) _commit(col);
+                  },
+                  child: TextField(
+                    controller: _fieldControllers[col],
+                    readOnly: !isEditable,
+                    keyboardType: numeric
+                        ? TextInputType.numberWithOptions(
+                            signed: true,
+                            decimal: !ctrl.columnSqlType(col).contains('INT'),
+                          )
+                        : null,
+                    style: TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: isEditable ? Colors.blue.shade700 : Colors.grey,
+                      color: isEditable ? null : Colors.grey.shade600,
                     ),
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    suffixIcon:
-                        !isEditable
-                            ? const Icon(
-                              Icons.lock,
-                              size: 14,
-                              color: Colors.grey,
-                            )
-                            : null,
-                  ),
-                  onSubmitted:
-                      isEditable ? (value) => _saveField(col, value) : null,
-                  onChanged:
-                      isEditable
-                          ? (value) {
-                            // デバウンスで遅延保存
-                          }
+                    decoration: InputDecoration(
+                      labelText: col,
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: isEditable ? Colors.blue.shade700 : Colors.grey,
+                      ),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      suffixIcon: !isEditable
+                          ? const Icon(Icons.lock, size: 14, color: Colors.grey)
                           : null,
+                    ),
+                    onSubmitted: isEditable ? (_) => _commit(col) : null,
+                  ),
                 ),
               );
             },
@@ -250,4 +274,33 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
       ],
     );
   }
+}
+
+/// 数値の列か（SQLite の型名から）
+bool isNumericSqlType(String sqlType) {
+  final t = sqlType.toUpperCase();
+  return t.contains('INT') ||
+      t.contains('REAL') ||
+      t.contains('DOUB') ||
+      t.contains('FLOA') ||
+      t.contains('NUMERIC');
+}
+
+/// 全角の数字・小数点・符号を半角にする（日本語入力のまま打つと「３３」になる）
+String toHalfWidthNumber(String text) {
+  final b = StringBuffer();
+  for (final r in text.runes) {
+    if (r >= 0xFF10 && r <= 0xFF19) {
+      b.writeCharCode(r - 0xFF10 + 0x30);
+    } else if (r == 0xFF0E) {
+      b.write('.');
+    } else if (r == 0xFF0D || r == 0x2212 || r == 0x30FC) {
+      b.write('-');
+    } else if (r == 0xFF0B) {
+      b.write('+');
+    } else {
+      b.writeCharCode(r);
+    }
+  }
+  return b.toString().trim();
 }

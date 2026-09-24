@@ -216,6 +216,8 @@ class DriveSyncOperations {
             detail: result.conflicts
                 .map((c) => c.theirsDeleted
                     ? t.drive.mergeConflictDeletedLine(table: c.table, fid: c.fid, mine: '${c.mine}')
+                    : c.mineDeleted
+                    ? t.drive.mergeConflictMineDeletedLine(table: c.table, fid: c.fid, theirs: '${c.theirs}')
                     : t.drive.mergeConflictLine(
                         table: c.table,
                         fid: c.fid,

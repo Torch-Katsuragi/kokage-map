@@ -113,7 +113,7 @@ void main() {
       expect(r.conflicts.single.mine, 40);
     });
 
-    test('相手が直した行をこちらが消していたら、行は消え、衝突は記録されない（geodiff の仕様）', () async {
+    test('相手が直した行をこちらが消していたら、行は消え、mineDeleted の衝突として拾う', () async {
       final base = await makeGpkg('${tmp.path}/base.gpkg');
       final mine = '${tmp.path}/mine.gpkg';
       final theirs = '${tmp.path}/theirs.gpkg';
@@ -125,7 +125,12 @@ void main() {
       final r = await GpkgMerger(g).rebase(base: base, theirs: theirs, mine: mine);
       expect(r.success, isTrue, reason: r.error);
       expect((await rows(mine)).map((e) => e['fid']), [2]);
-      expect(r.conflicts, isEmpty);
+      // geodiff 自身は記録しないので、rebase の前に両側の変更集合を突き合わせて拾う
+      expect(r.conflicts, hasLength(1));
+      expect(r.conflicts.single.mineDeleted, isTrue);
+      expect(r.conflicts.single.fid, '1');
+      expect(r.conflicts.single.theirs, 40);
+      expect(File('$mine.t.diff').existsSync() || File('$mine.m.json').existsSync(), isFalse, reason: '作業ファイルは片付ける');
     });
 
     test('base が壊れていれば失敗を返し、mine は触らない', () async {

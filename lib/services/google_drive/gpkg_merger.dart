@@ -14,7 +14,8 @@ import '../geodiff/geodiff.dart';
 /// - ふつうは同じ列を両方が直した場合で、mine（後から合わせた側）の値が残っている
 /// - [theirsDeleted] なら、相手がその行を消していて、こちらの直しは捨てられて行は消えている
 ///   （geodiff は削除と更新がぶつかると削除を採る）
-/// ⚠ 逆（相手が直し、こちらが消した）は geodiff が記録を残さない。行は消え、相手の直しは黙って捨てられる
+/// - [mineDeleted] なら、相手が直した行をこちらが消していて、相手の直しは捨てられて行は消えている。
+///   geodiff はこれを記録しないので、rebase の前に両側の変更集合を突き合わせて拾う
 class GpkgConflict {
   const GpkgConflict({
     required this.table,
@@ -24,6 +25,7 @@ class GpkgConflict {
     this.theirs,
     this.mine,
     this.theirsDeleted = false,
+    this.mineDeleted = false,
   });
 
   final String table;
@@ -38,10 +40,15 @@ class GpkgConflict {
   /// 相手がこの行を消していた（行は消えている）
   final bool theirsDeleted;
 
+  /// 相手が直したこの行を、こちらが消していた（行は消えている）
+  final bool mineDeleted;
+
   @override
   String toString() => theirsDeleted
       ? '$table#$fid col$column: theirs=削除 mine=$mine (base=$base)'
-      : '$table#$fid col$column: theirs=$theirs mine=$mine (base=$base)';
+      : mineDeleted
+          ? '$table#$fid col$column: theirs=$theirs mine=削除 (base=$base)'
+          : '$table#$fid col$column: theirs=$theirs mine=$mine (base=$base)';
 }
 
 class GpkgMergeResult {
@@ -67,13 +74,15 @@ class GpkgMerger {
     final conflictFile = '$mine.conflict.json';
     try {
       if (await fs.exists(conflictFile)) await fs.delete(conflictFile);
+      // geodiff が記録しない「相手が直した行をこちらが消した」を、書き換える前に拾っておく
+      final lost = await _updatesLostToMyDeletes(base: base, theirs: theirs, mine: mine);
       final rc = _geodiff.rebase(base, theirs, mine, conflictFile);
       if (rc == GeodiffResult.error || rc == GeodiffResult.unsupportedChange) {
         final msg = 'rebase rc=$rc ${_geodiff.lastError}';
         AppLogger.debug('[GpkgMerger] $msg');
         return GpkgMergeResult.failure(msg);
       }
-      final conflicts = await _readConflicts(conflictFile);
+      final conflicts = [...await _readConflicts(conflictFile), ...lost];
       return GpkgMergeResult.success(conflicts);
     } catch (e) {
       AppLogger.debug('[GpkgMerger] 例外: $e');
@@ -97,6 +106,75 @@ class GpkgMerger {
         if (await fs.exists(cs)) await fs.delete(cs);
       } catch (_) {}
     }
+  }
+
+  /// 相手（base → theirs）が直した行のうち、こちら（base → mine）が消した行。
+  ///
+  /// geodiff の listChanges JSON: {"geodiff":[{"table":"t","type":"update","changes":[{"column":0,"old":1},
+  /// {"column":2,"old":"a","new":"b"}]}]}。更新では主キーの列だけ `new` が無く、削除は全列の `old` を持つ。
+  /// 失敗しても merge は止めない（拾えないだけ）。
+  Future<List<GpkgConflict>> _updatesLostToMyDeletes({
+    required String base,
+    required String theirs,
+    required String mine,
+  }) async {
+    final out = <GpkgConflict>[];
+    final files = ['$mine.t.diff', '$mine.t.json', '$mine.m.diff', '$mine.m.json'];
+    try {
+      if (_geodiff.createChangeset(base, theirs, files[0]) != GeodiffResult.success) return out;
+      if (_geodiff.listChanges(files[0], files[1]) != GeodiffResult.success) return out;
+      if (_geodiff.createChangeset(base, mine, files[2]) != GeodiffResult.success) return out;
+      if (_geodiff.listChanges(files[2], files[3]) != GeodiffResult.success) return out;
+      Future<List<Map<String, dynamic>>> entries(String path, String type) async {
+        final json = jsonDecode(utf8.decode(await fs.readAsBytes(path))) as Map<String, dynamic>;
+        return [
+          for (final e in json['geodiff'] as List? ?? const [])
+            if ((e as Map<String, dynamic>)['type'] == type) e,
+        ];
+      }
+
+      // 相手の更新: (テーブル, 主キーの値) → 最初に変わった列
+      final updated = <String, Map<String, dynamic>>{};
+      final pkColumns = <String, List<int>>{};
+      for (final e in await entries(files[1], 'update')) {
+        final table = e['table'] as String;
+        final changes = (e['changes'] as List).cast<Map<String, dynamic>>();
+        final pk = changes.where((c) => !c.containsKey('new')).toList();
+        final changed = changes.where((c) => c.containsKey('new')).toList();
+        if (pk.isEmpty || changed.isEmpty) continue;
+        pkColumns[table] = [for (final c in pk) (c['column'] as num).toInt()];
+        updated['$table\u0000${pk.map((c) => c['old']).join('\u0000')}'] = changed.first;
+      }
+      if (updated.isEmpty) return out;
+      for (final e in await entries(files[3], 'delete')) {
+        final table = e['table'] as String;
+        final cols = pkColumns[table];
+        if (cols == null) continue;
+        final byColumn = {
+          for (final c in (e['changes'] as List).cast<Map<String, dynamic>>()) (c['column'] as num).toInt(): c['old'],
+        };
+        final key = '$table\u0000${cols.map((i) => byColumn[i]).join('\u0000')}';
+        final c = updated[key];
+        if (c == null) continue;
+        out.add(GpkgConflict(
+          table: table,
+          fid: cols.map((i) => '${byColumn[i]}').join(','),
+          column: (c['column'] as num?)?.toInt() ?? -1,
+          base: c['old'],
+          theirs: c['new'],
+          mineDeleted: true,
+        ));
+      }
+    } catch (e) {
+      AppLogger.debug('[GpkgMerger] 消した行と相手の更新の突き合わせに失敗: $e');
+    } finally {
+      for (final f in files) {
+        try {
+          if (await fs.exists(f)) await fs.delete(f);
+        } catch (_) {}
+      }
+    }
+    return out;
   }
 
   /// geodiff の conflict JSON:

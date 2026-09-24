@@ -1113,6 +1113,7 @@
     "mergeConflicts": "$count row(s) were changed on both sides (see details for which was kept)",
     "mergeConflictLine": "$table #$fid: kept this device's \"$mine\" (cloud had \"$theirs\")",
     "mergeConflictDeletedLine": "$table #$fid: removed because it was deleted in the cloud (this device had \"$mine\")",
+    "mergeConflictMineDeletedLine": "$table #$fid: deleted on this device, so the cloud change (\"$theirs\") was dropped",
     "unlinkDrive": "Unlink Drive",
     "unlinkConfirm": "Unlink Drive for ${name}?\n\nLocal files will not be deleted.",
     "unlink": "Unlink",

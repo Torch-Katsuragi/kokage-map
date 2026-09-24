@@ -1113,6 +1113,7 @@
     "mergeConflicts": "両方で変えた行が $count 行ありました（どちらを残したかは詳細に）",
     "mergeConflictLine": "$table #$fid: この端末の値「$mine」を残した（クラウドは「$theirs」）",
     "mergeConflictDeletedLine": "$table #$fid: クラウドで消されていたので消えた（この端末の値は「$mine」）",
+    "mergeConflictMineDeletedLine": "$table #$fid: この端末で消したので、クラウドでの変更（「$theirs」）は捨てた",
     "unlinkDrive": "Drive連携を解除",
     "unlinkConfirm": "${name} のDrive連携を解除しますか？\n\nローカルファイルは削除されません。",
     "unlink": "解除",

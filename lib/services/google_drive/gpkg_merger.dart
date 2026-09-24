@@ -9,7 +9,12 @@ import '../../core/fs/k_file_system.dart';
 import '../../utils/app_logger.dart';
 import '../geodiff/geodiff.dart';
 
-/// 同じ行・同じ列を両方が変えていた記録（mine の値が残っている）
+/// 同じ行を両方が変えていた記録。
+///
+/// - ふつうは同じ列を両方が直した場合で、mine（後から合わせた側）の値が残っている
+/// - [theirsDeleted] なら、相手がその行を消していて、こちらの直しは捨てられて行は消えている
+///   （geodiff は削除と更新がぶつかると削除を採る）
+/// ⚠ 逆（相手が直し、こちらが消した）は geodiff が記録を残さない。行は消え、相手の直しは黙って捨てられる
 class GpkgConflict {
   const GpkgConflict({
     required this.table,
@@ -18,6 +23,7 @@ class GpkgConflict {
     this.base,
     this.theirs,
     this.mine,
+    this.theirsDeleted = false,
   });
 
   final String table;
@@ -29,8 +35,13 @@ class GpkgConflict {
   final Object? theirs;
   final Object? mine;
 
+  /// 相手がこの行を消していた（行は消えている）
+  final bool theirsDeleted;
+
   @override
-  String toString() => '$table#$fid col$column: theirs=$theirs mine=$mine (base=$base)';
+  String toString() => theirsDeleted
+      ? '$table#$fid col$column: theirs=削除 mine=$mine (base=$base)'
+      : '$table#$fid col$column: theirs=$theirs mine=$mine (base=$base)';
 }
 
 class GpkgMergeResult {
@@ -92,6 +103,7 @@ class GpkgMerger {
   /// {"geodiff":[{"table":"trees","fid":"1","type":"conflict",
   ///              "changes":[{"column":2,"base":"a","old":"b","new":"c"}]}]}
   /// `old` が theirs、`new` が mine（geodiff は mine を残す）。
+  /// 相手が行を消していたときは `old` が無い（2026-09-24 に pygeodiff で確認）。
   static Future<List<GpkgConflict>> _readConflicts(String path) async {
     if (!await fs.exists(path)) return const [];
     final text = utf8.decode(await fs.readAsBytes(path));
@@ -112,6 +124,7 @@ class GpkgMerger {
           base: cm['base'],
           theirs: cm['old'],
           mine: cm['new'],
+          theirsDeleted: !cm.containsKey('old'),
         ));
       }
     }

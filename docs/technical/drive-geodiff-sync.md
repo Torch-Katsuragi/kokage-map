@@ -154,6 +154,22 @@ rtree の無い gpkg（このアプリで作ったもの）は何もしない。
 Drive の時刻どうしで比べる（`isRemoteNewer()`）。upload の応答に `modifiedTime` を含めるよう `$fields` を指定した。
 この値を持たない古い帳簿は従来の比較にフォールバックする。ローカルの変更判定（ファイルの mtime と `lastSyncedTime`）はどちらも端末の時計なので変えていない。
 
+### 衝突したときどちらが残るか（2026-09-24 に確認）
+
+「相手」は先に Drive に上げた端末、「こちら」は後から合わせる端末。
+
+| 相手 | こちら | 結果 | 通知 |
+|---|---|---|---|
+| 別の行・別の列を直す | 別の行・別の列を直す | 両方載る | なし |
+| 同じ行の別の列（例: ジオメトリと属性） | 〃 | 両方載る | なし |
+| 同じ行・同じ列を直す | 同じ行・同じ列を直す | **こちらの値** | 「この端末の値を残した（クラウドは…）」 |
+| 行を消す | 同じ行を直す | **消える** | 「クラウドで消されていたので消えた（この端末の値は…）」 |
+| 行を直す | 同じ行を消す | **消える** | ⚠ なし（geodiff が記録を残さない。相手の直しは黙って捨てられる） |
+| 行を消す | 同じ行を消す | 消える | なし |
+| 行を足す | 行を足す（fid がぶつかる） | 両方残る（fid を振り直す） | なし |
+
+削除は常に勝つ。5 行目を通知したければ、rebase の前に相手の変更集合（`listChanges`）とこちらの削除を突き合わせる必要がある（未着手）。
+
 ### 合わせられないとき（2026-09-24）
 
 geodiff は**スキーマが変わった変更集合を作れない**（`GeoPackage Table schemas are not the same for table: ...`）。
@@ -171,13 +187,14 @@ geodiff は**スキーマが変わった変更集合を作れない**（`GeoPack
 
 | どこで | ファイル | 中身 |
 |---|---|---|
-| ホスト VM | `test/geodiff_sync_roundtrip_test.dart` | 下の 8 本（偽 Drive、2 台を 1 プロセスで模す。端末ごとの帳簿は差し替える） |
-| 実機 1 台 | `integration_test/geodiff_sync_roundtrip_test.dart` | 同じ 8 本を Android の sqflite と `libgeodiff.so` で |
+| ホスト VM | `test/geodiff_sync_roundtrip_test.dart` | 下の 11 本（偽 Drive、2 台を 1 プロセスで模す。端末ごとの帳簿は差し替える） |
+| 実機 1 台 | `integration_test/geodiff_sync_roundtrip_test.dart` | 同じ 11 本を Android の sqflite と `libgeodiff.so` で |
 | 実機 2 台 | `integration_test/geodiff_two_device_test.dart` | PC 上の偽 Drive（`tool/sync_relay/relay_server.dart`）を 2 台で共有して往復 |
 | ホスト VM | `test/gpkg_index_repair_test.dart` ほか | 索引の焼き直し・`closeAllFor`・帳簿の時刻・同期ダイアログ |
 
-8 本: 別々の行の変更／同じ行・同じ列の衝突（後から合わせた端末の値が残る）／両端末の追加で fid がぶつかる／
+11 本: 別々の行の変更／同じ行・同じ列の衝突（後から合わせた端末の値が残る）／両端末の追加で fid がぶつかる／
 端末の時計が Drive より進んでいる／片方が列を足す（合わせられず衝突に退く）／片方がレイヤを足す（同）／
+同じ行でジオメトリと属性／片方が消し片方が直す／両方が同じ行を消す／
 base が無い gpkg は mergeable にならない／merge の前にアプリの接続を閉じる。
 シナリオ本体は `test/support/geodiff_roundtrip_scenarios.dart`、偽 Drive は `test/support/fake_google_drive.dart`
 （`GoogleDriveService` を `implements` + `noSuchMethod`。同期層が呼ばないメソッドを呼ぶと落ちる）。

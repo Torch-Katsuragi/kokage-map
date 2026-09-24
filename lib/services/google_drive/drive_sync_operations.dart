@@ -214,12 +214,14 @@ class DriveSyncOperations {
       ref.read(notificationCenterProvider.notifier).add(
             title: t.drive.mergeConflicts(count: result.conflicts.length.toString()),
             detail: result.conflicts
-                .map((c) => t.drive.mergeConflictLine(
-                      table: c.table,
-                      fid: c.fid,
-                      theirs: '${c.theirs}',
-                      mine: '${c.mine}',
-                    ))
+                .map((c) => c.theirsDeleted
+                    ? t.drive.mergeConflictDeletedLine(table: c.table, fid: c.fid, mine: '${c.mine}')
+                    : t.drive.mergeConflictLine(
+                        table: c.table,
+                        fid: c.fid,
+                        theirs: '${c.theirs}',
+                        mine: '${c.mine}',
+                      ))
                 .join('\n'),
             level: NotificationLevel.warning,
           );

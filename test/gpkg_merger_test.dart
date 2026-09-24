@@ -97,6 +97,37 @@ void main() {
       expect(after[0]['dbh'], 33); // mine 優先
     });
 
+    test('相手が消した行をこちらが直していたら、行は消えて theirsDeleted の衝突になる', () async {
+      final base = await makeGpkg('${tmp.path}/base.gpkg');
+      final mine = '${tmp.path}/mine.gpkg';
+      final theirs = '${tmp.path}/theirs.gpkg';
+      g.makeCopySqlite(base, mine);
+      g.makeCopySqlite(base, theirs);
+      await sql(theirs, 'DELETE FROM trees WHERE fid=1');
+      await sql(mine, 'UPDATE trees SET dbh=40 WHERE fid=1');
+
+      final r = await GpkgMerger(g).rebase(base: base, theirs: theirs, mine: mine);
+      expect(r.success, isTrue, reason: r.error);
+      expect((await rows(mine)).map((e) => e['fid']), [2]);
+      expect(r.conflicts.single.theirsDeleted, isTrue);
+      expect(r.conflicts.single.mine, 40);
+    });
+
+    test('相手が直した行をこちらが消していたら、行は消え、衝突は記録されない（geodiff の仕様）', () async {
+      final base = await makeGpkg('${tmp.path}/base.gpkg');
+      final mine = '${tmp.path}/mine.gpkg';
+      final theirs = '${tmp.path}/theirs.gpkg';
+      g.makeCopySqlite(base, mine);
+      g.makeCopySqlite(base, theirs);
+      await sql(theirs, 'UPDATE trees SET dbh=40 WHERE fid=1');
+      await sql(mine, 'DELETE FROM trees WHERE fid=1');
+
+      final r = await GpkgMerger(g).rebase(base: base, theirs: theirs, mine: mine);
+      expect(r.success, isTrue, reason: r.error);
+      expect((await rows(mine)).map((e) => e['fid']), [2]);
+      expect(r.conflicts, isEmpty);
+    });
+
     test('base が壊れていれば失敗を返し、mine は触らない', () async {
       final base = '${tmp.path}/base.gpkg';
       File(base).writeAsStringSync('not a database');

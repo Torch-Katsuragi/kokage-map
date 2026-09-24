@@ -322,6 +322,85 @@ void defineGeodiffRoundtripTests() {
     }
   });
 
+  test('同じ行で、片方がジオメトリを動かし片方が属性を直すと、両方載る', () async {
+    await share();
+    final gA = GeoPackageFile(const ['data.gpkg'], absolutePath: p.join(a, 'data.gpkg'));
+    // アプリ（feature_node.dart）と同じく、いまの名前を渡して動かす
+    await gA.updatePoint('trees', 1, const LatLng(33.935, 135.965), name: 'スギ1');
+    await gA.flushChanges();
+    await gA.dispose();
+    await sql(p.join(b, 'data.gpkg'), 'UPDATE trees SET dbh = 40 WHERE fid = 1');
+    await tick();
+
+    await syncOnce(a);
+    await tick();
+    final rb = await syncOnce(b);
+    expect(rb.mergedCount, 1);
+    expect(rb.conflicts, isEmpty, reason: '列が違えば衝突ではない');
+    await tick();
+    await syncOnce(a);
+
+    Future<Object?> geomOf(String path) async {
+      final db = await openDatabase(path, readOnly: true, singleInstance: false);
+      try {
+        return (await db.rawQuery('SELECT hex(geom) AS g FROM trees WHERE fid = 1')).single['g'];
+      } finally {
+        await db.close();
+      }
+    }
+
+    expect((await rows(p.join(b, 'data.gpkg')))[0], {'fid': 1, 'name': 'スギ1', 'dbh': 40});
+    expect(await geomOf(p.join(b, 'data.gpkg')), await geomOf(p.join(a, 'data.gpkg')));
+    expect((await rows(p.join(a, 'data.gpkg')))[0]['dbh'], 40);
+  });
+
+  test('片方が消し、片方が同じ行を直すと、消した方が勝ち、直した値は衝突として返る', () async {
+    await share();
+    await sql(p.join(a, 'data.gpkg'), 'DELETE FROM trees WHERE fid = 1');
+    await sql(p.join(b, 'data.gpkg'), 'UPDATE trees SET dbh = 40 WHERE fid = 1');
+    await tick();
+
+    await syncOnce(a);
+    await tick();
+    final rb = await syncOnce(b);
+    expect(rb.mergedCount, 1);
+    await tick();
+    await syncOnce(a);
+
+    // geodiff は「削除」と「更新」がぶつかると削除を採り、更新した値を衝突に残す
+    // （同じ行・同じ列の更新どうしなら後から合わせた側が勝つのとは違う。2026-09-24 に確認）
+    final expected = [
+      {'fid': 2, 'name': 'スギ2', 'dbh': 28},
+    ];
+    expect(await rows(p.join(a, 'data.gpkg')), expected);
+    expect(await rows(p.join(b, 'data.gpkg')), expected);
+    expect(rb.conflicts, hasLength(1));
+    expect(rb.conflicts.single.fid, '1');
+    expect(rb.conflicts.single.theirsDeleted, isTrue);
+    expect(rb.conflicts.single.mine, 40);
+  });
+
+  test('両方が同じ行を消しても落ちず、両端末でそろう', () async {
+    await share();
+    await sql(p.join(a, 'data.gpkg'), 'DELETE FROM trees WHERE fid = 2');
+    await sql(p.join(b, 'data.gpkg'), 'DELETE FROM trees WHERE fid = 2');
+    await sql(p.join(b, 'data.gpkg'), 'UPDATE trees SET dbh = 40 WHERE fid = 1');
+    await tick();
+
+    await syncOnce(a);
+    await tick();
+    final rb = await syncOnce(b);
+    expect(rb.failedMerges, isEmpty);
+    await tick();
+    await syncOnce(a);
+
+    final expected = [
+      {'fid': 1, 'name': 'スギ1', 'dbh': 40},
+    ];
+    expect(await rows(p.join(a, 'data.gpkg')), expected);
+    expect(await rows(p.join(b, 'data.gpkg')), expected);
+  });
+
   test('base が無い gpkg は mergeable にならず、今までどおりの二択', () async {
     await share();
     await SyncBaseStore.removeBase(b, 'data.gpkg');

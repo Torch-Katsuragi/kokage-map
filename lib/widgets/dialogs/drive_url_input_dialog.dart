@@ -230,11 +230,13 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      // キーボードが出ると背が足りず下がはみ出していた（2026-09-24、Fold で 15px）
+      scrollable: true,
       title: Row(
         children: [
           const Icon(Icons.cloud, color: Colors.blue),
           const SizedBox(width: 8),
-          Text(t.driveUrlDialog.title),
+          Flexible(child: Text(t.driveUrlDialog.title)),
         ],
       ),
       content: SizedBox(

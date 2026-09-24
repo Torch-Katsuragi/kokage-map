@@ -61,6 +61,10 @@ class AutoSyncService {
   /// 同期完了後にツリーリフレッシュが必要な場合のコールバック
   Future<void> Function(DriveFolderNode node)? onTreeRefreshNeeded;
 
+  /// 自動同期で行単位マージが走ったとき（合わせた数と、同じ行・同じ列の衝突）。
+  /// 自動同期は画面を出さないので、ここで通知しないと衝突が誰にも見えない
+  void Function(DriveFolderNode node, SyncResult result)? onMerged;
+
   bool get isEnabled => _enabled;
   bool get isSyncing => _isSyncing;
 
@@ -69,10 +73,12 @@ class AutoSyncService {
     required LayerTreeNode root,
     VoidCallback? onStatusChanged,
     Future<void> Function(DriveFolderNode)? onRefreshNeeded,
+    void Function(DriveFolderNode node, SyncResult result)? onMerged,
   }) async {
     rootNode = root;
     onSyncStatusChanged = onStatusChanged;
     onTreeRefreshNeeded = onRefreshNeeded;
+    this.onMerged = onMerged;
 
     final prefs = await SharedPreferences.getInstance();
     _enabled = prefs.getBool(kAutoSyncEnabledKey) ?? true;
@@ -311,6 +317,7 @@ class AutoSyncService {
         if (result.conflicts.isNotEmpty) {
           AppLogger.debug('[AutoSync] ${node.name}: 行の衝突 ${result.conflicts.length} 件（この端末の値を残した）: ${result.conflicts}');
         }
+        if (result.mergedCount > 0) onMerged?.call(node, result);
         if (needsTreeRefresh) await onTreeRefreshNeeded?.call(node);
       } else {
         AppLogger.debug('[AutoSync] ${node.name}: auto-merge failed - ${result.errorMessage}');

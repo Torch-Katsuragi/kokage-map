@@ -5,7 +5,7 @@
 
 | 成果物 | 置き場 | 作り方 |
 |---|---|---|
-| `libgeodiff.so`（Android arm64-v8a） | `android/app/src/main/jniLibs/arm64-v8a/` | `build_android.sh` |
+| `libgeodiff.so`（Android arm64-v8a / armeabi-v7a / x86_64） | `android/app/src/main/jniLibs/<abi>/` | `ABI=<abi> build_android.sh`（既定は arm64-v8a） |
 | `geodiff.dll`（Windows x64、ホスト VM テスト用） | `third_party/geodiff/windows/` | `build_windows.cmd` |
 
 ## 方針
@@ -16,6 +16,11 @@
   （`SQLITE_ENABLE_SESSION` `SQLITE_ENABLE_PREUPDATE_HOOK`）。加えて `RTREE` `COLUMN_METADATA` `FTS5` を有効にしてある
 - libgpkg は geodiff の CMake がビルド時に GitHub から取ってくる（ネットワークが要る）
 - Android は NDK 28.2（`ndkVersion` と同じ）、API 24、libc++ は静的。`NEEDED` は `libm` `libdl` `libc` だけ
+- 64bit（arm64-v8a・x86_64）は LOAD セグメントが 16KB 境界（Play の 16KB ページ要件。NDK 28 の既定）。
+  armeabi-v7a は 4KB だが、この要件は 64bit だけが対象
+- リリース APK には 3 ABI とも無圧縮（stored）で入る（2026-09-24 確認）。手元の実機（Pixel 9・Fold）は 64bit 専用なので
+  armeabi-v7a は実機で試していない。読めなかった場合は `SyncBaseStore.saveBase` が失敗を返して base を持たず、
+  行単位マージをしない（いままでどおりの二択）に退く
 - 依存するのは Android SDK 同梱の cmake 3.22.1 / ninja と NDK。Windows 側は Visual Studio の `cl`
 
 ## Dart からの呼び方

@@ -35,7 +35,6 @@ import '../../../providers/notification_providers.dart';
 import '../../../providers/project_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/basemap_style_json.dart';
-import '../../../services/google_drive/auto_sync_service.dart';
 import '../../../services/google_drive/index.dart';
 import '../../../services/qgis/qgs_read_back.dart';
 import '../../../services/tile_server.dart';
@@ -152,6 +151,9 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
           root: rootNode,
           onStatusChanged: () => triggerSetState(() {}),
           onRefreshNeeded: _updateChildrenRecursive,
+          onMerged: (_, result) {
+            if (mounted) DriveSyncOperations.notifyMerge(ref, result);
+          },
         ));
       }
     }

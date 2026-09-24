@@ -175,26 +175,7 @@ class DriveSyncOperations {
                 ),
               level: NotificationLevel.success,
             );
-        if (result.mergedCount > 0) {
-          ref.read(notificationCenterProvider.notifier).add(
-                title: t.drive.mergedFiles(count: result.mergedCount.toString()),
-                level: NotificationLevel.success,
-              );
-        }
-        if (result.conflicts.isNotEmpty) {
-          ref.read(notificationCenterProvider.notifier).add(
-                title: t.drive.mergeConflicts(count: result.conflicts.length.toString()),
-                detail: result.conflicts
-                    .map((c) => t.drive.mergeConflictLine(
-                          table: c.table,
-                          fid: c.fid,
-                          theirs: '${c.theirs}',
-                          mine: '${c.mine}',
-                        ))
-                    .join('\n'),
-                level: NotificationLevel.warning,
-              );
-        }
+        notifyMerge(ref, result);
       } else {
         node.syncStatus = SyncStatus.error;
         ref.read(notificationCenterProvider.notifier).add(
@@ -211,6 +192,30 @@ class DriveSyncOperations {
     }
 
     onStateChanged();
+  }
+
+  /// 行単位マージの結果を通知する（手動の同期と自動同期で共通）
+  static void notifyMerge(WidgetRef ref, SyncResult result) {
+    if (result.mergedCount > 0) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.drive.mergedFiles(count: result.mergedCount.toString()),
+            level: NotificationLevel.success,
+          );
+    }
+    if (result.conflicts.isNotEmpty) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.drive.mergeConflicts(count: result.conflicts.length.toString()),
+            detail: result.conflicts
+                .map((c) => t.drive.mergeConflictLine(
+                      table: c.table,
+                      fid: c.fid,
+                      theirs: '${c.theirs}',
+                      mine: '${c.mine}',
+                    ))
+                .join('\n'),
+            level: NotificationLevel.warning,
+          );
+    }
   }
 
   /// Drive連携を解除（子ノード付きフォルダ用、ルート以外）

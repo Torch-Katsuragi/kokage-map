@@ -46,7 +46,9 @@ class MapToolbar extends ConsumerWidget {
     final currentTool = ref.watch(currentToolProvider);
     final deviceTools = ref.watch(connectedDeviceToolsProvider);
     final selectedFeatures = ref.watch(selectedFeaturesProvider);
-    final hasOverlaySelected = selectedFeatures.any((n) => n is OverlayImageNode);
+    final hasOverlaySelected = selectedFeatures.any(
+      (n) => n is OverlayImageNode,
+    );
 
     return Positioned(
       left: side == ToolbarSide.left ? 0 : null,
@@ -56,81 +58,94 @@ class MapToolbar extends ConsumerWidget {
       child: Container(
         width: 44,
         color: Colors.transparent,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            const SizedBox(height: 16),
-            _ToolButton(
-              icon: Icons.pan_tool_alt,
-              tooltip: t.map.toolbar.pan,
-              isSelected: currentTool.name == 'Pan',
-              onPressed: () {
-                ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
-                onToolChanged();
-              },
-            ),
-            const SizedBox(height: 8),
-            _ToolButton(
-              icon: Icons.edit,
-              tooltip: t.map.toolbar.pen,
-              isSelected: currentTool.name == 'Pen',
-              onPressed: () {
-                // 3D 中は TerrainMapLayer が真上に寄せて 1 本指を描画に渡す（真上ロック）
-                ref.read(currentToolProvider.notifier).set(ref.read(penToolProvider));
-                onToolChanged();
-              },
-            ),
-            const SizedBox(height: 8),
-            _ToolButton(
-              icon: Icons.select_all,
-              tooltip: t.map.toolbar.select,
-              isSelected: currentTool.name == 'Select',
-              onPressed: () {
-                ref.read(currentToolProvider.notifier).set(ref.read(selectToolProvider));
-                onToolChanged();
-              },
-            ),
-            const SizedBox(height: 8),
-            _ToolButton(
-              icon: Icons.gps_fixed,
-              tooltip: t.map.toolbar.gpsTool,
-              isSelected: currentTool.name == 'GPS',
-              onPressed: () {
-                ref.read(currentToolProvider.notifier).set(ref.read(gpsToolProvider));
-                onToolChanged();
-              },
-            ),
-            // OverlayImageNode選択中のみ表示
-            if (hasOverlaySelected) ...[
-              const SizedBox(height: 8),
+        // 属性表を開いてキーボードが出ると地図が背の低い帯になり、道具が下にはみ出していた（2026-09-24、Fold）
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              const SizedBox(height: 16),
               _ToolButton(
-                icon: Icons.transform,
-                tooltip: t.map.toolbar.overlayTransform,
-                isSelected: currentTool.name == 'Overlay Transform',
+                icon: Icons.pan_tool_alt,
+                tooltip: t.map.toolbar.pan,
+                isSelected: currentTool.name == 'Pan',
                 onPressed: () {
-                  final tool = ref.read(overlayTransformToolProvider);
-                  // 選択中のOverlayImageNodeをターゲットに設定
-                  final overlay = selectedFeatures.whereType<OverlayImageNode>().firstOrNull;
-                  tool.setTarget(overlay);
-                  ref.read(currentToolProvider.notifier).set(tool);
+                  ref
+                      .read(currentToolProvider.notifier)
+                      .set(ref.read(panToolProvider));
                   onToolChanged();
                 },
               ),
-            ],
-            // 接続中の外部機器ツールを動的に表示
-            for (final dt in deviceTools) ...[
               const SizedBox(height: 8),
               _ToolButton(
-                icon: dt.icon,
-                tooltip: dt.name,
-                isSelected: currentTool == dt,
+                icon: Icons.edit,
+                tooltip: t.map.toolbar.pen,
+                isSelected: currentTool.name == 'Pen',
                 onPressed: () {
-                  ref.read(currentToolProvider.notifier).set(dt);
+                  // 3D 中は TerrainMapLayer が真上に寄せて 1 本指を描画に渡す（真上ロック）
+                  ref
+                      .read(currentToolProvider.notifier)
+                      .set(ref.read(penToolProvider));
                   onToolChanged();
                 },
               ),
+              const SizedBox(height: 8),
+              _ToolButton(
+                icon: Icons.select_all,
+                tooltip: t.map.toolbar.select,
+                isSelected: currentTool.name == 'Select',
+                onPressed: () {
+                  ref
+                      .read(currentToolProvider.notifier)
+                      .set(ref.read(selectToolProvider));
+                  onToolChanged();
+                },
+              ),
+              const SizedBox(height: 8),
+              _ToolButton(
+                icon: Icons.gps_fixed,
+                tooltip: t.map.toolbar.gpsTool,
+                isSelected: currentTool.name == 'GPS',
+                onPressed: () {
+                  ref
+                      .read(currentToolProvider.notifier)
+                      .set(ref.read(gpsToolProvider));
+                  onToolChanged();
+                },
+              ),
+              // OverlayImageNode選択中のみ表示
+              if (hasOverlaySelected) ...[
+                const SizedBox(height: 8),
+                _ToolButton(
+                  icon: Icons.transform,
+                  tooltip: t.map.toolbar.overlayTransform,
+                  isSelected: currentTool.name == 'Overlay Transform',
+                  onPressed: () {
+                    final tool = ref.read(overlayTransformToolProvider);
+                    // 選択中のOverlayImageNodeをターゲットに設定
+                    final overlay = selectedFeatures
+                        .whereType<OverlayImageNode>()
+                        .firstOrNull;
+                    tool.setTarget(overlay);
+                    ref.read(currentToolProvider.notifier).set(tool);
+                    onToolChanged();
+                  },
+                ),
+              ],
+              // 接続中の外部機器ツールを動的に表示
+              for (final dt in deviceTools) ...[
+                const SizedBox(height: 8),
+                _ToolButton(
+                  icon: dt.icon,
+                  tooltip: dt.name,
+                  isSelected: currentTool == dt,
+                  onPressed: () {
+                    ref.read(currentToolProvider.notifier).set(dt);
+                    onToolChanged();
+                  },
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -161,10 +176,7 @@ class _ToolButton extends StatelessWidget {
         color: isSelected ? Colors.blue : Colors.transparent,
       ),
       child: IconButton(
-        icon: Icon(
-          icon,
-          color: isSelected ? Colors.white : Colors.black,
-        ),
+        icon: Icon(icon, color: isSelected ? Colors.white : Colors.black),
         tooltip: tooltip,
         onPressed: onPressed,
         iconSize: 24,

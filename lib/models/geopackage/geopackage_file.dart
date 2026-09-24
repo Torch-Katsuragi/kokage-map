@@ -21,6 +21,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/background_save_manager.dart';
@@ -28,6 +29,7 @@ import '../geometry_type.dart';
 import 'feature_repository.dart';
 import 'geopackage_connection.dart';
 import 'geopackage_schema.dart';
+import 'gpkg_index_repair.dart';
 import 'layer_repository.dart';
 import 'qgis_interop.dart';
 import 'spatial_index_manager.dart';
@@ -135,6 +137,28 @@ class GeoPackageFile {
 
     // データベースを閉じる
     await _connection.dispose();
+
+    await _repairIndexAfterClose();
+  }
+
+  /// 閉じたあと、QGIS 用の rtree と範囲を実データに合わせる。
+  ///
+  /// ⚠ Android 本体の SQLite には rtree モジュールが無く、編集のたびの rtree 更新
+  /// （[SpatialIndexManager.updateRTreeIndex]）も範囲の更新も効かない。QGIS 製の gpkg を
+  /// Android で編集して戻すと、足した・動かした地物が QGIS の空間索引から漏れていた（2026-09-24 実機で確認）。
+  /// [GpkgIndexRepair] は rtree を持つ SQLite（geodiff に入っているもの）で書くので、閉じたあとにだけ呼ぶ。
+  /// 同じファイルを別の接続がまだ開いていれば、最後に閉じる側に任せる（別々の SQLite で同じファイルを開かない）。
+  /// rtree の無い gpkg（このアプリで作ったもの）は何もしない。web は対象外。
+  Future<void> _repairIndexAfterClose() async {
+    if (!fs.hasRealPaths) return;
+    final path = getAbsolutePath();
+    if (path == null || GeoPackageConnection.openCountFor(path) > 0) return;
+    try {
+      if (!await fs.exists(path)) return;
+      await GpkgIndexRepair.rebuildFile(path);
+    } catch (e) {
+      AppLogger.debug('[GeoPackageFile] 閉じたあとの索引の焼き直しに失敗: $e');
+    }
   }
 
   /// QGIS/GDAL と行き来しても壊れない状態にしてから閉じる

@@ -125,9 +125,13 @@ Android 本体の SQLite（sqflite が使う）は rtree モジュールを持�
 rtree への書き込みだけ geodiff に入っている SQLite（`SQLITE_ENABLE_RTREE` 付き、`libgeodiff.so` が `sqlite3_*` を外に出している）で行う
 （`Geodiff.execSql()`）。範囲も rtree から読まず、Dart で出した値を書く。実機で確認（`integration_test/gpkg_rtree_android_test.dart`）。
 
-⚠ 同じ理由で、**既存の `SpatialIndexManager.updateRTreeIndex`（編集のたびの rtree 更新）と
-`QgisInterop.updateContentsBounds`（範囲を rtree から出す）は Android では効いていない**はず。
-QGIS 製の gpkg を Android で編集して QGIS に戻すと、足した・動かした地物が空間索引に載らない。→ TODO
+同じ理由で、**既存の `SpatialIndexManager.updateRTreeIndex`（編集のたびの rtree 更新）と
+`QgisInterop.updateContentsBounds`（範囲を rtree から出す）も Android では効いていなかった**。
+QGIS 製の gpkg を Android で編集して QGIS に戻すと、足した・動かした地物が空間索引に載らない（実機で再現）。
+→ `GeoPackageFile.dispose()` の最後（接続を閉じたあと）で `GpkgIndexRepair.rebuildFile()` を呼び、
+rtree と範囲を実データから焼き直すようにした。同じファイルを別の接続がまだ開いていれば最後に閉じる側に任せる。
+rtree の無い gpkg（このアプリで作ったもの）は何もしない。編集のたびの更新は今も Android では失敗する（警告ログ）が、
+閉じた時点で辻褄が合う
 
 ### 速さ（2026-09-24、`test/support/geodiff_bench.dart`）
 

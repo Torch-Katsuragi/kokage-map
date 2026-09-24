@@ -622,8 +622,9 @@
   - [ ] 段5（本物の Drive）: 2 台とも Drive にサインインして手で往復（人の手が要る）
   - [ ] ⚠ `SyncLedger` のキーが `drive:<driveId>` なので、1 台で同じ Drive フォルダを 2 つの dir にクローンすると帳簿が衝突する
   - [x] Android の SQLite に rtree が無いので、`GpkgIndexRepair` は rtree を geodiff の SQLite で書く（`Geodiff.execSql`、2026-09-24 実機で確認）
-  - [ ] 🐛 同じ理由で、既存の `SpatialIndexManager.updateRTreeIndex` と `QgisInterop.updateContentsBounds` は Android では効いていない疑い
-        （QGIS 製の gpkg を Android で編集すると、足した・動かした地物が QGIS の空間索引に載らない）
+  - [x] 🐛 同じ理由で、既存の `SpatialIndexManager.updateRTreeIndex` と `QgisInterop.updateContentsBounds` が Android では効いていなかった
+        （QGIS 製の gpkg を Android で編集すると、足した地物が QGIS の空間索引に載らない。実機で再現）
+        → `GeoPackageFile.dispose()` の最後に `GpkgIndexRepair.rebuildFile()`（2026-09-24、実機で緑）
 
 #### MapLibre
 

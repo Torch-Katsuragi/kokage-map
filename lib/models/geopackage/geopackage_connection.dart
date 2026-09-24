@@ -85,8 +85,7 @@ class GeoPackageConnection {
     return closed;
   }
 
-  /// テスト用: いま [absPath] を開いている接続の数
-  @visibleForTesting
+  /// いま [absPath] を開いている接続の数（別の SQLite で書く前に、誰も開いていないことを確かめる）
   static int openCountFor(String absPath) => _openConnections[_registryKey(absPath)]?.length ?? 0;
 
   /// コンストラクタ

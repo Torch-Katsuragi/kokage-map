@@ -18,8 +18,57 @@ import 'package:sqflite/sqflite.dart';
 String? sqlAssert(Geodiff g, String path, String cond) =>
     g.execSql(path, 'SELECT CASE WHEN ($cond) THEN 1 ELSE abs(-9223372036854775807 - 1) END;');
 
+/// GDAL が QGIS 製の gpkg に付ける rtree の保守トリガー（ST_ 関数を使う）
+String gdalRtreeTriggers(String t, String g, String pk) => '''
+CREATE TRIGGER "rtree_${t}_${g}_insert" AFTER INSERT ON "$t" WHEN (new."$g" NOT NULL AND NOT ST_IsEmpty(NEW."$g"))
+BEGIN INSERT OR REPLACE INTO "rtree_${t}_$g" VALUES (NEW."$pk", ST_MinX(NEW."$g"), ST_MaxX(NEW."$g"), ST_MinY(NEW."$g"), ST_MaxY(NEW."$g")); END;
+CREATE TRIGGER "rtree_${t}_${g}_update1" AFTER UPDATE OF "$g" ON "$t" WHEN OLD."$pk" = NEW."$pk" AND (NEW."$g" NOTNULL AND NOT ST_IsEmpty(NEW."$g"))
+BEGIN INSERT OR REPLACE INTO "rtree_${t}_$g" VALUES (NEW."$pk", ST_MinX(NEW."$g"), ST_MaxX(NEW."$g"), ST_MinY(NEW."$g"), ST_MaxY(NEW."$g")); END;
+CREATE TRIGGER "rtree_${t}_${g}_delete" AFTER DELETE ON "$t" WHEN old."$g" NOT NULL
+BEGIN DELETE FROM "rtree_${t}_$g" WHERE id = OLD."$pk"; END;
+''';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  test('QGIS 製（rtree とトリガー付き）の gpkg をアプリで編集して閉じると、rtree に載っている', () async {
+    final tmp = await Directory.systemTemp.createTemp('rtree_edit_');
+    final path = '${tmp.path}/qgis.gpkg';
+    final g = Geodiff();
+    try {
+      final f0 = GeoPackageFile(const ['qgis.gpkg'], absolutePath: path);
+      await f0.addLayer('trees', GeometryType.point);
+      await f0.addPointWithAttributes('trees', const LatLng(33.93, 135.96), {});
+      await f0.addPointWithAttributes('trees', const LatLng(33.94, 135.97), {});
+      await f0.flushChanges();
+      await f0.dispose();
+      expect(
+        g.execSql(path, 'CREATE VIRTUAL TABLE rtree_trees_geom USING rtree(id, minx, maxx, miny, maxy);'
+            'INSERT INTO rtree_trees_geom VALUES (1, 135.96, 135.96, 33.93, 33.93), (2, 135.97, 135.97, 33.94, 33.94);'
+            '${gdalRtreeTriggers('trees', 'geom', 'fid')}'),
+        isNull,
+      );
+
+      // アプリで点を 1 つ足して閉じる（書く前に ST_ トリガーを落とし、閉じるときに戻す作り）
+      final f = GeoPackageFile(const ['qgis.gpkg'], absolutePath: path);
+      await f.addPointWithAttributes('trees', const LatLng(35.0, 137.0), {});
+      await f.flushChanges();
+      await f.dispose();
+
+      final triggers = sqlAssert(g, path,
+          "(SELECT count(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'rtree_trees_geom_%') = 3");
+      final count = sqlAssert(g, path, '(SELECT count(*) FROM rtree_trees_geom) = 3');
+      final far = sqlAssert(g, path, '(SELECT max(maxx) FROM rtree_trees_geom) > 136.99');
+      // ignore: avoid_print
+      print('[rtree-edit] triggers=${triggers ?? 'OK'} count=${count ?? 'OK'} far=${far ?? 'OK'}');
+      expect(triggers, isNull, reason: 'QGIS 用のトリガーが戻っている');
+      expect(count, isNull, reason: 'アプリが足した点が rtree に載っている');
+      expect(far, isNull);
+    } finally {
+      g.dispose();
+      await tmp.delete(recursive: true);
+    }
+  });
 
   test('Android の SQLite に rtree は無いが、geodiff の SQLite で焼き直せる', () async {
     final tmp = await Directory.systemTemp.createTemp('rtree_android_');

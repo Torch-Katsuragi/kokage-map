@@ -163,9 +163,11 @@ class QgsProjectBuilder {
 
     QgsDocument doc;
     var updatedInPlace = false;
+    String? existing;
     if (await fs.exists(path)) {
       try {
-        doc = QgsDocument.parse(await fs.readAsString(path));
+        existing = await fs.readAsString(path);
+        doc = QgsDocument.parse(existing);
         updatedInPlace = true;
       } on Object catch (e) {
         // 壊れていたら退避して作り直す（黙って上書きしない）
@@ -186,12 +188,19 @@ class QgsProjectBuilder {
         dirName: dirName,
       ),
     );
-    await fs.writeAsString(path, doc.toXmlString());
-    AppLogger.debug(
-      '[QgsProjectBuilder] $path に ${built.layers.length} レイヤを書いた'
-      '（除外 ${built.skipped.length} 件・${updatedInPlace ? "更新" : "新規"}・'
-      '外した ${report.removedLayers.length} 件・触らなかったレンダラ ${report.untouchedRenderers.length} 件）',
-    );
+    final xml = doc.toXmlString();
+    // 保存時刻の印しか変わらないなら書かない。書くと更新時刻が進み、Drive 同期が毎回
+    // 「端末で変更あり」と見てアップロードし続ける（2026-09-24、Fold で 5 分ごとに上げていた）
+    if (existing != null && _withoutSaveTime(existing) == _withoutSaveTime(xml)) {
+      AppLogger.debug('[QgsProjectBuilder] $path は変わらないので書かない');
+    } else {
+      await fs.writeAsString(path, xml);
+      AppLogger.debug(
+        '[QgsProjectBuilder] $path に ${built.layers.length} レイヤを書いた'
+        '（除外 ${built.skipped.length} 件・${updatedInPlace ? "更新" : "新規"}・'
+        '外した ${report.removedLayers.length} 件・触らなかったレンダラ ${report.untouchedRenderers.length} 件）',
+      );
+    }
     return QgsWriteResult(
       path: path,
       project: built,
@@ -199,6 +208,20 @@ class QgsProjectBuilder {
       removedLayers: report.removedLayers,
       untouchedRenderers: report.untouchedRenderers,
     );
+  }
+
+  static final _saveTimePatterns = [
+    RegExp('saveDateTime="[^"]*"'),
+    RegExp('(<savedAt[^>]*>)[^<]*(</savedAt>)'),
+  ];
+
+  /// 保存時刻（root の `saveDateTime` と印の `savedAt`）を伏せた本文
+  static String _withoutSaveTime(String xml) {
+    var s = xml;
+    for (final re in _saveTimePatterns) {
+      s = s.replaceAll(re, '');
+    }
+    return s;
   }
 
   /// 印に書くアプリ名。`kokage-map <version>+<build>`

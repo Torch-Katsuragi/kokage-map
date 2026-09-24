@@ -854,7 +854,10 @@ class KMeta {
     try {
       final json = toJson();
       final content = const JsonEncoder.withIndent('  ').convert(json);
-      await fs.writeAsString('$folderPath/$kMetaFileName', content);
+      final path = '$folderPath/$kMetaFileName';
+      // 中身が同じなら書かない（更新時刻が進むと Drive 同期が毎回アップロードする。2026-09-24）
+      if (await fs.exists(path) && await fs.readAsString(path) == content) return true;
+      await fs.writeAsString(path, content);
       AppLogger.debug('[KMeta] Saved to $folderPath');
       return true;
     } catch (e) {

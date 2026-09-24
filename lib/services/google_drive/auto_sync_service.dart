@@ -61,6 +61,10 @@ class AutoSyncService {
   /// 同期完了後にツリーリフレッシュが必要な場合のコールバック
   Future<void> Function(DriveFolderNode node)? onTreeRefreshNeeded;
 
+  /// 行単位で合わせられなかった版（`<dir>/<相対パス>` → そのときの Drive 側の modifiedTime）。
+  /// 同じリモートの版で何度やっても合わせられない（列の増減など）ので、版が変わるまで試さない
+  final Map<String, DateTime?> _failedMergeAt = {};
+
   /// 自動同期で行単位マージが走ったとき（合わせた数と、同じ行・同じ列の衝突）。
   /// 自動同期は画面を出さないので、ここで通知しないと衝突が誰にも見えない
   void Function(DriveFolderNode node, SyncResult result)? onMerged;
@@ -283,6 +287,14 @@ class AutoSyncService {
 
     for (final entry in entries) {
       if (entry.isConflict) {
+        final failedKey = '$localPath/${entry.relativePath}';
+        if (entry.mergeable &&
+            _failedMergeAt.containsKey(failedKey) &&
+            _failedMergeAt[failedKey] == entry.remoteModifiedTime) {
+          // この版は前に合わせられなかった → ユーザーに委ねる
+          hasRealConflict = true;
+          continue;
+        }
         if (entry.mergeable) {
           // 同じ gpkg を両方で変更 → 行単位で合わせる（base があるときだけ）
           autoDecisions.add(MergeDecision(entry: entry, choice: MergeChoice.merge));
@@ -317,7 +329,15 @@ class AutoSyncService {
         if (result.conflicts.isNotEmpty) {
           AppLogger.debug('[AutoSync] ${node.name}: 行の衝突 ${result.conflicts.length} 件（この端末の値を残した）: ${result.conflicts}');
         }
-        if (result.mergedCount > 0) onMerged?.call(node, result);
+        if (result.mergedCount > 0 || result.failedMerges.isNotEmpty) onMerged?.call(node, result);
+        if (result.failedMerges.isNotEmpty) {
+          hasRealConflict = true;
+          for (final path in result.failedMerges) {
+            final e = autoDecisions.map((d) => d.entry).firstWhere((x) => x.relativePath == path);
+            _failedMergeAt['$localPath/$path'] = e.remoteModifiedTime;
+          }
+          AppLogger.debug('[AutoSync] ${node.name}: 行単位で合わせられなかった ${result.failedMerges}');
+        }
         if (needsTreeRefresh) await onTreeRefreshNeeded?.call(node);
       } else {
         AppLogger.debug('[AutoSync] ${node.name}: auto-merge failed - ${result.errorMessage}');

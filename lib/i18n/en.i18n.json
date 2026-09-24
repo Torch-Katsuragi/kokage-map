@@ -1109,6 +1109,7 @@
     "noChanges": "No changes",
     "syncComplete": "Sync complete (↑${uploaded} ↓${downloaded} ×${deleted} →${moved})",
     "mergedFiles": "Merged $count file(s) row by row",
+    "mergeFailed": "Could not merge $count file(s) row by row (e.g. columns were added or removed). Choose this device or the cloud and sync again",
     "mergeConflicts": "$count row(s) were changed on both sides; kept this device's values",
     "mergeConflictLine": "$table #$fid: cloud \"$theirs\" → this device \"$mine\"",
     "unlinkDrive": "Unlink Drive",

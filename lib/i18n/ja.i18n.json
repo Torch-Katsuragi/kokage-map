@@ -1109,6 +1109,7 @@
     "noChanges": "変更はありません",
     "syncComplete": "同期完了 (↑${uploaded} ↓${downloaded} ×${deleted} →${moved})",
     "mergedFiles": "$count ファイルを行ごとに合わせました",
+    "mergeFailed": "$count ファイルは行ごとに合わせられませんでした（列の追加・削除など）。端末かクラウドを選んで同期し直してください",
     "mergeConflicts": "$count 行は両方で変えていたので、この端末の値を残しました",
     "mergeConflictLine": "$table #$fid: クラウド「$theirs」→ 端末「$mine」",
     "unlinkDrive": "Drive連携を解除",

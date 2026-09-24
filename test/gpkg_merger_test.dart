@@ -147,5 +147,15 @@ void main() {
       await SyncBaseStore.removeBase(local, 'sub/data.gpkg');
       expect(await SyncBaseStore.hasBase(local, 'sub/data.gpkg'), isFalse);
     });
+
+    test('libgeodiff が読めない端末では、落ちずに base を持たない（＝行単位マージをしない）', () async {
+      final local = tmp.path;
+      await makeGpkg(p.join(local, 'data.gpkg'));
+      Geodiff.libraryPathOverride = p.join(local, 'no_such_geodiff.dll');
+      addTearDown(() => Geodiff.libraryPathOverride = null);
+
+      expect(await SyncBaseStore.saveBase(local, 'data.gpkg'), isFalse);
+      expect(await SyncBaseStore.hasBase(local, 'data.gpkg'), isFalse);
+    });
   });
 }

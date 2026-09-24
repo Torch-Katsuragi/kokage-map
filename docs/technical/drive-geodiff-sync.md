@@ -128,17 +128,31 @@ base が無い gpkg（この版より前に同期したもの）は、次に上�
 Drive の時刻どうしで比べる（`isRemoteNewer()`）。upload の応答に `modifiedTime` を含めるよう `$fields` を指定した。
 この値を持たない古い帳簿は従来の比較にフォールバックする。ローカルの変更判定（ファイルの mtime と `lastSyncedTime`）はどちらも端末の時計なので変えていない。
 
+### 合わせられないとき（2026-09-24）
+
+geodiff は**スキーマが変わった変更集合を作れない**（`GeoPackage Table schemas are not the same for table: ...`）。
+列の追加・削除、レイヤ（テーブル）の追加は、どれも `createChangeset` の段階で断られる。
+その場合は手元もリモートも変えずに衝突のまま残し、`SyncResult.failedMerges` で返す。
+
+- 手動の同期: 通知（「列の追加・削除など…端末かクラウドを選んで同期し直して」）を出し、状態を「衝突」にする
+- 自動同期: 本当の衝突として扱う。同じリモートの版では再試行しない（版が変わったらもう一度試す）
+- レイヤの追加でテーブルの行だけ移って `gpkg_contents` に載らない、という中途半端な状態にはならない（テストで確認）
+
+改善案（未着手）: 片側だけの**列の追加**なら、rebase の前に base と相手側に同じ列を `ALTER TABLE ADD COLUMN` で足して
+スキーマをそろえれば合わせられる。両側が別々の列を足した場合は列の順が食い違うので、そこは今の退き方のまま。
+
 ### テスト
 
 | どこで | ファイル | 中身 |
 |---|---|---|
-| ホスト VM | `test/geodiff_sync_roundtrip_test.dart` | 下の 6 本（偽 Drive、2 台を 1 プロセスで模す。端末ごとの帳簿は差し替える） |
-| 実機 1 台 | `integration_test/geodiff_sync_roundtrip_test.dart` | 同じ 6 本を Android の sqflite と `libgeodiff.so` で |
+| ホスト VM | `test/geodiff_sync_roundtrip_test.dart` | 下の 8 本（偽 Drive、2 台を 1 プロセスで模す。端末ごとの帳簿は差し替える） |
+| 実機 1 台 | `integration_test/geodiff_sync_roundtrip_test.dart` | 同じ 8 本を Android の sqflite と `libgeodiff.so` で |
 | 実機 2 台 | `integration_test/geodiff_two_device_test.dart` | PC 上の偽 Drive（`tool/sync_relay/relay_server.dart`）を 2 台で共有して往復 |
 | ホスト VM | `test/gpkg_index_repair_test.dart` ほか | 索引の焼き直し・`closeAllFor`・帳簿の時刻・同期ダイアログ |
 
-6 本: 別々の行の変更／同じ行・同じ列の衝突（後から合わせた端末の値が残る）／両端末の追加で fid がぶつかる／
-端末の時計が Drive より進んでいる／base が無い gpkg は mergeable にならない／merge の前にアプリの接続を閉じる。
+8 本: 別々の行の変更／同じ行・同じ列の衝突（後から合わせた端末の値が残る）／両端末の追加で fid がぶつかる／
+端末の時計が Drive より進んでいる／片方が列を足す（合わせられず衝突に退く）／片方がレイヤを足す（同）／
+base が無い gpkg は mergeable にならない／merge の前にアプリの接続を閉じる。
 シナリオ本体は `test/support/geodiff_roundtrip_scenarios.dart`、偽 Drive は `test/support/fake_google_drive.dart`
 （`GoogleDriveService` を `implements` + `noSuchMethod`。同期層が呼ばないメソッドを呼ぶと落ちる）。
 

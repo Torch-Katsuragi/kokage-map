@@ -56,6 +56,10 @@ class SyncResult {
   /// 行単位マージで、同じ行・同じ列を両方が変えていた記録（この端末の値が残っている）
   final List<GpkgConflict> conflicts;
 
+  /// 行単位で合わせようとして合わせられなかったファイル（列の増減をまたいだ、Drive が途中で動いた等）。
+  /// 手元もリモートも変えずに衝突のまま残してある
+  final List<String> failedMerges;
+
   const SyncResult({
     required this.success,
     this.errorMessage,
@@ -66,6 +70,7 @@ class SyncResult {
     this.movedCount = 0,
     this.mergedCount = 0,
     this.conflicts = const [],
+    this.failedMerges = const [],
   });
 
   factory SyncResult.success({
@@ -76,6 +81,7 @@ class SyncResult {
     int movedCount = 0,
     int mergedCount = 0,
     List<GpkgConflict> conflicts = const [],
+    List<String> failedMerges = const [],
   }) {
     return SyncResult(
       success: true,
@@ -86,6 +92,7 @@ class SyncResult {
       movedCount: movedCount,
       mergedCount: mergedCount,
       conflicts: conflicts,
+      failedMerges: failedMerges,
     );
   }
 

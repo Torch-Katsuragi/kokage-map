@@ -252,6 +252,76 @@ void defineGeodiffRoundtripTests() {
     expect(await rows(p.join(b, 'data.gpkg')), expected);
   });
 
+  test('片方が列を足すと行単位では合わせられず、衝突として残る（落ちない・黙らない）', () async {
+    await share();
+
+    final gA = GeoPackageFile(const ['data.gpkg'], absolutePath: p.join(a, 'data.gpkg'));
+    await gA.addAttributeColumn('trees', 'height', 'REAL');
+    await gA.dispose();
+    await sql(p.join(a, 'data.gpkg'), 'UPDATE trees SET height = 21.5 WHERE fid = 1');
+    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = 'スギ2(B)' WHERE fid = 2");
+    await tick();
+
+    await syncOnce(a);
+    await tick();
+    final rb = await syncOnce(b);
+    expect(rb.mergedCount, 0, reason: '列の増減をまたいでは合わせられない');
+    expect(rb.failedMerges, ['data.gpkg'], reason: '合わせられなかったことを呼び手に返す');
+    // B の手元は変わらず、衝突のまま（次の同期でも両方 modified）
+    expect((await rows(p.join(b, 'data.gpkg')))[1]['name'], 'スギ2(B)');
+    await asDevice(b);
+    final again = await engine.getMergeEntries(b);
+    expect(again.single.isConflict, isTrue);
+  });
+
+  test('片方がレイヤを足した場合も、中途半端に移さず衝突として残す', () async {
+    await share();
+
+    final gA = GeoPackageFile(const ['data.gpkg'], absolutePath: p.join(a, 'data.gpkg'));
+    await gA.addLayer('roads', GeometryType.linestring);
+    await gA.addLine('roads', const [LatLng(33.93, 135.96), LatLng(33.94, 135.97)], name: '作業道A');
+    await gA.flushChanges();
+    await gA.dispose();
+    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = 'スギ2(B)' WHERE fid = 2");
+    await tick();
+
+    await syncOnce(a);
+    await tick();
+    final rb = await syncOnce(b);
+
+    Future<List<String>> tables(String path) async {
+      final db = await openDatabase(path, readOnly: true, singleInstance: false);
+      try {
+        return (await db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'roads'"))
+            .map((r) => r['name']! as String)
+            .toList();
+      } finally {
+        await db.close();
+      }
+    }
+
+    Future<List<String>> registered(String path) async {
+      final db = await openDatabase(path, readOnly: true, singleInstance: false);
+      try {
+        return (await db.rawQuery("SELECT table_name FROM gpkg_contents WHERE table_name = 'roads'"))
+            .map((r) => r['table_name']! as String)
+            .toList();
+      } finally {
+        await db.close();
+      }
+    }
+
+    final pathB = p.join(b, 'data.gpkg');
+    if (rb.mergedCount == 1) {
+      // 合わせたなら、テーブルと gpkg_contents への登録が両方そろっていないといけない
+      expect(await tables(pathB), ['roads']);
+      expect(await registered(pathB), ['roads'], reason: 'テーブルだけ移って GeoPackage のレイヤとして見えない状態は不可');
+    } else {
+      expect(rb.failedMerges, ['data.gpkg']);
+      expect(await tables(pathB), isEmpty, reason: '合わせられないなら B の手元は変えない');
+    }
+  });
+
   test('base が無い gpkg は mergeable にならず、今までどおりの二択', () async {
     await share();
     await SyncBaseStore.removeBase(b, 'data.gpkg');

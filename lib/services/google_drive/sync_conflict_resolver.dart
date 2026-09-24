@@ -425,6 +425,7 @@ class SyncConflictResolver {
       int movedCount = 0;
       int mergedCount = 0;
       final conflicts = <GpkgConflict>[];
+      final failedMerges = <String>[];
 
       final folderIdCache = <String, String>{};
 
@@ -454,6 +455,7 @@ class SyncConflictResolver {
           );
           if (merged == null) {
             AppLogger.debug('  → 行単位で合わせられなかった。衝突のまま残す');
+            failedMerges.add(relativePath);
             continue;
           }
           mergedCount++;
@@ -719,6 +721,7 @@ class SyncConflictResolver {
         movedCount: movedCount,
         mergedCount: mergedCount,
         conflicts: conflicts,
+        failedMerges: failedMerges,
       );
     } catch (e) {
       AppLogger.error('[SyncEngine] Merge エラー: $e');

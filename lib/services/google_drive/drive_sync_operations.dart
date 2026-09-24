@@ -158,7 +158,8 @@ class DriveSyncOperations {
       final result = await syncEngine.executeMerge(localPath, decisions);
 
       if (result.success) {
-        node.syncStatus = SyncStatus.synced;
+        // 行単位で合わせられなかったファイルは衝突のまま（端末かクラウドを選び直してもらう）
+        node.syncStatus = result.failedMerges.isEmpty ? SyncStatus.synced : SyncStatus.conflict;
 
         if (result.downloadedCount > 0 || result.deletedCount > 0 || result.movedCount > 0 || result.mergedCount > 0) {
           await updateChildrenRecursive(node);
@@ -196,6 +197,13 @@ class DriveSyncOperations {
 
   /// 行単位マージの結果を通知する（手動の同期と自動同期で共通）
   static void notifyMerge(WidgetRef ref, SyncResult result) {
+    if (result.failedMerges.isNotEmpty) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.drive.mergeFailed(count: result.failedMerges.length.toString()),
+            detail: result.failedMerges.join('\n'),
+            level: NotificationLevel.warning,
+          );
+    }
     if (result.mergedCount > 0) {
       ref.read(notificationCenterProvider.notifier).add(
             title: t.drive.mergedFiles(count: result.mergedCount.toString()),

@@ -20,6 +20,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
+import '../../services/google_drive/sync_base_store.dart';
 import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
 import 'folder_node.dart';
@@ -167,7 +168,9 @@ class DriveFolderNode extends FolderNode {
   ) async {
     final nodes = <LayerTreeNode>[];
 
-    final directories = entries.where((e) => e.isDirectory).toList()
+    final directories = entries
+        .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
+        .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
     for (final entity in directories) {
@@ -283,7 +286,9 @@ class DriveSubFolderNode extends FolderNode {
   ) async {
     final nodes = <LayerTreeNode>[];
 
-    final directories = entries.where((e) => e.isDirectory).toList()
+    final directories = entries
+        .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
+        .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
     for (final entity in directories) {

@@ -27,6 +27,7 @@ import 'package:root_maps/utils/app_logger.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../core/path_resolver.dart';
 import '../../services/geotiff_service.dart';
+import '../../services/google_drive/sync_base_store.dart';
 import '../../utils/exif_parser.dart';
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
@@ -145,7 +146,7 @@ class GlobalFolderNode extends FolderNode {
   ) async {
     final nodes = <LayerTreeNode>[];
     final directories = entries
-        .where((e) => e.isDirectory)
+        .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
@@ -320,7 +321,7 @@ class GlobalSubFolderNode extends FolderNode {
   Future<List<LayerTreeNode>> _loadSubFolders(List<KFileEntry> entries) async {
     final nodes = <LayerTreeNode>[];
     final directories = entries
-        .where((e) => e.isDirectory)
+        .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 

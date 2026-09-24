@@ -621,6 +621,9 @@
   - [x] 段5（偽 Drive）: Pixel 9 + Fold の 2 台で往復（`tool/sync_relay/run_two_device.sh`、2026-09-24 通過）。ホスト VM と実機 1 台で同じ 6 本
   - [ ] 段5（本物の Drive）: 2 台とも Drive にサインインして手で往復（人の手が要る）
   - [ ] ⚠ `SyncLedger` のキーが `drive:<driveId>` なので、1 台で同じ Drive フォルダを 2 つの dir にクローンすると帳簿が衝突する
+  - [x] Android の SQLite に rtree が無いので、`GpkgIndexRepair` は rtree を geodiff の SQLite で書く（`Geodiff.execSql`、2026-09-24 実機で確認）
+  - [ ] 🐛 同じ理由で、既存の `SpatialIndexManager.updateRTreeIndex` と `QgisInterop.updateContentsBounds` は Android では効いていない疑い
+        （QGIS 製の gpkg を Android で編集すると、足した・動かした地物が QGIS の空間索引に載らない）
 
 #### MapLibre
 

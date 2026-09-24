@@ -118,6 +118,28 @@ base が無い gpkg（この版より前に同期したもの）は、次に上�
 - **フィーチャを読み直す。** 同期後のツリー更新はレイヤ構造しか見ず、既存の LayerNode を使い回していた。
   読み込み済みレイヤだけ `updateChildren()` を呼び直す。merge だけでなく、既存の上書きダウンロードでも古いフィーチャが残っていた
 
+### Android の SQLite には rtree が無い（2026-09-24）
+
+Android 本体の SQLite（sqflite が使う）は rtree モジュールを持っていない（Pixel 9 / Android 17 で `no such module: rtree`）。
+地物テーブルは読み書きできるが、QGIS 製の gpkg の `rtree_*` には触れない。`GpkgIndexRepair` は行と範囲を sqflite で読み、
+rtree への書き込みだけ geodiff に入っている SQLite（`SQLITE_ENABLE_RTREE` 付き、`libgeodiff.so` が `sqlite3_*` を外に出している）で行う
+（`Geodiff.execSql()`）。範囲も rtree から読まず、Dart で出した値を書く。実機で確認（`integration_test/gpkg_rtree_android_test.dart`）。
+
+⚠ 同じ理由で、**既存の `SpatialIndexManager.updateRTreeIndex`（編集のたびの rtree 更新）と
+`QgisInterop.updateContentsBounds`（範囲を rtree から出す）は Android では効いていない**はず。
+QGIS 製の gpkg を Android で編集して QGIS に戻すと、足した・動かした地物が空間索引に載らない。→ TODO
+
+### 速さ（2026-09-24、`test/support/geodiff_bench.dart`）
+
+森林簿を想定した面 2 万筆（各 12 頂点、属性 10 列、rtree 付き、12.6MB）。各側 50 行を変えて rebase。
+
+| | base の写し | rebase | 索引の焼き直し（全件） |
+|---|---|---|---|
+| Pixel 9（実機） | 37ms | 66ms | 270ms |
+| PC（Windows、ホスト VM） | 72ms | 128ms | 188ms |
+
+同期のたびに回しても問題にならない。base は同期した gpkg と同じ大きさの写しなので、端末の容量はその分増える。
+
 ### リモートの変更判定は Drive の時刻どうしで（2026-09-24）
 
 以前は Drive の `modifiedTime`（サーバーの時計）と帳簿の `lastSyncedTime`（端末の `DateTime.now()`）を比べていた。

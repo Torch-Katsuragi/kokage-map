@@ -22,6 +22,15 @@ typedef _S3D = int Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Pointer
 typedef _S4C = Int32 Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
 typedef _S4D = int Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
 
+typedef _SqlOpenC = Int32 Function(Pointer<Utf8>, Pointer<Pointer<Void>>, Int32, Pointer<Utf8>);
+typedef _SqlOpenD = int Function(Pointer<Utf8>, Pointer<Pointer<Void>>, int, Pointer<Utf8>);
+typedef _SqlExecC = Int32 Function(Pointer<Void>, Pointer<Utf8>, Pointer<Void>, Pointer<Void>, Pointer<Pointer<Utf8>>);
+typedef _SqlExecD = int Function(Pointer<Void>, Pointer<Utf8>, Pointer<Void>, Pointer<Void>, Pointer<Pointer<Utf8>>);
+typedef _SqlCloseC = Int32 Function(Pointer<Void>);
+typedef _SqlCloseD = int Function(Pointer<Void>);
+typedef _SqlFreeC = Void Function(Pointer<Void>);
+typedef _SqlFreeD = void Function(Pointer<Void>);
+
 /// geodiff の戻り値
 abstract final class GeodiffResult {
   static const success = 0;
@@ -120,6 +129,52 @@ class Geodiff {
   /// テーブルごとの insert/update/delete 件数を JSON に
   int listChangesSummary(String changeset, String jsonFile) =>
       _withUtf8([changeset, jsonFile], (p) => _summary(_ctx, p[0], p[1]));
+
+  /// geodiff に静的リンクされた SQLite で [sql] を流す。成功なら null、失敗ならエラー文。
+  ///
+  /// ⚠ Android 本体の SQLite（sqflite）には rtree モジュールが無い。rtree を書くときはこちらを使う
+  /// （geodiff 側は `SQLITE_ENABLE_RTREE` 付きでビルドしてある。third_party/geodiff/README.md）。
+  /// ⚠ 同じファイルをアプリの接続で開いたまま呼ばない（別々の SQLite が同じファイルを開くとロックが外れる）。
+  /// Windows の geodiff.dll は SQLite の関数を外に出していないので、エラーを返す。
+  String? execSql(String dbPath, String sql) {
+    final _SqlOpenD open;
+    final _SqlExecD exec;
+    final _SqlCloseD close;
+    final _SqlFreeD free;
+    try {
+      open = _lib.lookupFunction<_SqlOpenC, _SqlOpenD>('sqlite3_open_v2');
+      exec = _lib.lookupFunction<_SqlExecC, _SqlExecD>('sqlite3_exec');
+      close = _lib.lookupFunction<_SqlCloseC, _SqlCloseD>('sqlite3_close');
+      free = _lib.lookupFunction<_SqlFreeC, _SqlFreeD>('sqlite3_free');
+    } on ArgumentError {
+      return 'この geodiff は SQLite の関数を外に出していない';
+    }
+    final ppDb = calloc<Pointer<Void>>();
+    final pErr = calloc<Pointer<Utf8>>();
+    final pPath = dbPath.toNativeUtf8();
+    final pSql = sql.toNativeUtf8();
+    try {
+      const sqliteOpenReadWrite = 0x00000002;
+      final rc = open(pPath, ppDb, sqliteOpenReadWrite, nullptr);
+      if (rc != 0) {
+        if (ppDb.value != nullptr) close(ppDb.value);
+        return 'sqlite3_open_v2 rc=$rc';
+      }
+      final rc2 = exec(ppDb.value, pSql, nullptr, nullptr, pErr);
+      String? err;
+      if (rc2 != 0) {
+        err = pErr.value == nullptr ? 'sqlite3_exec rc=$rc2' : pErr.value.toDartString();
+        if (pErr.value != nullptr) free(pErr.value.cast());
+      }
+      close(ppDb.value); // 途中で失敗した BEGIN は閉じると巻き戻る
+      return err;
+    } finally {
+      calloc.free(ppDb);
+      calloc.free(pErr);
+      malloc.free(pPath);
+      malloc.free(pSql);
+    }
+  }
 
   /// 変更の全行を JSON に
   int listChanges(String changeset, String jsonFile) =>

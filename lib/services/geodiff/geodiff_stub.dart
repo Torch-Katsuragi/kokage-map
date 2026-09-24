@@ -27,4 +27,5 @@ class Geodiff {
   int makeCopySqlite(String src, String dst) => GeodiffResult.error;
   int listChangesSummary(String changeset, String jsonFile) => GeodiffResult.error;
   int listChanges(String changeset, String jsonFile) => GeodiffResult.error;
+  String? execSql(String dbPath, String sql) => 'geodiff は web では使えない';
 }

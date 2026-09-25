@@ -28,6 +28,7 @@ import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/global_folder_node.dart';
 import '../models/nodes/image_node.dart';
 import '../models/nodes/layer_tree_node.dart';
+import '../models/nodes/sys_node.dart';
 import '../services/google_drive/index.dart';
 import '../services/kmeta_service.dart';
 
@@ -154,7 +155,8 @@ class LayerDrawerService {
     LayerTreeNode? current = node;
     while (current != null) {
       if (current is DriveFolderNode) return current;
-      if (current is GlobalFolderNode) return null;
+      // 端末側（sys・global）はプロジェクトの Drive 連携の外。global 配下の連携dirは上で拾える
+      if (current is GlobalFolderNode || current is SysNode) return null;
       current = current.parent;
     }
     return null;

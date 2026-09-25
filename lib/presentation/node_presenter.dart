@@ -19,11 +19,13 @@
 import 'package:flutter/material.dart';
 
 import '../core/node_types.dart';
+import '../i18n/strings.g.dart';
 import '../models/nodes/drive_folder_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/overlay_image_node.dart';
+import '../models/nodes/sys_node.dart';
 
 /// Drive連携UIのテーマカラー（彩度控えめ・明度高めのモダンな青）
 const Color cloudColor = Color(0xFF7EB0D5);
@@ -63,6 +65,9 @@ class NodePresenter {
   /// ノードインスタンスに基づくアイコンを取得
   /// サブクラス固有のアイコンがある場合はそれを返す
   static IconData getIcon(LayerTreeNode node) {
+    // 「この端末」は端末のアイコン
+    if (node is SysNode) return Icons.smartphone;
+
     // Drive連携フォルダはクラウドフォルダアイコン
     if (node is DriveFolderNode) return Icons.cloud;
     if (node is DriveSubFolderNode) return Icons.folder;
@@ -113,8 +118,8 @@ class NodePresenter {
       return cloudColor;
     }
 
-    // グローバルノードは青色で差別化
-    if (node.isGlobalNode) {
+    // 端末側（sys とグローバル配下）は青色で差別化
+    if (node is SysNode || node.isGlobalNode) {
       return Colors.blue.shade700;
     }
     
@@ -247,12 +252,15 @@ class NodePresenter {
   
   /// ノードの表示名を取得（名前 + タイプ情報）
   static String getDisplayName(LayerTreeNode node) {
+    // sys の name は内部の鍵（`<sys>`）。表示は i18n
+    if (node is SysNode) return t.layerDrawer.sysFolder;
     return node.name;
   }
   
   /// ノードのツールチップテキストを取得
   static String getTooltip(LayerTreeNode node) {
     final typeName = getTypeName(node.nodeType);
+    if (node is SysNode) return getDisplayName(node);
     if (node.isGlobalNode) {
       return '${node.name} (Global $typeName)';
     }

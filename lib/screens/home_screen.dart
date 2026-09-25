@@ -33,6 +33,7 @@ import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/global_folder_node.dart';
+import '../models/nodes/sys_node.dart';
 import '../providers/notification_providers.dart';
 import '../providers/project_providers.dart';
 import '../providers/ui_state_providers.dart';
@@ -416,19 +417,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         }
       }
 
-      // グローバルフォルダノードを作成
-      final globalFolderNode = GlobalFolderNode(
-        'Global',
-        globalPath: globalPath,
-        visible: true,
-        parent: ref.read(folderTreeProvider),
-      );
-
+      // グローバルフォルダは「この端末」（sys）の下に置く。sys はルート直下の先頭
+      // （[[docs/features/layer-management#この端末（sys）]]）
       final rootNode = ref.read(folderTreeProvider);
       if (rootNode != null) {
-        rootNode.children.removeWhere((child) => child is GlobalFolderNode);
-        rootNode.children.insert(0, globalFolderNode);
-        AppLogger.debug('[HomeScreen] グローバルフォルダをルートノードに追加');
+        final globalFolderNode = GlobalFolderNode(
+          'Global',
+          globalPath: globalPath,
+          visible: true,
+        );
+        SysNode.attachGlobalFolder(rootNode, globalFolderNode);
+        AppLogger.debug('[HomeScreen] グローバルフォルダを「この端末」の下に追加');
       }
     } catch (e) {
       AppLogger.debug('[HomeScreen] グローバルフォルダ初期化エラー: $e');

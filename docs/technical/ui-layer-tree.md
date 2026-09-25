@@ -14,7 +14,8 @@ root_mapsのレイヤツリーは `LayerTreeNode` を基底クラスとした階
 LayerTreeNode（基底）
 ├─ FolderNode（フォルダ）
 │  └─ DriveFolderNode（Drive連携フォルダ）
-│  └─ GlobalFolderNode（グローバルフォルダ）
+│  └─ GlobalFolderNode（グローバルフォルダ。SysNode の下に置く）
+│  └─ SysNode（「この端末」。ルート直下の仮想フォルダ。[[docs/features/layer-management#この端末（sys）]]）
 ├─ GeoPackageNode（.gpkgファイル）
 ├─ LayerNode（GeoPackage内レイヤ）
 ├─ FeatureNode（フィーチャ）
@@ -31,6 +32,7 @@ LayerTreeNode（基底）
 | ノードタイプ | 読み込み対象 |
 |------------|-------------|
 | FolderNode | サブフォルダ、GeoPackage、画像 |
+| SysNode | なし（子は home_screen が差し込む。可視性だけ当て直す） |
 | GeoPackageNode | レイヤ一覧 |
 | LayerNode | フィーチャ一覧 |
 | FeatureNode | なし（childrenクリアのみ） |

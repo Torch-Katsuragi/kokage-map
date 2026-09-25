@@ -604,6 +604,16 @@
 
 ### 機能開発
 
+#### レイヤツリー
+
+- [/] **「この端末」（sys）**（2026-09-25、`feature/sys-dir`）。ルート直下に仮想フォルダ `sys` を 1 つ置き、
+      グローバルフォルダをその下へ移した（実体の場所は変えない）。定義は [[docs/features/layer-management#この端末（sys）]]
+  - [x] `SysNode`（`lib/models/nodes/sys_node.dart`）・パス解決を「リゾルバの起点から下」に・`.qgs` から除外・
+        可視性は従来の鍵（ルートの `folders['Global']`）を引き継ぐ。テスト `test/sys_node_test.dart`
+  - [ ] 実機確認（Pixel）: sys → global の表示・可視性の保存・global 配下の Drive 連携dir・既存の global の表示状態が残るか
+  - [ ] `sys/view`（端末の写真など読み取り専用の仮想レイヤ）: **未実装・要判断**。
+        写真の権限（Play の申告）と大量写真の性能の設計が先
+
 #### Google Drive連携
 
 - [/] 行単位マージを geodiff で（設計は [[docs/technical/drive-geodiff-sync]]。ops.log 案は取り下げ）

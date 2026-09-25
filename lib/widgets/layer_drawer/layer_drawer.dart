@@ -33,9 +33,12 @@ import '../../models/nodes/drive_folder_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
+import '../../models/nodes/global_folder_node.dart';
 import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
+import '../../models/nodes/sys_node.dart';
+import '../../presentation/node_presenter.dart';
 import '../../providers/notification_providers.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/ui_state_providers.dart';
@@ -292,7 +295,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     //   `#/map` 直開き）には何も作らせない。作れてしまうと web では IndexedDB にだけ残る幽霊 gpkg になる
     final canAddHere = widget.currentNode is FolderNode && widget.currentNode!.getAbsoluteFilePath() != null;
     Widget titleBar = LayerDrawerTitleBar(
-      title: widget.currentNode!.name,
+      title: NodePresenter.getDisplayName(widget.currentNode!),
       currentNode: widget.currentNode!,
       onAdd: canAddHere
           ? (action) => switch (action) {
@@ -312,7 +315,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       titleBar = _wrapDragNav(
         titleBar,
         () => widget.onDirChanged(parent),
-        dropTarget: parent is FolderNode ? parent : null,
+        dropTarget: parent is FolderNode && parent is! SysNode ? parent : null,
       );
     }
 
@@ -390,17 +393,25 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
   Widget _buildNodeTile(LayerTreeNode node) {
     if (node is FolderNode) {
+      // 「この端末」とグローバルフォルダ本体は、名前変更・削除・ドラッグの対象にしない
+      final fixed = node is SysNode || node is GlobalFolderNode;
       final tile = FolderTile(
         node: node,
+        fixed: fixed,
         onTap: () => widget.onDirChanged(node),
-        onRename: node is! DriveFolderNode ? () => _renameFolder(context, node) : null,
+        onRename: node is! DriveFolderNode && !fixed ? () => _renameFolder(context, node) : null,
         onSyncMerge: node is DriveFolderNode ? openSyncMergeDialog : null,
         onRefreshSync: node is DriveFolderNode ? refreshSyncStatus : null,
         onUnlinkDrive: node is DriveFolderNode ? unlinkDriveFolder : null,
         onDeleteDrive: node is DriveFolderNode ? deleteDriveFolder : null,
       );
-      Widget result = _wrapDragNav(tile, () => widget.onDirChanged(node), dropTarget: node);
-      if (node is! DriveFolderNode) {
+      // sys はパスが無いので落とし先にしない（遷移のためのホバーは受ける）
+      Widget result = _wrapDragNav(
+        tile,
+        () => widget.onDirChanged(node),
+        dropTarget: node is SysNode ? null : node,
+      );
+      if (node is! DriveFolderNode && !fixed) {
         result = _wrapDraggable(result, node);
       }
       return result;

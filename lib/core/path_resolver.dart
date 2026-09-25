@@ -117,10 +117,9 @@ class GlobalPathResolver extends PathResolver {
     final root = rootPath;
     if (root == null) return null;
     if (segments.isEmpty) return root;
-    // 先頭セグメントはGlobalFolderNodeの表示名なのでスキップ
-    final adjusted = segments.sublist(1);
-    if (adjusted.isEmpty) return root;
-    return p.joinAll([root, ...adjusted]);
+    // segments はグローバルフォルダ（リゾルバの起点）からの相対。
+    // 起点の名前は LayerTreeNode.getAbsolutePathSegments が落としてある
+    return p.joinAll([root, ...segments]);
   }
   
   @override

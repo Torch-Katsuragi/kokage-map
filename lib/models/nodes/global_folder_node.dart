@@ -49,7 +49,7 @@ Future<LayerTreeNode?> _tryCreateGlobalDriveNode(
 }
 
 /// グローバルフォルダノード
-/// - どのプロジェクトを開いてもルートフォルダ直下に表示される
+/// - どのプロジェクトを開いても「この端末」（`SysNode`）の下に表示される（2026-09-25 まではルート直下）
 /// - 実体の置き場所は GlobalFolderLocator が決める
 ///   （Android: 共有ストレージ `Documents/KokageMap/Global`。旧: アプリ内部の k_maps_global）
 /// - 青色アイコンで通常フォルダと差別化（NodePresenter経由）

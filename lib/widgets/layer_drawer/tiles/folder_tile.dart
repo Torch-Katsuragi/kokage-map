@@ -42,6 +42,10 @@ class FolderTile extends ConsumerWidget {
   final Future<void> Function(BuildContext, DriveFolderNode)? onUnlinkDrive;
   final Future<void> Function(BuildContext, DriveFolderNode)? onDeleteDrive;
 
+  /// 名前変更・削除のメニューを出さない（「この端末」とグローバルフォルダ本体）。
+  /// 実体の場所はアプリが決めているので、ツリーから動かしたり消したりさせない
+  final bool fixed;
+
   const FolderTile({
     super.key,
     required this.node,
@@ -51,6 +55,7 @@ class FolderTile extends ConsumerWidget {
     this.onRefreshSync,
     this.onUnlinkDrive,
     this.onDeleteDrive,
+    this.fixed = false,
   });
 
   /// このプラットフォームで実際に同期できるか。
@@ -103,9 +108,9 @@ class FolderTile extends ConsumerWidget {
 
     return ListTile(
       leading: NodeVisibilityIcon(node: node),
-      title: Text(node.name),
+      title: Text(NodePresenter.getDisplayName(node)),
       onTap: onTap,
-      trailing: _buildFolderMenu(context, ref),
+      trailing: fixed ? null : _buildFolderMenu(context, ref),
     );
   }
 

@@ -28,6 +28,7 @@ import 'geopackage_node.dart';
 import 'global_folder_node.dart';
 import 'image_node.dart';
 import 'layer_tree_node.dart';
+import 'sys_node.dart';
 
 /// グローバルフォルダ内のノードのパスを解決するヘルパー
 /// 親チェインにGlobalFolderNodeがあればそこからパスを構築、なければnull
@@ -134,7 +135,7 @@ class DriveFolderNode extends FolderNode {
 
     // 既存の子ノードで、ファイルシステムに存在しないものを削除
     children.removeWhere((child) {
-      if (child is GlobalFolderNode || child is GlobalSubFolderNode) return false;
+      if (child is SysNode || child is GlobalFolderNode || child is GlobalSubFolderNode) return false;
       final shouldRemove = !allCurrentNames.contains(child.name);
       if (shouldRemove) {
         AppLogger.debug(
@@ -259,7 +260,7 @@ class DriveSubFolderNode extends FolderNode {
     };
 
     children.removeWhere((child) {
-      if (child is GlobalFolderNode || child is GlobalSubFolderNode) return false;
+      if (child is SysNode || child is GlobalFolderNode || child is GlobalSubFolderNode) return false;
       final shouldRemove = !allCurrentNames.contains(child.name);
       if (shouldRemove) {
         child.parent = null;

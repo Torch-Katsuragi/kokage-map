@@ -36,6 +36,7 @@ import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
+import '../../models/nodes/sys_node.dart';
 import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/label_template.dart';
@@ -100,6 +101,21 @@ class QgsProjectBuilder {
     return QgsProject(name: _projectName(root, rootPath), root: children, skipped: skipped);
   }
 
+  /// 自分の `.qgs` を持ちうる子 dir。
+  ///
+  /// sys 自体は dir でないので飛ばし、その下（global）を見る。global がルート直下に
+  /// あった頃と同じく、global や global 配下の連携dirに `.kmeta.json` があれば
+  /// そこに `.qgs` を書く（相対パスが取れないので親には埋め込まれない）。
+  static Iterable<FolderNode> _ownQgsCandidates(FolderNode root) sync* {
+    for (final child in root.children.whereType<FolderNode>()) {
+      if (child is SysNode) {
+        yield* child.children.whereType<FolderNode>();
+      } else {
+        yield child;
+      }
+    }
+  }
+
   /// プロジェクト名。
   ///
   /// ⚠ ルートの [FolderNode.name] は "Home" 固定なので使えない。
@@ -132,7 +148,7 @@ class QgsProjectBuilder {
     // （dir 分散のまま「root を開けば全部見える」を1種類のファイルで両立する）
     final embedded = <String, QgsEmbeddedGroup>{};
     if (project == null) {
-      for (final child in root.children.whereType<FolderNode>()) {
+      for (final child in _ownQgsCandidates(root)) {
         final childPath = child.getAbsoluteFilePath();
         if (childPath == null) continue;
         if (!await KMetaService.instance.hasMetaFile(childPath)) continue;
@@ -244,6 +260,8 @@ class QgsProjectBuilder {
     List<String> skipped,
     Map<String, QgsEmbeddedGroup> embedded,
   ) async {
+    // 「この端末」（sys）はプロジェクトに属さない。.qgs に載せない（除外の報告にも出さない）
+    if (node is SysNode) return null;
     if (node is FolderNode) {
       final path = node.getAbsoluteFilePath();
       final emb = path == null ? null : embedded[p.normalize(path)];

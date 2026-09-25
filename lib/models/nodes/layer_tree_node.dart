@@ -113,10 +113,22 @@ abstract class LayerTreeNode {
     return pathList;
   }
 
-  /// ファイルシステム上の絶対パスリスト
+  /// [pathResolver] のルートからの相対パスセグメント
+  ///
+  /// リゾルバの起点（リゾルバを自分に持つノード、無ければツリーのルート）の**下**から
+  /// 自分までの名前を返す。起点の名前は含まない。
+  ///
+  /// > [!NOTE] 2026-09-25: 「先頭 1 つを落とす」をやめた
+  /// > グローバルフォルダが「この端末」（sys）の下に入り、ツリー上の深さが決め打ちでなくなった。
+  /// > 以前は GlobalPathResolver 側でも先頭（Global の表示名）を落としていた。
   List<String> getAbsolutePathSegments() {
-    final path = getPathFromRoot();
-    return path.length > 1 ? path.sublist(1) : [];
+    final segments = <String>[];
+    LayerTreeNode? current = this;
+    while (current != null && current._pathResolver == null && current.parent != null) {
+      segments.insert(0, current.name);
+      current = current.parent;
+    }
+    return segments;
   }
 
   /// 再帰的に子ノードをたどり、ノード構造を辞書形式で返す

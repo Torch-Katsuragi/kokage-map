@@ -28,6 +28,7 @@ import 'geopackage_node.dart';
 import 'global_folder_node.dart';
 import 'image_node.dart';
 import 'layer_tree_node.dart';
+import 'sys_node.dart';
 
 /// フォルダノード
 class FolderNode extends LayerTreeNode {
@@ -61,11 +62,15 @@ class FolderNode extends LayerTreeNode {
   Future<void> persistVisibility() async {
     final parentFolder = parent;
     if (parentFolder is! FolderNode) return;
-    final parentPath = parentFolder.getAbsoluteFilePath();
+    final parentPath = parentFolder.visibilityMetaPath;
     if (parentPath == null) return;
     await KMetaService.instance.setFolderVisibility(parentPath, name, visible);
     parentFolder.invalidateMetaCache();
   }
+
+  /// 子の可視性を書く `.kmeta.json` の dir。通常は自分の dir。
+  /// 実体の無い [SysNode] はプロジェクトルートを返す
+  String? get visibilityMetaPath => getAbsoluteFilePath();
 
   /// マージ済みメタデータを取得（キャッシュ対応）
   Future<KMeta> getMeta() async {
@@ -118,9 +123,9 @@ class FolderNode extends LayerTreeNode {
     };
 
     // 既存の子ノードで、ファイルシステムに存在しないものを削除
-    // ただし、グローバル構造ノードはファイルシステム外に存在するため削除しない
+    // ただし、sys・グローバル構造ノードはファイルシステム外に存在するため削除しない
     children.removeWhere((child) {
-      if (child is GlobalFolderNode || child is GlobalSubFolderNode) {
+      if (child is SysNode || child is GlobalFolderNode || child is GlobalSubFolderNode) {
         return false;
       }
       final shouldRemove = !allCurrentNames.contains(child.name);

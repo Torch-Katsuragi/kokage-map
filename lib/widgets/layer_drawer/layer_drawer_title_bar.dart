@@ -23,6 +23,7 @@ import '../../models/nodes/drive_folder_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/global_folder_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
+import '../../models/nodes/sys_node.dart';
 import '../../presentation/node_presenter.dart';
 
 enum AddAction { folder, geoPackage, photo }
@@ -55,7 +56,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
     LayerTreeNode? node = currentNode;
     while (node != null) {
       if (node is DriveFolderNode) return true;
-      if (node is GlobalFolderNode) return false;
+      if (node is GlobalFolderNode || node is SysNode) return false;
       node = node.parent;
     }
     return false;

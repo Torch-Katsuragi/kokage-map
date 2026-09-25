@@ -487,6 +487,7 @@
     "newName": "新しい名前",
     "renameFailed": "リネームに失敗しました: $error",
     "title": "レイヤ",
+    "sysFolder": "この端末",
     "addFolder": "フォルダ追加",
     "rename": "名前変更",
     "submitRename": "変更",

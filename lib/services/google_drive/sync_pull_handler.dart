@@ -134,6 +134,7 @@ class SyncPullHandler {
           );
 
           if (success) {
+            await SyncBaseStore.settleAfterDownload(localFilePath);
             downloadedCount++;
             syncedFiles[driveEntry.relativePath] = KMetaSyncFile(
               driveFileId: driveFile.id!,

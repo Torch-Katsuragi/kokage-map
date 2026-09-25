@@ -133,10 +133,13 @@ class SyncLedger {
   Future<String> resolveKey({String? driveId, required String folderPath}) async {
     final base = keyFor(driveId: driveId, folderPath: folderPath);
     if (driveId == null || driveId.isEmpty) return base;
-    final scoped = '$base@${stableHashHex(folderPath, length: 16)}';
+    // `/sdcard/...` と `/storage/emulated/0/...` のような同じ場所の別名は、同じ dir として扱う
+    // （別名で開くと別のクローンと見て帳簿を分け、全ファイルを落とし直していた。2026-09-25）
+    final here = await fs.canonicalPath(folderPath);
+    final scoped = '$base@${stableHashHex(here, length: 16)}';
     if (await read(scoped) != null) return scoped;
     final owner = (await read(base))?.owner;
-    if (owner == null || owner == folderPath) return base;
+    if (owner == null || owner == folderPath || await fs.canonicalPath(owner) == here) return base;
     try {
       if (!await fs.isDirectory(owner)) return base;
       final ownerMeta = await KMeta.loadFromFile(owner);

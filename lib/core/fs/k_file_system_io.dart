@@ -101,6 +101,15 @@ class IoFileSystem implements KFileSystem {
   }
 
   @override
+  Future<String> canonicalPath(String path) async {
+    try {
+      return await Directory(path).resolveSymbolicLinks();
+    } on FileSystemException {
+      return path;
+    }
+  }
+
+  @override
   Future<DateTime?> lastModified(String path) async {
     final file = File(path);
     if (!await file.exists()) return null;

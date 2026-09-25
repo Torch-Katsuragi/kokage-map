@@ -256,7 +256,13 @@ tool/sync_relay/run_two_device.sh <端末A> <端末B>
   他の端末が毎回「Drive で変更あり」と見る。前回の同期から変わったファイルだけを上げるようにした
 - 直したあとは、変更の無い周期は何もせず、変更があれば変わったファイルだけを上げる（Fold で確認）
 
-残り: Android で gpkg を初めて開くと `android_metadata` 表が足され、1 回だけ無駄にアップロードされる（地物は同じ）
+Android で gpkg を初めて開くと `android_metadata` 表が足され、1 回だけ無駄にアップロードされていた（地物は同じ）。
+Drive から落とした直後、同期済みと記録する前に sqflite で一度開いて閉じ（`SyncBaseStore.settleAfterDownload`）、
+表を足させてから記録するようにした。Fold で、`android_metadata` の無い gpkg を PC から置いて落とし、
+レイヤを開いた次の周期でその gpkg が上がらないことを確かめた（2026-09-25。上がったのはレイヤが増えた `.qgs` だけ）。
+
+同じ試験で、プロジェクトを `/sdcard/…` で開くと帳簿が `/storage/emulated/0/…` の持ち主と別の dir とみなされ、
+全ファイルを落とし直していた。`SyncLedger.resolveKey` はリンクをたどった実体のパス（`fs.canonicalPath`）で比べる
 
 ## 段取り
 

@@ -89,6 +89,12 @@ abstract class KFileSystem {
   /// web でも `FileSystemFileHandle.getFile()` の `lastModified` で取れる。
   Future<DateTime?> lastModified(String path);
 
+  /// シンボリックリンクをたどった実体のパス。たどれなければ [path] のまま。
+  ///
+  /// Android の `/sdcard/...` は `/storage/emulated/0/...` と同じ場所を指す。
+  /// パスを「同じ場所か」の判定に使うときは、これを通してから比べる。web は [path] のまま。
+  Future<String> canonicalPath(String path);
+
   /// ローカルの実ファイルとして扱えるか。
   ///
   /// ⚠ web は false。`sqflite` や外部プロセスに**パスを渡して開かせる**類の処理は

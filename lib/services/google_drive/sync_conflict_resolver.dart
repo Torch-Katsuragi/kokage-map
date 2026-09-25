@@ -613,6 +613,7 @@ class SyncConflictResolver {
                   localFilePath,
                 );
                 if (success) {
+                  await SyncBaseStore.settleAfterDownload(localFilePath);
                   downloadedCount++;
                   syncedFiles[relativePath] = KMetaSyncFile(
                     driveFileId: entry.driveFileId!,
@@ -658,6 +659,7 @@ class SyncConflictResolver {
                       localFilePath,
                     );
                     if (success) {
+                      await SyncBaseStore.settleAfterDownload(localFilePath);
                       downloadedCount++;
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: entry.driveFileId!,
@@ -681,6 +683,7 @@ class SyncConflictResolver {
                       localFilePath,
                     );
                     if (success) {
+                      await SyncBaseStore.settleAfterDownload(localFilePath);
                       downloadedCount++;
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: entry.driveFileId!,

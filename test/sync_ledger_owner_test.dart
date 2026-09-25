@@ -43,6 +43,17 @@ void main() {
     expect(await SyncLedger.instance.resolveKey(driveId: drive, folderPath: b), startsWith('drive:$drive@'));
   });
 
+  test('同じ dir をリンク越しの別名で開いても、同じ帳簿（/sdcard と /storage/emulated/0）', () async {
+    final a = await dir('A');
+    final alias = p.join(tmp.path, 'alias');
+    await Link(alias).create(a); // Windows ではジャンクション
+    await KMetaService.instance.setDriveSync(a, driveId: drive, files: {'x.gpkg': KMetaSyncFile(driveFileId: 'f', lastSyncedTime: t1)});
+    KMetaService.instance.clearCache();
+
+    expect(await SyncLedger.instance.resolveKey(driveId: drive, folderPath: alias), 'drive:$drive');
+    expect((await KMetaService.instance.getMeta(alias)).sync.files['x.gpkg']!.lastSyncedTime, t1);
+  });
+
   test('持ち主の dir が消えていたら（動かした）、今までどおり帳簿を引き継ぐ', () async {
     final a = await dir('A');
     await KMetaService.instance.setDriveSync(a, driveId: drive, files: {'x.gpkg': KMetaSyncFile(driveFileId: 'f', lastSyncedTime: t1)});

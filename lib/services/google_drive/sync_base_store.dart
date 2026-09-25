@@ -5,7 +5,9 @@
 // `.sync/` は同期対象から外し（scanLocalFiles）、レイヤツリーにも出さない（FolderNode.loadNodes）。
 // 対象は `.gpkg` だけ（行単位マージができるのは GeoPackage だけ）。web は geodiff が無いので何もしない。
 // 設計: docs/technical/drive-geodiff-sync.md
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
 
 import '../../core/fs/k_file_system.dart';
 import '../../models/geopackage/geopackage_connection.dart';
@@ -80,6 +82,21 @@ abstract final class SyncBaseStore {
   static Future<void> releaseBeforeOverwrite(String absPath) async {
     if (!fs.hasRealPaths || !isGpkg(absPath)) return;
     await GeoPackageConnection.closeAllFor(absPath);
+  }
+
+  /// Drive から落とした gpkg を、同期済みと記録する前にアプリの SQLite で一度開いて閉じる。
+  ///
+  /// Android の SQLite は開いた gpkg に `android_metadata` 表を足す。落とした直後に同期済みと記録すると、
+  /// 最初にレイヤを開いた時点で更新時刻が進み、地物は同じなのに次の同期で 1 回アップロードしていた。
+  /// 記録の前に足させておけば、更新時刻は記録より前になる。Android 以外では何もしない。
+  static Future<void> settleAfterDownload(String absPath) async {
+    if (defaultTargetPlatform != TargetPlatform.android || !fs.hasRealPaths || !isGpkg(absPath)) return;
+    try {
+      final db = await openDatabase(absPath, singleInstance: false);
+      await db.close();
+    } catch (e) {
+      AppLogger.debug('[SyncBase] 落とした gpkg を開けなかった: $absPath - $e');
+    }
   }
 
   static Future<void> removeBase(String localPath, String relativePath) async {

@@ -402,6 +402,9 @@ class WebFileSystem implements KFileSystem {
   }
 
   @override
+  Future<String> canonicalPath(String path) async => path;
+
+  @override
   Future<DateTime?> lastModified(String path) async {
     final handle = await _fileHandle(path);
     if (handle == null) return null;

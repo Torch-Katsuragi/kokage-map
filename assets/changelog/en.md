@@ -21,6 +21,7 @@
 - Rivers and lakes could show up as rectangular plateaus with vertical walls in the 3D terrain. Water surfaces without elevation data are now filled from a secondary elevation source and interpolated from their surroundings
 - Drive sync: a GeoPackage downloaded from Drive was uploaded once more on the next sync just because it had been opened (Android adds a small table to files it opens; the features were unchanged). Fixed
 - Android: opening the same folder via `/sdcard/…` and `/storage/emulated/0/…` treated it as a separate clone and downloaded every file again. Fixed
+- Android: slope coloring under Terrain look had no effect and painted everything in the gentle-slope color. Fixed
 
 ## v0.7.2 — 2026/09/13
 

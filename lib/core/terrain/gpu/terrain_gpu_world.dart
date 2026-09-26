@@ -79,6 +79,8 @@ class TerrainGpuWorldRenderer {
               gpu.VertexAttribute(name: 'position', format: gpu.VertexFormat.float32x3),
               gpu.VertexAttribute(name: 'uv', format: gpu.VertexFormat.float32x2, offsetInBytes: 12),
               gpu.VertexAttribute(name: 'shade', format: gpu.VertexFormat.float32, offsetInBytes: 20),
+              // ⚠ 書き漏らすと slope は常に 0 で届き、傾斜の色分けが全面「緩い側の色」になる（2026-09-26 まで）
+              gpu.VertexAttribute(name: 'slope', format: gpu.VertexFormat.float32, offsetInBytes: 24),
             ],
           ),
         ],

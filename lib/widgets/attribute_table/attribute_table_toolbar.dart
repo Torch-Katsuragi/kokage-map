@@ -131,28 +131,35 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
           // 上段: レイヤー名（左） + アイコン群（右端）
           Row(
             children: [
-              // レイヤー名
-              Text(
-                ctrl.isFiltered
-                    ? '${ctrl.layer.layerName} (${ctrl.filteredCount}/${ctrl.totalCount})'
-                    : '${ctrl.layer.layerName} (${ctrl.totalCount})',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 13,
-                  height: 1.2,
-                  color: ctrl.isFiltered ? Colors.orange.shade800 : null,
+              // 左側（レイヤー名と座標系）。縦持ちで幅が足りなければこちらを縮める（右端のアイコン群は削らない）
+              Expanded(
+                child: Row(
+                  children: [
+                    // レイヤー名
+                    Flexible(
+                      child: Text(
+                        ctrl.isFiltered
+                            ? '${ctrl.layer.layerName} (${ctrl.filteredCount}/${ctrl.totalCount})'
+                            : '${ctrl.layer.layerName} (${ctrl.totalCount})',
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
+                          height: 1.2,
+                          color: ctrl.isFiltered ? Colors.orange.shade800 : null,
+                        ),
+                      ),
+                    ),
+
+                    if (ctrl.isPointLayer) ...[
+                      const SizedBox(width: 8),
+                      _buildWgs84Checkbox(context),
+                      const SizedBox(width: 8),
+                      Flexible(child: _buildEpsgSelector(context)),
+                    ],
+                  ],
                 ),
               ),
-
-              if (ctrl.isPointLayer) ...[
-                const SizedBox(width: 8),
-                _buildWgs84Checkbox(context),
-                const SizedBox(width: 8),
-                _buildEpsgSelector(context),
-              ],
-
-              // 右端に押し出す
-              const Expanded(child: SizedBox.shrink()),
 
               // ラベルの組み立て（列を選んで並べる）
               _buildIconButton(
@@ -476,9 +483,8 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
   }
 
   Widget _buildEpsgSelector(BuildContext context) {
-    return SizedBox(
-      width: 200,
-      height: 22,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 200, maxHeight: 22),
       child: _EpsgAutocomplete(
         initialValue: widget.controller.settings.additionalEpsg,
         onSelected: (epsg) {

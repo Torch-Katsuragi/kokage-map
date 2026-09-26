@@ -23,6 +23,7 @@
 - Android: opening the same folder via `/sdcard/…` and `/storage/emulated/0/…` treated it as a separate clone and downloaded every file again. Fixed
 - Android: slope coloring under Terrain look had no effect and painted everything in the gentle-slope color. Fixed
 - In portrait, the attribute table of a point layer pushed its top-row buttons off screen. The layer name and CRS field now shrink instead
+- With the Left-handed layout, the web zoom buttons overlapped the record button; they now sit on the other side of the map
 
 ## v0.7.2 — 2026/09/13
 

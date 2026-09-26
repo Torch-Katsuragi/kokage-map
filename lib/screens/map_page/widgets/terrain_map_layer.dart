@@ -28,6 +28,7 @@ import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/fs/k_file_system.dart';
+import '../../../core/map_layout.dart';
 import '../../../core/terrain/contour_tiles.dart';
 import '../../../core/terrain/dem_grid.dart';
 import '../../../core/terrain/dem_tiles.dart';
@@ -2088,6 +2089,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     ref.listen(partySessionProvider, (_, _) => _scheduleRefresh());
     ref.listen(currentToolProvider, (_, next) => _onToolChanged(next.name));
     final desktop = kIsWeb || (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS);
+    final toolbarLeft = MapLayout.resolve(ref.watch(mapLayoutPresetSettingProvider), MediaQuery.sizeOf(context)).toolbarLeft;
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;
@@ -2146,8 +2148,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
                 ),
               ),
             ),
+            // 拡大縮小（desktop）とドライブ（debug）。左下のフローティングボタン列の反対側に置く
+            // （左利きではフローティングボタン列が右下に来て重なっていた）
             Positioned(
-              right: 8,
+              right: toolbarLeft ? 8 : null,
+              left: toolbarLeft ? null : 8,
               bottom: 8,
               child: Column(
                 mainAxisSize: MainAxisSize.min,

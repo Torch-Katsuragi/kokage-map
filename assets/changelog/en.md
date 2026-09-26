@@ -10,7 +10,7 @@
 - On high-density screens (e.g. Pixel) the basemap texture is now built at twice the resolution when zoomed in, so zoom levels up to 17 look sharp (GSI tiles stop at 18, so beyond that nothing changes)
 - The attribution line at the bottom-left of the map is gone; sources are listed under Maps & Tiles → Data sources (it still appears on the map while OpenStreetMap is in use)
 - Contours are now one of the basemaps: stack them over the standard map or photos in the layers list. Contour tiles are generated from the elevation tiles and kept in the tile cache, so they appear instantly the second time and offline. The interval matches the GSI standard map: 2 m at zoom 18, 10 m at 15–17, 100 m at 12–14, 200 m at 9–11. The contour settings under Terrain appearance (interval, color, width) are gone
-- The layer list now starts with "This device", and the global folder has moved inside it. It holds data that lives on the device rather than in the project. The folder stays where it was on disk, and its shown/hidden state carries over
+- The layer list now starts with a "System" folder, and the global folder has moved inside it. It holds data that lives on the device rather than in the project. The folder stays where it was on disk, and its shown/hidden state carries over
 
 ### Fixes
 

@@ -15,7 +15,7 @@ LayerTreeNode（基底）
 ├─ FolderNode（フォルダ）
 │  └─ DriveFolderNode（Drive連携フォルダ）
 │  └─ GlobalFolderNode（グローバルフォルダ。SysNode の下に置く）
-│  └─ SysNode（「この端末」。ルート直下の仮想フォルダ。[[docs/features/layer-management#この端末（sys）]]）
+│  └─ SysNode（「System」。ルート直下の仮想フォルダ。[[docs/features/layer-management#System（sys）]]）
 ├─ GeoPackageNode（.gpkgファイル）
 ├─ LayerNode（GeoPackage内レイヤ）
 ├─ FeatureNode（フィーチャ）

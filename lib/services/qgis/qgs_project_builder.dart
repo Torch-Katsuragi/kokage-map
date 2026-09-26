@@ -260,7 +260,7 @@ class QgsProjectBuilder {
     List<String> skipped,
     Map<String, QgsEmbeddedGroup> embedded,
   ) async {
-    // 「この端末」（sys）はプロジェクトに属さない。.qgs に載せない（除外の報告にも出さない）
+    // 「System」（sys）はプロジェクトに属さない。.qgs に載せない（除外の報告にも出さない）
     if (node is SysNode) return null;
     if (node is FolderNode) {
       final path = node.getAbsoluteFilePath();

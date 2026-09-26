@@ -1,6 +1,6 @@
-// 「この端末」（sys）: グローバルフォルダをルート直下から sys の下へ移した（2026-09-25）。
+// 「System」（sys）: グローバルフォルダをルート直下から sys の下へ移した（2026-09-25）。
 // パス解決・保存済みの可視性・ツリー更新・.qgs 書き出しが sys を挟んでも崩れないこと。
-// 仕様は docs/features/layer-management.md の「この端末（sys）」
+// 仕様は docs/features/layer-management.md の「System（sys）」
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';

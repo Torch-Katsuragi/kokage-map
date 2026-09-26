@@ -13,16 +13,16 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// Root Maps: 「この端末」（sys）ノード
+// Root Maps: 「System」（sys）ノード
 // プロジェクトに属さない、端末側の層をまとめる仮想フォルダ。
-// 仕様は [[docs/features/layer-management#この端末（sys）]]
+// 仕様は [[docs/features/layer-management#System（sys）]]
 
 import '../kmeta.dart';
 import 'folder_node.dart';
 import 'global_folder_node.dart';
 import 'layer_tree_node.dart';
 
-/// 「この端末」（sys）
+/// 「System」（sys）
 ///
 /// - ツリーのルート直下に 1 つだけ置く。**実体ディレクトリは無い**
 /// - 子は `global`（[GlobalFolderNode]）だけ。将来 `view`（端末の写真など読み取り専用）が入る

@@ -65,7 +65,7 @@ class NodePresenter {
   /// ノードインスタンスに基づくアイコンを取得
   /// サブクラス固有のアイコンがある場合はそれを返す
   static IconData getIcon(LayerTreeNode node) {
-    // 「この端末」は端末のアイコン
+    // 「System」は端末のアイコン
     if (node is SysNode) return Icons.smartphone;
 
     // Drive連携フォルダはクラウドフォルダアイコン

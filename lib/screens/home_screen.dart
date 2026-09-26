@@ -417,8 +417,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         }
       }
 
-      // グローバルフォルダは「この端末」（sys）の下に置く。sys はルート直下の先頭
-      // （[[docs/features/layer-management#この端末（sys）]]）
+      // グローバルフォルダは「System」（sys）の下に置く。sys はルート直下の先頭
+      // （[[docs/features/layer-management#System（sys）]]）
       final rootNode = ref.read(folderTreeProvider);
       if (rootNode != null) {
         final globalFolderNode = GlobalFolderNode(
@@ -427,7 +427,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           visible: true,
         );
         SysNode.attachGlobalFolder(rootNode, globalFolderNode);
-        AppLogger.debug('[HomeScreen] グローバルフォルダを「この端末」の下に追加');
+        AppLogger.debug('[HomeScreen] グローバルフォルダを「System」の下に追加');
       }
     } catch (e) {
       AppLogger.debug('[HomeScreen] グローバルフォルダ初期化エラー: $e');

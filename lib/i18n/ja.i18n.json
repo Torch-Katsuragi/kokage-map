@@ -76,7 +76,7 @@
     "title": "設定",
     "categories": {
       "terrain": "地形の見た目",
-      "terrainDesc": "傾斜・標高の色分け、等高線",
+      "terrainDesc": "傾斜・標高の色分け",
       "general": "一般",
       "generalDesc": "グローバルフォルダ設定",
       "basemap": "地図・タイル",

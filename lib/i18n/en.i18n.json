@@ -76,7 +76,7 @@
     "title": "Settings",
     "categories": {
       "terrain": "Terrain look",
-      "terrainDesc": "Slope / elevation coloring, contour lines",
+      "terrainDesc": "Slope / elevation coloring",
       "general": "General",
       "generalDesc": "Global folder settings",
       "basemap": "Map & Tiles",

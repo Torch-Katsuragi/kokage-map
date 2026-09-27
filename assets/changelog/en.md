@@ -1,29 +1,41 @@
 # Changelog
 
-## Next release
+## v0.7.3 — 2026/09/27
+
+### Drive sync
+
+- When two devices edit the same GeoPackage, changes are now merged row by row. Edits to different rows are both kept. If both sides changed the same column of the same row, this device's value wins, and the notification's "Revert to cloud value" button restores the other side
+- If only one side added columns, the schemas are aligned first and then merged
+- Auto-sync uploads only files that changed, and does nothing when nothing changed
+- Editing a QGIS-made GeoPackage on Android no longer leaves new features out of QGIS's spatial index
+- A GeoPackage downloaded from Drive is no longer uploaded again just because it was opened
+- Opening the same folder via another path (`/sdcard/…` vs `/storage/emulated/0/…`) no longer re-downloads every file
+
+### Map and 3D
+
+- Base maps are now layers. In Maps & Tiles you can reorder them, show or hide them, and set opacity and blend mode (multiply, screen, …). Existing stacks keep their look, and the settings screen shows a one-tile preview
+- Contours are now one of the base maps. Intervals match the GSI standard map (2 m at zoom 18, 10 m at 15–17, 100 m at 12–14, 200 m at 9–11), and generated tiles stay in the cache so they work offline
+- The compass toggles 2D and 3D. 2D is top-down (one finger pans, two fingers zoom and rotate); in 3D one finger rotates and tilts. Double-tap resets north; long-press toggles the perspective view in 3D
+- On opening, the map starts at the extent of all features in the project
+- 3D loads faster: a coarse image appears first and is refined when idle. Waits drop by more than half on slow connections
+- On high-density screens the base map is drawn at twice the resolution when zoomed in
+- Bulk map download saves every stacked layer (contours included); only OpenStreetMap is skipped
+- Attributions moved to Maps & Tiles → Data sources (still shown on the map while OpenStreetMap is in use)
 
 ### Usability
 
-- On opening, the map starts at the extent of all features in the project (it no longer jumps to your location). Only when there are no features does it start in Tokyo and move to your location once known
-- Base maps are now layers. In Maps & Tiles you can reorder, show/hide, and set opacity and blend mode (multiply, screen, …) like in a paint app. Existing blends from the old advanced settings carry over unchanged. A one-tile preview of the current stack is shown above the layer list
-- The compass now switches between 2D and 3D. Tap to toggle 2D (top-down locked: one finger pans, two fingers zoom and rotate) and 3D (one finger rotates and tilts, two fingers pan, zoom and rotate); the current mode is shown under the button. Double-tap resets north up; long press toggles the perspective view in 3D
-- On high-density screens (e.g. Pixel) the basemap texture is now built at twice the resolution when zoomed in, so zoom levels up to 17 look sharp (GSI tiles stop at 18, so beyond that nothing changes)
-- The attribution line at the bottom-left of the map is gone; sources are listed under Maps & Tiles → Data sources (it still appears on the map while OpenStreetMap is in use)
-- Contours are now one of the basemaps: stack them over the standard map or photos in the layers list. Contour tiles are generated from the elevation tiles and kept in the tile cache, so they appear instantly the second time and offline. The interval matches the GSI standard map: 2 m at zoom 18, 10 m at 15–17, 100 m at 12–14, 200 m at 9–11. The contour settings under Terrain appearance (interval, color, width) are gone
-- The layer list now starts with a "System" folder, and the global folder has moved inside it. It holds data that lives on the device rather than in the project. The folder stays where it was on disk, and its shown/hidden state carries over
+- The layer list now starts with a "System" folder, and the global folder has moved inside it. It holds device-side data that doesn't belong to the project. The folder stays where it was on disk, and its shown/hidden state carries over
+- The attribute form now saves when you leave a field or move to another record (previously only Enter saved, and input could be lost). Numeric columns open the number keyboard
 
 ### Fixes
 
-- 3D loading is lighter. When zoomed in, basemap textures appear quickly at a coarser level and are upgraded when idle; elevation data is fetched only as needed and duplicate tile requests are merged. On slow connections waits drop by more than half
-- Contours on the coarse tiles seen during loading are drawn fainter so the patchwork with fine tiles is less distracting
-- Bulk map download now saves every stacked layer (contours included); only OpenStreetMap is skipped
-- The heading indicator on the location marker is a fan again (it had become a line when the map went 3D)
-- Rivers and lakes could show up as rectangular plateaus with vertical walls in the 3D terrain. Water surfaces without elevation data are now filled from a secondary elevation source and interpolated from their surroundings
-- Drive sync: a GeoPackage downloaded from Drive was uploaded once more on the next sync just because it had been opened (Android adds a small table to files it opens; the features were unchanged). Fixed
-- Android: opening the same folder via `/sdcard/…` and `/storage/emulated/0/…` treated it as a separate clone and downloaded every file again. Fixed
-- Android: slope coloring under Terrain look had no effect and painted everything in the gentle-slope color. Fixed
-- In portrait, the attribute table of a point layer pushed its top-row buttons off screen. The layer name and CRS field now shrink instead
-- With the Left-handed layout, the web zoom buttons overlapped the record button; they now sit on the other side of the map
+- Android: slope coloring under Terrain look had no effect. Fixed
+- 3D terrain could show rectangular plateaus over rivers and lakes. Fixed
+- The heading indicator on the location marker is a fan again, as in 2D
+- The Drive clone dialog and the map toolbar no longer run off screen while the keyboard is up
+- In portrait, a point layer's attribute table no longer pushes its top-row buttons off screen
+- With the Left-handed layout, the web zoom buttons no longer overlap the record button
+- Web: the first "Choose folder" no longer fails
 
 ## v0.7.2 — 2026/09/13
 

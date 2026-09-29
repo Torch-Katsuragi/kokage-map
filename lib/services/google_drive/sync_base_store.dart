@@ -40,20 +40,37 @@ abstract final class SyncBaseStore {
   /// 行単位マージの対象か
   static bool isGpkg(String relativePath) => relativePath.toLowerCase().endsWith('.gpkg');
 
-  /// この端末で base を持てるか（geodiff が使えて実ファイルがある）
+  /// フォルダ設定の 3-way マージの対象か（`QgsMerger`。2026-09-29〜）
+  static bool isQgs(String relativePath) => relativePath.toLowerCase().endsWith('.qgs');
+
+  /// この端末で gpkg の base を持てるか（geodiff が使えて実ファイルがある）
   static bool get isAvailable => Geodiff.isSupported && fs.hasRealPaths;
 
+  /// [relativePath] の base を持つか。`.qgs` はただの写しなので web でも持つ
+  static bool keepsBase(String relativePath) => isQgs(relativePath) || (isAvailable && isGpkg(relativePath));
+
   static Future<bool> hasBase(String localPath, String relativePath) async {
-    if (!isAvailable || !isGpkg(relativePath)) return false;
+    if (!keepsBase(relativePath)) return false;
     return fs.exists(basePath(localPath, relativePath));
   }
 
   /// いまのローカルファイルを base として写す（同期が成立した直後に呼ぶ）。
-  /// gpkg 以外・web では何もしない。失敗しても同期自体は止めない（false を返すだけ）。
+  /// gpkg と `.qgs` 以外では何もしない（web の gpkg も）。失敗しても同期自体は止めない（false を返すだけ）。
   static Future<bool> saveBase(String localPath, String relativePath, {Geodiff? geodiff}) async {
-    if (!isAvailable || !isGpkg(relativePath)) return false;
+    if (!keepsBase(relativePath)) return false;
     final src = p.join(localPath, p.joinAll(p.posix.split(relativePath)));
     final dst = basePath(localPath, relativePath);
+    if (isQgs(relativePath)) {
+      try {
+        if (!await fs.exists(src)) return false;
+        await fs.createDirectory(p.dirname(dst));
+        await fs.writeAsBytes(dst, await fs.readAsBytes(src));
+        return true;
+      } on Object catch (e) {
+        AppLogger.debug('[SyncBase] base の写しで例外: $relativePath - $e');
+        return false;
+      }
+    }
     try {
       if (!await fs.exists(src)) return false;
       await fs.createDirectory(p.dirname(dst));

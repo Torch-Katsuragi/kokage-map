@@ -25,9 +25,11 @@ import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../geodiff/geodiff.dart';
 import '../kmeta_service.dart';
+import '../qgis/qgs_meta_store.dart';
 import 'google_drive_service.dart';
 import 'gpkg_merger.dart';
 import 'gpkg_schema_aligner.dart';
+import 'qgs_merger.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
@@ -444,6 +446,27 @@ class SyncConflictResolver {
         AppLogger.debug('  remoteChange: ${entry.remoteChange}');
         AppLogger.debug('  driveFileId: ${entry.driveFileId}');
 
+        if (choice == MergeChoice.merge && SyncBaseStore.isQgs(relativePath)) {
+          final merged = await _mergeQgs(
+            localPath: localPath,
+            entry: entry,
+            localFilePath: localFilePath,
+            driveId: driveId,
+            folderIdCache: folderIdCache,
+          );
+          if (merged == null) {
+            AppLogger.debug('  → 設定を合わせられなかった。衝突のまま残す');
+            failedMerges.add(relativePath);
+            continue;
+          }
+          mergedCount++;
+          syncedFiles[relativePath] = KMetaSyncFile(
+            driveFileId: merged.driveFileId,
+            lastSyncedTime: DateTime.now(),
+            remoteModifiedTime: merged.remoteModifiedTime,
+          );
+          continue;
+        }
         if (choice == MergeChoice.merge) {
           geodiff ??= Geodiff();
           final merged = await _mergeGpkg(
@@ -750,6 +773,62 @@ class SyncConflictResolver {
   /// ローカルを上げて base を写し直す。どこかで失敗したら null（呼び手は衝突のまま残す）。
   /// ⚠ rebase 済みなのに上げられなかったときは、ローカルには相手の変更が載ったまま base は古い。
   ///   次の同期でもう一度 merge になる。
+  /// 両方で変わった `<dir名>.qgs` のフォルダ設定を 3-way で合わせて上げる（[QgsMerger]）。
+  /// 合わせられなければ null。QGIS が読む部分は、あとで自動更新が設定から書き直す。
+  Future<({String driveFileId, DateTime? remoteModifiedTime})?> _mergeQgs({
+    required String localPath,
+    required MergeFileEntry entry,
+    required String localFilePath,
+    required String driveId,
+    required Map<String, String> folderIdCache,
+  }) async {
+    final relativePath = entry.relativePath;
+    final fileId = entry.driveFileId;
+    if (fileId == null) return null;
+    final base = SyncBaseStore.basePath(localPath, relativePath);
+    if (!await fs.exists(base) || !await fs.exists(localFilePath)) return null;
+    final tmp = SyncBaseStore.tmpPath(localPath, relativePath);
+    try {
+      await fs.createDirectory(p.dirname(tmp));
+      if (!await _driveService.downloadFile(fileId, tmp)) return null;
+      // この端末の設定の書き込み・自動更新と、読んで直して書く間を取り合わない
+      final merged = await QgsFileLock.run(localFilePath, () async {
+        final r = await QgsMerger.merge(
+          base: await fs.readAsString(base),
+          mine: await fs.readAsString(localFilePath),
+          theirs: await fs.readAsString(tmp),
+        );
+        if (r != null) await fs.writeAsString(localFilePath, r.xml);
+        return r;
+      });
+      if (merged == null) return null;
+      if (merged.conflicts.isNotEmpty) AppLogger.debug('  設定の衝突（この端末の値を残した）: ${merged.conflicts}');
+      _kmetaService.invalidateCache(p.dirname(localFilePath));
+
+      final meta = await _driveService.getFileMetadata(fileId);
+      final remoteAt = entry.remoteModifiedTime;
+      if (meta?.modifiedTime != null && remoteAt != null && meta!.modifiedTime!.isAfter(remoteAt)) {
+        AppLogger.debug('  Drive 側が同期開始後に動いた。上げずに次回へ');
+        return null;
+      }
+      final relativeDir = p.dirname(relativePath);
+      String targetFolderId = driveId;
+      if (relativeDir != '.' && relativeDir.isNotEmpty) {
+        final folderId = await _fileOps.getDriveFolderIdForRelativeDir(driveId, relativeDir, folderIdCache);
+        if (folderId != null) targetFolderId = folderId;
+      }
+      final uploaded = await _driveService.uploadFileById(localFilePath, targetFolderId, existingFileId: fileId);
+      if (uploaded == null) return null;
+      await SyncBaseStore.saveBase(localPath, relativePath);
+      AppLogger.debug('  → 設定を合わせた（衝突 ${merged.conflicts.length} 件）');
+      return (driveFileId: uploaded.id ?? fileId, remoteModifiedTime: uploaded.modifiedTime);
+    } finally {
+      try {
+        if (await fs.exists(tmp)) await fs.delete(tmp);
+      } catch (_) {}
+    }
+  }
+
   Future<({String driveFileId, DateTime? remoteModifiedTime, List<GpkgConflict> conflicts})?> _mergeGpkg({
     required String localPath,
     required MergeFileEntry entry,

@@ -82,29 +82,45 @@ abstract final class QgsProjectFile {
   /// 別名の `.qgs`（Drive のフォルダ名で書いたもの・dir を改名する前の名前のもの）の順に探す。
   /// 印の無い別名の `.qgs` は他人のファイルなので採らない。名前の付け替えは書くとき
   /// （[QgsMetaStore]）にやる。
-  static Future<String?> find(String dirPath) async {
-    final path = p.join(dirPath, qgsFileNameFor(dirNameOf(dirPath)));
-    if (await fs.exists(path)) return path;
-    if (!await fs.isDirectory(dirPath)) return null;
+  ///
+  /// [names] は [dirPath] 直下のファイル名（[fileNames]）。呼び手が既に列挙していれば渡す。
+  static Future<String?> find(String dirPath, {Set<String>? names}) async {
+    names ??= await fileNames(dirPath);
+    if (names == null) return null;
+    final own = qgsFileNameFor(dirNameOf(dirPath));
+    final path = p.join(dirPath, own);
+    if (names.contains(own)) return path;
 
-    final legacy = p.join(dirPath, kLegacyQgsFileName);
-    if (await fs.exists(legacy)) {
-      await fs.rename(legacy, path);
+    if (names.contains(kLegacyQgsFileName)) {
+      await fs.rename(p.join(dirPath, kLegacyQgsFileName), path);
       AppLogger.debug('[QgsProjectFile] $kLegacyQgsFileName を ${p.basename(path)} に改名');
       return path;
     }
 
-    for (final entry in await fs.list(dirPath)) {
-      if (entry.isDirectory || !entry.path.toLowerCase().endsWith('.qgs')) continue;
+    for (final name in names) {
+      if (!name.toLowerCase().endsWith('.qgs')) continue;
+      final candidate = p.join(dirPath, name);
       try {
-        final doc = QgsDocument.parse(await fs.readAsString(entry.path));
+        final doc = QgsDocument.parse(await fs.readAsString(candidate));
         if (doc.stamp == null || doc.kokageMeta == null) continue;
-        return entry.path;
+        return candidate;
       } on Object {
         continue;
       }
     }
     return null;
+  }
+
+  /// [dirPath] 直下のファイル名。dir でなければ null。
+  ///
+  /// ツリーを開くと dir ごとに設定を探すので、`exists` を何度も呼ばず 1 回の列挙で決める
+  /// （80 dir の試験で、呼び出し 5 回ずつだと開くのが 2.5 秒遅かった。2026-09-29）
+  static Future<Set<String>?> fileNames(String dirPath) async {
+    try {
+      return {for (final e in await fs.list(dirPath)) if (!e.isDirectory) p.basename(e.path)};
+    } on Object {
+      return null;
+    }
   }
 
   /// プロジェクト名。Drive 連携していれば Drive のフォルダ名、していなければ dir 名
@@ -125,8 +141,11 @@ abstract final class QgsProjectFile {
 /// フォルダ設定の読み書き
 abstract final class QgsMetaStore {
   /// [dirPath] が自分の設定を持つか（`.qgs` か、まだ移していない `.kmeta.json` がある）
-  static Future<bool> exists(String dirPath) async =>
-      await fs.exists(p.join(dirPath, kMetaFileName)) || await QgsProjectFile.find(dirPath) != null;
+  static Future<bool> exists(String dirPath) async {
+    final names = await QgsProjectFile.fileNames(dirPath);
+    if (names == null) return false;
+    return names.contains(kMetaFileName) || await QgsProjectFile.find(dirPath, names: names) != null;
+  }
 
   /// [dirPath] の設定を読む。`.qgs` も `.kmeta.json` も無ければ null。
   ///
@@ -135,9 +154,11 @@ abstract final class QgsMetaStore {
   ///
   /// 旧 `.kmeta.json` を移したら [onMigrated] を呼ぶ（QGIS が読む部分も書き直させる）。
   static Future<KMeta?> read(String dirPath, {void Function()? onMigrated}) async {
+    final names = await QgsProjectFile.fileNames(dirPath);
+    if (names == null) return null;
     final legacyPath = p.join(dirPath, kMetaFileName);
-    final hasLegacy = await fs.exists(legacyPath);
-    var qgsPath = await QgsProjectFile.find(dirPath);
+    final hasLegacy = names.contains(kMetaFileName);
+    var qgsPath = await QgsProjectFile.find(dirPath, names: names);
 
     KMeta? fromQgs;
     var qgsReadable = false;

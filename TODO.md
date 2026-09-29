@@ -218,6 +218,8 @@
   - [x] 実機（Pixel 9）: v0.7.3 と同じ状態（`.kmeta.json`＋`kokage/meta` の無い `.qgs`）から移行。
         設定が JSON で完全一致、地図とレイヤ一覧も移行前と同じ、QGIS 側の `.qgs` にもスタイル・消灯・View が入る
   - [ ] web で実フォルダを開いての移行確認（フォルダ選択が OS ダイアログで自動操作できない）
+  - [ ] ⚠ QGIS で開いて保存しても `<properties><kokage><meta>` が残るかの実確認（QGIS は未知の properties を残す前提。
+        tabPC には QGIS が無く、メイン PC に ssh が通らなかった。メイン PC の QGIS 4.2.0 で `python-qgis` から開いて保存する）
 - [/] 段2（実用形・2026-09-06）: **QGIS 側で保存された `.qgs` をプロジェクトを開いたときに読み戻す**
       （`QgsReadBack`。印と `saveDateTime` の不一致で判定 → 寛容インポータで View・スタイル・可視性を取り込み →
       自動更新で正規化＋印つきに書き戻す）。`.kmeta.json` は残しているが、書きは自動更新・読みは読み戻しで

@@ -387,14 +387,16 @@ class KMetaService {
     final removals = <String>[];
 
     for (final entry in files.entries) {
+      // 元のパスを残す（まだ Drive に反映していない移動。何度動かしても最初の場所）
+      final moved = entry.value.copyWith(movedFrom: entry.value.movedFrom ?? entry.key);
       if (entry.key == oldPrefix) {
         removals.add(entry.key);
-        updates[newPrefix] = entry.value;
+        updates[newPrefix] = moved;
         changed = true;
       } else if (entry.key.startsWith('$oldPrefix/')) {
         final newKey = newPrefix + entry.key.substring(oldPrefix.length);
         removals.add(entry.key);
-        updates[newKey] = entry.value;
+        updates[newKey] = moved;
         changed = true;
       }
     }

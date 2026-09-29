@@ -79,12 +79,53 @@ void main() {
       ? (Directory(dir).listSync().map((e) => p.basename(e.path)).where((n) => n.endsWith('.qgs')).toList()..sort())
       : const [];
 
-  // ⚠ いまは通らない（既存の不具合・要判断。TODO.md「dir の改名が自動同期で巻き戻る」）。
-  // 改名すると帳簿のパスを新しい場所に付け替えるので「帳簿のパス ≠ Drive のパス」になるが、
+  // 以前は通らなかった: 改名すると帳簿のパスを新しい場所に付け替えるので「帳簿のパス ≠ Drive のパス」になるが、
   // push はそれをローカルの移動と見るのに、自動同期（getMergeEntries）はリモートの移動と見て
-  // 「リモートを採用」で手元の改名を巻き戻す。.qgs に限らず写真・gpkg も同じ
-  test('A で子 dir を改名 → 同期 → B にも新しい dir に <新しい名前>.qgs が 1 本だけ、設定は残る',
-      skip: '既存の不具合: 自動同期がローカルの移動をリモートの移動と見て巻き戻す（TODO.md）', () async {
+  // 「リモートを採用」で手元の改名を巻き戻していた。帳簿に元のパス（movedFrom）を残して区別する
+  test('写真を改名 → 自動同期で Drive の名前も変わり、B にも新しい名前で届く', () async {
+    await asDevice(a);
+    File(p.join(a, 'p.jpg')).writeAsBytesSync([0xFF, 0xD8, 0xFF, 0xD9]);
+    expect((await engine.push(a, driveFolder: rootId)).success, isTrue);
+    await asDevice(b);
+    expect((await engine.pull(rootId, b)).success, isTrue);
+    await tick();
+
+    await asDevice(a);
+    File(p.join(a, 'p.jpg')).renameSync(p.join(a, 'q.jpg'));
+    await KMetaService.instance.renameSyncedFiles(a, 'p.jpg', 'q.jpg');
+    await tick();
+    final ra = await syncOnce(a);
+    expect(ra.movedCount, 1);
+    expect(ra.uploadedCount, 0, reason: '上げ直さず、Drive 側を改名する');
+    final names = drive.items.values.where((f) => !f.trashed && f.name.endsWith('.jpg')).map((f) => f.name).toList();
+    expect(names, ['q.jpg']);
+
+    await tick();
+    await syncOnce(b);
+    expect(File(p.join(b, 'q.jpg')).existsSync(), isTrue);
+    expect(File(p.join(b, 'p.jpg')).existsSync(), isFalse);
+  });
+
+  test('相手が Drive 上で動かしたもの（この端末は動かしていない）は、今までどおり手元を動かす', () async {
+    await asDevice(a);
+    await Directory(p.join(a, 'x')).create();
+    File(p.join(a, 'x', 'p.jpg')).writeAsBytesSync([0xFF, 0xD8, 0xFF, 0xD9]);
+    expect((await engine.push(a, driveFolder: rootId)).success, isTrue);
+    await tick();
+
+    // 相手（別の端末）が Drive 上で x/p.jpg を y/ に動かした
+    final y = await drive.getOrCreateSubFolder(rootId, 'y');
+    final photo = drive.items.values.firstWhere((f) => f.name == 'p.jpg');
+    await drive.moveFile(photo.id, newParentId: y!.id!);
+    await tick();
+
+    final r = await syncOnce(a);
+    expect(r.movedCount, 1);
+    expect(File(p.join(a, 'y', 'p.jpg')).existsSync(), isTrue);
+    expect(File(p.join(a, 'x', 'p.jpg')).existsSync(), isFalse);
+  });
+
+  test('A で子 dir を改名 → 同期 → B にも新しい dir に <新しい名前>.qgs が 1 本だけ、設定は残る', () async {
     // A: 子 dir sub に設定と写真を置いて上げる、B が落とす
     await asDevice(a);
     await Directory(p.join(a, 'sub')).create();
@@ -117,5 +158,8 @@ void main() {
     KMetaService.instance.clearCache();
     expect((await KMetaService.instance.getMeta(p.join(b, 'sub2'))).visibility.images['p.jpg'], isFalse);
     expect(File(p.join(b, 'sub2', 'p.jpg')).existsSync(), isTrue);
+    // Drive にも古い名前の .qgs が残らない（.qgs の名前の付け替えは帳簿に載らないので、落としても害は無いが散らかる）
+    final onDrive = drive.items.values.where((f) => !f.trashed && f.name.endsWith('.qgs')).map((f) => f.name).toList()..sort();
+    expect(onDrive, ['proj.qgs', 'sub2.qgs']);
   });
 }

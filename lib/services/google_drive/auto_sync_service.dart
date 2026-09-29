@@ -21,8 +21,10 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/fs/k_file_system.dart';
 import '../../models/nodes/drive_folder_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../utils/app_logger.dart';
@@ -267,6 +269,17 @@ class AutoSyncService {
 
   /// フォルダレベルconflict時のファイル単位マージ
   ///
+  /// [relativePath] が `.qgs` で、同じ dir にまだ別の `.qgs`（付け替え後の名前）があるか
+  static Future<bool> _isRenamedProjectFile(String localPath, String relativePath) async {
+    if (!relativePath.toLowerCase().endsWith('.qgs')) return false;
+    final dir = p.join(localPath, p.dirname(relativePath));
+    try {
+      return (await fs.list(dir)).any((e) => !e.isDirectory && e.path.toLowerCase().endsWith('.qgs'));
+    } on Object {
+      return false;
+    }
+  }
+
   /// 同一ファイルが両方で変更された場合のみユーザーに委ね、
   /// それ以外（ローカルAを変更＋リモートBを変更）は自動マージ。
   /// ローカル削除は自動pushしない（手動同期を要求）。
@@ -305,8 +318,9 @@ class AutoSyncService {
         hasRealConflict = true;
         continue;
       }
-      // ローカル削除は自動pushしない
-      if (entry.localChange == MergeChangeType.deleted) continue;
+      // ローカル削除は自動pushしない。ただし `.qgs` の名前の付け替え（同じ dir にまだ `.qgs` がある）は、
+      // 古い名前を Drive に残すと相手の端末に散らかるので消す
+      if (entry.localChange == MergeChangeType.deleted && !await _isRenamedProjectFile(localPath, entry.relativePath)) continue;
 
       if (entry.localChange != MergeChangeType.none) {
         autoDecisions.add(MergeDecision(entry: entry, choice: MergeChoice.local));

@@ -128,10 +128,13 @@ class SyncPushHandler {
         );
         if (newParentId != null) {
           final oldParentId = driveEntry.file.parents?.firstOrNull;
+          final newName = p.posix.basename(syncedPath);
           final moved = await _driveService.moveFile(
             driveFileId,
             newParentId: newParentId,
             oldParentId: oldParentId,
+            // この端末で改名したなら名前も（写真の改名など）
+            newName: p.posix.basename(driveEntry.relativePath) != newName ? newName : null,
           );
           if (moved) {
             movedCount++;
@@ -195,7 +198,8 @@ class SyncPushHandler {
 
           final unchanged = await _unchangedSince(localFile, previousSyncedFiles, driveIdToEntry);
           if (unchanged != null) {
-            syncedFiles[relativePath] = unchanged;
+            // 移動は済んだ（上で Drive 側も動かした）ので、元のパスの印は外す
+            syncedFiles[relativePath] = unchanged.withoutMove();
             skippedCount++;
             processedBytes += fileSize;
             completedCount++;

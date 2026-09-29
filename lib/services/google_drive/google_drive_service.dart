@@ -819,10 +819,13 @@ class GoogleDriveService {
   /// [fileId] DriveファイルID
   /// [newParentId] 移動先フォルダID
   /// [oldParentId] 移動元フォルダID（省略可、省略時は現在の親から推測）
+  ///
+  /// [newName] を渡すと名前も変える（この端末で改名したとき）
   Future<bool> moveFile(
     String fileId, {
     required String newParentId,
     String? oldParentId,
+    String? newName,
   }) async {
     if (_driveApi == null) return false;
 
@@ -837,10 +840,10 @@ class GoogleDriveService {
       }
 
       await _driveApi!.files.update(
-        drive.File(),
+        drive.File(name: newName),
         fileId,
         addParents: newParentId,
-        removeParents: removeParent,
+        removeParents: removeParent == newParentId ? null : removeParent,
         supportsAllDrives: true,
       );
       

@@ -444,11 +444,27 @@ class KMetaSyncFile {
   /// 端末の時計が進んでいる分だけ相手の変更を見落とし、上書きして消す（2026-09-24）
   final DateTime? remoteModifiedTime;
 
+  /// この端末で改名・移動したときの元のパス（まだ Drive に反映していない）。
+  ///
+  /// 改名すると帳簿のパスは新しい場所に付け替わるので「帳簿のパス ≠ Drive のパス」になる。
+  /// Drive がまだここにあるなら、それはリモートの移動ではなく**この端末の移動**。
+  /// 以前は自動同期がリモートの移動と見て、手元の改名を元に戻していた（2026-09-29）
+  final String? movedFrom;
+
   const KMetaSyncFile({
     required this.driveFileId,
     this.lastSyncedTime,
     this.remoteModifiedTime,
+    this.movedFrom,
   });
+
+  /// [movedFrom] を外したもの（移動が Drive に届いたあと）
+  KMetaSyncFile withoutMove() => movedFrom == null
+      ? this
+      : KMetaSyncFile(driveFileId: driveFileId, lastSyncedTime: lastSyncedTime, remoteModifiedTime: remoteModifiedTime);
+
+  /// Drive 上のパス [drivePath] が、この端末で動かす前の場所か（＝ローカルの移動がまだ Drive に届いていない）
+  bool isPendingLocalMoveFrom(String drivePath) => movedFrom != null && movedFrom == drivePath;
 
   /// 最後の同期より後に Drive 側が変わったか（Drive の時刻どうしで比べる）。
   /// [remoteModifiedTime] の無い古い帳簿は、以前どおり [lastSyncedTime] と比べる
@@ -475,6 +491,7 @@ class KMetaSyncFile {
       remoteModifiedTime: json['remoteModifiedTime'] != null
           ? DateTime.tryParse(json['remoteModifiedTime'] as String)
           : null,
+      movedFrom: json['movedFrom'] as String?,
     );
   }
 
@@ -487,6 +504,7 @@ class KMetaSyncFile {
       // Drive の時刻は UTC のまま持つ（端末のタイムゾーンに引きずられない）
       json['remoteModifiedTime'] = remoteModifiedTime!.toUtc().toIso8601String();
     }
+    if (movedFrom != null) json['movedFrom'] = movedFrom;
     return json;
   }
 
@@ -495,11 +513,13 @@ class KMetaSyncFile {
     String? driveFileId,
     DateTime? lastSyncedTime,
     DateTime? remoteModifiedTime,
+    String? movedFrom,
   }) {
     return KMetaSyncFile(
       driveFileId: driveFileId ?? this.driveFileId,
       lastSyncedTime: lastSyncedTime ?? this.lastSyncedTime,
       remoteModifiedTime: remoteModifiedTime ?? this.remoteModifiedTime,
+      movedFrom: movedFrom ?? this.movedFrom,
     );
   }
 }

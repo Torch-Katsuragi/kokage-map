@@ -126,7 +126,13 @@ class SyncConflictResolver {
           final drivePath = driveEntry.relativePath;
           final driveFile = driveEntry.file;
 
-          if (syncedPath != drivePath) {
+          if (syncedPath != drivePath && syncInfo.isPendingLocalMoveFrom(drivePath)) {
+            // この端末で改名・移動したもの（Drive はまだ元の場所）。push が Drive 側も動かす
+            localModified++;
+            localModifiedFiles.add(syncedPath);
+            movedFileIds.add(syncInfo.driveFileId);
+            movedToPathSet.add(drivePath);
+          } else if (syncedPath != drivePath) {
             final alsoModified = driveFile.modifiedTime != null &&
                 syncInfo.isRemoteNewer(driveFile.modifiedTime!);
 
@@ -315,13 +321,26 @@ class SyncConflictResolver {
         DateTime? localModTime;
         final DateTime? remoteModTime = driveEntry?.file.modifiedTime;
         FileChangeInfo? moveInfo;
+        var localMove = false;
 
         if (driveEntry == null) {
           remoteChange = MergeChangeType.deleted;
         } else {
           final drivePath = driveEntry.relativePath;
 
-          if (syncedPath != drivePath) {
+          if (syncedPath != drivePath && syncInfo.isPendingLocalMoveFrom(drivePath)) {
+            // この端末で改名・移動したもの（Drive はまだ元の場所）→ ローカルの移動
+            localMove = true;
+            localChange = MergeChangeType.moved;
+            moveInfo = FileChangeInfo(
+              fileName: syncedPath,
+              type: FileChangeType.moved,
+              movedFrom: drivePath,
+              movedTo: syncedPath,
+            );
+            movedFileIds.add(syncInfo.driveFileId);
+            movedToPathSet.add(drivePath);
+          } else if (syncedPath != drivePath) {
             remoteChange = MergeChangeType.moved;
             moveInfo = FileChangeInfo(
               fileName: syncedPath,
@@ -337,7 +356,9 @@ class SyncConflictResolver {
           }
         }
 
-        if (movedFileIds.contains(syncInfo.driveFileId)) {
+        if (localMove) {
+          // localChange は moved のまま
+        } else if (movedFileIds.contains(syncInfo.driveFileId)) {
           localChange = MergeChangeType.none;
         } else if (localFiles.containsKey(syncedPath)) {
           localModTime = localFiles[syncedPath];
@@ -621,7 +642,35 @@ class SyncConflictResolver {
                   break;
               }
             case MergeChangeType.moved:
-              break;
+              // この端末で改名・移動した → Drive 側も同じ場所・名前へ（中身は同じファイル、履歴も残る）。
+              // `.qgs` は名前が設定から決まるので、dir の改名のあと新しい名前に付け替わっていて手元に無いことがある。
+              // そのときは Drive の古い名前のものを消す（新しい名前のものは追加として上がる）
+              if (entry.driveFileId != null && SyncBaseStore.isQgs(relativePath) && !await fs.exists(localFilePath)) {
+                if (await _driveService.deleteFile(entry.driveFileId!)) {
+                  syncedFiles.remove(relativePath);
+                  deletedCount++;
+                }
+              } else if (entry.driveFileId != null) {
+                final relDir = p.dirname(relativePath);
+                final parentId = relDir == '.' || relDir.isEmpty
+                    ? driveId
+                    : await _fileOps.getDriveFolderIdForRelativeDir(driveId, relDir, folderIdCache);
+                final from = entry.moveInfo?.movedFrom;
+                final newName = p.posix.basename(relativePath);
+                if (parentId != null &&
+                    await _driveService.moveFile(
+                      entry.driveFileId!,
+                      newParentId: parentId,
+                      newName: from != null && p.posix.basename(from) != newName ? newName : null,
+                    )) {
+                  syncedFiles[relativePath] = KMetaSyncFile(
+                    driveFileId: entry.driveFileId!,
+                    lastSyncedTime: DateTime.now(),
+                    remoteModifiedTime: entry.remoteModifiedTime,
+                  );
+                  movedCount++;
+                }
+              }
           }
         } else {
           // リモートを採用

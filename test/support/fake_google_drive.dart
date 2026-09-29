@@ -233,11 +233,12 @@ class FakeGoogleDrive implements GoogleDriveService {
   }
 
   @override
-  Future<bool> moveFile(String fileId, {required String newParentId, String? oldParentId}) async {
+  Future<bool> moveFile(String fileId, {required String newParentId, String? oldParentId, String? newName}) async {
     _count('moveFile');
     final f = items[fileId];
     if (f == null) return false;
     f.parentId = newParentId;
+    if (newName != null) f.name = newName;
     return true;
   }
 

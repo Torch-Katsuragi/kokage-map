@@ -839,11 +839,13 @@ class GoogleDriveService {
         }
       }
 
+      // 同じ dir の中の改名なら親は触らない
+      final sameParent = removeParent == newParentId;
       await _driveApi!.files.update(
         drive.File(name: newName),
         fileId,
-        addParents: newParentId,
-        removeParents: removeParent == newParentId ? null : removeParent,
+        addParents: sameParent ? null : newParentId,
+        removeParents: sameParent ? null : removeParent,
         supportsAllDrives: true,
       );
       

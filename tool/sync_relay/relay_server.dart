@@ -115,6 +115,8 @@ Object? _handle(Map<String, dynamic> r) {
       final f = _items[r['id']];
       if (f == null) return false;
       f.parentId = r['newParentId'] as String;
+      final newName = r['newName'] as String?;
+      if (newName != null) f.name = newName;
       return true;
     case 'done':
       _done.add(r['step'] as String);

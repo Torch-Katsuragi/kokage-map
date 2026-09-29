@@ -114,8 +114,8 @@ class RelayGoogleDrive implements GoogleDriveService {
   }
 
   @override
-  Future<bool> moveFile(String fileId, {required String newParentId, String? oldParentId}) async =>
-      await relay.call('moveFile', {'id': fileId, 'newParentId': newParentId}) == true;
+  Future<bool> moveFile(String fileId, {required String newParentId, String? oldParentId, String? newName}) async =>
+      await relay.call('moveFile', {'id': fileId, 'newParentId': newParentId, 'newName': ?newName}) == true;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

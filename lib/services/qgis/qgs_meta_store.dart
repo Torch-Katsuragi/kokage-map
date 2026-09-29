@@ -228,18 +228,24 @@ abstract final class QgsMetaStore {
         }
 
         final json = jsonEncode(meta.toJson());
-        if (existing != null && doc.kokageMeta == json && doc.lastWrittenByKokage && doc.stamp?.dirName == name) {
+        // QGIS が後から保存したファイルには印を付けない（付けると読み戻しが「自分が書いた」と見て、
+        // QGIS 側の変更を取り込まないまま上書きする。同期で届いた直後に帳簿を書いて踏んだ。2026-09-29）。
+        // 設定だけ書き、印は読み戻しのあとの自動更新（QGIS が読む部分も書き直す）に任せる
+        final claim = existing == null || doc.lastWrittenByKokage;
+        if (existing != null && doc.kokageMeta == json && (!claim || doc.stamp?.dirName == name)) {
           return true;
         }
         doc.kokageMeta = json;
-        doc.setStamp(
-          KokageStamp(
-            schemaVersion: kQgsSchemaVersion,
-            app: await appLabel(),
-            savedAt: DateTime.now(),
-            dirName: name,
-          ),
-        );
+        if (claim) {
+          doc.setStamp(
+            KokageStamp(
+              schemaVersion: kQgsSchemaVersion,
+              app: await appLabel(),
+              savedAt: DateTime.now(),
+              dirName: name,
+            ),
+          );
+        }
         await fs.writeAsString(path, doc.toXmlString());
         return true;
       } on Object catch (e) {

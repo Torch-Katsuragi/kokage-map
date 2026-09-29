@@ -102,6 +102,24 @@ void main() {
     expect(read!.isEmpty, isTrue);
   });
 
+  test('QGIS が後から保存した .qgs に設定を書いても、印は付けない（読み戻しが QGIS の変更を取り込めるように）', () async {
+    await QgsMetaStore.write(dir, rich);
+    // QGIS で保存した体: saveDateTime だけ進む（印の savedAt はそのまま）
+    final saved = File(qgsPath()).readAsStringSync().replaceFirst(RegExp('saveDateTime="[^"]*"'), 'saveDateTime="2099-01-01T00:00:00"');
+    File(qgsPath()).writeAsStringSync(saved);
+    expect(QgsDocument.parse(saved).lastWrittenByKokage, isFalse);
+
+    // 同じ設定なら書かない
+    await QgsMetaStore.write(dir, rich);
+    expect(File(qgsPath()).readAsStringSync(), saved);
+    // 違う設定なら設定だけ書き、QGIS が保存したという印は残す
+    await QgsMetaStore.write(dir, rich.copyWith(layout: const KMetaLayout(expanded: false)));
+    final doc = QgsDocument.parse(File(qgsPath()).readAsStringSync());
+    expect(doc.lastWrittenByKokage, isFalse);
+    expect(doc.root.getAttribute('saveDateTime'), '2099-01-01T00:00:00');
+    expect((await QgsMetaStore.read(dir))!.layout.expanded, isFalse);
+  });
+
   test('何も無い dir は null（設定を持たない）', () async {
     expect(await QgsMetaStore.exists(dir), isFalse);
     expect(await QgsMetaStore.read(dir), isNull);

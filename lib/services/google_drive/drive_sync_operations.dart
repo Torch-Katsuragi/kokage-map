@@ -36,6 +36,7 @@ import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
 import '../../widgets/dialogs/drive_sign_in_prompt.dart';
 import '../../widgets/layer_drawer/sync_merge_dialog.dart';
+import '../qgis/qgs_read_back.dart';
 import 'conflict_restorer.dart';
 import 'index.dart';
 
@@ -128,7 +129,7 @@ class DriveSyncOperations {
         node.syncStatus = SyncStatus.synced;
         onStateChanged();
         if (foldersCreated > 0) {
-          await updateChildrenRecursive(node);
+          await refreshAfterSync(node);
           onStateChanged();
         }
         ref.read(notificationCenterProvider.notifier).add(
@@ -164,7 +165,7 @@ class DriveSyncOperations {
         node.syncStatus = result.failedMerges.isEmpty ? SyncStatus.synced : SyncStatus.conflict;
 
         if (result.downloadedCount > 0 || result.deletedCount > 0 || result.movedCount > 0 || result.mergedCount > 0) {
-          await updateChildrenRecursive(node);
+          await refreshAfterSync(node);
           onMapRefresh?.call();
           onStateChanged();
         }
@@ -179,7 +180,7 @@ class DriveSyncOperations {
               level: NotificationLevel.success,
             );
         notifyMerge(ref, result, afterRestore: () async {
-          await updateChildrenRecursive(node);
+          await refreshAfterSync(node);
           onMapRefresh?.call();
         });
       } else {
@@ -467,6 +468,24 @@ class DriveSyncOperations {
       case FolderSyncStatus.notLinked:
       case FolderSyncStatus.error:
         node.syncStatus = SyncStatus.error;
+    }
+  }
+
+  /// 同期で落としたあとの更新: ツリーを読み直し、QGIS で保存された `.qgs` が届いていれば読み戻す。
+  ///
+  /// 読み戻しは開いたときにしか走らなかったので、QGIS で直した `.qgs` が Drive 越しに届いても、
+  /// 次にアプリが設定や `.qgs` を書いた時点で QGIS 側の変更が消えていた（2026-09-29）
+  static Future<void> refreshAfterSync(LayerTreeNode node) async {
+    await updateChildrenRecursive(node);
+    if (node is! FolderNode) return;
+    try {
+      final r = await const QgsReadBack().run(node);
+      if (r != null) {
+        AppLogger.debug('[DriveSync] 同期で届いた ${r.fileName} を読み戻した（View ${r.importedViewCount} 個）');
+        await updateChildrenRecursive(node);
+      }
+    } on Object catch (e) {
+      AppLogger.debug('[DriveSync] 読み戻しに失敗: $e');
     }
   }
 

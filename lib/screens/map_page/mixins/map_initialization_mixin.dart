@@ -150,7 +150,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         unawaited(AutoSyncService.instance.start(
           root: rootNode,
           onStatusChanged: () => triggerSetState(() {}),
-          onRefreshNeeded: _updateChildrenRecursive,
+          // ツリーを読み直し、QGIS で保存された .qgs が届いていれば読み戻す
+          onRefreshNeeded: DriveSyncOperations.refreshAfterSync,
           onMerged: (node, result) {
             if (!mounted) return;
             DriveSyncOperations.notifyMerge(ref, result, afterRestore: () async {

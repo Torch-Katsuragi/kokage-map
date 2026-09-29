@@ -215,6 +215,13 @@ class DriveSyncOperations {
             level: NotificationLevel.success,
           );
     }
+    if (result.settingConflicts.isNotEmpty) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.drive.settingConflicts(count: result.settingConflicts.length.toString()),
+            detail: result.settingConflicts.join('\n'),
+            level: NotificationLevel.warning,
+          );
+    }
     if (result.conflicts.isNotEmpty) {
       ref.read(notificationCenterProvider.notifier).add(
             title: t.drive.mergeConflicts(count: result.conflicts.length.toString()),

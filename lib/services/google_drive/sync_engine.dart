@@ -60,6 +60,10 @@ class SyncResult {
   /// 手元もリモートも変えずに衝突のまま残してある
   final List<String> failedMerges;
 
+  /// `.qgs` のフォルダ設定を合わせたとき、両方が別の値にしていた項目（`<ファイル>: <JSON の道筋>`）。
+  /// この端末の値が残っている
+  final List<String> settingConflicts;
+
   const SyncResult({
     required this.success,
     this.errorMessage,
@@ -71,6 +75,7 @@ class SyncResult {
     this.mergedCount = 0,
     this.conflicts = const [],
     this.failedMerges = const [],
+    this.settingConflicts = const [],
   });
 
   factory SyncResult.success({
@@ -82,6 +87,7 @@ class SyncResult {
     int mergedCount = 0,
     List<GpkgConflict> conflicts = const [],
     List<String> failedMerges = const [],
+    List<String> settingConflicts = const [],
   }) {
     return SyncResult(
       success: true,
@@ -93,6 +99,7 @@ class SyncResult {
       mergedCount: mergedCount,
       conflicts: conflicts,
       failedMerges: failedMerges,
+      settingConflicts: settingConflicts,
     );
   }
 

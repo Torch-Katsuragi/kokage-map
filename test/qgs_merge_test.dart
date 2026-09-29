@@ -202,6 +202,24 @@ void main() {
         expect(meta.styles.layers['y.gpkg/y']?.lineColor, const Color(0xFFFF0000), reason: dir);
         expect(meta.sync.driveId, rootId, reason: '$dir のリンク情報は残る');
       }
+      // 同じ項目を両方で変えたら、後から合わせた端末の値が残り、衝突として返る
+      await asDevice(a);
+      await KMetaService.instance.setGeoPackageVisibility(a, 'x.gpkg', true);
+      await asDevice(b);
+      await KMetaService.instance.setGeoPackageVisibility(b, 'z.gpkg', false);
+      await KMetaService.instance.setExpanded(b, true);
+      await asDevice(a);
+      await KMetaService.instance.setExpanded(a, false);
+      await tick();
+      await syncOnce(a);
+      await tick();
+      final rb2 = await syncOnce(b);
+      expect(rb2.settingConflicts, ['proj.qgs: layout/expanded']);
+      final mb = await metaOf(b);
+      expect(mb.layout.expanded, isTrue, reason: 'B の値');
+      expect(mb.visibility.geopackages['x.gpkg'], isTrue, reason: 'A の変更');
+      expect(mb.visibility.geopackages['z.gpkg'], isFalse, reason: 'B の変更');
+
       // どちらの端末にも `.qgs` は 1 本（名前の付け替え合いが起きない）
       for (final dir in [a, b]) {
         final names = Directory(dir).listSync().map((e) => p.basename(e.path)).where((n) => n.endsWith('.qgs'));

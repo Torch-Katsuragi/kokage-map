@@ -47,10 +47,13 @@ void main() {
     final sub = root.children.whereType<FolderNode>().single;
     await sub.updateChildren();
     final gpkg = sub.children.whereType<GeoPackageNode>().single;
+    File(p.join(proj, 'sub', 'b.gpkg-journal')).writeAsBytesSync(const []);
 
     final newName = await LayerDrawerService.renameGeoPackage(gpkg, 'c', projectRootDir: proj);
     expect(newName, 'c.gpkg');
     expect(File(p.join(proj, 'sub', 'c.gpkg')).existsSync(), isTrue);
     expect(File(p.join(proj, 'sub', 'b.gpkg')).existsSync(), isFalse);
+    expect(File(p.join(proj, 'sub', 'b.gpkg-journal')).existsSync(), isFalse, reason: '付属ファイルも連れていく');
+    expect(File(p.join(proj, 'sub', 'c.gpkg-journal')).existsSync(), isTrue);
   });
 }

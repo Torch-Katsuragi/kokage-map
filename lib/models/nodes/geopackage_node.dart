@@ -201,6 +201,12 @@ class GeoPackageNode extends LayerTreeNode {
 
       // リネーム実行
       await fs.rename(currentPath, newPath);
+      // SQLite の付属ファイル（-journal / -wal / -shm）も連れていく（古い名前で残ると散らかる）
+      for (final suffix in const ['-journal', '-wal', '-shm']) {
+        if (await fs.exists('$currentPath$suffix') && !await fs.exists('$newPath$suffix')) {
+          await fs.rename('$currentPath$suffix', '$newPath$suffix');
+        }
+      }
       
       // 注意: parent.updateChildren()は呼び出し元で行う
       // これにより、呼び出し元で展開状態の管理などを適切に行える

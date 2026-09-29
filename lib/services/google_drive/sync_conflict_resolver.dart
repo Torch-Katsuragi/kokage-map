@@ -429,7 +429,7 @@ class SyncConflictResolver {
       int mergedCount = 0;
       final conflicts = <GpkgConflict>[];
       final failedMerges = <String>[];
-      final settingConflicts = <String>[];
+      final settingConflicts = <QgsSettingConflict>[];
 
       final folderIdCache = <String, String>{};
 
@@ -461,7 +461,7 @@ class SyncConflictResolver {
             continue;
           }
           mergedCount++;
-          settingConflicts.addAll([for (final c in merged.conflicts) '$relativePath: $c']);
+          settingConflicts.addAll([for (final c in merged.conflicts) c.withDir(p.dirname(localFilePath))]);
           syncedFiles[relativePath] = KMetaSyncFile(
             driveFileId: merged.driveFileId,
             lastSyncedTime: DateTime.now(),
@@ -778,7 +778,7 @@ class SyncConflictResolver {
   ///   次の同期でもう一度 merge になる。
   /// 両方で変わった `<dir名>.qgs` のフォルダ設定を 3-way で合わせて上げる（[QgsMerger]）。
   /// 合わせられなければ null。QGIS が読む部分は、あとで自動更新が設定から書き直す。
-  Future<({String driveFileId, DateTime? remoteModifiedTime, List<String> conflicts})?> _mergeQgs({
+  Future<({String driveFileId, DateTime? remoteModifiedTime, List<QgsSettingConflict> conflicts})?> _mergeQgs({
     required String localPath,
     required MergeFileEntry entry,
     required String localFilePath,

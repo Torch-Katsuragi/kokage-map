@@ -20,6 +20,7 @@ library;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
 import '../../core/platform_capabilities.dart';
@@ -218,8 +219,26 @@ class DriveSyncOperations {
     if (result.settingConflicts.isNotEmpty) {
       ref.read(notificationCenterProvider.notifier).add(
             title: t.drive.settingConflicts(count: result.settingConflicts.length.toString()),
-            detail: result.settingConflicts.join('\n'),
+            detail: result.settingConflicts
+                .map((c) => '${c.dirPath == null ? '' : '${p.basename(c.dirPath!)}: '}${c.path}')
+                .join('\n'),
             level: NotificationLevel.warning,
+            actionLabel: t.drive.restoreTheirs,
+            onAction: () async {
+              try {
+                final n = await ConflictRestorer.restoreSettings(result.settingConflicts);
+                await afterRestore?.call();
+                ref.read(notificationCenterProvider.notifier).add(
+                      title: t.drive.restoredTheirs(count: n.toString()),
+                      level: NotificationLevel.success,
+                    );
+              } catch (e) {
+                ref.read(notificationCenterProvider.notifier).add(
+                      title: t.drive.restoreTheirsFailed(error: '$e'),
+                      level: NotificationLevel.error,
+                    );
+              }
+            },
           );
     }
     if (result.conflicts.isNotEmpty) {

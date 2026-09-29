@@ -22,6 +22,7 @@ import 'package:path/path.dart' as p;
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
 import 'gpkg_merger.dart';
+import 'qgs_merger.dart';
 import 'sync_conflict_resolver.dart';
 import 'sync_file_operations.dart';
 import 'sync_pull_handler.dart';
@@ -60,9 +61,8 @@ class SyncResult {
   /// 手元もリモートも変えずに衝突のまま残してある
   final List<String> failedMerges;
 
-  /// `.qgs` のフォルダ設定を合わせたとき、両方が別の値にしていた項目（`<ファイル>: <JSON の道筋>`）。
-  /// この端末の値が残っている
-  final List<String> settingConflicts;
+  /// `.qgs` のフォルダ設定を合わせたとき、両方が別の値にしていた項目。この端末の値が残っている
+  final List<QgsSettingConflict> settingConflicts;
 
   const SyncResult({
     required this.success,
@@ -87,7 +87,7 @@ class SyncResult {
     int mergedCount = 0,
     List<GpkgConflict> conflicts = const [],
     List<String> failedMerges = const [],
-    List<String> settingConflicts = const [],
+    List<QgsSettingConflict> settingConflicts = const [],
   }) {
     return SyncResult(
       success: true,

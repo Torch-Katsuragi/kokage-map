@@ -7,6 +7,7 @@ import 'package:flutter/painting.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/models/kmeta.dart';
+import 'package:root_maps/services/google_drive/conflict_restorer.dart';
 import 'package:root_maps/services/google_drive/qgs_merger.dart';
 import 'package:root_maps/services/google_drive/sync_engine.dart';
 import 'package:root_maps/services/kmeta_service.dart';
@@ -214,11 +215,19 @@ void main() {
       await syncOnce(a);
       await tick();
       final rb2 = await syncOnce(b);
-      expect(rb2.settingConflicts, ['proj.qgs: layout/expanded']);
+      expect(rb2.settingConflicts.map((c) => c.path), ['layout/expanded']);
+      expect(rb2.settingConflicts.single.theirs, isFalse, reason: 'クラウド（A）の値');
       final mb = await metaOf(b);
       expect(mb.layout.expanded, isTrue, reason: 'B の値');
       expect(mb.visibility.geopackages['x.gpkg'], isTrue, reason: 'A の変更');
       expect(mb.visibility.geopackages['z.gpkg'], isFalse, reason: 'B の変更');
+
+      // 通知の「クラウドの値に戻す」: 衝突した項目だけ A の値になり、ほかはそのまま
+      expect(await ConflictRestorer.restoreSettings(rb2.settingConflicts), 1);
+      final restored = await metaOf(b);
+      expect(restored.layout.expanded, isFalse, reason: 'クラウド（A）の値に戻った');
+      expect(restored.visibility.geopackages['z.gpkg'], isFalse, reason: 'ほかの変更は残る');
+      expect(restored.sync.driveId, rootId);
 
       // どちらの端末にも `.qgs` は 1 本（名前の付け替え合いが起きない）
       for (final dir in [a, b]) {

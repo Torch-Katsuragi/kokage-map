@@ -8,10 +8,33 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../../models/geopackage/geopackage_file.dart';
+import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
+import '../kmeta_service.dart';
 import 'gpkg_merger.dart';
+import 'qgs_merger.dart';
 
 abstract final class ConflictRestorer {
+  /// フォルダ設定の衝突（[QgsSettingConflict]）をクラウドの値に戻す。戻した数を返す。
+  /// 戻した設定はこの端末の変更になり、次の同期でクラウドにも上がる。
+  static Future<int> restoreSettings(List<QgsSettingConflict> conflicts) async {
+    final byDir = <String, List<QgsSettingConflict>>{};
+    for (final c in conflicts.where((c) => c.dirPath != null)) {
+      (byDir[c.dirPath!] ??= []).add(c);
+    }
+    var restored = 0;
+    for (final entry in byDir.entries) {
+      final meta = await KMetaService.instance.getMeta(entry.key);
+      var json = Map<String, Object?>.from(meta.toJson());
+      for (final c in entry.value) {
+        json = QgsMerger.setAt(json, c.path, c.theirs);
+        restored++;
+      }
+      await KMetaService.instance.saveMeta(entry.key, KMeta.fromJson(json).copyWith(sync: meta.sync));
+    }
+    return restored;
+  }
+
   /// [conflicts] のうち戻せるものを相手の値に戻す。戻した数を返す。
   static Future<int> restoreTheirs(List<GpkgConflict> conflicts) async {
     final byFile = <String, List<GpkgConflict>>{};

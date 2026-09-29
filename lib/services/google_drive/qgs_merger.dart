@@ -41,8 +41,29 @@ class QgsMergeResult {
   /// 合わせた `.qgs`
   final String xml;
 
-  /// 両側が別の値にしたキー（`views/a.gpkg/trees` のような JSON 上の道筋）。この端末の値を残した
-  final List<String> conflicts;
+  /// 両側が別の値にした項目。この端末の値を残した
+  final List<QgsSettingConflict> conflicts;
+}
+
+/// フォルダ設定で、両側が別の値にした項目（この端末の値を残した）。
+///
+/// [theirs] はクラウド側の値（JSON の値。[QgsMerger.absent] ならクラウドでは消されていた）。
+/// 「クラウドの値に戻す」で [restoreTheirs] が使う。
+class QgsSettingConflict {
+  const QgsSettingConflict({required this.path, required this.theirs, this.dirPath});
+
+  /// JSON 上の道筋（`layout/expanded`・`views/a.gpkg/trees` …）
+  final String path;
+
+  final Object? theirs;
+
+  /// 設定を持つ dir（戻すときに使う。合わせた側が埋める）
+  final String? dirPath;
+
+  QgsSettingConflict withDir(String dir) => QgsSettingConflict(path: path, theirs: theirs, dirPath: dir);
+
+  @override
+  String toString() => path;
 }
 
 abstract final class QgsMerger {
@@ -73,15 +94,16 @@ abstract final class QgsMerger {
     if (m == null || t == null) return null;
     final b = _json(docBase.kokageMeta) ?? const <String, Object?>{};
 
-    final conflicts = <String>[];
-    final merged = merge3(b, m, t, '', conflicts) as Map<String, Object?>;
+    final paths = <String>[];
+    final merged = merge3(b, m, t, '', paths) as Map<String, Object?>;
     // リンク情報はこの端末のもの
     if (m.containsKey('sync')) {
       merged['sync'] = m['sync'];
     } else {
       merged.remove('sync');
     }
-    conflicts.removeWhere((c) => c == 'sync' || c.startsWith('sync/'));
+    paths.removeWhere((c) => c == 'sync' || c.startsWith('sync/'));
+    final conflicts = [for (final path in paths) QgsSettingConflict(path: path, theirs: valueAt(t, path))];
 
     docMine.kokageMeta = jsonEncode(merged);
     final stamp = docMine.stamp!;
@@ -130,6 +152,35 @@ abstract final class QgsMerger {
     }
     conflicts.add(path);
     return mine;
+  }
+
+  /// [json] の [path]（`a/b/c`）の値。無ければ [absent]
+  static Object? valueAt(Object? json, String path) {
+    Object? cur = json;
+    for (final key in path.split('/')) {
+      if (cur is! Map || !cur.containsKey(key)) return absent;
+      cur = cur[key];
+    }
+    return cur;
+  }
+
+  /// [json] の [path] を [value] にしたものを返す（[absent] なら消す）。途中の辞書は作る
+  static Map<String, Object?> setAt(Map<String, Object?> json, String path, Object? value) {
+    final keys = path.split('/');
+    final root = Map<String, Object?>.from(json);
+    var cur = root;
+    for (var i = 0; i < keys.length - 1; i++) {
+      final next = cur[keys[i]];
+      final copy = next is Map ? Map<String, Object?>.from(next) : <String, Object?>{};
+      cur[keys[i]] = copy;
+      cur = copy;
+    }
+    if (identical(value, absent)) {
+      cur.remove(keys.last);
+    } else {
+      cur[keys.last] = value;
+    }
+    return root;
   }
 
   /// キーが無いことを表す印

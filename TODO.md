@@ -189,7 +189,7 @@
       `SyncLedger`（SharedPreferences・キーは driveId かパスのハッシュ）へ。共有ファイルにはリンク情報4項目だけ。
       旧版が書いた帳簿は初回ロードで引き取って共有ファイルから剥がす。継承チェーンは廃止
       （`getMeta` は自フォルダのメタデータを返す。2026-09-07 に `getMergedMeta` から改名し、マージ用キャッシュも撤去）
-      - [ ] ⚠ Drive 同期の通し確認は未実施（本セッションは Drive にサインインしていない）
+      - [x] Drive 同期の通し確認（2026-09-24 と 09-29 に本物の Drive で Fold ⇄ PC を往復）
 - [x] 段1: DOM 保持型 `QgsDocument`（2026-09-06）。`lib/services/qgis/qgs_document.dart`。
       QGIS 3.44 のフィクスチャで往復テスト 13 件（`test/qgs_document_test.dart`）:
       未知の最上位要素・maplayer 内要素・ツリーの customproperties が残る／参照とフィルタは直る／
@@ -253,7 +253,15 @@
         QGIS で変えた色が普通のレイヤに届いていなかった → レイヤのスタイルに重ねる（QGIS が持たない項目は残す）
 - [x] 不変条件5の書き方（2026-09-29）: 直前の版を `<名前>.qgs~` に残し、native は一時ファイルから置き換える。web は直接書く
   （`QgsFileWriter`。設定・自動更新・3-way マージの書き込みすべて）
-- [ ] 未決: dir 改名が Drive 越しに届いたときの追従／埋め込み3階層以上の実測
+- [ ] 🐛 **dir の改名が自動同期で巻き戻る**（2026-09-29 に 2 台テストで発見・既存の不具合・要判断）。
+      アプリで dir（や写真）を改名すると `renameSyncedFiles` が帳簿のパスを新しい場所に付け替えるので
+      「帳簿のパス ≠ Drive のパス」になる。`push` はこれをローカルの移動と見て Drive 側も動かすが、
+      自動同期の `getMergeEntries` はリモートの移動と見て「リモートを採用」→ 手元の改名を元の場所へ戻す。
+      `.qgs` に限らず写真・gpkg も同じ。テストは `test/qgs_dir_rename_sync_test.dart`（skip）。
+      直し方の案: 改名のとき帳簿に `movedFrom`（元のパス）を残し、`getMergeEntries` は Drive がまだ元の場所なら
+      ローカルの移動（localChange=moved）にする。`executeMerge` の「ローカルを採用」に moved の処理（Drive 側を
+      `moveFile`、名前が変わったならリネームも）を足し、終わったら `movedFrom` を消す
+- [ ] 未決: 埋め込み3階層以上の実測
 
 ## プロジェクト形式の設計（2026-08-21・設計のみ）
 

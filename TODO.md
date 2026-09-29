@@ -169,6 +169,9 @@
       `map_page.dart` の `build`（161 行）と `_buildMapLibreMap`（109 行）、`shapefile_exporter.dart`（914 行）、
       `settings_screen.dart`（1168 行）、`import_export/` の `SmartCoordinateSystemManager` の WKT 推定を `WktParser` へ寄せる
 
+- [ ] 🧪 `test/gpkg_index_repair_test.dart`「geodiff の rebase で入った行は rtree に無い → 焼き直しで載る」が
+      全体を並列で回すとまれに落ちる（単体では 3/3 通る。2026-09-29）。一時ファイルか geodiff の取り合いを疑う
+
 ## 正典を `.qgs` に移す（2026-09-06 設計・2026-09-29 段2 完了）
 
 > 設計は [[docs/technical/project-format-design#正典を `.qgs` に移す（2026-09-06 決定・設計）]]。

@@ -16,10 +16,6 @@
 // Root Maps: 同期Pushハンドラー
 // ローカル→Google DriveへのPush（アップロード）処理を担当
 
-import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
@@ -160,62 +156,8 @@ class SyncPushHandler {
       final totalBytes = filesToSync.fold<int>(0, (sum, f) => sum + f.size);
       int processedBytes = 0;
 
-      // フォルダ設定（`.qgs`） と通常ファイルを分離
-      final kmetaFiles = <LocalSyncFile>[];
-      final normalFiles = <LocalSyncFile>[];
-      for (final f in filesToSync) {
-        if (f.name == kMetaFileName) {
-          kmetaFiles.add(f);
-        } else {
-          normalFiles.add(f);
-        }
-      }
-
-      // フォルダ設定（`.qgs`） を先に直列処理
-      for (final localFile in kmetaFiles) {
-        final filePath = localFile.path;
-        final relativePath = localFile.relativePath;
-        final relativeDir = p.posix.dirname(relativePath);
-        final fileSize = localFile.size;
-
-        final unchanged = await _unchangedSince(localFile, previousSyncedFiles, driveIdToEntry);
-        if (unchanged != null) {
-          syncedFiles[relativePath] = unchanged;
-          skippedCount++;
-          processedBytes += fileSize;
-          completedCount++;
-          continue;
-        }
-
-        final targetFolderForFile = await _fileOps.getDriveFolderIdForRelativeDir(
-          targetFolderId, relativeDir, folderIdCache,
-        );
-        if (targetFolderForFile == null) {
-          skippedCount++;
-          processedBytes += fileSize;
-          continue;
-        }
-        final success = await _uploadKmetaFile(filePath, targetFolderForFile);
-        if (success) {
-          uploadedCount++;
-          final kmetaList = await _driveService.listFiles(targetFolderForFile);
-          drive.File? kmetaFile;
-          for (final item in kmetaList) {
-            if (item.name == kMetaFileName) { kmetaFile = item; break; }
-          }
-          if (kmetaFile != null) {
-            syncedFiles[relativePath] = KMetaSyncFile(
-              driveFileId: kmetaFile.id!,
-              lastSyncedTime: DateTime.now(),
-              remoteModifiedTime: kmetaFile.modifiedTime,
-            );
-          }
-        } else {
-          skippedCount++;
-        }
-        processedBytes += fileSize;
-        completedCount++;
-      }
+      // `.kmeta.json` を別扱いしていたが、2026-09-29 に `.qgs` へ移したので全部同じ扱い
+      final normalFiles = filesToSync;
 
       // フォルダIDを事前に解決（並列中のキャッシュ競合回避）
       final resolvedFolders = <int, String?>{};
@@ -400,39 +342,5 @@ class SyncPushHandler {
     }
 
     return push(localPath, driveFolder: driveId);
-  }
-
-  /// フォルダ設定（`.qgs`）をアップロード（deviceIdを除外）
-  ///
-  /// ⚠ 一時ファイルは作らない。web には一時ディレクトリが無いので、
-  /// 加工した中身をそのまま `uploadBytes` に渡す（2026-08-27 に載せ替え）。
-  Future<bool> _uploadKmetaFile(String filePath, String targetFolderId) async {
-    try {
-      final content = await fs.readAsString(filePath);
-      final json = jsonDecode(content) as Map<String, dynamic>;
-
-      final kmeta = KMeta.fromJson(json);
-      final syncJson = kmeta.sync.toJsonForSync();
-
-      final syncedJson = kmeta.toJson();
-      if (syncedJson.containsKey('sync')) {
-        syncedJson['sync'] = syncJson;
-      }
-
-      final result = await _driveService.uploadBytes(
-        Uint8List.fromList(
-          utf8.encode(
-            const JsonEncoder.withIndent('  ').convert(syncedJson),
-          ),
-        ),
-        kMetaFileName,
-        targetFolderId,
-      );
-
-      return result != null;
-    } catch (e) {
-      AppLogger.debug('[SyncEngine] kmeta.jsonアップロードエラー: $e');
-      return false;
-    }
   }
 }

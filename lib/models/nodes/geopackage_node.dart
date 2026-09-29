@@ -180,7 +180,10 @@ class GeoPackageNode extends LayerTreeNode {
     try {
       await geoPackageFile.dispose();
 
-      final currentPath = p.joinAll([projectRootDir, ...geoPackageFile.pathList]);
+      // ツリーから引いた実パス。以前は root と gpkg の相対パス（自分の dir 名を含まない）を
+      // つないでいて、サブフォルダの gpkg を改名すると「ファイルが存在しません」で失敗していた（2026-09-29）
+      final currentPath =
+          getAbsoluteFilePath() ?? geoPackageFile.getAbsolutePath() ?? p.joinAll([projectRootDir, ...geoPackageFile.pathList]);
       
       if (!await fs.exists(currentPath)) {
         throw Exception(t.services.fileNotFound(path: currentPath));

@@ -275,6 +275,28 @@ abstract final class QgsMetaStore {
     });
   }
 
+  /// QGIS が後から保存した [path] を読み戻し終えたら呼ぶ。印を付け直して「最後に書いたのはこかげマップ」にする
+  /// （QGIS の部分はそのまま。続く自動更新がアプリの状態で書き直す）
+  static Future<void> claim(String path) => QgsFileLock.run(path, () async {
+        try {
+          if (!await fs.exists(path)) return;
+          final doc = QgsDocument.parse(await fs.readAsString(path));
+          if (doc.lastWrittenByKokage) return;
+          final dirPath = p.dirname(path);
+          doc.setStamp(
+            KokageStamp(
+              schemaVersion: kQgsSchemaVersion,
+              app: await appLabel(),
+              savedAt: DateTime.now(),
+              dirName: doc.stamp?.dirName ?? QgsProjectFile.dirNameOf(dirPath),
+            ),
+          );
+          await QgsFileWriter.write(path, doc.toXmlString());
+        } on Object catch (e) {
+          AppLogger.debug('[QgsMetaStore] 印を付け直せない: $e');
+        }
+      });
+
   /// [path] を設定 [meta] で決まる名前に付け替える。付け替え先が既にあれば付け替えずにそちらを返す
   static Future<String> _renameToTarget(String path, String dirPath, KMeta meta) async {
     final target = QgsProjectFile.pathFor(dirPath, meta);

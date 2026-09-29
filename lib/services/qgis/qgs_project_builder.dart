@@ -190,6 +190,15 @@ class QgsProjectBuilder {
       doc = QgsDocument.create(projectName: built.name, projectCrs: built.projectCrs);
     }
 
+    // QGIS が後から保存したもの（まだ読み戻していない）は書かない。書くとアプリの状態で上書きして
+    // QGIS の変更が消える。読み戻しが取り込んで印を付け直したら（[QgsMetaStore.claim]）書ける。
+    // 同期で届いた直後、帳簿の保存が呼んだ自動更新が、ツリーの読み直し（とその後の読み戻し）より
+    // 先に走ることがある（2026-09-29）
+    if (updatedInPlace && !doc.lastWrittenByKokage) {
+      AppLogger.debug('[QgsProjectBuilder] $path は QGIS が後から保存したもの。読み戻すまで書かない');
+      return QgsWriteResult(path: path, project: built, updatedInPlace: false, removedLayers: const [], untouchedRenderers: const []);
+    }
+
     final report = doc.apply(built);
     doc.setStamp(
       KokageStamp(

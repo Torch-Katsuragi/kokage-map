@@ -121,7 +121,8 @@ class QgsReadBack {
     );
     final result = await const QgsImporter().import(path, root);
 
-    // 取り込んだ結果（と正規化）を印つきで書き戻す
+    // 取り込んだので印を付け直し（自動更新が書けるようになる）、取り込んだ結果（と正規化）を書き戻す
+    await QgsMetaStore.claim(path);
     QgsAutoRefresh.instance.schedule(rootPath);
 
     return QgsReadBackResult(

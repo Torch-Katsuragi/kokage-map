@@ -131,6 +131,22 @@ void main() {
     expect(await QgsProjectFile.find(dir), qgsPath());
   });
 
+  test('自動更新は、QGIS が後から保存した .qgs を読み戻すまで書かない（読み戻しが印を付け直したら書く）', () async {
+    await KMetaService.instance.saveMeta(dir, rich);
+    final root = FolderNode('Home', children: []);
+    await const QgsProjectBuilder().writeTo(root);
+    final qgisSaved = File(qgsPath()).readAsStringSync().replaceFirst(RegExp('saveDateTime="[^"]*"'), 'saveDateTime="2099-01-01T00:00:00"');
+    File(qgsPath()).writeAsStringSync(qgisSaved);
+
+    await const QgsProjectBuilder().writeTo(root);
+    expect(File(qgsPath()).readAsStringSync(), qgisSaved, reason: '読み戻す前は触らない');
+
+    await QgsMetaStore.claim(qgsPath());
+    expect(QgsDocument.parse(File(qgsPath()).readAsStringSync()).lastWrittenByKokage, isTrue);
+    await const QgsProjectBuilder().writeTo(root);
+    expect(QgsDocument.parse(File(qgsPath()).readAsStringSync()).lastWrittenByKokage, isTrue);
+  });
+
   test('何も無い dir は null（設定を持たない）', () async {
     expect(await QgsMetaStore.exists(dir), isFalse);
     expect(await QgsMetaStore.read(dir), isNull);

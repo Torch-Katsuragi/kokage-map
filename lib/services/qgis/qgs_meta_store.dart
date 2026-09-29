@@ -101,7 +101,10 @@ abstract final class QgsProjectFile {
       if (!name.toLowerCase().endsWith('.qgs')) continue;
       final candidate = p.join(dirPath, name);
       try {
-        final doc = QgsDocument.parse(await fs.readAsString(candidate));
+        final text = await fs.readAsString(candidate);
+        // 他人の大きな .qgs を毎回 XML として読まない
+        if (!text.contains('<kokage')) continue;
+        final doc = QgsDocument.parse(text);
         if (doc.stamp == null || doc.kokageMeta == null) continue;
         return candidate;
       } on Object {

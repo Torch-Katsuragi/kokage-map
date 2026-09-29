@@ -159,19 +159,32 @@ class QgsImporter {
     // QGIS は親グループが Unchecked なら子も描かないので、祖先の checked を AND で畳む
     // （QGIS ユーザーがグループごと消灯した場合も読み戻せるように）
     final checkedById = <String, bool>{};
-    void walkTree(XmlElement node, bool parentChecked) {
+    // こかげマップが書いた形（dir グループ > gpkg グループ > レイヤグループ > View）なら、
+    // グループの checked はそれぞれ dir・gpkg・レイヤの可視性に戻す（畳まずに）。そのための
+    // 自分の checked と、近い順の祖先グループ（名前と checked）
+    final ownCheckedById = <String, bool>{};
+    final ancestorsById = <String, List<(String, bool)>>{};
+    void walkTree(XmlElement node, bool parentChecked, List<(String, bool)> ancestors) {
       for (final child in node.childElements) {
-        final checked = parentChecked && child.getAttribute('checked') != 'Qt::Unchecked';
+        final own = child.getAttribute('checked') != 'Qt::Unchecked';
+        final checked = parentChecked && own;
         if (child.name.local == 'layer-tree-group') {
-          walkTree(child, checked);
+          walkTree(child, checked, [(child.getAttribute('name') ?? '', own), ...ancestors]);
         } else if (child.name.local == 'layer-tree-layer') {
           final id = child.getAttribute('id');
-          if (id != null) checkedById[id] = checked;
+          if (id != null) {
+            checkedById[id] = checked;
+            ownCheckedById[id] = own;
+            ancestorsById[id] = ancestors;
+          }
         }
       }
     }
     final treeRoot = doc.rootElement.findElements('layer-tree-group').firstOrNull;
-    if (treeRoot != null) walkTree(treeRoot, true);
+    if (treeRoot != null) walkTree(treeRoot, true, const []);
+    // 形が合ったレイヤの、グループ側の可視性（レイヤ・gpkg・dir）
+    final layerGroupChecked = <LayerNode, bool>{};
+    final containerChecked = <LayerTreeNode, bool>{};
 
     // 取り込み対象になったレイヤ。ここに入ったものだけ View を差し替える
     final touched = <LayerNode, List<ViewNode>>{};
@@ -232,6 +245,20 @@ class QgsImporter {
       }
 
       final id = _text(maplayer, 'id');
+      final chain = id == null ? null : ancestorsById[id];
+      // こかげマップが書いた形か: 親がレイヤグループ、その親が gpkg グループ
+      final shaped = chain != null && chain.length >= 2 && chain[0].$1 == layer.layerName && chain[1].$1 == gpkg.name;
+      if (shaped) {
+        layerGroupChecked[layer] = chain[0].$2;
+        containerChecked[gpkg] = chain[1].$2;
+        // その上は dir グループ（プロジェクト root 自身はグループにならない）
+        LayerTreeNode? folder = gpkg.parent;
+        for (var i = 2; i < chain.length && folder is FolderNode && !identical(folder, root); i++) {
+          if (chain[i].$1 != folder.name) break;
+          containerChecked[folder] = chain[i].$2;
+          folder = folder.parent;
+        }
+      }
       final views = touched.putIfAbsent(layer, () => []);
       views.add(
         ViewNode(
@@ -239,7 +266,7 @@ class QgsImporter {
           parent: layer,
           filter: source.subset,
           style: readStyleWithLabel(maplayer),
-          visible: id == null ? true : (checkedById[id] ?? true),
+          visible: id == null ? true : (shaped ? ownCheckedById[id]! : (checkedById[id] ?? true)),
         ),
       );
     }
@@ -255,8 +282,9 @@ class QgsImporter {
       // 既定 View 1枚だけのレイヤは View ではなく**レイヤの可視性**で表す
       // （暗黙の既定 View は フォルダ設定（`.qgs`） に書かれず、可視性も読まれないため）
       final views = entry.value;
+      final groupChecked = layerGroupChecked[layer];
       if (views.length == 1 && views.first.isDefaultView) {
-        layer.visible = views.first.visible;
+        layer.visible = views.first.visible && (groupChecked ?? true);
         await layer.persistVisibility();
         // スタイルもレイヤ側に持つ。既定 View は書かれないので、View に入れたままだと消える
         // （2026-09-29 まで、QGIS で変えた色は既定 View 1枚のレイヤに届いていなかった）
@@ -266,8 +294,19 @@ class QgsImporter {
         for (final v in views) {
           await v.persistVisibility();
         }
+        if (groupChecked != null && layer.visible != groupChecked) {
+          layer.visible = groupChecked;
+          await layer.persistVisibility();
+        }
       }
       viewsByLayer[layer.layerKey] = [for (final v in views) v.name];
+    }
+
+    // gpkg と dir のグループの可視性（変わったものだけ書く）
+    for (final e in containerChecked.entries) {
+      if (e.key.visible == e.value) continue;
+      e.key.visible = e.value;
+      await e.key.persistVisibility();
     }
 
     AppLogger.debug(

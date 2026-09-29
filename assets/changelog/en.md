@@ -10,6 +10,8 @@
 - When two devices change settings separately, Drive sync keeps both changes. If both changed the same item, each device keeps its own value
 - Changing settings in quick succession could lose the earlier change. Fixed
 - Colors and widths changed in QGIS sometimes did not come back to the app (layers without their own Views). Fixed
+- Hiding a GeoPackage or folder group in QGIS now hides that group in the app too (it used to hide the layer instead, which changed the QGIS tree after a round trip)
+- A `.qgs` saved in QGIS that arrives through Drive sync is read back right away (before, it waited until the project was reopened, and saving in the app first discarded the QGIS changes)
 - Layers styled in QGIS by category or rule now show "Style set in QGIS" on the style screen, and their colors and widths are not editable in the app (changes would not reach QGIS). The app draws them in a representative color
 
 ## v0.7.3 — 2026/09/27

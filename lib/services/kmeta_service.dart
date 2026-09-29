@@ -16,13 +16,21 @@
 // Root Maps: フォルダメタデータサービス
 // 継承チェーン解決・保存処理を担当
 
-import '../core/fs/k_file_system.dart';
+import 'dart:async';
+
+import 'package:path/path.dart' as p;
+
 import '../models/kmeta.dart';
 import '../utils/app_logger.dart';
+import 'qgis/qgs_meta_store.dart';
 import 'sync_ledger.dart';
 
 /// フォルダメタデータサービス
-/// `.kmeta.json` の読み書きとキャッシュ。フォルダ設定は自己完結（親からの継承は無い）
+/// フォルダ設定の読み書きとキャッシュ。フォルダ設定は自己完結（親からの継承は無い）
+///
+/// > [!IMPORTANT] 置き場所は `<dir名>.qgs`（2026-09-29〜）
+/// > `.kmeta.json` をやめ、`.qgs` の `kokage/meta` に書く（[QgsMetaStore]）。
+/// > 旧 `.kmeta.json` は読んだときに移して `.kmeta.json.migrated` に改名する。
 class KMetaService {
   // シングルトン
   static final KMetaService instance = KMetaService._internal();
@@ -49,19 +57,9 @@ class KMetaService {
       return _rawCache[folderPath];
     }
 
-    final loaded = await KMeta.loadFromFile(folderPath);
+    final loaded = await QgsMetaStore.read(folderPath, onMigrated: () => onSaved?.call(folderPath));
     if (loaded == null) return null;
-
-    // バージョンゲート: 旧バージョンはsyncのみ保持して再保存
-    if (loaded.version < kMetaSchemaVersion) {
-      AppLogger.debug(
-        '[KMetaService] 旧バージョン(v${loaded.version})検出、マイグレーション実行: $folderPath',
-      );
-      final migrated = KMeta(sync: loaded.sync);
-      await saveMeta(folderPath, migrated);
-      _rawCache[folderPath] = migrated;
-      return migrated;
-    }
+    // 旧版（v1）の設定も捨てずにそのまま読む（以前は sync 以外を捨てて保存し直していた）
 
     // 帳簿（端末ごとの同期状態）はアプリ私有領域から重ねる。
     // 旧版が共有ファイルに書いた帳簿が残っていれば、それを引き取って共有ファイルから剥がす
@@ -97,6 +95,26 @@ class KMetaService {
   /// 保存後に呼ばれる（`.qgs` の自動更新など）。アプリ起動時に配線する
   void Function(String folderPath)? onSaved;
 
+  /// 同じ dir の設定の「読んで直して書く」を 1 本ずつにする（並行すると片方の変更が消える）
+  final Map<String, Future<void>> _serialTails = {};
+
+  Future<T> _serial<T>(String folderPath, Future<T> Function() body) async {
+    final previous = _serialTails[folderPath] ?? Future<void>.value();
+    final done = Completer<void>();
+    _serialTails[folderPath] = done.future;
+    try {
+      await previous;
+    } on Object {
+      // 前の変更の失敗は持ち込まない
+    }
+    try {
+      return await body();
+    } finally {
+      done.complete();
+      if (identical(_serialTails[folderPath], done.future)) unawaited(_serialTails.remove(folderPath));
+    }
+  }
+
   /// メタデータを保存
   /// キャッシュを先に更新し、並行 read-modify-write の変更消失を防止
   ///
@@ -109,7 +127,7 @@ class KMetaService {
     final key = await SyncLedger.instance.resolveKey(driveId: meta.sync.driveId, folderPath: folderPath);
     await SyncLedger.instance.write(key, SyncLedgerEntry.fromSync(meta.sync).withOwner(folderPath));
 
-    final success = await meta.copyWith(sync: meta.sync.linkOnly()).saveToFile(folderPath);
+    final success = await QgsMetaStore.write(folderPath, meta.copyWith(sync: meta.sync.linkOnly()));
     if (!success) {
       if (prevRaw != null) {
         _rawCache[folderPath] = prevRaw;
@@ -129,18 +147,20 @@ class KMetaService {
     String layerKey,
     bool visible,
   ) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final v = rawMeta.visibility;
-    final updatedMeta = rawMeta.copyWith(
-      visibility: KMetaVisibility(
-        layers: {...v.layers, layerKey: visible},
-        geopackages: v.geopackages,
-        folders: v.folders,
-        images: v.images,
-        views: v.views,
-      ),
-    );
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final v = rawMeta.visibility;
+      final updatedMeta = rawMeta.copyWith(
+        visibility: KMetaVisibility(
+          layers: {...v.layers, layerKey: visible},
+          geopackages: v.geopackages,
+          folders: v.folders,
+          images: v.images,
+          views: v.views,
+        ),
+      );
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// GeoPackageの可視状態を更新
@@ -149,18 +169,20 @@ class KMetaService {
     String gpkgName,
     bool visible,
   ) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final v = rawMeta.visibility;
-    final updatedMeta = rawMeta.copyWith(
-      visibility: KMetaVisibility(
-        layers: v.layers,
-        geopackages: {...v.geopackages, gpkgName: visible},
-        folders: v.folders,
-        images: v.images,
-        views: v.views,
-      ),
-    );
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final v = rawMeta.visibility;
+      final updatedMeta = rawMeta.copyWith(
+        visibility: KMetaVisibility(
+          layers: v.layers,
+          geopackages: {...v.geopackages, gpkgName: visible},
+          folders: v.folders,
+          images: v.images,
+          views: v.views,
+        ),
+      );
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// フォルダの可視状態を更新
@@ -169,18 +191,20 @@ class KMetaService {
     String folderName,
     bool visible,
   ) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final v = rawMeta.visibility;
-    final updatedMeta = rawMeta.copyWith(
-      visibility: KMetaVisibility(
-        layers: v.layers,
-        geopackages: v.geopackages,
-        folders: {...v.folders, folderName: visible},
-        images: v.images,
-        views: v.views,
-      ),
-    );
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final v = rawMeta.visibility;
+      final updatedMeta = rawMeta.copyWith(
+        visibility: KMetaVisibility(
+          layers: v.layers,
+          geopackages: v.geopackages,
+          folders: {...v.folders, folderName: visible},
+          images: v.images,
+          views: v.views,
+        ),
+      );
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// 画像の可視状態を更新
@@ -189,18 +213,20 @@ class KMetaService {
     String imageName,
     bool visible,
   ) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final v = rawMeta.visibility;
-    final updatedMeta = rawMeta.copyWith(
-      visibility: KMetaVisibility(
-        layers: v.layers,
-        geopackages: v.geopackages,
-        folders: v.folders,
-        images: {...v.images, imageName: visible},
-        views: v.views,
-      ),
-    );
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final v = rawMeta.visibility;
+      final updatedMeta = rawMeta.copyWith(
+        visibility: KMetaVisibility(
+          layers: v.layers,
+          geopackages: v.geopackages,
+          folders: v.folders,
+          images: {...v.images, imageName: visible},
+          views: v.views,
+        ),
+      );
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// Viewの可視状態を更新
@@ -210,18 +236,20 @@ class KMetaService {
     String viewKey,
     bool visible,
   ) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final v = rawMeta.visibility;
-    final updatedMeta = rawMeta.copyWith(
-      visibility: KMetaVisibility(
-        layers: v.layers,
-        geopackages: v.geopackages,
-        folders: v.folders,
-        images: v.images,
-        views: {...v.views, viewKey: visible},
-      ),
-    );
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final v = rawMeta.visibility;
+      final updatedMeta = rawMeta.copyWith(
+        visibility: KMetaVisibility(
+          layers: v.layers,
+          geopackages: v.geopackages,
+          folders: v.folders,
+          images: v.images,
+          views: {...v.views, viewKey: visible},
+        ),
+      );
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// レイヤのView定義をまるごと差し替える。
@@ -233,14 +261,16 @@ class KMetaService {
     String layerKey,
     List<KMetaView> views,
   ) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final updated = Map<String, List<KMetaView>>.from(rawMeta.views);
-    if (views.isEmpty) {
-      updated.remove(layerKey);
-    } else {
-      updated[layerKey] = views;
-    }
-    return saveMeta(folderPath, rawMeta.copyWith(views: updated));
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final updated = Map<String, List<KMetaView>>.from(rawMeta.views);
+      if (views.isEmpty) {
+        updated.remove(layerKey);
+      } else {
+        updated[layerKey] = views;
+      }
+      return saveMeta(folderPath, rawMeta.copyWith(views: updated));
+    });
   }
 
   /// レイヤースタイルを更新
@@ -250,46 +280,54 @@ class KMetaService {
     String layerKey,
     KMetaLayerStyle style,
   ) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final updatedStyles = KMetaStyles(
-      defaultStyle: rawMeta.styles.defaultStyle,
-      layers: {...rawMeta.styles.layers, layerKey: style},
-    );
-    final updatedMeta = rawMeta.copyWith(styles: updatedStyles);
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final updatedStyles = KMetaStyles(
+        defaultStyle: rawMeta.styles.defaultStyle,
+        layers: {...rawMeta.styles.layers, layerKey: style},
+      );
+      final updatedMeta = rawMeta.copyWith(styles: updatedStyles);
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// デフォルトスタイルを更新
   Future<bool> setDefaultStyle(String folderPath, KMetaLayerStyle style) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final updatedStyles = KMetaStyles(
-      defaultStyle: style,
-      layers: rawMeta.styles.layers,
-    );
-    final updatedMeta = rawMeta.copyWith(styles: updatedStyles);
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final updatedStyles = KMetaStyles(
+        defaultStyle: style,
+        layers: rawMeta.styles.layers,
+      );
+      final updatedMeta = rawMeta.copyWith(styles: updatedStyles);
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// レイアウトの並び順を更新
   Future<bool> setSortOrder(String folderPath, List<String> sortOrder) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final updatedLayout = KMetaLayout(
-      sortOrder: sortOrder,
-      expanded: rawMeta.layout.expanded,
-    );
-    final updatedMeta = rawMeta.copyWith(layout: updatedLayout);
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final updatedLayout = KMetaLayout(
+        sortOrder: sortOrder,
+        expanded: rawMeta.layout.expanded,
+      );
+      final updatedMeta = rawMeta.copyWith(layout: updatedLayout);
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// 展開状態を更新
   Future<bool> setExpanded(String folderPath, bool expanded) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final updatedLayout = KMetaLayout(
-      sortOrder: rawMeta.layout.sortOrder,
-      expanded: expanded,
-    );
-    final updatedMeta = rawMeta.copyWith(layout: updatedLayout);
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final updatedLayout = KMetaLayout(
+        sortOrder: rawMeta.layout.sortOrder,
+        expanded: expanded,
+      );
+      final updatedMeta = rawMeta.copyWith(layout: updatedLayout);
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// Google Drive同期情報を更新
@@ -304,19 +342,21 @@ class KMetaService {
     String? deviceId,
     Map<String, KMetaSyncFile>? files,
   }) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final updatedSync = KMetaSync(
-      driveId: driveId ?? rawMeta.sync.driveId,
-      driveFolderName: driveFolderName ?? rawMeta.sync.driveFolderName,
-      driveUrl: driveUrl ?? rawMeta.sync.driveUrl,
-      isReadOnly: isReadOnly ?? rawMeta.sync.isReadOnly,
-      lastSynced: lastSynced ?? rawMeta.sync.lastSynced,
-      driveRevisionId: driveRevisionId ?? rawMeta.sync.driveRevisionId,
-      deviceId: deviceId ?? rawMeta.sync.deviceId,
-      files: files ?? rawMeta.sync.files,
-    );
-    final updatedMeta = rawMeta.copyWith(sync: updatedSync);
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final updatedSync = KMetaSync(
+        driveId: driveId ?? rawMeta.sync.driveId,
+        driveFolderName: driveFolderName ?? rawMeta.sync.driveFolderName,
+        driveUrl: driveUrl ?? rawMeta.sync.driveUrl,
+        isReadOnly: isReadOnly ?? rawMeta.sync.isReadOnly,
+        lastSynced: lastSynced ?? rawMeta.sync.lastSynced,
+        driveRevisionId: driveRevisionId ?? rawMeta.sync.driveRevisionId,
+        deviceId: deviceId ?? rawMeta.sync.deviceId,
+        files: files ?? rawMeta.sync.files,
+      );
+      final updatedMeta = rawMeta.copyWith(sync: updatedSync);
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// syncedFiles内のファイルパスを更新（ローカル移動/リネーム対応）
@@ -361,18 +401,65 @@ class KMetaService {
 
   /// Drive連携を解除
   Future<bool> unlinkDrive(String folderPath) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    // deviceIdは維持し、Drive関連フィールドのみクリア
-    final updatedSync = KMetaSync(deviceId: rawMeta.sync.deviceId);
-    final updatedMeta = rawMeta.copyWith(sync: updatedSync);
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      // deviceIdは維持し、Drive関連フィールドのみクリア
+      final updatedSync = KMetaSync(deviceId: rawMeta.sync.deviceId);
+      final updatedMeta = rawMeta.copyWith(sync: updatedSync);
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
-  /// フォルダが.kmeta.jsonを持っているか確認
-  Future<bool> hasMetaFile(String folderPath) =>
-      fs.exists('$folderPath/$kMetaFileName');
+  /// フォルダが自分の設定（`.qgs`、または移す前の `.kmeta.json`）を持っているか
+  Future<bool> hasMetaFile(String folderPath) => QgsMetaStore.exists(folderPath);
 
-  /// 新しい.kmeta.jsonを初期化（存在しない場合のみ）
+  /// 同期で `.qgs` を上書きダウンロードする前に呼ぶ。この端末のリンク情報を返す。
+  ///
+  /// リンク情報（driveId・読み取り専用か…）は端末ごとに違いうるので、ダウンロードした
+  /// `.qgs` のもので上書きしない。[absPath] がどこかの dir の `.qgs` でなければ null。
+  Future<KMetaSync?> linkBeforeReplace(String absPath) async {
+    if (!absPath.toLowerCase().endsWith('.qgs')) return null;
+    final dir = p.dirname(absPath);
+    final meta = await getRawMeta(dir);
+    if (meta == null || p.basename(absPath) != p.basename(QgsProjectFile.pathFor(dir, meta))) return null;
+    return meta.sync;
+  }
+
+  /// 同期で `.qgs` を上書きダウンロードした直後に呼ぶ（同期済みと記録する前に）。
+  ///
+  /// キャッシュを捨てて読み直し、この端末のリンク情報 [keep] を戻す。
+  /// ダウンロードしたものと同じなら書かない（書くと次の同期でまた上がる）。
+  Future<void> afterReplace(String absPath, KMetaSync? keep) async {
+    if (!absPath.toLowerCase().endsWith('.qgs')) return;
+    final dir = p.dirname(absPath);
+    invalidateCache(dir);
+    if (keep == null || !keep.isLinked) return;
+    final meta = await getRawMeta(dir) ?? KMeta.empty;
+    final s = meta.sync;
+    if (s.driveId == keep.driveId &&
+        s.driveUrl == keep.driveUrl &&
+        s.driveFolderName == keep.driveFolderName &&
+        s.isReadOnly == keep.isReadOnly) {
+      return;
+    }
+    await saveMeta(
+      dir,
+      meta.copyWith(
+        sync: KMetaSync(
+          driveId: keep.driveId,
+          driveFolderName: keep.driveFolderName,
+          driveUrl: keep.driveUrl,
+          isReadOnly: keep.isReadOnly,
+          lastSynced: s.lastSynced,
+          driveRevisionId: s.driveRevisionId,
+          deviceId: s.deviceId,
+          files: s.files,
+        ),
+      ),
+    );
+  }
+
+  /// 設定が無ければ空の設定を書く（存在する場合は読むだけ）
   Future<KMeta?> initializeMetaIfNeeded(String folderPath) async {
     if (await hasMetaFile(folderPath)) {
       return getRawMeta(folderPath);
@@ -390,11 +477,13 @@ class KMetaService {
     String imageName,
     KMetaImageOverlay overlay,
   ) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final updatedOverlays = Map<String, KMetaImageOverlay>.from(rawMeta.imageOverlays);
-    updatedOverlays[imageName] = overlay;
-    final updatedMeta = rawMeta.copyWith(imageOverlays: updatedOverlays);
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final updatedOverlays = Map<String, KMetaImageOverlay>.from(rawMeta.imageOverlays);
+      updatedOverlays[imageName] = overlay;
+      final updatedMeta = rawMeta.copyWith(imageOverlays: updatedOverlays);
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 
   /// 画像オーバーレイ設定を削除（通常のImageNodeに戻す）
@@ -402,10 +491,12 @@ class KMetaService {
     String folderPath,
     String imageName,
   ) async {
-    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final updatedOverlays = Map<String, KMetaImageOverlay>.from(rawMeta.imageOverlays);
-    updatedOverlays.remove(imageName);
-    final updatedMeta = rawMeta.copyWith(imageOverlays: updatedOverlays);
-    return saveMeta(folderPath, updatedMeta);
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final updatedOverlays = Map<String, KMetaImageOverlay>.from(rawMeta.imageOverlays);
+      updatedOverlays.remove(imageName);
+      final updatedMeta = rawMeta.copyWith(imageOverlays: updatedOverlays);
+      return saveMeta(folderPath, updatedMeta);
+    });
   }
 }

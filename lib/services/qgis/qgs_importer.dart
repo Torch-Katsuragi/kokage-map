@@ -188,7 +188,7 @@ class QgsImporter {
       final name = _text(maplayer, 'layername') ?? '(名前なし)';
       final provider = _text(maplayer, 'provider')?.toLowerCase();
 
-      // ラスタは取り込まない（自分が書いたオーバーレイの参照は .kmeta.json が正典。
+      // ラスタは取り込まない（自分が書いたオーバーレイの参照は フォルダ設定（`.qgs`） が正典。
       // QGIS 側で足したラスタは扱えないが、毎回の読み戻しで「取り込めません」と騒がない）
       if (maplayer.getAttribute('type') == 'raster') continue;
 
@@ -252,7 +252,7 @@ class QgsImporter {
       await layer.persistViews();
       // 可視性は View 定義とは別の場所に持つ。
       // 既定 View 1枚だけのレイヤは View ではなく**レイヤの可視性**で表す
-      // （暗黙の既定 View は `.kmeta.json` に書かれず、可視性も読まれないため）
+      // （暗黙の既定 View は フォルダ設定（`.qgs`） に書かれず、可視性も読まれないため）
       final views = entry.value;
       if (views.length == 1 && views.first.isDefaultView) {
         layer.visible = views.first.visible;

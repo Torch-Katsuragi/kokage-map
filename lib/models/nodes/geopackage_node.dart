@@ -122,7 +122,7 @@ class GeoPackageNode extends LayerTreeNode {
   }
 
   /// KMetaの可視性設定をレイヤーに適用（layerKey形式で照合）
-  /// 親FolderNodeのキャッシュを無効化して最新の.kmeta.jsonを読む
+  /// 親FolderNodeのキャッシュを無効化して最新のフォルダ設定（`.qgs`）を読む
   Future<void> _applyMetaVisibility() async {
     final folderParent = parent;
     if (folderParent is FolderNode) {

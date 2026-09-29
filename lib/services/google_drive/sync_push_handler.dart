@@ -88,6 +88,17 @@ class SyncPushHandler {
         targetFolderName = created.name!;
       }
 
+      // リンク情報は `<dir名>.qgs` に入る。集める前に書いておけば、その `.qgs` も
+      // この push で一緒に上がる（後から書くと、次の同期でもう一度上がる）
+      final link = previousMeta.sync;
+      if (link.driveId != targetFolderId || link.driveFolderName != targetFolderName) {
+        await _kmetaService.setDriveSync(
+          projectPath,
+          driveId: targetFolderId,
+          driveFolderName: targetFolderName,
+        );
+      }
+
       final filesToSync = await _fileOps.collectSyncFiles(projectPath);
       if (filesToSync.isEmpty) {
         return SyncResult.success(skippedCount: 0);
@@ -149,7 +160,7 @@ class SyncPushHandler {
       final totalBytes = filesToSync.fold<int>(0, (sum, f) => sum + f.size);
       int processedBytes = 0;
 
-      // .kmeta.json と通常ファイルを分離
+      // フォルダ設定（`.qgs`） と通常ファイルを分離
       final kmetaFiles = <LocalSyncFile>[];
       final normalFiles = <LocalSyncFile>[];
       for (final f in filesToSync) {
@@ -160,7 +171,7 @@ class SyncPushHandler {
         }
       }
 
-      // .kmeta.json を先に直列処理
+      // フォルダ設定（`.qgs`） を先に直列処理
       for (final localFile in kmetaFiles) {
         final filePath = localFile.path;
         final relativePath = localFile.relativePath;
@@ -391,7 +402,7 @@ class SyncPushHandler {
     return push(localPath, driveFolder: driveId);
   }
 
-  /// .kmeta.jsonをアップロード（deviceIdを除外）
+  /// フォルダ設定（`.qgs`）をアップロード（deviceIdを除外）
   ///
   /// ⚠ 一時ファイルは作らない。web には一時ディレクトリが無いので、
   /// 加工した中身をそのまま `uploadBytes` に渡す（2026-08-27 に載せ替え）。

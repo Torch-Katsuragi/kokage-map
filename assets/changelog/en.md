@@ -1,5 +1,14 @@
 # Changelog
 
+## Next release
+
+### Project format
+
+- Folder settings (visibility, styles, Views, order, overlay alignment) moved from `.kmeta.json` into the QGIS project file (`<folder name>.qgs`). They are migrated automatically on opening; the old file is kept as `.kmeta.json.migrated`
+- In folders shared through Drive, the `.qgs` is named after the Drive folder, so every device uses the same file even when local folder names differ
+- Settings now reach other devices through Drive sync (they used to stay on each device). Link details such as read-only stay per device
+- Changing settings in quick succession could lose the earlier change. Fixed
+
 ## v0.7.3 — 2026/09/27
 
 ### Drive sync

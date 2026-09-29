@@ -33,7 +33,7 @@ class SyncFileOperations {
   /// 同期対象のファイルパターン
   static const List<String> syncPatterns = [
     '*.gpkg',
-    '*.kmeta.json',
+    // `.kmeta.json` は 2026-09-29 に `.qgs` へ移したので扱わない（旧版アプリが Drive に置いても落とさない）
     '*.qgs', // dir ごとの QGIS プロジェクト（2026-09-06〜。共有 dir を QGIS でも開けるように）
     '*.jpg',
     '*.jpeg',

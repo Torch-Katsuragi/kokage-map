@@ -742,7 +742,7 @@ class FeatureRepository {
   ///
   /// > [!WARNING] [where] は文字列としてSQLに埋め込まれる
   /// > バインド変数にはできない（条件式そのものだから）。ユーザーが書いた
-  /// > フィルタをそのまま通す QGIS と同じ設計だが、**`.kmeta.json` は
+  /// > フィルタをそのまま通す QGIS と同じ設計だが、**フォルダ設定（`.qgs`） は
   /// > Drive経由で他人から届きうる**。文の切り替え（`;`）だけは弾いておく。
   /// > それ以上は SQLite の `SELECT` の外に出られないので許す。
   Future<List<Map<String, dynamic>>> getFeaturesWithGeometry(

@@ -33,11 +33,11 @@ import 'layer_tree_node.dart';
 /// > そのまま通すため。パスを持たない（[getAbsoluteFilePath] が null）ので、
 /// > 追加・移動・Drive 連携の入口は「パスが解決できない」で自然に閉じる。
 ///
-/// > [!IMPORTANT] 表示の可視性はプロジェクトルートの `.kmeta.json` に置く
+/// > [!IMPORTANT] 表示の可視性はプロジェクトルートの フォルダ設定（`.qgs`） に置く
 /// > sys 自身は `folders['<sys>']`、global は**従来どおり** `folders['Global']`。
 /// > global がルート直下にあった頃の保存値をそのまま引き継ぐため（鍵を変えない）。
 class SysNode extends FolderNode {
-  /// ノード名（＝ルートの `.kmeta.json` での可視性の鍵）。
+  /// ノード名（＝ルートの フォルダ設定（`.qgs`） での可視性の鍵）。
   ///
   /// ⚠ ファイル名に使えない `<` `>` を含めてある。プロジェクト直下に同名の実フォルダが
   /// あると `addChildIfNotExists` が名前で取り違えるため。表示名は
@@ -53,11 +53,11 @@ class SysNode extends FolderNode {
   @override
   String? getAbsoluteFilePath() => null;
 
-  /// 子（global）の可視性はプロジェクトルートの `.kmeta.json` に書く
+  /// 子（global）の可視性はプロジェクトルートの フォルダ設定（`.qgs`） に書く
   @override
   String? get visibilityMetaPath => _host?.getAbsoluteFilePath();
 
-  /// 子の可視性を読むのもプロジェクトルートの `.kmeta.json`
+  /// 子の可視性を読むのもプロジェクトルートの フォルダ設定（`.qgs`）
   @override
   Future<KMeta> getMeta() async => await _host?.getMeta() ?? KMeta.empty;
 

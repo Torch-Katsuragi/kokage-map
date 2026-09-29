@@ -169,7 +169,7 @@
       `map_page.dart` の `build`（161 行）と `_buildMapLibreMap`（109 行）、`shapefile_exporter.dart`（914 行）、
       `settings_screen.dart`（1168 行）、`import_export/` の `SmartCoordinateSystemManager` の WKT 推定を `WktParser` へ寄せる
 
-## 正典を `.qgs` に移す（2026-09-06・設計済み・未着手）
+## 正典を `.qgs` に移す（2026-09-06 設計・2026-09-29 段2 完了）
 
 > 設計は [[docs/technical/project-format-design#正典を `.qgs` に移す（2026-09-06 決定・設計）]]。
 > `.kmeta.json` をやめ、dir ごとの `<dir名>.qgs` を正典にする。子 dir は QGIS の
@@ -200,7 +200,21 @@
   - [x] ⚠ QGIS での実開封（2026-09-12、開発機に QGIS 4.2.0 を入れて headless で確認）。
         「QGIS で保存 → アプリで DOM 更新 → QGIS の pipe / projectCrs が残る」「アプリで読み戻し → subset と消灯が入る」まで。
         副産物: gpkg の `user_version` を sqflite が 1 に潰していたのを修正。詳細は [[docs/technical/qgis-interop]]
-- [ ] 段2: `KMetaService` の裏を `QgsDocument` に差し替え（`KMeta` モデルは残す。35ファイルの呼び出し側を動かさない）
+- [x] 段2 完全形（2026-09-29）: **`.kmeta.json` を廃止**。フォルダ設定（`KMeta` の JSON）は `<dir名>.qgs` の
+      `<properties><kokage><meta>` に入れ、`KMetaService` の読み書きは `QgsMetaStore` 経由（呼び出し側は無変更）。
+      QGIS が読む部分は従来どおり `QgsProjectBuilder` が書く。同じ `.qgs` を両方が書くので `QgsFileLock` で順番に。
+      旧 `.kmeta.json` は読んだときに移して `.kmeta.json.migrated` に改名（両方あれば `.qgs` が勝つ）。
+      旧版（v1）の設定も捨てない（以前は sync 以外を捨てて保存し直していた）
+  - [x] Drive 連携している dir は `<Drive のフォルダ名>.qgs`。印の `dirName`・プロジェクト名も同じ名前
+        （`<dir名>.qgs` のままだと、端末ごとにローカルの dir 名が違うと互いに改名し合って同期のたびに消して上げ直す。
+        2 台の往復テストで見つけた）。連携していない dir は `<dir名>.qgs` で、dir の改名は印から追従
+  - [x] 同期で `.qgs` を上書きしても、この端末のリンク情報（読み取り専用か等）は残す
+        （`KMetaService.linkBeforeReplace` / `afterReplace`。同じなら書かない＝次の同期で上がらない）。
+        push は集める前にリンク情報を書く（`.qgs` が同じ push で上がる）
+  - [x] 同じ dir の設定の読んで直して書くを 1 本ずつに（並行すると片方の変更が消えていた。以前から）
+  - [x] 実機（Pixel 9）: v0.7.3 と同じ状態（`.kmeta.json`＋`kokage/meta` の無い `.qgs`）から移行。
+        設定が JSON で完全一致、地図とレイヤ一覧も移行前と同じ、QGIS 側の `.qgs` にもスタイル・消灯・View が入る
+  - [ ] web で実フォルダを開いての移行確認（フォルダ選択が OS ダイアログで自動操作できない）
 - [/] 段2（実用形・2026-09-06）: **QGIS 側で保存された `.qgs` をプロジェクトを開いたときに読み戻す**
       （`QgsReadBack`。印と `saveDateTime` の不一致で判定 → 寛容インポータで View・スタイル・可視性を取り込み →
       自動更新で正規化＋印つきに書き戻す）。`.kmeta.json` は残しているが、書きは自動更新・読みは読み戻しで
@@ -220,7 +234,7 @@
 - [/] 段5（2026-09-06）: `*.qgs` を Drive 同期の対象に追加（既存の「新しい方が勝つ／衝突コピー」で扱う）
   - [ ] レイヤ単位の 3-way マージは未着手
 - [/] 段6（2026-09-06）: `.qgz` 読み（`archive`）・壊れた `.qgs` の `.bak` 退避・外したレイヤの報告
-  - [ ] `.kmeta.json` → `.migrated` の移行は、段2 の完全形と一緒に
+  - [x] `.kmeta.json` → `.migrated` の移行（2026-09-29、段2 と一緒に）
 - [ ] 段7: 「QGIS で設定されたスタイル」の読み取り専用 UI（未着手。いまは分類レンダラを触らないだけ）
 - [ ] 未決: dir 改名が Drive 越しに届いたときの追従／埋め込み3階層以上の実測／web の `.qgs~` リネーム
 

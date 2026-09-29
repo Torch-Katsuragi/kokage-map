@@ -683,7 +683,7 @@ class GoogleDriveService {
 
   /// メモリ上の内容をそのままアップロードする。
   ///
-  /// 一時ファイルを作らずに済ませたいとき用（`.kmeta.json` の加工など）。
+  /// 一時ファイルを作らずに済ませたいとき用（フォルダ設定（`.qgs`） の加工など）。
   /// web には一時ディレクトリが無いので、こちらしか使えない。
   Future<drive.File?> uploadBytes(
     Uint8List bytes,

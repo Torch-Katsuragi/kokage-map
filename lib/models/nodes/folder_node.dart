@@ -68,7 +68,7 @@ class FolderNode extends LayerTreeNode {
     parentFolder.invalidateMetaCache();
   }
 
-  /// 子の可視性を書く `.kmeta.json` の dir。通常は自分の dir。
+  /// 子の可視性を書く フォルダ設定（`.qgs`） の dir。通常は自分の dir。
   /// 実体の無い [SysNode] はプロジェクトルートを返す
   String? get visibilityMetaPath => getAbsoluteFilePath();
 
@@ -179,7 +179,7 @@ class FolderNode extends LayerTreeNode {
   }
 
   /// このフォルダ直下のFolderNodeリストのみ返す（名前昇順でソート）
-  /// .kmeta.jsonにDrive連携情報があればDriveFolderNodeとして作成
+  /// フォルダ設定（`.qgs`）にDrive連携情報があればDriveFolderNodeとして作成
   ///
   /// [entries] を渡すと列挙をやり直さない。同じフォルダに対して
   /// FolderNode / GeoPackageNode / ImageNode の3つを続けて作るときに使う。
@@ -202,7 +202,7 @@ class FolderNode extends LayerTreeNode {
       final folderPath = entity.path;
       final folderName = entity.name;
 
-      // .kmeta.jsonをチェックしてDrive連携情報があるか確認
+      // フォルダ設定（`.qgs`）をチェックしてDrive連携情報があるか確認
       final driveNode = await tryCreateDriveFolderNode(
         folderPath,
         folderName,
@@ -225,7 +225,7 @@ class FolderNode extends LayerTreeNode {
     return nodes;
   }
 
-  /// .kmeta.jsonからDrive連携情報を読み込み、DriveFolderNodeを作成
+  /// フォルダ設定（`.qgs`）からDrive連携情報を読み込み、DriveFolderNodeを作成
   /// GlobalFolderNodeのローダーからも利用されるためパッケージ可視
   static Future<LayerTreeNode?> tryCreateDriveFolderNode(
     String folderPath,
@@ -274,7 +274,7 @@ class FolderNode extends LayerTreeNode {
   }
 
   /// プロジェクトルート用のノードを作成
-  /// .kmeta.jsonにDrive連携情報があればDriveFolderNodeを返す
+  /// フォルダ設定（`.qgs`）にDrive連携情報があればDriveFolderNodeを返す
   static Future<LayerTreeNode> createRootNode(String projectDir) async {
     try {
       final meta = await KMetaService.instance.getRawMeta(projectDir);

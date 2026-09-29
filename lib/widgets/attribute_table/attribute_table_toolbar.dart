@@ -676,7 +676,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
   }
 
   /// 地図に出すラベルを列の組み合わせで決める。結果はレイヤ固有スタイル
-  /// （`.kmeta.json` の `styles.layers[<layer>].labelProperty`）に保存する
+  /// （フォルダ設定（`.qgs`） の `styles.layers[<layer>].labelProperty`）に保存する
   Future<void> _openLabelComposer(BuildContext context) async {
     final layer = widget.controller.layer;
     final folderPath = layer.folderNode?.getAbsoluteFilePath();

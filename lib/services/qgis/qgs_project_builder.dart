@@ -25,7 +25,6 @@
 /// > 対象は「このdirの下にある `.gpkg`」だけ。
 library;
 
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
@@ -44,11 +43,9 @@ import '../../utils/stable_hash.dart';
 import '../coordinate/gpkg_crs_resolver.dart';
 import '../kmeta_service.dart';
 import 'qgs_document.dart';
+import 'qgs_meta_store.dart';
 import 'qgs_model.dart';
 import 'qgs_writer.dart';
-
-/// アプリ側の `.qgs` の読み方の版。印（`kokage/schemaVersion`）に書く。
-const int kQgsSchemaVersion = 1;
 
 /// [QgsProjectBuilder.writeTo] の結果
 class QgsWriteResult {
@@ -98,13 +95,13 @@ class QgsProjectBuilder {
       if (node != null) children.add(node);
     }
 
-    return QgsProject(name: _projectName(root, rootPath), root: children, skipped: skipped);
+    return QgsProject(name: await _projectName(root, rootPath), root: children, skipped: skipped);
   }
 
   /// 自分の `.qgs` を持ちうる子 dir。
   ///
   /// sys 自体は dir でないので飛ばし、その下（global）を見る。global がルート直下に
-  /// あった頃と同じく、global や global 配下の連携dirに `.kmeta.json` があれば
+  /// あった頃と同じく、global や global 配下の連携dirに自分の設定（`.qgs`）があれば
   /// そこに `.qgs` を書く（相対パスが取れないので親には埋め込まれない）。
   static Iterable<FolderNode> _ownQgsCandidates(FolderNode root) sync* {
     for (final child in root.children.whereType<FolderNode>()) {
@@ -116,14 +113,14 @@ class QgsProjectBuilder {
     }
   }
 
-  /// プロジェクト名。
+  /// プロジェクト名。Drive 連携していれば Drive のフォルダ名、していなければ dir 名
+  /// （[QgsProjectFile.projectNameFor]。端末ごとに dir 名が違っても `.qgs` を同じにする）。
   ///
   /// ⚠ ルートの [FolderNode.name] は "Home" 固定なので使えない。
-  /// 実際のフォルダ名（パスの末尾）を採る。
-  String _projectName(FolderNode root, String? rootPath) {
+  Future<String> _projectName(FolderNode root, String? rootPath) async {
     if (rootPath == null) return root.name;
-    final base = p.basename(p.normalize(rootPath));
-    return base.isEmpty ? root.name : base;
+    if (p.basename(p.normalize(rootPath)).isEmpty) return root.name;
+    return QgsProjectFile.projectNameFor(rootPath, await KMetaService.instance.getRawMeta(rootPath));
   }
 
   /// [root] のフォルダに `<dir名>.qgs` を書く。
@@ -144,7 +141,7 @@ class QgsProjectBuilder {
       return null;
     }
 
-    // 自分の `.kmeta.json` を持つ子 dir は独立した `<dir名>.qgs` を持ち、親には埋め込みで載せる
+    // 自分の設定（`.qgs`）を持つ子 dir は独立した `<dir名>.qgs` を持ち、親には埋め込みで載せる
     // （dir 分散のまま「root を開けば全部見える」を1種類のファイルで両立する）
     final embedded = <String, QgsEmbeddedGroup>{};
     if (project == null) {
@@ -167,16 +164,14 @@ class QgsProjectBuilder {
     }
 
     final built = project ?? await build(root, embedded: embedded);
-    final dirName = _projectName(root, rootPath);
-    final path = p.join(rootPath, qgsFileNameFor(dirName));
+    final dirName = await _projectName(root, rootPath);
+    // 旧名 `project.qgs`・Drive のフォルダ名・dir 改名前の名前のものも [QgsProjectFile.find] が探す
+    final path = await QgsProjectFile.find(rootPath) ?? p.join(rootPath, qgsFileNameFor(dirName));
+    // フォルダ設定（[QgsMetaStore]）も同じファイルを書くので順番に
+    return QgsFileLock.run(path, () => _writeLocked(path, dirName, built));
+  }
 
-    // 旧名からの引き継ぎ
-    final legacyPath = p.join(rootPath, kLegacyQgsFileName);
-    if (!await fs.exists(path) && await fs.exists(legacyPath)) {
-      await fs.rename(legacyPath, path);
-      AppLogger.debug('[QgsProjectBuilder] $kLegacyQgsFileName を ${p.basename(path)} に改名');
-    }
-
+  Future<QgsWriteResult> _writeLocked(String path, String dirName, QgsProject built) async {
     QgsDocument doc;
     var updatedInPlace = false;
     String? existing;
@@ -199,7 +194,7 @@ class QgsProjectBuilder {
     doc.setStamp(
       KokageStamp(
         schemaVersion: kQgsSchemaVersion,
-        app: await _appLabel(),
+        app: await QgsMetaStore.appLabel(),
         savedAt: DateTime.now(),
         dirName: dirName,
       ),
@@ -238,16 +233,6 @@ class QgsProjectBuilder {
       s = s.replaceAll(re, '');
     }
     return s;
-  }
-
-  /// 印に書くアプリ名。`kokage-map <version>+<build>`
-  Future<String> _appLabel() async {
-    try {
-      final info = await PackageInfo.fromPlatform();
-      return 'kokage-map ${info.version}+${info.buildNumber}';
-    } on Object {
-      return 'kokage-map';
-    }
   }
 
   // =============================================

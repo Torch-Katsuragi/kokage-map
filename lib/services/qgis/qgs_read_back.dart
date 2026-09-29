@@ -31,7 +31,7 @@ import '../../utils/app_logger.dart';
 import 'qgs_auto_refresh.dart';
 import 'qgs_document.dart';
 import 'qgs_importer.dart';
-import 'qgs_writer.dart';
+import 'qgs_meta_store.dart';
 
 /// 読み戻した結果。何もしなかったときは [QgsReadBack.run] が null を返す
 class QgsReadBackResult {
@@ -53,12 +53,11 @@ class QgsReadBack {
   ///
   /// ツリーの子（gpkg とレイヤ）が読み込まれてから呼ぶこと。
   Future<QgsReadBackResult?> run(FolderNode root) async {
-    // まだ `.qgs` が無いプロジェクトは、開いた時点で最初の1本を作っておく
+    // 開いたら一度は書き直す（中身が同じなら書かない）。まだ `.qgs` が無ければ最初の1本になり、
+    // 旧 `.kmeta.json` から移したばかりなら QGIS が読む部分（スタイル・可視性）がそろう
     // （手動の書き出しメニューは撤去したので、ここが唯一の入口）
     final rootPath = root.getAbsoluteFilePath();
-    if (rootPath != null && await _findProjectFile(rootPath) == null) {
-      QgsAutoRefresh.instance.schedule(rootPath);
-    }
+    if (rootPath != null) QgsAutoRefresh.instance.schedule(rootPath);
 
     final results = <QgsReadBackResult>[];
     await _runTree(root, results);
@@ -79,17 +78,8 @@ class QgsReadBack {
     }
   }
 
-  /// `<dir名>.qgs`、無ければ旧 `project.qgs`。どちらも無ければ null
-  Future<String?> _findProjectFile(String dirPath) async {
-    final dirName = p.basename(p.normalize(dirPath));
-    for (final c in [
-      p.join(dirPath, qgsFileNameFor(dirName)),
-      p.join(dirPath, kLegacyQgsFileName),
-    ]) {
-      if (await fs.exists(c)) return c;
-    }
-    return null;
-  }
+  /// `<dir名>.qgs`（旧名・改名前の名前からの引き継ぎ込み）。無ければ null
+  Future<String?> _findProjectFile(String dirPath) => QgsProjectFile.find(dirPath);
 
   Future<QgsReadBackResult?> _runOne(FolderNode root) async {
     final rootPath = root.getAbsoluteFilePath();

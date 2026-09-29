@@ -127,6 +127,8 @@ class SyncPullHandler {
           final localFilePath =
               _fileOps.relativePathToLocalPath(localPath, driveEntry.relativePath);
 
+          // この端末のリンク情報は、落とした .qgs で上書きしない
+          final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
           await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
           final success = await _driveService.downloadFile(
             driveFile.id!,
@@ -135,6 +137,7 @@ class SyncPullHandler {
 
           if (success) {
             await SyncBaseStore.settleAfterDownload(localFilePath);
+            await KMetaService.instance.afterReplace(localFilePath, keepLink);
             downloadedCount++;
             syncedFiles[driveEntry.relativePath] = KMetaSyncFile(
               driveFileId: driveFile.id!,
@@ -158,7 +161,7 @@ class SyncPullHandler {
         maxConcurrency: _downloadConcurrency,
       );
 
-      // Driveにないファイルをローカルから削除（.kmeta.jsonは保護）
+      // Driveにないファイルをローカルから削除（フォルダ設定（`.qgs`）は保護）
       int deletedCount = 0;
       final driveFilePaths =
           filesToDownload.map((f) => f.relativePath).toSet();
@@ -277,7 +280,7 @@ class SyncPullHandler {
       isReadOnly: isReadOnly,
     );
     if (!saved) {
-      AppLogger.error('[SyncEngine] クローン: .kmeta.json 初期化失敗');
+      AppLogger.error('[SyncEngine] クローン: フォルダ設定（.qgs）の初期化失敗');
       return false;
     }
 

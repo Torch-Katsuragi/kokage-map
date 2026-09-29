@@ -606,6 +606,8 @@ class SyncConflictResolver {
               if (entry.driveFileId != null) {
                 await fs.createDirectory(p.dirname(localFilePath));
 
+                // この端末のリンク情報は、落とした .qgs で上書きしない
+                final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
                 await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
 
                 final success = await _driveService.downloadFile(
@@ -614,6 +616,7 @@ class SyncConflictResolver {
                 );
                 if (success) {
                   await SyncBaseStore.settleAfterDownload(localFilePath);
+                  await KMetaService.instance.afterReplace(localFilePath, keepLink);
                   downloadedCount++;
                   syncedFiles[relativePath] = KMetaSyncFile(
                     driveFileId: entry.driveFileId!,
@@ -652,6 +655,8 @@ class SyncConflictResolver {
                   if (entry.driveFileId != null) {
                     await fs.createDirectory(p.dirname(localFilePath));
 
+                    // この端末のリンク情報は、落とした .qgs で上書きしない
+                    final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
                     await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
 
                     final success = await _driveService.downloadFile(
@@ -660,6 +665,7 @@ class SyncConflictResolver {
                     );
                     if (success) {
                       await SyncBaseStore.settleAfterDownload(localFilePath);
+                      await KMetaService.instance.afterReplace(localFilePath, keepLink);
                       downloadedCount++;
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: entry.driveFileId!,
@@ -677,6 +683,8 @@ class SyncConflictResolver {
                   }
                 case MergeChangeType.modified:
                   if (entry.driveFileId != null) {
+                    // この端末のリンク情報は、落とした .qgs で上書きしない
+                    final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
                     await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
                     final success = await _driveService.downloadFile(
                       entry.driveFileId!,
@@ -684,6 +692,7 @@ class SyncConflictResolver {
                     );
                     if (success) {
                       await SyncBaseStore.settleAfterDownload(localFilePath);
+                      await KMetaService.instance.afterReplace(localFilePath, keepLink);
                       downloadedCount++;
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: entry.driveFileId!,
@@ -811,7 +820,7 @@ class SyncConflictResolver {
 
   /// Driveのフォルダ構造をローカルに反映（空フォルダ含む）
   ///
-  /// [driveId] を省略すると .kmeta.json から取得する。
+  /// [driveId] を省略すると フォルダ設定（`.qgs`） から取得する。
   /// 作成したフォルダ数を返す。
   Future<int> ensureDriveFolders(
     String localPath, {

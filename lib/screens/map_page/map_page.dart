@@ -147,7 +147,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   }
 
   /// プロジェクトをディスクから読み直す（メニューの「読み直す」・`/map?reload=1`）。
-  /// AI や QGIS が .gpkg / .kmeta.json / .qgs を書き換えたあとに、開き直さずに追いつく
+  /// AI や QGIS が .gpkg / フォルダ設定（`.qgs`） / .qgs を書き換えたあとに、開き直さずに追いつく
   Future<void> reloadProjectFromDisk() async {
     AppLogger.debug('[MapPage] プロジェクトを読み直す');
     KMetaService.instance.clearCache();

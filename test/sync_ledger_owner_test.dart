@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/services/kmeta_service.dart';
+import 'package:root_maps/services/qgis/qgs_meta_store.dart';
 import 'package:root_maps/services/sync_ledger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -69,7 +70,7 @@ void main() {
     final a = await dir('A');
     final b = await dir('B');
     await KMetaService.instance.setDriveSync(a, driveId: drive, files: {'x.gpkg': KMetaSyncFile(driveFileId: 'f', lastSyncedTime: t1)});
-    await KMeta.empty.saveToFile(a); // A はリンクを外した
+    await QgsMetaStore.write(a, KMeta.empty); // A はリンクを外した
     KMetaService.instance.clearCache();
     expect(await SyncLedger.instance.resolveKey(driveId: drive, folderPath: b), 'drive:$drive');
   });

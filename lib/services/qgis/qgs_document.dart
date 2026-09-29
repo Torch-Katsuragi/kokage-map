@@ -172,6 +172,27 @@ class QgsDocument {
     return root.getAttribute('saveDateTime') == s.savedAtText;
   }
 
+  /// アプリのフォルダ設定（`KMeta` の JSON）。無ければ null（QGIS か他人が作ったファイル）。
+  ///
+  /// `.kmeta.json` をやめて `.qgs` に一本化したときの置き場（2026-09-29）。QGIS が表現できる
+  /// 部分（可視性・フィルタ・単一シンボル・並び）は別に QGIS の形でも書いてあり、QGIS 側で
+  /// 保存されたときは読み戻し（`QgsReadBack`）がそちらを取り込んでここを書き直す。
+  /// QGIS は保存時に知らない `<properties>` をそのまま残す。
+  String? get kokageMeta {
+    final text = _kokageElement?.getElement('meta')?.innerText;
+    return text == null || text.isEmpty ? null : text;
+  }
+
+  set kokageMeta(String? json) {
+    if (json == null) {
+      final stale = _kokageElement?.getElement('meta');
+      if (stale != null) _detach(stale);
+      return;
+    }
+    final props = _ensureChild(root, 'properties');
+    _setProperty(_ensureChild(props, _kokageScope), 'meta', json);
+  }
+
   /// QGIS の `<properties>` 流儀で値を置く（`<key type="QString">value</key>`）
   void _setProperty(XmlElement scope, String key, String value, {String type = 'QString'}) {
     final el = _ensureChild(scope, key);

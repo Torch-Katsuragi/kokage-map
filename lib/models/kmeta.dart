@@ -14,14 +14,14 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: フォルダメタデータモデル
-// 各フォルダに配置される.kmeta.jsonの読み書き・継承マージを担当
+// 各フォルダに配置されるフォルダ設定（`.qgs`）の読み書き・継承マージを担当
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../core/fs/k_file_system.dart';
 import '../utils/app_logger.dart';
 
-/// .kmeta.jsonファイル名
+/// フォルダ設定（`.qgs`）ファイル名
 const String kMetaFileName = '.kmeta.json';
 
 /// 現在のスキーマバージョン
@@ -720,7 +720,7 @@ class KMetaImageOverlay {
   }
 }
 
-/// フォルダメタデータ（.kmeta.json）
+/// フォルダメタデータ（フォルダ設定（`.qgs`））
 class KMeta {
   /// スキーマバージョン
   final int version;

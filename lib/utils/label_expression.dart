@@ -31,7 +31,7 @@
 //   ( … )
 //
 // それ以外の関数・演算子は読めない（`tryParseLabelExpression` が null）。
-// 読めない式は `.kmeta.json` にそのまま残し、地図にはラベルを出さない。
+// 読めない式は フォルダ設定（`.qgs`） にそのまま残し、地図にはラベルを出さない。
 
 /// 式の木
 sealed class LabelExpr {

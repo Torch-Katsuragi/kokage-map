@@ -38,7 +38,7 @@ import 'layer_tree_node.dart';
 import 'overlay_image_node.dart';
 
 /// グローバルフォルダ内サブフォルダのDrive連携チェック
-/// .kmeta.jsonにDrive連携情報があればDriveFolderNodeを作成
+/// フォルダ設定（`.qgs`）にDrive連携情報があればDriveFolderNodeを作成
 Future<LayerTreeNode?> _tryCreateGlobalDriveNode(
   String folderPath,
   String folderName,
@@ -152,7 +152,7 @@ class GlobalFolderNode extends FolderNode {
 
     for (final entity in directories) {
       final name = entity.name;
-      // .kmeta.jsonにDrive連携情報があればGlobalDriveFolderNodeとして作成
+      // フォルダ設定（`.qgs`）にDrive連携情報があればGlobalDriveFolderNodeとして作成
       final driveNode = await _tryCreateGlobalDriveNode(
         entity.path, name, globalPath, this,
       );
@@ -327,7 +327,7 @@ class GlobalSubFolderNode extends FolderNode {
 
     for (final entity in directories) {
       final name = entity.name;
-      // .kmeta.jsonにDrive連携情報があればGlobalDriveFolderNodeとして作成
+      // フォルダ設定（`.qgs`）にDrive連携情報があればGlobalDriveFolderNodeとして作成
       final driveNode = await _tryCreateGlobalDriveNode(
         entity.path, name, basePath, this,
       );

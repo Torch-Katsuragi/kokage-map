@@ -32,6 +32,7 @@ import '../core/fs/k_file_system.dart';
 import '../models/kmeta.dart';
 import '../utils/app_logger.dart';
 import '../utils/stable_hash.dart';
+import 'qgis/qgs_meta_store.dart';
 
 /// 1フォルダぶんの帳簿
 class SyncLedgerEntry {
@@ -142,7 +143,7 @@ class SyncLedger {
     if (owner == null || owner == folderPath || await fs.canonicalPath(owner) == here) return base;
     try {
       if (!await fs.isDirectory(owner)) return base;
-      final ownerMeta = await KMeta.loadFromFile(owner);
+      final ownerMeta = await QgsMetaStore.read(owner);
       if (ownerMeta?.sync.driveId != driveId) return base;
     } on Object catch (_) {
       return base;

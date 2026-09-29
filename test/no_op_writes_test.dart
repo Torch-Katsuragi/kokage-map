@@ -1,4 +1,4 @@
-// 中身が変わらないなら .qgs と .kmeta.json を書かない。
+// 中身が変わらないなら .qgs（レイヤの部分もフォルダ設定の部分も）を書かない。
 // 書くと更新時刻が進み、Drive 同期（更新時刻と最後の同期時刻を比べる）が 5 分ごとに
 // アップロードし続けていた（2026-09-24、Fold と本物の Drive で見つけた）
 import 'dart:io';
@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:root_maps/core/path_resolver.dart';
 import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
+import 'package:root_maps/services/qgis/qgs_meta_store.dart';
 import 'package:root_maps/services/qgis/qgs_project_builder.dart';
 
 void main() {
@@ -37,14 +38,15 @@ void main() {
     expect(await mtime(first.path), t0);
   });
 
-  test('.kmeta.json は中身が同じなら書き直さない', () async {
+  test('フォルダ設定は中身が同じなら書き直さない', () async {
     final dir = tmp.path;
     const meta = KMeta();
-    expect(await meta.saveToFile(dir), isTrue);
-    final path = p.join(dir, kMetaFileName);
+    expect(await QgsMetaStore.write(dir, meta), isTrue);
+    final path = QgsProjectFile.pathFor(dir);
     final t0 = await mtime(path);
     await Future<void>.delayed(const Duration(milliseconds: 1100));
-    expect(await meta.saveToFile(dir), isTrue);
+    expect(await QgsMetaStore.write(dir, meta), isTrue);
     expect(await mtime(path), t0);
+    expect(File(p.join(dir, kMetaFileName)).existsSync(), isFalse);
   });
 }

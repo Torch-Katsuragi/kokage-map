@@ -16,7 +16,7 @@
 /// `.qgs`（QGISプロジェクト）に書き出す内容を、XMLと切り離して表した型。
 ///
 /// > [!IMPORTANT] `.qgs` は生成物であって、正典ではない
-/// > いつでも dir 構造 + `.kmeta.json` から再生成できる。ビルド成果物として扱う。
+/// > いつでも dir 構造 + フォルダ設定（`.qgs`） から再生成できる。ビルド成果物として扱う。
 /// > QGIS側で編集しても、次の生成で上書きされる。
 /// > 設計は [[docs/technical/project-format-design]]。
 ///
@@ -142,7 +142,7 @@ class QgsLayer extends QgsTreeNode {
 
 /// ラスタレイヤ（オーバーレイ画像の GeoTIFF）。
 ///
-/// アプリはオーバーレイの位置・倍率・回転を `.kmeta.json` に持ち、`.tif` には GeoTIFF タグとして
+/// アプリはオーバーレイの位置・倍率・回転を フォルダ設定（`.qgs`） に持ち、`.tif` には GeoTIFF タグとして
 /// 焼き込んでいる（`GeoTiffWriteScheduler`）。QGIS はそのタグを gdal プロバイダで読むので、
 /// `.qgs` にはファイルの参照だけ書けばよい。見た目（レンダラ）は QGIS の既定に任せる。
 class QgsRasterLayer extends QgsTreeNode {

@@ -15,7 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // こかげマップ: 外から「どのプロジェクトを・どこを・どう見せるか」を指示する起動要求
 //
-// データはローカルにあるので、AI や CLI は .gpkg / .kmeta.json / .qgs を直接書き換え、
+// データはローカルにあるので、AI や CLI は .gpkg / フォルダ設定（`.qgs`） / .qgs を直接書き換え、
 // アプリには「開いて」「ここを見せて」「読み直して」だけ頼めばよい。その口がこれ。
 //
 //   /map?project=<絶対パス>&lat=33.9&lon=135.57&zoom=15&bearing=30&pitch=45&reload=1

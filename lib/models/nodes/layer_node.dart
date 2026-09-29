@@ -161,7 +161,7 @@ abstract class LayerNode extends LayerTreeNode {
   /// 「View が無い」ではない（View が無いレイヤにも既定Viewが1枚できる）。
   final List<ViewNode> views = [];
 
-  /// `.kmeta.json` から View 定義を読み直す。
+  /// フォルダ設定（`.qgs`） から View 定義を読み直す。
   ///
   /// 定義が無ければ既定View（[kDefaultViewName]）を1枚だけ作る。
   /// 既定Viewはファイルには書かない — 書くと全プロジェクトに差分が出て
@@ -284,7 +284,7 @@ abstract class LayerNode extends LayerTreeNode {
   /// View を全部消灯したレイヤは、レイヤ自体が可視でも何も描かない。
   bool get hasVisibleView => views.isEmpty || views.any((v) => v.visible);
 
-  /// 現在の [views] を `.kmeta.json` に書き戻す。
+  /// 現在の [views] を フォルダ設定（`.qgs`） に書き戻す。
   ///
   /// 既定View1枚だけの状態は「View未定義」と同じ意味なので、書かずに消す。
   Future<void> persistViews() async {

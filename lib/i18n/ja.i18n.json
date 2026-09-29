@@ -1486,7 +1486,12 @@
     "sizeMultiplier": "大きさの倍率",
     "followLayer": "レイヤに従う",
     "followLayerConfirm": "この View の設定を消して、レイヤの設定に従わせますか？",
-    "followingLayer": "レイヤの設定に従っています。変えた項目だけがこの View の設定になります"
+    "followingLayer": "レイヤの設定に従っています。変えた項目だけがこの View の設定になります",
+    "qgisStyle": "QGIS で設定されたスタイル（$kind）",
+    "qgisStyleHint": "アプリでは代表の色で描きます。色や太さは QGIS で変えてください（ここで変えても QGIS には届きません）。ラベルはここで変えられます",
+    "qgisRendererCategorized": "分類",
+    "qgisRendererGraduated": "段階",
+    "qgisRendererRule": "ルール"
   },
   "terrainSettings": {
     "title": "地形の見た目",

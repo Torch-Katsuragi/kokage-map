@@ -45,6 +45,13 @@ class KMetaLayerStyle {
   final Color? labelHaloColor;
   final double? labelOpacity;
 
+  /// QGIS 側で単一シンボル以外（`categorizedSymbol` / `graduatedSymbol` / `RuleRenderer` …）に
+  /// 設定されているときの種類。null なら単一シンボル（アプリで色や太さを編集できる）。
+  ///
+  /// アプリは描き分けを再現できないので代表の色で描き、`.qgs` のレンダラは触らない（不変条件4）。
+  /// スタイル画面はこのとき色・太さを編集させない（変えても QGIS に届かず、見た目が食い違うため）
+  final String? qgisRenderer;
+
   const KMetaLayerStyle({
     this.pointSize,
     this.pointColor,
@@ -61,6 +68,7 @@ class KMetaLayerStyle {
     this.labelColor,
     this.labelHaloColor,
     this.labelOpacity,
+    this.qgisRenderer,
   });
 
   KMetaLayerStyle copyWith({
@@ -79,6 +87,7 @@ class KMetaLayerStyle {
     Color? labelColor,
     Color? labelHaloColor,
     double? labelOpacity,
+    String? qgisRenderer,
   }) =>
       KMetaLayerStyle(
         pointSize: pointSize ?? this.pointSize,
@@ -96,6 +105,7 @@ class KMetaLayerStyle {
         labelColor: labelColor ?? this.labelColor,
         labelHaloColor: labelHaloColor ?? this.labelHaloColor,
         labelOpacity: labelOpacity ?? this.labelOpacity,
+        qgisRenderer: qgisRenderer ?? this.qgisRenderer,
       );
 
   /// JSONからパース
@@ -116,6 +126,7 @@ class KMetaLayerStyle {
       labelColor: _parseColor(json['labelColor']),
       labelHaloColor: _parseColor(json['labelHaloColor']),
       labelOpacity: (json['labelOpacity'] as num?)?.toDouble(),
+      qgisRenderer: json['qgisRenderer'] as String?,
     );
   }
 
@@ -149,6 +160,7 @@ class KMetaLayerStyle {
       json['labelHaloColor'] = _colorToHex(labelHaloColor!);
     }
     if (labelOpacity != null) json['labelOpacity'] = labelOpacity;
+    if (qgisRenderer != null) json['qgisRenderer'] = qgisRenderer;
     return json;
   }
 
@@ -171,6 +183,7 @@ class KMetaLayerStyle {
       labelColor: labelColor ?? parent.labelColor,
       labelHaloColor: labelHaloColor ?? parent.labelHaloColor,
       labelOpacity: labelOpacity ?? parent.labelOpacity,
+      qgisRenderer: qgisRenderer ?? parent.qgisRenderer,
     );
   }
 
@@ -190,7 +203,8 @@ class KMetaLayerStyle {
       labelFontSize == null &&
       labelColor == null &&
       labelHaloColor == null &&
-      labelOpacity == null;
+      labelOpacity == null &&
+      qgisRenderer == null;
 }
 
 /// 可視性設定

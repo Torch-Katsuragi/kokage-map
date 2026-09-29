@@ -67,6 +67,57 @@ void main() {
     });
   });
 
+  group('QGIS で設定された描き分け（段7・読み取り専用）', () {
+    const categorized = '''
+<maplayer type="vector" geometry="Polygon">
+  <renderer-v2 type="categorizedSymbol" attr="species">
+    <categories>
+      <category value="sugi" symbol="0" label="スギ"/>
+      <category value="hinoki" symbol="1" label="ヒノキ"/>
+    </categories>
+    <symbols>
+      <symbol name="0" type="fill">
+        <layer class="SimpleFill">
+          <Option type="Map">
+            <Option name="color" value="46,125,50,255" type="QString"/>
+            <Option name="outline_color" value="0,0,0,255" type="QString"/>
+          </Option>
+        </layer>
+      </symbol>
+      <symbol name="1" type="fill">
+        <layer class="SimpleFill">
+          <Option type="Map"><Option name="color" value="255,235,59,255" type="QString"/></Option>
+        </layer>
+      </symbol>
+    </symbols>
+  </renderer-v2>
+</maplayer>''';
+
+    test('分類なら代表の色（最初のシンボル）で描き、種類の印を付ける', () {
+      final style = readStyleForTest(categorized)!;
+      expect(style.qgisRenderer, 'categorizedSymbol');
+      expect(style.polygonFillColor, const Color(0xFF2E7D32));
+    });
+
+    test('単一シンボルなら印は付けない（アプリで編集できる）', () {
+      final style = readStyleForTest(categorized.replaceFirst('categorizedSymbol', 'singleSymbol'))!;
+      expect(style.qgisRenderer, isNull);
+    });
+
+    test('シンボルが読めない描き分けでも、印だけは付ける', () {
+      final style = readStyleForTest('<maplayer><renderer-v2 type="RuleRenderer"><rules/></renderer-v2></maplayer>');
+      expect(style!.qgisRenderer, 'RuleRenderer');
+    });
+
+    test('印は JSON を往復し、ラベルと合わせても消えない', () {
+      const style = KMetaLayerStyle(qgisRenderer: 'graduatedSymbol', polygonFillColor: Color(0xFF123456));
+      final back = KMetaLayerStyle.fromJson(style.toJson());
+      expect(back.qgisRenderer, 'graduatedSymbol');
+      expect(back.mergeWith(const KMetaLayerStyle(labelEnabled: true)).qgisRenderer, 'graduatedSymbol');
+      expect(const KMetaLayerStyle(labelEnabled: true).mergeWith(back).qgisRenderer, 'graduatedSymbol');
+    });
+  });
+
   group('レンダラの読み取り', () {
     /// QGIS 3.x が書く形（`<Option>`）
     const modernPoint = '''

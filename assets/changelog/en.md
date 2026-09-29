@@ -9,6 +9,8 @@
 - Settings now reach other devices through Drive sync (they used to stay on each device). Link details such as read-only stay per device
 - When two devices change settings separately, Drive sync keeps both changes. If both changed the same item, each device keeps its own value
 - Changing settings in quick succession could lose the earlier change. Fixed
+- Colors and widths changed in QGIS sometimes did not come back to the app (layers without their own Views). Fixed
+- Layers styled in QGIS by category or rule now show "Style set in QGIS" on the style screen, and their colors and widths are not editable in the app (changes would not reach QGIS). The app draws them in a representative color
 
 ## v0.7.3 — 2026/09/27
 

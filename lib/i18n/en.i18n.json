@@ -1486,7 +1486,12 @@
     "sizeMultiplier": "Size multiplier",
     "followLayer": "Follow the layer",
     "followLayerConfirm": "Discard this View's own style and follow the layer?",
-    "followingLayer": "Following the layer's style. Only the items you change become this View's own"
+    "followingLayer": "Following the layer's style. Only the items you change become this View's own",
+    "qgisStyle": "Style set in QGIS ($kind)",
+    "qgisStyleHint": "The app draws it in a representative color. Change colors and widths in QGIS (changes here would not reach QGIS). Labels can be changed here",
+    "qgisRendererCategorized": "categorized",
+    "qgisRendererGraduated": "graduated",
+    "qgisRendererRule": "rule-based"
   },
   "terrainSettings": {
     "title": "Terrain look",

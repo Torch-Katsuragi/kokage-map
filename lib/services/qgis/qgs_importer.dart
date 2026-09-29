@@ -47,6 +47,7 @@ import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/label_expression.dart';
+import '../kmeta_service.dart';
 
 /// px ⇄ mm（QGISのシンボル単位はMM）。96dpi 相当。[[qgs_writer]] の逆。
 const double _kMmToPx = 96 / 25.4;
@@ -257,6 +258,10 @@ class QgsImporter {
       if (views.length == 1 && views.first.isDefaultView) {
         layer.visible = views.first.visible;
         await layer.persistVisibility();
+        // スタイルもレイヤ側に持つ。既定 View は書かれないので、View に入れたままだと消える
+        // （2026-09-29 まで、QGIS で変えた色は既定 View 1枚のレイヤに届いていなかった）
+        final imported = views.first.style;
+        if (imported != null) await _applyLayerStyle(layer, imported);
       } else {
         for (final v in views) {
           await v.persistVisibility();
@@ -275,6 +280,22 @@ class QgsImporter {
   // =============================================
   // 部品
   // =============================================
+
+  /// QGIS から読んだスタイルをレイヤのスタイルに重ねる。QGIS が持たない項目（ラベルの濃さ等）は残し、
+  /// 描き分けの印（[KMetaLayerStyle.qgisRenderer]）は QGIS の今の状態に合わせる（単一シンボルに戻したら外す）
+  Future<void> _applyLayerStyle(LayerNode layer, KMetaLayerStyle imported) async {
+    final folder = layer.folderNode;
+    final folderPath = folder?.getAbsoluteFilePath();
+    if (folder == null || folderPath == null) return;
+    final existing = (await KMetaService.instance.getMeta(folderPath)).styles.layers[layer.layerKey];
+    var merged = imported.mergeWith(existing);
+    if (imported.qgisRenderer == null && merged.qgisRenderer != null) {
+      merged = KMetaLayerStyle.fromJson(merged.toJson()..remove('qgisRenderer'));
+    }
+    await KMetaService.instance.setLayerStyle(folderPath, layer.layerKey, merged);
+    folder.invalidateMetaCache();
+    layer.invalidateKmetaStyleCache();
+  }
 
   /// `.qgs` ならそのまま、`.qgz`（zip）なら中の `.qgs` を取り出して返す。
   ///
@@ -393,6 +414,14 @@ class QgsImporter {
   }
 
   KMetaLayerStyle? readStyle(XmlElement maplayer) {
+    final style = _readSymbolStyle(maplayer);
+    final type = maplayer.findElements('renderer-v2').firstOrNull?.getAttribute('type');
+    // 単一シンボル以外は、代表の色で描きつつ「QGIS で設定されたスタイル」として印を付ける
+    if (type == null || type == 'singleSymbol') return style;
+    return (style ?? const KMetaLayerStyle()).copyWith(qgisRenderer: type);
+  }
+
+  KMetaLayerStyle? _readSymbolStyle(XmlElement maplayer) {
     final renderer = maplayer.findElements('renderer-v2').firstOrNull;
     if (renderer == null) return null;
     final symbol = renderer.findAllElements('symbol').firstOrNull;

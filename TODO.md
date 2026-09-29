@@ -172,6 +172,7 @@
 - [ ] 🧪 `test/gpkg_index_repair_test.dart`「geodiff の rebase で入った行は rtree に無い → 焼き直しで載る」が
       全体を並列で回すとまれに落ちる（単体では 3/3 通る。2026-09-29）。一時ファイルか geodiff の取り合いを疑う。
       `test/gpkg_merger_test.dart`「衝突なし: 別の行の変更が両方載る」も同じく 1 度だけ落ちた（geodiff 系で共通）
+      一時ファイル名は各テストの dir から作るので取り合いではない。Windows の並列負荷下だけ（Defender のロック？）。CI の Linux では未観測
 
 ## 正典を `.qgs` に移す（2026-09-06 設計・2026-09-29 段2 完了）
 

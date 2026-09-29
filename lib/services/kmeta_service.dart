@@ -40,15 +40,20 @@ class KMetaService {
   /// メタデータキャッシュ（フォルダパス → メタデータ）
   final Map<String, KMeta> _rawCache = {};
 
+  /// 設定を持たないと分かっている dir（ツリーを開くたびに dir を列挙し直さない）
+  final Set<String> _noMeta = {};
+
   /// キャッシュをクリア
   void clearCache() {
     _rawCache.clear();
+    _noMeta.clear();
     AppLogger.debug('[KMetaService] Cache cleared');
   }
 
   /// 特定フォルダのキャッシュをクリア（変更時に使用）
   void invalidateCache(String folderPath) {
     _rawCache.remove(folderPath);
+    _noMeta.remove(folderPath);
   }
 
   /// フォルダの生メタデータを取得（キャッシュ対応・バージョンゲート付き）
@@ -56,9 +61,13 @@ class KMetaService {
     if (_rawCache.containsKey(folderPath)) {
       return _rawCache[folderPath];
     }
+    if (_noMeta.contains(folderPath)) return null;
 
     final loaded = await QgsMetaStore.read(folderPath, onMigrated: () => onSaved?.call(folderPath));
-    if (loaded == null) return null;
+    if (loaded == null) {
+      _noMeta.add(folderPath);
+      return null;
+    }
     // 旧版（v1）の設定も捨てずにそのまま読む（以前は sync 以外を捨てて保存し直していた）
 
     // 帳簿（端末ごとの同期状態）はアプリ私有領域から重ねる。
@@ -123,6 +132,7 @@ class KMetaService {
   Future<bool> saveMeta(String folderPath, KMeta meta) async {
     final prevRaw = _rawCache[folderPath];
     _rawCache[folderPath] = meta;
+    _noMeta.remove(folderPath);
 
     final key = await SyncLedger.instance.resolveKey(driveId: meta.sync.driveId, folderPath: folderPath);
     await SyncLedger.instance.write(key, SyncLedgerEntry.fromSync(meta.sync).withOwner(folderPath));
@@ -411,7 +421,9 @@ class KMetaService {
   }
 
   /// フォルダが自分の設定（`.qgs`、または移す前の `.kmeta.json`）を持っているか
-  Future<bool> hasMetaFile(String folderPath) => QgsMetaStore.exists(folderPath);
+  ///
+  /// 読んだ結果はキャッシュに載るので、ツリーを読み込んだあとは dir を列挙し直さない
+  Future<bool> hasMetaFile(String folderPath) async => await getRawMeta(folderPath) != null;
 
   /// 同期で `.qgs` を上書きダウンロードする前に呼ぶ。この端末のリンク情報を返す。
   ///

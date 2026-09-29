@@ -28,6 +28,7 @@ import 'package:path/path.dart' as p;
 import '../../core/fs/k_file_system.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../utils/app_logger.dart';
+import '../kmeta_service.dart';
 import 'qgs_auto_refresh.dart';
 import 'qgs_document.dart';
 import 'qgs_importer.dart';
@@ -78,8 +79,12 @@ class QgsReadBack {
     }
   }
 
-  /// `<dir名>.qgs`（旧名・改名前の名前からの引き継ぎ込み）。無ければ null
-  Future<String?> _findProjectFile(String dirPath) => QgsProjectFile.find(dirPath);
+  /// `<dir名>.qgs`（旧名・改名前の名前からの引き継ぎ込み）。無ければ null。
+  /// 設定を持たない dir（キャッシュで分かる）は列挙しない
+  Future<String?> _findProjectFile(String dirPath) async {
+    if (!await KMetaService.instance.hasMetaFile(dirPath)) return null;
+    return QgsProjectFile.find(dirPath);
+  }
 
   Future<QgsReadBackResult?> _runOne(FolderNode root) async {
     final rootPath = root.getAbsoluteFilePath();

@@ -22,7 +22,8 @@ tags: [technical, geopackage, qgis, interop]
 - 失敗は logcat の `[QgsAutoRefresh]` に出るだけで通知しない（手動書き出しで再現できる）
 - **逆方向**: プロジェクトを開いたとき `QgsReadBack` が root と子 dir の `.qgs` を見て、印（`kokage/savedAt`）と
   root の `saveDateTime` が食い違えば（＝QGIS が後から保存した）寛容インポータで View・スタイル・可視性を
-  取り込み、続く自動更新で正規化＋印つきに書き戻す。ログは `[QgsReadBack]`
+  取り込み、続く自動更新で正規化＋印つきに書き戻す。ログは `[QgsReadBack]`。
+  Drive 同期でツリーを読み直したあとにも走る（`DriveSyncOperations.refreshAfterSync`、2026-09-29）
 - **子 dir**: 自分の設定（`.qgs`）を持つ子 dir は `<子dir名>.qgs` を持ち、親の `.qgs` には
   `layer-tree-group embedded="1" embedded_project="./子/子.qgs"` と `<maplayer embedded="1">` スタブで載る
   （`QgsProjectBuilder.writeTo` が子から先に書く）。QGIS 側では埋め込みグループは読み取り専用

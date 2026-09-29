@@ -1,7 +1,7 @@
 # CLI / URL からの起動と読み直し（AI フレンドリーな口）
 
 > [!NOTE] 何のためか
-> データはローカルの `.gpkg` / `.kmeta.json` / `.qgs` にある。AI やスクリプトはそれらを
+> データはローカルの `.gpkg` / `.qgs` にある（フォルダ設定は `.qgs` の `kokage/meta`）。AI やスクリプトはそれらを
 > QGIS の API・sqlite・JSON で直接書き換えればよく、アプリには
 > **「このプロジェクトを開いて」「ここを見せて」「読み直して」** だけ頼めれば足りる。
 > その頼み方を 1 本の文字列（ルート）に決めたのが `LaunchRequest`（2026-09-12、松本の要望）。
@@ -19,7 +19,7 @@
 | `zoom`（`z`） | ズーム |
 | `bearing` | 方位（度、北 0・時計回り） |
 | `pitch` | 傾き（度、0 が真上。上限は 3D の上限と同じ 75） |
-| `reload` | `1` でディスクから読み直す（`.kmeta.json` / `.gpkg` / `.qgs` の読み戻しまで） |
+| `reload` | `1` でディスクから読み直す（`.gpkg` / `.qgs` の読み戻しまで） |
 
 カメラは保存しない方針（2026-09-09）なので、位置は起動側が毎回明示する。
 指定が無いときの起動時のカメラ（2026-09-13）: フィーチャがあれば全部が入る範囲（GPS へは飛ばない）、無ければ東京で始めて GPS が取れたらそこへ飛ぶ（`fitToFeaturesAtStart`）。
@@ -56,7 +56,8 @@ python tool/kokage.py url --at 33.8985,135.5718,15     # web 版の URL を出�
 
 ## 典型的な流れ（AI が編集 → 見せる）
 
-1. QGIS の API か sqlite で `.gpkg` を編集、`.kmeta.json` を書き換える（正典は `.kmeta.json`、`.qgs` は自動更新）
+1. QGIS の API か sqlite で `.gpkg` を編集し、`.qgs` を QGIS で保存する（QGIS で保存したものは開いたときに読み戻す）。
+   アプリの設定を直接書くなら `.qgs` の `kokage/meta` の JSON を書き換え、`saveDateTime` と `kokage/savedAt` をそろえる
 2. `kokage.py reload --at <編集した場所>,16` — 開き直さずに反映し、その場所へ寄る
 3. スクショや `adb logcat` で確認
 

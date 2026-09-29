@@ -31,13 +31,14 @@ tags: [features, project, geopackage]
 - 編集内容は、対応するGeoPackageファイルに保存される。
 - 属性テーブル表示・簡易編集 (Root Maps内での確認用)
 
-## フォルダメタデータ（.kmeta.json）
+## フォルダ設定（`<dir名>.qgs` の `kokage/meta`）
 
-※実装済み
+※実装済み。置き場所は 2026-09-29 に `.kmeta.json` から QGIS のプロジェクトファイルへ移した
+（[[../technical/project-format-design|プロジェクト形式の設計]]）。旧 `.kmeta.json` は開いたときに移して
+`.kmeta.json.migrated` に改名する。Drive 連携している dir は `<Drive のフォルダ名>.qgs`。
 
-各フォルダに`.kmeta.json`ファイルを配置し、メタデータを階層的に管理。
+設定を持つフォルダにだけ `.qgs` を置く。親からの継承は無い（2026-09-06 に廃止。サブ dir 単体で持ち出せるように）。
 
-- 親フォルダの設定を子フォルダで継承・オーバーライド可能
 - 保存可能な設定:
   - `visibility`: レイヤー/GeoPackageの表示/非表示状態
   - `styles`: レイヤー個別のスタイル設定（色、サイズ等）

@@ -14,16 +14,16 @@ tags: [technical, geopackage, qgis, interop]
 
 ## `.qgs` はいつ書かれるか（2026-09-06）
 
-- `.kmeta.json` が保存されるたび（可視性・スタイル・View・並び順の変更）、3秒のデバウンス後に
+- フォルダ設定が保存されるたび（可視性・スタイル・View・並び順の変更。設定そのものは `kokage/meta` に即座に書く）、3秒のデバウンス後に
   root の `<dir名>.qgs` を `QgsAutoRefresh` が DOM 保持型で更新する
 - Drive push の直前に `flushNow()` で待ちを消化する
-- プロジェクトを開いたとき `.qgs` が無ければ、その場で最初の1本を作る（`QgsReadBack.run` が schedule する）
+- プロジェクトを開いたら一度書き直す（中身が同じなら書かない。無ければ最初の1本、`.kmeta.json` から移した直後なら QGIS の部分がそろう）
 - 手動の「QGISプロジェクトを書き出す／取り込む」メニューは 2026-09-06 に撤去した（自動追従と読み戻しで不要）
 - 失敗は logcat の `[QgsAutoRefresh]` に出るだけで通知しない（手動書き出しで再現できる）
 - **逆方向**: プロジェクトを開いたとき `QgsReadBack` が root と子 dir の `.qgs` を見て、印（`kokage/savedAt`）と
   root の `saveDateTime` が食い違えば（＝QGIS が後から保存した）寛容インポータで View・スタイル・可視性を
   取り込み、続く自動更新で正規化＋印つきに書き戻す。ログは `[QgsReadBack]`
-- **子 dir**: 自分の `.kmeta.json` を持つ子 dir は `<子dir名>.qgs` を持ち、親の `.qgs` には
+- **子 dir**: 自分の設定（`.qgs`）を持つ子 dir は `<子dir名>.qgs` を持ち、親の `.qgs` には
   `layer-tree-group embedded="1" embedded_project="./子/子.qgs"` と `<maplayer embedded="1">` スタブで載る
   （`QgsProjectBuilder.writeTo` が子から先に書く）。QGIS 側では埋め込みグループは読み取り専用
 

@@ -20,6 +20,7 @@ description: 定型作業（ランブック・手順書）を自動実行する�
 | キーワード | 手順書ファイルパス | 概要 |
 | --- | --- | --- |
 | `内部テストリリース` `クローズドテストリリース` `Playにアップ` | `.claude/skills/runbook/procedures/internal_test_release.md` | AAB を Play Developer API でアップロードしトラックに割り当てる（内部/クローズド共通） |
+| `依存を上げて` `最新化` `アップデート確認` | `.claude/skills/runbook/procedures/dependency_update.md` | Flutter・Dart・パッケージを最新に上げ、壊れたところを直して実機と web で確認する。開発セッションの冒頭（AGENTS.md 開発フロー）からも呼ぶ |
 
 ---
 

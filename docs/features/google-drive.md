@@ -155,7 +155,7 @@ project_meta.json
 
 # デフォルトで同期するファイル
 *.gpkg
-*.kmeta.json
+*.qgs
 project_meta.json
 
 # 除外パターン（先頭に!をつけない行は除外）
@@ -173,7 +173,7 @@ tile_cache/
 | ファイル/パターン | 同期 | 備考 |
 |------------------|------|------|
 | `*.gpkg` | ○ | GeoPackageファイル |
-| `.kmeta.json` | ○ | フォルダメタデータ |
+| `<dir名>.qgs` | ○ | フォルダ設定（2026-09-29 に `.kmeta.json` から移した。Drive 連携 dir は `<Drive のフォルダ名>.qgs`） |
 | `project_meta.json` | △ | Drive連携情報を除いた部分のみ |
 | `.ksync` | ○ | 同期パターン定義自体 |
 | `.ksync-state.json` | × | ローカル専用（同期状態） |
@@ -216,10 +216,10 @@ tile_cache/
 flowchart TB
     subgraph parent [親プロジェクト Project-A]
         A1[data.gpkg ✓ 同期対象]
-        A2[.kmeta.json ✓ 同期対象]
+        A2[<dir名>.qgs ✓ 同期対象]
         subgraph child [サブ共有フォルダ Subproject-B]
             B1[survey.gpkg ✗ 除外]
-            B2[.kmeta.json ✗ 除外]
+            B2[<dir名>.qgs ✗ 除外]
         end
     end
     
@@ -550,7 +550,7 @@ Drive APIを使用してリビジョンを管理：
 ```gitignore
 # 同期対象（include）
 *.gpkg
-*.kmeta.json
+*.qgs
 project_meta.json
 ops.log
 
@@ -625,7 +625,7 @@ flowchart TB
     subgraph local [Local Storage]
         ProjectFolder[Project Folder]
         GpkgFiles[*.gpkg]
-        KmetaFiles[.kmeta.json]
+        KmetaFiles[<dir名>.qgs]
         ProjectMeta[project_meta.json]
         OpsLog[ops.log]
         KsyncFile[.ksync]

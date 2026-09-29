@@ -120,6 +120,17 @@ void main() {
     expect((await QgsMetaStore.read(dir))!.layout.expanded, isFalse);
   });
 
+  test('書くときは直前の版を <名前>.qgs~ に残し、一時ファイルは残さない', () async {
+    await QgsMetaStore.write(dir, rich);
+    final first = File(qgsPath()).readAsStringSync();
+    await QgsMetaStore.write(dir, rich.copyWith(layout: const KMetaLayout(expanded: false)));
+    expect(File('${qgsPath()}~').readAsStringSync(), first);
+    expect(File('${qgsPath()}.tmp').existsSync(), isFalse);
+    expect((await QgsMetaStore.read(dir))!.layout.expanded, isFalse);
+    // .qgs~ は設定の .qgs として拾わない
+    expect(await QgsProjectFile.find(dir), qgsPath());
+  });
+
   test('何も無い dir は null（設定を持たない）', () async {
     expect(await QgsMetaStore.exists(dir), isFalse);
     expect(await QgsMetaStore.read(dir), isNull);

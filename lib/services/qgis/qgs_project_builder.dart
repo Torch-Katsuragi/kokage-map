@@ -205,7 +205,7 @@ class QgsProjectBuilder {
     if (existing != null && _withoutSaveTime(existing) == _withoutSaveTime(xml)) {
       AppLogger.debug('[QgsProjectBuilder] $path は変わらないので書かない');
     } else {
-      await fs.writeAsString(path, xml);
+      await QgsFileWriter.write(path, xml);
       AppLogger.debug(
         '[QgsProjectBuilder] $path に ${built.layers.length} レイヤを書いた'
         '（除外 ${built.skipped.length} 件・${updatedInPlace ? "更新" : "新規"}・'

@@ -801,7 +801,7 @@ class SyncConflictResolver {
           mine: await fs.readAsString(localFilePath),
           theirs: await fs.readAsString(tmp),
         );
-        if (r != null) await fs.writeAsString(localFilePath, r.xml);
+        if (r != null) await QgsFileWriter.write(localFilePath, r.xml);
         return r;
       });
       if (merged == null) return null;

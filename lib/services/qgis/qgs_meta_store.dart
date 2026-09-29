@@ -68,6 +68,26 @@ abstract final class QgsFileLock {
   }
 }
 
+/// `.qgs` を書く（不変条件5）。直前の版を `<名前>.qgs~` に残し、native では一時ファイルに書いてから
+/// 置き換える（途中で落ちても、読めない `.qgs` が残らない）。web は `createWritable` 自体が一時ファイル経由で
+/// 置き換えるので直接書く。`.qgs~` と `.qgs.tmp` は同期の対象（`*.qgs`）にもツリーにも出ない。
+abstract final class QgsFileWriter {
+  static Future<void> write(String path, String xml) async {
+    try {
+      if (await fs.exists(path)) await fs.writeAsBytes('$path~', await fs.readAsBytes(path));
+    } on Object catch (e) {
+      AppLogger.debug('[QgsFileWriter] 直前の版を残せない: $e');
+    }
+    if (!fs.hasRealPaths) {
+      await fs.writeAsString(path, xml);
+      return;
+    }
+    final tmp = '$path.tmp';
+    await fs.writeAsString(tmp, xml);
+    await fs.rename(tmp, path);
+  }
+}
+
 /// dir の `.qgs` を探す・名前を決める
 ///
 /// > [!IMPORTANT] Drive 連携している dir は `<Drive のフォルダ名>.qgs`（2026-09-29）
@@ -246,7 +266,7 @@ abstract final class QgsMetaStore {
             ),
           );
         }
-        await fs.writeAsString(path, doc.toXmlString());
+        await QgsFileWriter.write(path, doc.toXmlString());
         return true;
       } on Object catch (e) {
         AppLogger.debug('[QgsMetaStore] $path に書けない: $e');

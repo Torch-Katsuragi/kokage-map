@@ -18,6 +18,7 @@
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
 import 'geopackage_connection.dart';
+import 'sql_identifier.dart';
 
 /// GeoPackage スキーマを管理するクラス
 /// 責務: PRIMARY KEY検出、カラム追加・取得、テーブル構造操作
@@ -51,7 +52,7 @@ class GeoPackageSchema {
     final db = await connection.getDatabase();
 
     // PRAGMA table_infoでカラム情報を取得
-    final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
+    final columns = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
 
     // PRIMARY KEYカラムを検索（pk列が1のもの）
     String? primaryKeyColumn;
@@ -89,7 +90,7 @@ class GeoPackageSchema {
     try {
       // テーブルのレコード数をチェック
       final countResult = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM "$tableName";',
+        'SELECT COUNT(*) as count FROM ${quoteIdent(tableName)};',
       );
       final rowCount = countResult.first['count'] as int? ?? 0;
 
@@ -110,10 +111,10 @@ class GeoPackageSchema {
         }
 
         // fidカラムを追加（QGIS標準）
-        await db.execute('ALTER TABLE "$tableName" ADD COLUMN fid INTEGER;');
+        await db.execute('ALTER TABLE ${quoteIdent(tableName)} ADD COLUMN fid INTEGER;');
 
         // rowidから値をコピー
-        await db.execute('UPDATE "$tableName" SET fid = rowid;');
+        await db.execute('UPDATE ${quoteIdent(tableName)} SET fid = rowid;');
 
         AppLogger.debug('[GeoPackageSchema] ✓ fidカラムを追加し、rowidから値をコピーしました。');
         _primaryKeyCache[tableName] = 'fid';
@@ -158,7 +159,7 @@ class GeoPackageSchema {
   /// WHERE句を生成（PRIMARY KEYカラムに応じてクォート処理）
   Future<String> buildWhereClause(String tableName) async {
     final pkColumn = await getPrimaryKeyColumn(tableName);
-    return pkColumn == 'rowid' ? 'rowid = ?' : '"$pkColumn" = ?';
+    return pkColumn == 'rowid' ? 'rowid = ?' : '${quoteIdent(pkColumn)} = ?';
   }
 
   /// 指定テーブルのカラム名一覧を返す
@@ -170,7 +171,7 @@ class GeoPackageSchema {
   }) async {
     try {
       final db = await connection.getDatabase();
-      final result = await db.rawQuery('PRAGMA table_info("$tableName");');
+      final result = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
       final columns = result.map((row) => row['name'] as String).toList();
 
       // geom は属性データではないため常に除外
@@ -196,7 +197,7 @@ class GeoPackageSchema {
   Future<List<String>> getTableColumns(String tableName) async {
     try {
       final db = await connection.getDatabase();
-      final result = await db.rawQuery('PRAGMA table_info("$tableName");');
+      final result = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
       return result.map((row) => row['name'] as String).toList();
     } catch (e) {
       AppLogger.debug('[GeoPackageSchema] getTableColumns エラー: $e');
@@ -220,12 +221,12 @@ class GeoPackageSchema {
       }
 
       // 既存カラムのチェック
-      final result = await db.rawQuery('PRAGMA table_info("$tableName");');
+      final result = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
       final columns = result.map((row) => row['name'] as String).toList();
 
       if (!columns.contains(sanitizedName)) {
         await db.execute(
-          'ALTER TABLE "$tableName" ADD COLUMN "$sanitizedName" $columnType;',
+          'ALTER TABLE ${quoteIdent(tableName)} ADD COLUMN ${quoteIdent(sanitizedName)} $columnType;',
         );
       }
     } catch (e) {
@@ -258,7 +259,7 @@ class GeoPackageSchema {
   }) async {
     try {
       final db = await connection.getDatabase();
-      final result = await db.rawQuery('PRAGMA table_info("$tableName");');
+      final result = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
 
       final columnInfo = <Map<String, dynamic>>[];
       final builtInColumns = {'id', 'geom'};

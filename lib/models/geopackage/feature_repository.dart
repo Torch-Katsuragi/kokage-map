@@ -29,6 +29,7 @@ import '../geometry_type.dart';
 import 'geopackage_connection.dart';
 import 'geopackage_schema.dart';
 import 'spatial_index_manager.dart';
+import 'sql_identifier.dart';
 
 /// compute()用パラメータ
 class _GeometryParseParams {
@@ -204,7 +205,7 @@ class FeatureRepository {
 
       // トリガーを除去
       for (final name in triggersToRemove) {
-        await db.execute('DROP TRIGGER IF EXISTS "$name"');
+        await db.execute('DROP TRIGGER IF EXISTS ${quoteIdent(name)}');
       }
 
       AppLogger.debug(
@@ -277,7 +278,7 @@ class FeatureRepository {
     Map<String, dynamic>? metadata,
   }) async {
     final db = await connection.getDatabase();
-    final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
+    final columns = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
     final columnNames = columns.map((row) => row['name'] as String).toSet();
 
     final attributes = <String, dynamic>{};
@@ -312,14 +313,14 @@ class FeatureRepository {
       final updateValues = <dynamic>[wkb];
 
       for (final entry in attributes.entries) {
-        updateColumns.add('"${entry.key}" = ?');
+        updateColumns.add('${quoteIdent(entry.key)} = ?');
         updateValues.add(entry.value);
       }
 
       updateValues.add(id);
       final whereClause = await schema.buildWhereClause(tableName);
       final sql =
-          'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE $whereClause';
+          'UPDATE ${quoteIdent(tableName)} SET ${updateColumns.join(', ')} WHERE $whereClause';
       final affectedRows = await db.rawUpdate(sql, updateValues);
       return affectedRows > 0;
     } catch (e) {
@@ -399,7 +400,7 @@ class FeatureRepository {
       );
 
       final data = <String, dynamic>{'geom': wkb, ...attributes};
-      final rowId = await db.insert(tableName, data);
+      final rowId = await _insertRow(db, tableName, data);
 
       final env = _calculateEnvelope([point]);
       if (env != null) await _updateSpatialIndex(tableName, rowId, env);
@@ -436,7 +437,7 @@ class FeatureRepository {
       final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
 
       final data = <String, dynamic>{'geom': wkb, ...attributes};
-      final rowId = await db.insert(tableName, data);
+      final rowId = await _insertRow(db, tableName, data);
 
       final env = _calculateEnvelope(line);
       if (env != null) await _updateSpatialIndex(tableName, rowId, env);
@@ -473,7 +474,7 @@ class FeatureRepository {
       final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
 
       final data = <String, dynamic>{'geom': wkb, ...attributes};
-      final rowId = await db.insert(tableName, data);
+      final rowId = await _insertRow(db, tableName, data);
 
       final env = _calculatePolygonEnvelope(polygon);
       if (env != null) await _updateSpatialIndex(tableName, rowId, env);
@@ -656,7 +657,10 @@ class FeatureRepository {
       await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final whereClause = await schema.buildWhereClause(tableName);
-      final deleted = await db.delete(tableName, where: whereClause, whereArgs: [id]);
+      final deleted = await db.rawDelete(
+        'DELETE FROM ${quoteIdent(tableName)} WHERE $whereClause',
+        [id],
+      );
       await spatialIndex.removeFromRTreeIndex(tableName, id);
       if (deleted == 0) {
         AppLogger.debug('[FeatureRepository] removeFeature: 0件削除 ($tableName id=$id where=$whereClause)');
@@ -679,8 +683,8 @@ class FeatureRepository {
 
       final selectClause =
           pkColumn == 'rowid'
-              ? 'SELECT rowid, * FROM "$tableName" WHERE rowid = ?'
-              : 'SELECT * FROM "$tableName" WHERE "$pkColumn" = ?';
+              ? 'SELECT rowid, * FROM ${quoteIdent(tableName)} WHERE rowid = ?'
+              : 'SELECT * FROM ${quoteIdent(tableName)} WHERE ${quoteIdent(pkColumn)} = ?';
 
       final rows = await db.rawQuery(selectClause, [rowId]);
       if (rows.isEmpty) return null;
@@ -720,8 +724,8 @@ class FeatureRepository {
 
       final selectClause =
           pkColumn == 'rowid'
-              ? 'SELECT rowid, * FROM "$tableName"'
-              : 'SELECT * FROM "$tableName"';
+              ? 'SELECT rowid, * FROM ${quoteIdent(tableName)}'
+              : 'SELECT * FROM ${quoteIdent(tableName)}';
 
       final rows = await db.rawQuery(selectClause);
       return rows.map((row) {
@@ -756,8 +760,8 @@ class FeatureRepository {
 
       final selectClause =
           pkColumn == 'rowid'
-              ? 'SELECT rowid, * FROM "$tableName"'
-              : 'SELECT * FROM "$tableName"';
+              ? 'SELECT rowid, * FROM ${quoteIdent(tableName)}'
+              : 'SELECT * FROM ${quoteIdent(tableName)}';
 
       final sql = StringBuffer(selectClause);
       final safeWhere = sanitizeFilter(where);
@@ -839,10 +843,10 @@ class FeatureRepository {
 
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
-      final column = pkColumn == 'rowid' ? 'rowid' : '"$pkColumn"';
+      final column = pkColumn == 'rowid' ? 'rowid' : quoteIdent(pkColumn);
 
       final rows = await db.rawQuery(
-        'SELECT $column AS id FROM "$tableName" WHERE $safeWhere',
+        'SELECT $column AS id FROM ${quoteIdent(tableName)} WHERE $safeWhere',
       );
       return {
         for (final row in rows)
@@ -875,12 +879,12 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final columnList = columns?.join(', ') ?? '*';
+      final columnList = columns?.map(quoteIdent).join(', ') ?? '*';
       final orderByClause =
-          pkColumn == 'rowid' ? 'ORDER BY rowid' : 'ORDER BY "$pkColumn"';
+          pkColumn == 'rowid' ? 'ORDER BY rowid' : 'ORDER BY ${quoteIdent(pkColumn)}';
 
       return await db.rawQuery(
-        'SELECT $columnList FROM "$tableName" $orderByClause',
+        'SELECT $columnList FROM ${quoteIdent(tableName)} $orderByClause',
       );
     } catch (e) {
       AppLogger.debug('[FeatureRepository] getAllFeatureAttributes エラー発生 - $e');
@@ -899,12 +903,7 @@ class FeatureRepository {
   ) async {
     try {
       final db = await connection.getDatabase();
-      final whereClause = await schema.buildWhereClause(tableName);
-      final result = await db.query(
-        tableName,
-        where: whereClause,
-        whereArgs: [rowId],
-      );
+      final result = await _selectRow(db, tableName, rowId);
       return result.isNotEmpty ? result.first[attributeName] : null;
     } catch (e) {
       AppLogger.debug('[FeatureRepository] getFeatureAttribute: エラー発生 - $e');
@@ -918,12 +917,7 @@ class FeatureRepository {
   ) async {
     try {
       final db = await connection.getDatabase();
-      final whereClause = await schema.buildWhereClause(tableName);
-      final result = await db.query(
-        tableName,
-        where: whereClause,
-        whereArgs: [rowId],
-      );
+      final result = await _selectRow(db, tableName, rowId);
       return result.isNotEmpty ? Map<String, dynamic>.from(result.first) : null;
     } catch (e) {
       AppLogger.debug('[FeatureRepository] getFeatureAttributes: エラー発生 - $e');
@@ -941,7 +935,7 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final whereClause = await schema.buildWhereClause(tableName);
       final rowsUpdated = await db.rawUpdate(
-        'UPDATE "$tableName" SET "$attributeName" = ? WHERE $whereClause',
+        'UPDATE ${quoteIdent(tableName)} SET ${quoteIdent(attributeName)} = ? WHERE $whereClause',
         [newValue, rowId],
       );
       return rowsUpdated > 0;
@@ -984,12 +978,12 @@ class FeatureRepository {
       if (filteredAttributes.isEmpty) return true;
 
       final columnAssignments = filteredAttributes.keys
-          .map((key) => '"$key" = ?')
+          .map((key) => '${quoteIdent(key)} = ?')
           .join(', ');
       final values = [...filteredAttributes.values, rowId];
       final whereClause = await schema.buildWhereClause(tableName);
       final sql =
-          'UPDATE "$tableName" SET $columnAssignments WHERE $whereClause';
+          'UPDATE ${quoteIdent(tableName)} SET $columnAssignments WHERE $whereClause';
       final rowsUpdated = await db.rawUpdate(sql, values);
       return rowsUpdated > 0;
     } catch (e) {
@@ -1045,11 +1039,11 @@ class FeatureRepository {
 
         final columns = insertData.keys.toList();
         final placeholders = List.filled(columns.length, '?').join(', ');
-        final columnNames = columns.map((c) => '"$c"').join(', ');
+        final columnNames = columns.map(quoteIdent).join(', ');
         final values = columns.map((c) => insertData[c]).toList();
 
         batch.rawInsert(
-          'INSERT INTO "$tableName" ($columnNames) VALUES ($placeholders)',
+          'INSERT INTO ${quoteIdent(tableName)} ($columnNames) VALUES ($placeholders)',
           values,
         );
       }
@@ -1106,8 +1100,8 @@ class FeatureRepository {
 
       final selectClause =
           pkColumn == 'rowid'
-              ? 'SELECT rowid FROM "$tableName" WHERE $whereClause'
-              : 'SELECT "$pkColumn" FROM "$tableName" WHERE $whereClause';
+              ? 'SELECT rowid FROM ${quoteIdent(tableName)} WHERE $whereClause'
+              : 'SELECT ${quoteIdent(pkColumn)} FROM ${quoteIdent(tableName)} WHERE $whereClause';
 
       final rows = await db.rawQuery(selectClause);
       return rows
@@ -1130,7 +1124,7 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final result = await db.rawQuery(
-        'SELECT COUNT(*) as cnt FROM "$tableName" WHERE $whereClause',
+        'SELECT COUNT(*) as cnt FROM ${quoteIdent(tableName)} WHERE $whereClause',
       );
       return (result.first['cnt'] as int?) ?? 0;
     } catch (e) {
@@ -1154,10 +1148,10 @@ class FeatureRepository {
 
       if (columnsToInsert.isEmpty) return 0;
 
-      final columnList = columnsToInsert.map((c) => '"$c"').join(', ');
+      final columnList = columnsToInsert.map(quoteIdent).join(', ');
       await db.execute('''
-        INSERT INTO "$targetTable" ($columnList)
-        SELECT $columnList FROM "$sourceTable"
+        INSERT INTO ${quoteIdent(targetTable)} ($columnList)
+        SELECT $columnList FROM ${quoteIdent(sourceTable)}
         WHERE $whereClause
       ''');
 
@@ -1191,10 +1185,10 @@ class FeatureRepository {
         return 0;
       }
 
-      final columnList = columnsToInsert.map((c) => '"$c"').join(', ');
+      final columnList = columnsToInsert.map(quoteIdent).join(', ');
       await db.execute('''
-        INSERT INTO "$targetTable" ($columnList)
-        SELECT $columnList FROM "$sourceTable"
+        INSERT INTO ${quoteIdent(targetTable)} ($columnList)
+        SELECT $columnList FROM ${quoteIdent(sourceTable)}
       ''');
 
       final countResult = await db.rawQuery('SELECT changes() as count');
@@ -1217,7 +1211,7 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final data = <String, dynamic>{'geom': geometry, ...attributes};
-      return await db.insert(tableName, data);
+      return await _insertRow(db, tableName, data);
     } catch (e) {
       AppLogger.debug(
         '[FeatureRepository] addFeatureWithAttributes エラー発生 - $e',
@@ -1229,6 +1223,36 @@ class FeatureRepository {
   // ============================================================
   // プライベートヘルパー
   // ============================================================
+
+  /// 1 行挿入して rowid を返す。
+  ///
+  /// ⚠ `db.insert` はテーブル名・カラム名を囲まないので "Survey points" のような
+  ///   QGIS 由来の名前で構文エラーになる。識別子を自前で囲む
+  Future<int> _insertRow(
+    DatabaseExecutor db,
+    String tableName,
+    Map<String, dynamic> data,
+  ) {
+    final columns = data.keys.toList();
+    final placeholders = List.filled(columns.length, '?').join(', ');
+    return db.rawInsert(
+      'INSERT INTO ${quoteIdent(tableName)} (${columns.map(quoteIdent).join(', ')}) '
+      'VALUES ($placeholders)',
+      [for (final c in columns) data[c]],
+    );
+  }
+
+  Future<List<Map<String, Object?>>> _selectRow(
+    DatabaseExecutor db,
+    String tableName,
+    int rowId,
+  ) async {
+    final whereClause = await schema.buildWhereClause(tableName);
+    return db.rawQuery(
+      'SELECT * FROM ${quoteIdent(tableName)} WHERE $whereClause',
+      [rowId],
+    );
+  }
 
   void _normalizePrimaryKey(Map<String, dynamic> row, String pkColumn) {
     if (pkColumn != 'id') {

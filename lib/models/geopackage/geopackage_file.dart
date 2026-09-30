@@ -33,6 +33,7 @@ import 'gpkg_index_repair.dart';
 import 'layer_repository.dart';
 import 'qgis_interop.dart';
 import 'spatial_index_manager.dart';
+import 'sql_identifier.dart';
 
 /// GeoPackageファイルを管理するファサードクラス
 ///
@@ -575,7 +576,7 @@ class GeoPackageFile {
     }
 
     final result = await db.rawUpdate(
-      'UPDATE "$tableName" SET "$sanitizedCol" = $expression',
+      'UPDATE ${quoteIdent(tableName)} SET ${quoteIdent(sanitizedCol)} = $expression',
     );
     return result;
   }
@@ -596,7 +597,7 @@ class GeoPackageFile {
       throw Exception(t.services.invalidColumnName(name: newName));
     }
     await db.execute(
-      'ALTER TABLE "$tableName" RENAME COLUMN "$oldName" TO "$sanitizedNew"',
+      'ALTER TABLE ${quoteIdent(tableName)} RENAME COLUMN ${quoteIdent(oldName)} TO ${quoteIdent(sanitizedNew)}',
     );
     _schema.clearPrimaryKeyCache();
   }
@@ -604,7 +605,7 @@ class GeoPackageFile {
   /// カラムを削除
   Future<void> dropColumn(String tableName, String columnName) async {
     final db = await _connection.getDatabase();
-    await db.execute('ALTER TABLE "$tableName" DROP COLUMN "$columnName"');
+    await db.execute('ALTER TABLE ${quoteIdent(tableName)} DROP COLUMN ${quoteIdent(columnName)}');
     _schema.clearPrimaryKeyCache();
   }
 
@@ -616,13 +617,13 @@ class GeoPackageFile {
     final db = await _connection.getDatabase();
     final result = await db.rawQuery(
       'SELECT '
-      'COUNT("$columnName") as cnt, '
-      "SUM(CASE WHEN typeof(\"$columnName\") IN ('integer','real') THEN \"$columnName\" ELSE NULL END) as total, "
-      "AVG(CASE WHEN typeof(\"$columnName\") IN ('integer','real') THEN \"$columnName\" ELSE NULL END) as avg_val, "
-      'MIN("$columnName") as min_val, '
-      'MAX("$columnName") as max_val, '
-      'COUNT(DISTINCT "$columnName") as unique_cnt '
-      'FROM "$tableName"',
+      'COUNT(${quoteIdent(columnName)}) as cnt, '
+      "SUM(CASE WHEN typeof(${quoteIdent(columnName)}) IN ('integer','real') THEN ${quoteIdent(columnName)} ELSE NULL END) as total, "
+      "AVG(CASE WHEN typeof(${quoteIdent(columnName)}) IN ('integer','real') THEN ${quoteIdent(columnName)} ELSE NULL END) as avg_val, "
+      'MIN(${quoteIdent(columnName)}) as min_val, '
+      'MAX(${quoteIdent(columnName)}) as max_val, '
+      'COUNT(DISTINCT ${quoteIdent(columnName)}) as unique_cnt '
+      'FROM ${quoteIdent(tableName)}',
     );
 
     if (result.isEmpty) return {};
@@ -647,12 +648,12 @@ class GeoPackageFile {
     final db = await _connection.getDatabase();
     final pkColumn = await _schema.getPrimaryKeyColumn(tableName);
     final conditions = columns
-        .map((c) => 'CAST("$c" AS TEXT) LIKE ?')
+        .map((c) => 'CAST(${quoteIdent(c)} AS TEXT) LIKE ?')
         .join(' OR ');
     final pattern = '%$searchText%';
     final args = List.filled(columns.length, pattern);
     final result = await db.rawQuery(
-      'SELECT "$pkColumn" FROM "$tableName" WHERE $conditions',
+      'SELECT ${quoteIdent(pkColumn)} FROM ${quoteIdent(tableName)} WHERE $conditions',
       args,
     );
     return result.map((r) => r[pkColumn] as int).toList();
@@ -672,8 +673,8 @@ class GeoPackageFile {
       throw Exception(t.services.invalidColumnName(name: columnName));
     }
     final result = await db.rawUpdate(
-      'UPDATE "$tableName" SET "$sanitized" = REPLACE(CAST("$sanitized" AS TEXT), ?, ?) '
-      'WHERE CAST("$sanitized" AS TEXT) LIKE ?',
+      'UPDATE ${quoteIdent(tableName)} SET ${quoteIdent(sanitized)} = REPLACE(CAST(${quoteIdent(sanitized)} AS TEXT), ?, ?) '
+      'WHERE CAST(${quoteIdent(sanitized)} AS TEXT) LIKE ?',
       [searchText, replaceText, '%$searchText%'],
     );
     return result;

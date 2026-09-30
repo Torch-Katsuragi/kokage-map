@@ -40,6 +40,7 @@ library;
 import 'package:sqflite/sqflite.dart';
 
 import '../../utils/app_logger.dart';
+import 'sql_identifier.dart';
 
 /// GeoPackage を QGIS/GDAL と行き来させるための整合処理
 class QgisInterop {
@@ -92,7 +93,7 @@ class QgisInterop {
     for (final entry in _removedTriggers.entries) {
       try {
         // 同名が既にある場合に備えて落としてから作る
-        await db.execute('DROP TRIGGER IF EXISTS "${entry.key}"');
+        await db.execute('DROP TRIGGER IF EXISTS ${quoteIdent(entry.key)}');
         await db.execute(entry.value);
         restored++;
       } catch (e) {
@@ -121,7 +122,7 @@ class QgisInterop {
 
       final rows = await db.rawQuery(
         'SELECT MIN(minx) AS min_x, MIN(miny) AS min_y, '
-        'MAX(maxx) AS max_x, MAX(maxy) AS max_y FROM "$rtree"',
+        'MAX(maxx) AS max_x, MAX(maxy) AS max_y FROM ${quoteIdent(rtree)}',
       );
       if (rows.isEmpty) return;
 
@@ -166,7 +167,7 @@ class QgisInterop {
       if (registered.isEmpty) return; // このレイヤは登録されていない
 
       final countRows = await db.rawQuery(
-        'SELECT COUNT(*) AS c FROM "$tableName"',
+        'SELECT COUNT(*) AS c FROM ${quoteIdent(tableName)}',
       );
       final count = countRows.first['c'];
 

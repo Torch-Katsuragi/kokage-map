@@ -21,6 +21,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../services/geodiff/geodiff.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/wkb_utils.dart';
+import 'sql_identifier.dart';
 
 /// 外から行を書き換えられた GeoPackage の索引を実データに合わせ直す。
 ///
@@ -123,7 +124,7 @@ abstract final class GpkgIndexRepair {
         continue;
       }
 
-      final rows = await db.rawQuery('SELECT "$pk" AS id, "$geomCol" AS geom FROM "$table"');
+      final rows = await db.rawQuery('SELECT ${quoteIdent(pk)} AS id, ${quoteIdent(geomCol)} AS geom FROM ${quoteIdent(table)}');
       final values = <String>[];
       double? minX, maxX, minY, maxY;
       for (final r in rows) {
@@ -157,7 +158,7 @@ abstract final class GpkgIndexRepair {
   }
 
   static Future<String?> _primaryKey(Database db, String table) async {
-    final info = await db.rawQuery('PRAGMA table_info("$table")');
+    final info = await db.rawQuery('PRAGMA table_info(${quoteIdent(table)})');
     for (final col in info) {
       if ((col['pk'] as int? ?? 0) > 0) return col['name'] as String?;
     }

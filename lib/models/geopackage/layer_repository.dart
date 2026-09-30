@@ -21,6 +21,7 @@ import '../geometry_type.dart';
 import 'geopackage_connection.dart';
 import 'geopackage_schema.dart';
 import 'spatial_index_manager.dart';
+import 'sql_identifier.dart';
 
 /// レイヤ（フィーチャテーブル）を管理するリポジトリクラス
 /// 責務: レイヤの作成・削除・リネーム・一覧取得
@@ -79,7 +80,7 @@ class LayerRepository {
 
       // フィーチャテーブル作成（必須カラムのみ：fid と geom）
       await db.execute('''
-        CREATE TABLE IF NOT EXISTS "$name" (
+        CREATE TABLE IF NOT EXISTS ${quoteIdent(name)} (
           fid INTEGER PRIMARY KEY AUTOINCREMENT,
           geom BLOB NOT NULL
         );
@@ -121,7 +122,7 @@ class LayerRepository {
       final db = await connection.getDatabase();
 
       // フィーチャテーブル削除
-      await db.execute('DROP TABLE IF EXISTS "$name";');
+      await db.execute('DROP TABLE IF EXISTS ${quoteIdent(name)};');
 
       // メタデータ削除
       await db.delete(
@@ -150,7 +151,7 @@ class LayerRepository {
       final db = await connection.getDatabase();
 
       // テーブル名変更
-      await db.execute('ALTER TABLE "$oldName" RENAME TO "$newName";');
+      await db.execute('ALTER TABLE ${quoteIdent(oldName)} RENAME TO ${quoteIdent(newName)};');
 
       // gpkg_contentsのテーブル名更新
       await db.update(
@@ -194,7 +195,7 @@ class LayerRepository {
     try {
       final db = await connection.getDatabase();
       final result = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM "$tableName"',
+        'SELECT COUNT(*) as count FROM ${quoteIdent(tableName)}',
       );
       return (result.first['count'] as int?) ?? 0;
     } catch (e) {

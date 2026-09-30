@@ -18,6 +18,7 @@
 import '../../utils/app_logger.dart';
 import 'geopackage_connection.dart';
 import 'qgis_interop.dart';
+import 'sql_identifier.dart';
 
 /// 空間インデックスを管理するクラス
 /// 責務: R-Tree空間インデックス、レイヤエンベロープ、SpatiaLiteトリガー対応
@@ -38,8 +39,8 @@ class SpatialIndexManager {
 
       // SpatiaLiteスタイルの空間インデックス作成
       await db.execute('''
-        CREATE INDEX IF NOT EXISTS idx_${tableName}_geom 
-        ON "$tableName" (geom)
+        CREATE INDEX IF NOT EXISTS ${quoteIdent('idx_${tableName}_geom')}
+        ON ${quoteIdent(tableName)} (geom)
       ''');
     } catch (e) {
       AppLogger.debug('[ERROR] SpatialIndexManager.createSpatialIndex: $e');
@@ -69,7 +70,7 @@ class SpatialIndexManager {
         // R-Treeインデックスを更新（INSERT OR REPLACEで既存エントリも更新）
         await db.execute(
           '''
-          INSERT OR REPLACE INTO "$rtreeTable" (id, minx, maxx, miny, maxy)
+          INSERT OR REPLACE INTO ${quoteIdent(rtreeTable)} (id, minx, maxx, miny, maxy)
           VALUES (?, ?, ?, ?, ?)
           ''',
           [rowId, minX, maxX, minY, maxY],
@@ -94,7 +95,7 @@ class SpatialIndexManager {
       );
 
       if (tables.isNotEmpty) {
-        await db.execute('DELETE FROM "$rtreeTable" WHERE id = ?', [rowId]);
+        await db.execute('DELETE FROM ${quoteIdent(rtreeTable)} WHERE id = ?', [rowId]);
       }
     } catch (e) {
       AppLogger.debug('[WARNING] SpatialIndexManager.removeFromRTreeIndex: $e');
@@ -189,7 +190,7 @@ class SpatialIndexManager {
           // ⚠ 落とす前に定義を控える。落としたまま返すとQGIS側で
           //    空間インデックスが更新されなくなる（クローズ時に復元する）。
           qgisInterop.rememberTrigger(triggerName, sql);
-          await db.execute('DROP TRIGGER IF EXISTS "$triggerName"');
+          await db.execute('DROP TRIGGER IF EXISTS ${quoteIdent(triggerName)}');
           removedCount++;
           AppLogger.debug(
             '[SpatialIndexManager] SpatiaLiteトリガー削除: $triggerName',

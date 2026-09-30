@@ -10,6 +10,11 @@ Play Console の画面を触るのは API に無い項目だけ。
 - `assets/changelog/ja.md` / `en.md` の `## 未リリース` を **`## vX.Y.Z — YYYY/MM/DD` に切る**。
   内容は前リリースとの差分の**最終形**にまとめ直す（打ち消された旧仕様・開発ログ粒度の項目は落とす。目安 50 行）。
   ⚠ 2026-09-07 に、4 月から切らずに 266 行積み上がって旧仕様と矛盾していたのを整理した
+- 図解（`assets/changelog/typ/next.<言語>.typ`）があれば、同じく **`vX.Y.Z.<言語>.typ` に改名**し、中の見出しも
+  版に直して `python tool/changelog/build.py` で SVG を書き直す（古い `next.*.svg` は消す）。
+  アプリは md の版の見出しと同じ名前の SVG を探して図を出し、文章は「文章で読む」に畳む。無い言語・版は md のまま。
+  `test/changelog_figure_test.dart` が名前の食い違いを拾う。書き方は `assets/changelog/typ/lib.typ` の部品と
+  typst スキルの図解ブリーフ（図は文章より伝わるものだけ）
 - Play のリリースノートは 500 字上限。changelog の先頭エントリをそのまま渡すと途中で切れるので、
   `.temp/release/notes_ja.md` / `notes_en.md` に短く書いて `--notes-ja/--notes-en` に渡す（見出し無しなら全文が使われる）
 

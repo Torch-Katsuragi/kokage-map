@@ -19,8 +19,11 @@
 /// 画面表示時に既読マークを付ける。
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../i18n/strings.g.dart';
 import '../services/changelog_service.dart';
 
@@ -74,10 +77,11 @@ class _ChangelogScreenState extends State<ChangelogScreen> {
                     style: const TextStyle(color: Colors.grey),
                   ),
                 )
-              : Markdown(
-                  data: _content!,
-                  selectable: true,
-                  styleSheet: MarkdownStyleSheet.fromTheme(
+              : _Sections(content: _content!, styleSheet: _styleSheet(context)),
+    );
+  }
+
+  MarkdownStyleSheet _styleSheet(BuildContext context) => MarkdownStyleSheet.fromTheme(
                     Theme.of(context),
                   ).copyWith(
                     // h1スタイル
@@ -103,9 +107,78 @@ class _ChangelogScreenState extends State<ChangelogScreen> {
                         ),
                       ),
                     ),
-                  ),
-                  padding: const EdgeInsets.all(16),
-                ),
+                  );
+}
+
+/// 更新履歴を版（`## `）ごとに並べる。図解（SVG）がある版は図を出し、文章は畳んで下に置く。
+/// 無い版は今までどおり Markdown
+class _Sections extends StatelessWidget {
+  const _Sections({required this.content, required this.styleSheet});
+
+  final String content;
+  final MarkdownStyleSheet styleSheet;
+
+  /// `## ` の手前（`# 更新履歴` 等）と、版ごとのかたまりに分ける
+  static List<String> split(String md) {
+    final parts = <String>[];
+    final buf = StringBuffer();
+    for (final line in const LineSplitter().convert(md)) {
+      if (line.startsWith('## ') && buf.isNotEmpty) {
+        parts.add(buf.toString());
+        buf.clear();
+      }
+      buf.writeln(line);
+    }
+    if (buf.isNotEmpty) parts.add(buf.toString());
+    return parts;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = split(content);
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: parts.length,
+      itemBuilder: (context, i) => _Section(md: parts[i], styleSheet: styleSheet),
+    );
+  }
+}
+
+class _Section extends StatelessWidget {
+  const _Section({required this.md, required this.styleSheet});
+
+  final String md;
+  final MarkdownStyleSheet styleSheet;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = MarkdownBody(data: md, selectable: true, styleSheet: styleSheet);
+    if (!md.startsWith('## ')) return text;
+    final heading = md.substring(3, md.indexOf('\n'));
+    return FutureBuilder<String?>(
+      future: ChangelogService.instance.figureFor(heading),
+      builder: (context, snap) {
+        final svg = snap.data;
+        if (svg == null) return text;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SvgPicture.asset(svg, fit: BoxFit.fitWidth, semanticsLabel: heading),
+              ),
+              ExpansionTile(
+                title: Text(t.changelog.readAsText),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                children: [text],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

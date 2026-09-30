@@ -121,6 +121,7 @@ dependencies:
   web: ^1.1.0                       # web版のFile System Access API（js_interop）
   qr_flutter: ^4.1.0                    # Drive連携フォルダのQRコード表示（スキャン側は mobile_scanner）
   flutter_markdown_plus: ^1.0.12         # 更新履歴・使い方の表示用（flutter_markdown は 2026 に discontinued）
+  flutter_svg: ^2.3.0                    # 更新履歴の図解（Typst でビルド時に書き出した SVG。tool/changelog/build.py）
 
 
 # 手元コピーで差し替える依存（pub.dev 版が現行のビルド環境で壊れているもの）
@@ -166,6 +167,7 @@ flutter:
   assets:
     - assets/sounds/
     - assets/changelog/
+    - assets/changelog/svg/
     - assets/user_guide/
     - build/shaderbundles/terrain.shaderbundle # hook/build.dart が作る（flutter_gpu）
 

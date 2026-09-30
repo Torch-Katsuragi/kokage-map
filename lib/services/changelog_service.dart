@@ -21,7 +21,7 @@ library;
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show AssetManifest, rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../i18n/strings.g.dart';
 
@@ -95,5 +95,29 @@ class ChangelogService {
   /// SHA-256ハッシュを計算
   String _computeHash(String content) {
     return sha256.convert(utf8.encode(content)).toString();
+  }
+
+  // =============================================
+  // 図解（Typst でビルド時に書き出した SVG。tool/changelog/build.py）
+  // =============================================
+
+  Set<String>? _assets;
+
+  /// 版の見出し（`## 次のリリース`・`## v0.7.4 …`）に対応する図解の SVG。無ければ null（md で出す）。
+  ///
+  /// 表示中の言語のものだけ探す。別の言語の図を出すより、その言語の文章のほうがよい
+  Future<String?> figureFor(String heading) async {
+    final slug = figureSlug(heading);
+    if (slug == null) return null;
+    final path = 'assets/changelog/svg/$slug.${LocaleSettings.currentLocale.languageCode}.svg';
+    _assets ??= (await AssetManifest.loadFromAssetBundle(rootBundle)).listAssets().toSet();
+    return _assets!.contains(path) ? path : null;
+  }
+
+  /// 見出しから図解のファイル名の版の部分を取る（`次のリリース` → `next`、`v0.7.4 (2026-10-01)` → `v0.7.4`）
+  static String? figureSlug(String heading) {
+    final h = heading.trim();
+    if (h == '次のリリース' || h.toLowerCase() == 'next release') return 'next';
+    return RegExp(r'^v\d+\.\d+\.\d+').firstMatch(h)?.group(0);
   }
 }

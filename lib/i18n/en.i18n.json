@@ -1326,7 +1326,8 @@
   "changelog": {
     "title": "Changelog",
     "noContent": "No changelog available yet",
-    "updated": "App updated! ✨"
+    "updated": "App updated! ✨",
+    "readAsText": "Read as text"
   },
   "userGuide": {
     "title": "User Guide",

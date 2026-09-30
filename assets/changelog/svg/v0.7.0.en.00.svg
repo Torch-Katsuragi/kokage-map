@@ -1,0 +1,465 @@
+<svg class="typst-doc" viewBox="0 0 252 294.33" width="252pt" height="294.33pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">
+    <g>
+        <g class="typst-text" transform="matrix(1 0 0 -1 0 16.3)">
+            <use xlink:href="#g7838D034209CEE9E48E32E20A1F356EB" x="0" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g27DDF73DD219E9DB1BCCC68DB8EC4A3B" x="5.38" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g140E6EAA70C440623BE3E6338B475DC5" x="11.05" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gEB72738B37B7D6A32EC35AFD633589A8" x="13.99" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g140E6EAA70C440623BE3E6338B475DC5" x="19.67" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g27DDF73DD219E9DB1BCCC68DB8EC4A3B" x="22.61" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g1060E820F967657B2BB67122FA20E96A" x="31.27" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gBD96ECB0EE3DDBFB49BF2984790F2D06" x="43.75" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g27DDF73DD219E9DB1BCCC68DB8EC4A3B" x="49.43" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gBD96ECB0EE3DDBFB49BF2984790F2D06" x="55.11" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g866BCED00B4190CB498C5E3F5497C965" x="60.78" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gBE342A266064E8BAEF90C3297DF0592" x="66.46" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g27DDF73DD219E9DB1BCCC68DB8EC4A3B" x="70.95" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g346EE5338C274B8F8F58B896437AEA2F" x="76.63" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gBE342A266064E8BAEF90C3297DF0592" x="82.3" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gF9771BC44BF32C58629ED88CE7C529D0" x="86.79" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gF9771BC44BF32C58629ED88CE7C529D0" x="92.47" y="0" fill="#1565c0" fill-rule="nonzero"/>
+        </g>
+        <g class="typst-text" transform="matrix(1 0 0 -1 0 56.41)">
+            <use xlink:href="#g4D74571245A8EFA1CB38932856473232" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g2793CB17186B4B7692CC67215ACE4BF9" x="11.13" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g9EFED280C005A651CE0163FD7B14EB44" x="22.57" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g93E14BD3F72C7C20E07A8A6E65CC2802" x="38.09" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gAC118CDD0053CB9C5AAF0875E0D40380" x="55.5" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gE42E2619C391B998D5C8B4E6D81371AE" x="65.72" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g65DAF4AFA2E52FF7FDC392D518C1BB01" x="82.74" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gEBB7E1ECD87CB1839219F7EE47C0FBB5" x="88.14" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g32E1BFC6E4C8C1A8AFC708E8BD2BFC05" x="101.74" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gD5BB6E32160BA22DDFFB8A4772B75D12" x="113.24" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gE29C389C45E1F31F471E3F2A0EEA9675" x="124.85" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gA7EB9A45AB89518D351B365FEABFF82F" x="145.25" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g4A985A705303FE532748085A76FD763E" x="156.17" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+        </g>
+        <g class="typst-text" transform="matrix(1 0 0 -1 0 92.56)">
+            <use xlink:href="#g49C365C62FFA42B38FC9D89653FEE91B" x="0" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="6.5" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gE03A577F385712EA3CEECBBB99EC9C6" x="12.65" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g788C6E88EDC57E51F2601191D55CC69B" x="21.7" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="27.87" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="33.21" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="36.86" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gE03A577F385712EA3CEECBBB99EC9C6" x="40.42" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="49.46" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g8E941ED39367C2BDC0280713FF8CF6F1" x="54.96" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="60.9" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="64.46" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gB723A76B7CD13ADA78ADEDEB0256DC17" x="68.91" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="74.06" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="77.71" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g73E7F82A85A8DA66D0A2006F579E996D" x="83.87" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="89.81" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="93.37" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="98.86" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gB723A76B7CD13ADA78ADEDEB0256DC17" x="103.31" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g788C6E88EDC57E51F2601191D55CC69B" x="108.47" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gAE79702EBDC1887B1EBD5B6628DDC7D2" x="114.64" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="120.58" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="126.73" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="130.29" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="136.44" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gB723A76B7CD13ADA78ADEDEB0256DC17" x="140.9" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC9D28CCE31AB554DF1D073C9274F0D5D" x="146.05" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g5DA14A52C14F40C7F9DC2B31373D33FC" x="153.25" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCE6D33C5CCDC6881DA788B56BF79192D" x="159.14" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="167.59" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="171.15" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="174.8" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g84C7AEE4C58C8D93E5FF992077CD31C3" x="180.14" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g66CF02974EA79B19D4B4F3E058B55BB7" x="184.99" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="190.21" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="197.54" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g8E941ED39367C2BDC0280713FF8CF6F1" x="202.88" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g516216D5E04AFAF0BCD7BB0DEB9D2293" x="208.83" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gE03A577F385712EA3CEECBBB99EC9C6" x="217.89" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="226.93" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="233.08" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="236.73" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+        </g>
+        <g class="typst-text" transform="matrix(1 0 0 -1 0 106.73)">
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="0" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="5.34" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="8.99" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g516216D5E04AFAF0BCD7BB0DEB9D2293" x="17.36" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="23.54" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="27.19" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g788C6E88EDC57E51F2601191D55CC69B" x="32.54" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="38.71" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g516216D5E04AFAF0BCD7BB0DEB9D2293" x="44.2" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="53.26" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g8E941ED39367C2BDC0280713FF8CF6F1" x="59.41" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="68.23" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gAE79702EBDC1887B1EBD5B6628DDC7D2" x="71.79" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="77.73" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="86.1" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="89.66" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="95.15" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="98.8" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="102.45" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g9550C6A91B9D5C54FC3EEA31EC041EED" x="107.79" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g8E941ED39367C2BDC0280713FF8CF6F1" x="110.33" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC8EA8E4F9838BBC150D1CD37836BADA2" x="116.27" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g9F8F6E786936D192B2EE40867BF9135A" x="121.43" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="124.22" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="130.66" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="135.11" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g9550C6A91B9D5C54FC3EEA31EC041EED" x="138.67" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC60E5DD4F14714083F7924B7FAAD5E2B" x="141.21" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC60E5DD4F14714083F7924B7FAAD5E2B" x="143.75" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="149.17" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g788C6E88EDC57E51F2601191D55CC69B" x="155.33" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="161.5" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g8E941ED39367C2BDC0280713FF8CF6F1" x="166.99" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="172.93" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="180.26" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="183.82" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g788C6E88EDC57E51F2601191D55CC69B" x="189.97" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g9F09561888F8141485004BECDCC2E30B" x="196.15" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g516216D5E04AFAF0BCD7BB0DEB9D2293" x="200.35" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="206.53" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g2507874237788A6CCA6D0FDB76B94E63" x="212.68" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g8E941ED39367C2BDC0280713FF8CF6F1" x="220.27" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC8EA8E4F9838BBC150D1CD37836BADA2" x="226.21" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+        </g>
+        <g class="typst-group" transform="matrix(1 0 0 1 82 133.33)">
+            <g>
+                <path class="typst-shape" fill="#1c1b1f" fill-rule="nonzero" d="M 0 0m 0 9 c 0 -4.97 4.03 -9 9 -9 h 70 c 4.97 0 9 4.03 9 9 v 138 c 0 4.97 -4.03 9 -9 9 h -70 c -4.97 0 -9 -4.03 -9 -9 Z "/>
+                <g class="typst-group" transform="matrix(1 0 0 1 3 7)" clip-path="url(#c9EA405AC9A2961275A8E26747A87B454)">
+                    <g>
+                        <g class="typst-group">
+                            <g>
+                                <g class="typst-group" clip-path="url(#c8E0F71D9C7EC001846E5BA1D575853CE)">
+                                    <g>
+                                        <path class="typst-shape" fill="url(#gFE403A9F9476B794AAD97D90F4F664A0)" fill-rule="nonzero" d="M 0 0v 142 h 82 v -142 Z "/>
+                                        <path class="typst-shape" fill="#cdd8bf" fill-rule="nonzero" d="M 0 0m 0 37.04 c 16.4 -7.8 32.8 1.8 50.84 -4.2 c 13.12 -3.6 22.96 3.6 31.16 1.2 v 107.96 h -82 c 0 0 -16.4 -97.16 0 -104.96 Z "/>
+                                        <path class="typst-shape" fill="#b3c59d" fill-rule="nonzero" d="M 0 0m 0 61.63 c 16.4 -11.7 32.8 2.7 50.84 -6.3 c 13.12 -5.4 22.96 5.4 31.16 1.8 v 84.87 h -82 c 0 0 -16.4 -68.67 0 -80.37 Z "/>
+                                        <path class="typst-shape" fill="#dbe0d4" fill-rule="nonzero" d="M 0 0m 0 90.22 c 16.4 -15.6 32.8 3.6 50.84 -8.4 c 13.12 -7.2 22.96 7.2 31.16 2.4 v 57.78 h -82 c 0 0 -16.4 -36.18 0 -51.78 Z "/>
+                                        <g class="typst-group">
+                                            <g>
+                                                <path class="typst-shape" fill="#f5d19c" fill-rule="nonzero" stroke="#9e835a" stroke-width="0.6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" d="M 0 0m 8.2 113.6 l 27.88 -4.26 l 2.46 22.72 l -34.44 5.68 Z "/>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group">
+                                            <g>
+                                                <path class="typst-shape" fill="#f5d19c" fill-rule="nonzero" stroke="#9e835a" stroke-width="0.6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" d="M 0 0m 42.64 107.92 l 29.52 -2.84 l 5.74 22.72 l -32.8 2.84 Z "/>
+                                            </g>
+                                        </g>
+                                        <path class="typst-shape" fill="none" stroke="#8d6e63" stroke-width="2" stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="4" d="M 0 0m 1.64 144.84 c 22.96 -45.44 47.56 -9.94 76.26 -56.8 "/>
+                                    </g>
+                                </g>
+                                <g class="typst-group" transform="matrix(1 0 0 1 67 3)">
+                                    <g>
+                                        <path class="typst-shape" fill="#ffffff" fill-rule="nonzero" stroke="#d6d3da" stroke-width="0.6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" d="M 0 0m 0 6 c 0 -3.31 2.69 -6 6 -6 c 3.31 0 6 2.69 6 6 c 0 3.31 -2.69 6 -6 6 c -3.31 0 -6 -2.69 -6 -6 "/>
+                                        <g class="typst-group">
+                                            <g>
+                                                <path class="typst-shape" fill="#d32f2f" fill-rule="nonzero" d="M 0 0m 3.9 6 l 2.1 -4.5 l 2.1 4.5 Z "/>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group">
+                                            <g>
+                                                <path class="typst-shape" fill="#8f8c92" fill-rule="nonzero" d="M 0 0m 3.9 6 l 2.1 4.5 l 2.1 -4.5 Z "/>
+                                            </g>
+                                        </g>
+                                    </g>
+                                </g>
+                            </g>
+                        </g>
+                    </g>
+                </g>
+                <path class="typst-shape" fill="#444444" fill-rule="nonzero" transform="matrix(1 0 0 1 38 2.5)" d="M 0 0m 0 1 c 0 -0.55 0.45 -1 1 -1 h 10 c 0.55 0 1 0.45 1 1 c 0 0.55 -0.45 1 -1 1 h -10 c -0.55 0 -1 -0.45 -1 -1 Z "/>
+            </g>
+        </g>
+    </g>
+    <defs id="glyph">
+        <symbol id="g7838D034209CEE9E48E32E20A1F356EB" overflow="visible">
+            <path d="M 0 0m 4.87 4.5 l -1.67 -4.5 h -1.58 l -1.6 4.5 h 1.49 l 0.78 -2.77 q 0.13 -0.47 0.15 -0.8 h 0.02 q 0.03 0.31 0.16 0.77 l 0.8 2.8 h 1.45 Z "/>
+        </symbol>
+        <symbol id="g27DDF73DD219E9DB1BCCC68DB8EC4A3B" overflow="visible">
+            <path d="M 0 0m 2.55 -0.11 q -2.25 0 -2.25 3.16 q 0 1.64 0.61 2.5 q 0.61 0.86 1.76 0.86 q 2.2 0 2.2 -3.21 q 0 -1.6 -0.6 -2.45 q -0.6 -0.85 -1.72 -0.85 Z m 0.06 5.46 q -0.9 0 -0.9 -2.26 q 0 -2.13 0.88 -2.13 q 0.86 0 0.86 2.2 q 0 2.2 -0.84 2.2 Z "/>
+        </symbol>
+        <symbol id="g140E6EAA70C440623BE3E6338B475DC5" overflow="visible">
+            <path d="M 0 0m 1.2 -0.11 q -0.34 0 -0.57 0.21 q -0.23 0.21 -0.23 0.52 q 0 0.32 0.24 0.52 q 0.24 0.2 0.59 0.2 q 0.36 0 0.58 -0.2 q 0.23 -0.2 0.23 -0.52 q 0 -0.32 -0.23 -0.53 q -0.23 -0.2 -0.6 -0.2 Z "/>
+        </symbol>
+        <symbol id="gEB72738B37B7D6A32EC35AFD633589A8" overflow="visible">
+            <path d="M 0 0m 4.81 5.5 q -0.42 -0.76 -0.76 -1.43 q -0.33 -0.67 -0.59 -1.31 q -0.25 -0.65 -0.44 -1.32 q -0.18 -0.67 -0.29 -1.44 h -1.45 q 0.12 0.73 0.33 1.42 q 0.2 0.68 0.47 1.32 q 0.27 0.64 0.59 1.25 q 0.32 0.61 0.68 1.19 h -2.93 v 1.13 h 4.39 v -0.8 Z "/>
+        </symbol>
+        <symbol id="g1060E820F967657B2BB67122FA20E96A" overflow="visible">
+            <path d="M 0 0m 9 1.92 h -9 v 0.97 h 9 v -0.97 Z "/>
+        </symbol>
+        <symbol id="gBD96ECB0EE3DDBFB49BF2984790F2D06" overflow="visible">
+            <path d="M 0 0m 1.89 1.15 h 2.67 v -1.15 h -4.19 v 0.47 q 0 0.48 0.16 0.87 q 0.16 0.38 0.41 0.69 q 0.25 0.31 0.54 0.54 q 0.29 0.24 0.56 0.42 q 0.28 0.2 0.49 0.38 q 0.21 0.18 0.35 0.36 q 0.14 0.18 0.21 0.36 q 0.07 0.18 0.07 0.39 q 0 0.4 -0.23 0.61 q -0.23 0.21 -0.7 0.21 q -0.81 0 -1.56 -0.65 v 1.22 q 0.82 0.53 1.85 0.53 q 0.48 0 0.86 -0.13 q 0.38 -0.13 0.64 -0.36 q 0.26 -0.23 0.4 -0.56 q 0.14 -0.33 0.14 -0.74 q 0 -0.44 -0.13 -0.77 q -0.13 -0.34 -0.36 -0.62 q -0.22 -0.28 -0.51 -0.51 q -0.29 -0.23 -0.6 -0.45 q -0.21 -0.15 -0.41 -0.3 q -0.2 -0.15 -0.34 -0.29 q -0.15 -0.14 -0.24 -0.28 q -0.09 -0.14 -0.09 -0.26 Z "/>
+        </symbol>
+        <symbol id="g866BCED00B4190CB498C5E3F5497C965" overflow="visible">
+            <path d="M 0 0m 4.88 2.1 q 0 -0.47 -0.16 -0.87 q -0.16 -0.4 -0.45 -0.7 q -0.29 -0.3 -0.69 -0.47 q -0.4 -0.17 -0.87 -0.17 q -0.53 0 -0.95 0.2 q -0.42 0.2 -0.71 0.57 q -0.29 0.38 -0.44 0.92 q -0.15 0.54 -0.15 1.23 q 0 0.81 0.2 1.47 q 0.2 0.66 0.57 1.13 q 0.37 0.47 0.9 0.73 q 0.53 0.26 1.19 0.26 q 0.73 0 1.13 -0.17 v -1.16 q -0.48 0.27 -1.05 0.27 q -0.35 0 -0.64 -0.14 q -0.29 -0.14 -0.49 -0.39 q -0.2 -0.25 -0.32 -0.6 q -0.12 -0.35 -0.13 -0.79 h 0.03 q 0.45 0.62 1.32 0.62 q 0.39 0 0.71 -0.14 q 0.32 -0.14 0.54 -0.4 q 0.22 -0.26 0.35 -0.62 q 0.12 -0.36 0.12 -0.8 Z m -1.36 -0.09 q 0 1.02 -0.83 1.02 q -0.19 0 -0.34 -0.07 q -0.15 -0.07 -0.26 -0.2 q -0.11 -0.13 -0.17 -0.3 q -0.06 -0.17 -0.06 -0.38 q 0 -0.23 0.06 -0.44 q 0.06 -0.2 0.17 -0.35 q 0.11 -0.15 0.27 -0.24 q 0.15 -0.09 0.34 -0.09 q 0.19 0 0.34 0.08 q 0.15 0.08 0.26 0.22 q 0.11 0.14 0.16 0.33 q 0.06 0.2 0.06 0.43 Z "/>
+        </symbol>
+        <symbol id="gBE342A266064E8BAEF90C3297DF0592" overflow="visible">
+            <path d="M 0 0m 4.1 6.3 l -3.07 -7.35 h -1.24 l 3.06 7.35 h 1.25 Z "/>
+        </symbol>
+        <symbol id="g346EE5338C274B8F8F58B896437AEA2F" overflow="visible">
+            <path d="M 0 0m 4.78 3.45 q 0 -0.84 -0.18 -1.5 q -0.18 -0.66 -0.54 -1.12 q -0.35 -0.46 -0.86 -0.7 q -0.51 -0.24 -1.16 -0.24 q -0.77 0 -1.33 0.25 v 1.14 q 0.5 -0.33 1.2 -0.33 q 0.72 0 1.12 0.49 q 0.4 0.49 0.41 1.41 l -0.03 0.01 q -0.42 -0.62 -1.27 -0.62 q -0.39 0 -0.71 0.15 q -0.33 0.15 -0.57 0.4 q -0.24 0.26 -0.37 0.61 q -0.13 0.36 -0.13 0.78 q 0 0.5 0.16 0.91 q 0.16 0.41 0.45 0.7 q 0.29 0.29 0.7 0.45 q 0.41 0.16 0.91 0.16 q 0.51 0 0.92 -0.2 q 0.41 -0.2 0.7 -0.58 q 0.29 -0.38 0.44 -0.93 q 0.15 -0.55 0.15 -1.25 Z m -1.4 0.74 q 0 0.24 -0.06 0.45 q -0.06 0.21 -0.17 0.37 q -0.11 0.15 -0.27 0.24 q -0.16 0.09 -0.35 0.09 q -0.18 0 -0.33 -0.08 q -0.15 -0.08 -0.26 -0.22 q -0.11 -0.14 -0.17 -0.33 q -0.06 -0.19 -0.06 -0.42 q 0 -0.25 0.06 -0.44 q 0.06 -0.19 0.17 -0.32 q 0.11 -0.13 0.27 -0.2 q 0.16 -0.07 0.35 -0.07 q 0.18 0 0.33 0.07 q 0.15 0.07 0.26 0.2 q 0.11 0.12 0.17 0.29 q 0.06 0.17 0.06 0.36 Z "/>
+        </symbol>
+        <symbol id="gF9771BC44BF32C58629ED88CE7C529D0" overflow="visible">
+            <path d="M 0 0m 3.66 6.44 v -6.44 h -1.38 v 4.88 q -0.11 -0.1 -0.27 -0.19 q -0.16 -0.09 -0.33 -0.16 q -0.18 -0.07 -0.36 -0.12 q -0.19 -0.05 -0.37 -0.07 v 1.17 q 0.54 0.16 1.02 0.4 q 0.48 0.25 0.87 0.54 h 0.84 Z "/>
+        </symbol>
+        <symbol id="g4D74571245A8EFA1CB38932856473232" overflow="visible">
+            <path d="M 0 0m 10.86 10.86 h -3.79 v -10.86 h -3.01 v 10.86 h -3.78 v 2.44 h 10.58 v -2.44 Z "/>
+        </symbol>
+        <symbol id="g2793CB17186B4B7692CC67215ACE4BF9" overflow="visible">
+            <path d="M 0 0m 10.35 0 h -2.92 v 5.4 q 0 2.09 -1.52 2.09 q -0.78 0 -1.26 -0.58 q -0.48 -0.58 -0.48 -1.48 v -5.42 h -2.93 v 14.06 h 2.93 v -5.97 h 0.04 q 1.08 1.64 2.92 1.64 q 3.23 0 3.23 -3.9 v -5.84 Z "/>
+        </symbol>
+        <symbol id="g9EFED280C005A651CE0163FD7B14EB44" overflow="visible">
+            <path d="M 0 0m 9.77 3.92 h -6.2 q 0.15 -2.07 2.61 -2.07 q 1.57 0 2.76 0.74 v -2.12 q -1.32 -0.71 -3.42 -0.71 q -2.3 0 -3.57 1.28 q -1.27 1.28 -1.27 3.56 q 0 2.37 1.37 3.75 q 1.37 1.38 3.38 1.38 q 2.08 0 3.21 -1.23 q 1.14 -1.23 1.14 -3.35 v -1.23 Z m -2.72 1.8 q 0 2.04 -1.65 2.04 q -0.71 0 -1.22 -0.58 q -0.51 -0.58 -0.63 -1.46 h 3.5 Z "/>
+        </symbol>
+        <symbol id="g93E14BD3F72C7C20E07A8A6E65CC2802" overflow="visible">
+            <path d="M 0 0m 16.32 0 h -2.92 v 5.42 q 0 2.07 -1.52 2.07 q -0.72 0 -1.18 -0.62 q -0.45 -0.62 -0.45 -1.55 v -5.32 h -2.93 v 5.47 q 0 2.01 -1.49 2.01 q -0.75 0 -1.2 -0.59 q -0.45 -0.59 -0.45 -1.61 v -5.28 h -2.93 v 9.5 h 2.93 v -1.48 h 0.04 q 0.45 0.76 1.28 1.24 q 0.82 0.48 1.8 0.48 q 2.01 0 2.76 -1.77 q 1.09 1.77 3.19 1.77 q 3.1 0 3.1 -3.82 v -5.91 Z "/>
+        </symbol>
+        <symbol id="gAC118CDD0053CB9C5AAF0875E0D40380" overflow="visible">
+            <path d="M 0 0m 9.14 0 h -2.77 v 1.36 h -0.04 q -0.96 -1.6 -2.83 -1.6 q -1.38 0 -2.18 0.78 q -0.79 0.78 -0.79 2.09 q 0 2.76 3.27 3.19 l 2.58 0.34 q 0 1.56 -1.69 1.56 q -1.7 0 -3.23 -1.01 v 2.21 q 0.61 0.32 1.67 0.56 q 1.06 0.24 1.93 0.24 q 4.06 0 4.06 -4.05 v -5.68 Z m -2.76 3.86 v 0.64 l -1.73 -0.22 q -1.43 -0.19 -1.43 -1.29 q 0 -0.5 0.35 -0.82 q 0.35 -0.32 0.94 -0.32 q 0.83 0 1.35 0.57 q 0.52 0.57 0.52 1.44 Z "/>
+        </symbol>
+        <symbol id="gE42E2619C391B998D5C8B4E6D81371AE" overflow="visible">
+            <path d="M 0 0m 4.2 1.1 h -0.04 v -5.47 h -2.93 v 13.87 h 2.93 v -1.43 h 0.04 q 1.09 1.66 3.05 1.66 q 1.85 0 2.85 -1.27 q 1.01 -1.27 1.01 -3.45 q 0 -2.38 -1.17 -3.81 q -1.17 -1.44 -3.12 -1.44 q -1.72 0 -2.62 1.34 Z m -0.08 3.9 v -0.76 q 0 -0.98 0.52 -1.6 q 0.52 -0.62 1.36 -0.62 q 1 0 1.55 0.77 q 0.55 0.77 0.55 2.19 q 0 2.5 -1.95 2.5 q -0.9 0 -1.47 -0.68 q -0.57 -0.68 -0.57 -1.8 Z "/>
+        </symbol>
+        <symbol id="g65DAF4AFA2E52FF7FDC392D518C1BB01" overflow="visible">
+            <path d="M 0 0m 2.72 11 q -0.74 0 -1.22 0.44 q -0.47 0.44 -0.47 1.08 q 0 0.66 0.47 1.08 q 0.47 0.42 1.22 0.42 q 0.75 0 1.22 -0.42 q 0.47 -0.42 0.47 -1.08 q 0 -0.67 -0.47 -1.09 q -0.47 -0.43 -1.22 -0.43 Z m 1.45 -11 h -2.93 v 9.5 h 2.93 v -9.5 Z "/>
+        </symbol>
+        <symbol id="gEBB7E1ECD87CB1839219F7EE47C0FBB5" overflow="visible">
+            <path d="M 0 0m 0.61 0.25 v 2.38 q 0.72 -0.44 1.44 -0.65 q 0.72 -0.21 1.36 -0.21 q 0.78 0 1.23 0.21 q 0.45 0.21 0.45 0.65 q 0 0.28 -0.2 0.46 q -0.2 0.19 -0.52 0.32 q -0.32 0.14 -0.7 0.25 q -0.38 0.11 -0.73 0.25 q -0.57 0.21 -1 0.46 q -0.43 0.25 -0.72 0.57 q -0.29 0.32 -0.45 0.75 q -0.15 0.43 -0.15 1.01 q 0 0.8 0.35 1.37 q 0.35 0.58 0.93 0.94 q 0.58 0.37 1.33 0.54 q 0.75 0.17 1.55 0.17 q 0.63 0 1.28 -0.1 q 0.65 -0.1 1.28 -0.28 v -2.26 q -0.56 0.32 -1.19 0.49 q -0.64 0.16 -1.25 0.16 q -0.29 0 -0.54 -0.05 q -0.26 -0.05 -0.45 -0.15 q -0.19 -0.1 -0.31 -0.25 q -0.11 -0.15 -0.11 -0.35 q 0 -0.26 0.17 -0.45 q 0.17 -0.19 0.44 -0.32 q 0.27 -0.13 0.6 -0.24 q 0.33 -0.11 0.65 -0.22 q 0.58 -0.2 1.06 -0.45 q 0.47 -0.24 0.81 -0.57 q 0.34 -0.32 0.52 -0.76 q 0.18 -0.44 0.18 -1.04 q 0 -0.84 -0.37 -1.44 q -0.37 -0.6 -0.97 -0.97 q -0.61 -0.38 -1.4 -0.55 q -0.79 -0.17 -1.65 -0.17 q -1.57 0 -2.9 0.48 Z "/>
+        </symbol>
+        <symbol id="g32E1BFC6E4C8C1A8AFC708E8BD2BFC05" overflow="visible">
+            <path d="M 0 0m 10.41 0 h -2.92 v 5.28 q 0 2.21 -1.58 2.21 q -0.76 0 -1.25 -0.58 q -0.49 -0.58 -0.49 -1.48 v -5.42 h -2.93 v 9.5 h 2.93 v -1.5 h 0.04 q 1.05 1.73 3.05 1.73 q 3.15 0 3.15 -3.92 v -5.82 Z "/>
+        </symbol>
+        <symbol id="gD5BB6E32160BA22DDFFB8A4772B75D12" overflow="visible">
+            <path d="M 0 0m 5.76 -0.23 q -2.38 0 -3.73 1.33 q -1.36 1.33 -1.36 3.61 q 0 2.36 1.41 3.69 q 1.41 1.33 3.81 1.33 q 2.37 0 3.71 -1.33 q 1.35 -1.33 1.35 -3.52 q 0 -2.37 -1.39 -3.74 q -1.39 -1.37 -3.8 -1.37 Z m 0.07 7.72 q -1.04 0 -1.61 -0.71 q -0.58 -0.71 -0.58 -2.02 q 0 -2.74 2.21 -2.74 q 2.11 0 2.11 2.81 q 0 2.66 -2.12 2.66 Z "/>
+        </symbol>
+        <symbol id="gE29C389C45E1F31F471E3F2A0EEA9675" overflow="visible">
+            <path d="M 0 0m 14.99 9.5 l -2.74 -9.5 h -3.08 l -1.4 5.57 q -0.14 0.56 -0.16 1.22 h -0.06 q -0.06 -0.72 -0.19 -1.18 l -1.5 -5.6 h -3.04 l -2.68 9.5 h 2.99 l 1.31 -6.2 q 0.09 -0.44 0.14 -1.06 h 0.06 q 0.05 0.65 0.17 1.09 l 1.63 6.16 h 2.79 l 1.47 -6.2 q 0.06 -0.23 0.13 -1.08 h 0.06 q 0.05 0.54 0.15 1.08 l 1.23 6.2 h 2.72 Z "/>
+        </symbol>
+        <symbol id="gA7EB9A45AB89518D351B365FEABFF82F" overflow="visible">
+            <path d="M 0 0m 1.09 0.44 v 2.55 q 1.34 -0.97 3.12 -0.97 q 1.12 0 1.75 0.48 q 0.63 0.48 0.63 1.35 q 0 0.89 -0.77 1.37 q -0.77 0.48 -2.13 0.48 h -1.23 v 2.25 h 1.14 q 2.6 0 2.6 1.73 q 0 1.62 -1.99 1.62 q -1.34 0 -2.6 -0.86 v 2.39 q 1.4 0.71 3.27 0.71 q 2.04 0 3.18 -0.92 q 1.14 -0.92 1.14 -2.38 q 0 -2.61 -2.64 -3.27 v -0.05 q 1.41 -0.18 2.23 -1.03 q 0.82 -0.85 0.82 -2.08 q 0 -1.86 -1.36 -2.95 q -1.36 -1.09 -3.77 -1.09 q -2.06 0 -3.35 0.67 Z "/>
+        </symbol>
+        <symbol id="g4A985A705303FE532748085A76FD763E" overflow="visible">
+            <path d="M 0 0m 1.52 0 v 13.3 h 4.71 q 7.09 0 7.09 -6.48 q 0 -3.11 -1.93 -4.96 q -1.93 -1.86 -5.15 -1.86 h -4.71 Z m 3 10.86 v -8.43 h 1.48 q 1.95 0 3.06 1.17 q 1.11 1.17 1.11 3.18 q 0 1.9 -1.1 2.99 q -1.1 1.09 -3.08 1.09 h -1.47 Z "/>
+        </symbol>
+        <symbol id="g49C365C62FFA42B38FC9D89653FEE91B" overflow="visible">
+            <path d="M 0 0m 5.97 0.31 q -0.82 -0.43 -2.03 -0.43 q -1.57 0 -2.51 1.01 q -0.94 1.01 -0.94 2.65 q 0 1.76 1.06 2.85 q 1.06 1.09 2.69 1.09 q 1.05 0 1.73 -0.3 v -0.92 q -0.79 0.44 -1.74 0.44 q -1.27 0 -2.05 -0.85 q -0.79 -0.85 -0.79 -2.26 q 0 -1.34 0.74 -2.14 q 0.74 -0.8 1.93 -0.8 q 1.11 0 1.92 0.49 v -0.84 Z "/>
+        </symbol>
+        <symbol id="g37644D0F12786530B3A6A0E5E321A1B2" overflow="visible">
+            <path d="M 0 0m 3.05 -0.12 q -1.16 0 -1.86 0.74 q -0.69 0.74 -0.69 1.95 q 0 1.32 0.72 2.07 q 0.72 0.74 1.95 0.74 q 1.17 0 1.83 -0.72 q 0.66 -0.72 0.66 -2 q 0 -1.26 -0.71 -2.01 q -0.71 -0.76 -1.9 -0.76 Z m 0.06 4.79 q -0.81 0 -1.28 -0.55 q -0.47 -0.55 -0.47 -1.52 q 0 -0.93 0.48 -1.47 q 0.48 -0.54 1.28 -0.54 q 0.82 0 1.25 0.53 q 0.44 0.53 0.44 1.5 q 0 0.98 -0.44 1.52 q -0.44 0.53 -1.25 0.53 Z "/>
+        </symbol>
+        <symbol id="gE03A577F385712EA3CEECBBB99EC9C6" overflow="visible">
+            <path d="M 0 0m 8.31 0 h -0.84 v 3.01 q 0 0.87 -0.27 1.26 q -0.27 0.39 -0.9 0.39 q -0.54 0 -0.92 -0.49 q -0.38 -0.49 -0.38 -1.18 v -2.99 h -0.84 v 3.12 q 0 1.55 -1.19 1.55 q -0.55 0 -0.91 -0.46 q -0.36 -0.46 -0.36 -1.21 v -2.99 h -0.84 v 5.25 h 0.84 v -0.83 h 0.02 q 0.56 0.95 1.63 0.95 q 0.54 0 0.94 -0.3 q 0.4 -0.3 0.55 -0.79 q 0.58 1.09 1.74 1.09 q 1.73 0 1.73 -2.14 v -3.24 Z "/>
+        </symbol>
+        <symbol id="g788C6E88EDC57E51F2601191D55CC69B" overflow="visible">
+            <path d="M 0 0m 1.71 0.76 h -0.02 v -3.17 h -0.84 v 7.66 h 0.84 v -0.92 h 0.02 q 0.62 1.05 1.81 1.05 q 1.02 0 1.58 -0.7 q 0.57 -0.7 0.57 -1.89 q 0 -1.32 -0.64 -2.11 q -0.64 -0.79 -1.75 -0.79 q -1.02 0 -1.57 0.88 Z m -0.02 2.12 v -0.73 q 0 -0.65 0.42 -1.1 q 0.42 -0.45 1.07 -0.45 q 0.76 0 1.2 0.58 q 0.43 0.58 0.43 1.63 q 0 0.88 -0.41 1.37 q -0.41 0.5 -1.1 0.5 q -0.73 0 -1.18 -0.51 q -0.45 -0.51 -0.45 -1.28 Z "/>
+        </symbol>
+        <symbol id="gCB97B043A1B9B03AA647432E3ABB59DA" overflow="visible">
+            <path d="M 0 0m 4.61 0 h -0.84 v 0.82 h -0.02 q -0.55 -0.94 -1.61 -0.94 q -0.78 0 -1.23 0.42 q -0.44 0.42 -0.44 1.1 q 0 1.47 1.73 1.71 l 1.57 0.22 q 0 1.34 -1.08 1.34 q -0.95 0 -1.71 -0.65 v 0.86 q 0.77 0.49 1.78 0.49 q 1.85 0 1.85 -1.96 v -3.41 Z m -0.84 2.66 l -1.27 -0.17 q -0.58 -0.08 -0.88 -0.29 q -0.3 -0.21 -0.3 -0.74 q 0 -0.38 0.27 -0.63 q 0.27 -0.24 0.73 -0.24 q 0.63 0 1.03 0.44 q 0.41 0.44 0.41 1.11 v 0.52 Z "/>
+        </symbol>
+        <symbol id="g945D332C86C4EBD7B312687CD4B84822" overflow="visible">
+            <path d="M 0 0m 3.59 4.4 q -0.22 0.17 -0.64 0.17 q -0.54 0 -0.9 -0.51 q -0.36 -0.51 -0.36 -1.38 v -2.68 h -0.84 v 5.25 h 0.84 v -1.08 h 0.02 q 0.18 0.55 0.55 0.86 q 0.37 0.31 0.83 0.31 q 0.33 0 0.5 -0.07 v -0.87 Z "/>
+        </symbol>
+        <symbol id="gC5FA3359B6B8E6E148982B4173DCB4AF" overflow="visible">
+            <path d="M 0 0m 3.29 0.05 q -0.3 -0.16 -0.78 -0.16 q -1.38 0 -1.38 1.54 v 3.11 h -0.9 v 0.72 h 0.9 v 1.28 l 0.84 0.27 v -1.55 h 1.32 v -0.72 h -1.32 v -2.96 q 0 -0.53 0.18 -0.75 q 0.18 -0.23 0.59 -0.23 q 0.32 0 0.55 0.17 v -0.72 Z "/>
+        </symbol>
+        <symbol id="gEEA93299DEB4E5143F6D56F7E016DC5A" overflow="visible">
+            <path d="M 0 0m 5.07 2.41 h -3.71 q 0.02 -0.88 0.47 -1.35 q 0.45 -0.48 1.24 -0.48 q 0.89 0 1.63 0.58 v -0.79 q -0.69 -0.5 -1.83 -0.5 q -1.11 0 -1.75 0.72 q -0.64 0.72 -0.64 2.01 q 0 1.23 0.69 2 q 0.69 0.77 1.73 0.77 q 1.03 0 1.59 -0.67 q 0.56 -0.67 0.56 -1.85 v -0.44 Z m -0.86 0.71 q -0.01 0.73 -0.35 1.13 q -0.35 0.41 -0.96 0.41 q -0.59 0 -1.01 -0.43 q -0.42 -0.43 -0.51 -1.11 h 2.84 Z "/>
+        </symbol>
+        <symbol id="g8E941ED39367C2BDC0280713FF8CF6F1" overflow="visible">
+            <path d="M 0 0m 5.21 0 h -0.84 v 2.99 q 0 1.67 -1.22 1.67 q -0.63 0 -1.04 -0.47 q -0.41 -0.47 -0.41 -1.2 v -2.99 h -0.84 v 5.25 h 0.84 v -0.87 h 0.02 q 0.59 0.99 1.72 0.99 q 0.86 0 1.32 -0.56 q 0.46 -0.56 0.46 -1.61 v -3.21 Z "/>
+        </symbol>
+        <symbol id="g7612F93931127168C6BC31C49D5D71F6" overflow="visible">
+            <path d="M 0 0m 0.53 0.19 v 0.9 q 0.69 -0.51 1.51 -0.51 q 1.11 0 1.11 0.74 q 0 0.21 -0.09 0.36 q -0.09 0.15 -0.26 0.26 q -0.16 0.11 -0.38 0.2 q -0.22 0.09 -0.47 0.19 q -0.35 0.14 -0.61 0.28 q -0.26 0.14 -0.44 0.32 q -0.18 0.18 -0.27 0.4 q -0.09 0.23 -0.09 0.53 q 0 0.37 0.17 0.65 q 0.17 0.28 0.45 0.48 q 0.28 0.19 0.64 0.29 q 0.36 0.1 0.75 0.1 q 0.68 0 1.22 -0.24 v -0.85 q -0.58 0.38 -1.33 0.38 q -0.24 0 -0.43 -0.05 q -0.19 -0.05 -0.33 -0.15 q -0.14 -0.1 -0.21 -0.23 q -0.07 -0.14 -0.07 -0.3 q 0 -0.21 0.07 -0.34 q 0.07 -0.14 0.22 -0.25 q 0.14 -0.11 0.35 -0.19 q 0.21 -0.09 0.47 -0.19 q 0.35 -0.13 0.63 -0.27 q 0.28 -0.14 0.47 -0.32 q 0.19 -0.18 0.3 -0.41 q 0.11 -0.23 0.11 -0.55 q 0 -0.39 -0.17 -0.68 q -0.17 -0.29 -0.46 -0.48 q -0.29 -0.19 -0.66 -0.28 q -0.37 -0.09 -0.78 -0.09 q -0.81 0 -1.4 0.31 Z "/>
+        </symbol>
+        <symbol id="gB723A76B7CD13ADA78ADEDEB0256DC17" overflow="visible">
+            <path d="M 0 0m 1.62 1.17 l -0.82 -2.52 h -0.6 l 0.6 2.52 h 0.82 Z "/>
+        </symbol>
+        <symbol id="g73E7F82A85A8DA66D0A2006F579E996D" overflow="visible">
+            <path d="M 0 0m 5.1 0 h -0.84 v 0.83 h -0.02 q -0.52 -0.95 -1.62 -0.95 q -1.88 0 -1.88 2.24 v 3.14 h 0.84 v -3 q 0 -1.66 1.27 -1.66 q 0.62 0 1.01 0.45 q 0.4 0.45 0.4 1.19 v 3.02 h 0.84 v -5.25 Z "/>
+        </symbol>
+        <symbol id="gAE79702EBDC1887B1EBD5B6628DDC7D2" overflow="visible">
+            <path d="M 0 0m 5.21 0 h -0.84 v 3.02 q 0 1.64 -1.22 1.64 q -0.62 0 -1.04 -0.47 q -0.42 -0.47 -0.42 -1.22 v -2.97 h -0.84 v 7.77 h 0.84 v -3.39 h 0.02 q 0.6 0.99 1.72 0.99 q 1.77 0 1.77 -2.14 v -3.24 Z "/>
+        </symbol>
+        <symbol id="gC9D28CCE31AB554DF1D073C9274F0D5D" overflow="visible">
+            <path d="M 0 0m 6.46 0.5 q -1.11 -0.63 -2.46 -0.63 q -1.57 0 -2.55 1.02 q -0.97 1.02 -0.97 2.69 q 0 1.71 1.08 2.8 q 1.08 1.09 2.74 1.09 q 1.2 0 2.01 -0.39 v -0.95 q -0.89 0.56 -2.11 0.56 q -1.24 0 -2.03 -0.85 q -0.79 -0.85 -0.79 -2.2 q 0 -1.39 0.73 -2.19 q 0.73 -0.8 1.99 -0.8 q 0.86 0 1.49 0.34 v 2.06 h -1.61 v 0.78 h 2.47 v -3.33 Z "/>
+        </symbol>
+        <symbol id="g5DA14A52C14F40C7F9DC2B31373D33FC" overflow="visible">
+            <path d="M 0 0m 1.83 2.78 v -2.78 h -0.86 v 7.35 h 2.02 q 1.18 0 1.83 -0.57 q 0.65 -0.57 0.65 -1.62 q 0 -1.05 -0.72 -1.71 q -0.72 -0.67 -1.95 -0.67 h -0.97 Z m 0 3.79 v -3.01 h 0.9 q 0.89 0 1.36 0.41 q 0.47 0.41 0.47 1.15 q 0 1.46 -1.72 1.46 h -1.01 Z "/>
+        </symbol>
+        <symbol id="gCE6D33C5CCDC6881DA788B56BF79192D" overflow="visible">
+            <path d="M 0 0m 0.62 0.3 v 1.02 q 0.17 -0.15 0.42 -0.28 q 0.24 -0.12 0.51 -0.21 q 0.27 -0.08 0.54 -0.13 q 0.27 -0.05 0.5 -0.05 q 0.79 0 1.19 0.29 q 0.39 0.29 0.39 0.85 q 0 0.3 -0.13 0.52 q -0.13 0.22 -0.36 0.4 q -0.23 0.18 -0.55 0.35 q -0.32 0.17 -0.68 0.35 q -0.38 0.19 -0.72 0.39 q -0.33 0.2 -0.58 0.44 q -0.25 0.24 -0.39 0.55 q -0.14 0.31 -0.14 0.72 q 0 0.5 0.22 0.87 q 0.22 0.37 0.58 0.61 q 0.36 0.24 0.82 0.36 q 0.46 0.12 0.94 0.12 q 1.09 0 1.58 -0.26 v -0.97 q -0.65 0.45 -1.67 0.45 q -0.28 0 -0.56 -0.06 q -0.28 -0.06 -0.5 -0.19 q -0.22 -0.13 -0.36 -0.34 q -0.14 -0.21 -0.14 -0.51 q 0 -0.28 0.11 -0.49 q 0.11 -0.21 0.31 -0.37 q 0.21 -0.17 0.5 -0.33 q 0.29 -0.16 0.68 -0.35 q 0.39 -0.19 0.75 -0.41 q 0.35 -0.22 0.62 -0.48 q 0.27 -0.26 0.42 -0.58 q 0.16 -0.32 0.16 -0.73 q 0 -0.54 -0.21 -0.92 q -0.21 -0.38 -0.57 -0.61 q -0.36 -0.24 -0.83 -0.34 q -0.47 -0.11 -0.99 -0.11 q -0.17 0 -0.43 0.03 q -0.26 0.03 -0.52 0.08 q -0.27 0.05 -0.51 0.13 q -0.24 0.08 -0.38 0.18 Z "/>
+        </symbol>
+        <symbol id="g84C7AEE4C58C8D93E5FF992077CD31C3" overflow="visible">
+            <path d="M 0 0m 4.43 0.24 q -0.6 -0.36 -1.44 -0.36 q -1.12 0 -1.81 0.73 q -0.69 0.73 -0.69 1.89 q 0 1.3 0.74 2.08 q 0.74 0.79 1.98 0.79 q 0.69 0 1.22 -0.26 v -0.86 q -0.58 0.41 -1.25 0.41 q -0.8 0 -1.32 -0.58 q -0.52 -0.58 -0.52 -1.52 q 0 -0.92 0.48 -1.46 q 0.48 -0.53 1.3 -0.53 q 0.69 0 1.29 0.46 v -0.8 Z "/>
+        </symbol>
+        <symbol id="g66CF02974EA79B19D4B4F3E058B55BB7" overflow="visible">
+            <path d="M 0 0m 5.21 0 h -1.18 l -2.32 2.52 h -0.02 v -2.52 h -0.84 v 7.77 h 0.84 v -4.93 h 0.02 l 2.2 2.4 h 1.1 l -2.44 -2.53 l 2.62 -2.72 Z "/>
+        </symbol>
+        <symbol id="g516216D5E04AFAF0BCD7BB0DEB9D2293" overflow="visible">
+            <path d="M 0 0m 5.33 0 h -0.84 v 0.89 h -0.02 q -0.58 -1.02 -1.8 -1.02 q -0.99 0 -1.58 0.7 q -0.59 0.7 -0.59 1.92 q 0 1.3 0.66 2.09 q 0.66 0.78 1.75 0.78 q 1.08 0 1.57 -0.85 h 0.02 v 3.25 h 0.84 v -7.77 Z m -0.84 2.37 v 0.77 q 0 0.64 -0.42 1.08 q -0.42 0.44 -1.07 0.44 q -0.77 0 -1.21 -0.56 q -0.44 -0.56 -0.44 -1.56 q 0 -0.91 0.42 -1.43 q 0.42 -0.53 1.14 -0.53 q 0.7 0 1.14 0.51 q 0.44 0.51 0.44 1.28 Z "/>
+        </symbol>
+        <symbol id="g9550C6A91B9D5C54FC3EEA31EC041EED" overflow="visible">
+            <path d="M 0 0m 1.28 6.58 q -0.23 0 -0.38 0.15 q -0.16 0.15 -0.16 0.39 q 0 0.24 0.16 0.39 q 0.16 0.16 0.38 0.16 q 0.23 0 0.39 -0.16 q 0.16 -0.16 0.16 -0.39 q 0 -0.23 -0.16 -0.38 q -0.16 -0.16 -0.39 -0.16 Z m 0.41 -6.58 h -0.84 v 5.25 h 0.84 v -5.25 Z "/>
+        </symbol>
+        <symbol id="gC8EA8E4F9838BBC150D1CD37836BADA2" overflow="visible">
+            <path d="M 0 0m 1.14 -0.11 q -0.24 0 -0.4 0.17 q -0.17 0.17 -0.17 0.41 q 0 0.24 0.17 0.41 q 0.17 0.17 0.4 0.17 q 0.24 0 0.41 -0.17 q 0.17 -0.17 0.17 -0.41 q 0 -0.24 -0.17 -0.41 q -0.17 -0.17 -0.41 -0.17 Z "/>
+        </symbol>
+        <symbol id="g9F8F6E786936D192B2EE40867BF9135A" overflow="visible">
+            <path d="M 0 0m 1.83 0 h -0.86 v 7.35 h 0.86 v -7.35 Z "/>
+        </symbol>
+        <symbol id="gC60E5DD4F14714083F7924B7FAAD5E2B" overflow="visible">
+            <path d="M 0 0m 1.69 0 h -0.84 v 7.77 h 0.84 v -7.77 Z "/>
+        </symbol>
+        <symbol id="g9F09561888F8141485004BECDCC2E30B" overflow="visible">
+            <path d="M 0 0m 3.54 2.59 h -2.8 v 0.66 h 2.8 v -0.66 Z "/>
+        </symbol>
+        <symbol id="g2507874237788A6CCA6D0FDB76B94E63" overflow="visible">
+            <path d="M 0 0m 7.46 5.25 l -1.57 -5.25 h -0.87 l -1.08 3.76 q -0.06 0.22 -0.08 0.49 h -0.02 q -0.02 -0.18 -0.11 -0.48 l -1.17 -3.77 h -0.84 l -1.59 5.25 h 0.88 l 1.09 -3.95 q 0.05 -0.18 0.07 -0.47 h 0.04 q 0.02 0.23 0.09 0.48 l 1.21 3.94 h 0.77 l 1.09 -3.96 q 0.05 -0.19 0.08 -0.47 h 0.04 q 0.01 0.2 0.09 0.47 l 1.07 3.96 h 0.83 Z "/>
+        </symbol>
+    </defs>
+    <defs id="clip-path">
+        <clipPath id="c9EA405AC9A2961275A8E26747A87B454">
+            <path d="M 0 0m 0 3 c 0 -1.66 1.34 -3 3 -3 h 76 c 1.66 0 3 1.34 3 3 v 136 c 0 1.66 -1.34 3 -3 3 h -76 c -1.66 0 -3 -1.34 -3 -3 Z "/>
+        </clipPath>
+        <clipPath id="c8E0F71D9C7EC001846E5BA1D575853CE">
+            <path d="M 0 0h 82 v 142 h -82 Z "/>
+        </clipPath>
+    </defs>
+    <defs id="gradients">
+        <linearGradient id="f9DB95AA063D4D4D48DD3CECFD399DE9E" spreadMethod="pad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="0.79%" stop-color="#ffffff"/>
+            <stop offset="1.57%" stop-color="#ffffff"/>
+            <stop offset="2.36%" stop-color="#feffff"/>
+            <stop offset="3.15%" stop-color="#fefeff"/>
+            <stop offset="3.94%" stop-color="#fefeff"/>
+            <stop offset="4.72%" stop-color="#fefeff"/>
+            <stop offset="5.51%" stop-color="#fdfeff"/>
+            <stop offset="6.3%" stop-color="#fdfeff"/>
+            <stop offset="7.09%" stop-color="#fdfeff"/>
+            <stop offset="7.87%" stop-color="#fdfeff"/>
+            <stop offset="8.66%" stop-color="#fdfeff"/>
+            <stop offset="9.45%" stop-color="#fcfdff"/>
+            <stop offset="10.24%" stop-color="#fcfdff"/>
+            <stop offset="11.02%" stop-color="#fcfdff"/>
+            <stop offset="11.81%" stop-color="#fcfdff"/>
+            <stop offset="12.6%" stop-color="#fbfdff"/>
+            <stop offset="13.39%" stop-color="#fbfdff"/>
+            <stop offset="14.17%" stop-color="#fbfdff"/>
+            <stop offset="14.96%" stop-color="#fbfcff"/>
+            <stop offset="15.75%" stop-color="#fbfcff"/>
+            <stop offset="16.54%" stop-color="#fafcff"/>
+            <stop offset="17.32%" stop-color="#fafcfe"/>
+            <stop offset="18.11%" stop-color="#fafcfe"/>
+            <stop offset="18.9%" stop-color="#fafcfe"/>
+            <stop offset="19.69%" stop-color="#f9fcfe"/>
+            <stop offset="20.47%" stop-color="#f9fcfe"/>
+            <stop offset="21.26%" stop-color="#f9fbfe"/>
+            <stop offset="22.05%" stop-color="#f9fbfe"/>
+            <stop offset="22.83%" stop-color="#f9fbfe"/>
+            <stop offset="23.62%" stop-color="#f8fbfe"/>
+            <stop offset="24.41%" stop-color="#f8fbfe"/>
+            <stop offset="25.2%" stop-color="#f8fbfe"/>
+            <stop offset="25.98%" stop-color="#f8fbfe"/>
+            <stop offset="26.77%" stop-color="#f7fafe"/>
+            <stop offset="27.56%" stop-color="#f7fafe"/>
+            <stop offset="28.35%" stop-color="#f7fafe"/>
+            <stop offset="29.13%" stop-color="#f7fafe"/>
+            <stop offset="29.92%" stop-color="#f7fafe"/>
+            <stop offset="30.71%" stop-color="#f6fafe"/>
+            <stop offset="31.5%" stop-color="#f6fafe"/>
+            <stop offset="32.28%" stop-color="#f6fafe"/>
+            <stop offset="33.07%" stop-color="#f6f9fe"/>
+            <stop offset="33.86%" stop-color="#f6f9fe"/>
+            <stop offset="34.65%" stop-color="#f5f9fe"/>
+            <stop offset="35.43%" stop-color="#f5f9fe"/>
+            <stop offset="36.22%" stop-color="#f5f9fe"/>
+            <stop offset="37.01%" stop-color="#f5f9fe"/>
+            <stop offset="37.8%" stop-color="#f4f9fe"/>
+            <stop offset="38.58%" stop-color="#f4f8fe"/>
+            <stop offset="39.37%" stop-color="#f4f8fe"/>
+            <stop offset="40.16%" stop-color="#f4f8fe"/>
+            <stop offset="40.94%" stop-color="#f4f8fe"/>
+            <stop offset="41.73%" stop-color="#f3f8fe"/>
+            <stop offset="42.52%" stop-color="#f3f8fe"/>
+            <stop offset="43.31%" stop-color="#f3f8fe"/>
+            <stop offset="44.09%" stop-color="#f3f8fe"/>
+            <stop offset="44.88%" stop-color="#f2f7fe"/>
+            <stop offset="45.67%" stop-color="#f2f7fe"/>
+            <stop offset="46.46%" stop-color="#f2f7fe"/>
+            <stop offset="47.24%" stop-color="#f2f7fe"/>
+            <stop offset="48.03%" stop-color="#f2f7fe"/>
+            <stop offset="48.82%" stop-color="#f1f7fe"/>
+            <stop offset="49.61%" stop-color="#f1f7fe"/>
+            <stop offset="50.39%" stop-color="#f1f6fe"/>
+            <stop offset="51.18%" stop-color="#f1f6fe"/>
+            <stop offset="51.97%" stop-color="#f0f6fd"/>
+            <stop offset="52.76%" stop-color="#f0f6fd"/>
+            <stop offset="53.54%" stop-color="#f0f6fd"/>
+            <stop offset="54.33%" stop-color="#f0f6fd"/>
+            <stop offset="55.12%" stop-color="#f0f6fd"/>
+            <stop offset="55.91%" stop-color="#eff5fd"/>
+            <stop offset="56.69%" stop-color="#eff5fd"/>
+            <stop offset="57.48%" stop-color="#eff5fd"/>
+            <stop offset="58.27%" stop-color="#eff5fd"/>
+            <stop offset="59.06%" stop-color="#eef5fd"/>
+            <stop offset="59.84%" stop-color="#eef5fd"/>
+            <stop offset="60.63%" stop-color="#eef5fd"/>
+            <stop offset="61.42%" stop-color="#eef5fd"/>
+            <stop offset="62.2%" stop-color="#eef4fd"/>
+            <stop offset="62.99%" stop-color="#edf4fd"/>
+            <stop offset="63.78%" stop-color="#edf4fd"/>
+            <stop offset="64.57%" stop-color="#edf4fd"/>
+            <stop offset="65.35%" stop-color="#edf4fd"/>
+            <stop offset="66.14%" stop-color="#ecf4fd"/>
+            <stop offset="66.93%" stop-color="#ecf4fd"/>
+            <stop offset="67.72%" stop-color="#ecf3fd"/>
+            <stop offset="68.5%" stop-color="#ecf3fd"/>
+            <stop offset="69.29%" stop-color="#ecf3fd"/>
+            <stop offset="70.08%" stop-color="#ebf3fd"/>
+            <stop offset="70.87%" stop-color="#ebf3fd"/>
+            <stop offset="71.65%" stop-color="#ebf3fd"/>
+            <stop offset="72.44%" stop-color="#ebf3fd"/>
+            <stop offset="73.23%" stop-color="#eaf3fd"/>
+            <stop offset="74.02%" stop-color="#eaf2fd"/>
+            <stop offset="74.8%" stop-color="#eaf2fd"/>
+            <stop offset="75.59%" stop-color="#eaf2fd"/>
+            <stop offset="76.38%" stop-color="#eaf2fd"/>
+            <stop offset="77.17%" stop-color="#e9f2fd"/>
+            <stop offset="77.95%" stop-color="#e9f2fd"/>
+            <stop offset="78.74%" stop-color="#e9f2fd"/>
+            <stop offset="79.53%" stop-color="#e9f1fd"/>
+            <stop offset="80.31%" stop-color="#e8f1fd"/>
+            <stop offset="81.1%" stop-color="#e8f1fd"/>
+            <stop offset="81.89%" stop-color="#e8f1fd"/>
+            <stop offset="82.68%" stop-color="#e8f1fd"/>
+            <stop offset="83.46%" stop-color="#e8f1fd"/>
+            <stop offset="84.25%" stop-color="#e7f1fd"/>
+            <stop offset="85.04%" stop-color="#e7f1fc"/>
+            <stop offset="85.83%" stop-color="#e7f0fc"/>
+            <stop offset="86.61%" stop-color="#e7f0fc"/>
+            <stop offset="87.4%" stop-color="#e7f0fc"/>
+            <stop offset="88.19%" stop-color="#e6f0fc"/>
+            <stop offset="88.98%" stop-color="#e6f0fc"/>
+            <stop offset="89.76%" stop-color="#e6f0fc"/>
+            <stop offset="90.55%" stop-color="#e6f0fc"/>
+            <stop offset="91.34%" stop-color="#e5effc"/>
+            <stop offset="92.13%" stop-color="#e5effc"/>
+            <stop offset="92.91%" stop-color="#e5effc"/>
+            <stop offset="93.7%" stop-color="#e5effc"/>
+            <stop offset="94.49%" stop-color="#e5effc"/>
+            <stop offset="95.28%" stop-color="#e4effc"/>
+            <stop offset="96.06%" stop-color="#e4effc"/>
+            <stop offset="96.85%" stop-color="#e4effc"/>
+            <stop offset="97.64%" stop-color="#e4eefc"/>
+            <stop offset="98.43%" stop-color="#e3eefc"/>
+            <stop offset="99.21%" stop-color="#e3eefc"/>
+            <stop offset="100%" stop-color="#e3eefc"/>
+        </linearGradient>
+    </defs>
+    <defs id="gradient-refs">
+        <linearGradient gradientTransform="matrix(82 0 0 142 0 0)" id="gFE403A9F9476B794AAD97D90F4F664A0" href="#f9DB95AA063D4D4D48DD3CECFD399DE9E" xlink:href="#f9DB95AA063D4D4D48DD3CECFD399DE9E"/>
+    </defs>
+</svg>

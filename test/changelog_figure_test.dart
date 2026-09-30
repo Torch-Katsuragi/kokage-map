@@ -46,7 +46,7 @@ void main() {
     }
   });
 
-  testWidgets('図の版は切れを並べ（文章は読み上げ用）、図の無い版は md のまま', (tester) async {
+  testWidgets('全部の版を図の切れで並べる（文章は読み上げ用）', (tester) async {
     await LocaleSettings.setLocale(AppLocale.ja);
     SharedPreferences.setMockInitialValues({});
     tester.view.devicePixelRatio = 3;
@@ -63,10 +63,12 @@ void main() {
     const line = 'サブフォルダの中の GeoPackage を改名すると';
     expect(find.textContaining(line, findRichText: true), findsNothing);
     expect(find.bySemanticsLabel(RegExp(line)), findsOneWidget);
-    // 図の無い版（v0.7.3 等）は md の見出しがそのまま出る
+    // 2026-09-30 に全部の版を図にした。版の見出しが md の文字として出ることはない
+    expect(find.textContaining(RegExp(r'^v0\.\d+\.\d+'), findRichText: true), findsNothing);
+    // いちばん古い版まで図で続く
     await tester.scrollUntilVisible(
-      find.textContaining(RegExp(r'^v0\.7\.3'), findRichText: true),
-      600,
+      find.bySemanticsLabel(RegExp('^## v0\\.3\\.0')),
+      2000,
       scrollable: find.byType(Scrollable).first,
     );
     expect(tester.takeException(), isNull);

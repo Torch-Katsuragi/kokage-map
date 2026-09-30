@@ -29,22 +29,32 @@
 #let map-green = rgb("#9ccc65")
 
 #let font-main = ("BIZ UDPGothic", "Yu Gothic", "Noto Sans CJK JP")
+// 英語は欧文の字を先に（BIZ UDPGothic だとアポストロフィの前後が空く）。和文が混じればそちらへ落ちる
+#let font-en = ("Segoe UI", "Noto Sans") + font-main
 
 /// 英語のページは `#show: page-setup.with(lang: "en")`
 #let page-setup(lang: "ja", body) = {
-  set page(width: 252pt, height: auto, margin: 0pt, fill: none)
-  set text(font: font-main, size: 10.5pt, fill: ink, lang: lang)
+  let font = if lang == "en" { font-en } else { font-main }
+  // 下だけ少し空ける。Typst のページの高さは最後の行のベースラインまでなので、
+  // 無いと切れの末尾で g・p・y の下が欠ける（2026-09-30）
+  set page(width: 252pt, height: auto, margin: (bottom: 5pt, rest: 0pt), fill: none)
+  set text(font: font, size: 10.5pt, fill: ink, lang: lang)
   set par(leading: 0.65em, justify: false)
-  show raw: set text(font: font-main, size: 1.08em, fill: accent)
+  show raw: set text(font: font, size: 1.08em, fill: accent)
   body
   // 次の版（md）の見出しとの間
   v(24pt)
 }
 
+#let _note(body) = {
+  v(10pt)
+  text(size: 8.8pt, fill: sub)[#body]
+}
+
 // ---- 場面 ----
 
 /// 版の頭。大きな一言と、その下に短い説明
-#let hero(version, title, lead, visual) = {
+#let hero(version, title, lead, visual, note: none) = {
   v(10pt)
   text(size: 9pt, weight: "bold", fill: accent, tracking: 0.5pt)[#version]
   v(4pt)
@@ -53,6 +63,7 @@
   text(size: 10.5pt, fill: sub)[#lead]
   v(14pt)
   align(center, visual)
+  if note != none { _note(note) }
 }
 
 /// 1 つの変化。前の場面とはページを切る（＝切れ）
@@ -64,10 +75,7 @@
   text(size: 10.5pt, fill: sub)[#lead]
   v(14pt)
   align(center, visual)
-  if note != none {
-    v(10pt)
-    text(size: 8.8pt, fill: sub)[#note]
-  }
+  if note != none { _note(note) }
 }
 
 // ---- 小物 ----
@@ -177,8 +185,10 @@
 })
 
 /// QGIS のレイヤパネル。rows は (字下げ, 種類 "dir"/"layer", 名前, 状態 "ok"/"lock"/"hi"[, レイヤの色])
-#let layer-panel(w: 108pt, rows) = box(width: w, fill: white, stroke: 0.6pt + line-c, radius: 3pt, clip: true, {
-  block(width: 100%, fill: rgb("#f1eff4"), inset: (x: 5pt, y: 3pt), below: 0pt, text(size: 6.5pt, weight: "bold", fill: sub)[レイヤ])
+/// 英語のページは `header: "Layers"`
+// 絵は場面の中で中央寄せになるので、パネルの中は左寄せに戻す（でないと字下げが消える）
+#let layer-panel(w: 108pt, header: "レイヤ", rows) = box(width: w, fill: white, stroke: 0.6pt + line-c, radius: 3pt, clip: true, align(left, {
+  block(width: 100%, fill: rgb("#f1eff4"), inset: (x: 5pt, y: 3pt), below: 0pt, text(size: 6.5pt, weight: "bold", fill: sub)[#header])
   for row in rows {
     let (depth, kind, name, state) = row.slice(0, 4)
     let swatch = row.at(4, default: map-road)
@@ -192,7 +202,7 @@
         text(size: 7.5pt, fill: if locked { sub.lighten(15%) } else { ink })[#name]
       })
   }
-})
+}))
 
 /// 吹き出し（端末で何をしたか）
 #let bubble(body) = box(fill: white, stroke: 0.7pt + line-c, radius: 6pt, inset: (x: 5pt, y: 3.5pt),

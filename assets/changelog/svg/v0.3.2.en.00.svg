@@ -1,0 +1,554 @@
+<svg class="typst-doc" viewBox="0 0 252 294.41" width="252pt" height="294.41pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">
+    <g>
+        <g class="typst-text" transform="matrix(1 0 0 -1 0 16.3)">
+            <use xlink:href="#g7838D034209CEE9E48E32E20A1F356EB" x="0" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g27DDF73DD219E9DB1BCCC68DB8EC4A3B" x="5.38" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g140E6EAA70C440623BE3E6338B475DC5" x="11.05" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gACD1491381D61137C79B0FAAD0B26F40" x="13.99" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g140E6EAA70C440623BE3E6338B475DC5" x="19.67" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gBD96ECB0EE3DDBFB49BF2984790F2D06" x="22.61" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g1060E820F967657B2BB67122FA20E96A" x="31.27" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gBD96ECB0EE3DDBFB49BF2984790F2D06" x="43.75" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g27DDF73DD219E9DB1BCCC68DB8EC4A3B" x="49.43" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gBD96ECB0EE3DDBFB49BF2984790F2D06" x="55.11" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g866BCED00B4190CB498C5E3F5497C965" x="60.78" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gBE342A266064E8BAEF90C3297DF0592" x="66.46" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g27DDF73DD219E9DB1BCCC68DB8EC4A3B" x="70.95" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gACD1491381D61137C79B0FAAD0B26F40" x="76.63" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gBE342A266064E8BAEF90C3297DF0592" x="82.3" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#gF9771BC44BF32C58629ED88CE7C529D0" x="86.79" y="0" fill="#1565c0" fill-rule="nonzero"/>
+            <use xlink:href="#g27DDF73DD219E9DB1BCCC68DB8EC4A3B" x="92.47" y="0" fill="#1565c0" fill-rule="nonzero"/>
+        </g>
+        <g class="typst-text" transform="matrix(1 0 0 -1 0 56.41)">
+            <use xlink:href="#g6C61767212229556775A2AA845B54276" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g65DAF4AFA2E52FF7FDC392D518C1BB01" x="11.67" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g8DB832612991006118BB49298F4F19F7" x="17.07" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g77FBDD633282EF9557C3DF5B5AA51CB0" x="26.19" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gE42E2619C391B998D5C8B4E6D81371AE" x="42.05" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g2793CB17186B4B7692CC67215ACE4BF9" x="53.84" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gD5BB6E32160BA22DDFFB8A4772B75D12" x="65.28" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g71CCE333522C0848AE283999A3383F6B" x="76.89" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gD5BB6E32160BA22DDFFB8A4772B75D12" x="84.21" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gEBB7E1ECD87CB1839219F7EE47C0FBB5" x="95.83" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g1B560C058FF19CF2083B3DF996430360" x="109.43" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g8EA7534F0431F5B994D84A8FCC396BD1" x="116.71" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gD5BB6E32160BA22DDFFB8A4772B75D12" x="124.2" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g93E14BD3F72C7C20E07A8A6E65CC2802" x="135.81" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+        </g>
+        <g class="typst-text" transform="matrix(1 0 0 -1 0 82.06)">
+            <use xlink:href="#gC45E6567E2A63A0BB3463678F78F06" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gD5BB6E32160BA22DDFFB8A4772B75D12" x="10.04" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gF522EC281ED10F6C92AFAB29471B01A0" x="21.65" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g8EA7534F0431F5B994D84A8FCC396BD1" x="33.15" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gE388D5A2CC35F9779697126A3A7EDB92" x="45.95" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gAC118CDD0053CB9C5AAF0875E0D40380" x="57.71" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gF0B6D54E02F533EB06F31E9C69A938D1" x="67.94" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gF0B6D54E02F533EB06F31E9C69A938D1" x="73.34" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g9EFED280C005A651CE0163FD7B14EB44" x="78.74" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#g8EA7534F0431F5B994D84A8FCC396BD1" x="89.02" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+            <use xlink:href="#gC45E6567E2A63A0BB3463678F78F06" x="97.34" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
+        </g>
+        <g class="typst-text" transform="matrix(1 0 0 -1 0 118.21)">
+            <use xlink:href="#g49C365C62FFA42B38FC9D89653FEE91B" x="0" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="6.5" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gE03A577F385712EA3CEECBBB99EC9C6" x="11.84" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="20.89" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="26.38" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="30.03" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g84C7AEE4C58C8D93E5FF992077CD31C3" x="38.25" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="43.1" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g788C6E88EDC57E51F2601191D55CC69B" x="48.44" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="54.61" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g73E7F82A85A8DA66D0A2006F579E996D" x="58.17" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="64.11" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="67.76" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g9550C6A91B9D5C54FC3EEA31EC041EED" x="76.13" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="78.67" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="86" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="89.66" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g788C6E88EDC57E51F2601191D55CC69B" x="95.15" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC60E5DD4F14714083F7924B7FAAD5E2B" x="101.32" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="103.86" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g84C7AEE4C58C8D93E5FF992077CD31C3" x="109.2" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="114.05" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g516216D5E04AFAF0BCD7BB0DEB9D2293" x="119.55" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g2507874237788A6CCA6D0FDB76B94E63" x="128.6" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g9550C6A91B9D5C54FC3EEA31EC041EED" x="136.19" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="138.74" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gAE79702EBDC1887B1EBD5B6628DDC7D2" x="142.29" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g915B4DBA73DBF4489B1560615401F0A3" x="151.11" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="157.29" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC60E5DD4F14714083F7924B7FAAD5E2B" x="162.64" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC60E5DD4F14714083F7924B7FAAD5E2B" x="165.18" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="167.72" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="173.21" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gD27A4E7185BC8DA92D8F674BAD833B7D" x="176.86" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g9550C6A91B9D5C54FC3EEA31EC041EED" x="184.82" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gE03A577F385712EA3CEECBBB99EC9C6" x="187.36" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g788C6E88EDC57E51F2601191D55CC69B" x="196.41" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="202.58" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="208.73" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="212.38" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gB723A76B7CD13ADA78ADEDEB0256DC17" x="215.94" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="221.09" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="225.55" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+        </g>
+        <g class="typst-text" transform="matrix(1 0 0 -1 0 132.39)">
+            <use xlink:href="#g788C6E88EDC57E51F2601191D55CC69B" x="0" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gAE79702EBDC1887B1EBD5B6628DDC7D2" x="6.17" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="12.11" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="18.27" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="21.83" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="27.98" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gD27A4E7185BC8DA92D8F674BAD833B7D" x="35.31" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="40.39" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g73E7F82A85A8DA66D0A2006F579E996D" x="46.54" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="55.36" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC60E5DD4F14714083F7924B7FAAD5E2B" x="60.7" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="63.25" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="66.9" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="72.39" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g516216D5E04AFAF0BCD7BB0DEB9D2293" x="77.73" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gD27A4E7185BC8DA92D8F674BAD833B7D" x="83.91" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gAE79702EBDC1887B1EBD5B6628DDC7D2" x="91.87" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="97.81" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gA85FE3E10311C74F8E5EFDA32D25290C" x="103.15" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="108.18" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="116.55" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="121.89" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="125.54" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="133.91" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gCB97B043A1B9B03AA647432E3ABB59DA" x="139.4" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="144.74" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g9550C6A91B9D5C54FC3EEA31EC041EED" x="149.2" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="151.74" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g945D332C86C4EBD7B312687CD4B84822" x="157.23" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC5FA3359B6B8E6E148982B4173DCB4AF" x="163.76" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g37644D0F12786530B3A6A0E5E321A1B2" x="167.32" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g73E7F82A85A8DA66D0A2006F579E996D" x="176.35" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#g7612F93931127168C6BC31C49D5D71F6" x="182.29" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gEEA93299DEB4E5143F6D56F7E016DC5A" x="186.74" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+            <use xlink:href="#gC8EA8E4F9838BBC150D1CD37836BADA2" x="192.24" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+        </g>
+        <g class="typst-group">
+            <g>
+                <g class="typst-group" transform="matrix(1 0 0 1 39 158.99)">
+                    <g>
+                        <path class="typst-shape" fill="#1c1b1f" fill-rule="nonzero" d="M 0 0m 0 9 c 0 -4.97 4.03 -9 9 -9 h 48 c 4.97 0 9 4.03 9 9 v 100 c 0 4.97 -4.03 9 -9 9 h -48 c -4.97 0 -9 -4.03 -9 -9 Z "/>
+                        <g class="typst-group" transform="matrix(1 0 0 1 3 7)" clip-path="url(#cEA8DC819EBB5E6D527AE568BC64E4CAE)">
+                            <g>
+                                <g class="typst-group">
+                                    <g>
+                                        <path class="typst-shape" fill="#ffffff" fill-rule="nonzero" d="M 0 0v 104 h 60 v -104 Z "/>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 2 2)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 21 2)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 40 2)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 2 21)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 21 21)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 40 21)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 2 40)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 21 40)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 40 40)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 2 59)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 21 59)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 40 59)" clip-path="url(#c7C4FF833A339BF42511E034A4AB52BB9)">
+                                            <g>
+                                                <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 18 h 18 v -18 Z "/>
+                                                <g class="typst-group">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 18 l 6.3 -11.7 l 4.5 6.3 l 3.6 -3.6 l 3.6 4.5 v 4.5 Z "/>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <path class="typst-shape" fill="none" stroke="#1565c0" stroke-width="1.6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" transform="matrix(1 0 0 1 21 21)" d="M 0 0v 18 h 18 v -18 Z "/>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 31 23)">
+                                            <g>
+                                                <path class="typst-shape" fill="#1565c0" fill-rule="nonzero" d="M 0 0m 0 1.1 c 0 -0.61 0.49 -1.1 1.1 -1.1 h 5.8 c 0.61 0 1.1 0.49 1.1 1.1 v 5.8 c 0 0.61 -0.49 1.1 -1.1 1.1 h -5.8 c -0.61 0 -1.1 -0.49 -1.1 -1.1 Z "/>
+                                                <path class="typst-shape" fill="none" stroke="#1565c0" stroke-width="0.8" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" d="M 0 0m 1.1 0 h 5.8 c 0.61 0 1.1 0.49 1.1 1.1 v 5.8 c 0 0.61 -0.49 1.1 -1.1 1.1 h -5.8 c -0.61 0 -1.1 -0.49 -1.1 -1.1 v -5.8 c 0 -0.61 0.49 -1.1 1.1 -1.1 "/>
+                                                <path class="typst-shape" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" d="M 0 0m 1.8 4.2 l 1.7 1.8 l 2.9 -3.8 "/>
+                                            </g>
+                                        </g>
+                                    </g>
+                                </g>
+                            </g>
+                        </g>
+                        <path class="typst-shape" fill="#444444" fill-rule="nonzero" transform="matrix(1 0 0 1 27 2.5)" d="M 0 0m 0 1 c 0 -0.55 0.45 -1 1 -1 h 10 c 0.55 0 1 0.45 1 1 c 0 0.55 -0.45 1 -1 1 h -10 c -0.55 0 -1 -0.45 -1 -1 Z "/>
+                    </g>
+                </g>
+                <g class="typst-text" transform="matrix(1 0 0 -1 59.87 289.41)">
+                    <use xlink:href="#g4FD0B0E18CCFB15E2D4F724F5EFBB4BB" x="0" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#g299492E282B4A2B640252C729466C634" x="5.49" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#gB54EA1C230A86FAE59263358210E032F" x="9.56" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#gB54EA1C230A86FAE59263358210E032F" x="11.5" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#g8D727354F6E77581B99B6D20529867B1" x="13.43" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#gECE8BA4E0BF3531E753CBA3F005756DD" x="17.62" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#gD46A23E8F8A4F901D774DDA399C56950" x="20.4" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                </g>
+                <g class="typst-group" transform="matrix(1 0 0 1 113 220.2)">
+                    <g>
+                        <path class="typst-shape" fill="none" stroke="#1565c0" stroke-width="1.6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" transform="matrix(1 0 0 1 0 4)" d="M 0 0h 22 "/>
+                        <g class="typst-group" transform="matrix(1 0 0 1 20 0)">
+                            <g>
+                                <path class="typst-shape" fill="#1565c0" fill-rule="nonzero" d="M 0 0l 6 4 l -6 4 Z "/>
+                            </g>
+                        </g>
+                    </g>
+                </g>
+                <g class="typst-group" transform="matrix(1 0 0 1 147 158.99)">
+                    <g>
+                        <path class="typst-shape" fill="#1c1b1f" fill-rule="nonzero" d="M 0 0m 0 9 c 0 -4.97 4.03 -9 9 -9 h 48 c 4.97 0 9 4.03 9 9 v 100 c 0 4.97 -4.03 9 -9 9 h -48 c -4.97 0 -9 -4.03 -9 -9 Z "/>
+                        <g class="typst-group" transform="matrix(1 0 0 1 3 7)" clip-path="url(#cEA8DC819EBB5E6D527AE568BC64E4CAE)">
+                            <g>
+                                <g class="typst-group">
+                                    <g>
+                                        <g class="typst-group" clip-path="url(#cE0003B1D90883F6A55E8FCA1BAA06C30)">
+                                            <g>
+                                                <path class="typst-shape" fill="#eef3e6" fill-rule="nonzero" d="M 0 0v 104 h 60 v -104 Z "/>
+                                                <path class="typst-shape" fill="#f5d4a2" fill-rule="nonzero" transform="matrix(1 0 0 1 3 8.32)" d="M 0 0m 0 0.7 c 0 -0.39 0.31 -0.7 0.7 -0.7 h 23.8 c 0.39 0 0.7 0.31 0.7 0.7 v 36.04 c 0 0.39 -0.31 0.7 -0.7 0.7 h -23.8 c -0.39 0 -0.7 -0.31 -0.7 -0.7 Z "/>
+                                                <path class="typst-shape" fill="none" stroke="#9e835a" stroke-width="0.6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" transform="matrix(1 0 0 1 3 8.32)" d="M 0 0m 0.7 0 h 23.8 c 0.39 0 0.7 0.31 0.7 0.7 v 36.04 c 0 0.39 -0.31 0.7 -0.7 0.7 h -23.8 c -0.39 0 -0.7 -0.31 -0.7 -0.7 v -36.04 c 0 -0.39 0.31 -0.7 0.7 -0.7 "/>
+                                                <path class="typst-shape" fill="#f5d4a2" fill-rule="nonzero" transform="matrix(1 0 0 1 31.2 8.32)" d="M 0 0m 0 0.7 c 0 -0.39 0.31 -0.7 0.7 -0.7 h 23.8 c 0.39 0 0.7 0.31 0.7 0.7 v 36.04 c 0 0.39 -0.31 0.7 -0.7 0.7 h -23.8 c -0.39 0 -0.7 -0.31 -0.7 -0.7 Z "/>
+                                                <path class="typst-shape" fill="none" stroke="#9e835a" stroke-width="0.6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" transform="matrix(1 0 0 1 31.2 8.32)" d="M 0 0m 0.7 0 h 23.8 c 0.39 0 0.7 0.31 0.7 0.7 v 36.04 c 0 0.39 -0.31 0.7 -0.7 0.7 h -23.8 c -0.39 0 -0.7 -0.31 -0.7 -0.7 v -36.04 c 0 -0.39 0.31 -0.7 0.7 -0.7 "/>
+                                                <path class="typst-shape" fill="#f5d4a2" fill-rule="nonzero" transform="matrix(1 0 0 1 3 55.12)" d="M 0 0m 0 0.7 c 0 -0.39 0.31 -0.7 0.7 -0.7 h 23.8 c 0.39 0 0.7 0.31 0.7 0.7 v 36.04 c 0 0.39 -0.31 0.7 -0.7 0.7 h -23.8 c -0.39 0 -0.7 -0.31 -0.7 -0.7 Z "/>
+                                                <path class="typst-shape" fill="none" stroke="#9e835a" stroke-width="0.6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" transform="matrix(1 0 0 1 3 55.12)" d="M 0 0m 0.7 0 h 23.8 c 0.39 0 0.7 0.31 0.7 0.7 v 36.04 c 0 0.39 -0.31 0.7 -0.7 0.7 h -23.8 c -0.39 0 -0.7 -0.31 -0.7 -0.7 v -36.04 c 0 -0.39 0.31 -0.7 0.7 -0.7 "/>
+                                                <path class="typst-shape" fill="#f5d4a2" fill-rule="nonzero" transform="matrix(1 0 0 1 31.2 55.12)" d="M 0 0m 0 0.7 c 0 -0.39 0.31 -0.7 0.7 -0.7 h 23.8 c 0.39 0 0.7 0.31 0.7 0.7 v 36.04 c 0 0.39 -0.31 0.7 -0.7 0.7 h -23.8 c -0.39 0 -0.7 -0.31 -0.7 -0.7 Z "/>
+                                                <path class="typst-shape" fill="none" stroke="#9e835a" stroke-width="0.6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" transform="matrix(1 0 0 1 31.2 55.12)" d="M 0 0m 0.7 0 h 23.8 c 0.39 0 0.7 0.31 0.7 0.7 v 36.04 c 0 0.39 -0.31 0.7 -0.7 0.7 h -23.8 c -0.39 0 -0.7 -0.31 -0.7 -0.7 v -36.04 c 0 -0.39 0.31 -0.7 0.7 -0.7 "/>
+                                                <path class="typst-shape" fill="none" stroke="#8d6e63" stroke-width="2" stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="4" d="M 0 0m -2 81.12 c 20 -60.32 38 22.88 64 -49.92 "/>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 20 34)">
+                                            <g>
+                                                <path class="typst-shape" fill="#ffffff" fill-rule="nonzero" d="M 0 0m 0 2 c 0 -1.1 0.9 -2 2 -2 h 17 c 1.1 0 2 0.9 2 2 v 13 c 0 1.1 -0.9 2 -2 2 h -17 c -1.1 0 -2 -0.9 -2 -2 Z "/>
+                                                <g class="typst-group" transform="matrix(1 0 0 1 1.5 1.5)" clip-path="url(#cCD9CD19C08A7291C9980037908284940)">
+                                                    <g>
+                                                        <path class="typst-shape" fill="#cfe3f5" fill-rule="nonzero" d="M 0 0v 14 h 18 v -14 Z "/>
+                                                        <g class="typst-group">
+                                                            <g>
+                                                                <path class="typst-shape" fill="#6b9a5b" fill-rule="nonzero" d="M 0 0m 0 14 l 6.3 -9.1 l 4.5 4.9 l 3.6 -2.8 l 3.6 3.5 v 3.5 Z "/>
+                                                            </g>
+                                                        </g>
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                        <g class="typst-group" transform="matrix(1 0 0 1 27 51)">
+                                            <g>
+                                                <path class="typst-shape" fill="#ffffff" fill-rule="nonzero" d="M 0 0h 6 l -3 4 Z "/>
+                                            </g>
+                                        </g>
+                                    </g>
+                                </g>
+                            </g>
+                        </g>
+                        <path class="typst-shape" fill="#444444" fill-rule="nonzero" transform="matrix(1 0 0 1 27 2.5)" d="M 0 0m 0 1 c 0 -0.55 0.45 -1 1 -1 h 10 c 0.55 0 1 0.45 1 1 c 0 0.55 -0.45 1 -1 1 h -10 c -0.55 0 -1 -0.45 -1 -1 Z "/>
+                    </g>
+                </g>
+                <g class="typst-text" transform="matrix(1 0 0 -1 158.99 289.41)">
+                    <use xlink:href="#gDDDC4DF57D79C51C3F3C83251F591A7B" x="0" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#gBCDA0B498542E30D0611F20DA610A96" x="6.03" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#g2FDCD541F5E5A986F3C66264B10B8DCA" x="12.75" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#gF05AA83CCB20B96F0279A94A3B119C78" x="15.46" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#g8D727354F6E77581B99B6D20529867B1" x="19.99" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#gF8DDE77FCA1BF91266D3EA56666649CB" x="26.36" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#g299492E282B4A2B640252C729466C634" x="33.25" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                    <use xlink:href="#g90DE6B0267AED62FC2AFCFC8B475C65A" x="37.32" y="0" fill="#5f5b63" fill-rule="nonzero"/>
+                </g>
+            </g>
+        </g>
+    </g>
+    <defs id="glyph">
+        <symbol id="g7838D034209CEE9E48E32E20A1F356EB" overflow="visible">
+            <path d="M 0 0m 4.87 4.5 l -1.67 -4.5 h -1.58 l -1.6 4.5 h 1.49 l 0.78 -2.77 q 0.13 -0.47 0.15 -0.8 h 0.02 q 0.03 0.31 0.16 0.77 l 0.8 2.8 h 1.45 Z "/>
+        </symbol>
+        <symbol id="g27DDF73DD219E9DB1BCCC68DB8EC4A3B" overflow="visible">
+            <path d="M 0 0m 2.55 -0.11 q -2.25 0 -2.25 3.16 q 0 1.64 0.61 2.5 q 0.61 0.86 1.76 0.86 q 2.2 0 2.2 -3.21 q 0 -1.6 -0.6 -2.45 q -0.6 -0.85 -1.72 -0.85 Z m 0.06 5.46 q -0.9 0 -0.9 -2.26 q 0 -2.13 0.88 -2.13 q 0.86 0 0.86 2.2 q 0 2.2 -0.84 2.2 Z "/>
+        </symbol>
+        <symbol id="g140E6EAA70C440623BE3E6338B475DC5" overflow="visible">
+            <path d="M 0 0m 1.2 -0.11 q -0.34 0 -0.57 0.21 q -0.23 0.21 -0.23 0.52 q 0 0.32 0.24 0.52 q 0.24 0.2 0.59 0.2 q 0.36 0 0.58 -0.2 q 0.23 -0.2 0.23 -0.52 q 0 -0.32 -0.23 -0.53 q -0.23 -0.2 -0.6 -0.2 Z "/>
+        </symbol>
+        <symbol id="gACD1491381D61137C79B0FAAD0B26F40" overflow="visible">
+            <path d="M 0 0m 0.51 0.21 v 1.21 q 0.63 -0.46 1.48 -0.46 q 0.53 0 0.83 0.23 q 0.3 0.23 0.3 0.64 q 0 0.42 -0.37 0.65 q -0.37 0.23 -1.01 0.23 h -0.58 v 1.06 h 0.54 q 1.23 0 1.23 0.82 q 0 0.77 -0.94 0.77 q -0.63 0 -1.23 -0.41 v 1.13 q 0.66 0.33 1.55 0.33 q 0.97 0 1.51 -0.44 q 0.54 -0.44 0.54 -1.13 q 0 -1.23 -1.25 -1.55 v -0.02 q 0.67 -0.08 1.05 -0.49 q 0.39 -0.4 0.39 -0.99 q 0 -0.88 -0.65 -1.4 q -0.65 -0.51 -1.78 -0.51 q -0.98 0 -1.59 0.32 Z "/>
+        </symbol>
+        <symbol id="gBD96ECB0EE3DDBFB49BF2984790F2D06" overflow="visible">
+            <path d="M 0 0m 1.89 1.15 h 2.67 v -1.15 h -4.19 v 0.47 q 0 0.48 0.16 0.87 q 0.16 0.38 0.41 0.69 q 0.25 0.31 0.54 0.54 q 0.29 0.24 0.56 0.42 q 0.28 0.2 0.49 0.38 q 0.21 0.18 0.35 0.36 q 0.14 0.18 0.21 0.36 q 0.07 0.18 0.07 0.39 q 0 0.4 -0.23 0.61 q -0.23 0.21 -0.7 0.21 q -0.81 0 -1.56 -0.65 v 1.22 q 0.82 0.53 1.85 0.53 q 0.48 0 0.86 -0.13 q 0.38 -0.13 0.64 -0.36 q 0.26 -0.23 0.4 -0.56 q 0.14 -0.33 0.14 -0.74 q 0 -0.44 -0.13 -0.77 q -0.13 -0.34 -0.36 -0.62 q -0.22 -0.28 -0.51 -0.51 q -0.29 -0.23 -0.6 -0.45 q -0.21 -0.15 -0.41 -0.3 q -0.2 -0.15 -0.34 -0.29 q -0.15 -0.14 -0.24 -0.28 q -0.09 -0.14 -0.09 -0.26 Z "/>
+        </symbol>
+        <symbol id="g1060E820F967657B2BB67122FA20E96A" overflow="visible">
+            <path d="M 0 0m 9 1.92 h -9 v 0.97 h 9 v -0.97 Z "/>
+        </symbol>
+        <symbol id="g866BCED00B4190CB498C5E3F5497C965" overflow="visible">
+            <path d="M 0 0m 4.88 2.1 q 0 -0.47 -0.16 -0.87 q -0.16 -0.4 -0.45 -0.7 q -0.29 -0.3 -0.69 -0.47 q -0.4 -0.17 -0.87 -0.17 q -0.53 0 -0.95 0.2 q -0.42 0.2 -0.71 0.57 q -0.29 0.38 -0.44 0.92 q -0.15 0.54 -0.15 1.23 q 0 0.81 0.2 1.47 q 0.2 0.66 0.57 1.13 q 0.37 0.47 0.9 0.73 q 0.53 0.26 1.19 0.26 q 0.73 0 1.13 -0.17 v -1.16 q -0.48 0.27 -1.05 0.27 q -0.35 0 -0.64 -0.14 q -0.29 -0.14 -0.49 -0.39 q -0.2 -0.25 -0.32 -0.6 q -0.12 -0.35 -0.13 -0.79 h 0.03 q 0.45 0.62 1.32 0.62 q 0.39 0 0.71 -0.14 q 0.32 -0.14 0.54 -0.4 q 0.22 -0.26 0.35 -0.62 q 0.12 -0.36 0.12 -0.8 Z m -1.36 -0.09 q 0 1.02 -0.83 1.02 q -0.19 0 -0.34 -0.07 q -0.15 -0.07 -0.26 -0.2 q -0.11 -0.13 -0.17 -0.3 q -0.06 -0.17 -0.06 -0.38 q 0 -0.23 0.06 -0.44 q 0.06 -0.2 0.17 -0.35 q 0.11 -0.15 0.27 -0.24 q 0.15 -0.09 0.34 -0.09 q 0.19 0 0.34 0.08 q 0.15 0.08 0.26 0.22 q 0.11 0.14 0.16 0.33 q 0.06 0.2 0.06 0.43 Z "/>
+        </symbol>
+        <symbol id="gBE342A266064E8BAEF90C3297DF0592" overflow="visible">
+            <path d="M 0 0m 4.1 6.3 l -3.07 -7.35 h -1.24 l 3.06 7.35 h 1.25 Z "/>
+        </symbol>
+        <symbol id="gF9771BC44BF32C58629ED88CE7C529D0" overflow="visible">
+            <path d="M 0 0m 3.66 6.44 v -6.44 h -1.38 v 4.88 q -0.11 -0.1 -0.27 -0.19 q -0.16 -0.09 -0.33 -0.16 q -0.18 -0.07 -0.36 -0.12 q -0.19 -0.05 -0.37 -0.07 v 1.17 q 0.54 0.16 1.02 0.4 q 0.48 0.25 0.87 0.54 h 0.84 Z "/>
+        </symbol>
+        <symbol id="g6C61767212229556775A2AA845B54276" overflow="visible">
+            <path d="M 0 0m 4.52 4.58 v -4.58 h -3 v 13.3 h 4.69 q 5.03 0 5.03 -4.24 q 0 -2 -1.44 -3.24 q -1.44 -1.24 -3.85 -1.24 h -1.43 Z m 0 6.42 v -4.15 h 1.18 q 2.39 0 2.39 2.1 q 0 2.05 -2.39 2.05 h -1.18 Z "/>
+        </symbol>
+        <symbol id="g65DAF4AFA2E52FF7FDC392D518C1BB01" overflow="visible">
+            <path d="M 0 0m 2.72 11 q -0.74 0 -1.22 0.44 q -0.47 0.44 -0.47 1.08 q 0 0.66 0.47 1.08 q 0.47 0.42 1.22 0.42 q 0.75 0 1.22 -0.42 q 0.47 -0.42 0.47 -1.08 q 0 -0.67 -0.47 -1.09 q -0.47 -0.43 -1.22 -0.43 Z m 1.45 -11 h -2.93 v 9.5 h 2.93 v -9.5 Z "/>
+        </symbol>
+        <symbol id="g8DB832612991006118BB49298F4F19F7" overflow="visible">
+            <path d="M 0 0m 8.43 0.34 q -0.99 -0.58 -2.87 -0.58 q -2.19 0 -3.54 1.33 q -1.35 1.33 -1.35 3.42 q 0 2.42 1.45 3.82 q 1.45 1.4 3.88 1.4 q 1.68 0 2.43 -0.45 v -2.49 q -0.92 0.69 -2.05 0.69 q -1.26 0 -2 -0.74 q -0.74 -0.74 -0.74 -2.04 q 0 -1.26 0.71 -1.98 q 0.71 -0.72 1.94 -0.72 q 1.09 0 2.14 0.69 v -2.36 Z "/>
+        </symbol>
+        <symbol id="g77FBDD633282EF9557C3DF5B5AA51CB0" overflow="visible">
+            <path d="M 0 0m 10.75 0 h -3.52 l -3.03 4.71 h -0.04 v -4.71 h -2.93 v 14.06 h 2.93 v -8.95 h 0.04 l 2.83 4.39 h 3.48 l -3.4 -4.46 l 3.65 -5.04 Z "/>
+        </symbol>
+        <symbol id="gE42E2619C391B998D5C8B4E6D81371AE" overflow="visible">
+            <path d="M 0 0m 4.2 1.1 h -0.04 v -5.47 h -2.93 v 13.87 h 2.93 v -1.43 h 0.04 q 1.09 1.66 3.05 1.66 q 1.85 0 2.85 -1.27 q 1.01 -1.27 1.01 -3.45 q 0 -2.38 -1.17 -3.81 q -1.17 -1.44 -3.12 -1.44 q -1.72 0 -2.62 1.34 Z m -0.08 3.9 v -0.76 q 0 -0.98 0.52 -1.6 q 0.52 -0.62 1.36 -0.62 q 1 0 1.55 0.77 q 0.55 0.77 0.55 2.19 q 0 2.5 -1.95 2.5 q -0.9 0 -1.47 -0.68 q -0.57 -0.68 -0.57 -1.8 Z "/>
+        </symbol>
+        <symbol id="g2793CB17186B4B7692CC67215ACE4BF9" overflow="visible">
+            <path d="M 0 0m 10.35 0 h -2.92 v 5.4 q 0 2.09 -1.52 2.09 q -0.78 0 -1.26 -0.58 q -0.48 -0.58 -0.48 -1.48 v -5.42 h -2.93 v 14.06 h 2.93 v -5.97 h 0.04 q 1.08 1.64 2.92 1.64 q 3.23 0 3.23 -3.9 v -5.84 Z "/>
+        </symbol>
+        <symbol id="gD5BB6E32160BA22DDFFB8A4772B75D12" overflow="visible">
+            <path d="M 0 0m 5.76 -0.23 q -2.38 0 -3.73 1.33 q -1.36 1.33 -1.36 3.61 q 0 2.36 1.41 3.69 q 1.41 1.33 3.81 1.33 q 2.37 0 3.71 -1.33 q 1.35 -1.33 1.35 -3.52 q 0 -2.37 -1.39 -3.74 q -1.39 -1.37 -3.8 -1.37 Z m 0.07 7.72 q -1.04 0 -1.61 -0.71 q -0.58 -0.71 -0.58 -2.02 q 0 -2.74 2.21 -2.74 q 2.11 0 2.11 2.81 q 0 2.66 -2.12 2.66 Z "/>
+        </symbol>
+        <symbol id="g71CCE333522C0848AE283999A3383F6B" overflow="visible">
+            <path d="M 0 0m 6.98 0.11 q -0.65 -0.34 -1.96 -0.34 q -3.1 0 -3.1 3.22 v 4.35 h -1.54 v 2.16 h 1.54 v 2.05 l 2.92 0.83 v -2.89 h 2.13 v -2.16 h -2.13 v -3.84 q 0 -1.48 1.18 -1.48 q 0.46 0 0.96 0.27 v -2.17 Z "/>
+        </symbol>
+        <symbol id="gEBB7E1ECD87CB1839219F7EE47C0FBB5" overflow="visible">
+            <path d="M 0 0m 0.61 0.25 v 2.38 q 0.72 -0.44 1.44 -0.65 q 0.72 -0.21 1.36 -0.21 q 0.78 0 1.23 0.21 q 0.45 0.21 0.45 0.65 q 0 0.28 -0.2 0.46 q -0.2 0.19 -0.52 0.32 q -0.32 0.14 -0.7 0.25 q -0.38 0.11 -0.73 0.25 q -0.57 0.21 -1 0.46 q -0.43 0.25 -0.72 0.57 q -0.29 0.32 -0.45 0.75 q -0.15 0.43 -0.15 1.01 q 0 0.8 0.35 1.37 q 0.35 0.58 0.93 0.94 q 0.58 0.37 1.33 0.54 q 0.75 0.17 1.55 0.17 q 0.63 0 1.28 -0.1 q 0.65 -0.1 1.28 -0.28 v -2.26 q -0.56 0.32 -1.19 0.49 q -0.64 0.16 -1.25 0.16 q -0.29 0 -0.54 -0.05 q -0.26 -0.05 -0.45 -0.15 q -0.19 -0.1 -0.31 -0.25 q -0.11 -0.15 -0.11 -0.35 q 0 -0.26 0.17 -0.45 q 0.17 -0.19 0.44 -0.32 q 0.27 -0.13 0.6 -0.24 q 0.33 -0.11 0.65 -0.22 q 0.58 -0.2 1.06 -0.45 q 0.47 -0.24 0.81 -0.57 q 0.34 -0.32 0.52 -0.76 q 0.18 -0.44 0.18 -1.04 q 0 -0.84 -0.37 -1.44 q -0.37 -0.6 -0.97 -0.97 q -0.61 -0.38 -1.4 -0.55 q -0.79 -0.17 -1.65 -0.17 q -1.57 0 -2.9 0.48 Z "/>
+        </symbol>
+        <symbol id="g1B560C058FF19CF2083B3DF996430360" overflow="visible">
+            <path d="M 0 0m 7.43 11.82 q -0.57 0.22 -1.09 0.22 q -1.41 0 -1.41 -1.53 v -1.01 h 2.17 v -2.16 h -2.17 v -7.34 h -2.92 v 7.34 h -1.6 v 2.16 h 1.6 v 1.18 q 0 1.62 1.06 2.62 q 1.06 0.99 2.88 0.99 q 0.89 0 1.48 -0.19 v -2.28 Z "/>
+        </symbol>
+        <symbol id="g8EA7534F0431F5B994D84A8FCC396BD1" overflow="visible">
+            <path d="M 0 0m 7.43 6.86 q -0.53 0.29 -1.23 0.29 q -0.96 0 -1.49 -0.7 q -0.54 -0.7 -0.54 -1.91 v -4.54 h -2.93 v 9.5 h 2.93 v -1.76 h 0.04 q 0.7 1.93 2.5 1.93 q 0.46 0 0.72 -0.11 v -2.7 Z "/>
+        </symbol>
+        <symbol id="g93E14BD3F72C7C20E07A8A6E65CC2802" overflow="visible">
+            <path d="M 0 0m 16.32 0 h -2.92 v 5.42 q 0 2.07 -1.52 2.07 q -0.72 0 -1.18 -0.62 q -0.45 -0.62 -0.45 -1.55 v -5.32 h -2.93 v 5.47 q 0 2.01 -1.49 2.01 q -0.75 0 -1.2 -0.59 q -0.45 -0.59 -0.45 -1.61 v -5.28 h -2.93 v 9.5 h 2.93 v -1.48 h 0.04 q 0.45 0.76 1.28 1.24 q 0.82 0.48 1.8 0.48 q 2.01 0 2.76 -1.77 q 1.09 1.77 3.19 1.77 q 3.1 0 3.1 -3.82 v -5.91 Z "/>
+        </symbol>
+        <symbol id="gC45E6567E2A63A0BB3463678F78F06" overflow="visible">
+            <path d="M 0 0m 10.28 9.5 l -3.86 -10.26 q -1.39 -3.7 -4.19 -3.7 q -1.07 0 -1.75 0.24 v 2.34 q 0.58 -0.34 1.27 -0.34 q 1.13 0 1.58 1.07 l 0.5 1.18 l -3.86 9.48 h 3.25 l 1.77 -5.78 q 0.17 -0.54 0.26 -1.27 h 0.04 q 0.08 0.54 0.31 1.25 l 1.79 5.8 h 2.9 Z "/>
+        </symbol>
+        <symbol id="gF522EC281ED10F6C92AFAB29471B01A0" overflow="visible">
+            <path d="M 0 0m 10.26 0 h -2.92 v 1.45 h -0.05 q -1.09 -1.68 -2.9 -1.68 q -3.3 0 -3.3 4 v 5.73 h 2.92 v -5.47 q 0 -2.01 1.6 -2.01 q 0.79 0 1.26 0.55 q 0.47 0.55 0.47 1.5 v 5.44 h 2.92 v -9.5 Z "/>
+        </symbol>
+        <symbol id="gE388D5A2CC35F9779697126A3A7EDB92" overflow="visible">
+            <path d="M 0 0m 10.55 1.09 q 0 -2.64 -1.53 -4.1 q -1.53 -1.45 -4.43 -1.45 q -1.92 0 -3.04 0.55 v 2.47 q 1.47 -0.85 2.96 -0.85 q 1.48 0 2.3 0.78 q 0.82 0.78 0.82 2.13 v 0.75 h -0.04 q -1 -1.6 -2.96 -1.6 q -1.82 0 -2.89 1.28 q -1.07 1.28 -1.07 3.43 q 0 2.41 1.19 3.83 q 1.19 1.42 3.13 1.42 q 1.73 0 2.6 -1.34 h 0.04 v 1.1 h 2.93 v -8.41 Z m -2.89 3.48 v 0.75 q 0 0.9 -0.53 1.54 q -0.53 0.64 -1.39 0.64 q -0.97 0 -1.53 -0.76 q -0.56 -0.76 -0.56 -2.14 q 0 -1.19 0.53 -1.88 q 0.53 -0.69 1.45 -0.69 q 0.91 0 1.47 0.7 q 0.56 0.7 0.56 1.85 Z "/>
+        </symbol>
+        <symbol id="gAC118CDD0053CB9C5AAF0875E0D40380" overflow="visible">
+            <path d="M 0 0m 9.14 0 h -2.77 v 1.36 h -0.04 q -0.96 -1.6 -2.83 -1.6 q -1.38 0 -2.18 0.78 q -0.79 0.78 -0.79 2.09 q 0 2.76 3.27 3.19 l 2.58 0.34 q 0 1.56 -1.69 1.56 q -1.7 0 -3.23 -1.01 v 2.21 q 0.61 0.32 1.67 0.56 q 1.06 0.24 1.93 0.24 q 4.06 0 4.06 -4.05 v -5.68 Z m -2.76 3.86 v 0.64 l -1.73 -0.22 q -1.43 -0.19 -1.43 -1.29 q 0 -0.5 0.35 -0.82 q 0.35 -0.32 0.94 -0.32 q 0.83 0 1.35 0.57 q 0.52 0.57 0.52 1.44 Z "/>
+        </symbol>
+        <symbol id="gF0B6D54E02F533EB06F31E9C69A938D1" overflow="visible">
+            <path d="M 0 0m 4.17 0 h -2.93 v 14.06 h 2.93 v -14.06 Z "/>
+        </symbol>
+        <symbol id="g9EFED280C005A651CE0163FD7B14EB44" overflow="visible">
+            <path d="M 0 0m 9.77 3.92 h -6.2 q 0.15 -2.07 2.61 -2.07 q 1.57 0 2.76 0.74 v -2.12 q -1.32 -0.71 -3.42 -0.71 q -2.3 0 -3.57 1.28 q -1.27 1.28 -1.27 3.56 q 0 2.37 1.37 3.75 q 1.37 1.38 3.38 1.38 q 2.08 0 3.21 -1.23 q 1.14 -1.23 1.14 -3.35 v -1.23 Z m -2.72 1.8 q 0 2.04 -1.65 2.04 q -0.71 0 -1.22 -0.58 q -0.51 -0.58 -0.63 -1.46 h 3.5 Z "/>
+        </symbol>
+        <symbol id="g49C365C62FFA42B38FC9D89653FEE91B" overflow="visible">
+            <path d="M 0 0m 5.97 0.31 q -0.82 -0.43 -2.03 -0.43 q -1.57 0 -2.51 1.01 q -0.94 1.01 -0.94 2.65 q 0 1.76 1.06 2.85 q 1.06 1.09 2.69 1.09 q 1.05 0 1.73 -0.3 v -0.92 q -0.79 0.44 -1.74 0.44 q -1.27 0 -2.05 -0.85 q -0.79 -0.85 -0.79 -2.26 q 0 -1.34 0.74 -2.14 q 0.74 -0.8 1.93 -0.8 q 1.11 0 1.92 0.49 v -0.84 Z "/>
+        </symbol>
+        <symbol id="gCB97B043A1B9B03AA647432E3ABB59DA" overflow="visible">
+            <path d="M 0 0m 4.61 0 h -0.84 v 0.82 h -0.02 q -0.55 -0.94 -1.61 -0.94 q -0.78 0 -1.23 0.42 q -0.44 0.42 -0.44 1.1 q 0 1.47 1.73 1.71 l 1.57 0.22 q 0 1.34 -1.08 1.34 q -0.95 0 -1.71 -0.65 v 0.86 q 0.77 0.49 1.78 0.49 q 1.85 0 1.85 -1.96 v -3.41 Z m -0.84 2.66 l -1.27 -0.17 q -0.58 -0.08 -0.88 -0.29 q -0.3 -0.21 -0.3 -0.74 q 0 -0.38 0.27 -0.63 q 0.27 -0.24 0.73 -0.24 q 0.63 0 1.03 0.44 q 0.41 0.44 0.41 1.11 v 0.52 Z "/>
+        </symbol>
+        <symbol id="gE03A577F385712EA3CEECBBB99EC9C6" overflow="visible">
+            <path d="M 0 0m 8.31 0 h -0.84 v 3.01 q 0 0.87 -0.27 1.26 q -0.27 0.39 -0.9 0.39 q -0.54 0 -0.92 -0.49 q -0.38 -0.49 -0.38 -1.18 v -2.99 h -0.84 v 3.12 q 0 1.55 -1.19 1.55 q -0.55 0 -0.91 -0.46 q -0.36 -0.46 -0.36 -1.21 v -2.99 h -0.84 v 5.25 h 0.84 v -0.83 h 0.02 q 0.56 0.95 1.63 0.95 q 0.54 0 0.94 -0.3 q 0.4 -0.3 0.55 -0.79 q 0.58 1.09 1.74 1.09 q 1.73 0 1.73 -2.14 v -3.24 Z "/>
+        </symbol>
+        <symbol id="gEEA93299DEB4E5143F6D56F7E016DC5A" overflow="visible">
+            <path d="M 0 0m 5.07 2.41 h -3.71 q 0.02 -0.88 0.47 -1.35 q 0.45 -0.48 1.24 -0.48 q 0.89 0 1.63 0.58 v -0.79 q -0.69 -0.5 -1.83 -0.5 q -1.11 0 -1.75 0.72 q -0.64 0.72 -0.64 2.01 q 0 1.23 0.69 2 q 0.69 0.77 1.73 0.77 q 1.03 0 1.59 -0.67 q 0.56 -0.67 0.56 -1.85 v -0.44 Z m -0.86 0.71 q -0.01 0.73 -0.35 1.13 q -0.35 0.41 -0.96 0.41 q -0.59 0 -1.01 -0.43 q -0.42 -0.43 -0.51 -1.11 h 2.84 Z "/>
+        </symbol>
+        <symbol id="g945D332C86C4EBD7B312687CD4B84822" overflow="visible">
+            <path d="M 0 0m 3.59 4.4 q -0.22 0.17 -0.64 0.17 q -0.54 0 -0.9 -0.51 q -0.36 -0.51 -0.36 -1.38 v -2.68 h -0.84 v 5.25 h 0.84 v -1.08 h 0.02 q 0.18 0.55 0.55 0.86 q 0.37 0.31 0.83 0.31 q 0.33 0 0.5 -0.07 v -0.87 Z "/>
+        </symbol>
+        <symbol id="g84C7AEE4C58C8D93E5FF992077CD31C3" overflow="visible">
+            <path d="M 0 0m 4.43 0.24 q -0.6 -0.36 -1.44 -0.36 q -1.12 0 -1.81 0.73 q -0.69 0.73 -0.69 1.89 q 0 1.3 0.74 2.08 q 0.74 0.79 1.98 0.79 q 0.69 0 1.22 -0.26 v -0.86 q -0.58 0.41 -1.25 0.41 q -0.8 0 -1.32 -0.58 q -0.52 -0.58 -0.52 -1.52 q 0 -0.92 0.48 -1.46 q 0.48 -0.53 1.3 -0.53 q 0.69 0 1.29 0.46 v -0.8 Z "/>
+        </symbol>
+        <symbol id="g788C6E88EDC57E51F2601191D55CC69B" overflow="visible">
+            <path d="M 0 0m 1.71 0.76 h -0.02 v -3.17 h -0.84 v 7.66 h 0.84 v -0.92 h 0.02 q 0.62 1.05 1.81 1.05 q 1.02 0 1.58 -0.7 q 0.57 -0.7 0.57 -1.89 q 0 -1.32 -0.64 -2.11 q -0.64 -0.79 -1.75 -0.79 q -1.02 0 -1.57 0.88 Z m -0.02 2.12 v -0.73 q 0 -0.65 0.42 -1.1 q 0.42 -0.45 1.07 -0.45 q 0.76 0 1.2 0.58 q 0.43 0.58 0.43 1.63 q 0 0.88 -0.41 1.37 q -0.41 0.5 -1.1 0.5 q -0.73 0 -1.18 -0.51 q -0.45 -0.51 -0.45 -1.28 Z "/>
+        </symbol>
+        <symbol id="gC5FA3359B6B8E6E148982B4173DCB4AF" overflow="visible">
+            <path d="M 0 0m 3.29 0.05 q -0.3 -0.16 -0.78 -0.16 q -1.38 0 -1.38 1.54 v 3.11 h -0.9 v 0.72 h 0.9 v 1.28 l 0.84 0.27 v -1.55 h 1.32 v -0.72 h -1.32 v -2.96 q 0 -0.53 0.18 -0.75 q 0.18 -0.23 0.59 -0.23 q 0.32 0 0.55 0.17 v -0.72 Z "/>
+        </symbol>
+        <symbol id="g73E7F82A85A8DA66D0A2006F579E996D" overflow="visible">
+            <path d="M 0 0m 5.1 0 h -0.84 v 0.83 h -0.02 q -0.52 -0.95 -1.62 -0.95 q -1.88 0 -1.88 2.24 v 3.14 h 0.84 v -3 q 0 -1.66 1.27 -1.66 q 0.62 0 1.01 0.45 q 0.4 0.45 0.4 1.19 v 3.02 h 0.84 v -5.25 Z "/>
+        </symbol>
+        <symbol id="g9550C6A91B9D5C54FC3EEA31EC041EED" overflow="visible">
+            <path d="M 0 0m 1.28 6.58 q -0.23 0 -0.38 0.15 q -0.16 0.15 -0.16 0.39 q 0 0.24 0.16 0.39 q 0.16 0.16 0.38 0.16 q 0.23 0 0.39 -0.16 q 0.16 -0.16 0.16 -0.39 q 0 -0.23 -0.16 -0.38 q -0.16 -0.16 -0.39 -0.16 Z m 0.41 -6.58 h -0.84 v 5.25 h 0.84 v -5.25 Z "/>
+        </symbol>
+        <symbol id="g7612F93931127168C6BC31C49D5D71F6" overflow="visible">
+            <path d="M 0 0m 0.53 0.19 v 0.9 q 0.69 -0.51 1.51 -0.51 q 1.11 0 1.11 0.74 q 0 0.21 -0.09 0.36 q -0.09 0.15 -0.26 0.26 q -0.16 0.11 -0.38 0.2 q -0.22 0.09 -0.47 0.19 q -0.35 0.14 -0.61 0.28 q -0.26 0.14 -0.44 0.32 q -0.18 0.18 -0.27 0.4 q -0.09 0.23 -0.09 0.53 q 0 0.37 0.17 0.65 q 0.17 0.28 0.45 0.48 q 0.28 0.19 0.64 0.29 q 0.36 0.1 0.75 0.1 q 0.68 0 1.22 -0.24 v -0.85 q -0.58 0.38 -1.33 0.38 q -0.24 0 -0.43 -0.05 q -0.19 -0.05 -0.33 -0.15 q -0.14 -0.1 -0.21 -0.23 q -0.07 -0.14 -0.07 -0.3 q 0 -0.21 0.07 -0.34 q 0.07 -0.14 0.22 -0.25 q 0.14 -0.11 0.35 -0.19 q 0.21 -0.09 0.47 -0.19 q 0.35 -0.13 0.63 -0.27 q 0.28 -0.14 0.47 -0.32 q 0.19 -0.18 0.3 -0.41 q 0.11 -0.23 0.11 -0.55 q 0 -0.39 -0.17 -0.68 q -0.17 -0.29 -0.46 -0.48 q -0.29 -0.19 -0.66 -0.28 q -0.37 -0.09 -0.78 -0.09 q -0.81 0 -1.4 0.31 Z "/>
+        </symbol>
+        <symbol id="gC60E5DD4F14714083F7924B7FAAD5E2B" overflow="visible">
+            <path d="M 0 0m 1.69 0 h -0.84 v 7.77 h 0.84 v -7.77 Z "/>
+        </symbol>
+        <symbol id="g516216D5E04AFAF0BCD7BB0DEB9D2293" overflow="visible">
+            <path d="M 0 0m 5.33 0 h -0.84 v 0.89 h -0.02 q -0.58 -1.02 -1.8 -1.02 q -0.99 0 -1.58 0.7 q -0.59 0.7 -0.59 1.92 q 0 1.3 0.66 2.09 q 0.66 0.78 1.75 0.78 q 1.08 0 1.57 -0.85 h 0.02 v 3.25 h 0.84 v -7.77 Z m -0.84 2.37 v 0.77 q 0 0.64 -0.42 1.08 q -0.42 0.44 -1.07 0.44 q -0.77 0 -1.21 -0.56 q -0.44 -0.56 -0.44 -1.56 q 0 -0.91 0.42 -1.43 q 0.42 -0.53 1.14 -0.53 q 0.7 0 1.14 0.51 q 0.44 0.51 0.44 1.28 Z "/>
+        </symbol>
+        <symbol id="g2507874237788A6CCA6D0FDB76B94E63" overflow="visible">
+            <path d="M 0 0m 7.46 5.25 l -1.57 -5.25 h -0.87 l -1.08 3.76 q -0.06 0.22 -0.08 0.49 h -0.02 q -0.02 -0.18 -0.11 -0.48 l -1.17 -3.77 h -0.84 l -1.59 5.25 h 0.88 l 1.09 -3.95 q 0.05 -0.18 0.07 -0.47 h 0.04 q 0.02 0.23 0.09 0.48 l 1.21 3.94 h 0.77 l 1.09 -3.96 q 0.05 -0.19 0.08 -0.47 h 0.04 q 0.01 0.2 0.09 0.47 l 1.07 3.96 h 0.83 Z "/>
+        </symbol>
+        <symbol id="gAE79702EBDC1887B1EBD5B6628DDC7D2" overflow="visible">
+            <path d="M 0 0m 5.21 0 h -0.84 v 3.02 q 0 1.64 -1.22 1.64 q -0.62 0 -1.04 -0.47 q -0.42 -0.47 -0.42 -1.22 v -2.97 h -0.84 v 7.77 h 0.84 v -3.39 h 0.02 q 0.6 0.99 1.72 0.99 q 1.77 0 1.77 -2.14 v -3.24 Z "/>
+        </symbol>
+        <symbol id="g915B4DBA73DBF4489B1560615401F0A3" overflow="visible">
+            <path d="M 0 0m 5.33 0.42 q 0 -2.89 -2.77 -2.89 q -0.97 0 -1.7 0.37 v 0.84 q 0.89 -0.49 1.69 -0.49 q 1.94 0 1.94 2.06 v 0.57 h -0.02 q -0.6 -1 -1.8 -1 q -0.98 0 -1.58 0.7 q -0.6 0.7 -0.6 1.88 q 0 1.34 0.64 2.13 q 0.64 0.79 1.76 0.79 q 1.06 0 1.57 -0.85 h 0.02 v 0.73 h 0.84 v -4.83 Z m -0.84 1.95 v 0.77 q 0 0.63 -0.42 1.07 q -0.42 0.45 -1.05 0.45 q -0.78 0 -1.22 -0.57 q -0.44 -0.57 -0.44 -1.59 q 0 -0.88 0.42 -1.4 q 0.42 -0.53 1.12 -0.53 q 0.71 0 1.15 0.5 q 0.44 0.5 0.44 1.29 Z "/>
+        </symbol>
+        <symbol id="gD27A4E7185BC8DA92D8F674BAD833B7D" overflow="visible">
+            <path d="M 0 0m 5.03 5.25 l -2.41 -6.09 q -0.65 -1.63 -1.81 -1.63 q -0.33 0 -0.55 0.07 v 0.75 q 0.27 -0.09 0.5 -0.09 q 0.64 0 0.95 0.76 l 0.42 0.99 l -2.05 5.24 h 0.93 l 1.42 -4.04 q 0.03 -0.08 0.11 -0.4 h 0.03 q 0.03 0.12 0.1 0.39 l 1.49 4.05 h 0.87 Z "/>
+        </symbol>
+        <symbol id="g37644D0F12786530B3A6A0E5E321A1B2" overflow="visible">
+            <path d="M 0 0m 3.05 -0.12 q -1.16 0 -1.86 0.74 q -0.69 0.74 -0.69 1.95 q 0 1.32 0.72 2.07 q 0.72 0.74 1.95 0.74 q 1.17 0 1.83 -0.72 q 0.66 -0.72 0.66 -2 q 0 -1.26 -0.71 -2.01 q -0.71 -0.76 -1.9 -0.76 Z m 0.06 4.79 q -0.81 0 -1.28 -0.55 q -0.47 -0.55 -0.47 -1.52 q 0 -0.93 0.48 -1.47 q 0.48 -0.54 1.28 -0.54 q 0.82 0 1.25 0.53 q 0.44 0.53 0.44 1.5 q 0 0.98 -0.44 1.52 q -0.44 0.53 -1.25 0.53 Z "/>
+        </symbol>
+        <symbol id="gB723A76B7CD13ADA78ADEDEB0256DC17" overflow="visible">
+            <path d="M 0 0m 1.62 1.17 l -0.82 -2.52 h -0.6 l 0.6 2.52 h 0.82 Z "/>
+        </symbol>
+        <symbol id="gA85FE3E10311C74F8E5EFDA32D25290C" overflow="visible">
+            <path d="M 0 0m 4.98 5.25 l -2.09 -5.25 h -0.83 l -1.99 5.25 h 0.92 l 1.33 -3.81 q 0.15 -0.42 0.18 -0.73 h 0.02 q 0.05 0.39 0.16 0.71 l 1.39 3.83 h 0.89 Z "/>
+        </symbol>
+        <symbol id="gC8EA8E4F9838BBC150D1CD37836BADA2" overflow="visible">
+            <path d="M 0 0m 1.14 -0.11 q -0.24 0 -0.4 0.17 q -0.17 0.17 -0.17 0.41 q 0 0.24 0.17 0.41 q 0.17 0.17 0.4 0.17 q 0.24 0 0.41 -0.17 q 0.17 -0.17 0.17 -0.41 q 0 -0.24 -0.17 -0.41 q -0.17 -0.17 -0.41 -0.17 Z "/>
+        </symbol>
+        <symbol id="g4FD0B0E18CCFB15E2D4F724F5EFBB4BB" overflow="visible">
+            <path d="M 0 0m 4.92 0.38 q -0.84 -0.48 -1.88 -0.48 q -1.2 0 -1.94 0.77 q -0.74 0.77 -0.74 2.05 q 0 1.3 0.82 2.13 q 0.82 0.83 2.08 0.83 q 0.91 0 1.54 -0.3 v -0.73 q -0.68 0.43 -1.61 0.43 q -0.94 0 -1.54 -0.65 q -0.6 -0.65 -0.6 -1.68 q 0 -1.06 0.56 -1.67 q 0.56 -0.61 1.52 -0.61 q 0.66 0 1.14 0.26 v 1.57 h -1.23 v 0.59 h 1.88 v -2.54 Z "/>
+        </symbol>
+        <symbol id="g299492E282B4A2B640252C729466C634" overflow="visible">
+            <path d="M 0 0m 3.51 0 h -0.64 v 0.62 h -0.02 q -0.42 -0.72 -1.23 -0.72 q -0.6 0 -0.94 0.32 q -0.34 0.32 -0.34 0.84 q 0 1.12 1.32 1.3 l 1.2 0.17 q 0 1.02 -0.82 1.02 q -0.72 0 -1.3 -0.49 v 0.66 q 0.59 0.38 1.36 0.38 q 1.41 0 1.41 -1.49 v -2.6 Z m -0.64 2.02 l -0.96 -0.13 q -0.45 -0.06 -0.67 -0.22 q -0.23 -0.16 -0.23 -0.56 q 0 -0.29 0.21 -0.48 q 0.21 -0.19 0.56 -0.19 q 0.48 0 0.79 0.33 q 0.31 0.33 0.31 0.85 v 0.4 Z "/>
+        </symbol>
+        <symbol id="gB54EA1C230A86FAE59263358210E032F" overflow="visible">
+            <path d="M 0 0m 1.29 0 h -0.64 v 5.92 h 0.64 v -5.92 Z "/>
+        </symbol>
+        <symbol id="g8D727354F6E77581B99B6D20529867B1" overflow="visible">
+            <path d="M 0 0m 3.86 1.84 h -2.82 q 0.02 -0.67 0.36 -1.03 q 0.34 -0.36 0.95 -0.36 q 0.68 0 1.24 0.45 v -0.6 q -0.53 -0.38 -1.39 -0.38 q -0.85 0 -1.33 0.54 q -0.48 0.54 -0.48 1.53 q 0 0.93 0.53 1.52 q 0.53 0.59 1.31 0.59 q 0.79 0 1.21 -0.51 q 0.43 -0.51 0.43 -1.41 v -0.34 Z m -0.66 0.54 q 0 0.55 -0.27 0.86 q -0.26 0.31 -0.73 0.31 q -0.45 0 -0.77 -0.32 q -0.32 -0.32 -0.39 -0.85 h 2.16 Z "/>
+        </symbol>
+        <symbol id="gECE8BA4E0BF3531E753CBA3F005756DD" overflow="visible">
+            <path d="M 0 0m 2.73 3.35 q -0.17 0.13 -0.48 0.13 q -0.41 0 -0.69 -0.39 q -0.28 -0.39 -0.28 -1.05 v -2.04 h -0.64 v 4 h 0.64 v -0.82 h 0.02 q 0.14 0.42 0.42 0.66 q 0.28 0.24 0.63 0.24 q 0.25 0 0.38 -0.05 v -0.66 Z "/>
+        </symbol>
+        <symbol id="gD46A23E8F8A4F901D774DDA399C56950" overflow="visible">
+            <path d="M 0 0m 3.83 4 l -1.84 -4.64 q -0.49 -1.24 -1.38 -1.24 q -0.25 0 -0.42 0.05 v 0.57 q 0.21 -0.07 0.38 -0.07 q 0.48 0 0.73 0.58 l 0.32 0.76 l -1.56 3.99 h 0.71 l 1.08 -3.08 q 0.02 -0.06 0.08 -0.3 h 0.02 q 0.02 0.09 0.08 0.3 l 1.14 3.09 h 0.66 Z "/>
+        </symbol>
+        <symbol id="gDDDC4DF57D79C51C3F3C83251F591A7B" overflow="visible">
+            <path d="M 0 0m 2.99 -0.09 q -1.19 0 -1.91 0.79 q -0.72 0.79 -0.72 2.04 q 0 1.35 0.73 2.16 q 0.73 0.8 1.99 0.8 q 1.16 0 1.87 -0.78 q 0.71 -0.78 0.71 -2.04 q 0 -1.37 -0.73 -2.17 q -0.73 -0.8 -1.95 -0.8 Z m 0.05 5.2 q -0.88 0 -1.43 -0.64 q -0.55 -0.64 -0.55 -1.67 q 0 -1.04 0.54 -1.67 q 0.54 -0.63 1.4 -0.63 q 0.92 0 1.45 0.6 q 0.53 0.6 0.53 1.68 q 0 1.11 -0.52 1.71 q -0.52 0.61 -1.42 0.61 Z "/>
+        </symbol>
+        <symbol id="gBCDA0B498542E30D0611F20DA610A96" overflow="visible">
+            <path d="M 0 0m 3.97 0 h -0.64 v 2.28 q 0 1.27 -0.93 1.27 q -0.48 0 -0.79 -0.36 q -0.31 -0.36 -0.31 -0.91 v -2.28 h -0.64 v 4 h 0.64 v -0.66 h 0.02 q 0.45 0.76 1.31 0.76 q 0.66 0 1 -0.42 q 0.35 -0.42 0.35 -1.22 v -2.45 Z "/>
+        </symbol>
+        <symbol id="g2FDCD541F5E5A986F3C66264B10B8DCA" overflow="visible">
+            <path d="M 0 0m 2.5 0.04 q -0.23 -0.12 -0.6 -0.12 q -1.05 0 -1.05 1.17 v 2.37 h -0.69 v 0.55 h 0.69 v 0.98 l 0.64 0.21 v -1.18 h 1.01 v -0.55 h -1.01 v -2.25 q 0 -0.4 0.14 -0.57 q 0.14 -0.17 0.45 -0.17 q 0.24 0 0.42 0.13 v -0.55 Z "/>
+        </symbol>
+        <symbol id="gF05AA83CCB20B96F0279A94A3B119C78" overflow="visible">
+            <path d="M 0 0m 3.97 0 h -0.64 v 2.3 q 0 1.25 -0.93 1.25 q -0.47 0 -0.79 -0.36 q -0.32 -0.36 -0.32 -0.93 v -2.27 h -0.64 v 5.92 h 0.64 v -2.59 h 0.02 q 0.46 0.76 1.31 0.76 q 1.35 0 1.35 -1.63 v -2.46 Z "/>
+        </symbol>
+        <symbol id="gF8DDE77FCA1BF91266D3EA56666649CB" overflow="visible">
+            <path d="M 0 0m 6.33 0 h -0.64 v 2.3 q 0 0.66 -0.21 0.96 q -0.21 0.3 -0.69 0.3 q -0.41 0 -0.7 -0.38 q -0.29 -0.38 -0.29 -0.9 v -2.28 h -0.64 v 2.38 q 0 1.18 -0.91 1.18 q -0.42 0 -0.7 -0.35 q -0.27 -0.35 -0.27 -0.92 v -2.28 h -0.64 v 4 h 0.64 v -0.63 h 0.02 q 0.43 0.73 1.24 0.73 q 0.41 0 0.71 -0.23 q 0.3 -0.23 0.42 -0.6 q 0.45 0.83 1.33 0.83 q 1.32 0 1.32 -1.63 v -2.46 Z "/>
+        </symbol>
+        <symbol id="g90DE6B0267AED62FC2AFCFC8B475C65A" overflow="visible">
+            <path d="M 0 0m 1.3 0.58 h -0.02 v -2.42 h -0.64 v 5.84 h 0.64 v -0.7 h 0.02 q 0.47 0.8 1.38 0.8 q 0.77 0 1.21 -0.54 q 0.43 -0.54 0.43 -1.44 q 0 -1 -0.49 -1.61 q -0.49 -0.6 -1.34 -0.6 q -0.78 0 -1.2 0.67 Z m -0.02 1.61 v -0.56 q 0 -0.5 0.32 -0.84 q 0.32 -0.35 0.82 -0.35 q 0.58 0 0.91 0.45 q 0.33 0.45 0.33 1.24 q 0 0.67 -0.31 1.05 q -0.31 0.38 -0.84 0.38 q -0.56 0 -0.9 -0.39 q -0.34 -0.39 -0.34 -0.97 Z "/>
+        </symbol>
+    </defs>
+    <defs id="clip-path">
+        <clipPath id="cEA8DC819EBB5E6D527AE568BC64E4CAE">
+            <path d="M 0 0m 0 3 c 0 -1.66 1.34 -3 3 -3 h 54 c 1.66 0 3 1.34 3 3 v 98 c 0 1.66 -1.34 3 -3 3 h -54 c -1.66 0 -3 -1.34 -3 -3 Z "/>
+        </clipPath>
+        <clipPath id="c7C4FF833A339BF42511E034A4AB52BB9">
+            <path d="M 0 0m 0 1 c 0 -0.55 0.45 -1 1 -1 h 16 c 0.55 0 1 0.45 1 1 v 16 c 0 0.55 -0.45 1 -1 1 h -16 c -0.55 0 -1 -0.45 -1 -1 Z "/>
+        </clipPath>
+        <clipPath id="cE0003B1D90883F6A55E8FCA1BAA06C30">
+            <path d="M 0 0h 60 v 104 h -60 Z "/>
+        </clipPath>
+        <clipPath id="cCD9CD19C08A7291C9980037908284940">
+            <path d="M 0 0m 0 1 c 0 -0.55 0.45 -1 1 -1 h 16 c 0.55 0 1 0.45 1 1 v 12 c 0 0.55 -0.45 1 -1 1 h -16 c -0.55 0 -1 -0.45 -1 -1 Z "/>
+        </clipPath>
+    </defs>
+</svg>

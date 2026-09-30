@@ -50,7 +50,7 @@
       columns: (auto, auto, auto), column-gutter: 5pt, align: horizon,
       stack(dir: ttb, spacing: 4pt,
         caption[Before],
-        layer-panel(w: 84pt, (
+        layer-panel(w: 84pt, header: "Layers", (
           (0, "layer", "Roads", "ok"),
           (0, "dir", "Area B", "lock"),
           (1, "layer", "Stands", "lock"),
@@ -60,7 +60,7 @@
       arrow-r(w: 14pt),
       stack(dir: ttb, spacing: 4pt,
         caption(fill: accent)[Now],
-        layer-panel(w: 84pt, (
+        layer-panel(w: 84pt, header: "Layers", (
           (0, "layer", "Roads", "ok"),
           (0, "dir", "Area B", "ok"),
           (1, "layer", "Stands", "hi", map-green),

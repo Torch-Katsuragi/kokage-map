@@ -24,7 +24,7 @@
 // ---- head ----
 #hero(
   "v0.4.0 — 2026/03/18",
-  [Share & back up \ data via Google Drive],
+  [Share & back up data via Google Drive],
   [Sign in with Google to clone a folder to Drive and sync it by hand (Push/Pull).],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,

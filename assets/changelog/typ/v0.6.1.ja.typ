@@ -38,7 +38,7 @@
 // ---- 頭: ブラウザでも ----
 #hero(
   "v0.6.1 — 2026/09/07",
-  [ブラウザでも\ 開けるように],
+  [ブラウザでも開けるように],
   [Chrome / Edge でプロジェクトフォルダを開き、GeoPackage の表示・編集、Drive 連携、位置共有パーティが使えます。],
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),
@@ -51,7 +51,7 @@
 
 // ---- View ----
 #scene(
-  [1 つのレイヤを、条件で見せ分ける],
+  [1 つのレイヤを条件で見せ分ける],
   [レイヤのメニューの「View を追加」で、条件（QGIS のフィルタと同じ WHERE 句）の違う見せ方を何枚も作れます。色・太さも View ごとに変えられます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
@@ -78,7 +78,7 @@
 
 // ---- QGIS 連携 ----
 #scene(
-  [フォルダを、QGIS でも開ける],
+  [フォルダを QGIS でも開ける],
   [`<フォルダ名>.qgs` を自動で書き出し、表示やスタイルの変更に追従します。QGIS で保存した View・スタイル・表示状態は、次に開いたとき読み込みます。],
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),
@@ -108,7 +108,7 @@
 
 // ---- 画面の外の現在位置 ----
 #scene(
-  [現在地が画面の外でも、向きが分かる],
+  [現在地が画面の外でも向きが分かる],
   [現在位置が画面の外にあるとき、その方向を指す矢印が縁に出ます。タップで現在位置へ飛びます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 10pt, align: horizon,

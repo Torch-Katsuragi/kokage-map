@@ -5,7 +5,7 @@
 // ---- head ----
 #hero(
   "v0.3.3 — 2026/03/11",
-  [Download maps ahead \ for offline use],
+  [Download maps ahead for offline use],
   [Pick an area and zoom levels to bulk-download the basemap. It stays on screen with no signal.],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,

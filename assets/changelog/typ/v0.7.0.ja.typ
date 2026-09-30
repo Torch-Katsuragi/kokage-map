@@ -77,7 +77,7 @@
 
 // ---- 回して傾ける ----
 #scene(
-  [指で回して、傾ける],
+  [指で回して傾ける],
   [1 本指のドラッグで回転と傾き、2 本指で移動と拡大縮小です。],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
@@ -93,7 +93,7 @@
 
 // ---- 傾斜の陰影 ----
 #scene(
-  [急な斜面ほど、濃く],
+  [急な斜面ほど濃く],
   [地形の陰影は、光の向きではなく傾斜の濃淡です。尾根と谷底は白く抜けます。],
   {
     let w = 220pt
@@ -126,7 +126,7 @@
 
 // ---- 眺めモード ----
 #scene(
-  [コンパスを長押しで、眺めモード],
+  [コンパスを長押しで眺めモード],
   [遠近のある眺めになり、遠くは靄に溶けます。もう一度長押しで戻ります。],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
@@ -144,7 +144,7 @@
 
 // ---- web ----
 #scene(
-  [web でも、同じ 3D の地図],
+  [web でも同じ 3D の地図],
   [描画は WebGL2 で、こちらも GPU です。操作は Android と同じで、マウスでも動かせます。],
   stack(dir: ttb, spacing: 12pt,
     browser(w: 170pt, h: 100pt, terrain(170pt, 88pt)),

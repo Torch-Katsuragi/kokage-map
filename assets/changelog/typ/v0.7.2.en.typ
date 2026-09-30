@@ -108,7 +108,7 @@
 // ---- Head: Terrain look ----
 #hero(
   "v0.7.2 — 2026/09/13",
-  [Color the terrain \ by slope or elevation],
+  [Color the terrain by slope or elevation],
   [New "Terrain look" settings: color the terrain by slope or elevation, and draw contour lines from the elevation tiles.],
   grid(
     columns: (auto, auto, auto), column-gutter: 6pt, align: horizon,

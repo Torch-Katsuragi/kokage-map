@@ -21,7 +21,7 @@
 
 #hero(
   "v0.5.1 — 2026/04/02",
-  [Freely transform \ images on the map],
+  [Freely transform images on the map],
   [Images on the map now have Photoshop-style transform handles. Drag them to move, scale and rotate; the map shows the result instantly.],
   grid(
     columns: (auto, auto, auto), column-gutter: 10pt, align: horizon,

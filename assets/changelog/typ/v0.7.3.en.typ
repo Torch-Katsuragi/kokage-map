@@ -82,7 +82,7 @@
 // ---- Head: two devices, merged row by row ----
 #hero(
   "v0.7.3 — 2026/09/27",
-  [Two devices, \ merged row by row],
+  [Two devices, merged row by row],
   [When two devices edit the same GeoPackage, Drive sync merges the changes row by row. Edits to different rows are both kept.],
   {
     let head = ([Stand], [Status])

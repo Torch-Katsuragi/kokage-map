@@ -49,7 +49,7 @@
 // ---- 頭: レーザー距離計 ----
 #hero(
   "v0.5.0 — 2026/03/31",
-  [レーザー距離計で、\ 現場測量],
+  [レーザー距離計で現場測量],
   [TruPulse 360R と Bluetooth でつながります。測った距離・方位角・傾斜角が、そのまま点として記録されます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
@@ -68,7 +68,7 @@
 
 // ---- 閉合 ----
 #scene(
-  [閉じ具合を、その場で確かめる],
+  [閉じ具合をその場で確かめる],
   [閉合比をリアルタイムに表示し、精度が足りなければすぐ警告します。閉合補正はコンパス法則・トランシット法則から選べます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 6pt, align: horizon,
@@ -89,7 +89,7 @@
 
 // ---- 点から線・面 ----
 #scene(
-  [測った点が、そのまま線や面に],
+  [測った点がそのまま線や面に],
   [測量の点から、Line や Polygon のレイヤを自動で作れます。],
   grid(
     columns: (auto, auto, auto, auto), column-gutter: 6pt, align: horizon,
@@ -111,7 +111,7 @@
 
 // ---- 選択ツール ----
 #scene(
-  [重なっていても、タップで順に選べる],
+  [重なっていてもタップで順に選べる],
   [選択ツールがすべてのレイヤをまたいで選ぶようになりました。同じ場所をもう一度タップすると、次の候補に移ります。],
   grid(
     columns: (auto, auto, auto, auto, auto), column-gutter: 4pt, align: horizon,

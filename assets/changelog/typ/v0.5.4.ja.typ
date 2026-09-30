@@ -31,7 +31,7 @@
 // ---- 頭: 英語 ----
 #hero(
   "v0.5.4 — 2026/04/10",
-  [英語でも\ 使えるように],
+  [英語でも使えるように],
   [すべての画面が日本語と英語に対応しました。設定からワンタップで切り替えられます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 12pt, align: horizon,
@@ -43,7 +43,7 @@
 
 // ---- 圏外の地図 ----
 #scene(
-  [圏外でも、地図がすぐ出る],
+  [圏外でも地図がすぐ出る],
   [保存した背景地図（MBTiles）を地図エンジンが直接読むようになり、圏外での表示が安定しました。Android でバックグラウンドから戻ると地図が真っ白になる問題も直しました。],
   grid(
     columns: (auto, auto, auto), column-gutter: 12pt, align: horizon,
@@ -90,7 +90,7 @@
 
 // ---- 初回の権限 ----
 #scene(
-  [はじめに、権限を 1 つずつ案内],
+  [はじめに権限を 1 つずつ案内],
   [初回起動で、ストレージ・位置情報・Bluetooth の権限を順番に、何に使うかを添えて案内します。あとから設定でも確認・やり直しができます。],
   grid(
     columns: (auto, auto, auto, auto, auto), column-gutter: 4pt, align: horizon,

@@ -41,7 +41,7 @@
 
 #hero(
   "v0.5.6 — 2026/04/12",
-  [Open points \ in Google Maps],
+  [Open points in Google Maps],
   [The point detail panel has an "Open in Google Maps" button. On Android it launches the Google Maps app directly; on PC or without the app, it opens in the browser.],
   grid(
     columns: (auto, auto, auto), column-gutter: 14pt, align: horizon,

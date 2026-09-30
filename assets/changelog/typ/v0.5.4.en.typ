@@ -30,7 +30,7 @@
 
 #hero(
   "v0.5.4 — 2026/04/10",
-  [Now available \ in English],
+  [Now available in English],
   [All UI strings are in Japanese and English. Switch languages with one tap in Settings.],
   grid(
     columns: (auto, auto, auto), column-gutter: 12pt, align: horizon,

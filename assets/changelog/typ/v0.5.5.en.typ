@@ -11,7 +11,7 @@
 
 #hero(
   "v0.5.5 — 2026/04/11",
-  [Rebranded to \ "RootMap GIS"],
+  [Rebranded to "RootMap GIS"],
   [The app is renamed from "k\_maps". The same name now shows on Android, Windows and Web.],
   stack(dir: ttb, spacing: 14pt,
     grid(

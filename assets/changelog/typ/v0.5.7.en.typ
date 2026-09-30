@@ -29,7 +29,7 @@
 
 #hero(
   "v0.5.7 — 2026/04/13",
-  [Overlay images \ saved as GeoTIFF],
+  [Overlay images saved as GeoTIFF],
   [Overlay images are now saved as GeoTIFF. Position, scale and rotation live in the file itself, so they line up in the same place in QGIS and other GIS software.],
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),

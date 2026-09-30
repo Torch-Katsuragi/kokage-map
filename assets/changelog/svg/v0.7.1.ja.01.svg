@@ -15,21 +15,20 @@
                 </g>
                 <g class="typst-text" transform="matrix(1 0 0 -1 75 41.48)">
                     <use xlink:href="#gEA242F3819773C960A84436DDA4DDB5B" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
-                    <use xlink:href="#gBBE4D61A64EECD4296B0FAFBACB340D7" x="14.55" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
-                <g class="typst-text" transform="matrix(1 0 0 -1 98.55 41.48)">
+                <g class="typst-text" transform="matrix(1 0 0 -1 94.56 41.48)">
                     <use xlink:href="#gDF048F70A850F18B4F8BC864807A42A9" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                     <use xlink:href="#g87F0F306201018E6C829EDFB0A592398" x="13.5" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                     <use xlink:href="#gDB59B264EEA7AE543BCC03E43A8A1959" x="26.4" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                     <use xlink:href="#g9A09FFEC981119698B13EFCD3DB91397" x="33" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
-                <g class="typst-text" transform="matrix(1 0 0 -1 147.5 41.48)">
+                <g class="typst-text" transform="matrix(1 0 0 -1 143.5 41.48)">
                     <use xlink:href="#g1B3966AD281D1B6A2D2AB2888B776DF8" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
-                <g class="typst-text" transform="matrix(1 0 0 -1 162.5 41.48)">
+                <g class="typst-text" transform="matrix(1 0 0 -1 158.5 41.48)">
                     <use xlink:href="#gE519E58AD2390DB7A1795E3DD7C9061C" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
-                <g class="typst-text" transform="matrix(1 0 0 -1 177.5 41.48)">
+                <g class="typst-text" transform="matrix(1 0 0 -1 173.5 41.48)">
                     <use xlink:href="#gA1285ABD504B0E09A198B01590FB08E9" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                     <use xlink:href="#gE7AEBED8B737B203B830617D8536564F" x="14.7" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
@@ -370,9 +369,6 @@
         </symbol>
         <symbol id="gEA242F3819773C960A84436DDA4DDB5B" overflow="visible">
             <path d="M 0 0m 5.13 12.52 l 1.63 -0.15 l -0.34 -2.07 h 4.37 v -1.44 h -4.62 l -0.39 -2.31 h 4.14 v -1.44 h -4.38 q -0.21 -1.32 -0.21 -2.01 q 0 -1.11 0.61 -1.65 q 0.8 -0.7 2.39 -0.7 q 1.68 0 2.53 0.64 q 0.78 0.59 0.78 1.74 q 0 1.01 -0.44 2.18 l 1.53 0.1 q 0.6 -1.33 0.6 -2.34 q 0 -1.9 -1.33 -2.89 q -1.36 -1 -3.72 -1 q -2.42 0 -3.68 1.15 q -1 0.92 -1 2.62 q 0 0.8 0.22 2.14 h -2.75 v 1.44 h 3 l 0.4 2.31 h -3.22 v 1.44 h 3.48 l 0.39 2.22 Z "/>
-        </symbol>
-        <symbol id="gBBE4D61A64EECD4296B0FAFBACB340D7" overflow="visible">
-            <path d="M 0 0m 4.08 -1.19 q -1.35 1.98 -3.06 3.66 l 1.19 1.05 q 1.77 -1.68 3.12 -3.58 l -1.25 -1.13 Z "/>
         </symbol>
         <symbol id="gDF048F70A850F18B4F8BC864807A42A9" overflow="visible">
             <path d="M 0 0m 11.87 -1.43 q -1.16 0.78 -2.16 1.6 q -1.33 -0.83 -3.06 -0.83 q -2.4 0 -4.01 1.52 q -1.91 1.81 -1.91 4.86 q 0 2.56 1.39 4.28 q 1.67 2.07 4.54 2.07 q 2.67 0 4.31 -1.79 q 1.63 -1.76 1.63 -4.54 q 0 -2.69 -1.65 -4.5 q 1.14 -0.79 1.99 -1.27 l -1.08 -1.38 Z m -5.45 5.88 q 2.04 -1.25 3.11 -2.09 q 1 1.2 1 3.35 q 0 1.46 -0.51 2.56 q -0.4 0.84 -1.06 1.39 q -0.98 0.81 -2.29 0.81 q -1.73 0 -2.82 -1.34 q -1.05 -1.3 -1.05 -3.41 q 0 -1.83 0.8 -3.08 q 1.1 -1.74 3.14 -1.74 q 0.98 0 1.68 0.45 q -1.66 1.15 -2.94 1.92 l 0.94 1.19 Z "/>

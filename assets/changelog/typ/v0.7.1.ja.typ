@@ -48,7 +48,7 @@
 // ---- 頭: 遠くのデータへ寄る ----
 #hero(
   "v0.7.1 — 2026/09/12",
-  [遠くのデータへ、\ すぐ寄れる],
+  [遠くのデータへすぐ寄れる],
   [レイヤの ⋮ メニューに「レイヤへ寄せる」を足しました。行のダブルタップでも寄ります。],
   grid(
     columns: (auto, auto, auto), column-gutter: 10pt, align: horizon,
@@ -61,7 +61,7 @@
 
 // ---- GeoTIFF を QGIS へ ----
 #scene(
-  [重ねた画像も、QGIS で開ける],
+  [重ねた画像も QGIS で開ける],
   [オーバーレイ画像（GeoTIFF）を、QGIS プロジェクト（`.qgs`）にラスタレイヤとして書きます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 6pt, align: horizon,
@@ -74,7 +74,7 @@
 
 // ---- 現在位置の点 ----
 #scene(
-  [現在位置の点が、下を隠さない],
+  [現在位置の点が下を隠さない],
   [青い点を半透明にしました。真下にある点や短い線が見えます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 10pt, align: horizon,

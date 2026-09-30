@@ -108,7 +108,7 @@
 // ---- 頭: 地形の見た目 ----
 #hero(
   "v0.7.2 — 2026/09/13",
-  [地形を、\ 傾斜や標高で色分け],
+  [地形を傾斜や標高で色分け],
   [設定に「地形の見た目」を足しました。傾斜や標高で地形を色分けでき、標高タイルから等高線も描けます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 6pt, align: horizon,
@@ -126,7 +126,7 @@
 
 // ---- 画面の配置 ----
 #scene(
-  [画面の配置を、持ち方で選ぶ],
+  [画面の配置を持ち方で選ぶ],
   [設定で自動／縦持ち／横長／左利きを選べます。情報カードは属性テーブルと同じく下から出て、両方は同時に出ません。],
   grid(
     columns: (auto, auto, auto), column-gutter: 10pt, align: bottom,
@@ -139,7 +139,7 @@
 
 // ---- ラベル ----
 #scene(
-  [ラベルは、QGIS と同じ式で],
+  [ラベルは QGIS と同じ式で],
   [ラベルはスタイル画面（レイヤ／View）で組み立て、線と面のレイヤにも付けられます。],
   stack(dir: ttb, spacing: 8pt,
     box(fill: white, stroke: 0.6pt + line-c, radius: 3pt, inset: (x: 6pt, y: 4pt),
@@ -157,7 +157,7 @@
 
 // ---- View のスタイル ----
 #scene(
-  [View は、レイヤと違うところだけ],
+  [View はレイヤと違うところだけ],
   [View のスタイルは、レイヤと違う項目だけを持ちます。レイヤ側を変えると、触っていない項目は View にも届きます。],
   stack(dir: ttb, spacing: 8pt,
     grid(

@@ -32,7 +32,7 @@
 // ---- 頭 ----
 #hero(
   "v0.5.7 — 2026/04/13",
-  [重ねた画像は、\ GeoTIFF で保存],
+  [重ねた画像は GeoTIFF で保存],
   [オーバーレイ画像が GeoTIFF で保存されるようになりました。位置・大きさ・回転はファイルそのものに入るので、QGIS などの GIS ソフトで開いても同じ場所に重なります。],
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),
@@ -49,7 +49,7 @@
 )
 
 #scene(
-  [紙の地図を、透かして重ねる],
+  [紙の地図を透かして重ねる],
   [スキャンした紙の地図の白い地を消して、下の地図と重ねて見られます。変換のしかたは 3 つ。変換後のファイル名も決められます。],
   stack(dir: ttb, spacing: 6pt,
     stack(dir: ttb, spacing: 4pt,

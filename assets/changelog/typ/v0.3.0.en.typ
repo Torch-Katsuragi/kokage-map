@@ -22,7 +22,7 @@
 // ---- head ----
 #hero(
   "v0.3.0 — 2026/03/09",
-  [Blazing fast \ map rendering],
+  [Blazing fast map rendering],
   [The map engine moved from FlutterMap to MapLibre. Point clustering keeps even massive marker counts smooth.],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,

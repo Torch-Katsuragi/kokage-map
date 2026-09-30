@@ -38,7 +38,7 @@
 // ---- Head: in the browser too ----
 #hero(
   "v0.6.1 — 2026/09/07",
-  [Now in \ the browser, too],
+  [Now in the browser, too],
   [Open a project folder in Chrome / Edge, view and edit GeoPackages, use Google Drive and location-sharing parties.],
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),

@@ -46,7 +46,7 @@
 // ---- 頭 ----
 #hero(
   "v0.5.6 — 2026/04/12",
-  [ポイントの場所へ、\ Google Maps で],
+  [ポイントの場所へ Google Maps で],
   [ポイントの詳細パネルに「Google Maps で開く」ボタンが付きました。Android では Google Maps アプリが直接開きます。PC やアプリが無いときはブラウザで開きます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 14pt, align: horizon,
@@ -58,7 +58,7 @@
 
 // ---- 長押しで削除 ----
 #scene(
-  [削除は、1 秒の長押しで],
+  [削除は 1 秒の長押しで],
   [すべての地物と写真の詳細パネルに「削除」ボタンが付きました。押し間違えないよう、1 秒押し続けると消えます。押している間は赤いゲージが伸びます。],
   grid(
     columns: (auto, auto), column-gutter: 18pt, align: horizon,

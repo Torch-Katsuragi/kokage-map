@@ -22,7 +22,7 @@
 // ---- 頭: MapLibre ----
 #hero(
   "v0.3.0 — 2026/03/09",
-  [地図の描画を、爆速に],
+  [地図の描画を爆速に],
   [地図エンジンを FlutterMap から MapLibre に全面移行しました。大量の点もまとめて表示して（クラスタリング）、なめらかに動きます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,

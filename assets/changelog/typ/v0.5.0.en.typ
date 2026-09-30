@@ -49,7 +49,7 @@
 // ---- head ----
 #hero(
   "v0.5.0 — 2026/03/31",
-  [Field surveying with \ a laser rangefinder],
+  [Field surveying with a laser rangefinder],
   [Connects to the TruPulse 360R over Bluetooth. Each distance, azimuth and inclination you measure is recorded as a point right away.],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,

@@ -12,7 +12,7 @@
 // ---- 頭 ----
 #hero(
   "v0.5.5 — 2026/04/11",
-  [アプリ名が\ 「RootMap GIS」に],
+  [アプリ名が「RootMap GIS」に],
   [「k\_maps」から改名しました。Android・Windows・Web のどれでも同じ名前で表示されます。],
   stack(dir: ttb, spacing: 14pt,
     grid(

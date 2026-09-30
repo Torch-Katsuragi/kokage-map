@@ -4,7 +4,7 @@
 
 #hero(
   "Next release",
-  [Back and forth with QGIS, \ as is],
+  [Back and forth with QGIS, as is],
   [Folder settings now live in the QGIS project file (`.qgs`). Colors and visibility you set in the app look the same when you open it in QGIS.],
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),

@@ -81,7 +81,7 @@
 
 // ---- 複数選択 ----
 #scene(
-  [レイヤをまたいで、まとめて選ぶ],
+  [レイヤをまたいでまとめて選ぶ],
   [選択ツールで左下のボタンを有効にすると、タップや投げ縄で複数選べます。件数や合計を出し、まとめて削除できます。],
   grid(
     columns: (auto, auto), column-gutter: 10pt, align: horizon,
@@ -117,7 +117,7 @@
 
 // ---- 消しゴム ----
 #scene(
-  [消しゴムは、集めてから消す],
+  [消しゴムは集めてから消す],
   [触れたものをすぐには消さず、集めてから「N 件を削除」で確定します。],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
@@ -150,7 +150,7 @@
 
 // ---- GPS バー ----
 #scene(
-  [GPS のバーをやめて、地図が広く],
+  [GPS のバーをやめて地図が広く],
   [現在位置のマーカーは、選択ツールでタップできます。情報カードはほかのフィーチャと同じ場所に出ます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,

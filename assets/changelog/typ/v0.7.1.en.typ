@@ -48,7 +48,7 @@
 // ---- 頭: 遠くのデータへ寄る ----
 #hero(
   "v0.7.1 — 2026/09/12",
-  [Jump straight to \ far-away data],
+  [Jump straight to far-away data],
   ["Zoom to layer" is now in the layer ⋮ menu. Double-tapping the row also works.],
   grid(
     columns: (auto, auto, auto), column-gutter: 10pt, align: horizon,

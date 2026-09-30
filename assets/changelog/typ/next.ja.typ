@@ -5,7 +5,7 @@
 // ---- 頭: アプリで決めた見た目が、QGIS でもそのまま ----
 #hero(
   "次のリリース",
-  [QGIS と、\ そのまま行き来できるように],
+  [QGIS とそのまま行き来できるように],
   [フォルダの設定が QGIS のプロジェクトファイル（`.qgs`）になりました。アプリで決めた色や表示が、QGIS で開いても同じに見えます。],
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),
@@ -17,7 +17,7 @@
 
 // ---- 設定の置き場所 ----
 #scene(
-  [設定は、フォルダの `.qgs` に],
+  [設定はフォルダの `.qgs` に],
   [表示／非表示・色・View・並び順が、フォルダに置かれる 1 つのファイルに入ります。Drive で共有すれば、ほかの端末にも届きます。],
   grid(
     columns: (1fr, auto, 1fr), column-gutter: 6pt, align: horizon,
@@ -46,7 +46,7 @@
 
 // ---- QGIS で下のフォルダまで ----
 #scene(
-  [QGIS で、下のフォルダまで直せる],
+  [QGIS で下のフォルダまで直せる],
   [どのフォルダの `.qgs` を開いても、サブフォルダのレイヤまで編集できます。QGIS で変えた色は、アプリにも戻ります。],
   stack(dir: ttb, spacing: 10pt,
     grid(
@@ -82,7 +82,7 @@
 
 // ---- 2 台で同時に ----
 #scene(
-  [2 台で同時に変えても、両方残る],
+  [2 台で同時に変えても両方残る],
   [別々の端末で変えた設定は、Drive 同期で 1 つにまとまります。],
   stack(dir: ttb, spacing: 5pt,
     grid(

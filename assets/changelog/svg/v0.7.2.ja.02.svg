@@ -9,27 +9,26 @@
                 </g>
                 <g class="typst-text" transform="matrix(1 0 0 -1 43.65 41.48)">
                     <use xlink:href="#g2CF02F444E75BCE944F51703DF1BC1BC" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
-                    <use xlink:href="#gBBE4D61A64EECD4296B0FAFBACB340D7" x="15" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
-                <g class="typst-text" transform="matrix(1 0 0 -1 67.65 41.48)">
+                <g class="typst-text" transform="matrix(1 0 0 -1 63.65 41.48)">
                     <use xlink:href="#gDF048F70A850F18B4F8BC864807A42A9" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                     <use xlink:href="#g87F0F306201018E6C829EDFB0A592398" x="13.5" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                     <use xlink:href="#gDB59B264EEA7AE543BCC03E43A8A1959" x="26.4" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                     <use xlink:href="#g9A09FFEC981119698B13EFCD3DB91397" x="33" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
-                <g class="typst-text" transform="matrix(1 0 0 -1 116.6 41.48)">
+                <g class="typst-text" transform="matrix(1 0 0 -1 112.6 41.48)">
                     <use xlink:href="#g268F9704A90600B6F3D82114D7EE17F9" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
-                <g class="typst-text" transform="matrix(1 0 0 -1 131 41.48)">
+                <g class="typst-text" transform="matrix(1 0 0 -1 127 41.48)">
                     <use xlink:href="#g4BDBA7C0C1E9F536A9D6C18354A3F387" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
-                <g class="typst-text" transform="matrix(1 0 0 -1 146 41.48)">
+                <g class="typst-text" transform="matrix(1 0 0 -1 142 41.48)">
                     <use xlink:href="#g41639958C80CEB503BD17CBF8507445C" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
-                <g class="typst-text" transform="matrix(1 0 0 -1 159.65 41.48)">
+                <g class="typst-text" transform="matrix(1 0 0 -1 155.65 41.48)">
                     <use xlink:href="#g40F888B99F92371BD74B09BFF5C9AEC5" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
-                <g class="typst-text" transform="matrix(1 0 0 -1 174.65 41.48)">
+                <g class="typst-text" transform="matrix(1 0 0 -1 170.65 41.48)">
                     <use xlink:href="#g1B3966AD281D1B6A2D2AB2888B776DF8" x="0" y="0" fill="#1c1b1f" fill-rule="nonzero"/>
                 </g>
             </g>
@@ -531,9 +530,6 @@
         </symbol>
         <symbol id="g2CF02F444E75BCE944F51703DF1BC1BC" overflow="visible">
             <path d="M 0 0m 9.62 12.28 h 1.6 v -2.65 h 2.99 v -1.46 h -2.99 v -4.5 q 1.74 -0.8 3.44 -2.24 l -0.82 -1.45 q -1.44 1.25 -2.63 1.99 q -0.13 -1.79 -1.27 -2.4 q -0.64 -0.34 -1.74 -0.34 q -1.2 0 -2.09 0.43 q -1.34 0.65 -1.34 2.17 q 0 1.19 1.02 1.9 q 0.93 0.64 2.39 0.64 q 0.67 0 1.45 -0.17 v 3.96 h -4.71 v 1.46 h 4.71 v 2.65 Z m 0 -9.49 q -0.86 0.27 -1.52 0.27 q -0.64 0 -1.08 -0.2 q -0.7 -0.3 -0.7 -0.98 q 0 -0.56 0.51 -0.87 q 0.5 -0.31 1.33 -0.31 q 1.46 0 1.46 1.65 v 0.44 Z m -7.95 -3.52 q -0.26 2.42 -0.26 5.08 q 0 4.16 0.56 7.93 l 1.61 -0.23 q -0.55 -3.25 -0.55 -7.03 q 0 -2.78 0.28 -5.5 l -1.64 -0.25 Z "/>
-        </symbol>
-        <symbol id="gBBE4D61A64EECD4296B0FAFBACB340D7" overflow="visible">
-            <path d="M 0 0m 4.08 -1.19 q -1.35 1.98 -3.06 3.66 l 1.19 1.05 q 1.77 -1.68 3.12 -3.58 l -1.25 -1.13 Z "/>
         </symbol>
         <symbol id="gDF048F70A850F18B4F8BC864807A42A9" overflow="visible">
             <path d="M 0 0m 11.87 -1.43 q -1.16 0.78 -2.16 1.6 q -1.33 -0.83 -3.06 -0.83 q -2.4 0 -4.01 1.52 q -1.91 1.81 -1.91 4.86 q 0 2.56 1.39 4.28 q 1.67 2.07 4.54 2.07 q 2.67 0 4.31 -1.79 q 1.63 -1.76 1.63 -4.54 q 0 -2.69 -1.65 -4.5 q 1.14 -0.79 1.99 -1.27 l -1.08 -1.38 Z m -5.45 5.88 q 2.04 -1.25 3.11 -2.09 q 1 1.2 1 3.35 q 0 1.46 -0.51 2.56 q -0.4 0.84 -1.06 1.39 q -0.98 0.81 -2.29 0.81 q -1.73 0 -2.82 -1.34 q -1.05 -1.3 -1.05 -3.41 q 0 -1.83 0.8 -3.08 q 1.1 -1.74 3.14 -1.74 q 0.98 0 1.68 0.45 q -1.66 1.15 -2.94 1.92 l 0.94 1.19 Z "/>

@@ -24,7 +24,7 @@
 // ---- 頭: Drive ----
 #hero(
   "v0.4.0 — 2026/03/18",
-  [Google Drive で、\ データを共有・バックアップ],
+  [Google Drive でデータを共有・バックアップ],
   [Google でサインインすると、フォルダごと Drive にクローンして、手動で同期（Push/Pull）できます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
@@ -40,7 +40,7 @@
 
 // ---- タイトルバー ----
 #scene(
-  [同期は、タイトルバーからワンタップ],
+  [同期はタイトルバーからワンタップ],
   [同期の操作をタイトルバーにまとめました。同期の状態はアイコンで分かり、アプリが自動でも確かめます。],
   grid(
     columns: (auto, auto), column-gutter: 12pt, align: horizon,
@@ -64,7 +64,7 @@
 
 // ---- 条件式で絞り込み ----
 #scene(
-  [条件式で、すばやく絞り込む],
+  [条件式ですばやく絞り込む],
   [属性テーブルに QGIS 式のフィルタが付きました。大量のデータでも、条件に合うものだけ残せます。],
   stack(dir: ttb, spacing: 5pt,
     attr-table(w: 160pt, "面積", [`"面積" > 100`], (("85", false), ("240", true), ("130", true), ("60", false))),

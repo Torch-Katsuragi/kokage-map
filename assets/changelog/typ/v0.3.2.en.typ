@@ -11,7 +11,7 @@
 // ---- head ----
 #hero(
   "v0.3.2 — 2026/03/10",
-  [Pick photos from \ your gallery],
+  [Pick photos from your gallery],
   [Camera capture is replaced with gallery import, so photos you already have are easier to use.],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,

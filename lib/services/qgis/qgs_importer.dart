@@ -310,7 +310,12 @@ class QgsImporter {
           await layer.persistVisibility();
         }
       }
-      viewsByLayer[layer.layerKey] = [for (final v in views) v.name];
+      // 子孫の dir の写しも取り込むので、同名の gpkg/レイヤが別の dir にありうる。dir を添えて数え分ける
+      final folderPath = layer.folderNode?.getAbsoluteFilePath();
+      final relDir = folderPath == null || rootPath == null ? '.' : p.relative(folderPath, from: rootPath);
+      viewsByLayer[relDir == '.' ? layer.layerKey : '${relDir.replaceAll(r'\', '/')}/${layer.layerKey}'] = [
+        for (final v in views) v.name,
+      ];
     }
 
     // gpkg と dir のグループの可視性（変わったものだけ書く）

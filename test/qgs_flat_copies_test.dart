@@ -113,7 +113,9 @@ void main() {
     await const QgsProjectBuilder().writeTo(root);
 
     qgisSave(qgsOf(proj), DateTime.now().add(const Duration(minutes: 1)), uncheckTrees('b.gpkg'));
-    await const QgsReadBack().run(root);
+    final r = await const QgsReadBack().run(root);
+    // 根の a と sub の b。レイヤ名（trees）が同じでも dir で数え分ける
+    expect(r!.importedViewCount, 2);
 
     KMetaService.instance.clearCache();
     expect((await KMetaService.instance.getMeta(sub)).visibility.layers['b.gpkg/trees'], isFalse);

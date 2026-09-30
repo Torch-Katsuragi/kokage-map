@@ -54,6 +54,9 @@ void main() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
+  /// 描画のスタイルキー（gpkg のパス | viewKey）
+  String key(String view) => '${gpkg.getAbsolutePath()}|t.gpkg/chiten/$view';
+
   /// `_featureMap` に rowId を流し込む（DB読み込みの代わり）
   void seedFeatures() {
     for (var fid = 1; fid <= 12; fid++) {
@@ -79,12 +82,12 @@ void main() {
 
     await layer.refreshStyleGroups();
 
-    expect(layer.styleGroups.keys, ['t.gpkg/chiten/大きい']);
+    expect(layer.styleGroups.keys, [key('大きい')]);
     // area 106..111 = fid 7..12
     final assigned =
         layer.styleKeyByRowId.keys.toList()..sort();
     expect(assigned, [7, 8, 9, 10, 11, 12]);
-    expect(layer.styleKeyOf(7), 't.gpkg/chiten/大きい');
+    expect(layer.styleKeyOf(7), key('大きい'));
     expect(layer.styleKeyOf(1), '', reason: '当てはまらないフィーチャは既定スタイル');
   });
 
@@ -109,8 +112,27 @@ void main() {
     expect(layer.styleGroups.length, 2);
     expect(layer.styleKeyByRowId.length, 12, reason: '全フィーチャがどれかに属する');
     // 上にある View が勝つ
-    expect(layer.styleKeyOf(12), 't.gpkg/chiten/大きい');
-    expect(layer.styleKeyOf(1), 't.gpkg/chiten/その他');
+    expect(layer.styleKeyOf(12), key('大きい'));
+    expect(layer.styleKeyOf(1), key('その他'));
+  });
+
+  // 別の dir にある同名の gpkg・レイヤ（dir を複製したとき等）は、地図全体で別のスタイルとして描く。
+  // 以前はキーに dir が入らず1つに畳まれ、片方の色で両方描いていた（2026-09-30）
+  test('別の dir の同名 gpkg・レイヤはスタイルのキーが別になる', () async {
+    await Directory('${tmp.path}/sub').create();
+    final other = GeoPackageFile(const ['sub', 't.gpkg'], absolutePath: '${tmp.path}/sub/t.gpkg');
+    await other.addLayer('chiten', GeometryType.point);
+    final otherLayer = PointLayerNode(other, 'chiten', parent: GeoPackageNode(other));
+    try {
+      for (final l in [layer, otherLayer]) {
+        l.addFeatureToMap(1, turf.Feature<turf.Point>(geometry: turf.Point(coordinates: turf.Position(139.76, 35.68))));
+        l.views.add(ViewNode(name: '既定', parent: l, style: const KMetaLayerStyle(pointSize: 9)));
+        await l.refreshStyleGroups();
+      }
+      expect(layer.styleKeyOf(1), isNot(otherLayer.styleKeyOf(1)));
+    } finally {
+      await other.dispose();
+    }
   });
 
   test('Viewにスタイルが無ければレイヤのスタイルに落ちる', () async {

@@ -234,7 +234,10 @@ abstract class LayerNode extends LayerTreeNode {
       final style = view.style == null ? layerStyle : view.style!.mergeWith(layerStyle);
       if (style == null || style.isEmpty) continue;
 
-      final key = view.viewKey;
+      // 描画で使うキー。viewKey（gpkg名/レイヤ名/View名）には dir が入らないので、別の dir にある
+      // 同名の gpkg・レイヤ（複製した dir 等）と地図全体で1つに畳まれ、片方の色で両方描いていた
+      // （2026-09-30、Pixel 9 で Kitayama-2026 とその下の Kitayama-2026-demo）。gpkg のパスを添える
+      final key = '${geoPackageFile.getAbsolutePath() ?? ''}|${view.viewKey}';
       styleGroups[key] = style;
 
       if (!view.hasFilter) {

@@ -30,9 +30,10 @@
 
 #let font-main = ("BIZ UDPGothic", "Yu Gothic", "Noto Sans CJK JP")
 
-#let page-setup(body) = {
+/// 英語のページは `#show: page-setup.with(lang: "en")`
+#let page-setup(lang: "ja", body) = {
   set page(width: 252pt, height: auto, margin: 0pt, fill: none)
-  set text(font: font-main, size: 10.5pt, fill: ink, lang: "ja")
+  set text(font: font-main, size: 10.5pt, fill: ink, lang: lang)
   set par(leading: 0.65em, justify: false)
   show raw: set text(font: font-main, size: 1.08em, fill: accent)
   body

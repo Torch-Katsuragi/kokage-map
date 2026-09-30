@@ -31,10 +31,23 @@ OUT = BASE / "svg"
 APP_BG = (248, 249, 255)
 
 
+_LONG_FLOAT = re.compile(rb"-?\d+\.\d{3,}")
+
+
+def _shrink(svg: bytes) -> bytes:
+    """座標を小数 2 桁に丸める。Typst は字形の輪郭を 7〜8 桁で書くので、それだけで大きさの半分近くになる。
+    単位は pt で、0.01pt は 3 倍密度の画面でも 0.04 px。見た目は変わらない"""
+    def r(m: re.Match) -> bytes:
+        s = f"{float(m.group(0)):.2f}".rstrip("0").rstrip(".")
+        return (s if s not in ("-0", "") else "0").encode()
+    return _LONG_FLOAT.sub(r, svg)
+
+
 def build(src: pathlib.Path, preview: pathlib.Path | None) -> None:
     pages = typst.compile(str(src), root=str(BASE), format="svg")
     if not isinstance(pages, list):
         pages = [pages]
+    pages = [_shrink(p) for p in pages]
     for old in OUT.glob(f"{src.stem}.*.svg"):
         old.unlink()
     chunks = []

@@ -358,7 +358,7 @@ Everything since v0.6.0 (April 16), in one place.
 
 ## v0.5.5 — 2026/04/11
 
-### 🏷️ Rebranded to "RootMap GIS"
+### 🏷️ First rename: k_maps → RootMap GIS (the current name, Kokage Map, dates from v0.6.1)
 
 - Application name changed from "k_maps" to "RootMap GIS"
 - Unified app name display across all platforms (Android / Windows / Web)

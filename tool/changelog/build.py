@@ -56,6 +56,7 @@ def hero_title(src: pathlib.Path) -> str:
     title = text[m.end():i - 1]
     title = re.sub(r"\\\s*", "", title)          # 改行の `\`
     title = re.sub(r"`([^`]*)`", r"\1", title)   # raw
+    title = re.sub(r"\\(\S)", r"\1", title)      # エスケープ（`k\_maps`）
     return re.sub(r"\s+", " ", title).strip()
 
 

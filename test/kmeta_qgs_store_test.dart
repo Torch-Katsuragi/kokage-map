@@ -50,6 +50,35 @@ void main() {
   String qgsPath() => QgsProjectFile.pathFor(dir);
   String legacyPath() => p.join(dir, kMetaFileName);
 
+  // QGIS 4.2 で保存し直すと `<kokage><meta>` が `<properties name="kokage"><properties name="meta">` になり、
+  // saveDateTime も変わる（2026-09-30 に QGIS 4.2.2 で実測）。それでも設定が読め、書き足せること
+  test('QGIS 4 で保存し直された `.qgs` からも設定を読み、書き足せる', () async {
+    await QgsMetaStore.write(dir, rich);
+    var xml = File(qgsPath()).readAsStringSync();
+    xml = xml
+        .replaceAllMapped(
+          RegExp('<(kokage|schemaVersion|app|savedAt|savedBy|dirName|meta)( type="[^"]*")?>'),
+          (m) => '<properties name="${m[1]}"${m[2] ?? ''}>',
+        )
+        .replaceAll(RegExp('</(kokage|schemaVersion|app|savedAt|savedBy|dirName|meta)>'), '</properties>')
+        .replaceFirst(RegExp('saveDateTime="[^"]*"'), 'saveDateTime="2026-09-30T18:24:55"');
+    expect(xml, isNot(contains('<kokage')));
+    File(qgsPath()).writeAsStringSync(xml);
+    KMetaService.instance.clearCache();
+
+    expect(QgsDocument.parse(xml).lastWrittenByKokage, isFalse);
+    expect(jsonEncode((await QgsMetaStore.read(dir))!.toJson()), jsonEncode(rich.toJson()));
+
+    // QGIS が保存したファイルなので、印は付けず meta だけ書き換える。書き方も QGIS 4 のまま
+    final changed = rich.copyWith(visibility: const KMetaVisibility(images: {'IMG_1.jpg': true}));
+    expect(await QgsMetaStore.write(dir, changed), isTrue);
+    final out = File(qgsPath()).readAsStringSync();
+    expect(out, isNot(contains('<kokage')));
+    expect('name="meta"'.allMatches(out), hasLength(1));
+    expect(QgsDocument.parse(out).lastWrittenByKokage, isFalse);
+    expect((await QgsMetaStore.read(dir))!.visibility.images['IMG_1.jpg'], isTrue);
+  });
+
   test('書いたものがそのまま読める。`.kmeta.json` は作らない', () async {
     expect(await QgsMetaStore.write(dir, rich), isTrue);
     expect(File(qgsPath()).existsSync(), isTrue);

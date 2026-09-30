@@ -123,7 +123,8 @@ abstract final class QgsProjectFile {
       try {
         final text = await fs.readAsString(candidate);
         // 他人の大きな .qgs を毎回 XML として読まない
-        if (!text.contains('<kokage')) continue;
+        // QGIS 4.x で保存されると `<properties name="kokage">` になる
+        if (!text.contains('<kokage') && !text.contains('name="kokage"')) continue;
         final doc = QgsDocument.parse(text);
         if (doc.stamp == null || doc.kokageMeta == null) continue;
         return candidate;

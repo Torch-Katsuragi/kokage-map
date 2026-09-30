@@ -121,24 +121,45 @@ class QgsDocument {
 
   static const _kokageScope = 'kokage';
 
-  /// `<properties><kokage>` を返す。無ければ null
-  XmlElement? get _kokageElement =>
-      root.getElement('properties')?.getElement(_kokageScope);
+  /// `<properties>` の下の `<kokage>` を返す。無ければ null
+  XmlElement? get _kokageElement {
+    final props = root.getElement('properties');
+    return props == null ? null : _property(props, _kokageScope);
+  }
+
+  /// `<properties>` の中の [key] を返す。QGIS の書き方は 2 通りある:
+  /// 3.x までの `<key type="…">` と、4.x の `<properties name="key" type="…">`
+  /// （QGIS 4.2 で保存し直すと、こかげマップが書いた印も後者に書き換わる。2026-09-30 実測）
+  static XmlElement? _property(XmlElement scope, String key) =>
+      scope.getElement(key) ??
+      scope.findElements('properties').where((e) => e.getAttribute('name') == key).firstOrNull;
+
+  /// [_property] と同じだが、無ければ作る。作るときは文書の書き方に合わせる
+  XmlElement _ensureProperty(XmlElement scope, String key) {
+    final existing = _property(scope, key);
+    if (existing != null) return existing;
+    final named = root.getElement('properties')?.getAttribute('name') == 'properties';
+    final created = named
+        ? XmlElement(const XmlName.parts('properties'), [XmlAttribute(const XmlName.parts('name'), key)])
+        : XmlElement(XmlName.parts(key));
+    scope.children.add(created);
+    return created;
+  }
 
   /// 印を読む。無ければ null（QGIS か他人が作ったファイル）
   KokageStamp? get stamp {
     final k = _kokageElement;
     if (k == null) return null;
-    final savedAt = k.getElement('savedAt')?.innerText;
-    final dirName = k.getElement('dirName')?.innerText;
+    final savedAt = _property(k, 'savedAt')?.innerText;
+    final dirName = _property(k, 'dirName')?.innerText;
     if (savedAt == null || dirName == null) return null;
     final parsed = DateTime.tryParse(savedAt);
     if (parsed == null) return null;
     return KokageStamp(
-      schemaVersion: int.tryParse(k.getElement('schemaVersion')?.innerText ?? '') ?? 0,
-      app: k.getElement('app')?.innerText ?? '',
+      schemaVersion: int.tryParse(_property(k, 'schemaVersion')?.innerText ?? '') ?? 0,
+      app: _property(k, 'app')?.innerText ?? '',
       savedAt: parsed,
-      savedBy: k.getElement('savedBy')?.innerText,
+      savedBy: _property(k, 'savedBy')?.innerText,
       dirName: dirName,
     );
   }
@@ -146,7 +167,7 @@ class QgsDocument {
   /// 印を書く。root の `saveDateTime` も同じ値にする（QGIS が保存すると上書きされる）。
   void setStamp(KokageStamp stamp) {
     final props = _ensureChild(root, 'properties');
-    final k = _ensureChild(props, _kokageScope);
+    final k = _ensureProperty(props, _kokageScope);
     _setProperty(k, 'schemaVersion', '${stamp.schemaVersion}', type: 'int');
     _setProperty(k, 'app', stamp.app);
     _setProperty(k, 'savedAt', stamp.savedAtText);
@@ -154,7 +175,7 @@ class QgsDocument {
     if (stamp.savedBy != null) {
       _setProperty(k, 'savedBy', stamp.savedBy!);
     } else {
-      final stale = k.getElement('savedBy');
+      final stale = _property(k, 'savedBy');
       if (stale != null) _detach(stale);
     }
     root.setAttribute('saveDateTime', stamp.savedAtText);
@@ -177,25 +198,27 @@ class QgsDocument {
   /// `.kmeta.json` をやめて `.qgs` に一本化したときの置き場（2026-09-29）。QGIS が表現できる
   /// 部分（可視性・フィルタ・単一シンボル・並び）は別に QGIS の形でも書いてあり、QGIS 側で
   /// 保存されたときは読み戻し（`QgsReadBack`）がそちらを取り込んでここを書き直す。
-  /// QGIS は保存時に知らない `<properties>` をそのまま残す。
+  /// QGIS は保存時に知らない `<properties>` を残す（4.x では書き方だけ変わる。[_property]）。
   String? get kokageMeta {
-    final text = _kokageElement?.getElement('meta')?.innerText;
+    final k = _kokageElement;
+    final text = k == null ? null : _property(k, 'meta')?.innerText;
     return text == null || text.isEmpty ? null : text;
   }
 
   set kokageMeta(String? json) {
     if (json == null) {
-      final stale = _kokageElement?.getElement('meta');
+      final k = _kokageElement;
+      final stale = k == null ? null : _property(k, 'meta');
       if (stale != null) _detach(stale);
       return;
     }
     final props = _ensureChild(root, 'properties');
-    _setProperty(_ensureChild(props, _kokageScope), 'meta', json);
+    _setProperty(_ensureProperty(props, _kokageScope), 'meta', json);
   }
 
-  /// QGIS の `<properties>` 流儀で値を置く（`<key type="QString">value</key>`）
+  /// QGIS の `<properties>` 流儀で値を置く（`<key type="QString">value</key>` か 4.x の書き方）
   void _setProperty(XmlElement scope, String key, String value, {String type = 'QString'}) {
-    final el = _ensureChild(scope, key);
+    final el = _ensureProperty(scope, key);
     el.setAttribute('type', type);
     el.children.clear();
     el.children.add(XmlText(value));

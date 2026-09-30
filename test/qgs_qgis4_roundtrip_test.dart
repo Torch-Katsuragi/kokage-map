@@ -73,4 +73,31 @@ void main() {
     expect(out, contains('<projectCrs>'));
     expect(out, contains('saveUser="mtmtk"'), reason: 'QGIS 4 の属性は残す');
   });
+
+  // QGIS 4.x は保存時に印を `<properties name="kokage"><properties name="savedAt">` の形に書き直す。
+  // 2026-09-30 まで `<kokage><savedAt>` しか読めず、QGIS 4 で保存されたファイルは印も設定（meta）も
+  // 無いものとして扱っていた（写真の表示など QGIS の形で書けない設定が消える）
+  test('QGIS 4 の書き方の印を読める', () {
+    final s = doc.stamp!;
+    expect(s.dirName, 'Kitayama-2026');
+    expect(s.savedAtText, '2026-09-09T19:18:29');
+    expect(s.schemaVersion, 1);
+    expect(doc.lastWrittenByKokage, isFalse, reason: 'QGIS が保存したので saveDateTime が違う');
+  });
+
+  test('QGIS 4 の書き方の文書に書くと、同じ書き方で上書きし要素を増やさない', () {
+    doc.kokageMeta = '{"version":2}';
+    doc.setStamp(doc.stamp!);
+    final again = QgsDocument.parse(doc.toXmlString());
+    expect(again.kokageMeta, '{"version":2}');
+    expect(again.lastWrittenByKokage, isTrue);
+    final out = again.toXmlString();
+    expect(out, isNot(contains('<kokage')));
+    expect('name="kokage"'.allMatches(out), hasLength(1));
+    expect('name="savedAt"'.allMatches(out), hasLength(1));
+    expect(out, contains('<properties name="meta" type="QString">{"version":2}</properties>'));
+
+    again.kokageMeta = null;
+    expect(QgsDocument.parse(again.toXmlString()).kokageMeta, isNull);
+  });
 }

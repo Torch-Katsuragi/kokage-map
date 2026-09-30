@@ -1,68 +1,115 @@
-// 更新履歴（図解）: 次のリリース。tool/changelog/build.py が SVG（明・暗）に書き出す
+// 更新履歴（図解）: 次のリリース。tool/changelog/build.py が切れごとの SVG に書き出す
 #import "lib.typ": *
 #show: page-setup
 
-#release-head("次のリリース", "フォルダの設定が QGIS のプロジェクトファイルになりました")
-
-// ---- 図1 ----
-#fig("設定の置き場所", "アプリだけのファイルから、QGIS で開けるファイルへ")
-#grid(
-  columns: (1fr, auto, 1fr), column-gutter: 6pt, align: horizon,
-  panel(dim: true)[
-    #folder("林小班")
-    #file-row(".kmeta.json", note: "アプリ専用")
-    #file-row("林小班.gpkg")
-    #v(3pt)
-    #chip-off[この端末の中だけ]
-  ],
-  arrow-r(),
-  panel[
-    #folder("林小班")
-    #file-row("林小班.qgs", hot: true, note: "QGIS で開ける")
-    #file-row("林小班.gpkg")
-    #v(3pt)
-    #chip-on[他の端末にも届く]
-  ],
+// ---- 頭: アプリで決めた見た目が、QGIS でもそのまま ----
+#hero(
+  "次のリリース",
+  [QGIS と、\ そのまま行き来できるように],
+  [フォルダの設定が QGIS のプロジェクトファイル（`.qgs`）になりました。アプリで決めた色や表示が、QGIS で開いても同じに見えます。],
+  grid(
+    columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),
+    phone(label: "こかげマップ", mini-map(56pt, 98pt, road: map-red, road-w: 2.4pt)),
+    stack(dir: ttb, spacing: 3pt, file-icon(accent, w: 14pt), text(size: 7pt, weight: "bold", fill: accent)[林小班.qgs], arrow-lr(w: 30pt)),
+    pc(label: "QGIS", w: 110pt, h: 78pt, mini-map(104pt, 63pt, road: map-red, road-w: 2.4pt)),
+  ),
 )
-#fignote[開いたときに自動で移します。元のファイルは `.kmeta.json.migrated` として残ります。Drive で共有しているフォルダでは、`.qgs` の名前を Drive のフォルダ名にそろえます。]
 
-// ---- 図2 ----
-#fig("QGIS で開いたとき", "どのフォルダを開いても、下の階層まで直せます")
-#grid(
-  columns: (1fr, 1fr), column-gutter: 8pt,
-  panel(dim: true)[
-    #label-small[これまで]
-    #tree-node(0, "区域A.qgs", open: true)
-    #tree-node(1, "路網.gpkg", file: true, note: "直せる")
-    #tree-node(1, "小班", locked: true, note: "読み取り専用")
-  ],
-  panel[
-    #label-small[これから]
-    #tree-node(0, "区域A.qgs", open: true)
-    #tree-node(1, "路網.gpkg", file: true, note: "直せる")
-    #tree-node(1, "小班", note: "直せる", hot: true)
-  ],
+// ---- 設定の置き場所 ----
+#scene(
+  [設定は、フォルダの `.qgs` に],
+  [表示／非表示・色・View・並び順が、フォルダに置かれる 1 つのファイルに入ります。Drive で共有すれば、ほかの端末にも届きます。],
+  grid(
+    columns: (1fr, auto, 1fr), column-gutter: 6pt, align: horizon,
+    block(fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 7pt, width: 100%, align(left, {
+      text(size: 7pt, fill: sub, weight: "bold")[これまで]
+      v(4pt)
+      folder-icon(sub.lighten(30%)); h(3pt); text(size: 8.5pt, fill: sub)[林小班]
+      v(3pt)
+      h(6pt); file-icon(sub.lighten(20%)); h(3pt); text(size: 8pt, fill: sub)[.kmeta.json]
+      v(5pt)
+      badge(ok: false)[この端末だけ]
+    })),
+    arrow-r(w: 16pt),
+    block(fill: white, stroke: 1.2pt + accent, radius: 6pt, inset: 7pt, width: 100%, align(left, {
+      text(size: 7pt, fill: accent, weight: "bold")[これから]
+      v(4pt)
+      folder-icon(warm); h(3pt); text(size: 8.5pt, weight: "bold")[林小班]
+      v(3pt)
+      h(6pt); file-icon(accent); h(3pt); text(size: 8pt, fill: accent, weight: "bold")[林小班.qgs]
+      v(5pt)
+      badge[QGIS で開ける]; h(2pt); badge[共有できる]
+    })),
+  ),
+  note: [開いたときに自動で移し、元のファイルは `.kmeta.json.migrated` として残します。],
 )
-#fignote[QGIS で変えた色や表示は、そのレイヤがあるフォルダの設定に戻ります。QGIS 4 で保存し直したファイルからも、写真の表示などアプリだけの設定を読めるようになりました。]
 
-// ---- 図3 ----
-#fig("2 台で設定を変えたとき", "Drive 同期で両方の変更がそろいます")
-#merge-diagram(
-  a: ("端末A", "路網の色を赤に"),
-  b: ("端末B", "小班を非表示に"),
-  result: ("同期のあと", "路網は赤・小班は非表示（両方）"),
+// ---- QGIS で下のフォルダまで ----
+#scene(
+  [QGIS で、下のフォルダまで直せる],
+  [どのフォルダの `.qgs` を開いても、サブフォルダのレイヤまで編集できます。QGIS で変えた色は、アプリにも戻ります。],
+  stack(dir: ttb, spacing: 10pt,
+    grid(
+      columns: (auto, auto, auto), column-gutter: 5pt, align: horizon,
+      stack(dir: ttb, spacing: 4pt,
+        caption[これまで],
+        layer-panel(w: 84pt, (
+          (0, "layer", "路網", "ok"),
+          (0, "dir", "区域B", "lock"),
+          (1, "layer", "小班", "lock"),
+        )),
+        caption[子フォルダは読み取り専用],
+      ),
+      arrow-r(w: 14pt),
+      stack(dir: ttb, spacing: 4pt,
+        caption(fill: accent)[これから],
+        layer-panel(w: 84pt, (
+          (0, "layer", "路網", "ok"),
+          (0, "dir", "区域B", "ok"),
+          (1, "layer", "小班", "hi", map-green),
+        )),
+        caption(fill: accent)[小班の色を変える],
+      ),
+    ),
+    grid(
+      columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
+      pc(w: 84pt, h: 58pt, label: "QGIS で変えて保存", mini-map(78pt, 43pt, comp: map-green)),
+      arrow-r(w: 20pt),
+      phone(w: 44pt, h: 78pt, label: "アプリにも", mini-map(38pt, 64pt, comp: map-green)),
+    ),
+  ),
 )
-#fignote[同じ項目を両方で変えたときは、その端末の値を残し、通知から「クラウドの値に戻す」を選べます。「読み取り専用」などのリンク情報は端末ごとのままです。]
 
-// ---- 直したこと ----
-#section[直したこと]
+// ---- 2 台で同時に ----
+#scene(
+  [2 台で同時に変えても、両方残る],
+  [別々の端末で変えた設定は、Drive 同期で 1 つにまとまります。],
+  stack(dir: ttb, spacing: 5pt,
+    grid(
+      columns: (96pt, 96pt), align: center,
+      stack(dir: ttb, spacing: 4pt, bubble[路網を赤に], phone(w: 44pt, h: 78pt, label: "端末A", mini-map(38pt, 64pt, road: map-red, road-w: 2.4pt))),
+      stack(dir: ttb, spacing: 4pt, bubble[小班を隠す], phone(w: 44pt, h: 78pt, label: "端末B", mini-map(38pt, 64pt, comps: false))),
+    ),
+    arrows-in(192pt),
+    cloud(w: 64pt, label: "Drive"),
+    arrow-d(),
+    stack(dir: ttb, spacing: 4pt,
+      phone(w: 44pt, h: 78pt, mini-map(38pt, 64pt, road: map-red, road-w: 2.4pt, comps: false)),
+      badge[どちらの端末もこの状態に],
+    ),
+  ),
+  note: [同じ項目を両方で変えたときは、その端末の値を残します。通知の「クラウドの値に戻す」で相手の値にもできます。],
+)
+
+// ---- 細かな修正 ----
 #fixes(
-  [設定を続けて変えたとき、先の変更が消えることがあった],
-  [サブフォルダの中の GeoPackage を改名すると失敗していた],
-  [Drive 連携フォルダでフォルダや写真の名前を変えると、自動同期が元の名前に戻していた],
-  [QGIS で変えた色や太さが、View を作っていないレイヤに届かなかった],
-  [QGIS でグループごと非表示にすると、アプリではレイヤが非表示になっていた],
-  [別のフォルダに同じ名前の GeoPackage があると、地図で片方の色で両方描いていた],
-  [QGIS で保存した `.qgs` が Drive で届いても、開き直すまで取り込まなかった],
+  "ほかにも直しました",
+  [設定を続けて変えると、先の変更が消えることがあった],
+  [サブフォルダの GeoPackage の改名が失敗していた],
+  [Drive 連携フォルダで名前を変えると、自動同期が元に戻していた],
+  [QGIS で変えた色が、View の無いレイヤに届かなかった],
+  [QGIS でグループごと隠すと、アプリではレイヤが隠れていた],
+  [同じ名前の GeoPackage が別のフォルダにあると、色が混ざっていた],
+  [QGIS で保存した `.qgs` が、同期で届いてもすぐ反映されなかった],
+  [QGIS 4 で保存し直すと、写真の表示などアプリだけの設定が読めなかった],
 )
-#fignote[QGIS で分類やルールで描き分けたレイヤは、スタイル画面に「QGIS で設定されたスタイル」と出し、アプリでは代表の色で描きます。]

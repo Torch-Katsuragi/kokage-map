@@ -237,8 +237,11 @@ class QgsDocument {
       .where((e) => e.getElement('id')?.innerText == id)
       .firstOrNull;
 
-  /// 埋め込み（別プロジェクト由来）の maplayer か。子 dir の `.qgs` が正典なので触らない
+  /// 埋め込み（別プロジェクト由来）の maplayer か。[apply] は外す（子 dir は写しで入る）
   static bool isEmbedded(XmlElement e) => e.getAttribute('embedded') == '1';
+
+  /// レイヤツリーのグループを埋め込みにする customproperties のキー
+  static const _embeddingKeys = {'embedded', 'embedded_project', 'embedded-invisible-layers'};
 
   // =============================================
   // 反映
@@ -250,7 +253,7 @@ class QgsDocument {
   ///   属性と未知の子（`customproperties` 等）を引き継ぐ
   /// - `<maplayer>` は id で突き合わせ、あれば参照・フィルタ・単一シンボルの値だけ直す。
   ///   無ければ [QgsWriter] の形で足す。[project] に無いものは外して報告する
-  ///   （埋め込みのものは残す）
+  ///   （埋め込みスタブは報告せずに外す）
   /// - `<layerorder>` は [project] の順で書き直す
   QgsApplyReport apply(QgsProject project) {
     final report = QgsApplyReport();
@@ -306,27 +309,19 @@ class QgsDocument {
     final result = <XmlElement>[];
     for (final node in nodes) {
       switch (node) {
-        case QgsEmbeddedGroup(:final name, :final projectPath, :final visible, :final expanded):
-          final old = oldGroups[name];
-          final group = old?.copy() ?? _writer.embeddedGroupElement(node);
-          group.setAttribute('name', name);
-          group.setAttribute('checked', QgsWriter.checkedValue(visible));
-          group.setAttribute('expanded', expanded ? '1' : '0');
-          group.setAttribute('embedded', '1');
-          group.setAttribute('embedded_project', projectPath);
-          // 子は書かない（QGIS が子プロジェクトから再構成する）
-          group.children.removeWhere(
-            (c) =>
-                c is XmlElement &&
-                (c.name.local == 'layer-tree-group' || c.name.local == 'layer-tree-layer'),
-          );
-          result.add(group);
         case QgsGroup(:final name, :final children, :final visible, :final expanded):
           final old = oldGroups[name];
           final group = old?.copy() ?? _writer.treeGroupElement(name, visible: visible);
-          // 以前は埋め込みだったが、いまは普通のグループ（子 dir の .kmeta.json が消えた等）
+          // 以前は埋め込みだったが、いまは普通のグループ（2026-09-30 に埋め込みをやめて写しにした）。
+          // QGIS 4 は同じ印を customproperties にも書く（`<Option name="embedded" …/>`）
           group.removeAttribute('embedded');
           group.removeAttribute('embedded_project');
+          for (final props in group.findElements('customproperties')) {
+            props.descendantElements
+                .where((e) => _embeddingKeys.contains(e.getAttribute('name') ?? e.getAttribute('key')))
+                .toList()
+                .forEach(_detach);
+          }
           group.setAttribute('name', name);
           group.setAttribute('checked', QgsWriter.checkedValue(visible));
           group.setAttribute('expanded', expanded ? '1' : '0');
@@ -374,23 +369,10 @@ class QgsDocument {
     };
     final container = _projectLayers;
 
-    // 埋め込みスタブ: project の埋め込みグループに合わせて作り直す
-    final wantedStubs = <String, String>{
-      for (final g in project.embeddedGroups)
-        for (final id in g.layerIds) id: g.projectPath,
-    };
+    // 埋め込みスタブは外す。子 dir も写しとして平らに入る（2026-09-30 に埋め込みをやめた。
+    // それ以前に書いた `.qgs` と、手で足された埋め込み）
     for (final e in container.findElements('maplayer').toList()) {
-      if (!isEmbedded(e)) continue;
-      final id = e.getAttribute('id');
-      final path = id == null ? null : wantedStubs.remove(id);
-      if (path == null) {
-        _detach(e); // dir 構造に無い埋め込み（不変条件2）
-      } else {
-        e.setAttribute('project', path);
-      }
-    }
-    for (final entry in wantedStubs.entries) {
-      container.children.add(_writer.embeddedStubElement(entry.value, entry.key));
+      if (isEmbedded(e)) _detach(e);
     }
 
     // 既存: 直す or 外す
@@ -594,13 +576,6 @@ class QgsDocument {
       order.children.add(
         XmlElement(const XmlName.parts('layer'), [XmlAttribute(const XmlName.parts('id'), id)]),
       );
-    }
-    for (final group in project.embeddedGroups) {
-      for (final id in group.layerIds) {
-        order.children.add(
-          XmlElement(const XmlName.parts('layer'), [XmlAttribute(const XmlName.parts('id'), id)]),
-        );
-      }
     }
   }
 

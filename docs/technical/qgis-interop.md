@@ -24,9 +24,10 @@ tags: [technical, geopackage, qgis, interop]
   root の `saveDateTime` が食い違えば（＝QGIS が後から保存した）寛容インポータで View・スタイル・可視性を
   取り込み、続く自動更新で正規化＋印つきに書き戻す。ログは `[QgsReadBack]`。
   Drive 同期でツリーを読み直したあとにも走る（`DriveSyncOperations.refreshAfterSync`、2026-09-29）
-- **子 dir**: 自分の設定（`.qgs`）を持つ子 dir は `<子dir名>.qgs` を持ち、親の `.qgs` には
-  `layer-tree-group embedded="1" embedded_project="./子/子.qgs"` と `<maplayer embedded="1">` スタブで載る
-  （`QgsProjectBuilder.writeTo` が子から先に書く）。QGIS 側では埋め込みグループは読み取り専用
+- **子 dir**: 自分の設定（`.qgs`）を持つ子 dir は `<子dir名>.qgs` を持つ。どの `.qgs` にも子孫の dir の
+  レイヤが平らに写される（2026-09-30 に埋め込みをやめた。どの dir を QGIS で開いても下が全部直せる）。
+  持ち主はデータソースの置き場所の dir。読み戻しは QGIS で保存された `.qgs` を古い順に取り込み、
+  持ち主のほうが新しい（印の savedAt が後）写しは飛ばす
 
 ## いつ走るか
 

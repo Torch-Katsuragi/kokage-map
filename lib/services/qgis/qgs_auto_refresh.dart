@@ -18,7 +18,7 @@
 // フォルダ設定そのもの（`kokage/meta`）は [QgsMetaStore] が保存のたびに書く。こちらは
 // その設定とレイヤツリーから、QGIS が読む部分（レイヤ・可視性・フィルタ・スタイル・並び）を
 // DOM 保持型で書き直し、QGIS 側から見える状態を常に最新にする。
-// 自分の設定を持つ子 dir は、それぞれの `.qgs` を書いて親に埋め込む（[QgsProjectBuilder.writeTo]）。
+// 自分の設定を持つ子孫の dir の `.qgs` も書き直す。どれにも子孫のレイヤの写しが入る（[QgsProjectBuilder.writeTo]）。
 //
 // > [!IMPORTANT] Drive push の前に [flushNow] を呼ぶこと
 // > push はディスクのファイルを読んで上げる。デバウンス待ちのまま push すると

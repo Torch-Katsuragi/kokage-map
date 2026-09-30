@@ -60,8 +60,17 @@ class QgsReadBack {
     final rootPath = root.getAbsoluteFilePath();
     if (rootPath != null) QgsAutoRefresh.instance.schedule(rootPath);
 
+    // どの `.qgs` にも子孫の写しが入るので、同じ設定が複数のファイルで QGIS に直されうる。
+    // 古い保存から順に取り込み、後のものが勝つようにする
+    final saved = <_QgisSaved>[];
+    await _collect(root, saved, isRoot: true);
+    saved.sort((a, b) => a.savedAt.compareTo(b.savedAt));
+    final ownerWrittenAt = <String, DateTime?>{};
     final results = <QgsReadBackResult>[];
-    await _runTree(root, results);
+    for (final s in saved) {
+      final one = await _import(s, ownerWrittenAt);
+      if (one != null) results.add(one);
+    }
     if (results.isEmpty) return null;
     return QgsReadBackResult(
       fileName: results.map((r) => r.fileName).join(', '),
@@ -70,27 +79,28 @@ class QgsReadBack {
     );
   }
 
-  /// root と、独立した `.qgs` を持つ子 dir を順に見る
-  Future<void> _runTree(FolderNode folder, List<QgsReadBackResult> out) async {
-    final one = await _runOne(folder);
+  /// root と、独立した `.qgs` を持つ子 dir から、QGIS 側で保存されたものを集める
+  Future<void> _collect(FolderNode folder, List<_QgisSaved> out, {bool isRoot = false}) async {
+    final one = await _qgisSaved(folder, isRoot: isRoot);
     if (one != null) out.add(one);
     for (final child in folder.children.whereType<FolderNode>()) {
-      await _runTree(child, out);
+      await _collect(child, out);
     }
   }
 
   /// `<dir名>.qgs`（旧名・改名前の名前からの引き継ぎ込み）。無ければ null。
-  /// 設定を持たない dir（キャッシュで分かる）は列挙しない
-  Future<String?> _findProjectFile(String dirPath) async {
-    if (!await KMetaService.instance.hasMetaFile(dirPath)) return null;
+  /// 設定を持たない dir（キャッシュで分かる）は列挙しない。開いた根は設定が無くても
+  /// `.qgs` を書いている（自動更新が必ず書く）ので見る
+  Future<String?> _findProjectFile(String dirPath, {required bool isRoot}) async {
+    if (!isRoot && !await KMetaService.instance.hasMetaFile(dirPath)) return null;
     return QgsProjectFile.find(dirPath);
   }
 
-  Future<QgsReadBackResult?> _runOne(FolderNode root) async {
+  Future<_QgisSaved?> _qgisSaved(FolderNode root, {required bool isRoot}) async {
     final rootPath = root.getAbsoluteFilePath();
     if (rootPath == null) return null;
 
-    final path = await _findProjectFile(rootPath);
+    final path = await _findProjectFile(rootPath, isRoot: isRoot);
     if (path == null) return null;
 
     final String xml;
@@ -117,18 +127,71 @@ class QgsReadBack {
     AppLogger.debug(
       '[QgsReadBack] ${p.basename(path)} は QGIS 側で保存されている'
       '（saveDateTime=${doc.root.getAttribute('saveDateTime')} '
-      'savedAt=${doc.stamp?.savedAtText}）。取り込む',
+      'savedAt=${doc.stamp?.savedAtText}）',
     );
-    final result = await const QgsImporter().import(path, root);
+    // 保存時刻が読めなければ最古扱い（他の保存に負ける）
+    final savedAt = DateTime.tryParse(doc.root.getAttribute('saveDateTime') ?? '') ?? DateTime(0);
+    return _QgisSaved(folder: root, folderPath: rootPath, path: path, savedAt: savedAt);
+  }
+
+  Future<QgsReadBackResult?> _import(_QgisSaved s, Map<String, DateTime?> ownerWrittenAt) async {
+    // 持ち主の dir にこかげマップが最後に書いた時刻（印の savedAt）。この保存がそれより古ければ、
+    // その持ち主の分は古い写しなので取り込まない（持ち主が別の端末で直されて同期で届いた等）
+    final owners = <FolderNode, DateTime?>{};
+    for (final f in _foldersOf(s.folder)) {
+      final fp = f.getAbsoluteFilePath();
+      if (fp == null) continue;
+      owners[f] = ownerWrittenAt.containsKey(fp) ? ownerWrittenAt[fp] : (ownerWrittenAt[fp] = await _writtenAt(fp));
+    }
+    final result = await const QgsImporter().import(
+      s.path,
+      s.folder,
+      acceptOwner: (owner) {
+        final written = owners[owner];
+        return written == null || s.savedAt.isAfter(written);
+      },
+    );
 
     // 取り込んだので印を付け直し（自動更新が書けるようになる）、取り込んだ結果（と正規化）を書き戻す
-    await QgsMetaStore.claim(path);
-    QgsAutoRefresh.instance.schedule(rootPath);
+    await QgsMetaStore.claim(s.path);
+    QgsAutoRefresh.instance.schedule(s.folderPath);
 
     return QgsReadBackResult(
-      fileName: p.basename(path),
+      fileName: p.basename(s.path),
       importedViewCount: result.importedViewCount,
       discarded: result.discarded,
     );
   }
+
+  /// [folder] 自身と子孫の dir
+  static Iterable<FolderNode> _foldersOf(FolderNode folder) sync* {
+    yield folder;
+    for (final child in folder.children.whereType<FolderNode>()) {
+      yield* _foldersOf(child);
+    }
+  }
+
+  /// [dirPath] の `.qgs` にこかげマップが最後に書いた時刻。`.qgs` や印が無ければ null
+  static Future<DateTime?> _writtenAt(String dirPath) async {
+    if (!await KMetaService.instance.hasMetaFile(dirPath)) return null;
+    final path = await QgsProjectFile.find(dirPath);
+    if (path == null) return null;
+    try {
+      return QgsDocument.parse(await fs.readAsString(path)).stamp?.savedAt;
+    } on Object {
+      return null;
+    }
+  }
+}
+
+/// QGIS 側で保存された（まだ読み戻していない）`.qgs`
+class _QgisSaved {
+  const _QgisSaved({required this.folder, required this.folderPath, required this.path, required this.savedAt});
+
+  final FolderNode folder;
+  final String folderPath;
+  final String path;
+
+  /// QGIS が保存した時刻（root の `saveDateTime`）
+  final DateTime savedAt;
 }

@@ -13,6 +13,8 @@
 - In Drive-linked folders, renaming a folder or photo was undone by auto-sync. Fixed; the name changes on Drive too
 - Colors and widths changed in QGIS sometimes did not come back to the app (layers without their own Views). Fixed
 - Hiding a GeoPackage or folder group in QGIS now hides that group in the app too (it used to hide the layer instead, which changed the QGIS tree after a round trip)
+- Opening any folder's `.qgs` in QGIS now lets you edit the layers of its subfolders too (they used to be read-only). Colors and visibility changed in QGIS go back to the settings of the folder that holds the layer
+- App-only settings (such as photo visibility) are no longer lost when a `.qgs` is re-saved in QGIS 4
 - A `.qgs` saved in QGIS that arrives through Drive sync is read back right away (before, it waited until the project was reopened, and saving in the app first discarded the QGIS changes)
 - Layers styled in QGIS by category or rule now show "Style set in QGIS" on the style screen, and their colors and widths are not editable in the app (changes would not reach QGIS). The app draws them in a representative color
 

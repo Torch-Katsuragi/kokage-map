@@ -126,7 +126,16 @@ class QgsImporter {
   ///
   /// ⚠ 取り込み対象になったレイヤの View は**丸ごと置き換える**。
   /// 何度読んでも増えないようにするため。触らなかったレイヤはそのまま。
-  Future<QgsImportResult> import(String qgsPath, FolderNode root) async {
+  ///
+  /// [acceptOwner] は、設定の持ち主の dir（レイヤ・gpkg なら置き場所の dir、dir の可視性なら親）
+  /// ごとに取り込むかを決める。祖先の `.qgs` にある写しが、持ち主の新しい設定より古いときに
+  /// 巻き戻さないため（[QgsReadBack]）。
+  Future<QgsImportResult> import(
+    String qgsPath,
+    FolderNode root, {
+    bool Function(FolderNode owner)? acceptOwner,
+  }) async {
+    bool accepts(FolderNode? owner) => acceptOwner == null || (owner != null && acceptOwner(owner));
     final discarded = <String>[];
     final viewsByLayer = <String, List<String>>{};
 
@@ -196,7 +205,7 @@ class QgsImporter {
         doc.rootElement.findElements('projectlayers').firstOrNull;
     for (final maplayer in projectLayers?.findElements('maplayer') ??
         const <XmlElement>[]) {
-      // 埋め込みスタブ（子 dir の `.qgs` の管轄）。ここでは扱わない
+      // 埋め込みスタブ（別プロジェクトの管轄。2026-09-30 以前にこかげマップが書いたものか、手で足したもの）
       if (maplayer.getAttribute('embedded') == '1') continue;
 
       final name = _text(maplayer, 'layername') ?? '(名前なし)';
@@ -243,6 +252,8 @@ class QgsImporter {
         discarded.add('$name（${gpkg.name} に ${source.layerName} がありません）');
         continue;
       }
+      // 持ち主のほうが新しい（この写しは古い）。黙って飛ばす
+      if (!accepts(layer.folderNode)) continue;
 
       final id = _text(maplayer, 'id');
       final chain = id == null ? null : ancestorsById[id];
@@ -305,6 +316,8 @@ class QgsImporter {
     // gpkg と dir のグループの可視性（変わったものだけ書く）
     for (final e in containerChecked.entries) {
       if (e.key.visible == e.value) continue;
+      final owner = e.key.parent;
+      if (!accepts(owner is FolderNode ? owner : null)) continue;
       e.key.visible = e.value;
       await e.key.persistVisibility();
     }

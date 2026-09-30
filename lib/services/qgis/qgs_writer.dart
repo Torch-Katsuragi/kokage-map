@@ -186,17 +186,6 @@ class QgsWriter {
             }
           },
         );
-      case QgsEmbeddedGroup(:final name, :final projectPath, :final visible, :final expanded):
-        builder.element(
-          'layer-tree-group',
-          attributes: {
-            'name': name,
-            'expanded': expanded ? '1' : '0',
-            'checked': _checked(visible),
-            'embedded': '1',
-            'embedded_project': projectPath,
-          },
-        );
       case QgsLayer():
         builder.element(
           'layer-tree-layer',
@@ -249,11 +238,6 @@ class QgsWriter {
         for (final raster in project.rasterLayers) {
           _writeRasterMapLayer(builder, raster);
         }
-        for (final group in project.embeddedGroups) {
-          for (final id in group.layerIds) {
-            _writeEmbeddedStub(builder, group.projectPath, id);
-          }
-        }
       },
     );
   }
@@ -281,22 +265,6 @@ class QgsWriter {
       },
     );
   }
-
-  /// 埋め込みレイヤのスタブ。QGIS は読込時に子プロジェクトから本体を取る
-  void _writeEmbeddedStub(XmlBuilder builder, String projectPath, String id) {
-    builder.element(
-      'maplayer',
-      attributes: {'embedded': '1', 'project': projectPath, 'id': id},
-    );
-  }
-
-  /// 埋め込みスタブの断片
-  XmlElement embeddedStubElement(String projectPath, String id) =>
-      _fragment((b) => _writeEmbeddedStub(b, projectPath, id));
-
-  /// 埋め込みグループの断片
-  XmlElement embeddedGroupElement(QgsEmbeddedGroup group) =>
-      _fragment((b) => _writeTreeNode(b, group));
 
   void _writeMapLayer(XmlBuilder builder, QgsLayer layer) {
     builder.element(
@@ -341,11 +309,6 @@ class QgsWriter {
       nest: () {
         for (final id in project.orderedLayerIds) {
           builder.element('layer', attributes: {'id': id});
-        }
-        for (final group in project.embeddedGroups) {
-          for (final id in group.layerIds) {
-            builder.element('layer', attributes: {'id': id});
-          }
         }
       },
     );

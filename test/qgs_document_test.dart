@@ -205,63 +205,48 @@ void main() {
       expect(group.getAttribute('expanded'), '0');
     });
 
-    test('子 dir の埋め込み: グループとスタブを書き、無くなった埋め込みは外す', () {
+    // 2026-09-30 に子 dir の埋め込みをやめ、写しを平らに入れるようにした。それ以前の `.qgs`
+    // （QGIS 4 は埋め込みの印を customproperties にも書く）を読んでも、普通のグループに戻ること
+    test('以前の埋め込みグループは普通のグループに戻り、スタブは外れる', () {
       final doc = QgsDocument.parse(fixture());
-      // 手で足された（dir 構造に無い）埋め込みは外される
-      final tree = doc.root.getElement('layer-tree-group')!;
-      tree.children.add(
-        XmlElement(const XmlName.parts('layer-tree-group'), [
-          XmlAttribute(const XmlName.parts('name'), 'よそ'),
-          XmlAttribute(const XmlName.parts('embedded'), '1'),
-          XmlAttribute(const XmlName.parts('embedded_project'), '../よそ/よそ.qgs'),
-        ]),
-      );
+      XmlElement option(String name, [String? value]) => XmlElement(const XmlName.parts('Option'), [
+            XmlAttribute(const XmlName.parts('name'), name),
+            if (value != null) XmlAttribute(const XmlName.parts('value'), value),
+          ]);
+      doc.root.getElement('layer-tree-group')!.children.add(
+            XmlElement(const XmlName.parts('layer-tree-group'), [
+              XmlAttribute(const XmlName.parts('name'), '写真'),
+              XmlAttribute(const XmlName.parts('embedded'), '1'),
+              XmlAttribute(const XmlName.parts('embedded_project'), './写真/写真.qgs'),
+            ], [
+              XmlElement(const XmlName.parts('customproperties'), [], [
+                XmlElement(const XmlName.parts('Option'), [XmlAttribute(const XmlName.parts('type'), 'Map')], [
+                  option('embedded', '1'),
+                  option('embedded-invisible-layers'),
+                  option('embedded_project', './写真/写真.qgs'),
+                  option('keep', 'x'),
+                ]),
+              ]),
+            ]),
+          );
       doc.root.getElement('projectlayers')!.children.add(
-        XmlElement(const XmlName.parts('maplayer'), [
-          XmlAttribute(const XmlName.parts('embedded'), '1'),
-          XmlAttribute(const XmlName.parts('project'), '../よそ/よそ.qgs'),
-          XmlAttribute(const XmlName.parts('id'), 'yoso_1'),
-        ]),
-      );
+            XmlElement(const XmlName.parts('maplayer'), [
+              XmlAttribute(const XmlName.parts('embedded'), '1'),
+              XmlAttribute(const XmlName.parts('project'), './写真/写真.qgs'),
+              XmlAttribute(const XmlName.parts('id'), 'photo_a'),
+            ]),
+          );
 
-      final project = QgsProject(
-        name: 'テスト',
-        root: [
-          ...projectFromFixture().root,
-          const QgsEmbeddedGroup(
-            name: '写真',
-            projectPath: './写真/写真.qgs',
-            layerIds: ['photo_a', 'photo_b'],
-            expanded: false,
-          ),
-        ],
-      );
-      final report = doc.apply(project);
-      expect(report.removedLayers, ['root外']);
-
-      final groups = doc.root.getElement('layer-tree-group')!.findElements('layer-tree-group').toList();
-      expect(groups.map((g) => g.getAttribute('name')), ['林小班', '写真']);
-      final embedded = groups.last;
-      expect(embedded.getAttribute('embedded'), '1');
-      expect(embedded.getAttribute('embedded_project'), './写真/写真.qgs');
-      expect(embedded.getAttribute('expanded'), '0');
-      expect(embedded.findElements('layer-tree-layer'), isEmpty);
-
-      final stubs = doc.mapLayers.where(QgsDocument.isEmbedded).toList();
-      expect(stubs.map((s) => s.getAttribute('id')), ['photo_a', 'photo_b']);
-      expect(stubs.first.getAttribute('project'), './写真/写真.qgs');
-      final order = doc.root.getElement('layerorder')!.findElements('layer').map((l) => l.getAttribute('id'));
-      expect(order, [idSugi, idAll, 'photo_a', 'photo_b']);
-
-      // 2回目: 埋め込みが無くなれば普通のグループに戻り、スタブも消える
-      final project2 = QgsProject(
+      doc.apply(QgsProject(
         name: 'テスト',
         root: [...projectFromFixture().root, const QgsGroup(name: '写真', children: [])],
-      );
-      doc.apply(project2);
-      final group2 = doc.root.getElement('layer-tree-group')!
+      ));
+      final group = doc.root.getElement('layer-tree-group')!
           .findElements('layer-tree-group').firstWhere((g) => g.getAttribute('name') == '写真');
-      expect(group2.getAttribute('embedded'), isNull);
+      expect(group.getAttribute('embedded'), isNull);
+      expect(group.getAttribute('embedded_project'), isNull);
+      final names = group.findAllElements('Option').map((o) => o.getAttribute('name')).whereType<String>();
+      expect(names, ['keep'], reason: '埋め込みの印だけ外し、他の customproperties は残す');
       expect(doc.mapLayers.where(QgsDocument.isEmbedded), isEmpty);
     });
 

@@ -76,40 +76,39 @@ class QgsWriteResult {
 class QgsProjectBuilder {
   const QgsProjectBuilder();
 
-  /// [root] 以下を `.qgs` の内容に組み立てる。
+  /// [root] 以下を `.qgs` の内容に組み立てる。子孫の dir のレイヤも平らに全部入れる。
   ///
   /// [root] 自身はグループにしない（プロジェクトのルートそのものなので）。
   ///
-  /// [embedded] は「この dir の直下の子 dir → 埋め込みグループ」。
-  /// [writeTo] が子 dir の `.qgs` を先に書いてから渡す。
-  Future<QgsProject> build(
-    FolderNode root, {
-    Map<String, QgsEmbeddedGroup> embedded = const {},
-  }) async {
+  /// > [!IMPORTANT] どの dir の `.qgs` にも子孫のレイヤを写す（2026-09-30）
+  /// > どの dir も、あるときは根として開かれ、別のときは子になる。QGIS で開いた dir の下が
+  /// > 全部直せるように、埋め込み（QGIS では読み取り専用）をやめて写しを持つ。
+  /// > 持ち主はデータソースの置き場所で決まり、正典は持ち主の dir の設定（`kokage/meta`）。
+  /// > 写しは毎回そこから作り直すだけなので食い違わない。QGIS で直された写しは
+  /// > [QgsReadBack] が持ち主へ振り分ける。
+  Future<QgsProject> build(FolderNode root, {Map<LayerNode, QgsCrs>? crsCache}) async {
     final rootPath = root.getAbsoluteFilePath();
     final skipped = <String>[];
+    final crs = crsCache ?? <LayerNode, QgsCrs>{};
 
     final children = <QgsTreeNode>[];
     for (final child in root.children) {
-      final node = await _convert(child, rootPath, skipped, embedded);
+      final node = await _convert(child, rootPath, skipped, crs);
       if (node != null) children.add(node);
     }
 
     return QgsProject(name: await _projectName(root, rootPath), root: children, skipped: skipped);
   }
 
-  /// 自分の `.qgs` を持ちうる子 dir。
+  /// [root] の下の dir 全部（深さ優先）。
   ///
   /// sys 自体は dir でないので飛ばし、その下（global）を見る。global がルート直下に
   /// あった頃と同じく、global や global 配下の連携dirに自分の設定（`.qgs`）があれば
-  /// そこに `.qgs` を書く（相対パスが取れないので親には埋め込まれない）。
-  static Iterable<FolderNode> _ownQgsCandidates(FolderNode root) sync* {
+  /// そこに `.qgs` を書く（sys は根の `.qgs` には載らない）。
+  static Iterable<FolderNode> _foldersBelow(FolderNode root) sync* {
     for (final child in root.children.whereType<FolderNode>()) {
-      if (child is SysNode) {
-        yield* child.children.whereType<FolderNode>();
-      } else {
-        yield child;
-      }
+      if (child is! SysNode) yield child;
+      yield* _foldersBelow(child);
     }
   }
 
@@ -123,7 +122,9 @@ class QgsProjectBuilder {
     return QgsProjectFile.projectNameFor(rootPath, await KMetaService.instance.getRawMeta(rootPath));
   }
 
-  /// [root] のフォルダに `<dir名>.qgs` を書く。
+  /// [root] のフォルダに `<dir名>.qgs` を書く。[project] を渡さなければ、自分の設定（`.qgs`）を
+  /// 持つ子孫の dir の `.qgs` も書き直す（どれにも子孫の写しが入るので、[root] の下が変わると
+  /// 途中の dir の `.qgs` も変わる）。
   ///
   /// [project] を渡さなければその場で組み立てる。
   /// 呼び出し側が除外リストを見たい場合は、先に [build] して渡すこと。
@@ -141,29 +142,21 @@ class QgsProjectBuilder {
       return null;
     }
 
-    // 自分の設定（`.qgs`）を持つ子 dir は独立した `<dir名>.qgs` を持ち、親には埋め込みで載せる
-    // （dir 分散のまま「root を開けば全部見える」を1種類のファイルで両立する）
-    final embedded = <String, QgsEmbeddedGroup>{};
     if (project == null) {
-      for (final child in _ownQgsCandidates(root)) {
-        final childPath = child.getAbsoluteFilePath();
-        if (childPath == null) continue;
-        if (!await KMetaService.instance.hasMetaFile(childPath)) continue;
-        final childResult = await writeTo(child);
-        if (childResult == null) continue;
-        final rel = _relativeTo(rootPath, childResult.path);
-        if (rel == null) continue;
-        embedded[p.normalize(childPath)] = QgsEmbeddedGroup(
-          name: child.name,
-          projectPath: rel,
-          layerIds: [for (final l in childResult.project.layers) l.id],
-          visible: child.visible,
-          expanded: child.expanded,
-        );
+      // CRS は gpkg を開いて引くので、祖先ごとに引き直さない
+      final crsCache = <LayerNode, QgsCrs>{};
+      for (final folder in _foldersBelow(root)) {
+        final folderPath = folder.getAbsoluteFilePath();
+        if (folderPath == null) continue;
+        if (!await KMetaService.instance.hasMetaFile(folderPath)) continue;
+        await _writeOne(folder, folderPath, await build(folder, crsCache: crsCache));
       }
+      return _writeOne(root, rootPath, await build(root, crsCache: crsCache));
     }
+    return _writeOne(root, rootPath, project);
+  }
 
-    final built = project ?? await build(root, embedded: embedded);
+  Future<QgsWriteResult> _writeOne(FolderNode root, String rootPath, QgsProject built) async {
     final dirName = await _projectName(root, rootPath);
     // 旧名 `project.qgs`・Drive のフォルダ名・dir 改名前の名前のものも [QgsProjectFile.find] が探す
     final path = await QgsProjectFile.find(rootPath) ?? p.join(rootPath, qgsFileNameFor(dirName));
@@ -252,18 +245,15 @@ class QgsProjectBuilder {
     LayerTreeNode node,
     String? rootPath,
     List<String> skipped,
-    Map<String, QgsEmbeddedGroup> embedded,
+    Map<LayerNode, QgsCrs> crsCache,
   ) async {
     // 「System」（sys）はプロジェクトに属さない。.qgs に載せない（除外の報告にも出さない）
     if (node is SysNode) return null;
     if (node is FolderNode) {
-      final path = node.getAbsoluteFilePath();
-      final emb = path == null ? null : embedded[p.normalize(path)];
-      if (emb != null) return emb;
-      return _convertFolder(node, rootPath, skipped, embedded);
+      return _convertFolder(node, rootPath, skipped, crsCache);
     }
     if (node is GeoPackageNode) {
-      return _convertGeoPackage(node, rootPath, skipped);
+      return _convertGeoPackage(node, rootPath, skipped, crsCache);
     }
 
     // オーバーレイ画像は GeoTIFF ならラスタレイヤとして参照を書く（位置は .tif のタグに焼き込み済み）。
@@ -305,11 +295,11 @@ class QgsProjectBuilder {
     FolderNode folder,
     String? rootPath,
     List<String> skipped,
-    Map<String, QgsEmbeddedGroup> embedded,
+    Map<LayerNode, QgsCrs> crsCache,
   ) async {
     final children = <QgsTreeNode>[];
     for (final child in folder.children) {
-      final converted = await _convert(child, rootPath, skipped, embedded);
+      final converted = await _convert(child, rootPath, skipped, crsCache);
       if (converted != null) children.add(converted);
     }
     if (children.isEmpty) return null;
@@ -325,6 +315,7 @@ class QgsProjectBuilder {
     GeoPackageNode gpkg,
     String? rootPath,
     List<String> skipped,
+    Map<LayerNode, QgsCrs> crsCache,
   ) async {
     final absPath = gpkg.geoPackageFile.getAbsolutePath();
     final relPath = _relativeTo(rootPath, absPath);
@@ -336,7 +327,7 @@ class QgsProjectBuilder {
 
     final groups = <QgsTreeNode>[];
     for (final layer in gpkg.children.whereType<LayerNode>()) {
-      final group = await _convertLayer(layer, relPath, skipped);
+      final group = await _convertLayer(layer, relPath, skipped, crsCache);
       if (group != null) groups.add(group);
     }
     if (groups.isEmpty) return null;
@@ -353,6 +344,7 @@ class QgsProjectBuilder {
     LayerNode layer,
     String gpkgRelPath,
     List<String> skipped,
+    Map<LayerNode, QgsCrs> crsCache,
   ) async {
     final geometryType = _geometryTypeOf(layer);
     if (geometryType == null) {
@@ -361,7 +353,7 @@ class QgsProjectBuilder {
     }
 
     if (layer.views.isEmpty) await layer.loadViews();
-    final crs = await _crsOf(layer);
+    final crs = crsCache[layer] ??= await _crsOf(layer);
     final layerStyle = await layer.getKmetaStyle();
 
     final qgsLayers = <QgsTreeNode>[

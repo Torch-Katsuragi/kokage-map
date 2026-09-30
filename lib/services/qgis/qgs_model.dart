@@ -60,33 +60,6 @@ class QgsGroup extends QgsTreeNode {
   final bool expanded;
 }
 
-/// 別プロジェクト（子 dir の `.qgs`）を埋め込むグループ。
-///
-/// QGIS の「他プロジェクトのレイヤ／グループを埋め込む」機能そのもの
-/// （`layer-tree-group embedded="1" embedded_project="./写真/写真.qgs"`）。
-/// 子要素は書かない。QGIS が読込時に子プロジェクトから再構成する。
-/// `<projectlayers>` には `<maplayer embedded="1" project=... id=.../>` のスタブが要る。
-class QgsEmbeddedGroup extends QgsTreeNode {
-  const QgsEmbeddedGroup({
-    required this.name,
-    required this.projectPath,
-    required this.layerIds,
-    this.visible = true,
-    this.expanded = true,
-  });
-
-  final String name;
-
-  /// 親の `.qgs` から見た子 `.qgs` の相対パス（`./写真/写真.qgs`）
-  final String projectPath;
-
-  /// 子プロジェクトのレイヤ id（スタブに書く）
-  final List<String> layerIds;
-
-  final bool visible;
-  final bool expanded;
-}
-
 /// QGIS のレイヤ（こかげマップ の View）
 class QgsLayer extends QgsTreeNode {
   const QgsLayer({
@@ -272,27 +245,6 @@ class QgsProject {
   /// > 呼び出し側は必ずユーザーに見せること。
   final List<String> skipped;
 
-  /// 埋め込みグループを深さ優先で集める（スタブと layerorder に使う）
-  List<QgsEmbeddedGroup> get embeddedGroups {
-    final result = <QgsEmbeddedGroup>[];
-    void walk(List<QgsTreeNode> nodes) {
-      for (final node in nodes) {
-        switch (node) {
-          case QgsGroup(:final children):
-            walk(children);
-          case QgsEmbeddedGroup():
-            result.add(node);
-          case QgsLayer():
-          case QgsRasterLayer():
-            break;
-        }
-      }
-    }
-
-    walk(root);
-    return result;
-  }
-
   /// ツリーを深さ優先で辿って、レイヤだけを順に返す。
   ///
   /// QGIS の `<projectlayers>` と `<layerorder>` はこの順で並べる。
@@ -307,8 +259,6 @@ class QgsProject {
             result.add(node);
           case QgsRasterLayer():
             break; // [rasterLayers]
-          case QgsEmbeddedGroup():
-            break; // 子プロジェクトのもの。自分のレイヤではない
         }
       }
     }
@@ -328,7 +278,6 @@ class QgsProject {
           case QgsRasterLayer():
             result.add(node);
           case QgsLayer():
-          case QgsEmbeddedGroup():
             break;
         }
       }
@@ -350,8 +299,6 @@ class QgsProject {
             result.add(id);
           case QgsRasterLayer(:final id):
             result.add(id);
-          case QgsEmbeddedGroup():
-            break;
         }
       }
     }

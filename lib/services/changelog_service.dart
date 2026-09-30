@@ -103,23 +103,26 @@ class ChangelogService {
 
   Set<String>? _assets;
 
-  /// 版の見出し（`## 次のリリース`・`## v0.7.4 …`）に対応する図解の切れ（上から順）。無ければ null（md で出す）。
+  /// 版の見出し（`## 次のリリース`・`## v0.7.4 …`）に対応する図解。無ければ null（md で出す）。
   ///
   /// 表示中の言語のものだけ探す。別の言語の図を出すより、その言語の文章のほうがよい
-  Future<List<FigureChunk>?> figureFor(String heading) async {
+  Future<Figure?> figureFor(String heading) async {
     final slug = figureSlug(heading);
     if (slug == null) return null;
     final index = '$_figureDir$slug.${LocaleSettings.currentLocale.languageCode}.json';
     _assets ??= (await AssetManifest.loadFromAssetBundle(rootBundle)).listAssets().toSet();
     if (!_assets!.contains(index)) return null;
     final json = jsonDecode(await rootBundle.loadString(index)) as Map<String, dynamic>;
-    return [
-      for (final c in (json['chunks'] as List).cast<Map<String, dynamic>>())
-        FigureChunk(
-          asset: '$_figureDir${c['file']}',
-          aspectRatio: (c['width'] as num) / (c['height'] as num),
-        ),
-    ];
+    return Figure(
+      title: json['title'] as String? ?? '',
+      chunks: [
+        for (final c in (json['chunks'] as List).cast<Map<String, dynamic>>())
+          FigureChunk(
+            asset: '$_figureDir${c['file']}',
+            aspectRatio: (c['width'] as num) / (c['height'] as num),
+          ),
+      ],
+    );
   }
 
   static const _figureDir = 'assets/changelog/svg/';
@@ -130,6 +133,14 @@ class ChangelogService {
     if (h == '次のリリース' || h.toLowerCase() == 'next release') return 'next';
     return RegExp(r'^v\d+\.\d+\.\d+').firstMatch(h)?.group(0);
   }
+}
+
+/// 1 つの版の図解。[title] は版の頭の大きな一言（畳んだときの見出しに使う）
+class Figure {
+  const Figure({required this.title, required this.chunks});
+
+  final String title;
+  final List<FigureChunk> chunks;
 }
 
 /// 図解の 1 切れ（tool/changelog/build.py が Typst の 1 ページを 1 枚の SVG に書き出したもの）。

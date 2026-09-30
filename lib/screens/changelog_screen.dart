@@ -110,14 +110,15 @@ class _ChangelogScreenState extends State<ChangelogScreen> {
                   );
 }
 
-/// 更新履歴を版（`## `）ごとに並べる。図解（Typst で書き出した SVG の切れ）がある版は図を、無い版は
-/// 今までどおり Markdown を出す。
+/// 更新履歴を版（`## `）ごとに畳んで並べる。見出し（版・日付・その版の一言）を押すと開き、
+/// 図解（Typst で書き出した SVG の切れ）がある版は図を、無い版は Markdown を出す。いちばん新しい版だけ開いておく。
 ///
-/// > [!IMPORTANT] 継ぎ目を見せない
+/// > [!IMPORTANT] 開いた版の中は継ぎ目を見せない
 /// > 図の切れは背景を持たず、文章と同じ左右の余白で縦に並べる（縦読み漫画のように、スクロールで次々に出る）。
 /// > 切れは [ListView.builder] が見えるところだけ作るので、読み込みもスクロールに合わせて進む。
 /// > 高さは縦横比で先に確保するので、読み込んでも画面はずれない。
-/// > 図の版の文章は画面には出さず、読み上げ用に切れの意味（semantics）として持たせる
+/// > 図の版の文章は画面には出さず、読み上げ用に切れの意味（semantics）として持たせる。
+/// > 版と一言は図に描かず見出しに出す（開いたとき同じ字が二度出ないように）
 class _Sections extends StatefulWidget {
   const _Sections({required this.content, required this.styleSheet});
 
@@ -143,52 +144,159 @@ class _Sections extends StatefulWidget {
   State<_Sections> createState() => _SectionsState();
 }
 
-class _SectionsState extends State<_Sections> {
-  /// 並べるもの。String は Markdown、[FigureChunk] は図の切れ
-  late final Future<List<Object>> _items = _build();
+/// 1 つの版
+class _Version {
+  _Version({required this.heading, required this.title, required this.body, required this.figure});
 
-  Future<List<Object>> _build() async {
-    final items = <Object>[];
-    for (final md in _Sections.split(widget.content)) {
-      final figure = md.startsWith('## ')
-          ? await ChangelogService.instance.figureFor(md.substring(3, md.indexOf('\n')).trim())
-          : null;
-      if (figure == null) {
-        items.add(md);
-      } else {
-        items.addAll(figure);
-        // 読み上げ用（1 切れ目にその版の文章を持たせる）
-        _spoken[figure.first] = md;
+  /// `v0.7.3 — 2026/09/27`（md の `## ` の行）
+  final String heading;
+
+  /// その版の一言（図解の頭の一言。図が無ければ md の最初の `### `）
+  final String title;
+
+  /// 見出しの行を除いた md
+  final String body;
+  final Figure? figure;
+}
+
+/// 見出し（押すと開閉）
+class _Header {
+  const _Header(this.index);
+  final int index;
+}
+
+/// 図の版の切れ（[first] なら読み上げ用にその版の文章を持つ）
+class _Chunk {
+  const _Chunk(this.chunk, this.version, {required this.first});
+  final FigureChunk chunk;
+  final _Version version;
+  final bool first;
+}
+
+class _SectionsState extends State<_Sections> {
+  late final Future<(String, List<_Version>)> _loaded = _load();
+
+  /// 開いている版。いちばん新しい版だけ開いておく
+  final _open = <int>{0};
+
+  Future<(String, List<_Version>)> _load() async {
+    var preamble = '';
+    final versions = <_Version>[];
+    for (final part in _Sections.split(widget.content)) {
+      if (!part.startsWith('## ')) {
+        // `# 更新履歴` は画面の題と重なるので出さない
+        preamble = part.replaceAll(RegExp(r'^# .*$', multiLine: true), '');
+        continue;
       }
+      final nl = part.indexOf('\n');
+      final heading = part.substring(3, nl).trim();
+      final body = part.substring(nl + 1);
+      final figure = await ChangelogService.instance.figureFor(heading);
+      final firstH3 = RegExp(r'^### (.+)$', multiLine: true).firstMatch(body)?.group(1) ?? '';
+      versions.add(_Version(
+        heading: heading,
+        title: figure?.title ?? firstH3,
+        body: body,
+        figure: figure,
+      ));
     }
-    return items;
+    return (preamble, versions);
   }
 
-  final _spoken = <FigureChunk, String>{};
+  List<Object> _items(String preamble, List<_Version> versions) => [
+        if (preamble.trim().isNotEmpty) preamble,
+        for (final (i, v) in versions.indexed) ...[
+          _Header(i),
+          if (_open.contains(i))
+            if (v.figure != null)
+              for (final (k, c) in v.figure!.chunks.indexed) _Chunk(c, v, first: k == 0)
+            else
+              v.body,
+        ],
+      ];
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Object>>(
-      future: _items,
+    return FutureBuilder<(String, List<_Version>)>(
+      future: _loaded,
       builder: (context, snap) {
-        final items = snap.data;
-        if (items == null) return const SizedBox.shrink();
+        final data = snap.data;
+        if (data == null) return const SizedBox.shrink();
+        final (preamble, versions) = data;
+        final items = _items(preamble, versions);
         return ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           itemCount: items.length,
           itemBuilder: (context, i) => switch (items[i]) {
-            final FigureChunk c => Semantics(
-                label: _spoken[c],
+            _Header(:final index) => _VersionHeader(
+                version: versions[index],
+                open: _open.contains(index),
+                onTap: () => setState(() => _open.contains(index) ? _open.remove(index) : _open.add(index)),
+              ),
+            _Chunk(:final chunk, :final version, :final first) => Semantics(
+                label: first ? version.body : null,
                 excludeSemantics: true,
                 child: AspectRatio(
-                  aspectRatio: c.aspectRatio,
-                  child: SvgPicture.asset(c.asset, fit: BoxFit.fitWidth),
+                  aspectRatio: chunk.aspectRatio,
+                  child: SvgPicture.asset(chunk.asset, fit: BoxFit.fitWidth),
                 ),
               ),
             final Object md => MarkdownBody(data: md as String, selectable: true, styleSheet: widget.styleSheet),
           },
         );
       },
+    );
+  }
+}
+
+/// 版の見出し。図の頭と同じ字の並び（小さな版と日付、その下に大きな一言）
+class _VersionHeader extends StatelessWidget {
+  const _VersionHeader({required this.version, required this.open, required this.onTap});
+
+  final _Version version;
+  final bool open;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      button: true,
+      expanded: open,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.4)))),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      version.heading,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: const Color(0xFF1565C0),
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    if (version.title.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        version.title,
+                        style: theme.textTheme.titleMedium?.copyWith(fontSize: 18, fontWeight: FontWeight.bold, height: 1.35),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Icon(open ? Icons.expand_less : Icons.expand_more),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -63,14 +63,17 @@ void main() {
     const line = 'サブフォルダの中の GeoPackage を改名すると';
     expect(find.textContaining(line, findRichText: true), findsNothing);
     expect(find.bySemanticsLabel(RegExp(line)), findsOneWidget);
-    // 2026-09-30 に全部の版を図にした。版の見出しが md の文字として出ることはない
-    expect(find.textContaining(RegExp(r'^v0\.\d+\.\d+'), findRichText: true), findsNothing);
-    // いちばん古い版まで図で続く
-    await tester.scrollUntilVisible(
-      find.bySemanticsLabel(RegExp('^## v0\\.3\\.0')),
-      2000,
-      scrollable: find.byType(Scrollable).first,
-    );
+    // 版ごとに畳む。開いているのはいちばん新しい版だけ
+    final oldest = find.text('v0.3.0 — 2026/03/09');
+    await tester.scrollUntilVisible(oldest, 600, scrollable: find.byType(Scrollable).first);
+    final before = find.byType(SvgPicture).evaluate().length;
+    // 古い版の見出しを押すと開き、図の切れが続く
+    await tester.tap(oldest);
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pumpAndSettle();
+    expect(find.byType(SvgPicture).evaluate().length, greaterThan(before));
+    expect(find.text('地図の描画を、爆速に'), findsOneWidget, reason: '見出しに版の一言');
     expect(tester.takeException(), isNull);
     semantics.dispose();
   });

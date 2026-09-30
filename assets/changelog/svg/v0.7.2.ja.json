@@ -1,9 +1,10 @@
 {
+ "title": "地形を、傾斜や標高で色分け",
  "chunks": [
   {
    "file": "v0.7.2.ja.00.svg",
    "width": 252.0,
-   "height": 326.64
+   "height": 214.73
   },
   {
    "file": "v0.7.2.ja.01.svg",

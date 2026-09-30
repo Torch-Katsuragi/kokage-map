@@ -1,9 +1,10 @@
 {
+ "title": "ブラウザでも開けるように",
  "chunks": [
   {
    "file": "v0.6.1.ja.00.svg",
    "width": 252.0,
-   "height": 374.9
+   "height": 262.99
   },
   {
    "file": "v0.6.1.ja.01.svg",

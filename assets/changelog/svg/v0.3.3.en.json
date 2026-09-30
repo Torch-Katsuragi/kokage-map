@@ -1,9 +1,10 @@
 {
+ "title": "Download maps ahead for offline use",
  "chunks": [
   {
    "file": "v0.3.3.en.00.svg",
    "width": 252.0,
-   "height": 294.41
+   "height": 185.56
   },
   {
    "file": "v0.3.3.en.01.svg",

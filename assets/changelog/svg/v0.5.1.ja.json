@@ -1,9 +1,10 @@
 {
+ "title": "地図の上の画像を、指で自由に変形",
  "chunks": [
   {
    "file": "v0.5.1.ja.00.svg",
    "width": 252.0,
-   "height": 314.21
+   "height": 202.3
   },
   {
    "file": "v0.5.1.ja.01.svg",

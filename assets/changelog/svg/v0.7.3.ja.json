@@ -1,9 +1,10 @@
 {
+ "title": "2 台で直しても、行ごとに合わさる",
  "chunks": [
   {
    "file": "v0.7.3.ja.00.svg",
    "width": 252.0,
-   "height": 484.98
+   "height": 373.07
   },
   {
    "file": "v0.7.3.ja.01.svg",

@@ -1,9 +1,10 @@
 {
+ "title": "ラベルを地図に出せる",
  "chunks": [
   {
    "file": "v0.6.2.ja.00.svg",
    "width": 252.0,
-   "height": 282.46
+   "height": 197.44
   },
   {
    "file": "v0.6.2.ja.01.svg",

@@ -1,9 +1,10 @@
 {
+ "title": "地図の描画を、爆速に",
  "chunks": [
   {
    "file": "v0.3.0.ja.00.svg",
    "width": 252.0,
-   "height": 287.32
+   "height": 202.3
   },
   {
    "file": "v0.3.0.ja.01.svg",

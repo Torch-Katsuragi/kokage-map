@@ -43,6 +43,22 @@ def _shrink(svg: bytes) -> bytes:
     return _LONG_FLOAT.sub(r, svg)
 
 
+def hero_title(src: pathlib.Path) -> str:
+    """`#hero(版, [大きな一言], ...)` の一言を文字だけにして返す。アプリは畳んだ版の見出しに使う"""
+    text = src.read_text(encoding="utf-8")
+    m = re.search(r"#hero\(\s*\"[^\"]*\"\s*,\s*\[", text)
+    if not m:
+        raise SystemExit(f"{src.name}: #hero(\"版\", [一言], ...) が見つからない")
+    depth, i = 1, m.end()
+    while depth:
+        depth += {"[": 1, "]": -1}.get(text[i], 0)
+        i += 1
+    title = text[m.end():i - 1]
+    title = re.sub(r"\\\s*", "", title)          # 改行の `\`
+    title = re.sub(r"`([^`]*)`", r"\1", title)   # raw
+    return re.sub(r"\s+", " ", title).strip()
+
+
 def build(src: pathlib.Path, preview: pathlib.Path | None) -> None:
     pages = typst.compile(str(src), root=str(BASE), format="svg")
     if not isinstance(pages, list):
@@ -56,7 +72,8 @@ def build(src: pathlib.Path, preview: pathlib.Path | None) -> None:
         (OUT / name).write_bytes(svg)
         w, h = map(float, re.search(rb'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg).groups())
         chunks.append({"file": name, "width": round(w, 2), "height": round(h, 2)})
-    (OUT / f"{src.stem}.json").write_text(json.dumps({"chunks": chunks}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    index = {"title": hero_title(src), "chunks": chunks}
+    (OUT / f"{src.stem}.json").write_text(json.dumps(index, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     total = sum(len(p) for p in pages)
     print(f"{src.stem}: {len(pages)} 切れ・{total // 1024} KB")
 

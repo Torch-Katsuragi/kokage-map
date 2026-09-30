@@ -1,9 +1,10 @@
 {
+ "title": "Color the terrain by slope or elevation",
  "chunks": [
   {
    "file": "v0.7.2.en.00.svg",
    "width": 252.0,
-   "height": 334.69
+   "height": 225.83
   },
   {
    "file": "v0.7.2.en.01.svg",

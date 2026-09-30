@@ -1,9 +1,10 @@
 {
+ "title": "Labels on the map",
  "chunks": [
   {
    "file": "v0.6.2.en.00.svg",
    "width": 252.0,
-   "height": 278.76
+   "height": 195.56
   },
   {
    "file": "v0.6.2.en.01.svg",

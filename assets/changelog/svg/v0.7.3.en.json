@@ -1,9 +1,10 @@
 {
+ "title": "Two devices, merged row by row",
  "chunks": [
   {
    "file": "v0.7.3.en.00.svg",
    "width": 252.0,
-   "height": 489.11
+   "height": 380.25
   },
   {
    "file": "v0.7.3.en.01.svg",

@@ -53,13 +53,12 @@
 
 // ---- 場面 ----
 
-/// 版の頭。大きな一言と、その下に短い説明
+/// 版の頭。短い説明と絵。
+///
+/// 版（version）と大きな一言（title）は描かない。アプリが版ごとに畳める見出しとして出す
+/// （build.py が title を一覧の json に入れる）。開いたときに見出しと図で同じ字が二度出ないように
 #let hero(version, title, lead, visual, note: none) = {
-  v(10pt)
-  text(size: 9pt, weight: "bold", fill: accent, tracking: 0.5pt)[#version]
-  v(4pt)
-  text(size: 19pt, weight: "bold")[#title]
-  v(6pt)
+  v(2pt)
   text(size: 10.5pt, fill: sub)[#lead]
   v(14pt)
   align(center, visual)

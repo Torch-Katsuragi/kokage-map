@@ -1,9 +1,10 @@
 {
+ "title": "重ねた画像は、GeoTIFF で保存",
  "chunks": [
   {
    "file": "v0.5.7.ja.00.svg",
    "width": 252.0,
-   "height": 323.07
+   "height": 211.16
   },
   {
    "file": "v0.5.7.ja.01.svg",

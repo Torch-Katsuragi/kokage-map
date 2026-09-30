@@ -1326,8 +1326,7 @@
   "changelog": {
     "title": "更新履歴",
     "noContent": "更新履歴はまだありません",
-    "updated": "アプリが更新されました ✨",
-    "readAsText": "文章で読む"
+    "updated": "アプリが更新されました ✨"
   },
   "userGuide": {
     "title": "使い方ガイド",

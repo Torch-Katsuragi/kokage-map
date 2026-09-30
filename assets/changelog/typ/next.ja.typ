@@ -21,7 +21,7 @@
     #file-row("林小班.qgs", hot: true, note: "QGIS で開ける")
     #file-row("林小班.gpkg")
     #v(3pt)
-    #chip-on[Drive で他の端末にも届く]
+    #chip-on[他の端末にも届く]
   ],
 )
 #fignote[開いたときに自動で移します。元のファイルは `.kmeta.json.migrated` として残ります。Drive で共有しているフォルダでは、`.qgs` の名前を Drive のフォルダ名にそろえます。]

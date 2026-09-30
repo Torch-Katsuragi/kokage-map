@@ -1,8 +1,13 @@
-// 更新履歴（図解）の共通部品。スマホの幅に合わせた縦長 1 ページ（高さは中身なり）。
+// 更新履歴（図解）の共通部品。
+//
+// 継ぎ目を見せない（縦読み漫画のように、スクロールで次々に出てくる）ための約束:
+// - 背景は塗らない（アプリの画面の地がそのまま見える）。左右の余白も持たない（アプリが文章と同じ余白で置く）
+// - 図（fig）と節（section）ごとにページを切る。1 ページ＝1 切れで、アプリはスクロールに合わせて切れを
+//   順に読み込む。切れの高さは build.py が書き出す一覧に入るので、読み込みで画面がずれない
+// - 幅は、アプリで文章と同じくらいの字の大きさになるよう狭めにとる
 // アプリにダークテーマは無いので明るい配色だけ（付けるなら暗い配色で別に書き出して出し分ける）
 
 // 配色。増やさない
-#let bg = white
 #let ink = rgb("#1c1b1f")
 #let sub = rgb("#5f5b63")
 #let line-c = rgb("#d6d3da")
@@ -10,18 +15,22 @@
 #let okbg = rgb("#e6f4ea")
 #let okink = rgb("#1e6b3a")
 #let warm = rgb("#b45309")
-#let panel-bg = rgb("#f6f5f8")
+// 地はアプリの画面（#f8f9ff）。枠の中は白で少し浮かせる
+#let panel-bg = white
 
 #let page-setup(body) = {
-  set page(width: 320pt, height: auto, margin: (x: 12pt, y: 14pt), fill: bg)
+  set page(width: 252pt, height: auto, margin: 0pt, fill: none)
   set text(font: ("BIZ UDPGothic", "Yu Gothic", "Noto Sans CJK JP"), size: 10.5pt, fill: ink, lang: "ja")
   set par(leading: 0.62em, justify: false)
   // ファイル名などは本文と同じ字で、色だけ変える（等幅の和文フォントだと詰まって読みにくい）
   show raw: set text(font: ("BIZ UDPGothic", "Yu Gothic", "Noto Sans CJK JP"), size: 1.08em, fill: accent)
   body
+  // 次の版（md）の見出しとの間
+  v(20pt)
 }
 
 #let release-head(version, lead) = {
+  v(10pt)
   text(size: 17pt, weight: "bold")[#version]
   v(2pt)
   text(size: 11pt, fill: sub)[#lead]
@@ -30,8 +39,9 @@
 
 #let _fig-no = counter("kfig")
 #let fig(title, point) = {
+  pagebreak(weak: true)
   _fig-no.step()
-  v(8pt)
+  v(14pt)
   block(width: 100%)[
     #text(weight: "bold", size: 11.5pt)[図#context _fig-no.display()　#title]
     #linebreak()
@@ -47,6 +57,7 @@
 }
 
 #let section(title) = {
+  pagebreak(weak: true)
   v(12pt)
   block(width: 100%, stroke: (bottom: 0.8pt + line-c), inset: (bottom: 4pt))[
     #text(weight: "bold", size: 11.5pt)[#title]

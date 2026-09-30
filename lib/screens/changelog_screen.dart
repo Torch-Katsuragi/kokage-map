@@ -110,9 +110,15 @@ class _ChangelogScreenState extends State<ChangelogScreen> {
                   );
 }
 
-/// 更新履歴を版（`## `）ごとに並べる。図解（SVG）がある版は図を出し、文章は畳んで下に置く。
-/// 無い版は今までどおり Markdown
-class _Sections extends StatelessWidget {
+/// 更新履歴を版（`## `）ごとに並べる。図解（Typst で書き出した SVG の切れ）がある版は図を、無い版は
+/// 今までどおり Markdown を出す。
+///
+/// > [!IMPORTANT] 継ぎ目を見せない
+/// > 図の切れは背景を持たず、文章と同じ左右の余白で縦に並べる（縦読み漫画のように、スクロールで次々に出る）。
+/// > 切れは [ListView.builder] が見えるところだけ作るので、読み込みもスクロールに合わせて進む。
+/// > 高さは縦横比で先に確保するので、読み込んでも画面はずれない。
+/// > 図の版の文章は画面には出さず、読み上げ用に切れの意味（semantics）として持たせる
+class _Sections extends StatefulWidget {
   const _Sections({required this.content, required this.styleSheet});
 
   final String content;
@@ -134,49 +140,53 @@ class _Sections extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final parts = split(content);
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: parts.length,
-      itemBuilder: (context, i) => _Section(md: parts[i], styleSheet: styleSheet),
-    );
-  }
+  State<_Sections> createState() => _SectionsState();
 }
 
-class _Section extends StatelessWidget {
-  const _Section({required this.md, required this.styleSheet});
+class _SectionsState extends State<_Sections> {
+  /// 並べるもの。String は Markdown、[FigureChunk] は図の切れ
+  late final Future<List<Object>> _items = _build();
 
-  final String md;
-  final MarkdownStyleSheet styleSheet;
+  Future<List<Object>> _build() async {
+    final items = <Object>[];
+    for (final md in _Sections.split(widget.content)) {
+      final figure = md.startsWith('## ')
+          ? await ChangelogService.instance.figureFor(md.substring(3, md.indexOf('\n')).trim())
+          : null;
+      if (figure == null) {
+        items.add(md);
+      } else {
+        items.addAll(figure);
+        // 読み上げ用（1 切れ目にその版の文章を持たせる）
+        _spoken[figure.first] = md;
+      }
+    }
+    return items;
+  }
+
+  final _spoken = <FigureChunk, String>{};
 
   @override
   Widget build(BuildContext context) {
-    final text = MarkdownBody(data: md, selectable: true, styleSheet: styleSheet);
-    if (!md.startsWith('## ')) return text;
-    final heading = md.substring(3, md.indexOf('\n'));
-    return FutureBuilder<String?>(
-      future: ChangelogService.instance.figureFor(heading),
+    return FutureBuilder<List<Object>>(
+      future: _items,
       builder: (context, snap) {
-        final svg = snap.data;
-        if (svg == null) return text;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SvgPicture.asset(svg, fit: BoxFit.fitWidth, semanticsLabel: heading),
+        final items = snap.data;
+        if (items == null) return const SizedBox.shrink();
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          itemCount: items.length,
+          itemBuilder: (context, i) => switch (items[i]) {
+            final FigureChunk c => Semantics(
+                label: _spoken[c],
+                excludeSemantics: true,
+                child: AspectRatio(
+                  aspectRatio: c.aspectRatio,
+                  child: SvgPicture.asset(c.asset, fit: BoxFit.fitWidth),
+                ),
               ),
-              ExpansionTile(
-                title: Text(t.changelog.readAsText),
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: 8),
-                children: [text],
-              ),
-            ],
-          ),
+            final Object md => MarkdownBody(data: md as String, selectable: true, styleSheet: widget.styleSheet),
+          },
         );
       },
     );

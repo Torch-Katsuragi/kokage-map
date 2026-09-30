@@ -103,16 +103,26 @@ class ChangelogService {
 
   Set<String>? _assets;
 
-  /// 版の見出し（`## 次のリリース`・`## v0.7.4 …`）に対応する図解の SVG。無ければ null（md で出す）。
+  /// 版の見出し（`## 次のリリース`・`## v0.7.4 …`）に対応する図解の切れ（上から順）。無ければ null（md で出す）。
   ///
   /// 表示中の言語のものだけ探す。別の言語の図を出すより、その言語の文章のほうがよい
-  Future<String?> figureFor(String heading) async {
+  Future<List<FigureChunk>?> figureFor(String heading) async {
     final slug = figureSlug(heading);
     if (slug == null) return null;
-    final path = 'assets/changelog/svg/$slug.${LocaleSettings.currentLocale.languageCode}.svg';
+    final index = '$_figureDir$slug.${LocaleSettings.currentLocale.languageCode}.json';
     _assets ??= (await AssetManifest.loadFromAssetBundle(rootBundle)).listAssets().toSet();
-    return _assets!.contains(path) ? path : null;
+    if (!_assets!.contains(index)) return null;
+    final json = jsonDecode(await rootBundle.loadString(index)) as Map<String, dynamic>;
+    return [
+      for (final c in (json['chunks'] as List).cast<Map<String, dynamic>>())
+        FigureChunk(
+          asset: '$_figureDir${c['file']}',
+          aspectRatio: (c['width'] as num) / (c['height'] as num),
+        ),
+    ];
   }
+
+  static const _figureDir = 'assets/changelog/svg/';
 
   /// 見出しから図解のファイル名の版の部分を取る（`次のリリース` → `next`、`v0.7.4 (2026-10-01)` → `v0.7.4`）
   static String? figureSlug(String heading) {
@@ -120,4 +130,13 @@ class ChangelogService {
     if (h == '次のリリース' || h.toLowerCase() == 'next release') return 'next';
     return RegExp(r'^v\d+\.\d+\.\d+').firstMatch(h)?.group(0);
   }
+}
+
+/// 図解の 1 切れ（tool/changelog/build.py が Typst の 1 ページを 1 枚の SVG に書き出したもの）。
+/// 縦横比が先に分かるので、読み込む前から高さを確保でき、スクロール中に画面がずれない
+class FigureChunk {
+  const FigureChunk({required this.asset, required this.aspectRatio});
+
+  final String asset;
+  final double aspectRatio;
 }

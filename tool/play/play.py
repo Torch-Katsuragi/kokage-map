@@ -33,6 +33,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
+import google_auth_httplib2
+import httplib2
 
 KEY = Path.home() / '.gcp-keys' / 'nemurigi-play-console.json'
 PACKAGE = 'com.k_root.k_maps'
@@ -46,7 +48,12 @@ IMAGE_TYPES = (
 class Play:
     def __init__(self):
         creds = service_account.Credentials.from_service_account_file(str(KEY), scopes=SCOPES)
-        self.api = build('androidpublisher', 'v3', credentials=creds, cache_discovery=False)
+        # AAB（100MB 超）の最後の塊は、Google 側の処理を待つので既定の待ち時間では切れる（2026-09-30）
+        raw = httplib2.Http(timeout=600)
+        # 再開型アップロードの 308（Resume Incomplete）を転送と取り違えないように（googleapiclient の build_http と同じ）
+        raw.redirect_codes = raw.redirect_codes - {308}
+        http = google_auth_httplib2.AuthorizedHttp(creds, http=raw)
+        self.api = build('androidpublisher', 'v3', http=http, cache_discovery=False)
         self.edits = self.api.edits()
         self.edit_id = self.edits.insert(packageName=PACKAGE, body={}).execute()['id']
 
@@ -98,7 +105,7 @@ class Play:
         req = self.edits.bundles().upload(**self._kw(media_body=media))
         resp = None
         while resp is None:
-            st, resp = req.next_chunk()
+            st, resp = req.next_chunk(num_retries=3)
             if st:
                 print('  upload %3d%%' % int(st.progress() * 100), end='\r')
         vc = resp['versionCode']

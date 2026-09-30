@@ -1,9 +1,9 @@
-// Changelog (illustrated): next release. tool/changelog/build.py writes it out as SVG chunks
+// Changelog (illustrated): v0.8.0. tool/changelog/build.py writes it out as SVG chunks
 #import "lib.typ": *
 #show: page-setup.with(lang: "en")
 
 #hero(
-  "Next release",
+  "v0.8.0 — 2026/09/30",
   [Back and forth with QGIS, as is],
   [Folder settings now live in the QGIS project file (`.qgs`). Colors and visibility you set in the app look the same when you open it in QGIS.],
   grid(
@@ -98,7 +98,14 @@
 )
 
 #fixes(
-  "Also fixed",
+  "Also changed",
+  [The changelog is now illustrated, and each release folds],
+  [Layers styled in QGIS by category or rule show "Style set in QGIS" on the style screen],
+)
+
+#fixes(
+  "Fixes",
+  [Web: a GeoPackage could be overwritten empty right after opening a project],
   [Changing settings in a row could lose the earlier change],
   [Renaming a GeoPackage in a subfolder failed],
   [In Drive-linked folders, auto sync undid renames],

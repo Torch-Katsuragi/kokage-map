@@ -2,29 +2,34 @@
  "title": "QGIS とそのまま行き来できるように",
  "chunks": [
   {
-   "file": "next.ja.00.svg",
+   "file": "v0.8.0.ja.00.svg",
    "width": 252.0,
    "height": 196.3
   },
   {
-   "file": "next.ja.01.svg",
+   "file": "v0.8.0.ja.01.svg",
    "width": 252.0,
    "height": 292.57
   },
   {
-   "file": "next.ja.02.svg",
+   "file": "v0.8.0.ja.02.svg",
    "width": 252.0,
    "height": 306.27
   },
   {
-   "file": "next.ja.03.svg",
+   "file": "v0.8.0.ja.03.svg",
    "width": 252.0,
    "height": 456.69
   },
   {
-   "file": "next.ja.04.svg",
+   "file": "v0.8.0.ja.04.svg",
    "width": 252.0,
-   "height": 368.98
+   "height": 130.27
+  },
+  {
+   "file": "v0.8.0.ja.05.svg",
+   "width": 252.0,
+   "height": 395.08
   }
  ]
 }

@@ -16,6 +16,8 @@
 /// native のフォルダ選択（OSのピッカー）。
 library;
 
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 
 bool get canPickProjectFolder => true;
@@ -26,3 +28,6 @@ Future<String?> pickProjectFolder() => FilePicker.getDirectoryPath();
 Future<String?> lastProjectFolderName() async => null;
 
 Future<String?> reopenLastProjectFolder() async => null;
+
+Future<String?> openRequestedProjectFolder(String spec) async =>
+    Directory(spec).existsSync() ? spec : null;

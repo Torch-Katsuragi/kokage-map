@@ -16,7 +16,6 @@
 // Root Maps: ホーム画面（プロジェクト作成・選択）
 // プロジェクト新規作成・ローカル/DriveからインポートUI
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -183,12 +182,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       AppLogger.debug('[HomeScreen] 自動オープン: 権限が無いため見送り ($dir)');
       return;
     }
-    if (PlatformCapabilities.isWeb || !Directory(dir).existsSync()) {
-      AppLogger.debug('[HomeScreen] 自動オープン: パスが存在しない ($dir)');
+    // native は絶対パス、web は OPFS（`opfs:<名前>`）
+    final opened = await openRequestedProjectFolder(dir);
+    if (opened == null) {
+      AppLogger.debug('[HomeScreen] 自動オープン: 開けない ($dir)');
       return;
     }
     AppLogger.debug('[HomeScreen] 自動オープン ($dir)');
-    await _openProjectDir(dir);
+    await _openProjectDir(opened);
   }
 
   /// 起動中に `/map?project=...` が届いた（ホームにいる間だけ受ける。地図にいる間は MapPage が受ける）

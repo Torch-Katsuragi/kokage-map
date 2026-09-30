@@ -17,7 +17,6 @@
 // DB接続の初期化、クローズ、バリデーションを担当
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/widgets.dart';
@@ -136,14 +135,60 @@ class GeoPackageConnection {
   ///
   /// ⚠ 新規作成（元ファイルがまだ無い）ときは何も流し込まない。
   /// 空のDBとして開かれ、`onCreate` が走る。
-  Future<void> _checkOut(String absPath) async {
-    if (fs.hasRealPaths) return;
-    final bytes = await fs.readAsBytes(absPath).catchError((_) => Uint8List(0));
-    if (bytes.isEmpty) return;
+  ///
+  /// 戻り値は「元ファイルが在った」か。在ったのに GeoPackage の表が無ければ、呼び出し側は
+  /// 新規として作らずに失敗させる。
+  ///
+  /// > [!WARNING] 元ファイルを空の GeoPackage で潰していた（2026-09-30、web で実測）
+  /// > 以前は読めなければ黙って空として扱い、新規の GeoPackage を作り、2 秒ごとの書き戻しが
+  /// > それを元ファイルに上書きしていた（地物の表ごと消える）。起きたのは
+  /// > ①同じファイルを開いている接続があるのに流し込み直して、開いている DB を壊したとき
+  /// > ②読み取りが失敗したとき（書き戻しの最中など）。どちらも「在ったのに新規扱い」にしない
+  Future<bool> _checkOut(String absPath) async {
+    if (fs.hasRealPaths) return true;
+    // 同じファイルを開いている接続がある: WASM 側の DB がいちばん新しい（編集中かもしれない）。
+    // 流し込み直すと開いている DB を壊すので、そのまま共有する（sqflite の singleInstance）
+    if (openCountFor(absPath) > 0) return true;
+    if (!await fs.exists(absPath)) return false;
+    // 読み取りの失敗は投げる（空として扱わない）
+    final bytes = await fs.readAsBytes(absPath);
+    if (bytes.isEmpty) return false;
     await databaseFactory.writeDatabaseBytes(_databaseKey(absPath), bytes);
     AppLogger.debug(
       '[GeoPackageConnection] チェックアウト: $absPath (${bytes.length}バイト)',
     );
+    return true;
+  }
+
+  /// web のチェックアウトと開くのを 1 つずつにする鎖
+  static Future<void> _webOpenChain = Future.value();
+
+  /// チェックアウトして開く。web は 1 つずつ（戻り値は元ファイルが在ったかと、開いた DB）。
+  ///
+  /// > [!WARNING] 同時に流し込んで開くと、空の DB が開くことがある（2026-09-30、web で実測）
+  /// > プロジェクトを開いた直後、最初に開く数個の .gpkg で `gpkg_contents` が見えなかった
+  /// > （同じ中身の別ファイルは見える）。sqlite3 WASM の worker が立ち上がる間に
+  /// > 流し込みと開くが重なるためと見ている。1 つずつにすると起きない
+  Future<(bool, Database)> _checkOutAndOpen(String absPath) {
+    Future<(bool, Database)> run() async {
+      final existed = await _checkOut(absPath);
+      var db = await openDatabase(_databaseKey(absPath));
+      // 1 つずつにしても、開いた直後の最初の 1〜2 個は空に見えることがある（worker の立ち上がり）。
+      // 在ったファイルなら少し待って流し込み直し、1 度だけ開き直す
+      if (existed && !fs.hasRealPaths && openCountFor(absPath) == 0 && !await _hasGeoPackageCore(db)) {
+        await db.close();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await _checkOut(absPath);
+        db = await openDatabase(_databaseKey(absPath));
+        AppLogger.debug('[GeoPackageConnection] 空に見えたので開き直した: $absPath');
+      }
+      return (existed, db);
+    }
+
+    if (fs.hasRealPaths) return run();
+    final result = _webOpenChain.then((_) => run());
+    _webOpenChain = result.then((_) {}, onError: (_) {});
+    return result;
   }
 
   /// 書き戻し監視タイマー（web のみ）
@@ -257,8 +302,6 @@ class GeoPackageConnection {
     // 実パスを持たないプラットフォーム（web）は、sqflite にパスを渡して
     // 開かせることができない。代わりに**チェックアウト**する
     // （元ファイルの中身を sqlite3 WASM 側へ流し込んでから開く）。
-    await _checkOut(absPath);
-
     try {
       WidgetsFlutterBinding.ensureInitialized();
 
@@ -268,8 +311,15 @@ class GeoPackageConnection {
       //    以前は `version: 1` にしていたため、QGIS が作った .gpkg を開くだけで
       //    版が 1 に書き換わり、GDAL が「unrecognized user_version=0x00000001」
       //    と警告していた（2026-09-12 QGIS 4.2.0 で確認）
-      _database = await openDatabase(_databaseKey(absPath));
+      final (existed, db) = await _checkOutAndOpen(absPath);
+      _database = db;
       if (!await _hasGeoPackageCore(_database!)) {
+        // 在ったファイルに GeoPackage の表が無い: 新規として作ると、web は書き戻しで元ファイルを
+        // 空の GeoPackage で潰す（[_checkOut]）。開けなかったことにする
+        if (existed && !fs.hasRealPaths) {
+          _database = null;
+          throw StateError('$absPath は在るのに GeoPackage の表が見えない（空で作り直さない）');
+        }
         await _createDatabase(_database!);
       }
 

@@ -111,6 +111,24 @@ class WebFileSystem implements KFileSystem {
     }
   }
 
+  /// ブラウザのサイト専用領域（OPFS）の中の [name] フォルダをルートにする。無ければ null。
+  ///
+  /// > [!NOTE] 開発・自動テスト用（`#/map?project=opfs:<名前>`、2026-09-30）
+  /// > OPFS はフォルダ選択も許可の確認も要らないので、ブラウザを外から動かすだけで
+  /// > プロジェクトを開ける。中身は `tool/web_opfs.py` で流し込む。
+  /// > 前回のフォルダ（IndexedDB）には残さない（利用者の「前回のフォルダ」を上書きしない）
+  Future<String?> adoptOpfsDirectory(String name) async {
+    try {
+      final opfs = await web.window.navigator.storage.getDirectory().toDart;
+      final handle = await opfs.getDirectoryHandle(name).toDart;
+      _adopt(handle);
+      return _rootPath;
+    } catch (e) {
+      AppLogger.debug('[WebFileSystem] OPFS に $name が無い: $e');
+      return null;
+    }
+  }
+
   void _adopt(web.FileSystemDirectoryHandle handle) {
     _root = handle;
     _rootPath = '/${handle.name}';

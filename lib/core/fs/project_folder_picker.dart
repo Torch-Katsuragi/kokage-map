@@ -44,3 +44,12 @@ Future<String?> lastProjectFolderName() => impl.lastProjectFolderName();
 /// > [!IMPORTANT] ボタン押下などの**ユーザー操作の中から呼ぶこと**。
 /// > web ではブラウザの再許可プロンプトが要り、それはユーザー操作起点でしか出せない。
 Future<String?> reopenLastProjectFolder() => impl.reopenLastProjectFolder();
+
+/// 起動ルート `/map?project=…` で指示されたフォルダを開き、そのパスを返す。開けなければ null。
+///
+/// native は絶対パス（在れば開く）。web は `opfs:<名前>`（ブラウザのサイト専用領域の中のフォルダ。
+/// 開発・自動テスト用で、中身は `tool/web_opfs.py` で流し込む）。選択画面も許可の確認も出ない
+Future<String?> openRequestedProjectFolder(String spec) => impl.openRequestedProjectFolder(spec);
+
+/// web の起動ルートで OPFS のフォルダを指す接頭辞
+const kOpfsPrefix = 'opfs:';

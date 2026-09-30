@@ -22,7 +22,8 @@
 //
 //   Android: `adb shell am start -n com.k_root.k_maps/.MainActivity --es route "/map?..."`
 //            起動中なら onNewIntent → MethodChannel で同じ文字列が届く
-//   web:     `https://.../#/map?lat=...&zoom=...`（hashchange で起動中にも届く。project は無視）
+//   web:     `https://.../#/map?lat=...&zoom=...`（hashchange で起動中にも届く）。project は OS のパスではなく
+//            `opfs:<名前>`（ブラウザのサイト専用領域の中のフォルダ。開発・自動テスト用。`tool/web_opfs.py`）
 //   CLI:     `tool/kokage.py open|reload|url`（上を包んだだけ）
 //
 // 起動時の要求は [consumePending] で 1 回だけ取り出す（HomeScreen がプロジェクトを開き、
@@ -46,7 +47,7 @@ class LaunchRequest {
     this.reload = false,
   });
 
-  /// 開くプロジェクトフォルダ（絶対パス）。web では使えない
+  /// 開くプロジェクトフォルダ（絶対パス。web は `opfs:<名前>`）
   final String? project;
   final double? lat;
   final double? lon;

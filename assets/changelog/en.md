@@ -1,6 +1,6 @@
 # Changelog
 
-## Next release
+## v0.8.0 — 2026/09/30
 
 ### Project format
 
@@ -16,8 +16,13 @@
 - Opening any folder's `.qgs` in QGIS now lets you edit the layers of its subfolders too (they used to be read-only). Colors and visibility changed in QGIS go back to the settings of the folder that holds the layer
 - App-only settings (such as photo visibility) are no longer lost when a `.qgs` is re-saved in QGIS 4
 - GeoPackages and layers with the same name in different folders (e.g. a copied folder) no longer share one style on the map
+- Web: a GeoPackage could be overwritten with empty content right after opening a project (overlapping loads saw an empty database and saved it back). Fixed
 - A `.qgs` saved in QGIS that arrives through Drive sync is read back right away (before, it waited until the project was reopened, and saving in the app first discarded the QGIS changes)
 - Layers styled in QGIS by category or rule now show "Style set in QGIS" on the style screen, and their colors and widths are not editable in the app (changes would not reach QGIS). The app draws them in a representative color
+
+### Changelog
+
+- The changelog is now illustrated. Each release folds, and only the newest one starts open
 
 ## v0.7.3 — 2026/09/27
 

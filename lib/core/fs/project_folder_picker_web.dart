@@ -17,6 +17,7 @@
 library;
 
 import 'k_file_system_web.dart';
+import 'project_folder_picker.dart' show kOpfsPrefix;
 
 bool get canPickProjectFolder => WebFileSystem.supportsDirectoryPicker;
 
@@ -27,3 +28,9 @@ Future<String?> lastProjectFolderName() =>
 
 Future<String?> reopenLastProjectFolder() =>
     WebFileSystem.instance.reopenLastDirectory();
+
+Future<String?> openRequestedProjectFolder(String spec) async {
+  // web で開けるのは OPFS（`opfs:<名前>`）だけ。OS のパスはハンドルが無いので開けない
+  if (!spec.startsWith(kOpfsPrefix)) return null;
+  return WebFileSystem.instance.adoptOpfsDirectory(spec.substring(kOpfsPrefix.length));
+}

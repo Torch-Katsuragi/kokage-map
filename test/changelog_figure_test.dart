@@ -39,8 +39,9 @@ void main() {
       for (final c in chunks) {
         final svg = File('assets/changelog/svg/${c['file']}');
         expect(svg.existsSync(), isTrue, reason: '${c['file']} が無い（build.py で書き直す）');
-        // 地を塗らない（アプリの画面の地がそのまま見えて、継ぎ目が出ない）
-        expect(svg.readAsStringSync(), isNot(contains('fill="#ffffff" fill-rule="nonzero" d="M 0 0v')));
+        // 地を塗らない（アプリの画面の地がそのまま見えて、継ぎ目が出ない）。Typst はページの地を
+        // svg 直下の最初の図形として書く
+        expect(svg.readAsStringSync(), isNot(matches(RegExp(r'^<svg[^>]*>\s*<path class="typst-shape" fill='))));
       }
     }
   });

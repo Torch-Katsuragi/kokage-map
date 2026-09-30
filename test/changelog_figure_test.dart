@@ -73,7 +73,7 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pumpAndSettle();
     expect(find.byType(SvgPicture).evaluate().length, greaterThan(before));
-    expect(find.text('地図の描画を、爆速に'), findsOneWidget, reason: '見出しに版の一言');
+    expect(find.text('地図の描画を爆速に'), findsOneWidget, reason: '見出しに版の一言');
     expect(tester.takeException(), isNull);
     semantics.dispose();
   });

@@ -1,2 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# 更新履歴の図解（tool/changelog/build.py の出力）。改行を変換しない
+assets/changelog/svg/*.svg -text

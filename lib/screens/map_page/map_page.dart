@@ -119,6 +119,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     initializeAllServices();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      tutorialRoutes.mapRoute = ModalRoute.of(context);
       ref.read(mapControllerHolderProvider.notifier).set(mapController);
       if (tutorial) {
         ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
@@ -159,6 +160,19 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       return;
     }
     unawaited(p.lookAt(center: req.center, zoom: req.zoom, bearingDeg: req.bearing, pitchDeg: req.pitch, animate: false));
+  }
+
+  /// チュートリアルの決まった配置: 地図だけが前に出ていて、レイヤ一覧・表は閉じ、パン・何も選んでいない
+  void _resetForTutorial() {
+    final me = ModalRoute.of(context);
+    if (me != null) Navigator.of(context).popUntil((r) => r == me);
+    GlobalDrawingState.instance.cancel(isLine: true);
+    GlobalDrawingState.instance.cancel(isLine: false);
+    if (showAttributeTable) _closeAttributeTable();
+    triggerSetState(() => drawerOpen = false);
+    ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
+    ref.read(selectedLayerNodeProvider.notifier).select(null);
+    ref.read(selectedFeaturesProvider.notifier).set([]);
   }
 
   /// プロジェクトをディスクから読み直す（メニューの「読み直す」・`/map?reload=1`）。
@@ -334,6 +348,13 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           attributeTableLayer = next;
         });
       }
+    });
+
+    // チュートリアル: 章に入るたびに決まった配置へ戻す（前の章で開いた設定や一覧が残っていると案内がずれる）
+    ref.listen(tutorialProvider, (prev, s) {
+      if (s == null || s.menu || s.index != 0) return;
+      if (prev != null && !prev.menu && prev.chapter == s.chapter) return;
+      _resetForTutorial();
     });
 
     // 選択状態を監視（変更時に自動rebuild）

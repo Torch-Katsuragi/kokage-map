@@ -76,8 +76,16 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
     final listOpen = [TutorialTargets.areaTile, TutorialTargets.routeTile, TutorialTargets.pointsTile]
         .any((k) => k.currentContext?.mounted ?? false);
     final targets = s.step.pickTargets?.call(ref.read(currentToolProvider).name, listOpen) ?? s.step.targets;
+    // 「戻る」は位置で囲む（いちばん上の画面のアプリバーの左端。設定・写真の選択とも同じ所）
+    Rect backRect() => Rect.fromLTWH(4, MediaQuery.paddingOf(context).top + 4, 48, 48);
+    var covered = false;
     for (final key in targets) {
+      if (key == TutorialTargets.backButton) {
+        if (tutorialRoutes.pageOverMap) return backRect();
+        continue;
+      }
       final ctx = key.currentContext;
+      if (ctx != null && !(ModalRoute.of(ctx)?.isCurrent ?? true)) covered = true;
       // 下に隠れた画面の部品は囲まない（地図の上に設定を開いたときなど。地図は裏で生きている）
       if (ctx == null || !(ModalRoute.of(ctx)?.isCurrent ?? true)) continue;
       final box = ctx.findRenderObject();
@@ -85,6 +93,8 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
         return box.localToGlobal(Offset.zero, ancestor: me) & box.size;
       }
     }
+    // 迷子: 案内先が別の画面（設定など）の下に隠れている → 「戻る」を囲む
+    if (covered && tutorialRoutes.pageOverMap) return backRect();
     return null;
   }
 
@@ -115,7 +125,23 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
   }
 
   @override
+  void initState() {
+    super.initState();
+    tutorialRoutes.top.addListener(_onRoute);
+  }
+
+  void _onRoute() {
+    if (tutorialRoutes.top.value != null && tutorialRoutes.top.value == tutorialRoutes.mapRoute) {
+      // 組み立ての途中に変わることがあるので描き終えてから
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.read(tutorialProvider.notifier).report(const MapShown());
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    tutorialRoutes.top.removeListener(_onRoute);
     _poll?.cancel();
     _pulse.dispose();
     _move.dispose();

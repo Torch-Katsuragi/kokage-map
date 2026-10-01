@@ -18,6 +18,7 @@
 library;
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -31,6 +32,7 @@ import '../models/basemap_provider.dart';
 import '../providers/notification_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/basemap_service.dart';
+import '../tutorial/tutorial.dart';
 import '../widgets/basemap_preview.dart';
 import '../widgets/settings_widgets.dart';
 
@@ -56,6 +58,15 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
   void initState() {
     super.initState();
     _loadCacheInfo();
+    // チュートリアル: 開いたことと、赤色立体図がもう重なっているか（入っていればその手順は済み）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final tutorial = ref.read(tutorialProvider.notifier);
+      tutorial.report(const BasemapScreenOpened());
+      if (_baseMapService.layers.any((l) => l.providerId == reliefProviderId)) {
+        tutorial.report(const BasemapLayerAdded(reliefProviderId));
+      }
+    });
   }
 
   /// キャッシュ情報を読み込み
@@ -482,8 +493,10 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
               isBottom: i == layers.length - 1,
               blendLabel: _blendLabel,
               onChanged: (l) async {
+                final opacityChanged = l.opacity != layer.opacity;
                 await svc.updateLayer(l.providerId, (_) => l);
                 if (mounted) setState(() {});
+                if (opacityChanged) ref.read(tutorialProvider.notifier).report(BasemapOpacityChanged(l.providerId));
               },
               onRemove: layers.length > 1
                   ? () async {
@@ -499,6 +512,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
           child: Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
+              key: TutorialTargets.basemapAddButton,
               onPressed: _showAddLayerSheet,
               icon: const Icon(Icons.add),
               label: Text(t.basemap.layers.add),
@@ -543,6 +557,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
             ),
             for (final p in BaseMapProvider.availableProviders)
               ListTile(
+                key: p.id == reliefProviderId ? TutorialTargets.reliefOption : null,
                 leading: Icon(p.icon, color: have.contains(p.id) ? Colors.grey : Colors.blue),
                 title: Text(p.name),
                 subtitle: Text([
@@ -561,6 +576,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     // 等高線のように「重ねる前提」の地図は乗算で足す（白地に線だけなので、通常でもほぼ同じ）
     await svc.addLayer(picked.id, blend: picked.type == BaseMapType.generated ? BaseMapBlend.multiply : BaseMapBlend.normal);
     if (mounted) setState(() {});
+    ref.read(tutorialProvider.notifier).report(BasemapLayerAdded(picked.id));
   }
 
   /// 出典（地図面に出すのをやめてここにまとめた。松本 2026-09-13。OSM だけは地図面にも出す）
@@ -1058,6 +1074,7 @@ class _LayerRow extends StatelessWidget {
               ),
               Expanded(
                 child: Slider(
+                  key: layer.providerId == reliefProviderId ? TutorialTargets.reliefOpacity : null,
                   value: layer.opacity.toDouble(),
                   min: 0,
                   max: 100,

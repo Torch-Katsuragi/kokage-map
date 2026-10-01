@@ -1343,7 +1343,7 @@
       "yours": "Your own data"
     },
     "chapterHints(map)": {
-      "view": "Move, zoom, 2D and 3D",
+      "view": "Move, zoom, 2D and 3D, background map",
       "data": "Folders, GeoPackage, layers",
       "record": "Place a point, enter a name, draw a line",
       "photo": "Put geotagged photos on the map",
@@ -1360,7 +1360,13 @@
       "view_north_t": "North up",
       "view_north_b": "Double-tap the same button to put north back up.",
       "view_basemap_t": "Background map",
-      "view_basemap_b": "Change the background map in ≡ → Settings → Map & tiles.",
+      "view_basemap_b": "The background map is set in Settings. Open ≡ → Settings → Map & tiles.",
+      "view_relief_t": "Add the red relief map",
+      "view_relief_b": "Tap \"Add layer\" and choose \"国土地理院（赤色立体図）\" (GSI red relief) to lay it over the current map. Ridges and valleys show as shades of red.",
+      "view_opacity_t": "Adjust the transparency",
+      "view_opacity_b": "Move the slider of the red relief map to change how much shows through. Compare with the map below in the preview above.",
+      "view_backToMap_t": "Back to the map",
+      "view_backToMap_b": "Tap ← at the top left to go back. The map now shows the layer you added.",
       "data_folder_t": "Data lives in folders",
       "data_folder_b": "Kokage Map works on one folder at a time. The \"Practice\" folder is open now.",
       "data_open_t": "Open the layer list",

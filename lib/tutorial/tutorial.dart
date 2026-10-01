@@ -102,6 +102,27 @@ class GpsPointRecorded extends TutorialEvent {
   const GpsPointRecorded();
 }
 
+/// 設定の「地図・タイル」を開いた
+class BasemapScreenOpened extends TutorialEvent {
+  const BasemapScreenOpened();
+}
+
+/// 背景の地図に層を足した（もう入っていたときも開いた時点で知らせる）
+class BasemapLayerAdded extends TutorialEvent {
+  const BasemapLayerAdded(this.providerId);
+  final String providerId;
+}
+
+class BasemapOpacityChanged extends TutorialEvent {
+  const BasemapOpacityChanged(this.providerId);
+  final String providerId;
+}
+
+/// 地図の画面が前に戻ってきた（設定などを閉じた）
+class MapShown extends TutorialEvent {
+  const MapShown();
+}
+
 // ── 案内先 ─────────────────────
 
 class TutorialTargets {
@@ -123,6 +144,12 @@ class TutorialTargets {
   static final photoMenuItem = GlobalKey(debugLabel: 'tutorial.photoMenuItem');
   static final locatedPhoto = GlobalKey(debugLabel: 'tutorial.locatedPhoto');
   static final importButton = GlobalKey(debugLabel: 'tutorial.importButton');
+  static final basemapAddButton = GlobalKey(debugLabel: 'tutorial.basemapAddButton');
+  static final reliefOption = GlobalKey(debugLabel: 'tutorial.reliefOption');
+  static final reliefOpacity = GlobalKey(debugLabel: 'tutorial.reliefOpacity');
+
+  /// 「戻る」（いちばん上の画面のアプリバーの左端）。部品に鍵は付けず、位置で囲む（重ね絵が測る）
+  static final backButton = GlobalKey(debugLabel: 'tutorial.backButton');
   // 練習プロジェクトの中だけに付ける
   static final gpkgTile = GlobalKey(debugLabel: 'tutorial.gpkgTile');
   static final areaEye = GlobalKey(debugLabel: 'tutorial.areaEye');
@@ -157,6 +184,9 @@ bool isPracticeGpkg(String? absPath) {
 // ── 章と手順 ─────────────────────
 
 enum TutorialChapter { view, data, record, photo, gps, yours }
+
+/// 「背景の地図」で重ねる地図（国土地理院の赤色立体図）
+const reliefProviderId = 'gsi_red_relief';
 
 class TutorialStepDef {
   const TutorialStepDef(
@@ -209,7 +239,14 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('north', targets: [TutorialTargets.compassButton]),
       // ≡ → 設定 → 地図・タイル。開いていけば枠もついていく（前に出ている画面の部品が先に当たる）
       TutorialStepDef('basemap',
-          targets: [TutorialTargets.basemapSetting, TutorialTargets.settingsMenuItem, TutorialTargets.menuButton]),
+          targets: [TutorialTargets.basemapSetting, TutorialTargets.settingsMenuItem, TutorialTargets.menuButton],
+          done: (e) => e is BasemapScreenOpened),
+      // 赤色立体図を重ねて透け具合を変える（松本 2026-10-01「背景地図のチュートリアルが中途半端」）
+      TutorialStepDef('relief', targets: [TutorialTargets.reliefOption, TutorialTargets.basemapAddButton],
+          done: (e) => e is BasemapLayerAdded && e.providerId == reliefProviderId),
+      TutorialStepDef('opacity', waitNext: true, targets: [TutorialTargets.reliefOpacity],
+          done: (e) => e is BasemapOpacityChanged && e.providerId == reliefProviderId),
+      TutorialStepDef('backToMap', targets: [TutorialTargets.backButton], done: (e) => e is MapShown),
     ],
     TutorialChapter.data => [
       const TutorialStepDef('folder'),
@@ -324,6 +361,38 @@ class TutorialState {
         finished: finished ?? this.finished,
         satisfied: satisfied ?? false, // 手順が変わったら戻す
       );
+}
+
+/// いちばん上の画面を見張る（MaterialApp の navigatorObservers に入れる）。
+/// 「戻る」を囲むか・地図に戻ったかの判断に使う
+final tutorialRoutes = TutorialRouteObserver();
+
+class TutorialRouteObserver extends NavigatorObserver {
+  /// いちばん上の画面
+  final top = ValueNotifier<Route<dynamic>?>(null);
+
+  /// 地図の画面（地図が組まれたときに入れる）
+  Route<dynamic>? mapRoute;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => top.value = route;
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => top.value = previousRoute;
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (top.value == route) top.value = previousRoute;
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (top.value == oldRoute) top.value = newRoute;
+  }
+
+  /// 地図の上に別の画面（設定など。メニューやダイアログは数えない）が重なっているか
+  bool get pageOverMap {
+    final t = top.value;
+    return t is PageRoute && mapRoute != null && t != mapRoute;
+  }
 }
 
 /// 設定などホームの外から「チュートリアルを始めて」と頼む口。ホームが聞いていて、地図を閉じてから始める

@@ -54,6 +54,7 @@ import '../../utils/label_template.dart';
 import '../../widgets/attribute_table/attribute_table_widget.dart';
 import '../../widgets/feature_detail_panel.dart';
 import '../../widgets/feature_set_panel.dart';
+import '../../widgets/feature_silhouette.dart';
 import '../../widgets/info_panel_card.dart';
 // gps_track.dart は不要に（GpsHistoryRecorder に統合）
 import '../../widgets/layer_drawer/layer_drawer.dart';
@@ -771,7 +772,18 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         if (!isOpen) ref.read(selectedFeaturesProvider.notifier).clear();
       },
       onHeightChanged: (height) => infoPanelHeight = height,
-      child: InfoPanelFill(child: _buildInfoContent(selected)),
+      child: _withSilhouette(selected, InfoPanelFill(child: _buildInfoContent(selected))),
+    );
+  }
+
+  /// 情報パネルの背景に、選んだ地物の形を薄く敷く（1 つだけ選んでいるとき）
+  Widget _withSilhouette(List<LayerTreeNode> selected, Widget content) {
+    if (selected.length != 1) return content;
+    return Stack(
+      children: [
+        Positioned.fill(child: FeatureSilhouette(feature: selected.first)),
+        content,
+      ],
     );
   }
 
@@ -785,7 +797,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       child: Material(
         color: _panelBackgroundColor,
         elevation: 4,
-        child: InfoPanelFill(child: SingleChildScrollView(child: _buildInfoContent(selected))),
+        child: _withSilhouette(selected, InfoPanelFill(child: SingleChildScrollView(child: _buildInfoContent(selected)))),
       ),
     );
   }

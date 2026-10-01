@@ -55,7 +55,8 @@ class InfoPanelCard extends StatelessWidget {
     return Material(
       elevation: fill ? 0 : 4,
       borderRadius: BorderRadius.circular(fill ? 0 : 12),
-      color: fill ? Colors.white : Colors.white.withValues(alpha: 0.8),
+      // パネルに敷くときは透かす（パネル側が地の色を持ち、背景に地物の形を敷くため）
+      color: fill ? Colors.transparent : Colors.white.withValues(alpha: 0.8),
       child: Container(
         width: fill ? double.infinity : width,
         constraints: fill ? const BoxConstraints() : BoxConstraints(maxHeight: maxHeight),

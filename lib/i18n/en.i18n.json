@@ -1418,7 +1418,7 @@
       "photo_add_t": "Choose photos",
       "photo_add_b": "Tap + and choose \"Photo\".",
       "photo_legend_t": "Location",
-      "photo_legend_b": "A green frame means the photo has a location. Photos without one cannot be placed on the map. Turn on location in your camera settings.",
+      "photo_legend_b": "A green pin and frame mean the photo has a location. Photos without one cannot be placed on the map. Turn on location in your camera settings.",
       "photo_import_t": "Import",
       "photo_import_b": "Tap photos to choose them, then import with the button below.",
       "photo_done_t": "On the map",
@@ -1551,11 +1551,19 @@
   },
   "photoPicker": {
     "title": "Choose photos",
+    "allPhotos": "All photos",
     "onlyWithLocation": "With location",
-    "legend": "Green frame = has location. Photos without location cannot be placed on the map",
+    "onlyWithLocationOn": "Showing only photos with a location",
+    "legend": "Green pin and frame = has location. Photos without location cannot be placed on the map",
     "noLocation": "No location",
     "choose": "Choose photos",
-    "import": "Import $count"
+    "import": "Import $count",
+    "selected": "$count selected",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "weekdays": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",
+    "dateThisYear": "$w, $m/$d",
+    "dateOtherYear": "$w, $m/$d/$y"
   },
   "galleryImport": {
     "imported": "Imported $count photo(s)",

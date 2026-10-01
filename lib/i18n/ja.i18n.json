@@ -1418,7 +1418,7 @@
       "photo_add_t": "写真を選ぶ",
       "photo_add_b": "＋ を押して「写真」を選びます。",
       "photo_legend_t": "位置情報",
-      "photo_legend_b": "緑の枠は位置情報つきの写真です。位置なしの写真は地図に置けません。カメラの設定で位置情報をオンにして撮ってください。",
+      "photo_legend_b": "緑のピンと縁が付いた写真は位置情報つきです。位置なしの写真は地図に置けません。カメラの設定で位置情報をオンにして撮ってください。",
       "photo_import_t": "取り込む",
       "photo_import_b": "写真を押して選び、下のボタンで取り込みます。",
       "photo_done_t": "地図に出ます",
@@ -1551,11 +1551,19 @@
   },
   "photoPicker": {
     "title": "写真を選ぶ",
+    "allPhotos": "すべての写真",
     "onlyWithLocation": "位置ありだけ",
-    "legend": "緑の枠は位置情報つき。位置なしの写真は地図に置けません",
+    "onlyWithLocationOn": "位置情報つきの写真だけを出しています",
+    "legend": "緑のピンと縁は位置情報つき。位置なしの写真は地図に置けません",
     "noLocation": "位置なし",
     "choose": "写真を選んでください",
-    "import": "$count 枚を取り込む"
+    "import": "$count 枚を取り込む",
+    "selected": "$count 枚を選択",
+    "today": "今日",
+    "yesterday": "昨日",
+    "weekdays": "月,火,水,木,金,土,日",
+    "dateThisYear": "$m月$d日（$w）",
+    "dateOtherYear": "$y年$m月$d日（$w）"
   },
   "galleryImport": {
     "imported": "写真を $count 枚取り込みました",

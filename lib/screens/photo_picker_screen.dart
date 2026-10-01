@@ -354,7 +354,7 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
   }
 }
 
-/// 写真 1 枚。選んだら青枠。位置なしは薄くして「位置なし」の印を淡く重ねる
+/// 写真 1 枚。選んだら縮んで角丸の青枠。位置なしは薄くして「位置なし」の印を淡く重ねる
 class _Tile extends StatelessWidget {
   const _Tile({
     super.key,
@@ -377,36 +377,66 @@ class _Tile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final unlocated = hasLocation == false;
+    final photo = Stack(
+      fit: StackFit.expand,
+      children: [
+        // 位置なしは薄く（背景の白に寄せる）
+        Opacity(
+          opacity: unlocated ? 0.45 : 1,
+          child: AssetEntityImage(
+            asset,
+            isOriginal: false,
+            thumbnailSize: const ThumbnailSize.square(240),
+            fit: BoxFit.cover,
+            // 縮小画像を作れない形式（TIFF など）は印だけ出す（例外の文字をそのまま出さない）
+            errorBuilder: (_, _, _) => ColoredBox(
+              color: scheme.surfaceContainerHighest,
+              child: Icon(Icons.image_not_supported_outlined, color: scheme.outline),
+            ),
+          ),
+        ),
+        if (unlocated)
+          const Center(
+            child: Opacity(opacity: 0.6, child: SizedBox(width: 34, height: 34, child: NoLocationIcon())),
+          ),
+      ],
+    );
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // 位置なしは薄く（背景の白に寄せる）
-          Opacity(
-            opacity: unlocated ? 0.45 : 1,
-            child: AssetEntityImage(
-              asset,
-              isOriginal: false,
-              thumbnailSize: const ThumbnailSize.square(240),
-              fit: BoxFit.cover,
-              // 縮小画像を作れない形式（TIFF など）は印だけ出す（例外の文字をそのまま出さない）
-              errorBuilder: (_, _, _) => ColoredBox(
-                color: scheme.surfaceContainerHighest,
-                child: Icon(Icons.image_not_supported_outlined, color: scheme.outline),
+      // 選ぶと縮んで角が丸くなり、青い縁が付く。0.14 秒で形を変える（押した手応え。繰り返さない）
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: selected ? 1 : 0),
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+        child: photo,
+        builder: (context, k, child) {
+          final radius = BorderRadius.circular(14 * k);
+          return ColoredBox(
+            // 縮んだすき間は淡い青
+            // （transparent から lerp すると途中で灰色になるので、色はそのまま濃さだけ変える）
+            color: scheme.primaryContainer.withValues(alpha: k),
+            child: Padding(
+              padding: EdgeInsets.all(9 * k),
+              child: ClipRRect(
+                borderRadius: radius,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    child!,
+                    if (k > 0)
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: radius,
+                          border: Border.all(color: scheme.primary.withValues(alpha: k), width: 3),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-          if (unlocated)
-            const Center(
-              child: Opacity(opacity: 0.6, child: SizedBox(width: 34, height: 34, child: NoLocationIcon())),
-            ),
-          if (selected)
-            DecoratedBox(
-              decoration: BoxDecoration(border: Border.all(color: scheme.primary, width: 4)),
-            ),
-        ],
+          );
+        },
       ),
     );
   }

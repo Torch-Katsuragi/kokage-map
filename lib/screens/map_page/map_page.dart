@@ -395,7 +395,13 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     final editing = ref.watch(featureEditorProvider) != null;
     final layout = MapLayout.resolve(ref.watch(mapLayoutPresetSettingProvider), MediaQuery.of(context).size);
 
-    return KeyboardShortcutWrapper(
+    // 編集中の ← （と端末の戻る）はホームへ戻らず編集をやめる（つい押してしまうので）
+    return PopScope(
+      canPop: !editing,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) cancelEdit(context, ref);
+      },
+      child: KeyboardShortcutWrapper(
       mapState: this,
       child: Scaffold(
         appBar: AppBar(
@@ -554,6 +560,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                       : null,
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      ),
       ),
     );
   }

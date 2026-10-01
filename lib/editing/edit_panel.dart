@@ -27,6 +27,26 @@ import '../widgets/feature_silhouette.dart';
 import 'edit_session.dart';
 import 'edit_toolbar.dart';
 
+/// 編集をやめる。変更があれば破棄してよいか聞く（取消ボタン・左上の ← ・端末の戻る）
+Future<void> cancelEdit(BuildContext context, WidgetRef ref) async {
+  final s = ref.read(featureEditorProvider);
+  if (s == null || s.saving) return;
+  if (s.dirty) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: Text(t.featureEdit.discardConfirm),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.featureEdit.keepEditing)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t.featureEdit.discard)),
+        ],
+      ),
+    );
+    if (ok != true) return;
+  }
+  ref.read(featureEditorProvider.notifier).cancel();
+}
+
 class EditPanel extends ConsumerStatefulWidget {
   const EditPanel({super.key});
 
@@ -48,22 +68,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
     super.dispose();
   }
 
-  Future<void> _cancel(EditState s) async {
-    if (s.dirty) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          content: Text(t.featureEdit.discardConfirm),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.featureEdit.keepEditing)),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t.featureEdit.discard)),
-          ],
-        ),
-      );
-      if (ok != true) return;
-    }
-    ref.read(featureEditorProvider.notifier).cancel();
-  }
+  Future<void> _cancel(EditState s) => cancelEdit(context, ref);
 
   @override
   Widget build(BuildContext context) {

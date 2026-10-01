@@ -32,6 +32,7 @@ import '../providers/notification_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../tutorial/tutorial.dart';
 import '../utils/global_drawing_state.dart';
 import 'map_tool.dart';
 import 'pan_tool.dart';
@@ -116,6 +117,7 @@ class PenTool extends MapTool {
       PointFeatureNode.createIn(selected, latlng, '', '').then((_) {
         // フィーチャー作成完了後にUI更新
         mapState.refreshFeatures();
+        _ref.read(tutorialProvider.notifier).report(PointPlaced(selected));
       });
       mapState.setState(() {});
     } else if (selected is LineLayerNode) {

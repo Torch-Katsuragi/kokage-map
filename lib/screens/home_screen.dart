@@ -24,6 +24,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/fs/k_file_system.dart';
 import '../core/fs/project_folder_picker.dart';
 import '../core/launch_options.dart';
 import '../core/launch_request.dart';
@@ -39,6 +40,8 @@ import '../providers/ui_state_providers.dart';
 import '../services/changelog_service.dart';
 import '../services/global_folder_locator.dart';
 import '../services/party/party_invite.dart';
+import '../tutorial/practice_project.dart';
+import '../tutorial/tutorial.dart';
 import '../utils/folder_utils.dart';
 import 'changelog_screen.dart';
 import 'map_page/map_page.dart';
@@ -73,6 +76,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     LaunchRequest.incoming.addListener(_onLaunchRequest);
+    tutorialRequests.addListener(_onTutorialRequest);
     _initPermissions();
     _checkChangelogUnread();
     _loadLastFolderName();
@@ -148,6 +152,76 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     await _checkPermissions();
     await _maybeAutoOpenProjectDir();
     _maybeOpenPartyInvite();
+    // はじめての人にだけ一度聞く（あとからはホームと設定から）
+    if (needsOnboarding) await _offerTutorial();
+  }
+
+  /// チュートリアルを使えるか（練習プロジェクトを実際のフォルダに作る。web は未対応）
+  bool get _canTutorial => fs.hasRealPaths && PlatformCapabilities.canOpenLocalProject;
+
+  Future<void> _offerTutorial() async {
+    if (!mounted || !_canTutorial || !_permissionsGranted || _navigatedToMapPage) return;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t.tutorial.offerTitle),
+        content: Text(t.tutorial.offerBody),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.tutorial.later)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t.tutorial.start)),
+        ],
+      ),
+    );
+    if (yes == true) await _startTutorial();
+  }
+
+  /// 設定から頼まれた。地図の上からなら、地図が閉じてから始める
+  bool _tutorialPending = false;
+  void _onTutorialRequest() {
+    if (_navigatedToMapPage) {
+      _tutorialPending = true;
+    } else {
+      unawaited(_startTutorial());
+    }
+  }
+
+  /// 練習プロジェクトを作り直して開き、案内を始める
+  Future<void> _startTutorial() async {
+    if (!mounted || !_canTutorial || _isOpeningProject || _navigatedToMapPage) return;
+    if (!_permissionsGranted) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.permissions.storageNotGranted,
+            level: NotificationLevel.error,
+          );
+      return;
+    }
+    setState(() {
+      _isOpeningProject = true;
+      _openingProjectStatus = t.tutorial.preparing;
+    });
+    final PracticeProject proj;
+    try {
+      proj = await PracticeProject.recreate();
+    } catch (e) {
+      AppLogger.debug('[HomeScreen] 練習プロジェクトを作れない: $e');
+      if (!mounted) return;
+      setState(() => _isOpeningProject = false);
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.tutorial.failed,
+            level: NotificationLevel.error,
+          );
+      return;
+    }
+    // 開いた地図を練習の場所に合わせる（MapPage が consumePending で拾う）
+    LaunchRequest.defer(LaunchRequest(
+      lat: PracticeProject.center.latitude,
+      lon: PracticeProject.center.longitude,
+      zoom: PracticeProject.zoom,
+      pitch: 0,
+    ));
+    ref.read(expandedGeoPackagesProvider.notifier).addExpanded(proj.gpkgPath);
+    ref.read(tutorialProvider.notifier).start();
+    await _openProjectDir(proj.dir);
   }
 
   /// 招待URL（web の `?room=CODE`）で開かれたら、フォルダ選択を挟まず
@@ -203,6 +277,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   void dispose() {
     LaunchRequest.incoming.removeListener(_onLaunchRequest);
+    tutorialRequests.removeListener(_onTutorialRequest);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -493,11 +568,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         MaterialPageRoute(builder: (_) => const RootMapsHomePage()),
       ).then((_) {
         if (!mounted) return;
+        ref.read(tutorialProvider.notifier).stop(); // 地図を閉じたら案内も終わり
         setState(() {
           _navigatedToMapPage = false;
           _isOpeningProject = false;
           _openingProjectStatus = '';
         });
+        if (_tutorialPending) {
+          _tutorialPending = false;
+          unawaited(_startTutorial());
+        }
       }));
     }
   }
@@ -719,6 +799,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                   style: TextButton.styleFrom(
                                     foregroundColor: Colors.blue,
                                   ),
+                                ),
+                              ],
+                              if (_canTutorial && !_isOpeningProject) ...[
+                                const SizedBox(height: 4),
+                                TextButton.icon(
+                                  onPressed: _permissionsGranted ? _startTutorial : null,
+                                  icon: const Icon(Icons.school_outlined),
+                                  label: Text(t.tutorial.homeButton),
                                 ),
                               ],
                               if (_isOpeningProject) ...[

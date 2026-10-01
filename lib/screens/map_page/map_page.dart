@@ -45,6 +45,8 @@ import '../../services/kmeta_service.dart';
 import '../../services/party/party_invite.dart';
 import '../../tools/gps_tool.dart';
 import '../../tools/pen_tool.dart';
+import '../../tutorial/tutorial.dart';
+import '../../tutorial/tutorial_overlay.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/feature_calc_utils.dart';
 import '../../utils/global_drawing_state.dart';
@@ -106,10 +108,18 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     super.initState();
     AppLogger.debug('[MapPage] initState start');
     WidgetsBinding.instance.addObserver(this);
+    // チュートリアルは「レイヤ一覧を開く」「ペンを押す」から教えるので、閉じた一覧・パン・未選択で始める
+    // （道具と選択は前の地図から持ち越される。プロバイダは組み立て中に変えられないので次のフレームで）
+    final tutorial = ref.read(tutorialProvider) != null;
+    if (tutorial) drawerOpen = false;
     initializeAllServices();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(mapControllerHolderProvider.notifier).set(mapController);
+      if (tutorial) {
+        ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
+        ref.read(selectedLayerNodeProvider.notifier).select(null);
+      }
       // 招待URL（web の `?room=CODE`）経由の起動なら、参加ダイアログを
       // コード充填済みで開く（「ルーム参加がURLで済む」の受け側）。
       final inviteCode = consumePendingRoomCode();
@@ -333,7 +343,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
     return KeyboardShortcutWrapper(
       mapState: this,
-      child: Scaffold(
+      child: Stack(fit: StackFit.expand, children: [Scaffold(
         appBar: AppBar(
           title: _buildAppBarTitle(folderTree),
           actions: [
@@ -357,6 +367,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                     drawerWidth = 320;
                   }
                 });
+                ref.read(tutorialProvider.notifier).report(LayersPanelToggled(drawerOpen));
               },
               // ≡ メニュー（パーティ・水準器・設定を集約）はレイヤ一覧の左
               beforeLayerButton: [MapMenuButton(onReload: reloadProjectFromDisk)],
@@ -482,6 +493,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
+      // チュートリアル（練習プロジェクトのときだけ出る）
+      const TutorialOverlay(),
+      ]),
     );
   }
 
@@ -770,6 +784,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           triggerSetState(() {
             drawerOpen = isOpen;
           });
+          ref.read(tutorialProvider.notifier).report(LayersPanelToggled(isOpen));
         },
         onWidthChanged: (width) {
           triggerSetState(() {

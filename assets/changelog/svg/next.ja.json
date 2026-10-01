@@ -1,0 +1,20 @@
+{
+ "title": "練習用の地図で使い方を試せるように",
+ "chunks": [
+  {
+   "file": "next.ja.00.svg",
+   "width": 252.0,
+   "height": 181.44
+  },
+  {
+   "file": "next.ja.01.svg",
+   "width": 252.0,
+   "height": 245.13
+  },
+  {
+   "file": "next.ja.02.svg",
+   "width": 252.0,
+   "height": 116.55
+  }
+ ]
+}

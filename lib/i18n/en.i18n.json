@@ -1303,6 +1303,70 @@
     "unclosedParens": "Unclosed parentheses",
     "unclosedQuotes": "Unclosed quotes"
   },
+  "tutorial": {
+    "offerTitle": "Try the basics?",
+    "offerBody": "On a practice map, go from moving the map to placing a point in about 3 minutes.",
+    "start": "Start",
+    "later": "Later",
+    "homeButton": "Try the basics on a practice map",
+    "settingsTitle": "Tutorial",
+    "settingsSubtitle": "The practice map is recreated each time",
+    "preparing": "Preparing the practice map...",
+    "failed": "Could not create the practice map",
+    "quit": "Quit",
+    "next": "Next",
+    "finish": "Done",
+    "practice": {
+      "folder": "Practice",
+      "gpkg": "Practice",
+      "stands": "Stands",
+      "roads": "Roads",
+      "points": "Points",
+      "species": "Species",
+      "age": "Age",
+      "memo": "Memo",
+      "sugi": "Japanese cedar",
+      "hinoki": "Hinoki cypress"
+    },
+    "steps": {
+      "move": {
+        "title": "Move the map",
+        "body": "Drag with a finger to move. Spread two fingers to zoom in, pinch to zoom out."
+      },
+      "openLayers": {
+        "title": "Open the layer list",
+        "body": "This button lists the data on the map."
+      },
+      "hideStands": {
+        "title": "Hide the stands",
+        "body": "Tap the mark left of \"Stands\" to hide it from the map."
+      },
+      "showStands": {
+        "title": "Tap again to show",
+        "body": "Tap the same place again to bring it back."
+      },
+      "pickPoints": {
+        "title": "Pick the points layer",
+        "body": "Choose the layer to write to. Tap the \"Points\" row."
+      },
+      "closeLayers": {
+        "title": "Close the list",
+        "body": "The same button closes it."
+      },
+      "pen": {
+        "title": "Pick up the pen",
+        "body": "With the pen you write into the chosen layer."
+      },
+      "placePoint": {
+        "title": "Place a point",
+        "body": "Tap anywhere on the map to place a point there."
+      },
+      "done": {
+        "title": "Done",
+        "body": "That is all it takes to record in the field. You can recreate the practice map from Settings anytime."
+      }
+    }
+  },
   "onboarding": {
     "welcome": "Welcome to Kokage Map",
     "welcomeDesc": "A GeoPackage-based geographic information management app.\nLet's set up the required permissions to get started.",

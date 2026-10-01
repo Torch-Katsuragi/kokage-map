@@ -23,6 +23,7 @@ import '../models/nodes/overlay_image_node.dart';
 import '../providers/device_tool_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
+import '../tutorial/tutorial.dart';
 
 /// 地図画面左側のツールバー
 ///
@@ -77,6 +78,7 @@ class MapToolbar extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               _ToolButton(
+                key: TutorialTargets.penButton,
                 icon: Icons.edit,
                 tooltip: t.map.toolbar.pen,
                 isSelected: currentTool.name == 'Pen',
@@ -160,6 +162,7 @@ class _ToolButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   const _ToolButton({
+    super.key,
     required this.icon,
     required this.tooltip,
     required this.isSelected,

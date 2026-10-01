@@ -203,6 +203,16 @@
   }
 }))
 
+/// チュートリアルの札（画面の下に出る説明）。step は "1 / 8" など、none なら出さない
+#let coach-card(w, step, title) = box(width: w, fill: white, radius: 4pt, inset: (x: 4pt, y: 3pt),
+  stroke: 0.5pt + line-c, align(left, {
+    if step != none { text(size: 4.5pt, fill: accent)[#step]; linebreak() }
+    text(size: 6pt, weight: "bold")[#title]
+  }))
+
+/// チュートリアルの「ここを押す」枠
+#let spot(w, h) = box(width: w, height: h, rect(width: w, height: h, radius: 2.5pt, stroke: 1.4pt + accent))
+
 /// 吹き出し（端末で何をしたか）
 #let bubble(body) = box(fill: white, stroke: 0.7pt + line-c, radius: 6pt, inset: (x: 5pt, y: 3.5pt),
   text(size: 7.8pt)[#body])

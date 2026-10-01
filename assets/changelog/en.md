@@ -1,5 +1,16 @@
 # Changelog
 
+## Next release
+
+### Tutorial
+
+- Try the basics on a practice map. A guide shows where to tap, from moving the map and toggling layers to placing a point
+- Offered once on first use. Start it again anytime from Home or Settings
+
+### Fixes
+
+- Layers whose names contain spaces or quotes could not be written to
+
 ## v0.8.0 — 2026/09/30
 
 ### Project format

@@ -17,6 +17,7 @@
 // 水準器（コンパス）と設定は AppBar の ≡ メニュー（MapMenuButton）へ移動した。
 import 'package:flutter/material.dart';
 import '../i18n/strings.g.dart';
+import '../tutorial/tutorial.dart';
 import 'notification/notification_bell.dart';
 
 /// 地図画面AppBarの右側アクションボタン群を生成する関数
@@ -44,6 +45,7 @@ List<Widget> buildMapAppBarActions({
     ...beforeLayerButton,
     // レイヤードロワーボタン（右端）
     IconButton(
+      key: TutorialTargets.layersButton,
       icon: Icon(Icons.layers, color: drawerOpen ? Colors.blue : null),
       tooltip: drawerOpen ? t.layerDrawer.closeDrawer : t.layerDrawer.openDrawer,
       onPressed: onDrawerToggle,

@@ -34,6 +34,8 @@ import '../../../providers/ui_state_providers.dart';
 import '../../../screens/layer_style_settings_screen.dart';
 import '../../../services/geometry_conversion_service.dart';
 import '../../../services/survey/survey_chain_resolver.dart';
+import '../../../tutorial/practice_project.dart';
+import '../../../tutorial/tutorial.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/feature_calc_utils.dart';
 import '../../../widgets/geometry_conversion_dialogs.dart';
@@ -62,13 +64,18 @@ class LayerTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isSelected = ref.watch(selectedLayerNodeProvider) == node;
+    // チュートリアルの案内先（練習プロジェクトの小班の目・調査点の行）
+    final guiding = ref.watch(tutorialProvider) != null;
+    final eyeKey = guiding && isPracticeLayer(node, PracticeProject.standsLayer) ? TutorialTargets.standsEye : null;
+    final tileKey = guiding && isPracticeLayer(node, PracticeProject.pointsLayer) ? TutorialTargets.pointsTile : null;
 
     final tileContent = GestureDetector(
+      key: tileKey,
       onTap: () => ref.read(selectedLayerNodeProvider.notifier).select(node),
       onDoubleTap: () => _zoomToLayer(ref),
       child: ListTile(
         contentPadding: const EdgeInsets.only(left: 32, right: 16),
-        leading: _buildLeadingIcon(ref, isSelected),
+        leading: KeyedSubtree(key: eyeKey, child: _buildLeadingIcon(ref, isSelected)),
         title: Text(
           node.name,
           style: TextStyle(
@@ -120,6 +127,7 @@ class LayerTile extends ConsumerWidget {
         node.visible = !node.visible;
         node.persistVisibility();
         ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.read(tutorialProvider.notifier).report(LayerVisibilityToggled(node));
       },
       child: Stack(
         alignment: Alignment.center,

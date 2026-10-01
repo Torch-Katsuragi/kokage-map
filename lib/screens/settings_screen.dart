@@ -23,6 +23,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/fs/k_file_system.dart';
 import '../core/map_layout.dart';
 import '../core/platform_capabilities.dart';
 import '../core/terrain/dem_tiles.dart';
@@ -36,6 +37,7 @@ import '../providers/ui_state_providers.dart';
 import '../services/global_folder_locator.dart';
 import '../services/google_drive/auto_sync_service.dart';
 import '../services/google_drive/google_drive_service.dart';
+import '../tutorial/tutorial.dart';
 import '../utils/folder_utils.dart';
 import '../widgets/settings_widgets.dart';
 import 'basemap_settings_screen.dart';
@@ -719,6 +721,25 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
               }),
             ],
           ),
+
+          // チュートリアル（練習用の地図。ホームに戻ってから始める）
+          if (fs.hasRealPaths)
+            SettingsSection(
+              title: t.tutorial.settingsTitle,
+              icon: Icons.school_outlined,
+              iconColor: Colors.teal,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.play_arrow),
+                  title: Text(t.tutorial.homeButton),
+                  subtitle: Text(t.tutorial.settingsSubtitle),
+                  onTap: () {
+                    Navigator.of(context).popUntil((r) => r.isFirst);
+                    tutorialRequests.request();
+                  },
+                ),
+              ],
+            ),
 
           // UIサイズ調整セクション
           _buildUiScaleSection(),

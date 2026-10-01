@@ -169,7 +169,10 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
                   final a = shown[i];
                   _checkLocation(a);
                   final order = _selected.indexOf(a);
+                  // チュートリアルの案内先: 最初に見つかった位置つきの写真
+                  final firstLocated = shown.firstWhere((x) => _hasLocation[x.id] == true, orElse: () => a);
                   return _Tile(
+                    key: _hasLocation[a.id] == true && identical(firstLocated, a) ? TutorialTargets.locatedPhoto : null,
                     asset: a,
                     hasLocation: _hasLocation[a.id],
                     order: order < 0 ? null : order + 1,
@@ -185,6 +188,7 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
           child: FilledButton(
+            key: _selected.isEmpty ? null : TutorialTargets.importButton,
             onPressed: _selected.isEmpty ? null : () => Navigator.pop(context, List<AssetEntity>.of(_selected)),
             child: Text(_selected.isEmpty ? t.photoPicker.choose : t.photoPicker.import(count: _selected.length)),
           ),
@@ -195,7 +199,7 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
 }
 
 class _Tile extends StatelessWidget {
-  const _Tile({required this.asset, required this.hasLocation, required this.order, required this.onTap});
+  const _Tile({super.key, required this.asset, required this.hasLocation, required this.order, required this.onTap});
 
   final AssetEntity asset;
 

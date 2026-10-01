@@ -236,6 +236,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
           ]),
         ),
         PopupMenuItem(
+          key: TutorialTargets.photoMenuItem,
           value: AddAction.photo,
           child: Row(children: [
             const Icon(Icons.photo_library, color: Colors.blue),

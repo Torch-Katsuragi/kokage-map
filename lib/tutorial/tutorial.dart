@@ -116,6 +116,13 @@ class TutorialTargets {
   static final addButton = GlobalKey(debugLabel: 'tutorial.addButton');
   static final gpsRecordButton = GlobalKey(debugLabel: 'tutorial.gpsRecordButton');
   static final pickerLegend = GlobalKey(debugLabel: 'tutorial.pickerLegend');
+  // メニュー・設定・写真の選択の中（どれも地図の上に重なる別の画面。前に出ている画面の部品だけ囲む）
+  static final settingsMenuItem = GlobalKey(debugLabel: 'tutorial.settingsMenuItem');
+  static final basemapSetting = GlobalKey(debugLabel: 'tutorial.basemapSetting');
+  static final syncSetting = GlobalKey(debugLabel: 'tutorial.syncSetting');
+  static final photoMenuItem = GlobalKey(debugLabel: 'tutorial.photoMenuItem');
+  static final locatedPhoto = GlobalKey(debugLabel: 'tutorial.locatedPhoto');
+  static final importButton = GlobalKey(debugLabel: 'tutorial.importButton');
   // 練習プロジェクトの中だけに付ける
   static final gpkgTile = GlobalKey(debugLabel: 'tutorial.gpkgTile');
   static final areaEye = GlobalKey(debugLabel: 'tutorial.areaEye');
@@ -200,7 +207,9 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       const TutorialStepDef('zoom'),
       TutorialStepDef('mode', targets: [TutorialTargets.compassButton], done: (e) => e is MapModeToggled),
       TutorialStepDef('north', targets: [TutorialTargets.compassButton]),
-      TutorialStepDef('basemap', targets: [TutorialTargets.menuButton]),
+      // ≡ → 設定 → 地図・タイル。開いていけば枠もついていく（前に出ている画面の部品が先に当たる）
+      TutorialStepDef('basemap',
+          targets: [TutorialTargets.basemapSetting, TutorialTargets.settingsMenuItem, TutorialTargets.menuButton]),
     ],
     TutorialChapter.data => [
       const TutorialStepDef('folder'),
@@ -254,19 +263,23 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
     ],
     TutorialChapter.photo => [
       TutorialStepDef('open', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && e.open),
-      TutorialStepDef('add', targets: [TutorialTargets.addButton], done: (e) => e is PhotoPickerOpened),
+      TutorialStepDef('add', targets: [TutorialTargets.photoMenuItem, TutorialTargets.addButton],
+          done: (e) => e is PhotoPickerOpened),
       TutorialStepDef('legend', cardLift: 72, targets: [TutorialTargets.pickerLegend]),
-      TutorialStepDef('import', waitNext: true, cardLift: 72, done: (e) => e is PhotosImported),
+      // 位置つきの写真 → 選んだら取り込むボタン（ボタンの鍵は選んでいるときだけ付く）
+      TutorialStepDef('import', waitNext: true, cardLift: 72,
+          targets: [TutorialTargets.importButton, TutorialTargets.locatedPhoto], done: (e) => e is PhotosImported),
       const TutorialStepDef('done'),
     ],
     TutorialChapter.gps => [
       TutorialStepDef('tool', targets: [TutorialTargets.gpsButton], done: (e) => e is ToolChosen && e.name == 'GPS'),
       TutorialStepDef('record', waitNext: true, targets: [TutorialTargets.gpsRecordButton], done: (e) => e is GpsPointRecorded),
     ],
-    TutorialChapter.yours => const [
-      TutorialStepDef('folder'),
-      TutorialStepDef('drive'),
-      TutorialStepDef('qgis'),
+    TutorialChapter.yours => [
+      const TutorialStepDef('folder'),
+      TutorialStepDef('drive',
+          targets: [TutorialTargets.syncSetting, TutorialTargets.settingsMenuItem, TutorialTargets.menuButton]),
+      const TutorialStepDef('qgis'),
     ],
   };
 }

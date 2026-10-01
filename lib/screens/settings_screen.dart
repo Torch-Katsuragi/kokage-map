@@ -151,6 +151,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   static bool get _isMobile => PlatformCapabilities.isMobile;
 
+  /// チュートリアルの案内先（地図・タイル と Drive同期）
+  static GlobalKey? _tutorialKey(SettingsCategory c) => switch (c) {
+        SettingsCategory.basemap => TutorialTargets.basemapSetting,
+        SettingsCategory.sync => TutorialTargets.syncSetting,
+        _ => null,
+      };
+
   /// 狭い画面（スマホ等）用レイアウト
   Widget _buildNarrowLayout() {
     return Scaffold(
@@ -160,6 +167,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         children: _visibleCategories.map((category) {
           return ListTile(
+            key: _tutorialKey(category),
             leading: Icon(category.icon, color: Colors.blueGrey),
             title: Text(category.title),
             subtitle: Text(category.description, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -209,6 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               )
                             : null,
                         child: ListTile(
+                          key: _tutorialKey(category),
                           leading: Icon(
                             category.icon,
                             color: isSelected

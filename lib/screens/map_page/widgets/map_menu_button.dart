@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/platform_capabilities.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../providers/party_providers.dart';
+import '../../../tutorial/tutorial.dart';
 import '../../level_screen.dart';
 import '../../settings_screen.dart';
 import 'party_controls.dart';
@@ -103,6 +104,7 @@ class MapMenuButton extends ConsumerWidget {
           child: _MenuRow(icon: Icons.explore, label: t.level.tooltip),
         ),
         PopupMenuItem<String>(
+          key: TutorialTargets.settingsMenuItem,
           value: _settings,
           child: _MenuRow(icon: Icons.settings, label: t.common.settings),
         ),

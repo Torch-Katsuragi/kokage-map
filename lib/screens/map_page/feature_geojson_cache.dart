@@ -44,7 +44,11 @@ class FeatureGeoJsonInput {
     this.styleKeyOf,
     this.stylePropKey = 'k-style',
     this.labelOf,
+    this.hidden = const {},
   });
+
+  /// 描かないもの（編集中の地物。写しを編集の重ね絵で描く）
+  final Set<LayerTreeNode> hidden;
 
   final List<LineFeatureNode> lines;
   final List<PolygonFeatureNode> polygons;
@@ -182,6 +186,7 @@ class FeatureGeoJsonCache {
     final lineVerts = full ? <geo.Feature<geo.Point>>[] : null;
     final lineVertsSel = <geo.Feature<geo.Point>>[];
     for (final f in input.lines) {
+      if (input.hidden.contains(f)) continue;
       final sel = input.selected.contains(f);
       if (!full && !sel) continue;
       final geom = turfLineToGeo(f.turfFeature.geometry);
@@ -208,6 +213,7 @@ class FeatureGeoJsonCache {
     final polyVerts = full ? <geo.Feature<geo.Point>>[] : null;
     final polyVertsSel = <geo.Feature<geo.Point>>[];
     for (final f in input.polygons) {
+      if (input.hidden.contains(f)) continue;
       final sel = input.selected.contains(f);
       if (!full && !sel) continue;
       final geom = turfPolygonToGeo(f.turfFeature.geometry);
@@ -232,6 +238,7 @@ class FeatureGeoJsonCache {
     final pts = full ? <geo.Feature<geo.Point>>[] : null;
     final ptsSel = <geo.Feature<geo.Point>>[];
     for (final f in input.points) {
+      if (input.hidden.contains(f)) continue;
       final sel = input.selected.contains(f);
       if (!full && !sel) continue;
       final coords = f.geometry;

@@ -21,6 +21,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../editing/edit_session.dart';
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
 import '../models/nodes/current_location_node.dart';
@@ -384,22 +385,28 @@ class FeatureDetailPanel extends ConsumerWidget {
         ]);
       }
 
-      // Line/Polygonの場合は「編集」ボタンを追加
+      // 「編集」: 情報パネルのまま編集に替わる（点・線・面とも）
+      children.addAll([
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () => ref.read(featureEditorProvider.notifier).start(feature),
+            icon: const Icon(Icons.edit, size: 16),
+            label: Text(t.featureDetail.edit),
+          ),
+        ),
+      ]);
+      // 単純化・端を切るは当面これまでの画面で（編集の道具に移すまで）
       if (feature is LineFeatureNode || feature is PolygonFeatureNode) {
         children.addAll([
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton.icon(
+            child: TextButton.icon(
               onPressed: () => _openFeatureEditor(context, feature),
-              icon: const Icon(Icons.edit, size: 16),
-              label: Text(t.featureDetail.edit),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade50,
-                foregroundColor: Colors.blue.shade700,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-              ),
+              icon: const Icon(Icons.auto_fix_high, size: 16),
+              label: Text(t.featureEdit.simplifyTrim),
             ),
           ),
         ]);

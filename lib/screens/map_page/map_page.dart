@@ -26,6 +26,10 @@ import 'package:path/path.dart' as p;
 import '../../core/launch_request.dart';
 import '../../core/map_layout.dart';
 import '../../devices/base/device_tool.dart';
+import '../../editing/edit_overlay.dart';
+import '../../editing/edit_panel.dart';
+import '../../editing/edit_session.dart';
+import '../../editing/edit_toolbar.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../models/map_style_group.dart';
@@ -358,6 +362,25 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       _resetForTutorial();
     });
 
+    // 編集の始まり・終わり: 元の地物を地図から隠す／戻す。パネルを閉じたら（選択が外れたら）取消
+    ref.listen(featureEditorProvider, (prev, next) {
+      if ((prev == null) == (next == null)) return;
+      invalidateLayerCache();
+      if (next != null && showAttributeTable) _closeAttributeTable();
+      // 終えたとき: 保存した形が地図に出るまで描き直す（隠していた間の場面が残って、動かすまで出なかった）
+      if (next == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          invalidateLayerCache();
+          terrainSceneRevision.value++;
+        });
+      }
+    });
+    ref.listen<List<LayerTreeNode>>(selectedFeaturesProvider, (_, sel) {
+      final ed = ref.read(featureEditorProvider);
+      if (ed != null && !sel.contains(ed.feature)) ref.read(featureEditorProvider.notifier).cancel();
+    });
+
     // 選択状態を監視（変更時に自動rebuild）
     final selectedFeatures = ref.watch(selectedFeaturesProvider);
 
@@ -368,6 +391,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     currentNode ??= folderTree;
 
     final currentTool = ref.watch(currentToolProvider);
+    final editing = ref.watch(featureEditorProvider) != null;
     final layout = MapLayout.resolve(ref.watch(mapLayoutPresetSettingProvider), MediaQuery.of(context).size);
 
     return KeyboardShortcutWrapper(
@@ -381,6 +405,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
               showAttributeTable: showAttributeTable,
               drawerOpen: drawerOpen,
               onAttributeTableToggle: () {
+                // 編集中は属性も編集のパネルで書き換える（表を開くと編集のパネルが隠れる）
+                if (editing) return;
                 if (showAttributeTable) {
                   _closeAttributeTable();
                 } else {
@@ -410,7 +436,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
               child: Stack(
                 children: [
                   // ツールバー（左右は配置プリセットで決まる）
-                  MapToolbar(onToolChanged: () => triggerSetState(() {}), side: layout.toolbar),
+                  if (editing)
+                    EditToolbar(side: layout.toolbar)
+                  else
+                    MapToolbar(onToolChanged: () => triggerSetState(() {}), side: layout.toolbar),
                   // 地図本体
                   Positioned.fill(
                     left: layout.toolbarLeft ? 44 : 0,
@@ -454,6 +483,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                               heading: headingNotifier,
                             ),
                           ),
+                        // 編集中の形と取っ手（地図の場面には焼かず、カメラが動くたびに描き直す）
+                        EditOverlay(project: latLngToOffset, cameraTick: cameraTickNotifier),
                         _buildDrawingPreviewInfo(),
                         _buildOffscreenLocationIndicator(),
                         const ToolNameFlash(),
@@ -551,6 +582,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       points: pointFeatures,
       photos: photoNodes,
       selected: currentSelection.toSet(),
+      hidden: {?ref.read(featureEditorProvider)?.feature},
       // 固有スタイルが1つでもあれば、フィーチャに「どのグループのものか」を載せる
       styleKeyOf: styleGroups.isEmpty
           ? null
@@ -755,13 +787,17 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   bool _infoFloats(MapLayout layout) =>
       layout.info == InfoPlacement.bottom && showAttributeTable && attributeTableLayer != null;
 
-  Widget _buildInfoContent(List<LayerTreeNode> selected) => selected.length == 1
-      ? FeatureDetailPanel(feature: selected.first)
-      : FeatureSetPanel(features: selected);
+  Widget _buildInfoContent(List<LayerTreeNode> selected) => ref.read(featureEditorProvider) != null
+      // 編集中は情報パネルの枠のまま編集に替わる
+      ? const EditPanel()
+      : selected.length == 1
+          ? FeatureDetailPanel(feature: selected.first)
+          : FeatureSetPanel(features: selected);
 
   /// 情報カードを下から出す（属性テーブルと同じ動き。下へ引き切ると選択解除）
   Widget _buildInfoBottomPanel(List<LayerTreeNode> selected) {
-    final maxHeight = MediaQuery.of(context).size.height * 0.6;
+    // 編集中は上まで引き上げられる（属性が多いとき・メモを長く書くとき）
+    final maxHeight = MediaQuery.of(context).size.height * (ref.read(featureEditorProvider) != null ? 0.9 : 0.6);
     return ResizableBottomPanel(
       initialHeight: infoPanelHeight.clamp(120.0, maxHeight),
       minHeight: 120,
@@ -772,7 +808,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         if (!isOpen) ref.read(selectedFeaturesProvider.notifier).clear();
       },
       onHeightChanged: (height) => infoPanelHeight = height,
-      child: _withSilhouette(selected, InfoPanelFill(child: _buildInfoContent(selected))),
+      // 編集中は編集のパネルが自分で形を敷く（直すたびに変わる）
+      child: ref.read(featureEditorProvider) != null
+          ? _buildInfoContent(selected)
+          : _withSilhouette(selected, InfoPanelFill(child: _buildInfoContent(selected))),
     );
   }
 
@@ -797,7 +836,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       child: Material(
         color: _panelBackgroundColor,
         elevation: 4,
-        child: _withSilhouette(selected, InfoPanelFill(child: SingleChildScrollView(child: _buildInfoContent(selected)))),
+        child: ref.read(featureEditorProvider) != null
+            ? const EditPanel()
+            : _withSilhouette(selected, InfoPanelFill(child: SingleChildScrollView(child: _buildInfoContent(selected)))),
       ),
     );
   }

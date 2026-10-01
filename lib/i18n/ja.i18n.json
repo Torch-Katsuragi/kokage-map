@@ -1020,6 +1020,40 @@
     "minutesSeconds": "${minutes}分${seconds}秒",
     "secondsOnly": "${seconds}秒"
   },
+  "featureEdit": {
+    "title": "$kindを編集",
+    "shapeTab": "形",
+    "attrsTab": "属性",
+    "cancel": "取消",
+    "save": "保存",
+    "saveFailed": "保存できませんでした",
+    "discardConfirm": "変更を捨てて編集をやめますか？",
+    "keepEditing": "編集を続ける",
+    "discard": "捨てる",
+    "noAttrs": "書き換えられる属性がありません",
+    "deleteVertex": "選んだ頂点を消す",
+    "undo": "元に戻す",
+    "redo": "やり直す",
+    "simplifyTrim": "単純化・端を切る",
+    "lineStats": "頂点 $n ・ 長さ $len",
+    "polygonStats": "頂点 $n ・ 面積 $area",
+    "modes": {
+      "vertex": "頂点",
+      "move": "移動",
+      "rotate": "回転",
+      "scale": "拡大縮小",
+      "extend": "延長"
+    },
+    "hints": {
+      "vertex": "頂点をドラッグで動かします。辺の中ほどの小さな丸を押すと頂点が増えます。頂点を押して選ぶと、左の − で消せます。",
+      "move": "ドラッグで全体を動かします。",
+      "movePoint": "ドラッグするか、移したいところを押します。",
+      "rotate": "重心のまわりをなぞるように動かすと回ります。",
+      "scale": "重心から離すと大きく、近づけると小さくなります。",
+      "extend": "地図を押すと、近いほうの端から線が続きます。端の点を押すとそちらから延ばします。",
+      "twoFingers": "地図は 2 本指で動かせます。"
+    }
+  },
   "featureDetail": {
     "typeFeature": "フィーチャ",
     "typePoint": "点",

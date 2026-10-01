@@ -26,16 +26,43 @@ import 'package:latlong2/latlong.dart' hide Path;
 import '../models/nodes/feature_node.dart';
 
 class FeatureSilhouette extends StatelessWidget {
-  const FeatureSilhouette({super.key, required this.feature});
+  const FeatureSilhouette({super.key, required this.feature}) : parts = null, closed = false;
+
+  /// 形を直接渡す（編集中の写しを、直すたびに描き直すため）。parts が 1 点だけなら点として扱う
+  const FeatureSilhouette.shape({super.key, required List<List<LatLng>> this.parts, required this.closed})
+      : feature = null;
 
   final Object? feature;
+  final List<List<LatLng>>? parts;
+  final bool closed;
 
   @override
   Widget build(BuildContext context) {
     final f = feature;
     final color = Theme.of(context).colorScheme.primary;
-    if (f is PointFeatureNode) {
-      return IgnorePointer(
+    final given = this.parts;
+    if (given != null) {
+      if (given.length == 1 && given.first.length == 1) return _point(color);
+      if (given.every((p) => p.length < 2)) return const SizedBox.shrink();
+      return IgnorePointer(child: CustomPaint(painter: _ShapePainter(given, this.closed, color)));
+    }
+    if (f is PointFeatureNode) return _point(color);
+    final List<List<LatLng>> parts;
+    final bool closed;
+    if (f is LineFeatureNode) {
+      parts = [f.line];
+      closed = false;
+    } else if (f is PolygonFeatureNode) {
+      parts = f.polygon;
+      closed = true;
+    } else {
+      return const SizedBox.shrink();
+    }
+    if (parts.every((p) => p.length < 2)) return const SizedBox.shrink();
+    return IgnorePointer(child: CustomPaint(painter: _ShapePainter(parts, closed, color)));
+  }
+
+  Widget _point(Color color) => IgnorePointer(
         child: Align(
           alignment: Alignment.centerRight,
           child: Padding(
@@ -52,21 +79,6 @@ class FeatureSilhouette extends StatelessWidget {
           ),
         ),
       );
-    }
-    final List<List<LatLng>> parts;
-    final bool closed;
-    if (f is LineFeatureNode) {
-      parts = [f.line];
-      closed = false;
-    } else if (f is PolygonFeatureNode) {
-      parts = f.polygon;
-      closed = true;
-    } else {
-      return const SizedBox.shrink();
-    }
-    if (parts.every((p) => p.length < 2)) return const SizedBox.shrink();
-    return IgnorePointer(child: CustomPaint(painter: _ShapePainter(parts, closed, color)));
-  }
 }
 
 class _ShapePainter extends CustomPainter {

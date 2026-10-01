@@ -693,6 +693,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   /// コンパスのタップ: 2D ⇄ 3D。2D は真上に固定（眺めモードも解く）。3D は 2D に入る前の傾きに戻す
   void _toggleMode() {
+    if (ref.read(currentToolProvider).name == 'Edit') return; // 編集中は 2D のまま
     if (_flat) {
       _flat = false;
       final p = _pitchBefore2d ?? _default3dPitchDeg * math.pi / 180;
@@ -731,7 +732,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   }
 
   /// 1 本指を取るツール（真上ロックの対象）
-  static bool _toolTakesDrag(String toolName) => toolName == 'Pen' || toolName == 'Overlay Transform';
+  static bool _toolTakesDrag(String toolName) =>
+      toolName == 'Pen' || toolName == 'Overlay Transform' || toolName == 'Edit';
 
   /// ツールが変わった: 1 本指を取るツールなら真上に寄せて 1 本指を渡す。離れたら傾きを戻す
   DeviceTool? _listenedDevice;
@@ -745,6 +747,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _listenedDevice?.addListener(_scheduleRefresh);
     }
     final pen = _toolTakesDrag(toolName);
+    // 地物の編集は 2D に固定（真上から見ないと頂点の位置がずれて見える）。抜けても 2D のまま
+    if (toolName == 'Edit') {
+      _flat = true;
+      _camera.perspective = false;
+      _pitchBeforePen = 0;
+    }
     if (pen && !_penLock) {
       _penLock = true;
       _pitchBeforePen = _camera.pitch;

@@ -1020,6 +1020,40 @@
     "minutesSeconds": "${minutes}m ${seconds}s",
     "secondsOnly": "${seconds}s"
   },
+  "featureEdit": {
+    "title": "Edit $kind",
+    "shapeTab": "Shape",
+    "attrsTab": "Attributes",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saveFailed": "Could not save",
+    "discardConfirm": "Discard your changes and stop editing?",
+    "keepEditing": "Keep editing",
+    "discard": "Discard",
+    "noAttrs": "No editable attributes",
+    "deleteVertex": "Delete selected vertex",
+    "undo": "Undo",
+    "redo": "Redo",
+    "simplifyTrim": "Simplify or trim",
+    "lineStats": "$n vertices · length $len",
+    "polygonStats": "$n vertices · area $area",
+    "modes": {
+      "vertex": "Vertices",
+      "move": "Move",
+      "rotate": "Rotate",
+      "scale": "Scale",
+      "extend": "Extend"
+    },
+    "hints": {
+      "vertex": "Drag a vertex to move it. Tap a small dot midway along an edge to add one. Tap a vertex to select it, then remove it with − on the left.",
+      "move": "Drag to move the whole feature.",
+      "movePoint": "Drag it, or tap where it should go.",
+      "rotate": "Drag around the center to rotate.",
+      "scale": "Drag away from the center to enlarge, toward it to shrink.",
+      "extend": "Tap the map to continue the line from the nearer end. Tap an end point to extend from that end.",
+      "twoFingers": "Move the map with two fingers."
+    }
+  },
   "featureDetail": {
     "typeFeature": "Feature",
     "typePoint": "Point",

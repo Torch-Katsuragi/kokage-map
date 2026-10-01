@@ -12,6 +12,13 @@
 
 - Photos are now chosen inside the app. Photos with a location have a green frame and a pin; others say "No location". "With location" filters them
 
+### Editing features
+
+- "Edit" in the info panel now edits the feature on the map without leaving the panel. The map locks to top-down and the left toolbar switches to edit tools
+- Move, add and delete vertices; move, rotate and scale the whole feature; extend lines (tools differ for points, lines and areas). Undo and redo work too
+- Edit attributes in the panel as well. Nothing is written until you tap Save
+- The info panel now shows the selected feature's shape faintly in the background
+
 ### Also changed
 
 - On a phone in portrait, the layer list starts closed when the map opens

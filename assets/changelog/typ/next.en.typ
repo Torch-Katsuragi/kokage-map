@@ -75,6 +75,8 @@
 
 #fixes(
   "Also changed",
+  [Edit shape and attributes right in the info panel (vertices, move, rotate, scale, extend)],
+  [The info panel shows the selected feature's shape faintly],
   [On a phone in portrait, the layer list starts closed when the map opens],
 )
 

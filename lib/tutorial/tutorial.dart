@@ -115,7 +115,7 @@ class TutorialTargets {
   static final confirmButton = GlobalKey(debugLabel: 'tutorial.confirmButton');
   static final addButton = GlobalKey(debugLabel: 'tutorial.addButton');
   static final gpsRecordButton = GlobalKey(debugLabel: 'tutorial.gpsRecordButton');
-  static final pickerLegend = GlobalKey(debugLabel: 'tutorial.pickerLegend');
+  static final unlocatedPhoto = GlobalKey(debugLabel: 'tutorial.unlocatedPhoto');
   // メニュー・設定・写真の選択の中（どれも地図の上に重なる別の画面。前に出ている画面の部品だけ囲む）
   static final settingsMenuItem = GlobalKey(debugLabel: 'tutorial.settingsMenuItem');
   static final basemapSetting = GlobalKey(debugLabel: 'tutorial.basemapSetting');
@@ -265,7 +265,7 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('open', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && e.open),
       TutorialStepDef('add', targets: [TutorialTargets.photoMenuItem, TutorialTargets.addButton],
           done: (e) => e is PhotoPickerOpened),
-      TutorialStepDef('legend', cardLift: 72, targets: [TutorialTargets.pickerLegend]),
+      TutorialStepDef('legend', targets: [TutorialTargets.unlocatedPhoto]),
       // 位置つきの写真 → 選んだら取り込むボタン（ボタンの鍵は選んでいるときだけ付く）
       TutorialStepDef('import', waitNext: true, cardLift: 72,
           targets: [TutorialTargets.importButton, TutorialTargets.locatedPhoto], done: (e) => e is PhotosImported),

@@ -16,9 +16,10 @@
 // 写真の選択（アプリ内のギャラリー）: 位置情報の有り無しを選ぶ前に見せる
 //
 // OS の写真ピッカーは見た目を変えられないので、取り込んでから「位置が入っていなかった」と
-// 気づくことになっていた（松本 2026-10-01）。見た目は Google フォトに寄せる（同日）:
-// 日付ごとの見出し・すき間の細い正方形・上の題名でアルバム切り替え・選ぶと縮んで角が丸くなるタイル。
-// 位置ありは細い緑の縁と緑のピン、位置なしは灰色の「位置なし」の印。
+// 気づくことになっていた（松本 2026-10-01）。見た目は Google フォトに寄せ、サムネイルを主役にする（同日）:
+// - 日付ごとの見出し・すき間の細い正方形・上の題名でアルバム切り替え
+// - 1 回押すとその 1 枚をすぐ取り込む。長押しで複数選択に入り、選んだ写真は青枠。取り込むボタンは複数選択のときだけ
+// - 位置ありには何もしない。位置なしは薄くして、白黒の「位置なし」の印を淡く重ねる
 //
 // 位置は 1 枚ずつ EXIF を読む（Android 10 以降は MediaStore に緯度経度の列が無い）。
 // 画面に出た枠から順に読み、結果は覚えておく。
@@ -31,8 +32,6 @@ import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
 import '../i18n/strings.g.dart';
 import '../tutorial/tutorial.dart';
-
-const _green = Color(0xFF2E7D32);
 
 class PhotoPickerScreen extends StatefulWidget {
   const PhotoPickerScreen({super.key});
@@ -81,6 +80,9 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
   int _total = 0;
   bool _loading = false;
   final _selected = <AssetEntity>[];
+
+  /// 長押しで入る複数選択。入っていなければ 1 回押すとすぐ取り込む
+  bool _multi = false;
 
   /// 位置の有無（id → 有り）。読み終えた写真だけ入る
   final _hasLocation = <String, bool>{};
@@ -144,11 +146,28 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
     setState(() => _hasLocation[a.id] = has);
   }
 
-  void _toggle(AssetEntity a) {
+  void _tap(AssetEntity a) {
+    if (!_multi) {
+      Navigator.pop(context, [a]);
+      return;
+    }
     setState(() {
       if (!_selected.remove(a)) _selected.add(a);
+      if (_selected.isEmpty) _multi = false;
     });
   }
+
+  void _longPress(AssetEntity a) {
+    setState(() {
+      _multi = true;
+      if (!_selected.contains(a)) _selected.add(a);
+    });
+  }
+
+  void _endMulti() => setState(() {
+        _multi = false;
+        _selected.clear();
+      });
 
   // ── 日付の見出し ──
 
@@ -221,219 +240,225 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
     final shown = _onlyWithLocation ? _assets.where((a) => _hasLocation[a.id] == true).toList() : _assets;
     final rows = _rows(shown);
     final theme = Theme.of(context);
-    final selecting = _selected.isNotEmpty;
     final album = _album;
-    // チュートリアルの案内先: 最初に見つかった位置つきの写真
+    // チュートリアルの案内先: 最初に見つかった位置つき・位置なしの写真
     final firstLocated = shown.where((x) => _hasLocation[x.id] == true).firstOrNull;
+    final firstUnlocated = shown.where((x) => _hasLocation[x.id] == false).firstOrNull;
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => selecting ? setState(_selected.clear) : Navigator.pop(context),
-        ),
-        title: selecting
-            ? Text(t.photoPicker.selected(count: _selected.length))
-            : InkWell(
-                onTap: _albums.length > 1 ? _chooseAlbum : null,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          album == null || album.isAll ? t.photoPicker.allPhotos : album.name,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (_albums.length > 1) const Icon(Icons.arrow_drop_down),
-                    ],
-                  ),
-                ),
-              ),
-        actions: [
-          IconButton(
-            tooltip: t.photoPicker.onlyWithLocation,
-            isSelected: _onlyWithLocation,
-            icon: const Icon(Icons.location_on_outlined),
-            selectedIcon: const Icon(Icons.location_on, color: _green),
-            onPressed: () => setState(() => _onlyWithLocation = !_onlyWithLocation),
+    return PopScope(
+      canPop: !_multi,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _endMulti(); // 複数選択中の「戻る」は選択をやめるだけ
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => _multi ? _endMulti() : Navigator.pop(context),
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            key: TutorialTargets.pickerLegend,
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Row(
-              children: [
-                const _LocationMark(true),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    _onlyWithLocation ? t.photoPicker.onlyWithLocationOn : t.photoPicker.legend,
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: NotificationListener<ScrollNotification>(
-              onNotification: (n) {
-                if (n.metrics.extentAfter < 800) _loadMore();
-                return false;
-              },
-              child: LayoutBuilder(
-                builder: (context, box) {
-                  final side = (box.maxWidth - _gap * (_columns - 1)) / _columns;
-                  return ListView.builder(
-                    itemCount: rows.length,
-                    itemBuilder: (context, i) => switch (rows[i]) {
-                      _Header(:final label) => Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
-                          child: Text(label, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-                        ),
-                      _Photos(:final assets) => Padding(
-                          padding: const EdgeInsets.only(bottom: _gap),
-                          child: Row(
-                            children: [
-                              for (final (j, a) in assets.indexed) ...[
-                                if (j > 0) const SizedBox(width: _gap),
-                                SizedBox(
-                                  width: side,
-                                  height: side,
-                                  child: Builder(builder: (_) {
-                                    _checkLocation(a);
-                                    final order = _selected.indexOf(a);
-                                    return _Tile(
-                                      key: identical(a, firstLocated) ? TutorialTargets.locatedPhoto : null,
-                                      asset: a,
-                                      hasLocation: _hasLocation[a.id],
-                                      order: order < 0 ? null : order + 1,
-                                      onTap: () => _toggle(a),
-                                    );
-                                  }),
-                                ),
-                              ],
-                            ],
+          title: _multi
+              ? Text(t.photoPicker.selected(count: _selected.length))
+              : InkWell(
+                  onTap: _albums.length > 1 ? _chooseAlbum : null,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            album == null || album.isAll ? t.photoPicker.allPhotos : album.name,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                    },
-                  );
-                },
-              ),
+                        if (_albums.length > 1) const Icon(Icons.arrow_drop_down),
+                      ],
+                    ),
+                  ),
+                ),
+          actions: [
+            IconButton(
+              tooltip: t.photoPicker.onlyWithLocation,
+              isSelected: _onlyWithLocation,
+              icon: const Icon(Icons.location_on_outlined),
+              selectedIcon: Icon(Icons.location_on, color: theme.colorScheme.primary),
+              onPressed: () => setState(() => _onlyWithLocation = !_onlyWithLocation),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-          child: FilledButton(
-            key: selecting ? TutorialTargets.importButton : null,
-            onPressed: selecting ? () => Navigator.pop(context, List<AssetEntity>.of(_selected)) : null,
-            child: Text(selecting ? t.photoPicker.import(count: _selected.length) : t.photoPicker.choose),
+          ],
+        ),
+        body: NotificationListener<ScrollNotification>(
+          onNotification: (n) {
+            if (n.metrics.extentAfter < 800) _loadMore();
+            return false;
+          },
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final side = (box.maxWidth - _gap * (_columns - 1)) / _columns;
+              return ListView.builder(
+                itemCount: rows.length,
+                itemBuilder: (context, i) => switch (rows[i]) {
+                  _Header(:final label) => Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
+                      child: Text(label, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                    ),
+                  _Photos(:final assets) => Padding(
+                      padding: const EdgeInsets.only(bottom: _gap),
+                      child: Row(
+                        children: [
+                          for (final (j, a) in assets.indexed) ...[
+                            if (j > 0) const SizedBox(width: _gap),
+                            SizedBox(
+                              width: side,
+                              height: side,
+                              child: Builder(builder: (_) {
+                                _checkLocation(a);
+                                return _Tile(
+                                  key: identical(a, firstLocated)
+                                      ? TutorialTargets.locatedPhoto
+                                      : identical(a, firstUnlocated)
+                                          ? TutorialTargets.unlocatedPhoto
+                                          : null,
+                                  asset: a,
+                                  hasLocation: _hasLocation[a.id],
+                                  selected: _selected.contains(a),
+                                  onTap: () => _tap(a),
+                                  onLongPress: () => _longPress(a),
+                                );
+                              }),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                },
+              );
+            },
           ),
         ),
+        // 取り込むボタンは複数選択のときだけ（1 枚なら押した時点で取り込む）
+        bottomNavigationBar: _multi
+            ? SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+                  child: FilledButton(
+                    key: TutorialTargets.importButton,
+                    onPressed: _selected.isEmpty ? null : () => Navigator.pop(context, List<AssetEntity>.of(_selected)),
+                    child: Text(t.photoPicker.import(count: _selected.length)),
+                  ),
+                ),
+              )
+            : null,
       ),
     );
   }
 }
 
-/// 写真 1 枚。選ぶと少し縮んで角が丸くなり、左上の丸に番号が付く（Google フォトと同じ見え方）
+/// 写真 1 枚。選んだら青枠。位置なしは薄くして「位置なし」の印を淡く重ねる
 class _Tile extends StatelessWidget {
-  const _Tile({super.key, required this.asset, required this.hasLocation, required this.order, required this.onTap});
+  const _Tile({
+    super.key,
+    required this.asset,
+    required this.hasLocation,
+    required this.selected,
+    required this.onTap,
+    required this.onLongPress,
+  });
 
   final AssetEntity asset;
 
   /// null は読み中
   final bool? hasLocation;
-  final int? order;
+  final bool selected;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    final selected = order != null;
     final scheme = Theme.of(context).colorScheme;
-    final radius = BorderRadius.circular(selected ? 10 : 0);
+    final unlocated = hasLocation == false;
     return GestureDetector(
       onTap: onTap,
-      child: ColoredBox(
-        color: selected ? scheme.primaryContainer.withValues(alpha: 0.5) : Colors.transparent,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // 選んだら縮める（押した手応え。短く、繰り返さない）
-            AnimatedPadding(
-              duration: const Duration(milliseconds: 120),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.all(selected ? 10 : 0),
-              child: ClipRRect(
-                borderRadius: radius,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    AssetEntityImage(
-                      asset,
-                      isOriginal: false,
-                      thumbnailSize: const ThumbnailSize.square(240),
-                      fit: BoxFit.cover,
-                      // 縮小画像を作れない形式（TIFF など）は印だけ出す（例外の文字をそのまま出さない）
-                      errorBuilder: (_, _, _) => ColoredBox(
-                        color: scheme.surfaceContainerHighest,
-                        child: Icon(Icons.image_not_supported_outlined, color: scheme.outline),
-                      ),
-                    ),
-                    if (hasLocation == true)
-                      DecoratedBox(
-                        decoration: BoxDecoration(border: Border.all(color: _green, width: 2.5), borderRadius: radius),
-                      ),
-                  ],
-                ),
+      onLongPress: onLongPress,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 位置なしは薄く（背景の白に寄せる）
+          Opacity(
+            opacity: unlocated ? 0.45 : 1,
+            child: AssetEntityImage(
+              asset,
+              isOriginal: false,
+              thumbnailSize: const ThumbnailSize.square(240),
+              fit: BoxFit.cover,
+              // 縮小画像を作れない形式（TIFF など）は印だけ出す（例外の文字をそのまま出さない）
+              errorBuilder: (_, _, _) => ColoredBox(
+                color: scheme.surfaceContainerHighest,
+                child: Icon(Icons.image_not_supported_outlined, color: scheme.outline),
               ),
             ),
-            if (hasLocation != null)
-              Positioned(left: selected ? 14 : 5, bottom: selected ? 14 : 5, child: _LocationMark(hasLocation!)),
-            Positioned(
-              left: 6,
-              top: 6,
-              child: Container(
-                width: 22,
-                height: 22,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: selected ? scheme.primary : Colors.black12,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-                child: selected
-                    ? Text('$order', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))
-                    : null,
-              ),
+          ),
+          if (unlocated)
+            const Center(
+              child: Opacity(opacity: 0.6, child: SizedBox(width: 34, height: 34, child: NoLocationIcon())),
             ),
-          ],
-        ),
+          if (selected)
+            DecoratedBox(
+              decoration: BoxDecoration(border: Border.all(color: scheme.primary, width: 4)),
+            ),
+        ],
       ),
     );
   }
 }
 
-/// 位置の印。ありは緑の丸にピン、なしは灰色の丸に斜線のピン
-class _LocationMark extends StatelessWidget {
-  const _LocationMark(this.located);
-  final bool located;
+/// 「位置なし」の印（白黒）。白い地図のピンを黒で縁取り、斜線で消す。
+/// 明るい写真にも暗い写真にも埋もれないように、白と黒を両方使う
+class NoLocationIcon extends StatelessWidget {
+  const NoLocationIcon({super.key});
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(color: located ? _green : Colors.black45, shape: BoxShape.circle),
-        child: Icon(located ? Icons.place : Icons.location_off, size: 13, color: Colors.white),
-      );
+  Widget build(BuildContext context) => const CustomPaint(painter: _NoLocationPainter());
+}
+
+class _NoLocationPainter extends CustomPainter {
+  const _NoLocationPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    // ピン: 上が丸く下がとがった形
+    final pin = Path()
+      ..moveTo(w * 0.5, h * 0.94)
+      ..cubicTo(w * 0.32, h * 0.70, w * 0.18, h * 0.52, w * 0.18, h * 0.38)
+      ..arcToPoint(Offset(w * 0.82, h * 0.38), radius: Radius.circular(w * 0.32))
+      ..cubicTo(w * 0.82, h * 0.52, w * 0.68, h * 0.70, w * 0.5, h * 0.94)
+      ..close();
+    final hole = Path()..addOval(Rect.fromCircle(center: Offset(w * 0.5, h * 0.38), radius: w * 0.11));
+    final shape = Path.combine(PathOperation.difference, pin, hole);
+    final edge = w * 0.07;
+    canvas.drawPath(shape, Paint()..color = Colors.white);
+    canvas.drawPath(shape, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = edge
+      ..strokeJoin = StrokeJoin.round
+      ..color = Colors.black);
+    // 斜線（黒の太線の上に白の細線。どちらの地でも見える）
+    final a = Offset(w * 0.12, h * 0.10);
+    final b = Offset(w * 0.88, h * 0.90);
+    canvas.drawLine(a, b, Paint()
+      ..strokeWidth = edge * 2.4
+      ..strokeCap = StrokeCap.round
+      ..color = Colors.black);
+    canvas.drawLine(a, b, Paint()
+      ..strokeWidth = edge * 0.9
+      ..strokeCap = StrokeCap.round
+      ..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(_NoLocationPainter old) => false;
 }
 
 /// アルバムの表紙（いちばん新しい 1 枚）

@@ -151,14 +151,21 @@ bool isPracticeGpkg(String? absPath) {
 enum TutorialChapter { view, data, record, photo, gps, yours }
 
 class TutorialStepDef {
-  const TutorialStepDef(this.id, {this.targets = const [], this.done, this.cardTop = false, this.cardLift = 0});
+  const TutorialStepDef(
+    this.id, {
+    this.targets = const [],
+    this.done,
+    this.cardTop = false,
+    this.cardLift = 0,
+    this.waitNext = false,
+  });
 
   final String id;
 
   /// 枠で囲む部品。前から順に、画面にあるものを使う
   final List<GlobalKey> targets;
 
-  /// 済んだとみなす操作。済むまでは「とばす」、済んだら「次へ」を出す。
+  /// 済んだとみなす操作。済むまでは「とばす」。済んだら自動で次へ（[waitNext] なら「次へ」を出して待つ）。
   /// null は説明・指で触ってみる手順（はじめから「次へ」）
   final bool Function(TutorialEvent e)? done;
 
@@ -167,6 +174,10 @@ class TutorialStepDef {
 
   /// 下に出す札を持ち上げる量（画面の下のボタンを隠さないため）
   final double cardLift;
+
+  /// 済んでも自動で進まず「できました」と「次へ」を出す。結果を見てほしい手順
+  /// （地図の上で選ぶ・点を打つ・名前を入れる・線を引く・写真・GPS）。ボタンを押すだけの手順は自動で進む（松本 2026-10-01）
+  final bool waitNext;
 
   bool get isInfo => done == null;
 }
@@ -203,7 +214,7 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
           done: (e) => e is LayerVisibilityToggled && _area(e.layer) && e.layer.visible),
       TutorialStepDef('close', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && !e.open),
       TutorialStepDef('select', targets: [TutorialTargets.selectButton], done: (e) => e is ToolChosen && e.name == 'Select'),
-      TutorialStepDef('pick', cardTop: true, done: (e) => e is FeatureSelected && _area(e.layer)),
+      TutorialStepDef('pick', waitNext: true, cardTop: true, done: (e) => e is FeatureSelected && _area(e.layer)),
       TutorialStepDef('table', cardTop: true, targets: [TutorialTargets.tableButton],
           done: (e) => e is AttributeTableToggled && e.open),
       TutorialStepDef('closeTable', cardTop: true, targets: [TutorialTargets.tableButton],
@@ -214,17 +225,17 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('pick', targets: [TutorialTargets.pointsTile], done: (e) => e is LayerSelected && _points(e.layer)),
       TutorialStepDef('close', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && !e.open),
       TutorialStepDef('pen', targets: [TutorialTargets.penButton], done: (e) => e is ToolChosen && e.name == 'Pen'),
-      TutorialStepDef('place', done: (e) => e is PointPlaced && _points(e.layer)),
-      TutorialStepDef('select', cardTop: true, targets: [TutorialTargets.selectButton],
+      TutorialStepDef('place', waitNext: true, done: (e) => e is PointPlaced && _points(e.layer)),
+      TutorialStepDef('select', waitNext: true, cardTop: true, targets: [TutorialTargets.selectButton],
           done: (e) => e is FeatureSelected && _points(e.layer)),
       TutorialStepDef('table', cardTop: true, targets: [TutorialTargets.tableButton],
           done: (e) => e is AttributeTableToggled && e.open),
-      TutorialStepDef('name', cardTop: true, done: (e) => e is AttributeSaved && _points(e.layer)),
+      TutorialStepDef('name', waitNext: true, cardTop: true, done: (e) => e is AttributeSaved && _points(e.layer)),
       TutorialStepDef('closeTable', cardTop: true, targets: [TutorialTargets.tableButton],
           done: (e) => e is AttributeTableToggled && !e.open),
       TutorialStepDef('route', targets: [TutorialTargets.routeTile, TutorialTargets.layersButton],
           done: (e) => e is LayerSelected && _route(e.layer)),
-      TutorialStepDef('draw', targets: [TutorialTargets.confirmButton, TutorialTargets.layersButton, TutorialTargets.penButton],
+      TutorialStepDef('draw', waitNext: true, targets: [TutorialTargets.confirmButton, TutorialTargets.layersButton, TutorialTargets.penButton],
           done: (e) => e is ShapeSaved && _route(e.layer)),
       const TutorialStepDef('area'),
     ],
@@ -232,12 +243,12 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('open', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && e.open),
       TutorialStepDef('add', targets: [TutorialTargets.addButton], done: (e) => e is PhotoPickerOpened),
       TutorialStepDef('legend', cardLift: 72, targets: [TutorialTargets.pickerLegend]),
-      TutorialStepDef('import', cardLift: 72, done: (e) => e is PhotosImported),
+      TutorialStepDef('import', waitNext: true, cardLift: 72, done: (e) => e is PhotosImported),
       const TutorialStepDef('done'),
     ],
     TutorialChapter.gps => [
       TutorialStepDef('tool', targets: [TutorialTargets.gpsButton], done: (e) => e is ToolChosen && e.name == 'GPS'),
-      TutorialStepDef('record', targets: [TutorialTargets.gpsRecordButton], done: (e) => e is GpsPointRecorded),
+      TutorialStepDef('record', waitNext: true, targets: [TutorialTargets.gpsRecordButton], done: (e) => e is GpsPointRecorded),
     ],
     TutorialChapter.yours => const [
       TutorialStepDef('folder'),
@@ -327,10 +338,15 @@ class Tutorial extends Notifier<TutorialState?> {
     }
   }
 
-  /// 操作の知らせ。今の手順に合えば「済んだ」にする（進むのは「次へ」を押したとき。松本 2026-10-01）
+  /// 操作の知らせ。今の手順に合えば次へ（[TutorialStepDef.waitNext] の手順は「済んだ」にして「次へ」を待つ）
   void report(TutorialEvent e) {
     final s = state;
     if (s == null || s.menu || s.satisfied) return;
-    if (s.step.done?.call(e) ?? false) state = s.copyWith(index: s.index, satisfied: true);
+    if (!(s.step.done?.call(e) ?? false)) return;
+    if (s.step.waitNext) {
+      state = s.copyWith(index: s.index, satisfied: true);
+    } else {
+      next();
+    }
   }
 }

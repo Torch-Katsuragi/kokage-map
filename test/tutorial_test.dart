@@ -71,11 +71,17 @@ void main() {
     final other = GeoPackageFile(const ['o.gpkg'], absolutePath: p.join(tmp.path, 'o.gpkg'));
     final otherPoints = PointLayerNode(other, PracticeProject.pointsLayer, parent: GeoPackageNode(other));
 
-    // 操作が済んだら「次へ」で進む
+    // ボタンの手順は自動で進む。結果を見る手順（waitNext）は「できました」になり「次へ」で進む
     void done(TutorialEvent e) {
+      final before = s().index;
+      final wait = s().step.waitNext;
       tut.report(e);
-      expect(s().satisfied, isTrue, reason: '${s().step.id} <- $e');
-      tut.next();
+      if (wait) {
+        expect(s().satisfied, isTrue, reason: '${s().step.id} <- $e');
+        tut.next();
+      } else {
+        expect(s().index, before + 1, reason: 'auto <- $e');
+      }
     }
 
     tut.start();

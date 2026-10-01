@@ -159,7 +159,12 @@ class TutorialStepDef {
     this.cardTop = false,
     this.cardLift = 0,
     this.waitNext = false,
+    this.pickTargets,
   });
+
+  /// 枠で囲む部品を、今の道具とレイヤ一覧の開閉から選ぶ（[targets] より優先）。
+  /// 何手かかかる手順で、次に押すところへ枠を動かすため
+  final List<GlobalKey> Function(String tool, bool listOpen)? pickTargets;
 
   final String id;
 
@@ -227,7 +232,8 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('close', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && !e.open),
       TutorialStepDef('pen', targets: [TutorialTargets.penButton], done: (e) => e is ToolChosen && e.name == 'Pen'),
       TutorialStepDef('place', waitNext: true, done: (e) => e is PointPlaced && _points(e.layer)),
-      TutorialStepDef('select', waitNext: true, cardTop: true, targets: [TutorialTargets.selectButton],
+      TutorialStepDef('select', waitNext: true, cardTop: true,
+          pickTargets: (tool, _) => tool == 'Select' ? const [] : [TutorialTargets.selectButton],
           done: (e) => e is FeatureSelected && _points(e.layer)),
       TutorialStepDef('table', cardTop: true, targets: [TutorialTargets.tableButton],
           done: (e) => e is AttributeTableToggled && e.open),
@@ -236,7 +242,13 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
           done: (e) => e is AttributeTableToggled && !e.open),
       TutorialStepDef('route', targets: [TutorialTargets.routeTile, TutorialTargets.layersButton],
           done: (e) => e is LayerSelected && _route(e.layer)),
-      TutorialStepDef('draw', waitNext: true, targets: [TutorialTargets.confirmButton, TutorialTargets.layersButton, TutorialTargets.penButton],
+      // 一覧を閉じる → ペン → 地図を押す → ✓。枠は次に押すところへ動く
+      TutorialStepDef('draw', waitNext: true,
+          pickTargets: (tool, listOpen) => listOpen
+              ? [TutorialTargets.layersButton]
+              : tool != 'Pen'
+                  ? [TutorialTargets.penButton]
+                  : [TutorialTargets.confirmButton],
           done: (e) => e is ShapeSaved && _route(e.layer)),
       const TutorialStepDef('area'),
     ],

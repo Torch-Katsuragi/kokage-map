@@ -18,6 +18,7 @@
 // MaterialApp の builder に置き、どの画面（ダイアログ・写真の選択）の上にも出す。
 // 押すのは本物の部品なので、札以外は触れる。画面を暗くしないのはダイアログまで暗くなるため。
 // 枠はくすんだ赤。外側のハローだけゆっくり広がって薄れる（目に入るが点滅ほどうるさくない。松本 2026-10-01）。
+// 枠が別の場所へ移るときは 0.22 秒で寄っていく（どこへ移ったかを目で追えるように）。
 // 案内先の位置は案内中だけ一定間隔で測り直す（一覧の開閉などで動くため）。
 
 import 'dart:async';
@@ -46,12 +47,24 @@ class TutorialOverlay extends ConsumerStatefulWidget {
 /// 案内の枠の色（彩度を抑えた赤）
 const _ringColor = Color(0xFFC0504D);
 
-class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with SingleTickerProviderStateMixin {
+class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerProviderStateMixin {
   Rect? _target;
   Timer? _poll;
 
   /// ハローの脈動（枠が出ている間だけ回す）
   late final _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600));
+
+  /// 枠が別の場所へ移るときの短い移動（出てくるときはその場に出す）
+  late final _move = AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
+  Rect? _from;
+
+  /// いま描く枠（移動中は前の場所から寄っていく途中）
+  Rect? _shown() {
+    final to = _target;
+    final from = _from;
+    if (to == null || from == null) return to;
+    return Rect.lerp(from, to, Curves.easeOutCubic.transform(_move.value));
+  }
 
   // ── 案内先 ──
 
@@ -59,7 +72,11 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with SingleTi
     if (s.menu) return null;
     final me = context.findRenderObject();
     if (me is! RenderBox) return null;
-    for (final key in s.step.targets) {
+    // レイヤ一覧が開いているか（練習のレイヤの行が画面にあるか）
+    final listOpen = [TutorialTargets.areaTile, TutorialTargets.routeTile, TutorialTargets.pointsTile]
+        .any((k) => k.currentContext?.mounted ?? false);
+    final targets = s.step.pickTargets?.call(ref.read(currentToolProvider).name, listOpen) ?? s.step.targets;
+    for (final key in targets) {
       final ctx = key.currentContext;
       // 下に隠れた画面の部品は囲まない（地図の上に設定を開いたときなど。地図は裏で生きている）
       if (ctx == null || !(ModalRoute.of(ctx)?.isCurrent ?? true)) continue;
@@ -75,7 +92,16 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with SingleTi
     final s = ref.read(tutorialProvider);
     if (!mounted || s == null) return;
     final r = _measure(s);
-    if (r != _target) setState(() => _target = r);
+    if (r == _target) return;
+    final prev = _shown();
+    // 離れた場所へ移るときだけ動かす（一覧の開閉に合わせた数ピクセルのずれは追いかけるだけ）
+    if (prev != null && r != null && (prev.center - r.center).distance > 24) {
+      _from = prev;
+      _move.forward(from: 0);
+    } else {
+      _from = null;
+    }
+    setState(() => _target = r);
   }
 
   /// 章に入るときの下ごしらえ
@@ -92,6 +118,7 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with SingleTi
   void dispose() {
     _poll?.cancel();
     _pulse.dispose();
+    _move.dispose();
     super.dispose();
   }
 
@@ -140,7 +167,7 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with SingleTi
         if (target != null)
           Positioned.fill(
             child: IgnorePointer(
-              child: CustomPaint(painter: _RingPainter(target.inflate(5), _ringColor, _pulse)),
+              child: CustomPaint(painter: _RingPainter(() => (_shown() ?? target).inflate(5), _ringColor, _pulse, _move)),
             ),
           ),
         if (s != null && !typing)
@@ -277,14 +304,15 @@ class _CardFrame extends StatelessWidget {
 
 /// 案内先を囲む枠と、外へ広がって薄れるハロー
 class _RingPainter extends CustomPainter {
-  _RingPainter(this.hole, this.color, this.pulse) : super(repaint: pulse);
-  final Rect hole;
+  _RingPainter(this.hole, this.color, this.pulse, Animation<double> move)
+      : super(repaint: Listenable.merge([pulse, move]));
+  final Rect Function() hole;
   final Color color;
   final Animation<double> pulse;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final r = RRect.fromRectAndRadius(hole, const Radius.circular(10));
+    final r = RRect.fromRectAndRadius(hole(), const Radius.circular(10));
     final p = Curves.easeOut.transform(pulse.value);
     canvas.drawRRect(r.inflate(3 + 9 * p), Paint()
       ..style = PaintingStyle.stroke
@@ -297,5 +325,5 @@ class _RingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RingPainter old) => old.hole != hole || old.color != color;
+  bool shouldRepaint(_RingPainter old) => true;
 }

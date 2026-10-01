@@ -111,7 +111,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     // チュートリアルは「レイヤ一覧を開く」「ペンを押す」から教えるので、閉じた一覧・パン・未選択で始める
     // （道具と選択は前の地図から持ち越される。プロバイダは組み立て中に変えられないので次のフレームで）
     final tutorial = ref.read(tutorialProvider) != null;
-    if (tutorial) drawerOpen = false;
+    // レイヤ一覧を開いて始めるかは画面の幅で決める（MediaQuery は initState では読めないので views から）
+    final view = WidgetsBinding.instance.platformDispatcher.views.first;
+    drawerOpen = !tutorial && MapLayout.layerListOpenAtStart(view.physicalSize / view.devicePixelRatio);
     initializeAllServices();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {

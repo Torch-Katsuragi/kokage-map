@@ -1481,6 +1481,14 @@
     "copied": "URL copied",
     "noUrl": "This folder has no Drive URL"
   },
+  "photoPicker": {
+    "title": "Choose photos",
+    "onlyWithLocation": "With location",
+    "legend": "Green frame = has location. Photos without location cannot be placed on the map",
+    "noLocation": "No location",
+    "choose": "Choose photos",
+    "import": "Import $count"
+  },
   "galleryImport": {
     "imported": "Imported $count photo(s)",
     "folderPathFailed": "Failed to resolve folder path",

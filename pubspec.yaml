@@ -122,6 +122,8 @@ dependencies:
   qr_flutter: ^4.1.0                    # Drive連携フォルダのQRコード表示（スキャン側は mobile_scanner）
   flutter_markdown_plus: ^1.0.12         # 更新履歴・使い方の表示用（flutter_markdown は 2026 に discontinued）
   flutter_svg: ^2.3.0                    # 更新履歴の図解（Typst でビルド時に書き出した SVG。tool/changelog/build.py）
+  photo_manager: ^3.12.0                 # 写真の選択をアプリ内で（位置情報の有り無しを選ぶ前に見せる。photo_picker_screen.dart）
+  photo_manager_image_provider: ^2.2.0
 
 
 # 手元コピーで差し替える依存（pub.dev 版が現行のビルド環境で壊れているもの）

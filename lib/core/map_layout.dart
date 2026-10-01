@@ -61,6 +61,10 @@ class MapLayout {
 
   bool get toolbarLeft => toolbar == ToolbarSide.left;
 
+  /// 地図を開いたときにレイヤ一覧を開いておくか。一覧（幅 320）を出しても地図が十分に残る幅のときだけ。
+  /// スマホの縦では地図の大半を覆うので閉じて始める（松本 2026-10-01「スマホだと邪魔」）
+  static bool layerListOpenAtStart(Size size) => size.width >= 720;
+
   @override
   bool operator ==(Object other) => other is MapLayout && other.toolbar == toolbar && other.info == info;
 

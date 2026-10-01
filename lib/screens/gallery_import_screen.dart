@@ -36,6 +36,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:photo_manager/photo_manager.dart' show AssetEntity;
 
 import '../core/platform_capabilities.dart';
 import '../i18n/strings.g.dart';
@@ -45,6 +46,7 @@ import '../models/nodes/image_node.dart';
 import '../providers/notification_providers.dart';
 import '../utils/app_logger.dart';
 import '../utils/exif_parser.dart';
+import 'photo_picker_screen.dart';
 
 /// コピーしたバイトの素性（ネイティブ側の戻り値に対応）
 enum _CopyResult {
@@ -71,6 +73,15 @@ class GalleryImporter {
     WidgetRef? ref,
   }) async {
     await _ensureMediaLocationPermission();
+
+    // Android はアプリ内のギャラリーで選ぶ（位置の有り無しが選ぶ前に見える）。開けなければ OS のピッカー
+    if (PlatformCapabilities.supportsNativeGalleryCopy && context.mounted) {
+      final assets = await PhotoPickerScreen.pick(context);
+      if (assets != null) {
+        if (assets.isEmpty || !context.mounted) return false;
+        return _importAssets(assets, targetFolder, ref: ref);
+      }
+    }
 
     final result = await FilePicker.pickFiles(type: FileType.image);
     if (result.isEmpty) return false;
@@ -140,6 +151,39 @@ class GalleryImporter {
           level: NotificationLevel.warning,
         );
       }
+    }
+    return imported > 0;
+  }
+
+  /// アプリ内のギャラリーで選んだ写真を取り込む。原本（EXIF つき）をそのまま写す
+  static Future<bool> _importAssets(List<AssetEntity> assets, FolderNode targetFolder, {WidgetRef? ref}) async {
+    final folderPath = targetFolder.getAbsoluteFilePath();
+    final notifier = ref?.read(notificationCenterProvider.notifier);
+    if (folderPath == null) {
+      notifier?.add(title: t.galleryImport.folderPathFailed, level: NotificationLevel.error);
+      return false;
+    }
+    var imported = 0;
+    for (final a in assets) {
+      try {
+        final src = await a.originFile;
+        if (src == null) continue;
+        final name = await a.titleAsync;
+        final ext = p.extension(name.isNotEmpty ? name : src.path).toLowerCase();
+        if (ext.isEmpty) continue;
+        final base = p.basenameWithoutExtension(name.isNotEmpty ? name : src.path);
+        final destPath = _uniquePath(folderPath, base, ext);
+        await src.copy(destPath);
+        final node = await _createImageNode(destPath, targetFolder);
+        AppLogger.debug('[GalleryImport] ${p.basename(destPath)}: location=${node.hasLocation}');
+        targetFolder.addChild(node);
+        imported++;
+      } catch (e) {
+        AppLogger.debug('[GalleryImport] Error importing ${a.id}: $e');
+      }
+    }
+    if (imported > 0) {
+      notifier?.add(title: t.galleryImport.imported(count: imported), level: NotificationLevel.success);
     }
     return imported > 0;
   }

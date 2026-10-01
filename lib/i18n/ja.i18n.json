@@ -1481,6 +1481,14 @@
     "copied": "URLをコピーしました",
     "noUrl": "このフォルダにはDriveのURLがありません"
   },
+  "photoPicker": {
+    "title": "写真を選ぶ",
+    "onlyWithLocation": "位置ありだけ",
+    "legend": "緑の枠は位置情報つき。位置なしの写真は地図に置けません",
+    "noLocation": "位置なし",
+    "choose": "写真を選んでください",
+    "import": "$count 枚を取り込む"
+  },
   "galleryImport": {
     "imported": "写真を $count 枚取り込みました",
     "folderPathFailed": "フォルダのパスを解決できませんでした",

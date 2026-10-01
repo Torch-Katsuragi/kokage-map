@@ -30,6 +30,7 @@ import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/import_export/import_export_service.dart';
+import '../../../tutorial/tutorial.dart';
 import '../common_dialogs.dart';
 import 'drag_feedback_card.dart';
 import 'layer_tile.dart';
@@ -62,6 +63,8 @@ class GeoPackageTile extends ConsumerWidget {
     final isExpanded = expansionState.isExpanded(absPath);
 
     final headerTile = ListTile(
+      // チュートリアルの案内先（練習プロジェクトの GeoPackage だけ）
+      key: ref.watch(tutorialProvider) != null && isPracticeGpkg(absPath) ? TutorialTargets.gpkgTile : null,
       leading: NodeVisibilityIcon(node: node),
       title: Row(
         children: [

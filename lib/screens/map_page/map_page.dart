@@ -46,7 +46,6 @@ import '../../services/party/party_invite.dart';
 import '../../tools/gps_tool.dart';
 import '../../tools/pen_tool.dart';
 import '../../tutorial/tutorial.dart';
-import '../../tutorial/tutorial_overlay.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/feature_calc_utils.dart';
 import '../../utils/global_drawing_state.dart';
@@ -121,6 +120,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       if (tutorial) {
         ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
         ref.read(selectedLayerNodeProvider.notifier).select(null);
+        ref.read(selectedFeaturesProvider.notifier).set([]); // 前の練習の地物が選ばれたまま残る
       }
       // 招待URL（web の `?room=CODE`）経由の起動なら、参加ダイアログを
       // コード充填済みで開く（「ルーム参加がURLで済む」の受け側）。
@@ -253,6 +253,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         attributeTableLayer = layer;
         showAttributeTable = true;
       });
+      ref.read(tutorialProvider.notifier).report(const AttributeTableToggled(true));
     } catch (e) {
       AppLogger.debug('[MAP] 属性テーブル表示エラー: $e');
       ref
@@ -271,6 +272,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       showAttributeTable = false;
       attributeTableLayer = null;
     });
+    ref.read(tutorialProvider.notifier).report(const AttributeTableToggled(false));
     AppLogger.debug('[MAP] 属性テーブル表示終了');
   }
 
@@ -345,7 +347,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
     return KeyboardShortcutWrapper(
       mapState: this,
-      child: Stack(fit: StackFit.expand, children: [Scaffold(
+      child: Scaffold(
         appBar: AppBar(
           title: _buildAppBarTitle(folderTree),
           actions: [
@@ -372,7 +374,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                 ref.read(tutorialProvider.notifier).report(LayersPanelToggled(drawerOpen));
               },
               // ≡ メニュー（パーティ・水準器・設定を集約）はレイヤ一覧の左
-              beforeLayerButton: [MapMenuButton(onReload: reloadProjectFromDisk)],
+              beforeLayerButton: [KeyedSubtree(key: TutorialTargets.menuButton, child: MapMenuButton(onReload: reloadProjectFromDisk))],
             ),
           ],
         ),
@@ -495,9 +497,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
-      // チュートリアル（練習プロジェクトのときだけ出る）
-      const TutorialOverlay(),
-      ]),
     );
   }
 

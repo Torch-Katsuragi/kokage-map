@@ -13,10 +13,11 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// チュートリアルの重ね絵: 案内先を枠で囲み、説明の札を出す。
+// チュートリアルの重ね絵: 案内先を枠で囲み、説明の札を出す。章の一覧もここ。
 //
-// 押すのは本物の部品なので、札以外は触れる（IgnorePointer）。
-// 動きは付けない。案内先の位置は描き終わるたびに測り直す（レイヤ一覧が開くと動くため）。
+// MaterialApp の builder に置き、どの画面（ダイアログ・写真の選択）の上にも出す。
+// 押すのは本物の部品なので、札以外は触れる。画面を暗くしないのはダイアログまで暗くなるため。
+// 動きは付けない。案内先の位置は案内中だけ一定間隔で測り直す（一覧の開閉などで動くため）。
 
 import 'dart:async';
 
@@ -24,12 +25,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../i18n/strings.g.dart';
+import '../models/nodes/feature_node.dart';
+import '../models/nodes/layer_node.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
+import '../providers/ui_state_providers.dart';
+import 'practice_project.dart';
 import 'tutorial.dart';
 
 class TutorialOverlay extends ConsumerStatefulWidget {
-  const TutorialOverlay({super.key});
+  const TutorialOverlay({super.key, required this.child});
+
+  final Widget child;
 
   @override
   ConsumerState<TutorialOverlay> createState() => _TutorialOverlayState();
@@ -37,34 +44,76 @@ class TutorialOverlay extends ConsumerStatefulWidget {
 
 class _TutorialOverlayState extends ConsumerState<TutorialOverlay> {
   Rect? _target;
-
-  // 「地図を動かす」: 指の動いた量で見る（地図の動きは読み込み時の位置合わせでも起きるので使えない）
-  double _dragged = 0;
-
-  void _onPointerMove(PointerMoveEvent e) {
-    if (ref.read(tutorialProvider) != TutorialStep.move) return;
-    _dragged += e.delta.distance;
-    if (_dragged > 150) ref.read(tutorialProvider.notifier).report(const CameraMoved());
-  }
-
-  Rect? _measure(TutorialStep step) {
-    final ctx = TutorialTargets.of(step)?.currentContext;
-    final box = ctx?.findRenderObject();
-    final me = context.findRenderObject();
-    if (box is! RenderBox || !box.hasSize || !box.attached || me is! RenderBox) return null;
-    final topLeft = box.localToGlobal(Offset.zero, ancestor: me);
-    return topLeft & box.size;
-  }
-
-  // 案内先は重ね絵の外で組まれ、出るのも動くのも重ね絵の描き直しと関係ない（一覧の読み込み・開閉）。
-  // なので案内中だけ一定間隔で測る。変わらなければ何もしない
   Timer? _poll;
 
+  // ── 指の動き（地図を動かす・拡大）。地図の動きは読み込み時の位置合わせでも起きるので指で見る ──
+  final _pointers = <int, Offset>{};
+  double _dragged = 0;
+  double? _spreadAtStart;
+
+  bool _isStep(String id) {
+    final s = ref.read(tutorialProvider);
+    return s != null && !s.menu && s.chapter == TutorialChapter.view && s.step.id == id;
+  }
+
+  void _onDown(PointerDownEvent e) {
+    _pointers[e.pointer] = e.position;
+    _spreadAtStart = _pointers.length == 2 ? _spread() : null;
+  }
+
+  void _onUp(PointerEvent e) {
+    _pointers.remove(e.pointer);
+    _spreadAtStart = null;
+  }
+
+  double _spread() {
+    final v = _pointers.values.toList();
+    return (v[0] - v[1]).distance;
+  }
+
+  void _onMove(PointerMoveEvent e) {
+    _pointers[e.pointer] = e.position;
+    final tutorial = ref.read(tutorialProvider.notifier);
+    if (_pointers.length == 1 && _isStep('move')) {
+      _dragged += e.delta.distance;
+      if (_dragged > 150) tutorial.report(const CameraMoved());
+    }
+    final start = _spreadAtStart;
+    if (_pointers.length == 2 && start != null && _isStep('zoom') && (_spread() - start).abs() > 60) {
+      tutorial.report(const Pinched());
+    }
+  }
+
+  // ── 案内先 ──
+
+  Rect? _measure(TutorialState s) {
+    if (s.menu) return null;
+    final me = context.findRenderObject();
+    if (me is! RenderBox) return null;
+    for (final key in s.step.targets) {
+      final box = key.currentContext?.findRenderObject();
+      if (box is RenderBox && box.hasSize && box.attached) {
+        return box.localToGlobal(Offset.zero, ancestor: me) & box.size;
+      }
+    }
+    return null;
+  }
+
   void _tick() {
-    final step = ref.read(tutorialProvider);
-    if (!mounted || step == null) return;
-    final r = _measure(step);
+    final s = ref.read(tutorialProvider);
+    if (!mounted || s == null) return;
+    final r = _measure(s);
     if (r != _target) setState(() => _target = r);
+  }
+
+  /// 章に入るときの下ごしらえ
+  void _prepare(TutorialChapter c) {
+    if (c != TutorialChapter.gps) return;
+    // GPS の章は「測点に書き込む」前提で始める（レイヤの選び方は「記録する」で教える）
+    final tree = ref.read(folderTreeProvider);
+    final points = tree?.getVisibleLayerNodes().whereType<LayerNode>()
+        .where((l) => isPracticeLayer(l, PracticeProject.pointsLayer)).firstOrNull;
+    if (points != null) ref.read(selectedLayerNodeProvider.notifier).select(points);
   }
 
   @override
@@ -75,122 +124,188 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(currentToolProvider, (_, tool) => ref.read(tutorialProvider.notifier).report(ToolChosen(tool.name)));
-    ref.listen(selectedLayerNodeProvider, (_, layer) => ref.read(tutorialProvider.notifier).report(LayerSelected(layer)));
-    ref.listen(tutorialProvider, (_, _) => _dragged = 0);
-    final step = ref.watch(tutorialProvider);
-    if (step == null) {
+    final tutorial = ref.read(tutorialProvider.notifier);
+    ref.listen(currentToolProvider, (_, tool) => tutorial.report(ToolChosen(tool.name)));
+    ref.listen(selectedLayerNodeProvider, (_, layer) => tutorial.report(LayerSelected(layer)));
+    ref.listen(selectedFeaturesProvider, (_, nodes) {
+      // 持ち主はフィーチャの親から取る（選択中レイヤはこのあとで切り替わる）
+      final parent = nodes.whereType<FeatureNode>().firstOrNull?.parent;
+      if (parent is LayerNode) tutorial.report(FeatureSelected(parent));
+    });
+    ref.listen(tutorialProvider, (prev, s) {
+      _dragged = 0;
+      if (s != null && !s.menu && (prev == null || prev.menu || prev.chapter != s.chapter)) _prepare(s.chapter);
+    });
+
+    final s = ref.watch(tutorialProvider);
+    if (s == null) {
       _poll?.cancel();
       _poll = null;
-      return const SizedBox.shrink();
+    } else {
+      _poll ??= Timer.periodic(const Duration(milliseconds: 200), (_) => _tick());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _tick());
     }
-    _poll ??= Timer.periodic(const Duration(milliseconds: 200), (_) => _tick());
-    WidgetsBinding.instance.addPostFrameCallback((_) => _tick());
 
-    final wantsTarget = TutorialTargets.of(step) != null;
-    final target = wantsTarget ? _target : null;
+    // キーボードが出ている間（名前の入力など）は札も枠も引っ込める。入力欄やダイアログを隠さないように
+    final typing = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final target = s == null || s.menu || typing ? null : _target;
     final size = MediaQuery.sizeOf(context);
+    final pad = MediaQuery.paddingOf(context);
+    // 上に出すときはアプリバーの下（アプリバーのボタンを案内することがあるので隠さない）
+    final topY = pad.top + kToolbarHeight + 8;
     // 札は案内先と反対の側に置く
-    final cardAtTop = target != null && target.center.dy > size.height / 2;
+    final cardAtTop = s != null && !s.menu && (s.step.cardTop || (target != null && target.center.dy > size.height / 2));
 
-    return Stack(
-      children: [
-        // 指の動きだけ覗く（translucent なので下の地図にもそのまま届く）
-        Positioned.fill(
-          child: Listener(behavior: HitTestBehavior.translucent, onPointerMove: _onPointerMove),
-        ),
-        if (target != null)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(painter: _SpotPainter(target.inflate(6), Theme.of(context).colorScheme.primary)),
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _onDown,
+      onPointerMove: _onMove,
+      onPointerUp: _onUp,
+      onPointerCancel: _onUp,
+      child: Stack(
+        children: [
+          widget.child,
+          if (target != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(painter: _RingPainter(target.inflate(5), Theme.of(context).colorScheme.primary)),
+              ),
             ),
-          ),
-        Positioned(
-          left: 12,
-          right: 12,
-          top: cardAtTop ? MediaQuery.paddingOf(context).top + 12 : null,
-          bottom: cardAtTop ? null : MediaQuery.paddingOf(context).bottom + 24,
-          child: SafeArea(top: false, bottom: false, child: _Card(step: step)),
-        ),
-      ],
-    );
-  }
-}
-
-class _Card extends ConsumerWidget {
-  const _Card({required this.step});
-  final TutorialStep step;
-
-  (String, String) _text() {
-    final s = t.tutorial.steps;
-    return switch (step) {
-      TutorialStep.move => (s.move.title, s.move.body),
-      TutorialStep.openLayers => (s.openLayers.title, s.openLayers.body),
-      TutorialStep.hideStands => (s.hideStands.title, s.hideStands.body),
-      TutorialStep.showStands => (s.showStands.title, s.showStands.body),
-      TutorialStep.pickPoints => (s.pickPoints.title, s.pickPoints.body),
-      TutorialStep.closeLayers => (s.closeLayers.title, s.closeLayers.body),
-      TutorialStep.pen => (s.pen.title, s.pen.body),
-      TutorialStep.placePoint => (s.placePoint.title, s.placePoint.body),
-      TutorialStep.done => (s.done.title, s.done.body),
-    };
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final (title, body) = _text();
-    final tutorial = ref.read(tutorialProvider.notifier);
-    final total = TutorialStep.values.length - 1;
-    final theme = Theme.of(context);
-    final done = step == TutorialStep.done;
-
-    return Material(
-      elevation: 6,
-      borderRadius: BorderRadius.circular(12),
-      color: theme.colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!done)
-              Text('${step.index + 1} / $total',
-                  style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
-            Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text(body, style: theme.textTheme.bodyMedium),
-            Row(
-              children: [
-                if (!done) TextButton(onPressed: tutorial.stop, child: Text(t.tutorial.quit)),
-                const Spacer(),
-                // 自分で操作しなくても先へ進めるのは「地図を動かす」だけ（動かしたかは判りにくいので）
-                if (step == TutorialStep.move) TextButton(onPressed: tutorial.next, child: Text(t.tutorial.next)),
-                if (done) FilledButton(onPressed: tutorial.stop, child: Text(t.tutorial.finish)),
-                if (done) const SizedBox(width: 8),
-              ],
+          if (s != null && !typing)
+            Positioned(
+              // 上に出すときは左右の道具の列（幅 44）を空ける
+              left: cardAtTop ? 52 : 12,
+              right: cardAtTop ? 52 : 12,
+              top: cardAtTop ? topY : null,
+              bottom: cardAtTop ? null : pad.bottom + 20 + (s.menu ? 0 : s.step.cardLift),
+              child: s.menu ? _MenuCard(state: s) : _StepCard(state: s),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
 }
 
-/// 案内先のまわりだけ明るく残し、枠で囲む
-class _SpotPainter extends CustomPainter {
-  _SpotPainter(this.hole, this.color);
+String _chapterName(TutorialChapter c) => t.tutorial.chapters[c.name] ?? c.name;
+
+class _StepCard extends ConsumerWidget {
+  const _StepCard({required this.state});
+  final TutorialState state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tutorial = ref.read(tutorialProvider.notifier);
+    final key = '${state.chapter.name}_${state.step.id}';
+    final title = t.tutorial.text['${key}_t'] ?? key;
+    final body = t.tutorial.text['${key}_b'] ?? '';
+    final theme = Theme.of(context);
+    return _CardFrame(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${_chapterName(state.chapter)}  ${state.index + 1} / ${state.stepCount}',
+              style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
+          Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(body, style: theme.textTheme.bodyMedium),
+          Row(
+            children: [
+              TextButton(onPressed: tutorial.showMenu, child: Text(t.tutorial.menuTitle)),
+              const Spacer(),
+              // 操作の手順も飛ばせる（屋内で GPS が取れない・写真が無いなど）
+              if (state.step.isInfo)
+                FilledButton(onPressed: tutorial.next, child: Text(t.tutorial.next))
+              else
+                TextButton(
+                  onPressed: tutorial.next,
+                  style: TextButton.styleFrom(foregroundColor: theme.colorScheme.outline),
+                  child: Text(t.tutorial.skip),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuCard extends ConsumerWidget {
+  const _MenuCard({required this.state});
+  final TutorialState state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tutorial = ref.read(tutorialProvider.notifier);
+    final theme = Theme.of(context);
+    const chapters = TutorialChapter.values;
+    final nextIndex = state.chapter.index + 1;
+    final next = state.justFinished && nextIndex < chapters.length ? chapters[nextIndex] : null;
+    return _CardFrame(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            state.justFinished ? t.tutorial.chapterDone(name: _chapterName(state.chapter)) : t.tutorial.menuTitle,
+            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          if (!state.justFinished) Text(t.tutorial.menuBody, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 4),
+          for (final c in chapters)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              leading: Icon(
+                state.finished.contains(c) ? Icons.check_circle : Icons.circle_outlined,
+                color: state.finished.contains(c) ? Colors.green : theme.colorScheme.outline,
+              ),
+              title: Text('${c.index + 1}. ${_chapterName(c)}',
+                  style: TextStyle(fontWeight: c == next ? FontWeight.bold : null)),
+              subtitle: Text(t.tutorial.chapterHints[c.name] ?? ''),
+              onTap: () => tutorial.openChapter(c),
+            ),
+          Row(
+            children: [
+              TextButton(onPressed: tutorial.stop, child: Text(t.tutorial.finish)),
+              const Spacer(),
+              if (next != null)
+                FilledButton(onPressed: () => tutorial.openChapter(next), child: Text(t.tutorial.continueTo)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardFrame extends StatelessWidget {
+  const _CardFrame({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        elevation: 6,
+        borderRadius: BorderRadius.circular(12),
+        color: Theme.of(context).colorScheme.surface,
+        child: Padding(padding: const EdgeInsets.fromLTRB(16, 12, 8, 4), child: child),
+      );
+}
+
+/// 案内先を囲む枠（太い線と外側の淡い帯）
+class _RingPainter extends CustomPainter {
+  _RingPainter(this.hole, this.color);
   final Rect hole;
   final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     final r = RRect.fromRectAndRadius(hole, const Radius.circular(10));
-    final dim = Path()
-      ..fillType = PathFillType.evenOdd
-      ..addRect(Offset.zero & size)
-      ..addRRect(r);
-    canvas.drawPath(dim, Paint()..color = Colors.black.withValues(alpha: 0.35));
+    canvas.drawRRect(r.inflate(4), Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8
+      ..color = color.withValues(alpha: 0.25));
     canvas.drawRRect(r, Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
@@ -198,5 +313,5 @@ class _SpotPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SpotPainter old) => old.hole != hole || old.color != color;
+  bool shouldRepaint(_RingPainter old) => old.hole != hole || old.color != color;
 }

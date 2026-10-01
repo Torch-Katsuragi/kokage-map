@@ -26,6 +26,7 @@ import '../../models/nodes/layer_node.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../services/coordinate/index.dart';
+import '../../tutorial/tutorial.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/qgis_expression_filter.dart';
 
@@ -295,6 +296,7 @@ class AttributeTableController extends ChangeNotifier {
     try {
       await feature.setAttributeValue(field, value);
       AppLogger.debug('[AttributeTableController] 属性保存: $field = $value');
+      _ref.read(tutorialProvider.notifier).report(AttributeSaved(layer));
       return null;
     } catch (e) {
       final msg = t.attributeTable.saveError(field: field, error: e.toString());
@@ -425,6 +427,9 @@ class AttributeTableController extends ChangeNotifier {
     if (absoluteIndex < _currentPageOffset || absoluteIndex >= pageEnd) return;
 
     final localIndex = absoluteIndex - _currentPageOffset;
+    // 表のマスを押した選択が地図を回って戻ってきたときは動かさない。
+    // 動かすと押したマスから行の先頭へ飛び、そのマスを編集できなかった（2026-10-01 チュートリアルで発覚）
+    if (_stateManager!.currentRowIdx == localIndex) return;
     if (localIndex >= 0 && localIndex < _stateManager!.refRows.length) {
       _stateManager!.setCurrentCell(
         _stateManager!.refRows[localIndex].cells.values.first,

@@ -26,6 +26,7 @@ import '../../../providers/tool_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../tools/gps_tool.dart';
 import '../../../tools/pen_tool.dart';
+import '../../../tutorial/tutorial.dart';
 import '../../../utils/global_drawing_state.dart';
 
 /// 描画・測量操作用のFABボタン群
@@ -180,6 +181,7 @@ class DrawingActionButtons extends ConsumerWidget {
         ),
         const SizedBox(width: 12),
         FloatingActionButton.extended(
+          key: TutorialTargets.confirmButton,
           heroTag: 'confirm',
           onPressed: onConfirmDrawing,
           icon: const Icon(Icons.check),

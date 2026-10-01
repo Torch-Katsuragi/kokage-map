@@ -23,11 +23,13 @@
 // 画面に出た枠から順に読み、結果は覚えておく。
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
 import '../i18n/strings.g.dart';
+import '../tutorial/tutorial.dart';
 
 class PhotoPickerScreen extends StatefulWidget {
   const PhotoPickerScreen({super.key});
@@ -68,6 +70,11 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
   @override
   void initState() {
     super.initState();
+    // 組み立ての最中にプロバイダを変えられないので、描き終えてから知らせる
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ProviderScope.containerOf(context, listen: false).read(tutorialProvider.notifier).report(const PhotoPickerOpened());
+    });
     _init();
   }
 
@@ -135,6 +142,7 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
       body: Column(
         children: [
           Container(
+            key: TutorialTargets.pickerLegend,
             width: double.infinity,
             color: scheme.surfaceContainerHighest,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

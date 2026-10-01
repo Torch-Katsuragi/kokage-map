@@ -41,6 +41,7 @@ import 'services/internal_gps_location_store.dart';
 import 'services/kmeta_service.dart';
 import 'services/party/party_firebase.dart';
 import 'services/qgis/qgs_auto_refresh.dart';
+import 'tutorial/tutorial_overlay.dart';
 import 'utils/background_save_manager.dart';
 import 'widgets/debug_log_overlay.dart';
 
@@ -354,7 +355,8 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
           child: Listener(
             behavior: HitTestBehavior.translucent,
             onPointerDown: (_) => _restoreDriveOnce(),
-            child: content,
+            // チュートリアルの札はどの画面（ダイアログ・写真の選択）の上にも出す
+            child: TutorialOverlay(child: content),
           ),
         );
       },

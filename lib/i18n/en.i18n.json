@@ -1304,8 +1304,8 @@
     "unclosedQuotes": "Unclosed quotes"
   },
   "tutorial": {
-    "offerTitle": "Try the basics?",
-    "offerBody": "On a practice map, go from moving the map to placing a point in about 3 minutes.",
+    "offerTitle": "Try the tutorial?",
+    "offerBody": "On a practice map, try each chapter: reading the map, recording points and lines, importing photos.",
     "start": "Start",
     "later": "Later",
     "homeButton": "Tutorial",
@@ -1315,56 +1315,119 @@
     "failed": "Could not create the practice map",
     "quit": "Quit",
     "next": "Next",
+    "skip": "Skip",
     "finish": "Done",
+    "menuTitle": "Tutorial",
+    "menuBody": "Pick a chapter. Start anywhere.",
+    "chapterDone": "Finished \"$name\"",
+    "continueTo": "Next chapter",
     "practice": {
       "folder": "Practice",
       "gpkg": "Practice",
-      "stands": "Stands",
-      "roads": "Roads",
+      "area": "Areas",
+      "route": "Routes",
       "points": "Points",
-      "species": "Species",
-      "age": "Age",
       "memo": "Memo",
-      "sugi": "Japanese cedar",
-      "hinoki": "Hinoki cypress"
+      "areaA": "Area A",
+      "areaB": "Area B",
+      "route1": "Route 1",
+      "memoExample": "Write a memo here"
     },
-    "steps": {
-      "move": {
-        "title": "Move the map",
-        "body": "Drag with a finger to move. Spread two fingers to zoom in, pinch to zoom out."
-      },
-      "openLayers": {
-        "title": "Open the layer list",
-        "body": "This button lists the data on the map."
-      },
-      "hideStands": {
-        "title": "Hide the stands",
-        "body": "Tap the mark left of \"Stands\" to hide it from the map."
-      },
-      "showStands": {
-        "title": "Tap again to show",
-        "body": "Tap the same place again to bring it back."
-      },
-      "pickPoints": {
-        "title": "Pick the points layer",
-        "body": "Choose the layer to write to. Tap the \"Points\" row."
-      },
-      "closeLayers": {
-        "title": "Close the list",
-        "body": "The same button closes it."
-      },
-      "pen": {
-        "title": "Pick up the pen",
-        "body": "With the pen you write into the chosen layer."
-      },
-      "placePoint": {
-        "title": "Place a point",
-        "body": "Tap anywhere on the map to place a point there."
-      },
-      "done": {
-        "title": "Done",
-        "body": "That is all it takes to record in the field. You can recreate the practice map from Settings anytime."
-      }
+    "chapters(map)": {
+      "view": "Reading the map",
+      "data": "How data is organized",
+      "record": "Recording",
+      "photo": "Importing photos",
+      "gps": "Recording with GPS",
+      "yours": "Your own data"
+    },
+    "chapterHints(map)": {
+      "view": "Move, zoom, 2D and 3D",
+      "data": "Folders, GeoPackage, layers",
+      "record": "Place a point, enter a name, draw a line",
+      "photo": "Put geotagged photos on the map",
+      "gps": "Record where you are",
+      "yours": "Your folder, Drive, QGIS"
+    },
+    "text(map)": {
+      "view_move_t": "Move the map",
+      "view_move_b": "Drag with a finger to move the map.",
+      "view_zoom_t": "Zoom",
+      "view_zoom_b": "Spread two fingers to zoom in, pinch to zoom out.",
+      "view_mode_t": "2D and 3D",
+      "view_mode_b": "This button switches between 2D (straight down) and tilted 3D.",
+      "view_north_t": "North up",
+      "view_north_b": "Double-tap the same button to put north back up.",
+      "view_basemap_t": "Background map",
+      "view_basemap_b": "Change the background map in ≡ → Settings → Map & tiles.",
+      "data_folder_t": "Data lives in folders",
+      "data_folder_b": "Kokage Map works on one folder at a time. The \"Practice\" folder is open now.",
+      "data_open_t": "Open the layer list",
+      "data_open_b": "This button lists what is in the folder.",
+      "data_gpkg_t": "The data file",
+      "data_gpkg_b": "\"Practice.gpkg\" holds the data (a GeoPackage). QGIS opens it as is.",
+      "data_layers_t": "Layers",
+      "data_layers_b": "It holds three layers: areas, routes and points. A layer is a set of data with the same shape.",
+      "data_hide_t": "Show and hide",
+      "data_hide_b": "Tap the mark left of \"Areas\" to hide them from the map.",
+      "data_show_t": "Tap again to show",
+      "data_show_b": "Tap the same place again to bring them back.",
+      "data_zoomTo_t": "Go to a layer",
+      "data_zoomTo_b": "Double-tap the \"Routes\" row to fit the routes on screen.",
+      "data_close_t": "Close the list",
+      "data_close_b": "The same button closes it.",
+      "data_select_t": "Select tool",
+      "data_select_b": "This button lets you pick things on the map.",
+      "data_pick_t": "Pick an area",
+      "data_pick_b": "Tap an area on the map to see its name and memo.",
+      "data_table_t": "See it as a table",
+      "data_table_b": "This button lists the selected layer as a table.",
+      "data_closeTable_t": "Close the table",
+      "data_closeTable_b": "The same button closes it.",
+      "record_open_t": "Open the layer list",
+      "record_open_b": "Choose which layer to write to.",
+      "record_pick_t": "Pick the points layer",
+      "record_pick_b": "Tap the \"Points\" row. New data goes into the selected layer.",
+      "record_close_t": "Close the list",
+      "record_close_b": "The same button closes it.",
+      "record_pen_t": "Pen",
+      "record_pen_b": "With the pen you write into the selected layer.",
+      "record_place_t": "Place a point",
+      "record_place_b": "Tap anywhere on the map to place a point there.",
+      "record_select_t": "Pick your point",
+      "record_select_b": "Switch to the select tool and tap the point you placed.",
+      "record_table_t": "Open the table",
+      "record_table_b": "The table opens with the selected point's row highlighted.",
+      "record_name_t": "Enter a name",
+      "record_name_b": "Double-tap the cell in the \"name\" column, type a name and confirm. It is saved right away.",
+      "record_closeTable_t": "Close the table",
+      "record_closeTable_b": "The same button closes it.",
+      "record_route_t": "Pick the routes layer",
+      "record_route_b": "Open the layer list and tap the \"Routes\" row.",
+      "record_draw_t": "Draw a line",
+      "record_draw_b": "Close the list, take the pen and tap a few places on the map. ↶ removes the last point. ✓ at the bottom right saves it.",
+      "record_area_t": "Areas work the same",
+      "record_area_b": "Draw areas the same way. ✓ joins the last point to the first.",
+      "photo_open_t": "Open the layer list",
+      "photo_open_b": "Photos are imported into the open folder.",
+      "photo_add_t": "Choose photos",
+      "photo_add_b": "Tap + and choose \"Photo\".",
+      "photo_legend_t": "Location",
+      "photo_legend_b": "A green frame means the photo has a location. Photos without one cannot be placed on the map. Turn on location in your camera settings.",
+      "photo_import_t": "Import",
+      "photo_import_b": "Tap photos to choose them, then import with the button below.",
+      "photo_done_t": "On the map",
+      "photo_done_b": "Imported photos are copied into the practice folder and shown where they were taken. Tap one with the select tool to view it.",
+      "gps_tool_t": "GPS tool",
+      "gps_tool_b": "This button switches to the GPS tool. The points layer is selected for you.",
+      "gps_record_t": "Record where you are",
+      "gps_record_b": "Tap to record a point where you are. Hold to keep measuring while pressed. Indoors there may be no fix.",
+      "yours_folder_t": "Open your folder",
+      "yours_folder_b": "On Home, \"Select folder\" opens the folder with your data. Its GeoPackages and photos show up on the map as they are.",
+      "yours_drive_t": "Share with Drive",
+      "yours_drive_b": "A folder synced with Drive shows the same data on your other devices. Start from Settings → Drive sync.",
+      "yours_qgis_t": "Open in QGIS",
+      "yours_qgis_b": "Open the .qgs in the folder with QGIS to see it as the app shows it. Colors changed in QGIS come back to the app."
     }
   },
   "onboarding": {

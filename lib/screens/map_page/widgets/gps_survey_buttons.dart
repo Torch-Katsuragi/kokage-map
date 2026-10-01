@@ -18,6 +18,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../i18n/strings.g.dart';
+import '../../../tutorial/tutorial.dart';
 
 /// GPS測量ボタンウィジェット
 /// GPS測量ボタン（長押し対応）とGPS軌跡抽出ボタンを含む
@@ -91,6 +92,7 @@ class GpsSurveyButtons extends StatelessWidget {
                 ),
               // GPS測量ボタン
               GestureDetector(
+                key: TutorialTargets.gpsRecordButton,
                 onTap: onRecordGpsPosition,
                 onLongPress: onStartLongPressGpsSurvey,
                 onLongPressEnd: (_) => onStopLongPressGpsSurvey(),

@@ -36,14 +36,15 @@ class PracticeProject {
 
   String get gpkgPath => p.join(dir, '${t.tutorial.practice.gpkg}.gpkg');
 
-  /// 地図を開いたときに見せる場所（2 つの小班が画面に収まる寄り）。
+  /// 地図を開いたときに見せる場所（2 つのエリアが画面に収まる寄り）。
   /// 開いたときの「フィーチャが全部入る範囲」は共有フォルダ（Global）の中身まで含むので、ここで決める
   static const center = LatLng(33.9297, 135.9738);
   static const zoom = 16.3;
 
   // レイヤ名。チュートリアルはこの名前で案内先を探す
-  static String get standsLayer => t.tutorial.practice.stands;
-  static String get roadsLayer => t.tutorial.practice.roads;
+  // 林業に寄せない一般的な名前にする（松本 2026-10-01「エリアとか測点とか」）
+  static String get areaLayer => t.tutorial.practice.area;
+  static String get routeLayer => t.tutorial.practice.route;
   static String get pointsLayer => t.tutorial.practice.points;
 
   static Future<String> _dirPath() async {
@@ -74,33 +75,35 @@ class PracticeProject {
     if (!await gpkg.createEmptyDatabase()) {
       throw StateError('practice gpkg: create failed');
     }
-    final species = t.tutorial.practice.species;
-    final age = t.tutorial.practice.age;
+    final pr = t.tutorial.practice;
+    // 名前は `name` の列（アプリが地物の名前として読む列。線を引いたときの名前もここに入る）
+    final fields = {'name': 'TEXT', pr.memo: 'TEXT'};
 
-    await gpkg.addLayer(standsLayer, GeometryType.polygon);
-    await gpkg.addAttributeColumns(standsLayer, {species: 'TEXT', age: 'INTEGER'});
-    // 尾根を挟んで東西に並ぶ 2 つの小班（おおよそ 250m 四方。北山村の大沼の南東の山）
-    await gpkg.addPolygonWithAttributes(standsLayer, [
+    await gpkg.addLayer(areaLayer, GeometryType.polygon);
+    await gpkg.addAttributeColumns(areaLayer, fields);
+    // 尾根を挟んで東西に並ぶ 2 つのエリア（おおよそ 250m 四方。北山村の大沼の南東の山）
+    await gpkg.addPolygonWithAttributes(areaLayer, [
       const [
         LatLng(33.9312, 135.9707), LatLng(33.9316, 135.9736), LatLng(33.9291, 135.9741),
         LatLng(33.9278, 135.9723), LatLng(33.9287, 135.9703), LatLng(33.9312, 135.9707),
       ],
-    ], {species: t.tutorial.practice.sugi, age: 42});
-    await gpkg.addPolygonWithAttributes(standsLayer, [
+    ], {'name': pr.areaA, pr.memo: pr.memoExample});
+    await gpkg.addPolygonWithAttributes(areaLayer, [
       const [
         LatLng(33.9316, 135.9736), LatLng(33.9309, 135.9772), LatLng(33.9282, 135.9768),
         LatLng(33.9274, 135.9747), LatLng(33.9291, 135.9741), LatLng(33.9316, 135.9736),
       ],
-    ], {species: t.tutorial.practice.hinoki, age: 35});
+    ], {'name': pr.areaB, pr.memo: ''});
 
-    await gpkg.addLayer(roadsLayer, GeometryType.linestring);
-    await gpkg.addLineWithAttributes(roadsLayer, const [
+    await gpkg.addLayer(routeLayer, GeometryType.linestring);
+    await gpkg.addAttributeColumns(routeLayer, fields);
+    await gpkg.addLineWithAttributes(routeLayer, const [
       LatLng(33.9260, 135.9695), LatLng(33.9275, 135.9715), LatLng(33.9278, 135.9735),
       LatLng(33.9272, 135.9757), LatLng(33.9280, 135.9780),
-    ], {});
+    ], {'name': pr.route1});
 
     await gpkg.addLayer(pointsLayer, GeometryType.point);
-    await gpkg.addAttributeColumns(pointsLayer, {species: 'TEXT', t.tutorial.practice.memo: 'TEXT'});
+    await gpkg.addAttributeColumns(pointsLayer, fields);
 
     await gpkg.dispose();
   }

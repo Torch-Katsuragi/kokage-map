@@ -92,6 +92,7 @@ class MapToolbar extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               _ToolButton(
+                key: TutorialTargets.selectButton,
                 icon: Icons.select_all,
                 tooltip: t.map.toolbar.select,
                 isSelected: currentTool.name == 'Select',
@@ -104,6 +105,7 @@ class MapToolbar extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               _ToolButton(
+                key: TutorialTargets.gpsButton,
                 icon: Icons.gps_fixed,
                 tooltip: t.map.toolbar.gpsTool,
                 isSelected: currentTool.name == 'GPS',

@@ -4,12 +4,22 @@
 
 ### Tutorial
 
-- Try the basics on a practice map. A guide shows where to tap, from moving the map and toggling layers to placing a point
-- Offered once on first use. Start it again anytime from Home or Settings
+- Try the basics on a practice map. A guide shows where to tap
+- Six chapters: reading the map, how data is organized, recording (points, names, lines), importing photos, recording with GPS, your own data. Start from any chapter
+- Offered once on first use. Start it again from "Tutorial" on Home or from Settings
+
+### Importing photos
+
+- Photos are now chosen inside the app. Photos with a location have a green frame and a pin; others say "No location". "With location" filters them
+
+### Also changed
+
+- On a phone in portrait, the layer list starts closed when the map opens
 
 ### Fixes
 
 - Layers whose names contain spaces or quotes could not be written to
+- In the attribute table, cells other than the first in a row sometimes could not be edited
 
 ## v0.8.0 — 2026/09/30
 

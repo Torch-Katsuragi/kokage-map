@@ -35,6 +35,7 @@ List<Widget> buildMapAppBarActions({
     const NotificationBell(),
     // 属性テーブルボタン
     IconButton(
+      key: TutorialTargets.tableButton,
       icon: Icon(
         Icons.table_view,
         color: showAttributeTable ? Colors.blue : null,

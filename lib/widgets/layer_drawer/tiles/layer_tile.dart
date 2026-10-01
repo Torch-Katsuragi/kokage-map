@@ -64,10 +64,10 @@ class LayerTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isSelected = ref.watch(selectedLayerNodeProvider) == node;
-    // チュートリアルの案内先（練習プロジェクトの小班の目・調査点の行）
+    // チュートリアルの案内先（練習プロジェクトのエリアの目・各レイヤの行）
     final guiding = ref.watch(tutorialProvider) != null;
-    final eyeKey = guiding && isPracticeLayer(node, PracticeProject.standsLayer) ? TutorialTargets.standsEye : null;
-    final tileKey = guiding && isPracticeLayer(node, PracticeProject.pointsLayer) ? TutorialTargets.pointsTile : null;
+    final eyeKey = guiding && isPracticeLayer(node, PracticeProject.areaLayer) ? TutorialTargets.areaEye : null;
+    final tileKey = guiding ? TutorialTargets.tileOf(node) : null;
 
     final tileContent = GestureDetector(
       key: tileKey,
@@ -230,6 +230,7 @@ class LayerTile extends ConsumerWidget {
       coords,
       padding: const EdgeInsets.all(50),
     );
+    ref.read(tutorialProvider.notifier).report(LayerZoomed(node));
   }
 
   // ---------- View 操作 ----------

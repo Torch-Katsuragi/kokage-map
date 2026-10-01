@@ -45,6 +45,7 @@ import '../../providers/ui_state_providers.dart';
 import '../../screens/gallery_import_screen.dart';
 import '../../services/kmeta_service.dart';
 import '../../services/layer_drawer_service.dart';
+import '../../tutorial/tutorial.dart';
 import '../dialogs/add_folder_type_dialog.dart';
 import '../dialogs/drive_url_input_dialog.dart';
 import 'common_dialogs.dart';
@@ -709,6 +710,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     if (imported) {
       await folder.updateChildren();
       triggerMapRefresh();
+      ref.read(tutorialProvider.notifier).report(const PhotosImported());
     }
   }
 }

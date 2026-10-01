@@ -1304,8 +1304,8 @@
     "unclosedQuotes": "引用符が閉じられていません"
   },
   "tutorial": {
-    "offerTitle": "使い方を試しますか？",
-    "offerBody": "練習用の地図で、地図の動かし方から点を打つまでを 3 分ほどで試せます。",
+    "offerTitle": "チュートリアルをやりますか？",
+    "offerBody": "練習用の地図で、地図の見方から点や線の記録・写真の取り込みまでを章ごとに試せます。",
     "start": "はじめる",
     "later": "あとで",
     "homeButton": "チュートリアル",
@@ -1315,56 +1315,119 @@
     "failed": "練習用の地図を作れませんでした",
     "quit": "やめる",
     "next": "次へ",
+    "skip": "とばす",
     "finish": "おわる",
+    "menuTitle": "チュートリアル",
+    "menuBody": "章を選んでください。どこからでも始められます。",
+    "chapterDone": "「$name」がおわりました",
+    "continueTo": "次の章へ",
     "practice": {
       "folder": "練習",
       "gpkg": "練習",
-      "stands": "小班",
-      "roads": "路網",
-      "points": "調査点",
-      "species": "樹種",
-      "age": "林齢",
+      "area": "エリア",
+      "route": "ルート",
+      "points": "測点",
       "memo": "メモ",
-      "sugi": "スギ",
-      "hinoki": "ヒノキ"
+      "areaA": "エリアA",
+      "areaB": "エリアB",
+      "route1": "ルート1",
+      "memoExample": "ここにメモを書けます"
     },
-    "steps": {
-      "move": {
-        "title": "地図を動かす",
-        "body": "指でなぞると動きます。2 本指で広げると拡大、つまむと縮小です。"
-      },
-      "openLayers": {
-        "title": "レイヤ一覧を開く",
-        "body": "このボタンで地図に載っているデータの一覧が開きます。"
-      },
-      "hideStands": {
-        "title": "小班を隠す",
-        "body": "「小班」の左のしるしを押すと地図から消えます。"
-      },
-      "showStands": {
-        "title": "もう一度押して戻す",
-        "body": "同じところをもう一度押すと表示に戻ります。"
-      },
-      "pickPoints": {
-        "title": "調査点を選ぶ",
-        "body": "書き込む先のレイヤを選びます。「調査点」の行を押してください。"
-      },
-      "closeLayers": {
-        "title": "一覧を閉じる",
-        "body": "同じボタンで閉じます。"
-      },
-      "pen": {
-        "title": "ペンを持つ",
-        "body": "ペンを押すと選んだレイヤに書き込めます。"
-      },
-      "placePoint": {
-        "title": "点を打つ",
-        "body": "地図の好きなところを押すと、そこに調査点が 1 つ打たれます。"
-      },
-      "done": {
-        "title": "できました",
-        "body": "現場で記録するときの基本はこれだけです。練習用の地図は設定からいつでも作り直せます。"
-      }
+    "chapters(map)": {
+      "view": "地図を見る",
+      "data": "データの仕組み",
+      "record": "記録する",
+      "photo": "写真を取り込む",
+      "gps": "GPS で記録する",
+      "yours": "自分のデータで"
+    },
+    "chapterHints(map)": {
+      "view": "動かす・拡大・2D と 3D",
+      "data": "フォルダ・GeoPackage・レイヤ",
+      "record": "点を打つ・名前を入れる・線を引く",
+      "photo": "位置つきの写真を地図に置く",
+      "gps": "今いる場所を記録する",
+      "yours": "自分のフォルダ・Drive・QGIS"
+    },
+    "text(map)": {
+      "view_move_t": "地図を動かす",
+      "view_move_b": "指でなぞると地図が動きます。",
+      "view_zoom_t": "拡大と縮小",
+      "view_zoom_b": "2 本指で広げると拡大、つまむと縮小です。",
+      "view_mode_t": "2D と 3D",
+      "view_mode_b": "この丸を押すと、真上から見る 2D と傾けた 3D が切り替わります。",
+      "view_north_t": "北を上に",
+      "view_north_b": "同じ丸を 2 回続けて押すと北が上に戻ります。",
+      "view_basemap_t": "背景の地図",
+      "view_basemap_b": "背景の地図は ≡ → 設定 → 地図・タイル で替えられます。",
+      "data_folder_t": "データはフォルダごと",
+      "data_folder_b": "こかげマップはフォルダを 1 つ開いて使います。いま開いているのは「練習」フォルダです。",
+      "data_open_t": "レイヤ一覧を開く",
+      "data_open_b": "このボタンでフォルダの中身が一覧で出ます。",
+      "data_gpkg_t": "データの入れ物",
+      "data_gpkg_b": "「練習.gpkg」がデータの入れ物（GeoPackage）です。QGIS でもそのまま開けます。",
+      "data_layers_t": "レイヤ",
+      "data_layers_b": "中にエリア・ルート・測点の 3 つのレイヤがあります。レイヤは同じ形のデータの集まりです。",
+      "data_hide_t": "表示を切り替える",
+      "data_hide_b": "「エリア」の左のしるしを押すと地図から消えます。",
+      "data_show_t": "もう一度押して戻す",
+      "data_show_b": "同じところをもう一度押すと表示に戻ります。",
+      "data_zoomTo_t": "そのレイヤへ移動",
+      "data_zoomTo_b": "「ルート」の行を 2 回続けて押すと、ルートが収まる位置へ地図が動きます。",
+      "data_close_t": "一覧を閉じる",
+      "data_close_b": "同じボタンで閉じます。",
+      "data_select_t": "選択ツール",
+      "data_select_b": "このボタンで地図の上のものを選べるようになります。",
+      "data_pick_t": "エリアを選ぶ",
+      "data_pick_b": "地図のエリアを押すと、名前とメモが出ます。",
+      "data_table_t": "表で見る",
+      "data_table_b": "このボタンで、選んだレイヤを表で一覧できます。",
+      "data_closeTable_t": "表を閉じる",
+      "data_closeTable_b": "同じボタンで閉じます。",
+      "record_open_t": "レイヤ一覧を開く",
+      "record_open_b": "書き込む先のレイヤを選びに行きます。",
+      "record_pick_t": "測点を選ぶ",
+      "record_pick_b": "「測点」の行を押します。選んだレイヤに書き込まれます。",
+      "record_close_t": "一覧を閉じる",
+      "record_close_b": "同じボタンで閉じます。",
+      "record_pen_t": "ペン",
+      "record_pen_b": "ペンを押すと、選んだレイヤに書き込めます。",
+      "record_place_t": "点を打つ",
+      "record_place_b": "地図の好きなところを押すと、そこに測点が 1 つ打たれます。",
+      "record_select_t": "打った点を選ぶ",
+      "record_select_b": "選択ツールに持ち替えて、いま打った点を押します。",
+      "record_table_t": "表を開く",
+      "record_table_b": "表のボタンを押すと、選んだ点の行に色が付いて出ます。",
+      "record_name_t": "名前を入れる",
+      "record_name_b": "「name」の列のマスを 2 回押して名前を入力し、確定します。入れた値はすぐ保存されます。",
+      "record_closeTable_t": "表を閉じる",
+      "record_closeTable_b": "同じボタンで閉じます。",
+      "record_route_t": "ルートを選ぶ",
+      "record_route_b": "レイヤ一覧を開いて「ルート」の行を押します。",
+      "record_draw_t": "線を引く",
+      "record_draw_b": "一覧を閉じてペンに持ち替え、地図を何か所か押します。最後の点は ↶ で取り消せます。右下の ✓ で保存します。",
+      "record_area_t": "エリアも同じ",
+      "record_area_b": "エリアも同じ手順で描けます。✓ を押すと最初の点と最後の点がつながります。",
+      "photo_open_t": "レイヤ一覧を開く",
+      "photo_open_b": "写真は開いているフォルダに取り込みます。",
+      "photo_add_t": "写真を選ぶ",
+      "photo_add_b": "＋ を押して「写真」を選びます。",
+      "photo_legend_t": "位置情報",
+      "photo_legend_b": "緑の枠は位置情報つきの写真です。位置なしの写真は地図に置けません。カメラの設定で位置情報をオンにして撮ってください。",
+      "photo_import_t": "取り込む",
+      "photo_import_b": "写真を押して選び、下のボタンで取り込みます。",
+      "photo_done_t": "地図に出ます",
+      "photo_done_b": "取り込んだ写真は練習フォルダに写り、撮った場所に出ます。選択ツールで押すと大きく見られます。",
+      "gps_tool_t": "GPS ツール",
+      "gps_tool_b": "このボタンで GPS ツールに持ち替えます。書き込む先は測点にしてあります。",
+      "gps_record_t": "今いる場所を記録",
+      "gps_record_b": "押すと今いる場所に測点を 1 つ記録します。長押しすると押している間は測り続けます。屋内では位置が取れないことがあります。",
+      "yours_folder_t": "自分のフォルダを開く",
+      "yours_folder_b": "ホームの「フォルダを選択」で、データを入れたフォルダを開きます。中の GeoPackage や写真がそのまま地図に出ます。",
+      "yours_drive_t": "Drive で共有",
+      "yours_drive_b": "Drive と同期したフォルダは、ほかの端末でも同じデータを見られます。設定の「Drive同期」から始めます。",
+      "yours_qgis_t": "QGIS で開く",
+      "yours_qgis_b": "フォルダの中の .qgs を QGIS で開くと、アプリと同じ見た目で開けます。QGIS で変えた色もアプリに戻ります。"
     }
   },
   "onboarding": {

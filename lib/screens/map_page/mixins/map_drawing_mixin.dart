@@ -23,6 +23,7 @@ import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
+import '../../../tutorial/tutorial.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/global_drawing_state.dart';
 import '../map_page_state_base.dart';
@@ -86,6 +87,7 @@ mixin MapDrawingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
     
     if (success) {
       AppLogger.debug('[MAP] フィーチャ確定成功: $name');
+      ref.read(tutorialProvider.notifier).report(ShapeSaved(selected));
     } else {
       AppLogger.debug('[MAP] フィーチャ確定失敗: $name');
     }

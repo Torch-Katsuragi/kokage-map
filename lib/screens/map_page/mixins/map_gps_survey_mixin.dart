@@ -26,6 +26,7 @@ import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../tools/gps_tool.dart';
+import '../../../tutorial/tutorial.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/global_drawing_state.dart';
 import '../map_page_state_base.dart';
@@ -79,6 +80,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       final success = await currentTool.recordCurrentGpsPosition();
       if (success) {
         triggerSetState(() {}); // プレビュー更新
+        ref.read(tutorialProvider.notifier).report(const GpsPointRecorded());
         
         if (mounted) {
           final drawState = GlobalDrawingState.instance;

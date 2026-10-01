@@ -59,6 +59,7 @@ import '../../../services/basemap_service.dart';
 import '../../../tools/gps_tool.dart';
 import '../../../tools/map_tool.dart';
 import '../../../tools/overlay_transform_tool.dart';
+import '../../../tutorial/tutorial.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/global_drawing_state.dart';
 import '../../layer_style_settings_screen.dart';
@@ -153,6 +154,7 @@ class _ZoomButton extends StatelessWidget {
 /// 3D で傾いていれば縁を少し濃くする。下に今のモードを小さく書く
 class _CompassButton extends StatelessWidget {
   const _CompassButton({
+    super.key,
     required this.bearingDeg,
     required this.pitchDeg,
     required this.flat,
@@ -709,6 +711,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _anim.forward(from: 0);
     }
     ref.read(mapFlashProvider.notifier).show(_flat ? t.map.flash.mode2d : t.map.flash.mode3d);
+    ref.read(tutorialProvider.notifier).report(const MapModeToggled());
     setState(() {});
   }
 
@@ -2138,6 +2141,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
               child: ValueListenableBuilder<double>(
                 valueListenable: widget.mapBearingNotifier,
                 builder: (_, bearingDeg, _) => _CompassButton(
+                  key: TutorialTargets.compassButton,
                   bearingDeg: bearingDeg,
                   pitchDeg: _camera.pitch * 180 / math.pi,
                   flat: _flat,

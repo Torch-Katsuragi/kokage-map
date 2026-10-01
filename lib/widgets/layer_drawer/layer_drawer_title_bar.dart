@@ -25,6 +25,7 @@ import '../../models/nodes/global_folder_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/sys_node.dart';
 import '../../presentation/node_presenter.dart';
+import '../../tutorial/tutorial.dart';
 
 enum AddAction { folder, geoPackage, photo }
 
@@ -207,6 +208,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
 
   Widget _buildAddButton() {
     return PopupMenuButton<AddAction>(
+      key: TutorialTargets.addButton,
       tooltip: t.layerDrawer.add,
       onSelected: onAdd,
       offset: const Offset(0, 40),

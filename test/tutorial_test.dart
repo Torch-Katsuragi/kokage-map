@@ -75,7 +75,7 @@ void main() {
     expect(s().menu, isTrue);
     tut.openChapter(TutorialChapter.record);
     expect(s().step.id, 'open');
-    tut.report(const CameraMoved()); // 関係ない操作
+    tut.report(const PhotosImported()); // 関係ない操作
     expect(s().step.id, 'open');
     tut.report(const LayersPanelToggled(true));
     tut.report(LayerSelected(otherPoints));

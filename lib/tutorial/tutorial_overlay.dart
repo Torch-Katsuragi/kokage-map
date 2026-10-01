@@ -46,44 +46,6 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> {
   Rect? _target;
   Timer? _poll;
 
-  // ── 指の動き（地図を動かす・拡大）。地図の動きは読み込み時の位置合わせでも起きるので指で見る ──
-  final _pointers = <int, Offset>{};
-  double _dragged = 0;
-  double? _spreadAtStart;
-
-  bool _isStep(String id) {
-    final s = ref.read(tutorialProvider);
-    return s != null && !s.menu && s.chapter == TutorialChapter.view && s.step.id == id;
-  }
-
-  void _onDown(PointerDownEvent e) {
-    _pointers[e.pointer] = e.position;
-    _spreadAtStart = _pointers.length == 2 ? _spread() : null;
-  }
-
-  void _onUp(PointerEvent e) {
-    _pointers.remove(e.pointer);
-    _spreadAtStart = null;
-  }
-
-  double _spread() {
-    final v = _pointers.values.toList();
-    return (v[0] - v[1]).distance;
-  }
-
-  void _onMove(PointerMoveEvent e) {
-    _pointers[e.pointer] = e.position;
-    final tutorial = ref.read(tutorialProvider.notifier);
-    if (_pointers.length == 1 && _isStep('move')) {
-      _dragged += e.delta.distance;
-      if (_dragged > 150) tutorial.report(const CameraMoved());
-    }
-    final start = _spreadAtStart;
-    if (_pointers.length == 2 && start != null && _isStep('zoom') && (_spread() - start).abs() > 60) {
-      tutorial.report(const Pinched());
-    }
-  }
-
   // ── 案内先 ──
 
   Rect? _measure(TutorialState s) {
@@ -133,7 +95,6 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> {
       if (parent is LayerNode) tutorial.report(FeatureSelected(parent));
     });
     ref.listen(tutorialProvider, (prev, s) {
-      _dragged = 0;
       if (s != null && !s.menu && (prev == null || prev.menu || prev.chapter != s.chapter)) _prepare(s.chapter);
     });
 
@@ -156,32 +117,25 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> {
     // 札は案内先と反対の側に置く
     final cardAtTop = s != null && !s.menu && (s.step.cardTop || (target != null && target.center.dy > size.height / 2));
 
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: _onDown,
-      onPointerMove: _onMove,
-      onPointerUp: _onUp,
-      onPointerCancel: _onUp,
-      child: Stack(
-        children: [
-          widget.child,
-          if (target != null)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(painter: _RingPainter(target.inflate(5), Theme.of(context).colorScheme.primary)),
-              ),
+    return Stack(
+      children: [
+        widget.child,
+        if (target != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(painter: _RingPainter(target.inflate(5), Theme.of(context).colorScheme.primary)),
             ),
-          if (s != null && !typing)
-            Positioned(
-              // 上に出すときは左右の道具の列（幅 44）を空ける
-              left: cardAtTop ? 52 : 12,
-              right: cardAtTop ? 52 : 12,
-              top: cardAtTop ? topY : null,
-              bottom: cardAtTop ? null : pad.bottom + 20 + (s.menu ? 0 : s.step.cardLift),
-              child: s.menu ? _MenuCard(state: s) : _StepCard(state: s),
-            ),
-        ],
-      ),
+          ),
+        if (s != null && !typing)
+          Positioned(
+            // 上に出すときは左右の道具の列（幅 44）を空ける
+            left: cardAtTop ? 52 : 12,
+            right: cardAtTop ? 52 : 12,
+            top: cardAtTop ? topY : null,
+            bottom: cardAtTop ? null : pad.bottom + 20 + (s.menu ? 0 : s.step.cardLift),
+            child: s.menu ? _MenuCard(state: s) : _StepCard(state: s),
+          ),
+      ],
     );
   }
 }
@@ -213,15 +167,12 @@ class _StepCard extends ConsumerWidget {
             children: [
               TextButton(onPressed: tutorial.showMenu, child: Text(t.tutorial.menuTitle)),
               const Spacer(),
-              // 操作の手順も飛ばせる（屋内で GPS が取れない・写真が無いなど）
+              // 操作の手順も「次へ」で進める（屋内で GPS が取れない・写真が無いなど）。
+              // 操作すれば自動で進むので控えめに出す
               if (state.step.isInfo)
                 FilledButton(onPressed: tutorial.next, child: Text(t.tutorial.next))
               else
-                TextButton(
-                  onPressed: tutorial.next,
-                  style: TextButton.styleFrom(foregroundColor: theme.colorScheme.outline),
-                  child: Text(t.tutorial.skip),
-                ),
+                TextButton(onPressed: tutorial.next, child: Text(t.tutorial.next)),
             ],
           ),
         ],

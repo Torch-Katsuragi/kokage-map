@@ -32,14 +32,6 @@ sealed class TutorialEvent {
   const TutorialEvent();
 }
 
-class CameraMoved extends TutorialEvent {
-  const CameraMoved();
-}
-
-class Pinched extends TutorialEvent {
-  const Pinched();
-}
-
 /// 2D / 3D の切り替え
 class MapModeToggled extends TutorialEvent {
   const MapModeToggled();
@@ -166,7 +158,7 @@ class TutorialStepDef {
   /// 枠で囲む部品。前から順に、画面にあるものを使う
   final List<GlobalKey> targets;
 
-  /// 済んだとみなす操作。null は説明だけの手順（「次へ」で進む）
+  /// 済んだとみなす操作（押せば自動で次へ）。null は「次へ」を押すまで留まる手順（説明・指で触ってみる）
   final bool Function(TutorialEvent e)? done;
 
   /// 札を上に出す（下にパネルが開く手順）
@@ -185,8 +177,9 @@ bool _points(LayerNode? l) => isPracticeLayer(l, PracticeProject.pointsLayer);
 List<TutorialStepDef> stepsOf(TutorialChapter c) {
   return switch (c) {
     TutorialChapter.view => [
-      TutorialStepDef('move', done: (e) => e is CameraMoved),
-      TutorialStepDef('zoom', done: (e) => e is Pinched),
+      // 指で動かす・拡大するは、満足するまで触ってもらう（自動で先へ進めない。松本 2026-10-01）
+      const TutorialStepDef('move'),
+      const TutorialStepDef('zoom'),
       TutorialStepDef('mode', targets: [TutorialTargets.compassButton], done: (e) => e is MapModeToggled),
       TutorialStepDef('north', targets: [TutorialTargets.compassButton]),
       TutorialStepDef('basemap', targets: [TutorialTargets.menuButton]),

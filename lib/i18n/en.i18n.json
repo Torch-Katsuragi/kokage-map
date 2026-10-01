@@ -1315,7 +1315,6 @@
     "failed": "Could not create the practice map",
     "quit": "Quit",
     "next": "Next",
-    "skip": "Skip",
     "finish": "Done",
     "menuTitle": "Tutorial",
     "menuBody": "Pick a chapter. Start anywhere.",
@@ -1351,7 +1350,7 @@
     },
     "text(map)": {
       "view_move_t": "Move the map",
-      "view_move_b": "Drag with a finger to move the map.",
+      "view_move_b": "Drag with a finger to move the map. Tap Next when you are ready.",
       "view_zoom_t": "Zoom",
       "view_zoom_b": "Spread two fingers to zoom in, pinch to zoom out.",
       "view_mode_t": "2D and 3D",

@@ -26,6 +26,7 @@ import '../../models/nodes/layer_node.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../services/coordinate/index.dart';
+import '../../tutorial/practice_project.dart';
 import '../../tutorial/tutorial.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/qgis_expression_filter.dart';
@@ -633,10 +634,18 @@ class AttributeTableController extends ChangeNotifier {
 
   /// Phase 3: NULL/空値ハイライト用セルレンダラー
   TrinaColumnRenderer _nullHighlightRenderer(String columnName) {
+    // チュートリアル: 練習の測点の表では、色の付いた行の name のマスを案内先にする
+    final guideName = columnName == 'name' && isPracticeLayer(layer, PracticeProject.pointsLayer);
     return (TrinaColumnRendererContext ctx) {
       final value = ctx.cell.value;
       final isNull = value == null || value.toString().isEmpty;
+      final key = guideName &&
+              _ref.read(tutorialProvider) != null &&
+              ctx.rowIdx == (ctx.stateManager.currentRowIdx ?? 0)
+          ? TutorialTargets.nameCell
+          : null;
       return Container(
+        key: key,
         padding: const EdgeInsets.symmetric(horizontal: 4),
         alignment: Alignment.centerLeft,
         child: Text(

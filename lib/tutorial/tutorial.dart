@@ -122,6 +122,7 @@ class TutorialTargets {
   static final areaTile = GlobalKey(debugLabel: 'tutorial.areaTile');
   static final routeTile = GlobalKey(debugLabel: 'tutorial.routeTile');
   static final pointsTile = GlobalKey(debugLabel: 'tutorial.pointsTile');
+  static final nameCell = GlobalKey(debugLabel: 'tutorial.nameCell');
 
   /// 練習プロジェクトのレイヤの行に付ける鍵（無ければ null）
   static GlobalKey? tileOf(LayerNode layer) {
@@ -230,7 +231,7 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
           done: (e) => e is FeatureSelected && _points(e.layer)),
       TutorialStepDef('table', cardTop: true, targets: [TutorialTargets.tableButton],
           done: (e) => e is AttributeTableToggled && e.open),
-      TutorialStepDef('name', waitNext: true, cardTop: true, done: (e) => e is AttributeSaved && _points(e.layer)),
+      TutorialStepDef('name', waitNext: true, cardTop: true, targets: [TutorialTargets.nameCell], done: (e) => e is AttributeSaved && _points(e.layer)),
       TutorialStepDef('closeTable', cardTop: true, targets: [TutorialTargets.tableButton],
           done: (e) => e is AttributeTableToggled && !e.open),
       TutorialStepDef('route', targets: [TutorialTargets.routeTile, TutorialTargets.layersButton],

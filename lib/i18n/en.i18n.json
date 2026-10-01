@@ -1315,6 +1315,8 @@
     "failed": "Could not create the practice map",
     "quit": "Quit",
     "next": "Next",
+    "skip": "Skip",
+    "doneHint": "Done. Tap Next to go on.",
     "finish": "Done",
     "menuTitle": "Tutorial",
     "menuBody": "Pick a chapter. Start anywhere.",

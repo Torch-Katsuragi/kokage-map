@@ -71,26 +71,33 @@ void main() {
     final other = GeoPackageFile(const ['o.gpkg'], absolutePath: p.join(tmp.path, 'o.gpkg'));
     final otherPoints = PointLayerNode(other, PracticeProject.pointsLayer, parent: GeoPackageNode(other));
 
+    // 操作が済んだら「次へ」で進む
+    void done(TutorialEvent e) {
+      tut.report(e);
+      expect(s().satisfied, isTrue, reason: '${s().step.id} <- $e');
+      tut.next();
+    }
+
     tut.start();
     expect(s().menu, isTrue);
     tut.openChapter(TutorialChapter.record);
     expect(s().step.id, 'open');
     tut.report(const PhotosImported()); // 関係ない操作
-    expect(s().step.id, 'open');
-    tut.report(const LayersPanelToggled(true));
+    expect(s().satisfied, isFalse);
+    done(const LayersPanelToggled(true));
     tut.report(LayerSelected(otherPoints));
-    expect(s().step.id, 'pick');
-    tut.report(LayerSelected(points));
-    tut.report(const LayersPanelToggled(false));
-    tut.report(const ToolChosen('Pen'));
-    tut.report(PointPlaced(points));
-    tut.report(FeatureSelected(points));
-    tut.report(const AttributeTableToggled(true));
-    tut.report(AttributeSaved(points));
-    tut.report(const AttributeTableToggled(false));
-    tut.report(LayerSelected(routes));
+    expect(s().satisfied, isFalse);
+    done(LayerSelected(points));
+    done(const LayersPanelToggled(false));
+    done(const ToolChosen('Pen'));
+    done(PointPlaced(points));
+    done(FeatureSelected(points));
+    done(const AttributeTableToggled(true));
+    done(AttributeSaved(points));
+    done(const AttributeTableToggled(false));
+    done(LayerSelected(routes));
     expect(s().step.id, 'draw');
-    tut.report(ShapeSaved(routes));
+    tut.next(); // 済んでいなくても「とばす」で進める
     expect(s().step.isInfo, isTrue); // 「エリアも同じ」は説明だけ
     tut.next();
     expect(s().menu, isTrue);

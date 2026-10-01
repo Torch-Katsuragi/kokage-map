@@ -60,7 +60,10 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with SingleTi
     final me = context.findRenderObject();
     if (me is! RenderBox) return null;
     for (final key in s.step.targets) {
-      final box = key.currentContext?.findRenderObject();
+      final ctx = key.currentContext;
+      // 下に隠れた画面の部品は囲まない（地図の上に設定を開いたときなど。地図は裏で生きている）
+      if (ctx == null || !(ModalRoute.of(ctx)?.isCurrent ?? true)) continue;
+      final box = ctx.findRenderObject();
       if (box is RenderBox && box.hasSize && box.attached) {
         return box.localToGlobal(Offset.zero, ancestor: me) & box.size;
       }
@@ -117,7 +120,8 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with SingleTi
 
     // キーボードが出ている間（名前の入力など）は札も枠も引っ込める。入力欄やダイアログを隠さないように
     final typing = MediaQuery.viewInsetsOf(context).bottom > 0;
-    final target = s == null || s.menu || typing ? null : _target;
+    // 済んだ手順は囲まない（「次へ」を見てもらう）
+    final target = s == null || s.menu || s.satisfied || typing ? null : _target;
     final size = MediaQuery.sizeOf(context);
     final pad = MediaQuery.paddingOf(context);
     // 上に出すときはアプリバーの下（アプリバーのボタンを案内することがあるので隠さない）
@@ -176,16 +180,30 @@ class _StepCard extends ConsumerWidget {
           Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Text(body, style: theme.textTheme.bodyMedium),
+          if (state.satisfied) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.check_circle, size: 18, color: Colors.green),
+                const SizedBox(width: 6),
+                Expanded(child: Text(t.tutorial.doneHint, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.green[800]))),
+              ],
+            ),
+          ],
           Row(
             children: [
               TextButton(onPressed: tutorial.showMenu, child: Text(t.tutorial.menuTitle)),
               const Spacer(),
-              // 操作の手順も「次へ」で進める（屋内で GPS が取れない・写真が無いなど）。
-              // 操作すれば自動で進むので控えめに出す
-              if (state.step.isInfo)
+              // 操作の手順は、済むまでは控えめな「とばす」（屋内で GPS が取れない・写真が無いなど）。
+              // 済んだら「次へ」に替わる
+              if (state.step.isInfo || state.satisfied)
                 FilledButton(onPressed: tutorial.next, child: Text(t.tutorial.next))
               else
-                TextButton(onPressed: tutorial.next, child: Text(t.tutorial.next)),
+                TextButton(
+                  onPressed: tutorial.next,
+                  style: TextButton.styleFrom(foregroundColor: theme.colorScheme.outline),
+                  child: Text(t.tutorial.skip),
+                ),
             ],
           ),
         ],

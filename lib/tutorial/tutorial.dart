@@ -158,7 +158,8 @@ class TutorialStepDef {
   /// 枠で囲む部品。前から順に、画面にあるものを使う
   final List<GlobalKey> targets;
 
-  /// 済んだとみなす操作（押せば自動で次へ）。null は「次へ」を押すまで留まる手順（説明・指で触ってみる）
+  /// 済んだとみなす操作。済むまでは「とばす」、済んだら「次へ」を出す。
+  /// null は説明・指で触ってみる手順（はじめから「次へ」）
   final bool Function(TutorialEvent e)? done;
 
   /// 札を上に出す（下にパネルが開く手順）
@@ -250,12 +251,21 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
 
 /// 案内の状態。[menu] のあいだは章の一覧を出す
 class TutorialState {
-  const TutorialState({required this.chapter, this.index = 0, this.menu = false, this.finished = const {}});
+  const TutorialState({
+    required this.chapter,
+    this.index = 0,
+    this.menu = false,
+    this.finished = const {},
+    this.satisfied = false,
+  });
 
   final TutorialChapter chapter;
   final int index;
   final bool menu;
   final Set<TutorialChapter> finished;
+
+  /// 今の手順の操作が済んだ（「とばす」が「次へ」に替わる）
+  final bool satisfied;
 
   TutorialStepDef get step => stepsOf(chapter)[index];
   int get stepCount => stepsOf(chapter).length;
@@ -263,12 +273,19 @@ class TutorialState {
   /// 章を終えた直後か（一覧に「おわりました」を出す）
   bool get justFinished => menu && finished.contains(chapter);
 
-  TutorialState copyWith({TutorialChapter? chapter, int? index, bool? menu, Set<TutorialChapter>? finished}) =>
+  TutorialState copyWith({
+    TutorialChapter? chapter,
+    int? index,
+    bool? menu,
+    Set<TutorialChapter>? finished,
+    bool? satisfied,
+  }) =>
       TutorialState(
         chapter: chapter ?? this.chapter,
         index: index ?? this.index,
         menu: menu ?? this.menu,
         finished: finished ?? this.finished,
+        satisfied: satisfied ?? false, // 手順が変わったら戻す
       );
 }
 
@@ -310,9 +327,10 @@ class Tutorial extends Notifier<TutorialState?> {
     }
   }
 
+  /// 操作の知らせ。今の手順に合えば「済んだ」にする（進むのは「次へ」を押したとき。松本 2026-10-01）
   void report(TutorialEvent e) {
     final s = state;
-    if (s == null || s.menu) return;
-    if (s.step.done?.call(e) ?? false) next();
+    if (s == null || s.menu || s.satisfied) return;
+    if (s.step.done?.call(e) ?? false) state = s.copyWith(index: s.index, satisfied: true);
   }
 }

@@ -35,7 +35,6 @@ class EditPanel extends ConsumerStatefulWidget {
 }
 
 class _EditPanelState extends ConsumerState<EditPanel> {
-  bool _attrsTab = false;
   final _controllers = <String, TextEditingController>{};
 
   TextEditingController _controller(String col, Object? value) =>
@@ -95,15 +94,15 @@ class _EditPanelState extends ConsumerState<EditPanel> {
                       ButtonSegment(value: false, label: Text(t.featureEdit.shapeTab), icon: const Icon(Icons.polyline, size: 16)),
                       ButtonSegment(value: true, label: Text(t.featureEdit.attrsTab), icon: const Icon(Icons.notes, size: 16)),
                     ],
-                    selected: {_attrsTab},
+                    selected: {s.attrsTab},
                     showSelectedIcon: false,
                     style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                    onSelectionChanged: (v) => setState(() => _attrsTab = v.first),
+                    onSelectionChanged: (v) => ref.read(featureEditorProvider.notifier).setAttrsTab(v.first),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              Expanded(child: _attrsTab ? _attrs(s, theme) : _shape(s, theme)),
+              Expanded(child: s.attrsTab ? _attrs(s, theme) : _shape(s, theme)),
               Row(
                 children: [
                   TextButton(onPressed: s.saving ? null : () => _cancel(s), child: Text(t.featureEdit.cancel)),
@@ -137,6 +136,8 @@ class _EditPanelState extends ConsumerState<EditPanel> {
       EditMode.rotate => t.featureEdit.hints.rotate,
       EditMode.scale => t.featureEdit.hints.scale,
       EditMode.extend => t.featureEdit.hints.extend,
+      EditMode.simplify => t.featureEdit.hints.simplify,
+      EditMode.trim => t.featureEdit.hints.trim,
     };
     return ListView(
       padding: EdgeInsets.zero,
@@ -150,11 +151,51 @@ class _EditPanelState extends ConsumerState<EditPanel> {
         ),
         const SizedBox(height: 4),
         Text(hint, style: theme.textTheme.bodyMedium),
+        if (s.mode == EditMode.simplify) _simplifySlider(s, theme),
+        if (s.mode == EditMode.trim) _trimSlider(s, theme),
         const SizedBox(height: 4),
         Text(t.featureEdit.hints.twoFingers, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
         const SizedBox(height: 10),
         Text(_stats(s), style: theme.textTheme.bodySmall),
       ],
+    );
+  }
+
+  /// 間引く: 許す幅（m）。0〜50 m、0.5 m 刻み
+  Widget _simplifySlider(EditState s, ThemeData theme) {
+    final ed = ref.read(featureEditorProvider.notifier);
+    return Row(
+      children: [
+        Expanded(
+          child: Slider(
+            value: s.tolerance.clamp(0, 50),
+            max: 50,
+            divisions: 100,
+            label: '${s.tolerance.toStringAsFixed(1)} m',
+            onChangeStart: (_) => ed.sliderStart(),
+            onChanged: ed.setTolerance,
+            onChangeEnd: (_) => ed.sliderEnd(),
+          ),
+        ),
+        SizedBox(width: 56, child: Text('${s.tolerance.toStringAsFixed(1)} m', textAlign: TextAlign.right)),
+      ],
+    );
+  }
+
+  /// 切り落とす: 残す頂点の範囲
+  Widget _trimSlider(EditState s, ThemeData theme) {
+    final ed = ref.read(featureEditorProvider.notifier);
+    final max = ed.trimMax;
+    if (max < 2) return const SizedBox.shrink();
+    final (a, b) = s.trimRange ?? (0, max);
+    return RangeSlider(
+      values: RangeValues(a.toDouble(), b.toDouble()),
+      max: max.toDouble(),
+      divisions: max,
+      labels: RangeLabels('${a + 1}', '${b + 1}'),
+      onChangeStart: (_) => ed.sliderStart(),
+      onChanged: (v) => ed.setTrim(v.start.round(), v.end.round()),
+      onChangeEnd: (_) => ed.sliderEnd(),
     );
   }
 

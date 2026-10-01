@@ -33,9 +33,6 @@ import '../providers/notification_providers.dart';
 import '../providers/project_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/ui_state_providers.dart';
-import '../widgets/feature_editor/actions/simplify_action.dart';
-import '../widgets/feature_editor/actions/trim_action.dart';
-import '../widgets/feature_editor/feature_editor_screen.dart';
 import '../widgets/info_panel_card.dart';
 import '../widgets/long_press_delete_button.dart';
 import '../widgets/photo_viewer.dart';
@@ -397,20 +394,6 @@ class FeatureDetailPanel extends ConsumerWidget {
           ),
         ),
       ]);
-      // 単純化・端を切るは当面これまでの画面で（編集の道具に移すまで）
-      if (feature is LineFeatureNode || feature is PolygonFeatureNode) {
-        children.addAll([
-          const SizedBox(height: 4),
-          SizedBox(
-            width: double.infinity,
-            child: TextButton.icon(
-              onPressed: () => _openFeatureEditor(context, feature),
-              icon: const Icon(Icons.auto_fix_high, size: 16),
-              label: Text(t.featureEdit.simplifyTrim),
-            ),
-          ),
-        ]);
-      }
 
       // 全フィーチャ共通: 削除ボタンを追加
       children.addAll([
@@ -506,22 +489,6 @@ class FeatureDetailPanel extends ConsumerWidget {
         level: NotificationLevel.error,
       );
     }
-  }
-
-  /// フィーチャ編集画面に遷移
-  void _openFeatureEditor(BuildContext context, FeatureNode feature) {
-    Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => FeatureEditorScreen(
-          feature: feature,
-          actions: [
-            SimplifyAction(),
-            TrimAction(),
-          ],
-        ),
-      ),
-    );
   }
 
   /// パネルの枠は [InfoPanelCard]（複数選択・現在位置のカードと共通）

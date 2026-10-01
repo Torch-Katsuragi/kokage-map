@@ -17,6 +17,7 @@
 // Main UI for map display and layer/feature editing
 // maplibre移行: FlutterMap → MapLibreMap
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -797,7 +798,17 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   /// 情報カードを下から出す（属性テーブルと同じ動き。下へ引き切ると選択解除）
   Widget _buildInfoBottomPanel(List<LayerTreeNode> selected) {
     // 編集中は上まで引き上げられる（属性が多いとき・メモを長く書くとき）
-    final maxHeight = MediaQuery.of(context).size.height * (ref.read(featureEditorProvider) != null ? 0.9 : 0.6);
+    final screenH = MediaQuery.of(context).size.height;
+    // 地図とパネルが入る高さ（アプリバーと上の帯を除く）。上まで上げても地図を一筋残す
+    final bodyH = screenH - MediaQuery.of(context).padding.top - kToolbarHeight;
+    final edit = ref.read(featureEditorProvider);
+    final maxHeight = edit != null ? bodyH - 56 : screenH * 0.6;
+    // 情報パネル → 編集（少しせり上がる）→ 属性（上までせり上がる）→ 終われば元の高さへ下りる
+    final target = edit == null
+        ? infoPanelHeight.clamp(120.0, maxHeight)
+        : edit.attrsTab
+            ? maxHeight
+            : math.max(infoPanelHeight, math.min(330.0, screenH * 0.45));
     return ResizableBottomPanel(
       initialHeight: infoPanelHeight.clamp(120.0, maxHeight),
       minHeight: 120,
@@ -807,7 +818,11 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       onOpenChanged: (isOpen) {
         if (!isOpen) ref.read(selectedFeaturesProvider.notifier).clear();
       },
-      onHeightChanged: (height) => infoPanelHeight = height,
+      // 編集中に指で変えた高さは、情報パネルに戻ったときの高さにしない
+      onHeightChanged: (height) {
+        if (ref.read(featureEditorProvider) == null) infoPanelHeight = height;
+      },
+      targetHeight: target,
       // 編集中は編集のパネルが自分で形を敷く（直すたびに変わる）
       child: ref.read(featureEditorProvider) != null
           ? _buildInfoContent(selected)

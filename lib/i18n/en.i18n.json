@@ -1034,7 +1034,6 @@
     "deleteVertex": "Delete selected vertex",
     "undo": "Undo",
     "redo": "Redo",
-    "simplifyTrim": "Simplify or trim",
     "lineStats": "$n vertices · length $len",
     "polygonStats": "$n vertices · area $area",
     "modes": {
@@ -1042,7 +1041,9 @@
       "move": "Move",
       "rotate": "Rotate",
       "scale": "Scale",
-      "extend": "Extend"
+      "extend": "Extend",
+      "simplify": "Simplify",
+      "trim": "Trim"
     },
     "hints": {
       "vertex": "Drag a vertex to move it. Tap a small dot midway along an edge to add one. Tap a vertex to select it, then remove it with − on the left.",
@@ -1051,7 +1052,9 @@
       "rotate": "Drag around the center to rotate.",
       "scale": "Drag away from the center to enlarge, toward it to shrink.",
       "extend": "Tap the map to continue the line from the nearer end. Tap an end point to extend from that end.",
-      "twoFingers": "Move the map with two fingers."
+      "twoFingers": "Move the map with two fingers.",
+      "simplify": "Move the slider right to remove vertices that are nearly in a straight line. The number is how far a vertex may be off the line and still be removed.",
+      "trim": "Vertices outside the handles are cut off. Move the end handles inward."
     }
   },
   "featureDetail": {

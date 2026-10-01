@@ -48,6 +48,8 @@ class EditTool extends MapTool {
   EditState? get _s => _ref.read(featureEditorProvider);
 
   // ドラッグの途中で使うもの
+  /// ドラッグを始めたときの形（離したらこれを 1 手の前として積む）
+  Snap? _snap;
   Shape? _base;
   (int, int)? _dragVertex;
   bool _dragAll = false;
@@ -94,6 +96,7 @@ class EditTool extends MapTool {
 
   void _reset() {
     _base = null;
+    _snap = null;
     _dragVertex = null;
     _dragAll = false;
     _startLatLng = null;
@@ -112,6 +115,7 @@ class EditTool extends MapTool {
         final v = _hitVertex(s.geom, p, mapState, _vertexHit);
         if (v != null) {
           _base = s.geom;
+          _snap = s.snap;
           _dragVertex = v;
           _ed.select(v);
           return;
@@ -120,23 +124,27 @@ class EditTool extends MapTool {
         if (mid != null) {
           // 中点を掴んだら、そこに頂点を足してそのまま動かす（足すのと動かすのを 1 手にする）
           _base = s.geom;
+          _snap = s.snap;
           final (r, i, ll) = mid;
-          final g = [for (final ring in s.geom) List<LatLng>.of(ring)]..[r].insert(i + 1, ll);
-          _ed.preview(g);
+          _ed.previewInsert(r, i + 1, ll);
           _dragVertex = (r, i + 1);
           _ed.select(_dragVertex);
         }
       case EditMode.move:
         _base = s.geom;
+        _snap = s.snap;
         _dragAll = true;
         _startLatLng = mapState.offsetToLatLng(p);
       case EditMode.rotate:
       case EditMode.scale:
         _base = s.geom;
+        _snap = s.snap;
         _centre = mapState.latLngToOffset(centroidOf(s.geom));
         _startVec = p - _centre!;
       case EditMode.extend:
-        break;
+      case EditMode.simplify:
+      case EditMode.trim:
+        break; // 間引く・切り落とすはパネルのつまみで
     }
   }
 
@@ -175,8 +183,8 @@ class EditTool extends MapTool {
 
   @override
   void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
-    final base = _base;
-    if (base != null) _ed.commit(base);
+    final before = _snap;
+    if (before != null) _ed.commit(before);
     _reset();
   }
 
@@ -202,7 +210,7 @@ class EditTool extends MapTool {
         _ed.select(null);
       case EditMode.move:
         // 点は押したところへ動かす
-        if (s.kind == EditKind.point) _ed.apply([[mapState.offsetToLatLng(p)]]);
+        if (s.kind == EditKind.point) _ed.apply([[mapState.offsetToLatLng(p)]], s.ids);
       case EditMode.extend:
         // 端点を押せばそちらから延ばす。それ以外は、押したところに近い端から続ける
         final line = s.geom.first;
@@ -221,6 +229,8 @@ class EditTool extends MapTool {
         _ed.extendLine(mapState.offsetToLatLng(p));
       case EditMode.rotate:
       case EditMode.scale:
+      case EditMode.simplify:
+      case EditMode.trim:
         break;
     }
   }

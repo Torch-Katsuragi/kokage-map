@@ -53,6 +53,10 @@ class ResizableBottomPanel extends StatefulWidget {
   /// ドラッグハンドルの色
   final Color handleColor;
 
+  /// この高さへ寄せる（変わるたびに短く動いて合わせる）。null なら指で決めた高さのまま。
+  /// 情報パネル → 編集 → 属性の全画面のように、中身に合わせて上下させるため
+  final double? targetHeight;
+
   const ResizableBottomPanel({
     super.key,
     required this.child,
@@ -63,24 +67,39 @@ class ResizableBottomPanel extends StatefulWidget {
     this.onHeightChanged,
     this.backgroundColor,
     this.handleColor = Colors.black12,
+    this.targetHeight,
   });
 
   @override
   State<ResizableBottomPanel> createState() => _ResizableBottomPanelState();
 }
 
-class _ResizableBottomPanelState extends State<ResizableBottomPanel> {
+class _ResizableBottomPanelState extends State<ResizableBottomPanel> with SingleTickerProviderStateMixin {
   late double _panelHeight;
+  late final AnimationController _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 260))
+    ..addListener(() => setState(() => _panelHeight = _tween.transform(Curves.easeOutCubic.transform(_anim.value))));
+  Tween<double> _tween = Tween(begin: 0, end: 0);
 
   @override
   void initState() {
     super.initState();
-    _panelHeight = widget.initialHeight;
+    _panelHeight = widget.targetHeight ?? widget.initialHeight;
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
   }
 
   @override
   void didUpdateWidget(covariant ResizableBottomPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final to = widget.targetHeight;
+    if (to != null && to != oldWidget.targetHeight) {
+      _tween = Tween(begin: _panelHeight, end: to.clamp(widget.minHeight, widget.maxHeight));
+      _anim.forward(from: 0);
+    }
     // maxHeight が変わった場合、現在値がはみ出していれば補正
     if (oldWidget.maxHeight != widget.maxHeight) {
       _panelHeight = _panelHeight.clamp(widget.minHeight, widget.maxHeight);
@@ -102,6 +121,7 @@ class _ResizableBottomPanelState extends State<ResizableBottomPanel> {
             GestureDetector(
               behavior: HitTestBehavior.translucent,
               onVerticalDragUpdate: (details) {
+                _anim.stop();
                 setState(() {
                   _panelHeight -= details.delta.dy;
                   if (_panelHeight < widget.minHeight) {

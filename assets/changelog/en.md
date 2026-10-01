@@ -15,7 +15,10 @@
 ### Editing features
 
 - "Edit" in the info panel now edits the feature on the map without leaving the panel. The map locks to top-down and the left toolbar switches to edit tools
-- Move, add and delete vertices; move, rotate and scale the whole feature; extend lines (tools differ for points, lines and areas). Undo and redo work too
+- Move, add and delete vertices; move, rotate and scale the whole feature; extend, simplify and trim lines (tools differ for points, lines and areas). Undo and redo work too
+- Switching to attributes raises the panel to the top; it comes back down when you finish
+- Per-vertex records of GPS-surveyed lines stay aligned when you add or delete vertices
+- The old edit screen (simplify and trim only) is gone
 - Edit attributes in the panel as well. Nothing is written until you tap Save
 - The info panel now shows the selected feature's shape faintly in the background
 

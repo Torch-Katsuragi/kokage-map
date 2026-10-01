@@ -29,6 +29,8 @@ IconData editModeIcon(EditMode m) => switch (m) {
       EditMode.rotate => Icons.rotate_right,
       EditMode.scale => Icons.open_in_full,
       EditMode.extend => Icons.trending_flat,
+      EditMode.simplify => Icons.auto_fix_high,
+      EditMode.trim => Icons.content_cut,
     };
 
 String editModeName(EditMode m) => switch (m) {
@@ -37,6 +39,8 @@ String editModeName(EditMode m) => switch (m) {
       EditMode.rotate => t.featureEdit.modes.rotate,
       EditMode.scale => t.featureEdit.modes.scale,
       EditMode.extend => t.featureEdit.modes.extend,
+      EditMode.simplify => t.featureEdit.modes.simplify,
+      EditMode.trim => t.featureEdit.modes.trim,
     };
 
 class EditToolbar extends ConsumerWidget {

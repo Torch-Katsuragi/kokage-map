@@ -86,7 +86,12 @@ class _EditPainter extends CustomPainter {
     }
 
     // 頂点
-    final showVertices = s.mode == EditMode.vertex || s.mode == EditMode.extend || s.kind == EditKind.point;
+    // 間引く・切り落とすでも頂点を出す（どれが残るかを見るため）
+    final showVertices = s.mode == EditMode.vertex ||
+        s.mode == EditMode.extend ||
+        s.mode == EditMode.simplify ||
+        s.mode == EditMode.trim ||
+        s.kind == EditKind.point;
     if (showVertices) {
       for (var ri = 0; ri < rings.length; ri++) {
         for (var i = 0; i < rings[ri].length; i++) {

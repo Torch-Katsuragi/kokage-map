@@ -2100,6 +2100,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     ref.listen(partySessionProvider, (_, _) => _scheduleRefresh());
     ref.listen(currentToolProvider, (_, next) => _onToolChanged(next.name));
     final desktop = kIsWeb || (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS);
+    final editing = ref.watch(currentToolProvider).name == 'Edit';
     final toolbarLeft = MapLayout.resolve(ref.watch(mapLayoutPresetSettingProvider), MediaQuery.sizeOf(context)).toolbarLeft;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -2143,6 +2144,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
               ),
             ),
             // コンパス: 方位に合わせて回る。タップで 2D ⇄ 3D、ダブルタップで北を上に、長押しで眺めモード
+            // （地物の編集中は地図の上のボタンを出さない。2D 固定で、地図は形を直すためだけに使う）
+            if (!editing)
             Positioned(
               right: 8,
               top: 8,
@@ -2162,6 +2165,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
             ),
             // 拡大縮小（desktop）とドライブ（debug）。左下のフローティングボタン列の反対側に置く
             // （左利きではフローティングボタン列が右下に来て重なっていた）
+            if (!editing)
             Positioned(
               right: toolbarLeft ? 8 : null,
               left: toolbarLeft ? null : 8,

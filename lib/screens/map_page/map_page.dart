@@ -487,7 +487,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                         // 編集中の形と取っ手（地図の場面には焼かず、カメラが動くたびに描き直す）
                         EditOverlay(project: latLngToOffset, cameraTick: cameraTickNotifier),
                         _buildDrawingPreviewInfo(),
-                        _buildOffscreenLocationIndicator(),
+                        if (!editing) _buildOffscreenLocationIndicator(),
                         const ToolNameFlash(),
                       ],
                     ),
@@ -527,7 +527,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                             onStopLongPressGpsSurvey: stopLongPressGpsSurvey,
                             onOpenTrackExtraction: openTrackExtractionDialog,
                           ),
-                        const LeftBottomFab(),
+                        // 地物の編集中は地図の上のボタンを出さない
+                        if (!editing) const LeftBottomFab(),
                       ],
                     ),
                   ),

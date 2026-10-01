@@ -731,7 +731,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
               children: [
                 ListTile(
                   leading: const Icon(Icons.play_arrow),
-                  title: Text(t.tutorial.homeButton),
+                  title: Text(t.tutorial.start),
                   subtitle: Text(t.tutorial.settingsSubtitle),
                   onTap: () {
                     Navigator.of(context).popUntil((r) => r.isFirst);

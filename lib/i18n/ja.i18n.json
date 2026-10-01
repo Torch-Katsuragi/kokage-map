@@ -1308,7 +1308,7 @@
     "offerBody": "練習用の地図で、地図の動かし方から点を打つまでを 3 分ほどで試せます。",
     "start": "はじめる",
     "later": "あとで",
-    "homeButton": "練習用の地図で使い方を試す",
+    "homeButton": "チュートリアル",
     "settingsTitle": "チュートリアル",
     "settingsSubtitle": "練習用の地図は始めるたびに作り直されます",
     "preparing": "練習用の地図を用意しています...",

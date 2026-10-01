@@ -1308,7 +1308,7 @@
     "offerBody": "On a practice map, go from moving the map to placing a point in about 3 minutes.",
     "start": "Start",
     "later": "Later",
-    "homeButton": "Try the basics on a practice map",
+    "homeButton": "Tutorial",
     "settingsTitle": "Tutorial",
     "settingsSubtitle": "The practice map is recreated each time",
     "preparing": "Preparing the practice map...",

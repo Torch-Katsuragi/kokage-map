@@ -191,6 +191,11 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('layers', targets: [TutorialTargets.areaTile]),
       TutorialStepDef('hide', targets: [TutorialTargets.areaEye],
           done: (e) => e is LayerVisibilityToggled && _area(e.layer) && !e.layer.visible),
+      // 一覧を閉じて、地図から消えたのを自分の目で見てもらう（松本 2026-10-01）
+      TutorialStepDef('hiddenClose', targets: [TutorialTargets.layersButton],
+          done: (e) => e is LayersPanelToggled && !e.open),
+      TutorialStepDef('hiddenOpen', targets: [TutorialTargets.layersButton],
+          done: (e) => e is LayersPanelToggled && e.open),
       TutorialStepDef('show', targets: [TutorialTargets.areaEye],
           done: (e) => e is LayerVisibilityToggled && _area(e.layer) && e.layer.visible),
       TutorialStepDef('zoomTo', targets: [TutorialTargets.routeTile], done: (e) => e is LayerZoomed && _route(e.layer)),

@@ -191,14 +191,15 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('layers', targets: [TutorialTargets.areaTile]),
       TutorialStepDef('hide', targets: [TutorialTargets.areaEye],
           done: (e) => e is LayerVisibilityToggled && _area(e.layer) && !e.layer.visible),
-      // 一覧を閉じて、地図から消えたのを自分の目で見てもらう（松本 2026-10-01）
+      // 地図は自分のいる場所から始まるので、行のダブルタップでエリアのある所へ飛んでから
+      // 一覧を閉じ、消えているのを自分の目で見てもらう（松本 2026-10-01）
+      TutorialStepDef('zoomTo', targets: [TutorialTargets.areaTile], done: (e) => e is LayerZoomed && _area(e.layer)),
       TutorialStepDef('hiddenClose', targets: [TutorialTargets.layersButton],
           done: (e) => e is LayersPanelToggled && !e.open),
       TutorialStepDef('hiddenOpen', targets: [TutorialTargets.layersButton],
           done: (e) => e is LayersPanelToggled && e.open),
       TutorialStepDef('show', targets: [TutorialTargets.areaEye],
           done: (e) => e is LayerVisibilityToggled && _area(e.layer) && e.layer.visible),
-      TutorialStepDef('zoomTo', targets: [TutorialTargets.routeTile], done: (e) => e is LayerZoomed && _route(e.layer)),
       TutorialStepDef('close', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && !e.open),
       TutorialStepDef('select', targets: [TutorialTargets.selectButton], done: (e) => e is ToolChosen && e.name == 'Select'),
       TutorialStepDef('pick', cardTop: true, done: (e) => e is FeatureSelected && _area(e.layer)),

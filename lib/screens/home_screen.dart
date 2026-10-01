@@ -212,13 +212,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           );
       return;
     }
-    // 開いた地図を練習の場所に合わせる（MapPage が consumePending で拾う）
-    LaunchRequest.defer(LaunchRequest(
-      lat: PracticeProject.center.latitude,
-      lon: PracticeProject.center.longitude,
-      zoom: PracticeProject.zoom,
-      pitch: 0,
-    ));
+    // 地図は自分のいる場所（GPS）から始める。練習のデータへは「データの仕組み」でダブルタップして飛ぶ（MapPage 側）
     ref.read(expandedGeoPackagesProvider.notifier).addExpanded(proj.gpkgPath);
     ref.read(tutorialProvider.notifier).start();
     await _openProjectDir(proj.dir);

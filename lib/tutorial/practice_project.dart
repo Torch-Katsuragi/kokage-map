@@ -36,12 +36,6 @@ class PracticeProject {
 
   String get gpkgPath => p.join(dir, '${t.tutorial.practice.gpkg}.gpkg');
 
-  /// 地図を開いたときに見せる場所（2 つのエリアが画面に収まる寄り）。
-  /// 開いたときの「フィーチャが全部入る範囲」は共有フォルダ（Global）の中身まで含むので、ここで決める
-  static const center = LatLng(33.9297, 135.9738);
-  static const zoom = 16.3;
-
-  // レイヤ名。チュートリアルはこの名前で案内先を探す
   // 林業に寄せない一般的な名前にする（松本 2026-10-01「エリアとか測点とか」）
   static String get areaLayer => t.tutorial.practice.area;
   static String get routeLayer => t.tutorial.practice.route;

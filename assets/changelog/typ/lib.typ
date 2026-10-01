@@ -210,8 +210,8 @@
     text(size: 6pt, weight: "bold")[#title]
   }))
 
-/// チュートリアルの「ここを押す」枠
-#let spot(w, h) = box(width: w, height: h, rect(width: w, height: h, radius: 2.5pt, stroke: 1.4pt + accent))
+/// チュートリアルの「ここを押す」枠（アプリと同じくすんだ赤）
+#let spot(w, h) = box(width: w, height: h, rect(width: w, height: h, radius: 2.5pt, stroke: 1.4pt + rgb("#c0504d")))
 
 /// 吹き出し（端末で何をしたか）
 #let bubble(body) = box(fill: white, stroke: 0.7pt + line-c, radius: 6pt, inset: (x: 5pt, y: 3.5pt),

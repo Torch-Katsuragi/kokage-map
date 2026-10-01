@@ -17,7 +17,8 @@
 //
 // MaterialApp の builder に置き、どの画面（ダイアログ・写真の選択）の上にも出す。
 // 押すのは本物の部品なので、札以外は触れる。画面を暗くしないのはダイアログまで暗くなるため。
-// 動きは付けない。案内先の位置は案内中だけ一定間隔で測り直す（一覧の開閉などで動くため）。
+// 枠はくすんだ赤。外側のハローだけゆっくり広がって薄れる（目に入るが点滅ほどうるさくない。松本 2026-10-01）。
+// 案内先の位置は案内中だけ一定間隔で測り直す（一覧の開閉などで動くため）。
 
 import 'dart:async';
 
@@ -42,9 +43,15 @@ class TutorialOverlay extends ConsumerStatefulWidget {
   ConsumerState<TutorialOverlay> createState() => _TutorialOverlayState();
 }
 
-class _TutorialOverlayState extends ConsumerState<TutorialOverlay> {
+/// 案内の枠の色（彩度を抑えた赤）
+const _ringColor = Color(0xFFC0504D);
+
+class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with SingleTickerProviderStateMixin {
   Rect? _target;
   Timer? _poll;
+
+  /// ハローの脈動（枠が出ている間だけ回す）
+  late final _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600));
 
   // ── 案内先 ──
 
@@ -81,6 +88,7 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> {
   @override
   void dispose() {
     _poll?.cancel();
+    _pulse.dispose();
     super.dispose();
   }
 
@@ -115,6 +123,11 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> {
     // 上に出すときはアプリバーの下（アプリバーのボタンを案内することがあるので隠さない）
     final topY = pad.top + kToolbarHeight + 8;
     // 札は案内先と反対の側に置く
+    if (target != null && !_pulse.isAnimating) {
+      _pulse.repeat();
+    } else if (target == null && _pulse.isAnimating) {
+      _pulse.stop();
+    }
     final cardAtTop = s != null && !s.menu && (s.step.cardTop || (target != null && target.center.dy > size.height / 2));
 
     return Stack(
@@ -123,7 +136,7 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> {
         if (target != null)
           Positioned.fill(
             child: IgnorePointer(
-              child: CustomPaint(painter: _RingPainter(target.inflate(5), Theme.of(context).colorScheme.primary)),
+              child: CustomPaint(painter: _RingPainter(target.inflate(5), _ringColor, _pulse)),
             ),
           ),
         if (s != null && !typing)
@@ -244,19 +257,21 @@ class _CardFrame extends StatelessWidget {
       );
 }
 
-/// 案内先を囲む枠（太い線と外側の淡い帯）
+/// 案内先を囲む枠と、外へ広がって薄れるハロー
 class _RingPainter extends CustomPainter {
-  _RingPainter(this.hole, this.color);
+  _RingPainter(this.hole, this.color, this.pulse) : super(repaint: pulse);
   final Rect hole;
   final Color color;
+  final Animation<double> pulse;
 
   @override
   void paint(Canvas canvas, Size size) {
     final r = RRect.fromRectAndRadius(hole, const Radius.circular(10));
-    canvas.drawRRect(r.inflate(4), Paint()
+    final p = Curves.easeOut.transform(pulse.value);
+    canvas.drawRRect(r.inflate(3 + 9 * p), Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 8
-      ..color = color.withValues(alpha: 0.25));
+      ..strokeWidth = 6
+      ..color = color.withValues(alpha: 0.35 * (1 - p)));
     canvas.drawRRect(r, Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3

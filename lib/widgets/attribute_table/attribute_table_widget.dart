@@ -265,6 +265,16 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
         }
       }
     });
+
+    // 開いたときに地図で選んでいるものがあれば、その行に色を付ける（選択の変化しか見ていなかったので、
+    // 先に選んでから表を開くと色が付かなかった。2026-10-01 チュートリアルで発覚）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final selected = ref.read(selectedFeaturesProvider);
+      if (selected.length == 1 && selected.first is FeatureNode) {
+        _controller.highlightFeatureOnCurrentPage(selected.first as FeatureNode);
+      }
+    });
   }
 
   void _onGridChanged(TrinaGridOnChangedEvent event) async {

@@ -351,10 +351,11 @@ class _RingPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final r = RRect.fromRectAndRadius(hole(), const Radius.circular(10));
     final p = Curves.easeOut.transform(pulse.value);
-    canvas.drawRRect(r.inflate(3 + 9 * p), Paint()
+    // 広がりは 24px まで（12px では赤枠と脈動があっても見落とされた。松本 2026-10-02）
+    canvas.drawRRect(r.inflate(3 + 21 * p), Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 6
-      ..color = color.withValues(alpha: 0.35 * (1 - p)));
+      ..strokeWidth = 8
+      ..color = color.withValues(alpha: 0.45 * (1 - p)));
     canvas.drawRRect(r, Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3

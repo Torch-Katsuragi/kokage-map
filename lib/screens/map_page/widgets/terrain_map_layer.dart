@@ -537,6 +537,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   Timer? _retextureTimer;
   Rect? _lastOverlayBounds;
 
+  /// 選んだ面の塗り（テクスチャに描く）: いま描いてある選択と、その範囲（Mercator）
+  List<geo.Feature<geo.Geometry>> _selFillDrawn = const [];
+  Rect? _selFillBounds;
+
   // ジェスチャ
   double _scaleStart = 1;
   double _bearingStart = 0;
@@ -926,6 +930,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   void _refresh() {
     if (_size == Size.zero) return;
     _syncOverlays();
+    _syncSelectionFill();
     final sw = Stopwatch()..start();
     _meshBuilds = 0;
     _placeholders = 0;
@@ -1131,14 +1136,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     );
   }
 
-  TerrainFeatureStyle _selectedStyle(TerrainFeatureStyle base) {
+  TerrainFeatureStyle _selectedStyle(TerrainFeatureStyle base, {bool fill = true}) {
     final s = layerStyleSettings;
     final color = s.getColor(selectedColorDef);
     final k = s.getDouble(selectedMultiplierDef);
     return TerrainFeatureStyle(
       lineColor: color,
       lineWidth: base.lineWidth * k,
-      fillColor: color.withValues(alpha: 0.4),
+      fillColor: fill ? color.withValues(alpha: 0.4) : Colors.transparent,
       outlineColor: color,
       outlineWidth: base.outlineWidth * k,
       pointColor: color,
@@ -1297,7 +1302,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     if (progress.phase == 0) {
       // 選択（先に見せたい）・頂点・写真は少ないので一度に
       add(
-        builder({for (final e in groups.entries) e.key: _selectedStyle(e.value)}, _selectedStyle(defaultStyle), '__no_label__')
+        // 選んだ面の塗りはテクスチャに描くので、ここは枠線だけ（平らな板の塗りは尾根で地形に埋もれていた）
+        builder({for (final e in groups.entries) e.key: _selectedStyle(e.value, fill: false)}, _selectedStyle(defaultStyle, fill: false),
+                '__no_label__')
             .build(lines: g.selectedPolylines, polygons: g.selectedPolygons, points: g.selectedMarkers, clipRect: clip),
         withLabels: false,
       );
@@ -1867,6 +1874,64 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   // ── オーバーレイ画像 ─────────────────────────────────
 
+  /// 選んだ面が変わったら、前と今の範囲のテクスチャを作り直す（塗りはテクスチャに描くので地形に埋もれない）。
+  /// 枠線は今までどおり地形に沿わせた線ですぐ出るので、塗りが少し遅れて付いても選んだことは伝わる
+  void _syncSelectionFill() {
+    final sel = widget.geoJson.selectedPolygons;
+    if (identical(sel, _selFillDrawn)) return;
+    _selFillDrawn = sel;
+    Rect? b;
+    final boxes = _bboxes(sel);
+    for (var i = 0; i < sel.length; i++) {
+      if (boxes[i * 4].isNaN) continue;
+      final r = Rect.fromLTRB(boxes[i * 4], boxes[i * 4 + 1], boxes[i * 4 + 2], boxes[i * 4 + 3]);
+      b = b == null ? r : b.expandToInclude(r);
+    }
+    final prev = _selFillBounds;
+    _selFillBounds = b;
+    final dirty = prev == null ? b : (b == null ? prev : prev.expandToInclude(b));
+    if (dirty == null) return;
+    // オーバーレイの作り直しが控えていれば一緒に（作り直しは新しい呼び出しが古い方を止めるので）
+    _retextureTimer?.cancel();
+    final within = _overlayBounds == null ? dirty : _overlayBounds!.expandToInclude(dirty);
+    _overlayBounds = null;
+    _world.retexture(within: within.inflate(10));
+  }
+
+  /// 選んだ面の塗りをテクスチャに描く（どの段でも）
+  void _bakeSelectionFill(ui.Canvas canvas, TileRange range) {
+    final sel = widget.geoJson.selectedPolygons;
+    if (sel.isEmpty) return;
+    const ts = WebMercator.tileSize;
+    final west = range.west;
+    final north = WebMercator.tileNorth(range.y0, range.z);
+    final span = WebMercator.tileSpan(range.z);
+    final pxPerM = range.width * ts / range.widthMeters;
+    final merc = Rect.fromLTRB(west, north - range.height * span, west + range.widthMeters, north);
+    final fill = Paint()
+      ..style = PaintingStyle.fill
+      ..color = layerStyleSettings.getColor(selectedColorDef).withValues(alpha: 0.4);
+    for (final i in _featureIndexes(sel, merc)) {
+      final path = ui.Path()..fillType = ui.PathFillType.evenOdd;
+      for (final rings in TerrainSceneBuilder.ringsOf(sel[i].geometry)) {
+        for (final ring in rings) {
+          var first = true;
+          for (final p in ring.positions) {
+            final o = Offset((WebMercator.xFromLon(p.x) - west) * pxPerM, (north - WebMercator.yFromLat(p.y)) * pxPerM);
+            if (first) {
+              path.moveTo(o.dx, o.dy);
+              first = false;
+            } else {
+              path.lineTo(o.dx, o.dy);
+            }
+          }
+          path.close();
+        }
+      }
+      canvas.drawPath(path, fill);
+    }
+  }
+
   /// 見えているオーバーレイ画像の集合・位置が変わったら、画像を読み、テクスチャを作り直す（400ms にまとめる）
   void _syncOverlays() {
     final nodes = widget.mapState.overlayImageNodes;
@@ -1954,9 +2019,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）
       _bakedGen[TileKey(demZoom, range.x0 >> off, range.y0 >> off)] = _bakeGen;
     }
+    _bakeSelectionFill(canvas, range);
   }
 
-  /// 引いた段のフィーチャをテクスチャに描く（真上からの投影。座標は範囲左上原点のピクセル）
+  /// 引いた段のフィーチャをテクスチャに描く（真上からの投影。座標は範囲左上原点のピクセル）。
+  ///
+  /// 太さは画面で見える太さに合わせる。テクスチャは表示の段とほぼ同じ段で作るので、テクスチャの 1 px ≒ 画面の 1 px。
+  /// 以前は設定の半分にしていて、引くほど細く薄れて地物を見失った（松本 2026-10-02。MapLibre の頃は画面の px で
+  /// 一定の太さだったので、引いても色の塊として見えていた）
   void _bakeFeatures(ui.Canvas canvas, TileRange range, int demZoom) {
     final g = widget.geoJson;
     if (g.polygons.isEmpty && g.polylines.isEmpty && g.markers.isEmpty) return;
@@ -2005,7 +2075,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       }
       if (st.fillColor.a > 0) canvas.drawPath(path, fill..color = st.fillColor);
       if (st.outlineColor.a > 0 && st.outlineWidth > 0) {
-        canvas.drawPath(path, stroke..color = st.outlineColor..strokeWidth = math.max(0.6, st.outlineWidth * 0.5));
+        canvas.drawPath(path, stroke..color = st.outlineColor..strokeWidth = math.max(1.0, st.outlineWidth));
       }
       n++;
     }
@@ -2025,7 +2095,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           }
         }
       }
-      canvas.drawPath(path, stroke..color = st.lineColor..strokeWidth = math.max(0.8, st.lineWidth * 0.5));
+      canvas.drawPath(path, stroke..color = st.lineColor..strokeWidth = math.max(1.5, st.lineWidth));
       n++;
     }
     for (final f in g.markers) {
@@ -2035,7 +2105,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       final y = WebMercator.yFromLat(pos.y);
       if (x < merc.left || x > merc.right || y < merc.top || y > merc.bottom) continue;
       final st = styleOf(f);
-      canvas.drawCircle(px(pos), math.max(1.5, st.pointSize * 0.4), fill..color = st.pointColor);
+      canvas.drawCircle(px(pos), math.max(2.0, st.pointSize), fill..color = st.pointColor);
       n++;
     }
     if (sw.elapsedMilliseconds > 30) {

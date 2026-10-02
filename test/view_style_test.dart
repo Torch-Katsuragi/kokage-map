@@ -135,6 +135,14 @@ void main() {
     }
   });
 
+  test('取り直しの後に足した地物は、フィルタ無しの View のスタイル', () async {
+    seedFeatures();
+    layer.views.add(ViewNode(name: 'その他', parent: layer, style: const KMetaLayerStyle(pointSize: 5)));
+    await layer.refreshStyleGroups();
+    // 描いて足した地物（まだ取り直していない）
+    expect(layer.styleKeyOf(99), key('その他'));
+  });
+
   test('Viewにスタイルが無ければレイヤのスタイルに落ちる', () async {
     seedFeatures();
     // レイヤのスタイルをキャッシュに直接入れる（.kmeta.json 経由の代用）

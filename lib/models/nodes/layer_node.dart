@@ -224,6 +224,7 @@ abstract class LayerNode extends LayerTreeNode {
   Future<void> refreshStyleGroups() async {
     styleKeyByRowId.clear();
     styleGroups.clear();
+    _restStyleKey = null;
 
     if (views.isEmpty) return;
     final layerStyle = await getKmetaStyle();
@@ -241,7 +242,8 @@ abstract class LayerNode extends LayerTreeNode {
       styleGroups[key] = style;
 
       if (!view.hasFilter) {
-        // フィルタ無しの View は残り全部を受け持つ
+        // フィルタ無しの View は残り全部を受け持つ（あとから足した地物も）
+        _restStyleKey ??= key;
         for (final rowId in _featureMap.keys) {
           styleKeyByRowId.putIfAbsent(rowId, () => key);
         }
@@ -259,11 +261,18 @@ abstract class LayerNode extends LayerTreeNode {
 
     // どの View にも当たらなかったフィーチャは既定スタイル。
     // グループが1つも無ければ、そもそも属性を載せない（[styleGroups] が空）。
-    if (styleGroups.isEmpty) styleKeyByRowId.clear();
+    if (styleGroups.isEmpty) {
+      styleKeyByRowId.clear();
+      _restStyleKey = null;
+    }
   }
 
+  /// フィルタ無しの View のキー。取り直しの後に足した地物（描いた面など）はここに落とす。
+  /// 無いと既定のスタイル（黒 10%）で描かれ、レイヤの色が付いていなかった（2026-10-02）
+  String? _restStyleKey;
+
   /// [rowId] のフィーチャが属するスタイルグループのキー。既定なら空文字。
-  String styleKeyOf(int rowId) => styleKeyByRowId[rowId] ?? '';
+  String styleKeyOf(int rowId) => styleKeyByRowId[rowId] ?? _restStyleKey ?? '';
 
   /// 表示中の View のフィルタを OR で束ねた WHERE 句。絞り込み不要なら null。
   ///

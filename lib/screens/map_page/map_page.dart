@@ -373,6 +373,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
     // チュートリアル: 章に入るたびに決まった配置へ戻す（前の章で開いた設定や一覧が残っていると案内がずれる）
     ref.listen(tutorialProvider, (prev, s) {
+      if (s != null && !s.menu && (prev == null || prev.index != s.index || prev.chapter != s.chapter) && s.step.clearSelection) {
+        ref.read(selectedFeaturesProvider.notifier).set([]);
+      }
       if (s == null || s.menu || s.index != 0) return;
       if (prev != null && !prev.menu && prev.chapter == s.chapter) return;
       _resetForTutorial(s.chapter);

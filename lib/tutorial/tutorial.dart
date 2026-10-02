@@ -313,7 +313,11 @@ class TutorialStepDef {
     this.pickTargets,
     this.inEdit = false,
     this.compact = false,
+    this.clearSelection = false,
   });
+
+  /// この手順に入るときに地物の選択を外す（情報パネルを閉じて、描く場所と札の場所を空ける）
+  final bool clearSelection;
 
   /// 札を見出しだけにする（編集のパネルが同じ説明を出しているとき。地図を広く残す）
   final bool compact;
@@ -434,7 +438,8 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('close', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && !e.open),
       TutorialStepDef('pen', targets: [TutorialTargets.penButton], done: (e) => e is ToolChosen && e.name == 'Pen'),
       TutorialStepDef('place', waitNext: true, done: (e) => e is PointPlaced && _points(e.layer)),
-      TutorialStepDef('select', cardTop: true,
+      // 札は下のまま（手前の「点を打つ」の札が下なので点は上の方に打たれる。上に出すと打った点を隠した）
+      TutorialStepDef('select',
           pickTargets: (tool, _) => tool == 'Select' ? const [] : [TutorialTargets.selectButton],
           done: (e) => e is FeatureSelected && _points(e.layer)),
       TutorialStepDef('edit', cardTop: true, targets: [TutorialTargets.editButton],
@@ -445,7 +450,8 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
           done: (e) => e is AttrEdited && e.column == 'name'),
       TutorialStepDef('save', inEdit: true, waitNext: true, cardLift: 72, targets: [TutorialTargets.editSaveButton],
           done: (e) => e is EditSaved && _points(e.layer)),
-      TutorialStepDef('route', targets: [TutorialTargets.routeTile, TutorialTargets.layersButton],
+      // 点の保存のあとも点が選ばれたままで、情報パネルが下を塞いでいた。線と面を描く前に外す
+      TutorialStepDef('route', clearSelection: true, targets: [TutorialTargets.routeTile, TutorialTargets.layersButton],
           done: (e) => e is LayerSelected && _route(e.layer)),
       // 一覧を閉じる → ペン → 地図を押す → ✓。枠は次に押すところへ動く
       TutorialStepDef('draw', waitNext: true, pickTargets: _drawTargets, done: (e) => e is ShapeSaved && _route(e.layer)),

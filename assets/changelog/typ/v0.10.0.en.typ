@@ -1,9 +1,9 @@
-// Changelog (illustrated): next release. tool/changelog/build.py writes it out as SVG chunks
+// Changelog (illustrated): v0.10.0. tool/changelog/build.py writes it out as SVG chunks
 #import "lib.typ": *
 #show: page-setup.with(lang: "en")
 
 #hero(
-  "Next release",
+  "v0.10.0 — 2026/10/02",
   [No View row when a layer has a single View],
   [Change the look with "Style" in the layer's ⋮ menu. After "Add view", a View named after the layer (formerly "Default") and the added one are listed together.],
   grid(
@@ -24,6 +24,7 @@
   "Tutorial",
   ["Changing the look" now adds a View and switches between looks],
   [After each color change, close the list and see the map],
+  [A larger glow around the red frame that marks where to tap],
 )
 
 #fixes(

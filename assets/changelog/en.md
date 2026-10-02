@@ -1,6 +1,6 @@
 # Changelog
 
-## Next release
+## v0.10.0 — 2026/10/02
 
 ### Views
 
@@ -17,6 +17,7 @@
 
 - "Changing the look" now adds a View, gives it another color and switches between looks with its mark
 - After each color change the guide has you close the layer list to see the map. Each chapter starts with the practice data clear of the guide card
+- The glow around the red frame that marks where to tap next is larger and easier to spot
 
 ### Fixes
 

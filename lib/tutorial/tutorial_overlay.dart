@@ -31,8 +31,6 @@ import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
-import '../providers/ui_state_providers.dart';
-import 'practice_project.dart';
 import 'tutorial.dart';
 
 class TutorialOverlay extends ConsumerStatefulWidget {
@@ -98,9 +96,27 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
     return null;
   }
 
+  /// 手順ごとに 1 度だけ、案内先が送らないと見えない所にあれば送って見せる（情報パネルの「削除」など）
+  Object? _revealedFor;
+  void _reveal(TutorialState s) {
+    if (s.menu || identical(_revealedFor, s.step)) return;
+    for (final key in s.step.targets) {
+      final ctx = key.currentContext;
+      if (ctx == null || !(ModalRoute.of(ctx)?.isCurrent ?? true)) continue;
+      if (Scrollable.maybeOf(ctx) == null) {
+        _revealedFor = s.step;
+        return;
+      }
+      _revealedFor = s.step;
+      Scrollable.ensureVisible(ctx, alignment: 0.5, duration: const Duration(milliseconds: 200));
+      return;
+    }
+  }
+
   void _tick() {
     final s = ref.read(tutorialProvider);
     if (!mounted || s == null) return;
+    _reveal(s);
     final r = _measure(s);
     if (r == _target) return;
     final prev = _shown();
@@ -115,15 +131,6 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
   }
 
   /// 章に入るときの下ごしらえ
-  void _prepare(TutorialChapter c) {
-    if (c != TutorialChapter.gps) return;
-    // GPS の章は「測点に書き込む」前提で始める（レイヤの選び方は「記録する」で教える）
-    final tree = ref.read(folderTreeProvider);
-    final points = tree?.getVisibleLayerNodes().whereType<LayerNode>()
-        .where((l) => isPracticeLayer(l, PracticeProject.pointsLayer)).firstOrNull;
-    if (points != null) ref.read(selectedLayerNodeProvider.notifier).select(points);
-  }
-
   @override
   void initState() {
     super.initState();
@@ -131,6 +138,7 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
   }
 
   void _onRoute() {
+    if (mounted) setState(() {}); // ダイアログが開いた・閉じた
     if (tutorialRoutes.top.value != null && tutorialRoutes.top.value == tutorialRoutes.mapRoute) {
       // 組み立ての途中に変わることがあるので描き終えてから
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -158,9 +166,6 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
       final parent = nodes.whereType<FeatureNode>().firstOrNull?.parent;
       if (parent is LayerNode) tutorial.report(FeatureSelected(parent));
     });
-    ref.listen(tutorialProvider, (prev, s) {
-      if (s != null && !s.menu && (prev == null || prev.menu || prev.chapter != s.chapter)) _prepare(s.chapter);
-    });
 
     final s = ref.watch(tutorialProvider);
     if (s == null) {
@@ -172,7 +177,8 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
     }
 
     // キーボードが出ている間（名前の入力など）は札も枠も引っ込める。入力欄やダイアログを隠さないように
-    final typing = MediaQuery.viewInsetsOf(context).bottom > 0;
+    // ダイアログ（色を選ぶ・名前を入れるなど）が開いている間も引っ込める。札がダイアログのボタンを隠していた
+    final typing = MediaQuery.viewInsetsOf(context).bottom > 0 || tutorialRoutes.top.value is RawDialogRoute;
     // 済んだ手順は囲まない（「次へ」を見てもらう）
     final target = s == null || s.menu || s.satisfied || typing ? null : _target;
     final size = MediaQuery.sizeOf(context);
@@ -234,7 +240,7 @@ class _StepCard extends ConsumerWidget {
               style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
           Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text(body, style: theme.textTheme.bodyMedium),
+          if (!state.step.compact || state.satisfied) Text(body, style: theme.textTheme.bodyMedium),
           if (state.satisfied) ...[
             const SizedBox(height: 6),
             Row(

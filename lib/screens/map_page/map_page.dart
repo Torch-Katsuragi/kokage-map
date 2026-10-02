@@ -50,6 +50,7 @@ import '../../services/kmeta_service.dart';
 import '../../services/party/party_invite.dart';
 import '../../tools/gps_tool.dart';
 import '../../tools/pen_tool.dart';
+import '../../tutorial/practice_project.dart';
 import '../../tutorial/tutorial.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/feature_calc_utils.dart';
@@ -169,7 +170,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   }
 
   /// チュートリアルの決まった配置: 地図だけが前に出ていて、レイヤ一覧・表は閉じ、パン・何も選んでいない
-  void _resetForTutorial() {
+  void _resetForTutorial(TutorialChapter chapter) {
     final me = ModalRoute.of(context);
     if (me != null) Navigator.of(context).popUntil((r) => r == me);
     GlobalDrawingState.instance.cancel(isLine: true);
@@ -177,8 +178,21 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     if (showAttributeTable) _closeAttributeTable();
     triggerSetState(() => drawerOpen = false);
     ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
-    ref.read(selectedLayerNodeProvider.notifier).select(null);
+    // GPS の章は記録先が要るので測点を選んでおく（選んでいないと「レイヤーが選択されていません」で止まる）
+    final layers = ref.read(folderTreeProvider)?.getVisibleLayerNodes().whereType<LayerNode>() ?? const <LayerNode>[];
+    ref.read(selectedLayerNodeProvider.notifier).select(chapter == TutorialChapter.gps
+        ? layers.where((l) => isPracticeLayer(l, PracticeProject.pointsLayer)).firstOrNull
+        : null);
     ref.read(selectedFeaturesProvider.notifier).set([]);
+    // 練習のデータを触る章は、そのデータが収まる位置から始める（地図は自分のいる場所から開くので）
+    const onData = {TutorialChapter.style, TutorialChapter.record, TutorialChapter.fix, TutorialChapter.photo};
+    if (onData.contains(chapter)) {
+      final coords = [
+        for (final l in ref.read(folderTreeProvider)?.getVisibleLayerNodes().whereType<LayerNode>() ?? const <LayerNode>[])
+          if (isPracticeGpkg(l.geoPackageFile.getAbsolutePath())) ...l.getAllCoordinates(),
+      ];
+      if (coords.isNotEmpty) mapControllerInstance.fitCoordinates(coords, padding: const EdgeInsets.all(60));
+    }
   }
 
   /// プロジェクトをディスクから読み直す（メニューの「読み直す」・`/map?reload=1`）。
@@ -360,7 +374,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     ref.listen(tutorialProvider, (prev, s) {
       if (s == null || s.menu || s.index != 0) return;
       if (prev != null && !prev.menu && prev.chapter == s.chapter) return;
-      _resetForTutorial();
+      _resetForTutorial(s.chapter);
     });
 
     // 編集の始まり・終わり: 元の地物を地図から隠す／戻す。パネルを閉じたら（選択が外れたら）取消
@@ -710,12 +724,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     } else if (selected is PolygonLayerNode &&
         drawingState.drawingPolygon.length >= 3) {
       final closed = closeRing(drawingState.drawingPolygon);
-      final areaDeg2 = GeometryCalc.calcPolygonArea([closed]);
+      // calcPolygonArea はもう m²（turf）。度²として掛け直していて、桁が 10 桁ずれていた
+      final areaM2 = GeometryCalc.calcPolygonArea([closed]);
       final centroid = GeometryCalc.calcPolygonCentroid([closed]);
-      final areaM2 = DegreeMeterConverter.convertAreaToMeters2(
-        areaDeg2,
-        centroid.latitude,
-      );
       previewText =
           areaM2 >= 10000
               ? 'Area: ${(areaM2 / 10000).toStringAsFixed(3)} ha'
@@ -808,9 +819,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     // 編集中は上まで引き上げられる（属性が多いとき・メモを長く書くとき）
     final screenH = MediaQuery.of(context).size.height;
     // 地図とパネルが入る高さ（アプリバーと上の帯を除く）。上まで上げても地図を一筋残す
-    final bodyH = screenH - MediaQuery.of(context).padding.top - kToolbarHeight;
+    // キーボードが出ている間はその分も除く（出たままの高さだとパネルがはみ出していた）
+    final bodyH = screenH - MediaQuery.of(context).padding.top - kToolbarHeight - MediaQuery.viewInsetsOf(context).bottom;
     final edit = ref.read(featureEditorProvider);
-    final maxHeight = edit != null ? bodyH - 56 : screenH * 0.6;
+    final maxHeight = edit != null ? math.max(160.0, bodyH - 56) : screenH * 0.6;
     // 情報パネル → 編集（少しせり上がる）→ 属性（上までせり上がる）→ 終われば元の高さへ下りる
     final target = edit == null
         ? infoPanelHeight.clamp(120.0, maxHeight)

@@ -32,10 +32,20 @@ import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/geotiff_service.dart';
 import '../../../services/kmeta_service.dart';
+import '../../../tutorial/practice_project.dart';
+import '../../../tutorial/tutorial.dart';
 import '../../../utils/app_logger.dart';
 import '../../dialogs/overlay_convert_dialog.dart';
 import '../common_dialogs.dart';
 import 'node_visibility_icon.dart';
+
+/// 練習フォルダの写真のうち、並びの最初のものか
+bool _isFirstPracticePhoto(ImageNode node) {
+  final dir = PracticeProject.knownDir;
+  if (dir == null || !p.isWithin(dir, node.filePath)) return false;
+  final siblings = node.parent?.children.whereType<ImageNode>().where((n) => n is! OverlayImageNode);
+  return siblings == null || siblings.isEmpty || identical(siblings.first, node);
+}
 
 /// 写真ノード用の ListTile ウィジェット
 class PhotoTile extends ConsumerWidget {
@@ -54,7 +64,11 @@ class PhotoTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isOverlay = node is OverlayImageNode;
 
+    // チュートリアルの案内先: 練習フォルダの写真（最初の 1 枚。鍵は 1 つしか付けられない）
+    final guiding = ref.watch(tutorialProvider) != null;
+    final key = guiding && !isOverlay && _isFirstPracticePhoto(node) ? TutorialTargets.photoTile : null;
     return ListTile(
+      key: key,
       leading: NodeVisibilityIcon(node: node),
       title: Text(node.name),
       subtitle: isOverlay
@@ -64,6 +78,7 @@ class PhotoTile extends ConsumerWidget {
               : Text(t.layerDrawer.photo.noLocation, style: const TextStyle(fontSize: 11)),
       onTap: () {
         ref.read(selectedFeaturesProvider.notifier).set([node]);
+        ref.read(tutorialProvider.notifier).report(const PhotoSelected());
         if (node.hasLocation && onJumpTo != null) {
           onJumpTo!(node.location!);
         }

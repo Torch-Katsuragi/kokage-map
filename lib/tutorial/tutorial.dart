@@ -102,6 +102,11 @@ class GpsPointRecorded extends TutorialEvent {
   const GpsPointRecorded();
 }
 
+/// レイヤか View の見え方の画面を開いた
+class StyleScreenOpened extends TutorialEvent {
+  const StyleScreenOpened();
+}
+
 /// 設定の「地図・タイル」を開いた
 class BasemapScreenOpened extends TutorialEvent {
   const BasemapScreenOpened();
@@ -121,6 +126,65 @@ class BasemapOpacityChanged extends TutorialEvent {
 /// 地図の画面が前に戻ってきた（設定などを閉じた）
 class MapShown extends TutorialEvent {
   const MapShown();
+}
+
+/// 情報パネルの「編集」で編集を始めた
+class EditStarted extends TutorialEvent {
+  const EditStarted(this.layer);
+  final LayerNode? layer;
+}
+
+/// 編集のパネルで「属性」を開いた
+class AttrsTabOpened extends TutorialEvent {
+  const AttrsTabOpened();
+}
+
+/// 編集のパネルで属性の欄を書き換えた
+class AttrEdited extends TutorialEvent {
+  const AttrEdited(this.column);
+  final String column;
+}
+
+/// 編集で形を 1 手動かした（頂点・移動など）
+class ShapeEdited extends TutorialEvent {
+  const ShapeEdited();
+}
+
+class EditUndone extends TutorialEvent {
+  const EditUndone();
+}
+
+/// 編集を保存せずにやめた（取消・← ）
+class EditCancelled extends TutorialEvent {
+  const EditCancelled();
+}
+
+/// 編集を保存した
+class EditSaved extends TutorialEvent {
+  const EditSaved(this.layer);
+  final LayerNode? layer;
+}
+
+/// 情報パネルの「削除」で地物を消した
+class FeatureDeleted extends TutorialEvent {
+  const FeatureDeleted(this.layer);
+  final LayerNode? layer;
+}
+
+/// レイヤか View の見え方（スタイル）を保存した
+class StyleSaved extends TutorialEvent {
+  const StyleSaved(this.layer);
+  final LayerNode? layer;
+}
+
+/// 写真を選んだ（一覧の行・地図の上）
+class PhotoSelected extends TutorialEvent {
+  const PhotoSelected();
+}
+
+/// 写真を大きく開いた
+class PhotoViewed extends TutorialEvent {
+  const PhotoViewed();
 }
 
 // ── 案内先 ─────────────────────
@@ -158,6 +222,34 @@ class TutorialTargets {
   static final pointsTile = GlobalKey(debugLabel: 'tutorial.pointsTile');
   static final nameCell = GlobalKey(debugLabel: 'tutorial.nameCell');
 
+  // 情報パネル・編集のパネル
+  static final editButton = GlobalKey(debugLabel: 'tutorial.editButton');
+  static final attrsSegment = GlobalKey(debugLabel: 'tutorial.attrsSegment');
+  static final nameField = GlobalKey(debugLabel: 'tutorial.nameField');
+  static final editSaveButton = GlobalKey(debugLabel: 'tutorial.editSaveButton');
+  static final editUndoButton = GlobalKey(debugLabel: 'tutorial.editUndoButton');
+  static final deleteButton = GlobalKey(debugLabel: 'tutorial.deleteButton');
+  static final photoPreview = GlobalKey(debugLabel: 'tutorial.photoPreview');
+
+  // レイヤ一覧の中（練習プロジェクトだけ）
+  static final areaViewMenu = GlobalKey(debugLabel: 'tutorial.areaViewMenu');
+  static final styleMenuItem = GlobalKey(debugLabel: 'tutorial.styleMenuItem');
+  static final photoTile = GlobalKey(debugLabel: 'tutorial.photoTile');
+
+  /// 見え方の画面の「塗りの色」
+  static final fillColorTile = GlobalKey(debugLabel: 'tutorial.fillColorTile');
+
+  /// 見え方の画面の「面」の節（閉じていればまずここを開いてもらう）
+  static final polygonSection = GlobalKey(debugLabel: 'tutorial.polygonSection');
+  static GlobalKey? settingSection(String? id) => id == 'polygon' ? polygonSection : null;
+
+  /// 「既定」の View の行
+  static final areaViewRow = GlobalKey(debugLabel: 'tutorial.areaViewRow');
+
+  /// 設定の項目の鍵（見え方の画面の色の欄に枠を出すため。設定の画面は汎用なので鍵の名前で引く）
+  static GlobalKey? settingTile(String settingKey) =>
+      settingKey == 'layer_style_polygon_fill_color' ? fillColorTile : null;
+
   /// 練習プロジェクトのレイヤの行に付ける鍵（無ければ null）
   static GlobalKey? tileOf(LayerNode layer) {
     if (isPracticeLayer(layer, PracticeProject.areaLayer)) return areaTile;
@@ -183,7 +275,7 @@ bool isPracticeGpkg(String? absPath) {
 
 // ── 章と手順 ─────────────────────
 
-enum TutorialChapter { view, data, record, photo, gps, yours }
+enum TutorialChapter { view, data, style, record, fix, photo, gps, yours }
 
 /// 「背景の地図」で重ねる地図（国土地理院の赤色立体図）
 const reliefProviderId = 'gsi_red_relief';
@@ -197,7 +289,15 @@ class TutorialStepDef {
     this.cardLift = 0,
     this.waitNext = false,
     this.pickTargets,
+    this.inEdit = false,
+    this.compact = false,
   });
+
+  /// 札を見出しだけにする（編集のパネルが同じ説明を出しているとき。地図を広く残す）
+  final bool compact;
+
+  /// 編集の最中に行う手順。編集をやめたら、手前の「編集する」の手順へ戻す
+  final bool inEdit;
 
   /// 枠で囲む部品を、今の道具とレイヤ一覧の開閉から選ぶ（[targets] より優先）。
   /// 何手かかかる手順で、次に押すところへ枠を動かすため
@@ -226,6 +326,13 @@ class TutorialStepDef {
 }
 
 bool _area(LayerNode? l) => isPracticeLayer(l, PracticeProject.areaLayer);
+
+/// 線・面を描く手順の枠: 一覧が開いていれば閉じる所、ペンでなければペン、描いていれば ✓
+List<GlobalKey> _drawTargets(String tool, bool listOpen) => listOpen
+    ? [TutorialTargets.layersButton]
+    : tool != 'Pen'
+        ? [TutorialTargets.penButton]
+        : [TutorialTargets.confirmButton];
 bool _route(LayerNode? l) => isPracticeLayer(l, PracticeProject.routeLayer);
 bool _points(LayerNode? l) => isPracticeLayer(l, PracticeProject.pointsLayer);
 
@@ -251,18 +358,18 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
     TutorialChapter.data => [
       const TutorialStepDef('folder'),
       TutorialStepDef('open', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && e.open),
-      TutorialStepDef('gpkg', targets: [TutorialTargets.gpkgTile]),
-      TutorialStepDef('layers', targets: [TutorialTargets.areaTile]),
-      TutorialStepDef('hide', targets: [TutorialTargets.areaEye],
+      TutorialStepDef('gpkg', targets: [TutorialTargets.gpkgTile, TutorialTargets.layersButton]),
+      TutorialStepDef('layers', targets: [TutorialTargets.areaTile, TutorialTargets.layersButton]),
+      TutorialStepDef('hide', targets: [TutorialTargets.areaEye, TutorialTargets.layersButton],
           done: (e) => e is LayerVisibilityToggled && _area(e.layer) && !e.layer.visible),
       // 地図は自分のいる場所から始まるので、行のダブルタップでエリアのある所へ飛んでから
       // 一覧を閉じ、消えているのを自分の目で見てもらう（松本 2026-10-01）
-      TutorialStepDef('zoomTo', targets: [TutorialTargets.areaTile], done: (e) => e is LayerZoomed && _area(e.layer)),
+      TutorialStepDef('zoomTo', targets: [TutorialTargets.areaTile, TutorialTargets.layersButton], done: (e) => e is LayerZoomed && _area(e.layer)),
       TutorialStepDef('hiddenClose', targets: [TutorialTargets.layersButton],
           done: (e) => e is LayersPanelToggled && !e.open),
       TutorialStepDef('hiddenOpen', targets: [TutorialTargets.layersButton],
           done: (e) => e is LayersPanelToggled && e.open),
-      TutorialStepDef('show', targets: [TutorialTargets.areaEye],
+      TutorialStepDef('show', targets: [TutorialTargets.areaEye, TutorialTargets.layersButton],
           done: (e) => e is LayerVisibilityToggled && _area(e.layer) && e.layer.visible),
       TutorialStepDef('close', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && !e.open),
       TutorialStepDef('select', targets: [TutorialTargets.selectButton], done: (e) => e is ToolChosen && e.name == 'Select'),
@@ -272,31 +379,57 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('closeTable', cardTop: true, targets: [TutorialTargets.tableButton],
           done: (e) => e is AttributeTableToggled && !e.open),
     ],
+    // 見え方: レイヤ＝データ、View＝見え方（松本 2026-09-12 の型）。View の ⋮ → スタイル → 塗りの色
+    TutorialChapter.style => [
+      TutorialStepDef('open', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && e.open),
+      TutorialStepDef('view', targets: [TutorialTargets.areaViewRow, TutorialTargets.layersButton]),
+      TutorialStepDef('menu', targets: [TutorialTargets.styleMenuItem, TutorialTargets.areaViewMenu, TutorialTargets.layersButton],
+          done: (e) => e is StyleScreenOpened),
+      TutorialStepDef('color', waitNext: true, targets: [TutorialTargets.fillColorTile, TutorialTargets.polygonSection],
+          done: (e) => e is StyleSaved && _area(e.layer)),
+      TutorialStepDef('backToMap', targets: [TutorialTargets.backButton], done: (e) => e is MapShown),
+      TutorialStepDef('close', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && !e.open),
+    ],
+    // 記録: 点を打つ → 情報パネルの「編集」→「属性」で名前 → 保存 → 線 → 面
     TutorialChapter.record => [
       TutorialStepDef('open', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && e.open),
-      TutorialStepDef('pick', targets: [TutorialTargets.pointsTile], done: (e) => e is LayerSelected && _points(e.layer)),
+      TutorialStepDef('pick', targets: [TutorialTargets.pointsTile, TutorialTargets.layersButton], done: (e) => e is LayerSelected && _points(e.layer)),
       TutorialStepDef('close', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && !e.open),
       TutorialStepDef('pen', targets: [TutorialTargets.penButton], done: (e) => e is ToolChosen && e.name == 'Pen'),
       TutorialStepDef('place', waitNext: true, done: (e) => e is PointPlaced && _points(e.layer)),
-      TutorialStepDef('select', waitNext: true, cardTop: true,
+      TutorialStepDef('select', cardTop: true,
           pickTargets: (tool, _) => tool == 'Select' ? const [] : [TutorialTargets.selectButton],
           done: (e) => e is FeatureSelected && _points(e.layer)),
-      TutorialStepDef('table', cardTop: true, targets: [TutorialTargets.tableButton],
-          done: (e) => e is AttributeTableToggled && e.open),
-      TutorialStepDef('name', waitNext: true, cardTop: true, targets: [TutorialTargets.nameCell], done: (e) => e is AttributeSaved && _points(e.layer)),
-      TutorialStepDef('closeTable', cardTop: true, targets: [TutorialTargets.tableButton],
-          done: (e) => e is AttributeTableToggled && !e.open),
+      TutorialStepDef('edit', cardTop: true, targets: [TutorialTargets.editButton],
+          done: (e) => e is EditStarted && _points(e.layer)),
+      TutorialStepDef('attrs', inEdit: true, cardTop: true, targets: [TutorialTargets.attrsSegment], done: (e) => e is AttrsTabOpened),
+      // パネルが上まで広がっているので、札は下の「保存」のすぐ上に（上に出すとパネルの見出しを隠す）
+      TutorialStepDef('name', inEdit: true, cardLift: 72, targets: [TutorialTargets.nameField],
+          done: (e) => e is AttrEdited && e.column == 'name'),
+      TutorialStepDef('save', inEdit: true, waitNext: true, cardLift: 72, targets: [TutorialTargets.editSaveButton],
+          done: (e) => e is EditSaved && _points(e.layer)),
       TutorialStepDef('route', targets: [TutorialTargets.routeTile, TutorialTargets.layersButton],
           done: (e) => e is LayerSelected && _route(e.layer)),
       // 一覧を閉じる → ペン → 地図を押す → ✓。枠は次に押すところへ動く
-      TutorialStepDef('draw', waitNext: true,
-          pickTargets: (tool, listOpen) => listOpen
-              ? [TutorialTargets.layersButton]
-              : tool != 'Pen'
-                  ? [TutorialTargets.penButton]
-                  : [TutorialTargets.confirmButton],
-          done: (e) => e is ShapeSaved && _route(e.layer)),
-      const TutorialStepDef('area'),
+      TutorialStepDef('draw', waitNext: true, pickTargets: _drawTargets, done: (e) => e is ShapeSaved && _route(e.layer)),
+      TutorialStepDef('area', targets: [TutorialTargets.areaTile, TutorialTargets.layersButton],
+          done: (e) => e is LayerSelected && _area(e.layer)),
+      TutorialStepDef('drawArea', waitNext: true, pickTargets: _drawTargets,
+          done: (e) => e is ShapeSaved && _area(e.layer)),
+    ],
+    // 直す・消す: エリアを選んで編集 → 頂点を動かす → 元に戻す → もう一度動かして保存 → エリアB を消す
+    TutorialChapter.fix => [
+      TutorialStepDef('select', targets: [TutorialTargets.selectButton], done: (e) => e is ToolChosen && e.name == 'Select'),
+      TutorialStepDef('pick', cardTop: true, done: (e) => e is FeatureSelected && _area(e.layer)),
+      TutorialStepDef('edit', cardTop: true, targets: [TutorialTargets.editButton],
+          done: (e) => e is EditStarted && _area(e.layer)),
+      TutorialStepDef('drag', inEdit: true, cardTop: true, compact: true, waitNext: true, done: (e) => e is ShapeEdited),
+      TutorialStepDef('undo', inEdit: true, cardTop: true, compact: true, targets: [TutorialTargets.editUndoButton], done: (e) => e is EditUndone),
+      TutorialStepDef('again', inEdit: true, cardTop: true, compact: true, waitNext: true, done: (e) => e is ShapeEdited),
+      TutorialStepDef('save', inEdit: true, cardTop: true, compact: true, targets: [TutorialTargets.editSaveButton], done: (e) => e is EditSaved && _area(e.layer)),
+      TutorialStepDef('pickB', cardTop: true, done: (e) => e is FeatureSelected && _area(e.layer)),
+      TutorialStepDef('delete', waitNext: true, targets: [TutorialTargets.deleteButton],
+          done: (e) => e is FeatureDeleted && _area(e.layer)),
     ],
     TutorialChapter.photo => [
       TutorialStepDef('open', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && e.open),
@@ -306,6 +439,9 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       // 位置つきの写真 → 選んだら取り込むボタン（ボタンの鍵は選んでいるときだけ付く）
       TutorialStepDef('import', waitNext: true, cardLift: 72,
           targets: [TutorialTargets.importButton, TutorialTargets.locatedPhoto], done: (e) => e is PhotosImported),
+      // 取り込んだ写真を一覧から選ぶ（その場所へ地図が動く）→ パネルの写真を押して大きく
+      TutorialStepDef('pick', targets: [TutorialTargets.photoTile, TutorialTargets.layersButton], done: (e) => e is PhotoSelected),
+      TutorialStepDef('view', cardTop: true, targets: [TutorialTargets.photoPreview], done: (e) => e is PhotoViewed),
       const TutorialStepDef('done'),
     ],
     TutorialChapter.gps => [
@@ -436,7 +572,15 @@ class Tutorial extends Notifier<TutorialState?> {
   /// 操作の知らせ。今の手順に合えば次へ（[TutorialStepDef.waitNext] の手順は「済んだ」にして「次へ」を待つ）
   void report(TutorialEvent e) {
     final s = state;
-    if (s == null || s.menu || s.satisfied) return;
+    if (s == null || s.menu) return;
+    // 編集の最中の手順で編集をやめたら、手前の「編集する」へ戻る（その先へは編集しないと進めない）
+    if (e is EditCancelled && s.step.inEdit) {
+      final steps = stepsOf(s.chapter);
+      final back = steps.lastIndexWhere((d) => d.id == 'edit', s.index);
+      if (back >= 0) state = s.copyWith(index: back);
+      return;
+    }
+    if (s.satisfied) return;
     if (!(s.step.done?.call(e) ?? false)) return;
     if (s.step.waitNext) {
       state = s.copyWith(index: s.index, satisfied: true);

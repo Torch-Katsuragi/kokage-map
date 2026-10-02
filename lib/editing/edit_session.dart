@@ -33,6 +33,7 @@ import '../models/nodes/feature_node.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../tools/map_tool.dart';
+import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
 import '../utils/feature_calc_utils.dart';
 import '../widgets/feature_editor/shared/sub_table_helper.dart';
@@ -229,6 +230,7 @@ class FeatureEditor extends Notifier<EditState?> {
     );
     _toolBefore = ref.read(currentToolProvider);
     ref.read(currentToolProvider.notifier).set(ref.read(editToolProvider));
+    _tutorial(EditStarted(f.parent));
     await _loadAttributes(f);
   }
 
@@ -271,7 +273,10 @@ class FeatureEditor extends Notifier<EditState?> {
   void setAttrsTab(bool on) {
     final s = state;
     if (s != null) state = s.copyWith(attrsTab: on);
+    if (on) _tutorial(const AttrsTabOpened());
   }
+
+  void _tutorial(TutorialEvent e) => ref.read(tutorialProvider.notifier).report(e);
 
   void select((int, int)? v) {
     final s = state;
@@ -296,6 +301,7 @@ class FeatureEditor extends Notifier<EditState?> {
     final s = state;
     if (s == null || (_sameShape(before.$1, s.geom) && before.$2.length == s.ids.length)) return;
     state = s.copyWith(undo: [...s.undo, before], redo: const []);
+    _tutorial(const ShapeEdited());
   }
 
   /// その場で 1 手（途中経過なし）
@@ -314,6 +320,7 @@ class FeatureEditor extends Notifier<EditState?> {
     state = s.copyWith(geom: g, ids: ids, undo: s.undo.sublist(0, s.undo.length - 1), redo: [...s.redo, s.snap],
         selected: () => null);
     _rebaseTool();
+    _tutorial(const EditUndone());
   }
 
   void redo() {
@@ -436,6 +443,7 @@ class FeatureEditor extends Notifier<EditState?> {
   void setAttr(String col, Object? value) {
     final s = state;
     if (s != null) state = s.copyWith(attrs: {...s.attrs, col: value});
+    _tutorial(AttrEdited(col));
   }
 
   /// 書き込んで終える
@@ -467,6 +475,7 @@ class FeatureEditor extends Notifier<EditState?> {
     }
     _end();
     ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    _tutorial(EditSaved(f.parent));
     return true;
   }
 
@@ -484,7 +493,11 @@ class FeatureEditor extends Notifier<EditState?> {
   }
 
   /// 何も書かずに終える
-  void cancel() => _end();
+  void cancel() {
+    if (state == null) return;
+    _end();
+    _tutorial(const EditCancelled());
+  }
 
   void _end() {
     if (state == null) return;

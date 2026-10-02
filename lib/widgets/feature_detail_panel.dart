@@ -33,6 +33,7 @@ import '../providers/notification_providers.dart';
 import '../providers/project_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../tutorial/tutorial.dart';
 import '../widgets/info_panel_card.dart';
 import '../widgets/long_press_delete_button.dart';
 import '../widgets/photo_viewer.dart';
@@ -165,7 +166,9 @@ class FeatureDetailPanel extends ConsumerWidget {
         children: [
           // 画像プレビューを追加（タップでフルスクリーン表示）
           GestureDetector(
+            key: TutorialTargets.photoPreview,
             onTap: () {
+              ref.read(tutorialProvider.notifier).report(const PhotoViewed());
               showPhotoViewer(
                 context,
                 imagePath: photo.filePath,
@@ -382,24 +385,12 @@ class FeatureDetailPanel extends ConsumerWidget {
         ]);
       }
 
-      // 「編集」: 情報パネルのまま編集に替わる（点・線・面とも）
-      children.addAll([
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: () => ref.read(featureEditorProvider.notifier).start(feature),
-            icon: const Icon(Icons.edit, size: 16),
-            label: Text(t.featureDetail.edit),
-          ),
-        ),
-      ]);
-
       // 全フィーチャ共通: 削除ボタンを追加
       children.addAll([
         const SizedBox(height: 12),
         LongPressDeleteButton(
           label: t.featureDetail.delete,
+          key: TutorialTargets.deleteButton,
           onDelete: () => _handleDelete(ref),
         ),
       ]);
@@ -418,6 +409,14 @@ class FeatureDetailPanel extends ConsumerWidget {
         context,
         ref,
         title: displayTitle,
+        // 「編集」は見出しに（パネルの下にあると送らないと見えなかった）。押すとパネルのまま編集に替わる
+        action: FilledButton.tonalIcon(
+          key: TutorialTargets.editButton,
+          onPressed: () => ref.read(featureEditorProvider.notifier).start(feature),
+          icon: const Icon(Icons.edit, size: 16),
+          label: Text(t.featureDetail.edit),
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        ),
         children: children,
       );
     }
@@ -472,12 +471,15 @@ class FeatureDetailPanel extends ConsumerWidget {
     final notifNotifier = ref.read(notificationCenterProvider.notifier);
     try {
       // 1. 選択解除 → パネルが消える → ファイル参照が無くなる
+      final layer = target is FeatureNode ? target.parent : null;
+      final tutorial = ref.read(tutorialProvider.notifier);
       selectionNotifier.remove(target);
       // 2. UIリビルドを確実に挟む
       await Future<void>.delayed(Duration.zero);
       // 3. ファイル/DB削除
       await target.dispose();
       refreshNotifier.trigger();
+      tutorial.report(FeatureDeleted(layer));
       notifNotifier.add(
         title: t.featureDetail.deleted,
         level: NotificationLevel.success,
@@ -497,9 +499,11 @@ class FeatureDetailPanel extends ConsumerWidget {
     WidgetRef ref, {
     required String title,
     required List<Widget> children,
+    Widget? action,
   }) =>
       InfoPanelCard(
         title: title,
+        action: action,
         onClose: () => ref.read(selectedFeaturesProvider.notifier).clear(),
         children: children,
       );

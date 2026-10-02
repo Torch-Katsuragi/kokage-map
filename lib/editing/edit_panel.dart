@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../i18n/strings.g.dart';
+import '../tutorial/tutorial.dart';
 import '../widgets/feature_silhouette.dart';
 import 'edit_session.dart';
 import 'edit_toolbar.dart';
@@ -95,6 +96,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
                         style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                   ),
                   SegmentedButton<bool>(
+                    key: TutorialTargets.attrsSegment,
                     segments: [
                       ButtonSegment(value: false, label: Text(t.featureEdit.shapeTab), icon: const Icon(Icons.polyline, size: 16)),
                       ButtonSegment(value: true, label: Text(t.featureEdit.attrsTab), icon: const Icon(Icons.notes, size: 16)),
@@ -113,6 +115,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
                   TextButton(onPressed: s.saving ? null : () => _cancel(s), child: Text(t.featureEdit.cancel)),
                   const Spacer(),
                   FilledButton.icon(
+                    key: TutorialTargets.editSaveButton,
                     onPressed: s.saving
                         ? null
                         : () async {
@@ -216,6 +219,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: TextField(
+              key: c == 'name' ? TutorialTargets.nameField : null,
               controller: _controller(c, s.originalAttrs[c]),
               decoration: InputDecoration(labelText: c, isDense: true, border: const OutlineInputBorder()),
               minLines: 1,

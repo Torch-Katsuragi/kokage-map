@@ -4,23 +4,27 @@
 
 ### Tutorial
 
-- Try the basics on a practice map. A guide shows where to tap
-- Six chapters: reading the map, how data is organized, recording (points, names, lines), importing photos, recording with GPS, your own data. Start from any chapter
+- Try the basics on a practice map. A red frame shows where to tap next, and tapping moves on. Hands-on steps such as moving the map wait for "Next". Any step can be skipped
+- Eight chapters: reading the map (up to laying red relief over the basemap), how data is organized, changing the look, recording (points, names, lines, areas), fixing and deleting, importing photos, recording with GPS, your own data. Start from any chapter
+- Each chapter starts from the same screen layout. If you wander into another screen, the guide points to the back button
 - Offered once on first use. Start it again from "Tutorial" on Home or from Settings
 
 ### Importing photos
 
-- Photos are now chosen inside the app. Photos with a location have a green frame and a pin; others say "No location". "With location" filters them
+- Photos are now chosen inside the app. Thumbnails are grouped by date like Google Photos, and you can switch albums
+- Tap a photo to import it. Long-press to select several
+- Photos without a location are dimmed and marked. "With location" filters them
 
 ### Editing features
 
-- "Edit" in the info panel now edits the feature on the map without leaving the panel. The map locks to top-down and the left toolbar switches to edit tools
+- "Edit" in the info panel header now edits the feature on the map without leaving the panel. The map locks to top-down and the left toolbar switches to edit tools
 - Move, add and delete vertices; move, rotate and scale the whole feature; extend, simplify and trim lines (tools differ for points, lines and areas). Undo and redo work too
 - Switching to attributes raises the panel to the top; it comes back down when you finish
 - Per-vertex records of GPS-surveyed lines stay aligned when you add or delete vertices
 - The old edit screen (simplify and trim only) is gone
 - Edit attributes in the panel as well. Nothing is written until you tap Save
 - The info panel now shows the selected feature's shape faintly in the background
+- Map buttons are hidden while editing. The ← at the top left and the device back button stop editing (asking first if there are changes to discard)
 
 ### Also changed
 
@@ -35,6 +39,9 @@
 - The color of a selected area had gaps on ridges where the map showed through
 - A selected line was drawn under its unselected self
 - Point labels no longer put a black dot over the point; the label sits just above the marker
+- The color chooser in the style screen did not open (broken since v0.8.0)
+- The area shown while drawing an area was far off
+- The panel overflowed when the keyboard was up while entering attributes
 
 ## v0.8.0 — 2026/09/30
 

@@ -23,6 +23,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/settings_schema.dart';
 import '../i18n/strings.g.dart';
@@ -31,6 +32,7 @@ import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/view_node.dart';
 import '../services/kmeta_service.dart';
+import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
 import '../utils/label_expression.dart';
 import '../utils/label_template.dart';
@@ -458,6 +460,13 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
   /// このとき色・太さの節は出さない（変えても QGIS に届かず、見た目が食い違う）
   String? _qgisRenderer;
 
+  @override
+  void initState() {
+    super.initState();
+    // 組み立ての最中にプロバイダを変えられないので、描き終えてから
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tutorialReport(const StyleScreenOpened()));
+  }
+
   String get _title =>
       _isGlobalMode
           ? t.settingsWidget.layerDrawingTitle
@@ -505,6 +514,12 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     if (type == _qgisRenderer) return;
     _qgisRenderer = type;
     if (mounted) setState(() {});
+  }
+
+  /// チュートリアルに知らせる（この画面は Consumer ではないので、上の ProviderScope から）
+  void _tutorialReport(TutorialEvent e) {
+    if (!mounted) return;
+    ProviderScope.containerOf(context, listen: false).read(tutorialProvider.notifier).report(e);
   }
 
   /// 値変更時のKMeta自動保存
@@ -569,6 +584,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       widget.targetLayer!.folderNode?.invalidateMetaCache();
       await widget.targetLayer!.refreshStyleGroups();
       AppLogger.debug('[LayerStyle] View設定を保存: ${widget.targetView!.viewKey}（差分 ${diff.isEmpty ? '無し' : 'あり'}）');
+      _tutorialReport(StyleSaved(widget.targetLayer));
       return;
     }
 
@@ -584,6 +600,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     AppLogger.debug(
       '[LayerStyle] レイヤー固有設定を保存: ${widget.targetLayer!.layerKey}',
     );
+    _tutorialReport(StyleSaved(widget.targetLayer));
   }
 
   /// リセット処理（View なら「レイヤに従う」に戻す）

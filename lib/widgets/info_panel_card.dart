@@ -39,7 +39,11 @@ class InfoPanelCard extends StatelessWidget {
     this.width = 220,
     this.maxHeight = 300,
     required this.onClose,
+    this.action,
   });
+
+  /// 見出しの右（× の手前）に置くボタン（「編集」など）
+  final Widget? action;
 
   final String title;
   final List<Widget> children;
@@ -80,6 +84,7 @@ class InfoPanelCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (action != null) ...[action!, const SizedBox(width: 8)],
                 IconButton(
                   icon: const Icon(Icons.close, size: 18),
                   padding: EdgeInsets.zero,

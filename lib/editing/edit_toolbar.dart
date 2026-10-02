@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/map_layout.dart';
 import '../i18n/strings.g.dart';
 import '../providers/ui_state_providers.dart';
+import '../tutorial/tutorial.dart';
 import 'edit_session.dart';
 
 IconData editModeIcon(EditMode m) => switch (m) {
@@ -86,7 +87,12 @@ class EditToolbar extends ConsumerWidget {
                 const SizedBox(height: 8),
               ],
               const Divider(height: 16, indent: 8, endIndent: 8),
-              _Button(icon: Icons.undo, tooltip: t.featureEdit.undo, onPressed: s.undo.isEmpty ? null : ed.undo),
+              _Button(
+                key: TutorialTargets.editUndoButton,
+                icon: Icons.undo,
+                tooltip: t.featureEdit.undo,
+                onPressed: s.undo.isEmpty ? null : ed.undo,
+              ),
               const SizedBox(height: 8),
               _Button(icon: Icons.redo, tooltip: t.featureEdit.redo, onPressed: s.redo.isEmpty ? null : ed.redo),
             ],
@@ -98,7 +104,7 @@ class EditToolbar extends ConsumerWidget {
 }
 
 class _Button extends StatelessWidget {
-  const _Button({required this.icon, required this.tooltip, required this.onPressed, this.selected = false});
+  const _Button({super.key, required this.icon, required this.tooltip, required this.onPressed, this.selected = false});
 
   final IconData icon;
   final String tooltip;

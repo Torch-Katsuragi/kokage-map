@@ -21,7 +21,7 @@ void main() {
     final json = jsonEncode({'type': 'FeatureCollection', 'features': [f(0), f(1), f(2)]});
     // 1 番目を消し、2 番目の手前に頂点を足した
     final out = remapSubTable(json, 3, [a, n, c], [0, null, 2]);
-    final fs = (jsonDecode(out!)['features'] as List).cast<Map>();
+    final fs = ((jsonDecode(out!) as Map)['features'] as List).cast<Map>();
     expect(fs.map((e) => (e['properties'] as Map)['time']).toList(), ['t0', null, 't2']);
     // 位置は新しい頂点の場所
     expect((fs[1]['geometry'] as Map)['coordinates'], [n.longitude, n.latitude]);
@@ -47,7 +47,7 @@ void main() {
   test('面の閉じた記録（頂点数 + 1）は閉じたまま返す', () {
     final json = jsonEncode({'type': 'FeatureCollection', 'features': [f(0), f(1), f(2), f(0)]});
     final out = remapSubTable(json, 3, [a, c], [0, 2], closed: true);
-    final fs = (jsonDecode(out!)['features'] as List).cast<Map>();
+    final fs = ((jsonDecode(out!) as Map)['features'] as List).cast<Map>();
     expect(fs.length, 3);
     expect((fs.last['properties'] as Map)['time'], 't0');
   });

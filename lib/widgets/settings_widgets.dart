@@ -24,6 +24,7 @@ import 'package:flutter/material.dart';
 
 import '../core/settings_schema.dart';
 import '../i18n/strings.g.dart';
+import '../tutorial/tutorial.dart';
 
 /// 設定セクション（カード形式）
 ///
@@ -630,6 +631,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
 
   Widget _buildSection(SettingSectionDef section) {
     return SettingsSection(
+      key: TutorialTargets.settingSection(section.id),
       title: section.title,
       icon: section.icon,
       iconColor: section.iconColor,
@@ -728,6 +730,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
   Widget _buildColorTile(ColorDef def) {
     final color = _store.getColor(def);
     return ListTile(
+      key: TutorialTargets.settingTile(def.key),
       title: Text(def.title),
       subtitle: def.description != null ? Text(def.description!) : null,
       trailing: GestureDetector(

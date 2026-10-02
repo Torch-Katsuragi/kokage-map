@@ -67,6 +67,7 @@ void main() {
     final node = GeoPackageNode(gpkg);
     final points = PointLayerNode(gpkg, PracticeProject.pointsLayer, parent: node);
     final routes = LineLayerNode(gpkg, PracticeProject.routeLayer, parent: node);
+    final areas = PolygonLayerNode(gpkg, PracticeProject.areaLayer, parent: node);
     // 別のプロジェクトの同名レイヤには反応しない
     final other = GeoPackageFile(const ['o.gpkg'], absolutePath: p.join(tmp.path, 'o.gpkg'));
     final otherPoints = PointLayerNode(other, PracticeProject.pointsLayer, parent: GeoPackageNode(other));
@@ -98,17 +99,49 @@ void main() {
     done(const ToolChosen('Pen'));
     done(PointPlaced(points));
     done(FeatureSelected(points));
-    done(const AttributeTableToggled(true));
-    done(AttributeSaved(points));
-    done(const AttributeTableToggled(false));
+    done(EditStarted(points));
+    done(const AttrsTabOpened());
+    tut.report(const AttrEdited('memo')); // 名前の欄ではない
+    expect(s().step.id, 'name');
+    done(const AttrEdited('name'));
+    done(EditSaved(points));
     done(LayerSelected(routes));
     expect(s().step.id, 'draw');
     tut.next(); // 済んでいなくても「とばす」で進める
-    expect(s().step.isInfo, isTrue); // 「エリアも同じ」は説明だけ
-    tut.next();
+    done(LayerSelected(areas));
+    done(ShapeSaved(areas));
     expect(s().menu, isTrue);
     expect(s().justFinished, isTrue);
     expect(s().finished, contains(TutorialChapter.record));
+  });
+
+  test('直す・消す: 形を動かす → 元に戻す → 動かす → 保存 → 消す', () {
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    final tut = c.read(tutorialProvider.notifier);
+    TutorialState s() => c.read(tutorialProvider)!;
+    final areas = PolygonLayerNode(gpkg, PracticeProject.areaLayer, parent: GeoPackageNode(gpkg));
+    tut.start();
+    tut.openChapter(TutorialChapter.fix);
+    for (final (e, wait) in <(TutorialEvent, bool)>[
+      (const ToolChosen('Select'), false),
+      (FeatureSelected(areas), false),
+      (EditStarted(areas), false),
+      (const ShapeEdited(), true),
+      (const EditUndone(), false),
+      (const ShapeEdited(), true),
+      (EditSaved(areas), false),
+      (FeatureSelected(areas), false),
+      (FeatureDeleted(areas), true),
+    ]) {
+      final id = s().step.id;
+      tut.report(e);
+      if (wait) {
+        expect(s().satisfied, isTrue, reason: id);
+        tut.next();
+      }
+    }
+    expect(s().justFinished, isTrue);
   });
 
   test('どの手順にも文がある（ja / en）', () async {

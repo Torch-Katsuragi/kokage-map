@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart' as mui show GlobalMaterialLocalizations;
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -313,7 +314,12 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
       title: t.common.appName,
       locale: TranslationProvider.of(context).flutterLocale,
       supportedLocales: AppLocaleUtils.supportedLocales,
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      localizationsDelegates: [
+        ...GlobalMaterialLocalizations.delegates,
+        // flex_color_picker 4 は分離された material_ui の MaterialLocalizations を探す（Flutter 本体のとは別の型）。
+        // 無いと色を選ぶ画面が開かず、黙って例外になっていた（2026-09-12 の flex_color_picker 4 から。2026-10-02 発覚）
+        mui.GlobalMaterialLocalizations.delegate,
+      ],
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,

@@ -26,12 +26,26 @@
 
 #let photo(c, located) = box(width: 40pt, height: 40pt, {
   place(rect(width: 40pt, height: 40pt, fill: c))
-  if located {
-    place(rect(width: 40pt, height: 40pt, stroke: 2pt + okink))
-    place(dx: 3pt, dy: 30pt, circle(radius: 4pt, fill: okink))
-  } else {
-    place(dy: 31pt, box(width: 40pt, height: 9pt, fill: rgb(0, 0, 0, 120), align(center + horizon, text(size: 5.5pt, fill: white)[No location])))
+  if not located {
+    place(rect(width: 40pt, height: 40pt, fill: rgb(255, 255, 255, 140)))
+    place(dx: 13pt, dy: 13pt, {
+      place(circle(radius: 7pt, fill: rgb(0, 0, 0, 90)))
+      place(dx: 4.5pt, dy: 3pt, circle(radius: 2.5pt, stroke: 1pt + white))
+      place(line(start: (3pt, 11pt), end: (11pt, 3pt), stroke: 1.2pt + white))
+    })
   }
+})
+
+// 編集中の画面: 左に編集の道具、赤い形と頂点、下にパネル
+#let edit-screen = box(width: 56pt, height: 98pt, clip: true, {
+  place(mini-map(56pt, 98pt, comps: false))
+  place(dx: 0pt, dy: 0pt, rect(width: 9pt, height: 70pt, fill: white))
+  for i in range(5) { place(dx: 2pt, dy: 4pt + i * 9pt, rect(width: 5pt, height: 5pt, radius: 1pt, fill: if i == 0 { accent } else { sub.lighten(40%) })) }
+  let pts = ((18pt, 14pt), (44pt, 10pt), (50pt, 38pt), (30pt, 50pt), (16pt, 36pt))
+  place(polygon(fill: rgb(211, 47, 47, 50), stroke: 1.2pt + map-red, ..pts))
+  for p in pts { let (x, y) = p; place(dx: x - 2pt, dy: y - 2pt, circle(radius: 2pt, fill: white, stroke: 1pt + map-red)) }
+  place(dy: 70pt, rect(width: 56pt, height: 28pt, fill: white, stroke: (top: 0.6pt + line-c)))
+  place(dx: 30pt, dy: 86pt, box(width: 22pt, height: 8pt, radius: 4pt, fill: accent, align(center + horizon, text(size: 4.5pt, fill: white)[Save])))
 })
 
 #hero(
@@ -49,23 +63,25 @@
 )
 
 #scene(
-  [Six chapters to choose from],
-  [Map, data, recording, photos, GPS and your own data. Start from any chapter; finished ones get a mark.],
+  [Eight chapters to choose from],
+  [Map, data, look, recording, fixing, photos, GPS and your own data. Start from any chapter; finished ones get a mark. Each chapter starts from the same screen layout.],
   box(width: 160pt, fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: (y: 6pt), align(left, {
     block(inset: (x: 6pt), below: 4pt, text(size: 9pt, weight: "bold")[Tutorial])
     chapter-row(1, [Reading the map], done: true)
     chapter-row(2, [How data is organized], done: true)
-    chapter-row(3, [Recording (points, names, lines)])
-    chapter-row(4, [Importing photos])
-    chapter-row(5, [Recording with GPS])
-    chapter-row(6, [Your own data])
+    chapter-row(3, [Changing the look])
+    chapter-row(4, [Recording (points, names, lines, areas)])
+    chapter-row(5, [Fixing and deleting])
+    chapter-row(6, [Importing photos])
+    chapter-row(7, [Recording with GPS])
+    chapter-row(8, [Your own data])
   })),
   note: [Offered once on first use. Later, start it from "Tutorial" on Home or from Settings. The practice map is recreated each time.],
 )
 
 #scene(
   [See which photos have a location],
-  [Photos are now chosen inside the app. Those with a location have a green frame and a pin, so you no longer find out after importing.],
+  [Photos are now chosen inside the app. Thumbnails are grouped by date; tap one to import it, long-press to pick several. Photos without a location are dimmed and marked, so you no longer find out after importing.],
   stack(dir: ttb, spacing: 6pt,
     grid(columns: 4, column-gutter: 3pt,
       photo(rgb("#7a9a6b"), true), photo(rgb("#a08a70"), false), photo(rgb("#6b8aa0"), true), photo(rgb("#b0a090"), false)),
@@ -73,9 +89,15 @@
   ),
 )
 
+#scene(
+  [Edit shapes right in the info panel],
+  [Tap "Edit" and the map locks to top-down while the left toolbar switches to edit tools: vertices, move, rotate, scale, extend, simplify, trim. Undo and redo too. Switching to attributes raises the panel to the top.],
+  phone(label: "Editing", edit-screen),
+  note: [Map buttons hide while editing. The ← and the device back button stop editing. The old edit screen is gone.],
+)
+
 #fixes(
   "Also changed",
-  [Edit shape and attributes right in the info panel (vertices, move, rotate, scale, extend, simplify, trim)],
   [The info panel shows the selected feature's shape faintly],
   [On a phone in portrait, the layer list starts closed when the map opens],
 )
@@ -89,4 +111,7 @@
   [The color of a selected area had gaps on ridges],
   [A selected line was drawn under its unselected self],
   [Point labels put a black dot over the point],
+  [The color chooser in the style screen did not open],
+  [The area shown while drawing an area was far off],
+  [The panel overflowed when the keyboard was up while entering attributes],
 )

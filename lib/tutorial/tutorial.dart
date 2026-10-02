@@ -314,7 +314,11 @@ class TutorialStepDef {
     this.inEdit = false,
     this.compact = false,
     this.clearSelection = false,
+    this.cardBottom = false,
   });
+
+  /// 枠が画面の下半分にあっても札を下に置く（上に見比べるもの＝見本などがあるとき）
+  final bool cardBottom;
 
   /// この手順に入るときに地物の選択を外す（情報パネルを閉じて、描く場所と札の場所を空ける）
   final bool clearSelection;
@@ -377,7 +381,7 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       // 赤色立体図を重ねて透け具合を変える（松本 2026-10-01「背景地図のチュートリアルが中途半端」）
       TutorialStepDef('relief', targets: [TutorialTargets.reliefOption, TutorialTargets.basemapAddButton],
           done: (e) => e is BasemapLayerAdded && e.providerId == reliefProviderId),
-      TutorialStepDef('opacity', waitNext: true, targets: [TutorialTargets.reliefOpacity],
+      TutorialStepDef('opacity', waitNext: true, cardBottom: true, targets: [TutorialTargets.reliefOpacity],
           done: (e) => e is BasemapOpacityChanged && e.providerId == reliefProviderId),
       TutorialStepDef('backToMap', targets: [TutorialTargets.backButton], done: (e) => e is MapShown),
     ],

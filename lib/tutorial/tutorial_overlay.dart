@@ -196,7 +196,7 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
     }
     final cardAtTop = s != null && !s.menu && (s.step.cardTop ||
             // 持ち上げた札は下のボタンの真上に置くと決めてあるので、案内先が下にあっても上へ逃がさない
-            (s.step.cardLift == 0 && target != null && target.center.dy > size.height / 2));
+            (s.step.cardLift == 0 && !s.step.cardBottom && target != null && target.center.dy > size.height / 2));
 
     return Stack(
       children: [

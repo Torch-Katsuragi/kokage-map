@@ -4,76 +4,232 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>こかげマップ ベータテストのご案内</title>
+<meta name="theme-color" content="#1d3a2c">
+<title>こかげマップ テスター募集</title>
+<link rel="icon" href="/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
-  body{font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans JP","Hiragino Sans",sans-serif;max-width:760px;margin:0 auto;padding:24px 20px 64px;line-height:1.7;color:#222;background:#fff}
-  h1{font-size:1.7rem;border-bottom:2px solid #1e88e5;padding-bottom:.3em}
-  h2{font-size:1.2rem;margin-top:2em;border-left:4px solid #1e88e5;padding-left:.5em}
-  ol.steps{padding-left:1.4em}
-  ol.steps li{margin:.8em 0}
-  .btn{display:inline-block;margin:.3em 0;padding:.55em 1.1em;border-radius:6px;background:#1e88e5;color:#fff;text-decoration:none;font-weight:600}
-  .btn:hover{background:#1565c0}
-  .note{background:#f3f7fb;border-left:4px solid #90caf9;padding:.6em 1em;margin:1em 0}
-  .warn{background:#fff8e1;border-left:4px solid #ffb300;padding:.6em 1em;margin:1em 0}
-  dt{font-weight:600;margin-top:1em}
-  dd{margin:.2em 0 0 1em}
-  code{background:#f2f2f2;padding:.05em .3em;border-radius:3px}
-  footer{margin-top:3em;font-size:.9rem;color:#555}
-  .links a{display:inline-block;margin:.3em 1.2em .3em 0}
+  :root{
+    --forest:#1d3a2c; --forest2:#27503c; --leaf:#6fae7a; --pale:#b9dcbf;
+    --paper:#f5f1e6; --card:#fff; --line:#ddd6c4;
+    --ink:#20261f; --sub:#5b6458; --amber:#e9a23b; --amber-d:#c9821c;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif;line-height:1.8;font-size:16px}
+  a{color:var(--forest2)}
+  .wrap{max-width:960px;margin:0 auto;padding:0 20px}
+
+  /* ── 上の帯 ── */
+  .hero{position:relative;overflow:hidden;color:#fff;
+    background:var(--forest) url("contours.svg") center/cover no-repeat}
+  .hero::after{content:"";position:absolute;inset:auto 0 0 0;height:90px;
+    background:linear-gradient(transparent,var(--forest));pointer-events:none}
+  .hero .wrap{position:relative;z-index:1;display:grid;grid-template-columns:1.15fr .85fr;
+    gap:32px;align-items:center;padding-top:56px;padding-bottom:64px}
+  .tags{display:flex;flex-wrap:wrap;gap:8px}
+  .tag{display:inline-block;border-radius:999px;padding:4px 14px;font-size:.88rem;font-weight:700}
+  .tag.main{background:var(--amber);color:var(--forest)}
+  .tag.sub{border:1px solid rgba(255,255,255,.7);font-weight:500}
+  .kicker{margin:36px 0 0;color:var(--pale);font-weight:700;letter-spacing:.1em}
+  h1{margin:4px 0 0;font-size:clamp(2.6rem,7vw,4rem);font-weight:900;line-height:1.15;letter-spacing:.02em}
+  .en{margin:6px 0 0;color:rgba(185,220,191,.7);font-size:.8rem;letter-spacing:.35em}
+  .lead{margin:28px 0 0;font-size:1.05rem;line-height:2}
+  .stats{display:flex;gap:36px;margin-top:32px}
+  .stat small{display:block;color:var(--pale);font-size:.8rem}
+  .stat b{font-size:2.6rem;font-weight:900;line-height:1.1}
+  .stat b span{font-size:1.05rem;margin-left:2px}
+  .stats-note{margin:8px 0 0;font-size:.82rem;color:rgba(255,255,255,.8)}
+  .cta{display:inline-block;margin-top:32px;background:var(--amber);color:var(--forest);
+    font-weight:900;text-decoration:none;padding:14px 28px;border-radius:999px;font-size:1.05rem}
+  .cta:hover{background:#f2b453}
+  .phones{position:relative;height:520px}
+  .phone{position:absolute;width:230px;background:#111;border-radius:28px;padding:8px;
+    box-shadow:0 18px 40px rgba(0,0,0,.35)}
+  .phone img{display:block;width:100%;border-radius:21px}
+  .phone.back{left:0;top:40px;transform:rotate(-7deg);width:210px}
+  .phone.front{right:0;top:0;transform:rotate(4deg)}
+
+  /* ── 本文 ── */
+  section{padding:56px 0 8px}
+  h2{margin:0 0 6px;font-size:1.5rem;color:var(--forest);font-weight:900}
+  .h2note{margin:0 0 20px;color:var(--sub);font-size:.92rem}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px}
+  .card h3{margin:0 0 6px;font-size:1.08rem;color:var(--forest)}
+  .card p{margin:0;color:var(--sub);font-size:.93rem;line-height:1.75}
+  .num{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;
+    background:var(--forest);color:#fff;font-weight:700;font-size:.9rem;margin-bottom:10px}
+
+  .req{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 22px;padding:0;list-style:none}
+  .req li{background:#fff;border:1.5px solid var(--forest);border-radius:999px;padding:4px 16px;
+    font-weight:700;color:var(--forest);font-size:.92rem}
+
+  .steps{display:grid;gap:14px;counter-reset:s}
+  .step{display:grid;grid-template-columns:48px 1fr auto;gap:16px;align-items:center;
+    background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 22px}
+  .step .n{width:40px;height:40px;border-radius:50%;background:var(--amber);color:#fff;
+    display:grid;place-items:center;font-weight:900;font-size:1.1rem}
+  .step h3{margin:0;font-size:1.08rem}
+  .step p{margin:2px 0 0;color:var(--sub);font-size:.92rem}
+  .btn{display:inline-block;white-space:nowrap;background:var(--forest);color:#fff;text-decoration:none;
+    font-weight:700;padding:11px 22px;border-radius:999px}
+  .btn:hover{background:var(--forest2)}
+  .note{margin:16px 0 0;font-size:.88rem;color:var(--sub)}
+  .warn{margin:0 0 18px;background:#fff8e6;border-left:4px solid var(--amber);border-radius:6px;
+    padding:12px 16px;font-size:.93rem}
+
+  details{background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
+  summary{cursor:pointer;padding:14px 18px;font-weight:700;list-style:none;position:relative;padding-right:44px}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:"+";position:absolute;right:18px;top:10px;font-size:1.4rem;color:var(--forest2);font-weight:400}
+  details[open] summary::after{content:"−"}
+  details p{margin:0;padding:0 18px 16px;color:var(--sub);font-size:.93rem}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  footer{margin-top:56px;background:var(--forest);color:rgba(255,255,255,.85);font-size:.88rem}
+  footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;padding-top:28px;padding-bottom:28px}
+  footer a{color:#fff;margin-right:18px;white-space:nowrap;display:inline-block}
+
+  @media (max-width:760px){
+    .hero .wrap{grid-template-columns:1fr;padding-top:36px;padding-bottom:40px}
+    .phones{height:380px;max-width:340px;margin:0 auto;width:100%}
+    .phone{width:170px;border-radius:22px;padding:6px}
+    .phone img{border-radius:17px}
+    .phone.back{width:155px;top:30px}
+    .grid,.two{grid-template-columns:1fr}
+    .step{grid-template-columns:40px 1fr;padding:16px}
+    .step .n{width:34px;height:34px;font-size:1rem}
+    .step .btn{grid-column:1/-1;text-align:center}
+    .stats{gap:28px}
+    .lead{font-size:1rem;line-height:1.9}
+    .lead br{display:none}
+    .step{align-items:start}
+  }
 </style>
 </head>
 <body>
-<p><a href="/about/">こかげマップについて</a> · <a href="/privacy/">プライバシーポリシー</a></p>
 
-<h1>こかげマップ ベータテストのご案内</h1>
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <div class="tags">
+        <span class="tag main">クローズドテスト 参加者募集</span>
+        <span class="tag sub">Android 13 以上・無料</span>
+      </div>
+      <p class="kicker">林業の現場のための地図アプリ</p>
+      <h1>こかげマップ</h1>
+      <p class="en">KOKAGE MAP</p>
+      <p class="lead">手元の地図データをスマホに入れて山へ。<br>班の居場所も地形も一つの画面で見られます。<br>正式公開の前に使ってくれる方を探しています。</p>
+      <div class="stats">
+        <div class="stat"><small>テスター</small><b>12<span>人</span></b></div>
+        <div class="stat"><small>インストールしたまま</small><b>14<span>日間</span></b></div>
+      </div>
+      <p class="stats-note">Google Play で一般公開するための条件です。</p>
+      <a class="cta" href="#join">参加のしかたを見る</a>
+    </div>
+    <div class="phones" aria-hidden="true">
+      <div class="phone back"><img src="shot-2d.jpg" alt=""></div>
+      <div class="phone front"><img src="shot-3d.jpg" alt=""></div>
+    </div>
+  </div>
+</header>
 
-<p>こかげマップ（Android 版）のクローズドテストにご協力ください。Google Play のテスト版として配信しているので、インストールも更新も Play ストアから行えます。</p>
+<main class="wrap">
 
-<div class="note">
-テスターの募集は準備中です。参加の手順は下のとおりですが、Play 側の受付が整うまでは「このアプリは利用できません」と表示されることがあります。整い次第、このページを「準備ができました」に書き換えます。
-</div>
+<section>
+  <h2>お願いしたいこと</h2>
+  <p class="h2note">特別な作業はいりません。入れて、ときどき使ってもらえれば十分です。</p>
+  <div class="grid">
+    <div class="card"><span class="num">1</span><h3>14 日間は消さずに置く</h3>
+      <p>Google Play の審査条件（テスター 12 人以上が 14 日間続けて参加）のためです。開かない日があっても構いません。</p></div>
+    <div class="card"><span class="num">2</span><h3>普段の作業で使ってみる</h3>
+      <p>おかしいところ・分かりにくいところがあれば教えてください。画面のスクリーンショットがあると助かります。</p></div>
+    <div class="card"><span class="num">3</span><h3>手元のデータで試す</h3>
+      <p>GeoPackage（.gpkg）や QGIS のプロジェクトがあれば、それを開いて試してもらえると一番ありがたいです。</p></div>
+  </div>
+</section>
 
-<h2>お願いしたいこと</h2>
-<ul>
-  <li>インストールしたら、<strong>14 日間はアンインストールせずに置いておいてください</strong>。Google Play の審査条件（テスター 12 人以上が 14 日間続けて参加していること）のためです</li>
-  <li>普段の作業で使ってみて、おかしいところ・分かりにくいところがあれば教えてください。画面のスクリーンショットがあると助かります</li>
-  <li>手元の GeoPackage（<code>.gpkg</code>）や QGIS のプロジェクトがあれば、それを開いて試してもらえると一番ありがたいです</li>
-</ul>
+<section id="join">
+  <h2>参加のしかた</h2>
+  <p class="h2note">スマホのブラウザからそのまま進められます。</p>
+  <ul class="req">
+    <li>Android 13 以上のスマホ</li>
+    <li>Google アカウント（個人のもの）</li>
+  </ul>
+  <p class="warn">下の 2 つは、<strong>Play ストアで使っている Google アカウント</strong>で開いてください。別のアカウントだと「利用できません」になります。</p>
+  <div class="steps">
+    <div class="step">
+      <span class="n">1</span>
+      <div><h3>グループに参加する</h3><p>開いたページで「グループに参加」を押すだけです。</p></div>
+      <a class="btn" href="https://groups.google.com/g/kokage-map-testers">グループに参加する</a>
+    </div>
+    <div class="step">
+      <span class="n">2</span>
+      <div><h3>テスターになる</h3><p>開いたページで「テスターになる」を押します。</p></div>
+      <a class="btn" href="https://play.google.com/apps/testing/com.k_root.k_maps">テスターになる</a>
+    </div>
+    <div class="step">
+      <span class="n">3</span>
+      <div><h3>Play ストアから入れる</h3><p>同じページの「Google Play からダウンロード」から入れます。更新も Play ストアから届きます。</p></div>
+    </div>
+  </div>
+  <p class="note">グループのメンバー一覧はオーナーだけが見られます。参加者どうしにアドレスは見えません。</p>
+</section>
 
-<h2>参加の手順（2 ステップ）</h2>
-<p>どちらも <strong>Play ストアで使っている Google アカウント</strong>で開いてください。別のアカウントだと「利用できません」になります。</p>
-<ol class="steps">
-  <li>
-    テスター用の Google グループに参加します。「グループに参加」を押すだけです。<br>
-    <a class="btn" href="https://groups.google.com/g/kokage-map-testers">グループに参加する</a>
-  </li>
-  <li>
-    参加できたら、こちらで「テスターになる」を押し、その下の「Google Play からダウンロード」からインストールします。<br>
-    <a class="btn" href="https://play.google.com/apps/testing/com.k_root.k_maps">テスターになる</a>
-  </li>
-</ol>
-<p>グループのメンバー一覧はオーナーだけが見られます。参加者どうしにはアドレスは見えません。</p>
+<section>
+  <h2>うまくいかないとき</h2>
+  <p class="h2note">よくあるものを集めました。</p>
+  <details>
+    <summary>「このアプリは利用できません」と出る</summary>
+    <p>Play にログインしているアカウントが、グループに参加したアカウントと違っています。Play ストアアプリの右上のアイコンからアカウントを切り替えてください。</p>
+  </details>
+  <details>
+    <summary>「テスターになる」を押したのに Play ストアにアプリが出てこない</summary>
+    <p>反映に数分かかることがあります。Play ストアアプリを一度閉じて開き直してください。</p>
+  </details>
+  <details>
+    <summary>「接続を待機しています」のまま進まない</summary>
+    <p>通信が一瞬切れたときに、ダウンロードが待ちのまま止まることがあります。「キャンセル」を押してから、もう一度「インストール」を押してください。</p>
+  </details>
+  <details>
+    <summary>「エラーが発生しました。もう一度お試しください」と出る</summary>
+    <p>Play ストア側の一時的なエラーです。少し待ってからもう一度押すか、端末を再起動してから試してください。</p>
+  </details>
+  <details>
+    <summary>Android 12 以前のスマホを使っている</summary>
+    <p>対応していません。設定 →「デバイス情報」→「Android バージョン」で確かめられます。</p>
+  </details>
+  <details>
+    <summary>家族共有や仕事用プロファイルのアカウントを使っている</summary>
+    <p>テストの対象外になることがあります。個人の Google アカウントでお試しください。</p>
+  </details>
+</section>
 
-<h2>つまずきやすいところ</h2>
-<dl>
-  <dt>リンクを開いたのに「このアプリは利用できません」と出る</dt>
-  <dd>Play にログインしているアカウントが、グループに参加したアカウントと違っています。Play ストアアプリの右上のアイコンからアカウントを切り替えてください</dd>
-  <dt>「テスターになる」を押したのに Play ストアでアプリが出てこない</dt>
-  <dd>反映に数分かかることがあります。Play ストアアプリを一度閉じて開き直してください</dd>
-  <dt>家族共有や仕事用プロファイルのアカウントを使っている</dt>
-  <dd>テストの対象外になることがあります。個人の Google アカウントでお試しください</dd>
-  <dt>初回起動で位置情報の許可を押した直後に終了する</dt>
-  <dd>v0.7.0 で修正済みです。Play ストアから最新版に更新してください</dd>
-</dl>
+<section>
+  <div class="two">
+    <div class="card">
+      <h3>不具合・要望の報告</h3>
+      <p>報告フォームは準備中です。それまでは、ふだんの連絡手段（LINE など）で、画面のスクリーンショットと一緒にお知らせください。GitHub のアカウントをお持ちの方は <a href="https://github.com/Torch-Katsuragi/kokage-map/issues">Issues</a> からでも構いません。</p>
+    </div>
+    <div class="card">
+      <h3>データの扱い</h3>
+      <p>アプリは、あなたが選んだフォルダのファイルだけを読み書きします。開発者にデータが送られることはありません。詳しくは <a href="/privacy/">プライバシーポリシー</a> をご覧ください。</p>
+    </div>
+  </div>
+</section>
 
-<h2>不具合・要望の報告</h2>
-<p>報告フォームは準備中です。それまでは、ふだんの連絡手段（LINE など）で、画面のスクリーンショットと一緒にお知らせください。GitHub のアカウントをお持ちの方は <a href="https://github.com/Torch-Katsuragi/kokage-map/issues">Issues</a> からでも構いません。</p>
+</main>
 
-<h2>データの扱い</h2>
-<p>アプリは、あなたが選んだフォルダのファイルだけを読み書きします。開発者にデータが送られることはありません。詳しくは <a href="/privacy/">プライバシーポリシー</a> をご覧ください。</p>
+<footer>
+  <div class="wrap">
+    <div><a href="/about/">こかげマップについて</a><a href="/">web 版を開く</a><a href="https://github.com/Torch-Katsuragi/kokage-map">ソースコード</a></div>
+    <div>© Nemurigi Kobo / ねむりぎ工房</div>
+  </div>
+</footer>
 
-<p class="links"><a href="/about/">こかげマップについて</a> <a href="https://kokage-map.sleeptree.jp/">web 版を開く</a> <a href="https://github.com/Torch-Katsuragi/kokage-map">ソースコード（GitHub）</a></p>
-
-<footer>© Nemurigi Kobo / ねむりぎ工房</footer>
 </body>
 </html>

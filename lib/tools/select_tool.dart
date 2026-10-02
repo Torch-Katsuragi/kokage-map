@@ -72,6 +72,9 @@ class SelectTool extends MapTool {
   ) =>
       _buildCandidates(tapLatLng, mapState, selectRange);
 
+  /// 写真の印の当たり半径 [px]（印 13px ＋ 指の余白）
+  static const _photoMarkerHitPx = 24.0;
+
   /// 現在位置マーカーの当たり半径 [px]（マーカー本体 20px ＋ 余白）
   static const double _locationMarkerHitPx = 22;
 
@@ -111,6 +114,16 @@ class SelectTool extends MapTool {
 
     for (final photo in mapState.photoNodes) {
       if (!photo.hasLocation) continue;
+      // 写真の印（半径 13px のカメラ）は地物の点より上に描くので、印に入ったら最優先（画面座標で見る）
+      if (tapOffset != null) {
+        try {
+          final px = (mapState.latLngToOffset(photo.location!) - tapOffset).distance;
+          if (px <= _photoMarkerHitPx) {
+            candidates.add((priority: -1, distance: px, node: photo));
+            continue;
+          }
+        } catch (_) {}
+      }
       final d = GeometryCalc.calcDistance(tapLatLng, photo.location!);
       if (d <= selectRange) {
         candidates.add((priority: 0, distance: d, node: photo));

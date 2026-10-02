@@ -743,10 +743,46 @@ class TerrainWorldPainter extends CustomPainter {
       if (!gesturing && isOccluded(wx, wy, z)) continue;
       final heading = pt.headingDeg;
       if (heading != null) _paintHeadingFan(canvas, sp, heading);
+      final icon = pt.icon;
+      if (icon != null) {
+        _paintIconMarker(canvas, sp, pt, icon);
+        continue;
+      }
       pointPaint.color = pt.color;
       canvas.drawCircle(sp, pt.sizePx, pointPaint);
       canvas.drawCircle(sp, pt.sizePx, pointEdge);
     }
+  }
+
+  static final Map<(int, int, int), TextPainter> _iconPainters = {};
+  static final _iconFill = Paint()..color = Colors.white;
+  static final _iconShadow = Paint()
+    ..color = Colors.black26
+    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+
+  /// 記号つきの印: 白地の丸・色の縁・中に記号（レイヤ一覧のアイコンと同じ記号）
+  void _paintIconMarker(Canvas canvas, Offset sp, TerrainPoint pt, IconData icon) {
+    final r = pt.sizePx;
+    canvas.drawCircle(sp + const Offset(0, 1), r, _iconShadow);
+    canvas.drawCircle(sp, r, _iconFill);
+    canvas.drawCircle(
+      sp,
+      r - 1.25,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..color = pt.color,
+    );
+    final tp = _iconPainters.putIfAbsent((icon.codePoint, pt.color.toARGB32(), r.round()), () {
+      return TextPainter(
+        text: TextSpan(
+          text: String.fromCharCode(icon.codePoint),
+          style: TextStyle(fontFamily: icon.fontFamily, package: icon.fontPackage, fontSize: r * 1.2, color: pt.color),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+    });
+    tp.paint(canvas, sp - Offset(tp.width / 2, tp.height / 2));
   }
 
   static final _fanFill = Paint()..color = Colors.lightBlue.withValues(alpha: 0.3);

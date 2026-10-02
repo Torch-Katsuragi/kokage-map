@@ -8,6 +8,11 @@
 - After "Add view", a View named after the layer and the added View are listed together. The one named after the layer uses the layer style (it used to be called "Default"; QGIS shows the layer name too)
 - "Add view" puts the new View at the top (the View on top wins, so one added at the bottom drew nothing)
 
+### Photos
+
+- Photos on the map now use the same camera mark as the layer list. A selected photo turns the selection color, and the mark is easier to tap
+- The photo info panel shows the photo faintly in the background, with a zoom button at the top right
+
 ### Tutorial
 
 - "Changing the look" now adds a View, gives it another color and switches between looks with its mark

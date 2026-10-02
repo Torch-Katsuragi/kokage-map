@@ -18,12 +18,16 @@
 // 線と面は形がひと目で分かるように、パネルいっぱいに縮尺を合わせて描く（向きは北が上）。
 // 点は形が無いので「POINT」の文字を薄く出す。文字や数値の邪魔にならない濃さに抑える。
 
+import 'dart:io';
 import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../models/nodes/feature_node.dart';
+import '../models/nodes/image_node.dart';
 
 class FeatureSilhouette extends StatelessWidget {
   const FeatureSilhouette({super.key, required this.feature}) : parts = null, closed = false;
@@ -47,6 +51,15 @@ class FeatureSilhouette extends StatelessWidget {
       return IgnorePointer(child: CustomPaint(painter: _ShapePainter(given, this.closed, color)));
     }
     if (f is PointFeatureNode) return _point(color);
+    // 写真は写真そのものを薄く敷く
+    if (f is ImageNode && !kIsWeb) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.22,
+          child: Image.file(File(f.filePath), fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink()),
+        ),
+      );
+    }
     final List<List<LatLng>> parts;
     final bool closed;
     if (f is LineFeatureNode) {

@@ -1067,6 +1067,7 @@
     "scaleLabel": "Scale: ",
     "rotationLabel": "Rot: ",
     "imageError": "Image Error",
+    "viewPhoto": "View the photo",
     "nameLabel": "Name: ",
     "pathLabel": "Path: ",
     "coordLabel": "Coordinates: ",
@@ -1527,9 +1528,9 @@
       "fix_delete_t": "Delete",
       "fix_delete_b": "Long-press \"Delete\" under the details. It is a long press so you do not delete by accident.",
       "photo_pick_t": "Pick the photo",
-      "photo_pick_b": "Tap the new photo row in the list. The map moves to where it was taken.",
+      "photo_pick_b": "Tap the new photo row in the list. The map moves to where it was taken and the photo is selected. Tapping its camera mark on the map works too.",
       "photo_view_t": "View it large",
-      "photo_view_b": "Tap the photo in the panel below to view it large."
+      "photo_view_b": "Tap the zoom button at the top right of the panel to view it large."
     }
   },
   "onboarding": {

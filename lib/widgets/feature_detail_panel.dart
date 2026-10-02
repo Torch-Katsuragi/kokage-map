@@ -14,7 +14,6 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // フィーチャ詳細パネルウィジェット
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -163,74 +162,18 @@ class FeatureDetailPanel extends ConsumerWidget {
         context,
         ref,
         title: '📸 写真ファイル',
+        // 写真は背景に薄く敷く（[FeatureSilhouette]）。大きく見るのは見出しの右のボタンで
+        action: IconButton.filledTonal(
+          key: TutorialTargets.photoPreview,
+          iconSize: 28,
+          tooltip: t.featureDetail.viewPhoto,
+          icon: const Icon(Icons.zoom_in),
+          onPressed: () {
+            ref.read(tutorialProvider.notifier).report(const PhotoViewed());
+            showPhotoViewer(context, imagePath: photo.filePath);
+          },
+        ),
         children: [
-          // 画像プレビューを追加（タップでフルスクリーン表示）
-          GestureDetector(
-            key: TutorialTargets.photoPreview,
-            onTap: () {
-              ref.read(tutorialProvider.notifier).report(const PhotoViewed());
-              showPhotoViewer(
-                context,
-                imagePath: photo.filePath,
-              );
-            },
-            child: Container(
-              width: double.infinity,
-              height: 120,
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Stack(
-                children: [
-                  // 画像
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.file(
-                      File(photo.filePath),
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: double.infinity,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: Colors.grey.shade100,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.broken_image, color: Colors.grey, size: 24),
-                              const SizedBox(height: 4),
-                              Text(
-                                t.featureDetail.imageError,
-                                style: const TextStyle(color: Colors.grey, fontSize: 10),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  // 拡大アイコン（ホバーヒント）
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Icon(
-                        Icons.zoom_in,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
           // 詳細情報
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,

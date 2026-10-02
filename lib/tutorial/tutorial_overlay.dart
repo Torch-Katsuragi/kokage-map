@@ -28,6 +28,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../i18n/strings.g.dart';
 import '../models/nodes/feature_node.dart';
+import '../models/nodes/image_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
@@ -165,6 +166,8 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
       // 持ち主はフィーチャの親から取る（選択中レイヤはこのあとで切り替わる）
       final parent = nodes.whereType<FeatureNode>().firstOrNull?.parent;
       if (parent is LayerNode) tutorial.report(FeatureSelected(parent));
+      // 写真は一覧の行からでも地図のカメラの印からでも
+      if (nodes.any((n) => n is ImageNode)) tutorial.report(const PhotoSelected());
     });
 
     final s = ref.watch(tutorialProvider);

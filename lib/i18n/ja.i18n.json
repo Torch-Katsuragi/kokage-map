@@ -1067,6 +1067,7 @@
     "scaleLabel": "縮尺: ",
     "rotationLabel": "回転: ",
     "imageError": "画像エラー",
+    "viewPhoto": "写真を大きく見る",
     "nameLabel": "名前: ",
     "pathLabel": "パス: ",
     "coordLabel": "座標: ",
@@ -1527,9 +1528,9 @@
       "fix_delete_t": "消す",
       "fix_delete_b": "情報の下の「削除」を長押しすると消えます。うっかり消さないように長押しにしてあります。",
       "photo_pick_t": "写真を選ぶ",
-      "photo_pick_b": "一覧に増えた写真の行を押すと、その場所へ地図が動きます。",
+      "photo_pick_b": "一覧に増えた写真の行を押すと、その場所へ地図が動いて写真が選ばれます。地図のカメラの印を押しても選べます。",
       "photo_view_t": "大きく見る",
-      "photo_view_b": "下のパネルの写真を押すと大きく見られます。"
+      "photo_view_b": "パネルの右上の拡大ボタンを押すと大きく見られます。"
     }
   },
   "onboarding": {

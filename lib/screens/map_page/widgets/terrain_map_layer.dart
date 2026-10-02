@@ -231,7 +231,11 @@ class _TileScene {
     this.dynamicPoints = const [],
     this.staticSource,
     this.complete = true,
-  });
+    List<TerrainPoint>? photoPoints,
+  }) : photoPoints = photoPoints ?? [];
+
+  /// 写真の印（カメラの記号を描くので、静的な点と分けて画面に描く）
+  final List<TerrainPoint> photoPoints;
 
   /// まだ持ち上げていないフィーチャがある（時間を分けて育てる静的シーン）
   bool complete;
@@ -1207,7 +1211,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final loc = widget.currentLocation;
     final cacheKey = (tile.key, step, tile.borderMask, tile.sourceZoom);
     final staticKey = <Object?>[
-      g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images,
+      g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images, g.selectedImages,
       g.lineVertices, g.polygonVertices,
     ];
     final drawing = GlobalDrawingState.instance;
@@ -1286,7 +1290,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       staticSource: stat,
       dynamicLines: dyn.lines,
       dynamicPolygons: dyn.polygons,
-      dynamicPoints: dyn.points,
+      dynamicPoints: stat.photoPoints.isEmpty ? dyn.points : [...stat.photoPoints, ...dyn.points],
       points: stat.points,
       // 動的なラベルが無ければ静的のリストをそのまま（同一性を保つ → 描画側のラベル投影キャッシュが効く）
       labels: dyn.labels.isEmpty ? stat.labels : [...stat.labels, ...dyn.labels],
@@ -1359,12 +1363,24 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           clipRect: clip,
         ),
       );
-      add(
-        builder(const {}, const TerrainFeatureStyle(
-          lineColor: Colors.amber, lineWidth: 1, fillColor: Colors.amber, outlineColor: Colors.amber,
-          outlineWidth: 1, pointColor: Colors.amber, pointSize: 7,
-        ), 'name').build(points: g.images, clipRect: clip),
-      );
+      // 写真はレイヤ一覧と同じカメラの印で（ただの黄色い丸では地物の点と見分けにくかった。松本 2026-10-02）。
+      // 選んだ写真は選択の色。記号を描くので GPU の点ではなく画面に描く点（[photoPoints]）にする
+      final selImages = Set<geo.Feature>.identity()..addAll(g.selectedImages);
+      final selColor = layerStyleSettings.getColor(selectedColorDef);
+      for (final (images, color) in [
+        ([for (final f in g.images) if (!selImages.contains(f)) f], const Color(0xFFF9A825)),
+        (g.selectedImages, selColor),
+      ]) {
+        if (images.isEmpty) continue;
+        final s = builder(const {}, TerrainFeatureStyle(
+          lineColor: color, lineWidth: 1, fillColor: color, outlineColor: color,
+          outlineWidth: 1, pointColor: color, pointSize: 13,
+        ), 'name').build(points: images, clipRect: clip);
+        for (final p in s.points) {
+          scene.photoPoints.add(TerrainPoint(x: p.x, y: p.y, color: color, sizePx: 13, icon: Icons.photo_camera));
+        }
+        scene.labels.addAll(s.labels);
+      }
       // 点フィーチャ。焼き込む段はテクスチャに描いてあるので持ち上げない。
       // それ以外の引いた段では格子（画面 60px 相当）でまとめて数を出す（1 万点を 1 点ずつ描かない）
       final baked = _bakesFeatures(tile.key);

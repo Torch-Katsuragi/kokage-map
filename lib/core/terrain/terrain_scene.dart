@@ -74,7 +74,17 @@ class TerrainFeatureStyle {
 
 /// DEM に持ち上げた点（ビルボードの丸）
 class TerrainPoint {
-  const TerrainPoint({required this.x, required this.y, required this.color, required this.sizePx, this.headingDeg});
+  const TerrainPoint({
+    required this.x,
+    required this.y,
+    required this.color,
+    required this.sizePx,
+    this.headingDeg,
+    this.icon,
+  });
+
+  /// 印の中に描く記号（写真のカメラなど）。あれば白地の丸に [color] の縁と記号で描く
+  final IconData? icon;
 
   /// DEM 原点基準の Mercator m
   final double x;

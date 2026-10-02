@@ -15,6 +15,12 @@
 )
 
 #fixes(
+  "Photos",
+  [Photos on the map use a camera mark; selected ones turn the selection color],
+  [The photo panel shows the photo faintly behind, with a zoom button at the top right],
+)
+
+#fixes(
   "Tutorial",
   ["Changing the look" now adds a View and switches between looks],
   [After each color change, close the list and see the map],

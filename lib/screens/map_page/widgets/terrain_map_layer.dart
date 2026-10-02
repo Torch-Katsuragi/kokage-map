@@ -340,6 +340,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   ///   （松本 2026-09-13「地形読み込み中だけフィーチャが表示されたりされなかったり」。web で目立つ）
   int _bakeGen = 0;
   final Map<TileKey, int> _bakedGen = {};
+
+  /// 描いたがまだ貼っていないテクスチャの世代。作り直しが打ち切られると絵は捨てられるので、ここに描いただけでは
+  /// 焼いたことにしない（スタイルを戻してすぐ消灯すると、古い色のタイルが焼いた扱いで残っていた。2026-10-02）
+  final Map<TileKey, int> _composedGen = {};
+
+  void _onTextureApplied(TileKey key) {
+    final g = _composedGen.remove(key);
+    if (g != null) _bakedGen[key] = g;
+  }
   final Map<TileKey, int> _bakeRequested = {};
   Timer? _bakeCheckTimer;
 
@@ -597,7 +606,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     )
       ..textureLayers = _layerFetchers
       ..addListener(_onWorldChanged)
-      ..textureDecorator = _decorateTexture;
+      ..textureDecorator = _decorateTexture
+      ..onTextureApplied = _onTextureApplied;
     _planner = TerrainFramePlanner(_world);
     _painter = TerrainWorldPainter(
       camera: _camera,
@@ -2047,8 +2057,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     // 引いた段は面・線・点を全部、寄った段は面の塗りだけ描く（塗りを地形に沿わせた板にすると、尾根で地形に
     // 突き抜けられて下の地図が白く抜けた。松本 2026-10-02。枠線・線・点は形のまま持ち上げる）
     _bakeFeatures(canvas, range, demZoom, fillsOnly: demZoom > kBakeMaxZoom);
-    // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）
-    _bakedGen[TileKey(demZoom, range.x0 >> off, range.y0 >> off)] = _bakeGen;
+    // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）。確定はタイルに貼ったとき（[_onTextureApplied]）
+    _composedGen[TileKey(demZoom, range.x0 >> off, range.y0 >> off)] = _bakeGen;
     _bakeSelectionFill(canvas, range);
   }
 

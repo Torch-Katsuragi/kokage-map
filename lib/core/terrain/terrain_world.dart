@@ -305,6 +305,11 @@ class TerrainWorld extends ChangeNotifier {
   /// テクスチャに上描きする手（オーバーレイ画像・焼き込み）。[demZoom] はそのタイルの段（テクスチャの段は range.z）
   void Function(ui.Canvas canvas, TileRange range, int demZoom)? textureDecorator;
 
+  /// タイルにテクスチャを貼ったときに呼ぶ（読み込み・作り直し・差し替えのどれでも）。
+  /// 作っている途中で別の作り直しが始まると、作った絵は捨てられて古い絵のまま残る。上描きした中身の記録は
+  /// 描いたときではなく貼ったときに確定させる（[textureDecorator] の側で）
+  void Function(TileKey key)? onTextureApplied;
+
   TextureDecorator? _decorateFor(int demZoom) {
     final d = textureDecorator;
     return d == null ? null : (canvas, range) => d(canvas, range, demZoom);
@@ -588,6 +593,7 @@ class TerrainWorld extends ChangeNotifier {
       ..textureWidth = tex.width
       ..textureHeight = tex.height
       ..pendingTextureOffset = null;
+    onTextureApplied?.call(key);
     revision++;
     notifyListeners();
   }
@@ -839,6 +845,7 @@ class TerrainWorld extends ChangeNotifier {
         ..textureWidth = tex.width
         ..textureHeight = tex.height
         ..pendingTextureOffset = later;
+      onTextureApplied?.call(tile.key);
       revision++;
       notifyListeners();
       if (later != null) _scheduleUpgrade(tile.key);
@@ -887,6 +894,7 @@ class TerrainWorld extends ChangeNotifier {
       }
       tile.lastUsed = ++_clock;
       _tiles[key] = tile;
+      onTextureApplied?.call(key);
       final sw = Stopwatch()..start();
       _refreshBorders(key);
       revision++;

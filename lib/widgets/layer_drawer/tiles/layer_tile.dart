@@ -199,6 +199,7 @@ class LayerTile extends ConsumerWidget {
           child: Row(children: [const Icon(Icons.palette, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.style)]),
         ),
         PopupMenuItem(
+          key: guiding ? TutorialTargets.addViewMenuItem : null,
           value: 'add_view',
           child: Row(children: [const Icon(Icons.filter_alt, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.view.addView)]),
         ),
@@ -252,9 +253,12 @@ class LayerTile extends ConsumerWidget {
       n++;
       name = '$base $n';
     }
-    node.views.add(ViewNode(name: name, parent: node));
+    // いちばん上に足す（地物は上の View が受け持つ。下に足すと、フィルタの無い既定 View に全部取られて何も描かなかった。
+    // QGIS も新しいレイヤは上に足す）
+    node.views.insert(0, ViewNode(name: name, parent: node));
     await node.persistViews();
     ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    ref.read(tutorialProvider.notifier).report(ViewAdded(node));
   }
 
   // ---------- レイヤー操作 ----------

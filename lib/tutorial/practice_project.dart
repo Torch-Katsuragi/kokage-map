@@ -66,7 +66,7 @@ class PracticeProject {
     await KMetaService.instance.setLayerStyle(
       dir,
       '${p.basename(proj.gpkgPath)}/$areaLayer',
-      const KMetaLayerStyle(polygonFillColor: Color(0xFF2E7D32), polygonFillOpacity: 0.3),
+      const KMetaLayerStyle(polygonFillColor: Color(0xFF2E7D32), polygonFillOpacity: 0.45),
     );
     knownDir = dir;
     return proj;

@@ -191,7 +191,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         for (final l in ref.read(folderTreeProvider)?.getVisibleLayerNodes().whereType<LayerNode>() ?? const <LayerNode>[])
           if (isPracticeGpkg(l.geoPackageFile.getAbsolutePath())) ...l.getAllCoordinates(),
       ];
-      if (coords.isNotEmpty) mapControllerInstance.fitCoordinates(coords, padding: const EdgeInsets.all(60));
+      // 下は案内の札の分を空ける（札の裏に練習のデータが隠れて、色を変えても見えなかった）
+      if (coords.isNotEmpty) mapControllerInstance.fitCoordinates(coords, padding: const EdgeInsets.fromLTRB(60, 60, 60, 260));
     }
   }
 

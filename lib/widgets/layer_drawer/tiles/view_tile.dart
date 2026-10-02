@@ -31,6 +31,8 @@ import '../../../presentation/node_presenter.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../screens/layer_style_settings_screen.dart';
+import '../../../tutorial/practice_project.dart';
+import '../../../tutorial/tutorial.dart';
 import '../common_dialogs.dart';
 
 /// Viewノード用 ListTile（可視切り替え・フィルタ編集・並べ替え）
@@ -47,7 +49,7 @@ class ViewTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       contentPadding: const EdgeInsets.only(left: 56, right: 8),
-      leading: _VisibilityIcon(node: node),
+      leading: KeyedSubtree(key: _guiding(ref) ? TutorialTargets.newViewEye : null, child: _VisibilityIcon(node: node)),
       title: Text(
         node.displayName,
         style: TextStyle(
@@ -72,9 +74,18 @@ class ViewTile extends ConsumerWidget {
     );
   }
 
+  /// チュートリアルの案内先: 練習のエリアに足した View（いちばん上の、既定でない View）
+  bool _guiding(WidgetRef ref) =>
+      ref.watch(tutorialProvider) != null &&
+      !node.isDefaultView &&
+      _layer.views.indexOf(node) == 0 &&
+      isPracticeLayer(_layer, PracticeProject.areaLayer);
+
   Widget _buildMenu(BuildContext context, WidgetRef ref) {
     final index = _layer.views.indexOf(node);
+    final guiding = _guiding(ref);
     return PopupMenuButton<String>(
+      key: guiding ? TutorialTargets.newViewMenu : null,
       iconSize: 18,
       onSelected: (value) async {
         switch (value) {
@@ -98,6 +109,7 @@ class ViewTile extends ConsumerWidget {
           (context) => [
             PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.view.rename)),
             PopupMenuItem(
+              key: guiding ? TutorialTargets.viewStyleMenuItem : null,
               value: 'style',
               child: Text(t.layerDrawer.layer.style),
             ),
@@ -281,6 +293,7 @@ class _VisibilityIcon extends ConsumerWidget {
         await node.persistVisibility();
         await node.layerNode.updateChildren();
         ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.read(tutorialProvider.notifier).report(ViewVisibilityToggled(node));
       },
       child: Stack(
         alignment: Alignment.center,

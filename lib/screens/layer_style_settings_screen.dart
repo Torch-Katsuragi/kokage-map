@@ -464,7 +464,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
   void initState() {
     super.initState();
     // 組み立ての最中にプロバイダを変えられないので、描き終えてから
-    WidgetsBinding.instance.addPostFrameCallback((_) => _tutorialReport(const StyleScreenOpened()));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tutorialReport(StyleScreenOpened(view: widget.isViewMode ? widget.targetView : null)));
   }
 
   String get _title =>
@@ -584,7 +584,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       widget.targetLayer!.folderNode?.invalidateMetaCache();
       await widget.targetLayer!.refreshStyleGroups();
       AppLogger.debug('[LayerStyle] View設定を保存: ${widget.targetView!.viewKey}（差分 ${diff.isEmpty ? '無し' : 'あり'}）');
-      _tutorialReport(StyleSaved(widget.targetLayer));
+      _tutorialReport(StyleSaved(widget.targetLayer, view: widget.targetView));
       return;
     }
 

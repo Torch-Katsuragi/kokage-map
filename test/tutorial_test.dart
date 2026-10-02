@@ -10,6 +10,7 @@ import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
+import 'package:root_maps/models/nodes/view_node.dart';
 import 'package:root_maps/tutorial/practice_project.dart';
 import 'package:root_maps/tutorial/tutorial.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -142,6 +143,52 @@ void main() {
       }
     }
     expect(s().justFinished, isTrue);
+  });
+
+  test('見え方を変える: レイヤの色 → View を足す → View の色 → 目で切り替える', () {
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    final tut = c.read(tutorialProvider.notifier);
+    TutorialState s() => c.read(tutorialProvider)!;
+    final areas = PolygonLayerNode(gpkg, PracticeProject.areaLayer, parent: GeoPackageNode(gpkg));
+    final view = ViewNode(name: '新しいView', parent: areas);
+    tut.start();
+    tut.openChapter(TutorialChapter.style);
+    for (final (e, wait) in <(TutorialEvent, bool)>[
+      (const LayersPanelToggled(true), false),
+      (const StyleScreenOpened(), false),
+      (StyleSaved(areas), true),
+      (const MapShown(), false),
+      (const LayersPanelToggled(false), true),
+      (ViewAdded(areas), false),
+      (StyleScreenOpened(view: view), false),
+      (StyleSaved(areas, view: view), true),
+      (const MapShown(), false),
+      (const LayersPanelToggled(false), true),
+      (ViewVisibilityToggled(view..visible = false), true),
+      (const LayersPanelToggled(false), true),
+    ]) {
+      final id = s().step.id;
+      tut.report(e);
+      if (wait) {
+        expect(s().satisfied, isTrue, reason: id);
+        tut.next();
+      }
+    }
+    expect(s().justFinished, isTrue);
+  });
+
+  test('見え方を変える: レイヤの色の手順では View の保存では進まない', () {
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    final tut = c.read(tutorialProvider.notifier);
+    TutorialState s() => c.read(tutorialProvider)!;
+    final areas = PolygonLayerNode(gpkg, PracticeProject.areaLayer, parent: GeoPackageNode(gpkg));
+    tut.start();
+    tut.openChapter(TutorialChapter.style);
+    tut.report(const LayersPanelToggled(true));
+    tut.report(StyleScreenOpened(view: ViewNode(name: 'x', parent: areas)));
+    expect(s().step.id, 'menu');
   });
 
   test('どの手順にも文がある（ja / en）', () async {

@@ -6,6 +6,12 @@
 
 - A layer with a single View no longer shows a View row in the layer list. Change its look with "Style" in the layer's ⋮ menu
 - After "Add view", a View named after the layer and the added View are listed together. The one named after the layer uses the layer style (it used to be called "Default"; QGIS shows the layer name too)
+- "Add view" puts the new View at the top (the View on top wins, so one added at the bottom drew nothing)
+
+### Tutorial
+
+- "Changing the look" now adds a View, gives it another color and switches between looks with its mark
+- After each color change the guide has you close the layer list to see the map. Each chapter starts with the practice data clear of the guide card
 
 ### Fixes
 

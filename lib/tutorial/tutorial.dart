@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/nodes/layer_node.dart';
+import '../models/nodes/view_node.dart';
 import 'practice_project.dart';
 
 // ── 画面の側から届く操作 ─────────────────────
@@ -104,7 +105,22 @@ class GpsPointRecorded extends TutorialEvent {
 
 /// レイヤか View の見え方の画面を開いた
 class StyleScreenOpened extends TutorialEvent {
-  const StyleScreenOpened();
+  const StyleScreenOpened({this.view});
+
+  /// View の見え方として開いたとき（レイヤのスタイルなら null）
+  final ViewNode? view;
+}
+
+/// レイヤに View を足した
+class ViewAdded extends TutorialEvent {
+  const ViewAdded(this.layer);
+  final LayerNode layer;
+}
+
+/// View の目を押した
+class ViewVisibilityToggled extends TutorialEvent {
+  const ViewVisibilityToggled(this.view);
+  final ViewNode view;
 }
 
 /// 設定の「地図・タイル」を開いた
@@ -173,8 +189,11 @@ class FeatureDeleted extends TutorialEvent {
 
 /// レイヤか View の見え方（スタイル）を保存した
 class StyleSaved extends TutorialEvent {
-  const StyleSaved(this.layer);
+  const StyleSaved(this.layer, {this.view});
   final LayerNode? layer;
+
+  /// View の見え方を保存したとき（レイヤのスタイルなら null）
+  final ViewNode? view;
 }
 
 /// 写真を選んだ（一覧の行・地図の上）
@@ -234,6 +253,12 @@ class TutorialTargets {
   // レイヤ一覧の中（練習プロジェクトだけ）
   static final areaLayerMenu = GlobalKey(debugLabel: 'tutorial.areaLayerMenu');
   static final styleMenuItem = GlobalKey(debugLabel: 'tutorial.styleMenuItem');
+  static final addViewMenuItem = GlobalKey(debugLabel: 'tutorial.addViewMenuItem');
+
+  /// 練習のエリアに足した View（いちばん上の、既定でない View）の ⋮・その「スタイル」・目
+  static final newViewMenu = GlobalKey(debugLabel: 'tutorial.newViewMenu');
+  static final viewStyleMenuItem = GlobalKey(debugLabel: 'tutorial.viewStyleMenuItem');
+  static final newViewEye = GlobalKey(debugLabel: 'tutorial.newViewEye');
   static final photoTile = GlobalKey(debugLabel: 'tutorial.photoTile');
 
   /// 見え方の画面の「塗りの色」
@@ -242,8 +267,6 @@ class TutorialTargets {
   /// 見え方の画面の「面」の節（閉じていればまずここを開いてもらう）
   static final polygonSection = GlobalKey(debugLabel: 'tutorial.polygonSection');
   static GlobalKey? settingSection(String? id) => id == 'polygon' ? polygonSection : null;
-
-  /// 「既定」の View の行
 
   /// 設定の項目の鍵（見え方の画面の色の欄に枠を出すため。設定の画面は汎用なので鍵の名前で引く）
   static GlobalKey? settingTile(String settingKey) =>
@@ -378,15 +401,31 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('closeTable', cardTop: true, targets: [TutorialTargets.tableButton],
           done: (e) => e is AttributeTableToggled && !e.open),
     ],
-    // 見え方: レイヤの ⋮ → スタイル → 塗りの色（既定 View しかないときは View の行を出さない。2026-10-02）
+    // 見え方: レイヤの ⋮ → スタイル → 塗りの色（既定 View しかないときは View の行を出さない。2026-10-02）。
+    // 続けて View を足し、その見え方を変えて、目で切り替える（View＝見え方をいくつも持てる）。
+    // スマホの縦では一覧が地図をほぼ覆うので、色を変えるたびに一覧を閉じて見てもらう（閉じたら止まる）
     TutorialChapter.style => [
       TutorialStepDef('open', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && e.open),
       TutorialStepDef('menu', targets: [TutorialTargets.styleMenuItem, TutorialTargets.areaLayerMenu, TutorialTargets.layersButton],
-          done: (e) => e is StyleScreenOpened),
+          done: (e) => e is StyleScreenOpened && e.view == null),
       TutorialStepDef('color', waitNext: true, targets: [TutorialTargets.fillColorTile, TutorialTargets.polygonSection],
-          done: (e) => e is StyleSaved && _area(e.layer)),
+          done: (e) => e is StyleSaved && e.view == null && _area(e.layer)),
       TutorialStepDef('backToMap', targets: [TutorialTargets.backButton], done: (e) => e is MapShown),
-      TutorialStepDef('close', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && !e.open),
+      TutorialStepDef('look', waitNext: true, targets: [TutorialTargets.layersButton],
+          done: (e) => e is LayersPanelToggled && !e.open),
+      TutorialStepDef('addView', targets: [TutorialTargets.addViewMenuItem, TutorialTargets.areaLayerMenu, TutorialTargets.layersButton],
+          done: (e) => e is ViewAdded && _area(e.layer)),
+      TutorialStepDef('viewMenu', targets: [TutorialTargets.viewStyleMenuItem, TutorialTargets.newViewMenu, TutorialTargets.layersButton],
+          done: (e) => e is StyleScreenOpened && e.view != null),
+      TutorialStepDef('viewColor', waitNext: true, targets: [TutorialTargets.fillColorTile, TutorialTargets.polygonSection],
+          done: (e) => e is StyleSaved && e.view != null && _area(e.layer)),
+      TutorialStepDef('viewBack', targets: [TutorialTargets.backButton], done: (e) => e is MapShown),
+      TutorialStepDef('viewLook', waitNext: true, targets: [TutorialTargets.layersButton],
+          done: (e) => e is LayersPanelToggled && !e.open),
+      TutorialStepDef('viewHide', waitNext: true, targets: [TutorialTargets.newViewEye, TutorialTargets.layersButton],
+          done: (e) => e is ViewVisibilityToggled && _area(e.view.layerNode) && !e.view.visible),
+      TutorialStepDef('close', waitNext: true, targets: [TutorialTargets.layersButton],
+          done: (e) => e is LayersPanelToggled && !e.open),
     ],
     // 記録: 点を打つ → 情報パネルの「編集」→「属性」で名前 → 保存 → 線 → 面
     TutorialChapter.record => [

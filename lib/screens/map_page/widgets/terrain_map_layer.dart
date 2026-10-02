@@ -320,6 +320,19 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// ⚠ リストの同一性で比べると、GPS 軌跡の統合などで中身が同じまま全件が組み直されるたびに全部焼き直していた
   int? _bakedContentRevision;
 
+  /// 最後に焼いたときのスタイルの中身（[_onSceneRevision]）
+  String? _bakedStyleSignature;
+  String _styleSignature() {
+    final d = _defaultStyle();
+    return [
+      '${d.fillColor.toARGB32()} ${d.outlineColor.toARGB32()} ${d.lineColor.toARGB32()} ${d.pointColor.toARGB32()} '
+          '${d.outlineWidth} ${d.lineWidth} ${d.pointSize}',
+      for (final g in widget.styleGroups())
+        '${g.key} ${g.fillHex} ${g.fillOpacity} ${g.outlineHex} ${g.outlineOpacity} ${g.borderWidth} '
+            '${g.lineHex} ${g.lineWidth} ${g.pointHex} ${g.pointSize}',
+    ].join('|');
+  }
+
   /// 焼き込みの世代。フィーチャの一覧が変わるたびに進む。タイルごとに「どの世代で焼いたか」を [_bakedGen] に記録し、
   /// 世代が古いタイルは焼き直す（[_checkBakes]）。
   /// ⚠ 以前は「一覧が変わった瞬間に読み込み済みのタイル」だけ焼き直していたので、その瞬間に読み込み中だった親タイルは
@@ -849,6 +862,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   void _onSceneRevision() {
     final g = widget.geoJson;
     final rev = g.contentRevision;
+    // 色や濃さだけ変えたときは地物の署名（形とスタイルの鍵）が変わらないので、スタイルの中身でも見る。
+    // 塗りはどの段もテクスチャに描くので、変われば全部焼き直す
+    final styleSig = _styleSignature();
+    if (_bakedStyleSignature != null && _bakedStyleSignature != styleSig) {
+      _bakeGen++;
+      _bakeEvents.add((_bakeGen, null));
+      if (_bakeEvents.length > _bakeEventsKept) _bakeEvents.removeRange(0, _bakeEvents.length - _bakeEventsKept);
+    }
+    _bakedStyleSignature = styleSig;
     if (_bakedContentRevision != rev) {
       _bakedContentRevision = rev;
       _bakeGen++;
@@ -892,11 +914,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
     final stale = <TileKey>{
       for (final k in live)
-        if (_bakesFeatures(k) && _bakedGen[k] != gen && _bakeRequested[k] != gen && touched(k, _bakedGen[k] ?? -1)) k,
+        if (_bakedGen[k] != gen && _bakeRequested[k] != gen && touched(k, _bakedGen[k] ?? -1)) k,
     };
     // 触れていないタイルは今の世代で焼けているのと同じ扱い（次の出来事まで見ない）
     for (final k in live) {
-      if (_bakesFeatures(k) && !stale.contains(k) && _bakedGen.containsKey(k) && _bakedGen[k] != gen && _bakeRequested[k] != gen) {
+      if (!stale.contains(k) && _bakedGen.containsKey(k) && _bakedGen[k] != gen && _bakeRequested[k] != gen) {
         _bakedGen[k] = gen;
       }
     }
@@ -1382,7 +1404,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       final end = math.min(progress.polygon + progress.chunk, polygonIdx.length);
       final t0 = sw.elapsedMicroseconds;
       add(
-        builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey)
+        // 塗りはテクスチャに描いてある（[_decorateTexture]）。ここは枠線とラベル
+        builder({for (final e in groups.entries) e.key: e.value.withoutFill()}, defaultStyle.withoutFill(),
+                FeatureGeoJsonInput.labelPropKey)
             .build(polygons: [for (var i = progress.polygon; i < end; i++) g.polygons[polygonIdx[i]]], clipRect: clip),
         withLabels: !dense,
       );
@@ -2020,11 +2044,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   void _decorateTexture(ui.Canvas canvas, TileRange range, int demZoom) {
     _drawOverlayImages(canvas, range);
     final off = range.z - demZoom;
-    if (demZoom <= kBakeMaxZoom) {
-      _bakeFeatures(canvas, range, demZoom);
-      // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）
-      _bakedGen[TileKey(demZoom, range.x0 >> off, range.y0 >> off)] = _bakeGen;
-    }
+    // 引いた段は面・線・点を全部、寄った段は面の塗りだけ描く（塗りを地形に沿わせた板にすると、尾根で地形に
+    // 突き抜けられて下の地図が白く抜けた。松本 2026-10-02。枠線・線・点は形のまま持ち上げる）
+    _bakeFeatures(canvas, range, demZoom, fillsOnly: demZoom > kBakeMaxZoom);
+    // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）
+    _bakedGen[TileKey(demZoom, range.x0 >> off, range.y0 >> off)] = _bakeGen;
     _bakeSelectionFill(canvas, range);
   }
 
@@ -2033,9 +2057,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// 太さは画面で見える太さに合わせる。テクスチャは表示の段とほぼ同じ段で作るので、テクスチャの 1 px ≒ 画面の 1 px。
   /// 以前は設定の半分にしていて、引くほど細く薄れて地物を見失った（松本 2026-10-02。MapLibre の頃は画面の px で
   /// 一定の太さだったので、引いても色の塊として見えていた）
-  void _bakeFeatures(ui.Canvas canvas, TileRange range, int demZoom) {
+  void _bakeFeatures(ui.Canvas canvas, TileRange range, int demZoom, {bool fillsOnly = false}) {
     final g = widget.geoJson;
-    if (g.polygons.isEmpty && g.polylines.isEmpty && g.markers.isEmpty) return;
+    if (g.polygons.isEmpty && (fillsOnly || (g.polylines.isEmpty && g.markers.isEmpty))) return;
     const ts = WebMercator.tileSize;
     final west = range.west;
     final north = WebMercator.tileNorth(range.y0, range.z);
@@ -2080,12 +2104,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         }
       }
       if (st.fillColor.a > 0) canvas.drawPath(path, fill..color = st.fillColor);
+      if (fillsOnly) {
+        n++;
+        continue;
+      }
       if (st.outlineColor.a > 0 && st.outlineWidth > 0) {
         canvas.drawPath(path, stroke..color = st.outlineColor..strokeWidth = math.max(1.0, st.outlineWidth));
       }
       n++;
     }
-    for (final i in _featureIndexes(g.polylines, merc)) {
+    for (final i in fillsOnly ? const <int>[] : _featureIndexes(g.polylines, merc)) {
       final f = g.polylines[i];
       final st = styleOf(f);
       final path = ui.Path();
@@ -2104,7 +2132,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       canvas.drawPath(path, stroke..color = st.lineColor..strokeWidth = math.max(1.5, st.lineWidth));
       n++;
     }
-    for (final f in g.markers) {
+    for (final f in fillsOnly ? const <geo.Feature<geo.Point>>[] : g.markers) {
       final pos = f.geometry?.position;
       if (pos == null) continue;
       final x = WebMercator.xFromLon(pos.x);

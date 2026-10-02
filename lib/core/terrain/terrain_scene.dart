@@ -53,6 +53,17 @@ class TerrainFeatureStyle {
     pointSize: 6,
   );
 
+  /// 塗りだけ透明にした写し
+  TerrainFeatureStyle withoutFill() => TerrainFeatureStyle(
+        lineColor: lineColor,
+        lineWidth: lineWidth,
+        fillColor: const Color(0x00000000),
+        outlineColor: outlineColor,
+        outlineWidth: outlineWidth,
+        pointColor: pointColor,
+        pointSize: pointSize,
+      );
+
   /// `#RRGGBB` と不透明度から色を作る（MapStyleGroup の形）
   static Color fromHex(String hex, [double opacity = 1]) {
     final h = hex.replaceFirst('#', '');
@@ -176,7 +187,8 @@ class TerrainSceneBuilder {
         if (exterior.length < 3 || !bboxHits(exterior)) continue;
         // ⚠ 穴は塗りには反映しない（耳切りが穴なし）。縁だけ描く
         final fillRing = clipRect == null ? exterior : LiftedPolygon.clipToRect(exterior, clipRect);
-        if (fillRing.length >= 3) {
+        // 塗りが透明なら板を作らない（寄った段の塗りはテクスチャに描くので、ここは枠線だけになる）
+        if (fillRing.length >= 3 && style.fillColor.a > 0) {
           outPolys.add(LiftedPolygon.lift(fillRing, mesh, color: style.fillColor, clipCells: polygonClipCells));
         }
         for (final ring in rings) {

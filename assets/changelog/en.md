@@ -15,6 +15,7 @@
 
 ### Fixes
 
+- Area fills had gaps on ridges where the map showed through white. Fills are now painted into the terrain image; only the outline follows the terrain
 - Color and opacity changed through a View's "Style" were sometimes lost when the project was reopened
 - In the tutorial's practice map, areas now have a visible fill (it was 10% black, so changing the color showed nothing)
 

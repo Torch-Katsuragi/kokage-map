@@ -23,5 +23,4 @@
 #fixes(
   "Tutorial",
   [Each chapter starts in 2D, north up],
-  [The opacity step covered the preview to compare against],
 )

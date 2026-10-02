@@ -6,7 +6,6 @@
 
 - The tutorial now runs on the web too. The practice map is made inside the browser (the photo chapter is not shown on the web)
 - Each chapter starts with the map in 2D, north up (after switching to 3D, the next chapter used to start tilted)
-- The guide for changing opacity no longer covers the preview to compare against
 
 ## v0.10.0 — 2026/10/02
 

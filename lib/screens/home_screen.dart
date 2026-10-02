@@ -18,6 +18,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -157,7 +158,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   /// チュートリアルを使えるか（練習プロジェクトを実際のフォルダに作る。web は未対応）
-  bool get _canTutorial => fs.hasRealPaths && PlatformCapabilities.canOpenLocalProject;
+  // web は練習用フォルダをブラウザのサイト専用領域（OPFS）に作るので、フォルダを選べなくても始められる
+  bool get _canTutorial => kIsWeb || (fs.hasRealPaths && PlatformCapabilities.canOpenLocalProject);
 
   Future<void> _offerTutorial() async {
     if (!mounted || !_canTutorial || !_permissionsGranted || _navigatedToMapPage) return;

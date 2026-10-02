@@ -31,3 +31,5 @@ Future<String?> reopenLastProjectFolder() async => null;
 
 Future<String?> openRequestedProjectFolder(String spec) async =>
     Directory(spec).existsSync() ? spec : null;
+
+Future<String?> preparePracticeFolder(String name) async => null;

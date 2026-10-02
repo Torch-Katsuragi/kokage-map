@@ -117,10 +117,17 @@ class WebFileSystem implements KFileSystem {
   /// > OPFS はフォルダ選択も許可の確認も要らないので、ブラウザを外から動かすだけで
   /// > プロジェクトを開ける。中身は `tool/web_opfs.py` で流し込む。
   /// > 前回のフォルダ（IndexedDB）には残さない（利用者の「前回のフォルダ」を上書きしない）
-  Future<String?> adoptOpfsDirectory(String name) async {
+  ///
+  /// [fresh] なら一度消して空で作る（チュートリアルの練習用フォルダ。始めるたびに作り直す）
+  Future<String?> adoptOpfsDirectory(String name, {bool fresh = false}) async {
     try {
       final opfs = await web.window.navigator.storage.getDirectory().toDart;
-      final handle = await opfs.getDirectoryHandle(name).toDart;
+      if (fresh) {
+        try {
+          await opfs.removeEntry(name, web.FileSystemRemoveOptions(recursive: true)).toDart;
+        } catch (_) {} // 無ければそれでよい
+      }
+      final handle = await opfs.getDirectoryHandle(name, web.FileSystemGetDirectoryOptions(create: fresh)).toDart;
       _adopt(handle);
       return _rootPath;
     } catch (e) {

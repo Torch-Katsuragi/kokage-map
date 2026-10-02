@@ -19,6 +19,7 @@
 // 案内先の部品には [TutorialTargets] の GlobalKey を付ける（レイヤの行は練習プロジェクトの中だけ）。
 // 手順の文は i18n の `tutorial.text` に `<章>_<手順>_t`（見出し）と `_b`（本文）で置く。
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -298,6 +299,12 @@ bool isPracticeGpkg(String? absPath) {
 // ── 章と手順 ─────────────────────
 
 enum TutorialChapter { view, data, style, record, fix, photo, gps, yours }
+
+/// この端末で出す章。web は写真の章を出さない（アプリ内のギャラリーが無く、OS のファイル選択になる）
+List<TutorialChapter> get availableTutorialChapters => [
+      for (final c in TutorialChapter.values)
+        if (!(kIsWeb && c == TutorialChapter.photo)) c,
+    ];
 
 /// 「背景の地図」で重ねる地図（国土地理院の赤色立体図）
 const reliefProviderId = 'gsi_red_relief';

@@ -23,6 +23,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 
 import '../core/fs/k_file_system.dart';
+import '../core/fs/project_folder_picker.dart';
 import '../i18n/strings.g.dart';
 import '../models/geometry_type.dart';
 import '../models/geopackage/geopackage_connection.dart';
@@ -55,12 +56,16 @@ class PracticeProject {
 
   /// 作り直して返す。前回の練習で打った点などは消える（[at] はテスト用の置き場所）
   static Future<PracticeProject> recreate({String? at}) async {
-    final dir = at ?? await _dirPath();
+    // web はブラウザのサイト専用領域（OPFS）に空で作ってそこを開く（ルートそのものなので消し直しも向こうで済む）
+    final webDir = at == null ? await preparePracticeFolder(t.tutorial.practice.folder) : null;
+    final dir = at ?? webDir ?? await _dirPath();
     final proj = PracticeProject._(dir);
     // 前回の練習の接続が残っていると、消して作り直したファイルに書けない（SQLITE_READONLY_DBMOVED）
     await GeoPackageConnection.closeAllFor(proj.gpkgPath);
-    if (await fs.exists(dir)) await fs.delete(dir, recursive: true);
-    await fs.createDirectory(dir);
+    if (webDir == null) {
+      if (await fs.exists(dir)) await fs.delete(dir, recursive: true);
+      await fs.createDirectory(dir);
+    }
     await proj._writeData();
     // 塗りの既定（黒 10%）は地形の上だとほとんど見えず、「見え方を変える」で色を変えても変わったと分からない
     await KMetaService.instance.setLayerStyle(

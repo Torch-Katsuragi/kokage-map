@@ -51,5 +51,9 @@ Future<String?> reopenLastProjectFolder() => impl.reopenLastProjectFolder();
 /// 開発・自動テスト用で、中身は `tool/web_opfs.py` で流し込む）。選択画面も許可の確認も出ない
 Future<String?> openRequestedProjectFolder(String spec) => impl.openRequestedProjectFolder(spec);
 
+/// チュートリアルの練習用フォルダを空にして開き、そのパスを返す。web だけ（ブラウザのサイト専用領域 OPFS の中。
+/// フォルダ選択も許可の確認も要らない）。native は null（練習用フォルダは Documents の下に作る）
+Future<String?> preparePracticeFolder(String name) => impl.preparePracticeFolder(name);
+
 /// web の起動ルートで OPFS のフォルダを指す接頭辞
 const kOpfsPrefix = 'opfs:';

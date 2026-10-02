@@ -34,3 +34,5 @@ Future<String?> openRequestedProjectFolder(String spec) async {
   if (!spec.startsWith(kOpfsPrefix)) return null;
   return WebFileSystem.instance.adoptOpfsDirectory(spec.substring(kOpfsPrefix.length));
 }
+
+Future<String?> preparePracticeFolder(String name) => WebFileSystem.instance.adoptOpfsDirectory(name, fresh: true);

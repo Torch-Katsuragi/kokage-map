@@ -284,8 +284,8 @@ class _MenuCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tutorial = ref.read(tutorialProvider.notifier);
     final theme = Theme.of(context);
-    const chapters = TutorialChapter.values;
-    final nextIndex = state.chapter.index + 1;
+    final chapters = availableTutorialChapters;
+    final nextIndex = chapters.indexOf(state.chapter) + 1;
     final next = state.justFinished && nextIndex < chapters.length ? chapters[nextIndex] : null;
     return _CardFrame(
       child: Column(
@@ -307,7 +307,7 @@ class _MenuCard extends ConsumerWidget {
                 state.finished.contains(c) ? Icons.check_circle : Icons.circle_outlined,
                 color: state.finished.contains(c) ? Colors.green : theme.colorScheme.outline,
               ),
-              title: Text('${c.index + 1}. ${_chapterName(c)}',
+              title: Text('${chapters.indexOf(c) + 1}. ${_chapterName(c)}',
                   style: TextStyle(fontWeight: c == next ? FontWeight.bold : null)),
               subtitle: Text(t.tutorial.chapterHints[c.name] ?? ''),
               onTap: () => tutorial.openChapter(c),

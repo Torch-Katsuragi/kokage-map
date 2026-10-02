@@ -751,6 +751,23 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     setState(() {});
   }
 
+  /// 2D・北が上に（知らせもフラッシュも出さない。チュートリアルの章の始め）
+  void _resetToFlatNorth() {
+    if (!_flat) {
+      _flat = true;
+      _pitchBefore2d = _camera.pitch > 0.02 ? _camera.pitch : null;
+      _camera.perspective = false;
+      _pitchBeforePen = 0;
+    }
+    if (_camera.pitch == 0 && _camera.bearing == 0) {
+      setState(() {});
+      return;
+    }
+    _animateTo(pitch: 0, bearing: 0);
+    _anim.forward(from: 0);
+    setState(() {});
+  }
+
   /// コンパスのダブルタップ: 北を上に（モードはそのまま）
   void _resetNorth() {
     _animateTo(bearing: 0);
@@ -2229,6 +2246,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   Widget build(BuildContext context) {
     ref.listen(partySessionProvider, (_, _) => _scheduleRefresh());
     ref.listen(currentToolProvider, (_, next) => _onToolChanged(next.name));
+    // チュートリアル: 章に入るたびに 2D・北が上に戻す（1 章で 3D にすると、次の章も斜めの眺めで始まっていた）
+    ref.listen(tutorialProvider, (prev, s) {
+      if (s == null || s.menu || s.index != 0) return;
+      if (prev != null && !prev.menu && prev.chapter == s.chapter) return;
+      _resetToFlatNorth();
+    });
     final desktop = kIsWeb || (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS);
     final editing = ref.watch(currentToolProvider).name == 'Edit';
     final toolbarLeft = MapLayout.resolve(ref.watch(mapLayoutPresetSettingProvider), MediaQuery.sizeOf(context)).toolbarLeft;

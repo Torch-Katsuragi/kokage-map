@@ -4,18 +4,18 @@
 
 #hero(
   "次のリリース",
-  [既定の View しかないときは View の行を出さない],
-  [見え方はレイヤの ⋮ の「スタイル」で変えます。「View を追加」すると、既定と足した View が並びます。既定の View の見え方はレイヤのスタイルと同じです。],
+  [View が 1 つだけなら View の行を出さない],
+  [見え方はレイヤの ⋮ の「スタイル」で変えます。「View を追加」すると、レイヤと同じ名前の View（前の「既定」）と足した View が並びます。],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
-    stack(dir: ttb, spacing: 4pt, layer-panel(w: 96pt, ((0, "layer", [エリア], "ok", rgb("#2e7d32")),)), caption[View が既定だけ]),
+    stack(dir: ttb, spacing: 4pt, layer-panel(w: 96pt, ((0, "layer", [エリア], "ok", rgb("#2e7d32")),)), caption[View が 1 つ]),
     arrow-r(w: 20pt),
-    stack(dir: ttb, spacing: 4pt, layer-panel(w: 96pt, ((0, "layer", [エリア], "ok", rgb("#2e7d32")), (1, "layer", [既定], "ok", rgb("#2e7d32")), (1, "layer", [大きい], "hi", rgb("#c0504d")))), caption[View を足したとき]),
+    stack(dir: ttb, spacing: 4pt, layer-panel(w: 96pt, ((0, "layer", [エリア], "ok", rgb("#2e7d32")), (1, "layer", [エリア], "ok", rgb("#2e7d32")), (1, "layer", [大きい], "hi", rgb("#c0504d")))), caption[View を足したとき]),
   ),
 )
 
 #fixes(
   "直したこと",
-  [既定の View の色や濃さを変えても、開き直すと元に戻っていた],
+  [View の「スタイル」で変えた色や濃さが、開き直すと元に戻ることがあった],
   [練習用の地図のエリアの塗りが黒 10% で、色を変えても分からなかった],
 )

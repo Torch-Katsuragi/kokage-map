@@ -1,5 +1,5 @@
 {
- "title": "既定の View しかないときは View の行を出さない",
+ "title": "View が 1 つだけなら View の行を出さない",
  "chunks": [
   {
    "file": "next.ja.00.svg",

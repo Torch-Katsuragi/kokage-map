@@ -1,5 +1,5 @@
 {
- "title": "No View row when there is only the default View",
+ "title": "No View row when a layer has a single View",
  "chunks": [
   {
    "file": "next.en.00.svg",

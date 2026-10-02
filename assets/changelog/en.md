@@ -4,12 +4,12 @@
 
 ### Views
 
-- A layer with only the default View no longer shows a View row in the layer list. Change its look with "Style" in the layer's ⋮ menu
-- After "Add view", the default View and the added View are listed together. The default View always looks like the layer style
+- A layer with a single View no longer shows a View row in the layer list. Change its look with "Style" in the layer's ⋮ menu
+- After "Add view", a View named after the layer and the added View are listed together. The one named after the layer uses the layer style (it used to be called "Default"; QGIS shows the layer name too)
 
 ### Fixes
 
-- Color and opacity changed for the default View were lost when the project was reopened
+- Color and opacity changed through a View's "Style" were sometimes lost when the project was reopened
 - In the tutorial's practice map, areas now have a visible fill (it was 10% black, so changing the color showed nothing)
 
 ## v0.9.0 — 2026/10/02

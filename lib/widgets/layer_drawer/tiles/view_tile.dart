@@ -49,7 +49,7 @@ class ViewTile extends ConsumerWidget {
       contentPadding: const EdgeInsets.only(left: 56, right: 8),
       leading: _VisibilityIcon(node: node),
       title: Text(
-        node.name,
+        node.displayName,
         style: TextStyle(
           fontSize: 13,
           color: dimmed ? Colors.grey : null,
@@ -127,12 +127,14 @@ class ViewTile extends ConsumerWidget {
     final newName = await RenameDialog.show(
       context,
       title: t.layerDrawer.view.renameTitle,
-      currentName: node.name,
+      currentName: node.displayName,
       label: t.layerDrawer.view.viewName,
     );
     if (newName == null || newName.trim().isEmpty) return;
-    final trimmed = newName.trim();
-    if (trimmed == node.name) return;
+    var trimmed = newName.trim();
+    if (trimmed == node.displayName) return;
+    // レイヤと同じ名前にしたフィルタ無しの View は既定 View として持つ（QGIS からの読み戻しと同じ扱い）
+    if (trimmed == _layer.layerName && !node.hasFilter) trimmed = kDefaultViewName;
 
     if (_layer.views.any((v) => v != node && v.name == trimmed)) {
       _notify(ref, t.layerDrawer.view.nameDuplicate, NotificationLevel.warning);
@@ -188,7 +190,7 @@ class ViewTile extends ConsumerWidget {
   }
 
   Future<void> _duplicate(WidgetRef ref) async {
-    final base = node.name;
+    final base = node.displayName;
     var name = '$base 2';
     var n = 2;
     while (_layer.views.any((v) => v.name == name)) {
@@ -221,7 +223,7 @@ class ViewTile extends ConsumerWidget {
           (context) => AlertDialog(
             title: Text(t.layerDrawer.view.delete),
             content: Text(
-              t.layerDrawer.view.deleteConfirm(name: node.name),
+              t.layerDrawer.view.deleteConfirm(name: node.displayName),
             ),
             actions: [
               TextButton(

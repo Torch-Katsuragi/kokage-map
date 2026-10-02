@@ -76,6 +76,9 @@ class ViewNode extends LayerTreeNode {
   /// 既定Viewか（＝ユーザーが View を作っていないレイヤの、暗黙の1枚）
   bool get isDefaultView => name == kDefaultViewName && !hasFilter;
 
+  /// 画面と QGIS に出す名前。既定 View は親レイヤと同じ名前で見せる（中の名前 [kDefaultViewName] は識別用に残す）
+  String get displayName => isDefaultView ? layerNode.layerName : name;
+
   /// 永続化する形に落とす
   KMetaView toKMetaView() =>
       KMetaView(name: name, filter: filter, style: style);

@@ -61,7 +61,7 @@ void main() {
     expect(find.byType(SvgPicture), findsWidgets);
     // 図の版の本文は画面に文字として出さないが、読み上げでは読める
     // いちばん新しい版（開いている）の 1 行。版を足したら差し替える
-    const line = '既定の View しかないレイヤは、レイヤ一覧に View の行を出さない';
+    const line = 'View が 1 つだけのレイヤは、レイヤ一覧に View の行を出さない';
     expect(find.textContaining(line, findRichText: true), findsNothing);
     expect(find.bySemanticsLabel(RegExp(line)), findsOneWidget);
     // 版ごとに畳む。開いているのはいちばん新しい版だけ

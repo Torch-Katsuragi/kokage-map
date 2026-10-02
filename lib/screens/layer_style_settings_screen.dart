@@ -473,7 +473,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
           : t.settingsWidget.styleTitle(
             name:
                 widget.isViewMode
-                    ? '${widget.targetLayer!.layerName} / ${widget.targetView!.name}'
+                    ? '${widget.targetLayer!.layerName} / ${widget.targetView!.displayName}'
                     : widget.targetLayer!.layerName,
           );
 

@@ -360,7 +360,7 @@ class QgsProjectBuilder {
       for (final view in layer.views)
         QgsLayer(
           id: _layerId(view, gpkgRelPath),
-          name: view.name,
+          name: view.displayName,
           dataSourcePath: gpkgRelPath,
           tableName: layer.layerName,
           geometryType: geometryType,

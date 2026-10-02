@@ -271,9 +271,13 @@ class QgsImporter {
         }
       }
       final views = touched.putIfAbsent(layer, () => []);
+      // レイヤと同じ名前でフィルタの無い QGIS レイヤは既定 View（こかげマップは既定 View をレイヤ名で書く。
+      // QGIS でふつうに足したレイヤもこの形）。旧版が書いた「既定」もそのまま既定 View
+      final isDefault = name == layer.layerName && (source.subset == null || source.subset!.isEmpty) &&
+          !views.any((v) => v.name == kDefaultViewName);
       views.add(
         ViewNode(
-          name: _uniqueName(name, views),
+          name: isDefault ? kDefaultViewName : _uniqueName(name, views),
           parent: layer,
           filter: source.subset,
           style: readStyleWithLabel(maplayer),

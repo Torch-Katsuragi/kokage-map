@@ -22,6 +22,8 @@
 
 #fixes(
   "Fixes",
+  [Newly drawn features used the default color until reopening],
+  [Quickly toggling visibility after a color change could leave old-color patches],
   [Area fills had gaps on ridges where the map showed through],
   [Color and opacity changed through a View's "Style" were sometimes lost on reopening],
   [A View added with "Add view" went to the bottom and drew nothing (it now goes on top)],

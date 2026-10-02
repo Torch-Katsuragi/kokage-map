@@ -15,6 +15,8 @@
 
 ### Fixes
 
+- Newly drawn lines and areas used the default color instead of the layer's until the project was reopened
+- Changing a color and then quickly toggling visibility could leave patches in the old color
 - Area fills had gaps on ridges where the map showed through white. Fills are now painted into the terrain image; only the outline follows the terrain
 - Color and opacity changed through a View's "Style" were sometimes lost when the project was reopened
 - In the tutorial's practice map, areas now have a visible fill (it was 10% black, so changing the color showed nothing)

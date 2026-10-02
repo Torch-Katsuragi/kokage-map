@@ -52,6 +52,15 @@ void main() {
     expect((fs.last['properties'] as Map)['time'], 't0');
   });
 
+  test('GPS 軌跡の抽出（間引く前の全点を持つ）は頂点と数が合わないので触らない', () {
+    // track_extraction_dialog と同じ形: 見出し + 測った点すべて。線は間引いた頂点だけ
+    final rows = [
+      ['timestamp', 'latitude', 'longitude', 'altitude', 'accuracy', 'speed', 'bearing', 'source_type'],
+      for (var i = 0; i < 120; i++) ['2026-09-08T10:${(i ~/ 60).toString().padLeft(2, '0')}:${(i % 60).toString().padLeft(2, '0')}', 34 + i / 1e4, 135 + i / 1e4, 300.0, 5.0, 1.2, 90.0, 'internal'],
+    ];
+    expect(remapSubTable(jsonEncode(rows), 3, [a, n, c], [0, null, 2]), isNull);
+  });
+
   test('記録の数が頂点と合わなければ触らない', () {
     final json = jsonEncode({'type': 'FeatureCollection', 'features': [f(0), f(1)]});
     expect(remapSubTable(json, 3, [a, b, c], [0, 1, 2]), isNull);

@@ -31,8 +31,6 @@ import '../../../presentation/node_presenter.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../screens/layer_style_settings_screen.dart';
-import '../../../tutorial/practice_project.dart';
-import '../../../tutorial/tutorial.dart';
 import '../common_dialogs.dart';
 
 /// Viewノード用 ListTile（可視切り替え・フィルタ編集・並べ替え）
@@ -46,11 +44,7 @@ class ViewTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dimmed = !node.isVisibleRecursive();
-    final guiding = ref.watch(tutorialProvider) != null;
     return ListTile(
-      key: guiding && _layer.views.indexOf(node) == 0 && isPracticeLayer(_layer, PracticeProject.areaLayer)
-          ? TutorialTargets.areaViewRow
-          : null,
       dense: true,
       contentPadding: const EdgeInsets.only(left: 56, right: 8),
       leading: _VisibilityIcon(node: node),
@@ -80,13 +74,7 @@ class ViewTile extends ConsumerWidget {
 
   Widget _buildMenu(BuildContext context, WidgetRef ref) {
     final index = _layer.views.indexOf(node);
-    // チュートリアルの案内先: 練習のエリアの最初の View の ⋮
-    final guiding = ref.watch(tutorialProvider) != null;
-    final menuKey = guiding && index == 0 && isPracticeLayer(_layer, PracticeProject.areaLayer)
-        ? TutorialTargets.areaViewMenu
-        : null;
     return PopupMenuButton<String>(
-      key: menuKey,
       iconSize: 18,
       onSelected: (value) async {
         switch (value) {
@@ -110,7 +98,6 @@ class ViewTile extends ConsumerWidget {
           (context) => [
             PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.view.rename)),
             PopupMenuItem(
-              key: menuKey != null ? TutorialTargets.styleMenuItem : null,
               value: 'style',
               child: Text(t.layerDrawer.layer.style),
             ),
@@ -175,8 +162,8 @@ class ViewTile extends ConsumerWidget {
             (_) => LayerStyleSettingsScreen(
               targetLayer: _layer,
               folderPath: folderPath,
-              // 既定 View 1 枚だけのレイヤは View を書かない（＝スタイルはレイヤが持つ）ので、レイヤのスタイルとして開く
-              targetView: _layer.views.length == 1 && node.isDefaultView ? null : node,
+              // 既定 View の見え方はレイヤのスタイルそのもの（既定 View にはスタイルを持たせない）
+              targetView: node.isDefaultView ? null : node,
             ),
       ),
     );

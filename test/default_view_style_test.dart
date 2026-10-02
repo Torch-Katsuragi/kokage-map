@@ -14,6 +14,7 @@ import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
+import 'package:root_maps/models/nodes/view_node.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -69,6 +70,21 @@ void main() {
 
     final reopened = await loadLayer();
     expect((await reopened.getKmetaStyle())?.polygonFillOpacity, 0.6);
+  });
+
+  test('View がほかにあっても、既定 View のスタイルはレイヤのスタイルになる', () async {
+    final layer = await loadLayer();
+    layer.views.single.style = const KMetaLayerStyle(polygonFillOpacity: 0.4);
+    layer.views.add(ViewNode(name: '大きい', parent: layer, filter: 'fid > 1', style: const KMetaLayerStyle(polygonFillOpacity: 0.9)));
+    await layer.persistViews();
+
+    KMetaService.instance.clearCache();
+    final meta = await KMetaService.instance.getMeta(proj);
+    expect(meta.styles.layers['a.gpkg/area']?.polygonFillOpacity, 0.4);
+    final saved = meta.views['a.gpkg/area']!;
+    expect(saved.map((v) => v.name), ['既定', '大きい']);
+    expect(saved.first.style, isNull, reason: '既定 View はスタイルを持たない');
+    expect(saved.last.style?.polygonFillOpacity, 0.9);
   });
 
   test('既定 View の変更は、レイヤのほかの設定を消さずに重ねる', () async {

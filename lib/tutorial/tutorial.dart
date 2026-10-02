@@ -232,7 +232,7 @@ class TutorialTargets {
   static final photoPreview = GlobalKey(debugLabel: 'tutorial.photoPreview');
 
   // レイヤ一覧の中（練習プロジェクトだけ）
-  static final areaViewMenu = GlobalKey(debugLabel: 'tutorial.areaViewMenu');
+  static final areaLayerMenu = GlobalKey(debugLabel: 'tutorial.areaLayerMenu');
   static final styleMenuItem = GlobalKey(debugLabel: 'tutorial.styleMenuItem');
   static final photoTile = GlobalKey(debugLabel: 'tutorial.photoTile');
 
@@ -244,7 +244,6 @@ class TutorialTargets {
   static GlobalKey? settingSection(String? id) => id == 'polygon' ? polygonSection : null;
 
   /// 「既定」の View の行
-  static final areaViewRow = GlobalKey(debugLabel: 'tutorial.areaViewRow');
 
   /// 設定の項目の鍵（見え方の画面の色の欄に枠を出すため。設定の画面は汎用なので鍵の名前で引く）
   static GlobalKey? settingTile(String settingKey) =>
@@ -379,11 +378,10 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) {
       TutorialStepDef('closeTable', cardTop: true, targets: [TutorialTargets.tableButton],
           done: (e) => e is AttributeTableToggled && !e.open),
     ],
-    // 見え方: レイヤ＝データ、View＝見え方（松本 2026-09-12 の型）。View の ⋮ → スタイル → 塗りの色
+    // 見え方: レイヤの ⋮ → スタイル → 塗りの色（既定 View しかないときは View の行を出さない。2026-10-02）
     TutorialChapter.style => [
       TutorialStepDef('open', targets: [TutorialTargets.layersButton], done: (e) => e is LayersPanelToggled && e.open),
-      TutorialStepDef('view', targets: [TutorialTargets.areaViewRow, TutorialTargets.layersButton]),
-      TutorialStepDef('menu', targets: [TutorialTargets.styleMenuItem, TutorialTargets.areaViewMenu, TutorialTargets.layersButton],
+      TutorialStepDef('menu', targets: [TutorialTargets.styleMenuItem, TutorialTargets.areaLayerMenu, TutorialTargets.layersButton],
           done: (e) => e is StyleScreenOpened),
       TutorialStepDef('color', waitNext: true, targets: [TutorialTargets.fillColorTile, TutorialTargets.polygonSection],
           done: (e) => e is StyleSaved && _area(e.layer)),

@@ -104,11 +104,11 @@ class LayerTile extends ConsumerWidget {
       child: tileContent,
     );
 
-    // View は既定 1 枚だけでも出す（松本 2026-09-12: 隠すとかえって分かりにくい。
-    // 「レイヤ＝データ、View＝見え方」の型を最初から見せておく）。
-    // 既定 1 枚は引き続きファイルには書かれない（`LayerNode.persistViews`）
+    // 既定の View しかないときは View の行を出さない（2026-10-02 に 09-12 の「既定 1 枚でも出す」を改めた）。
+    // 既定 View の見え方はレイヤのスタイルそのもので、レイヤの ⋮ →「スタイル」で変える。
+    // View を足すと、既定と足した View が並ぶ
     final views = node.views;
-    if (views.isEmpty) return draggable;
+    if (views.isEmpty || (views.length == 1 && views.first.isDefaultView)) return draggable;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -156,7 +156,9 @@ class LayerTile extends ConsumerWidget {
   }
 
   PopupMenuButton<String> _buildMenu(BuildContext context, WidgetRef ref) {
+    final guiding = ref.watch(tutorialProvider) != null && isPracticeLayer(node, PracticeProject.areaLayer);
     return PopupMenuButton<String>(
+      key: guiding ? TutorialTargets.areaLayerMenu : null,
       onSelected: (value) async {
         switch (value) {
           case 'rename':
@@ -192,6 +194,7 @@ class LayerTile extends ConsumerWidget {
           child: Row(children: [const Icon(Icons.edit, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.rename)]),
         ),
         PopupMenuItem(
+          key: guiding ? TutorialTargets.styleMenuItem : null,
           value: 'style',
           child: Row(children: [const Icon(Icons.palette, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.style)]),
         ),

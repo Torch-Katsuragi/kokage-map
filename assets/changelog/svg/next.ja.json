@@ -1,15 +1,15 @@
 {
- "title": "変えた色が残るように",
+ "title": "既定の View しかないときは View の行を出さない",
  "chunks": [
   {
    "file": "next.ja.00.svg",
    "width": 252.0,
-   "height": 117.47
+   "height": 132.05
   },
   {
    "file": "next.ja.01.svg",
    "width": 252.0,
-   "height": 128.17
+   "height": 165.89
   }
  ]
 }

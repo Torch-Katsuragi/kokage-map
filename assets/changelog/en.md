@@ -2,9 +2,14 @@
 
 ## Next release
 
+### Views
+
+- A layer with only the default View no longer shows a View row in the layer list. Change its look with "Style" in the layer's ⋮ menu
+- After "Add view", the default View and the added View are listed together. The default View always looks like the layer style
+
 ### Fixes
 
-- Color and opacity changed for the default View in the style screen were lost when the project was reopened
+- Color and opacity changed for the default View were lost when the project was reopened
 - In the tutorial's practice map, areas now have a visible fill (it was 10% black, so changing the color showed nothing)
 
 ## v0.9.0 — 2026/10/02

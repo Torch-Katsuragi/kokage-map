@@ -1,15 +1,15 @@
 {
- "title": "Style changes now stick",
+ "title": "No View row when there is only the default View",
  "chunks": [
   {
    "file": "next.en.00.svg",
    "width": 252.0,
-   "height": 114.91
+   "height": 143.24
   },
   {
    "file": "next.en.01.svg",
    "width": 252.0,
-   "height": 126.16
+   "height": 162.71
   }
  ]
 }

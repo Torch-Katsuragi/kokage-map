@@ -4,17 +4,18 @@
 
 #hero(
   "Next release",
-  [Style changes now stick],
-  [Color and opacity changed for the default View in the style screen reverted when the project was reopened. They are now kept as the layer style.],
+  [No View row when there is only the default View],
+  [Change the look with "Style" in the layer's ⋮ menu. After "Add view", the default View and the added one are listed together. The default View always looks like the layer style.],
   grid(
-    columns: (auto, auto, auto), column-gutter: 10pt, align: horizon,
-    stack(dir: ttb, spacing: 4pt, box(width: 40pt, height: 36pt, polygon(fill: rgb(46, 125, 50, 150), stroke: 0.8pt + ink, (10pt, 0pt), (30pt, 0pt), (40pt, 18pt), (30pt, 36pt), (10pt, 36pt), (0pt, 18pt))), caption[Changed]),
-    arrow-r(w: 24pt),
-    stack(dir: ttb, spacing: 4pt, box(width: 40pt, height: 36pt, polygon(fill: rgb(46, 125, 50, 150), stroke: 0.8pt + ink, (10pt, 0pt), (30pt, 0pt), (40pt, 18pt), (30pt, 36pt), (10pt, 36pt), (0pt, 18pt))), caption[Same after reopening]),
+    columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
+    stack(dir: ttb, spacing: 4pt, layer-panel(w: 96pt, header: "Layers", ((0, "layer", [Areas], "ok", rgb("#2e7d32")),)), caption[Default View only]),
+    arrow-r(w: 20pt),
+    stack(dir: ttb, spacing: 4pt, layer-panel(w: 96pt, header: "Layers", ((0, "layer", [Areas], "ok", rgb("#2e7d32")), (1, "layer", [Default], "ok", rgb("#2e7d32")), (1, "layer", [Large], "hi", rgb("#c0504d")))), caption[After adding a View]),
   ),
 )
 
 #fixes(
-  "Other fixes",
+  "Fixes",
+  [Color and opacity changed for the default View were lost on reopening],
   [Areas in the practice map had a 10% black fill, so changing the color showed nothing],
 )

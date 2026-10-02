@@ -290,8 +290,8 @@ abstract class LayerNode extends LayerTreeNode {
   /// 現在の [views] を フォルダ設定（`.qgs`） に書き戻す。
   ///
   /// 既定View1枚だけの状態は「View未定義」と同じ意味なので、書かずに消す。
-  /// そのとき View に付いたスタイルはレイヤのスタイルへ移す（View ごと消すとスタイルも消えていた。
-  /// スタイル画面で既定 View の色を変えても、開き直すと元に戻っていた）
+  /// 既定 View の見え方はレイヤのスタイルそのもの。既定 View に付いたスタイル（QGIS からの読み込み・旧データ）は
+  /// レイヤのスタイルへ移す（前は既定 1 枚のとき View ごと捨てていて、変えた色が開き直すと元に戻っていた）
   Future<void> persistViews() async {
     final folder = folderNode;
     if (folder == null) return;
@@ -299,11 +299,12 @@ abstract class LayerNode extends LayerTreeNode {
     if (folderPath == null) return;
 
     final isJustDefault = views.length == 1 && views.first.isDefaultView;
-    final defaultStyle = isJustDefault ? views.first.style : null;
-    if (defaultStyle != null) {
+    final defaultView = views.where((v) => v.isDefaultView).firstOrNull;
+    final defaultStyle = defaultView?.style;
+    if (defaultView != null && defaultStyle != null) {
       final existing = (await KMetaService.instance.getMeta(folderPath)).styles.layers[layerKey];
       await KMetaService.instance.setLayerStyle(folderPath, layerKey, defaultStyle.mergeWith(existing));
-      views.first.style = null;
+      defaultView.style = null;
       invalidateKmetaStyleCache();
     }
     await KMetaService.instance.setViews(

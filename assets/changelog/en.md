@@ -1,6 +1,6 @@
 # Changelog
 
-## Next release
+## v0.9.0 — 2026/10/02
 
 ### Tutorial
 

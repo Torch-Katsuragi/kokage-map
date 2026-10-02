@@ -1,4 +1,4 @@
-// Changelog (illustrated): Next release. tool/changelog/build.py writes it out as SVG chunks
+// Changelog (illustrated): v0.9.0. tool/changelog/build.py writes it out as SVG chunks
 #import "lib.typ": *
 #show: page-setup.with(lang: "en")
 
@@ -49,7 +49,7 @@
 })
 
 #hero(
-  "Next release",
+  "v0.9.0 — 2026/10/02",
   [Try the basics on a practice map],
   [No data of your own needed. A practice map opens and a frame shows where to tap. Tap it to move on.],
   grid(

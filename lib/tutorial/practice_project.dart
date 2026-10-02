@@ -18,6 +18,7 @@
 // 自分のデータが無くても始められるように、開くたびに作り直す。
 // 置き場所は共有フォルダ（Global）の隣。Android なら Documents/KokageMap/練習 で、利用者からも見える。
 
+import 'package:flutter/painting.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 
@@ -26,7 +27,9 @@ import '../i18n/strings.g.dart';
 import '../models/geometry_type.dart';
 import '../models/geopackage/geopackage_connection.dart';
 import '../models/geopackage/geopackage_file.dart';
+import '../models/kmeta.dart';
 import '../services/global_folder_locator.dart';
+import '../services/kmeta_service.dart';
 
 class PracticeProject {
   PracticeProject._(this.dir);
@@ -59,6 +62,12 @@ class PracticeProject {
     if (await fs.exists(dir)) await fs.delete(dir, recursive: true);
     await fs.createDirectory(dir);
     await proj._writeData();
+    // 塗りの既定（黒 10%）は地形の上だとほとんど見えず、「見え方を変える」で色を変えても変わったと分からない
+    await KMetaService.instance.setLayerStyle(
+      dir,
+      '${p.basename(proj.gpkgPath)}/$areaLayer',
+      const KMetaLayerStyle(polygonFillColor: Color(0xFF2E7D32), polygonFillOpacity: 0.3),
+    );
     knownDir = dir;
     return proj;
   }

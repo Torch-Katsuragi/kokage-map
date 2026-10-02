@@ -175,7 +175,8 @@ class ViewTile extends ConsumerWidget {
             (_) => LayerStyleSettingsScreen(
               targetLayer: _layer,
               folderPath: folderPath,
-              targetView: node,
+              // 既定 View 1 枚だけのレイヤは View を書かない（＝スタイルはレイヤが持つ）ので、レイヤのスタイルとして開く
+              targetView: _layer.views.length == 1 && node.isDefaultView ? null : node,
             ),
       ),
     );

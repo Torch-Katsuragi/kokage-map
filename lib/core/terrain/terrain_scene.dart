@@ -149,11 +149,11 @@ class TerrainSceneBuilder {
       return maxX >= clipRect.left && minX <= clipRect.right && maxY >= clipRect.top && minY <= clipRect.bottom;
     }
 
-    void label(Offset at, geo.Feature f) {
+    void label(Offset at, geo.Feature f, {double? markerGap}) {
       if (!inside(at)) return;
       final text = f.properties[labelProp];
       if (text is! String || text.isEmpty) return;
-      labels.add(TerrainLabel(x: at.dx, y: at.dy, text: text, style: labelTextStyle));
+      labels.add(TerrainLabel(x: at.dx, y: at.dy, text: text, style: labelTextStyle, markerGap: markerGap));
     }
 
     for (final f in lines) {
@@ -204,7 +204,7 @@ class TerrainSceneBuilder {
       final p = _toLocalPosition(g.position);
       if (!inside(p)) continue;
       outPoints.add(TerrainPoint(x: p.dx, y: p.dy, color: style.pointColor, sizePx: style.pointSize));
-      label(p, f);
+      label(p, f, markerGap: style.pointSize + 2);
     }
     return TerrainScene(lines: outLines, polygons: outPolys, outlines: outlines, points: outPoints, labels: labels);
   }

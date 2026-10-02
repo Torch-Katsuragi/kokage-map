@@ -87,4 +87,6 @@
   [Opening the attribute table after selecting on the map did not highlight that row],
   [Lines and areas got thin and faint when zoomed out],
   [The color of a selected area had gaps on ridges],
+  [A selected line was drawn under its unselected self],
+  [Point labels put a black dot over the point],
 )

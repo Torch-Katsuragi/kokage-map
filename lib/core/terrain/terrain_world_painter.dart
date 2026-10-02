@@ -691,38 +691,39 @@ class TerrainWorldPainter extends CustomPainter {
         if (!labelViewport.contains(sp)) continue;
         final label = labels[k];
         if (collideLabels && placed.length >= maxPlaced) {
-          canvas.drawCircle(sp, 2, dotPaint);
+          if (label.markerGap == null) canvas.drawCircle(sp, 2, dotPaint);
           continue;
         }
         // layout（重い）の前に、文字数からの見積もりで重なりを弾く
         final fontSize = label.style?.fontSize ?? 14;
         final estW = label.text.length * fontSize * 0.7 + 4;
         final estH = fontSize * 1.3 + 2;
-        final estBox = Rect.fromLTWH(sp.dx - estW / 2, sp.dy - estH - 4, estW, estH);
+        final gap = label.markerGap ?? 4;
+        final estBox = Rect.fromLTWH(sp.dx - estW / 2, sp.dy - estH - gap, estW, estH);
         if (collideLabels && placed.overlaps(estBox)) {
-          canvas.drawCircle(sp, 2, dotPaint);
+          if (label.markerGap == null) canvas.drawCircle(sp, 2, dotPaint);
           continue;
         }
         if (!label.isLaidOut) {
           if (layouts >= _layoutsPerFrame) {
             deferredLayouts++;
-            canvas.drawCircle(sp, 2, dotPaint);
+            if (label.markerGap == null) canvas.drawCircle(sp, 2, dotPaint);
             continue;
           }
           layouts++;
         }
         final tp = label.painter;
-        final origin = sp - Offset(tp.width / 2, tp.height + 4);
+        final origin = sp - Offset(tp.width / 2, tp.height + gap);
         final box = Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2);
         if (collideLabels && placed.overlaps(box)) {
-          canvas.drawCircle(sp, 2, dotPaint);
+          if (label.markerGap == null) canvas.drawCircle(sp, 2, dotPaint);
           continue;
         }
         placed.add(box);
         visibleLabels.add(base + k);
         canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(3)), boxPaint);
         tp.paint(canvas, origin);
-        canvas.drawCircle(sp, 2.5, anchorPaint);
+        if (label.markerGap == null) canvas.drawCircle(sp, 2.5, anchorPaint);
       }
     }
     _sweepCaches();

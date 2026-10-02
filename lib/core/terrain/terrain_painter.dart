@@ -447,7 +447,7 @@ class LiftedSegments {
 /// 地形に乗せるラベル（ビルボード）
 class TerrainLabel {
   /// [painter] を渡さなければ [text] と [style] から**描くときに**作る（1 万ラベルの layout を貼り付け時にやらない）
-  TerrainLabel({required this.x, required this.y, TextPainter? painter, String? text, this.style})
+  TerrainLabel({required this.x, required this.y, TextPainter? painter, String? text, this.style, this.markerGap})
       : _painter = painter,
         text = text ?? painter?.text?.toPlainText() ?? '';
 
@@ -456,6 +456,10 @@ class TerrainLabel {
   final double y;
   final String text;
   final TextStyle? style;
+
+  /// 点の印に付くラベル: 印の半径＋すき間（論理 px）。印があるので位置の黒点は打たず、ラベルを印の上に離して置く。
+  /// null は面・線のラベル（重心や中点に黒点を打ち、その上に置く）
+  final double? markerGap;
   TextPainter? _painter;
 
   /// layout 済みか（描画側は 1 フレームに新しく layout する数を絞る）
@@ -690,7 +694,7 @@ class TerrainPainter extends CustomPainter {
       final sp = toScreen(label.x, label.y, z, size, pc);
       if (!viewport.inflate(64).contains(sp)) continue;
       final tp = label.painter;
-      final origin = sp - Offset(tp.width / 2, tp.height + 4);
+      final origin = sp - Offset(tp.width / 2, tp.height + (label.markerGap ?? 4));
       final box = Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2);
       final isSel = selected?.kind == 'label' && selected?.index == i;
       if (collideLabels && !isSel) {
@@ -702,7 +706,7 @@ class TerrainPainter extends CustomPainter {
           }
         }
         if (overlaps) {
-          canvas.drawCircle(sp, 2, Paint()..color = Colors.black54); // 点だけ残す
+          if (label.markerGap == null) canvas.drawCircle(sp, 2, Paint()..color = Colors.black54); // 点だけ残す
           continue;
         }
       }
@@ -713,7 +717,7 @@ class TerrainPainter extends CustomPainter {
         Paint()..color = (isSel ? Colors.yellow : Colors.white).withValues(alpha: 0.85),
       );
       tp.paint(canvas, origin);
-      canvas.drawCircle(sp, isSel ? 5 : 2.5, Paint()..color = Colors.black);
+      if (label.markerGap == null) canvas.drawCircle(sp, isSel ? 5 : 2.5, Paint()..color = Colors.black);
     }
     sw.stop();
     onPainted?.call(sw.elapsed);

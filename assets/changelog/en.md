@@ -33,6 +33,8 @@
 - Opening the attribute table after selecting on the map did not highlight that row
 - Lines and areas got thin and faint when zoomed out and were easy to lose. They now keep the same width at every scale
 - The color of a selected area had gaps on ridges where the map showed through
+- A selected line was drawn under its unselected self
+- Point labels no longer put a black dot over the point; the label sits just above the marker
 
 ## v0.8.0 — 2026/09/30
 

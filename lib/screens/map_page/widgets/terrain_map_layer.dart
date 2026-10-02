@@ -287,6 +287,10 @@ class _StaticProgress {
   int polygon = 0;
   int line = 0;
 
+  /// 線の並びの末尾にある選択の線の数。選択は先に作るが、あとから足す地物の線はこの手前に差し込む
+  /// （後ろに足すと地物の線が選択の上に描かれていた）
+  int selectedLines = 0;
+
   /// このタイルに掛かるフィーチャの番号（bbox で先に絞る。1 万面を 40 枚のタイルで毎回総当たりしない）
   List<int>? polygonIdx;
   List<int>? lineIdx;
@@ -1292,8 +1296,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final coarse = tile.bordered.cellSize * step >= 30;
     final dense = coarse && g.polygons.length > 2000;
     void add(TerrainScene s, {bool withLabels = true}) {
-      if (!dense) scene.lines.addAll(s.outlines);
-      scene.lines.addAll(s.lines);
+      // 選択の線より手前（下）に入れる
+      final at = scene.lines.length - progress.selectedLines;
+      scene.lines.insertAll(at, [if (!dense) ...s.outlines, ...s.lines]);
       scene.polygons.addAll(s.polygons);
       scene.points.addAll(s.points);
       if (withLabels) scene.labels.addAll(s.labels);
@@ -1308,6 +1313,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
             .build(lines: g.selectedPolylines, polygons: g.selectedPolygons, points: g.selectedMarkers, clipRect: clip),
         withLabels: false,
       );
+      progress.selectedLines = scene.lines.length;
       add(
         builder(const {}, TerrainFeatureStyle(
           lineColor: defaultStyle.lineColor, lineWidth: 1, fillColor: defaultStyle.fillColor,
@@ -1355,7 +1361,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           cx /= ps.length;
           cy /= ps.length;
           scene.points.add(TerrainPoint(x: cx, y: cy, color: const Color(0xFF3F51B5), sizePx: 12));
-          scene.labels.add(TerrainLabel(x: cx, y: cy, text: '${ps.length}', style: labelStyleForClusters));
+          scene.labels.add(TerrainLabel(x: cx, y: cy, text: '${ps.length}', style: labelStyleForClusters, markerGap: 14));
         }
       } else {
         add(pointScene); // 引いた段でも点が少なければラベルは出す（多ければ上でまとめている）

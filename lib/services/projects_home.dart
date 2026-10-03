@@ -13,114 +13,79 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// こかげマップ: プロジェクトの置き場所（ホームの「新しく作る」「続きから」「一覧」）
+// こかげマップ: 「地図を開く」で開くいつもの地図（置き場所 `Documents/KokageMap` そのもの）
 //
-// 置き場所は Global の親（Android は Documents/KokageMap）。1 プロジェクト 1 フォルダで、
-// Global と練習用フォルダは一覧に出さない。置き場所の外のフォルダも「ほかの場所を開く」で開ける（2026-10-03）。
-
-import 'dart:convert';
+// スマホが苦手な人は何も考えずにここだけを開き、地図にメモをし、たまに事務員から QR で現場の地図を
+// 受け取る（2026-10-03 の想定）。中身の形は決めてある:
+//
+//   KokageMap/
+//   ├─ KokageMap.qgs        フォルダの設定（PC の QGIS でもこれで開ける）
+//   ├─ マイ地図.gpkg         書き込み先。点・線・面のレイヤを最初から作っておく
+//   ├─ 写真/                取り込んだ写真
+//   ├─ 共有/                QR で受け取った地図（Drive と同期）
+//   └─ .kokage/             アプリ用（Global・練習用。地図に出さない）
+//
+// 置き場所の外のフォルダも「ほかの場所を開く」で開ける。
 
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/fs/k_file_system.dart';
-import '../i18n/strings.g.dart';
+import '../models/geometry_type.dart';
+import '../models/geopackage/geopackage_file.dart';
+import '../utils/app_logger.dart';
 import 'global_folder_locator.dart';
-import 'kmeta_service.dart';
-
-/// 置き場所の中のプロジェクト 1 つ
-class ProjectEntry {
-  const ProjectEntry({required this.path, required this.name, required this.modified, required this.driveLinked});
-
-  final String path;
-  final String name;
-  final DateTime modified;
-
-  /// Drive と同期しているフォルダ
-  final bool driveLinked;
-}
 
 class ProjectsHome {
   ProjectsHome._();
 
+  // 名前は端末の言語に依らず固定（Drive で共有しても、どの端末でも同じ形になるように）
+  static const myMapName = 'マイ地図.gpkg';
+  static const photosDirName = '写真';
+  static const sharedDirName = '共有';
+  static const myMapLayers = {'点': GeometryType.point, '線': GeometryType.linestring, '面': GeometryType.polygon};
+
   static const _lastKey = 'last_project_dir';
 
-  /// プロジェクトごとの最後に開いた時刻（ミリ秒）。フォルダの更新時刻は中のファイルを書いても変わらないので自分で持つ
-  static const _openedKey = 'project_opened_at';
-
-  /// 置き場所（無ければ作る）
-  static Future<String> root() async {
-    final dir = p.dirname(await GlobalFolderLocator.defaultPath());
-    if (!await fs.exists(dir)) await fs.createDirectory(dir);
-    return dir;
-  }
-
-  /// 一覧に出さない名前（Global・練習用・隠しフォルダ）
-  static bool _hidden(String name) =>
-      name.startsWith('.') || name == GlobalFolderLocator.sharedRelativeSegments.last || name == t.tutorial.practice.folder;
-
-  /// 置き場所の中のプロジェクト。新しく触ったものから
-  static Future<List<ProjectEntry>> list() async {
-    final dir = await root();
-    final prefs = await SharedPreferences.getInstance();
-    final opened = _decode(prefs.getString(_openedKey));
-    final out = <ProjectEntry>[];
-    for (final e in await fs.list(dir)) {
-      if (!e.isDirectory || _hidden(e.name)) continue;
-      final path = e.path;
-      final name = e.name;
-      DateTime modified;
-      final at = opened[path];
-      if (at != null) {
-        modified = DateTime.fromMillisecondsSinceEpoch(at);
-      } else {
-        try {
-          modified = await fs.lastModified(path) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        } catch (_) {
-          modified = DateTime.fromMillisecondsSinceEpoch(0);
-        }
-      }
-      var linked = false;
+  /// いつもの地図のフォルダ（中身をそろえてから返す）
+  static Future<String> myMap() async {
+    final root = await GlobalFolderLocator.kokageRoot();
+    if (!await fs.exists(root)) await fs.createDirectory(root);
+    for (final name in [photosDirName, sharedDirName]) {
+      final dir = p.join(root, name);
+      if (!await fs.exists(dir)) await fs.createDirectory(dir);
+    }
+    final gpkgPath = p.join(root, myMapName);
+    if (!await fs.exists(gpkgPath)) {
+      final gpkg = GeoPackageFile([myMapName], absolutePath: gpkgPath);
       try {
-        linked = (await KMetaService.instance.getMeta(path)).sync.driveId != null;
-      } catch (_) {}
-      out.add(ProjectEntry(path: path, name: name, modified: modified, driveLinked: linked));
+        if (await gpkg.createEmptyDatabase()) {
+          for (final e in myMapLayers.entries) {
+            await gpkg.addLayer(e.key, e.value);
+            await gpkg.addAttributeColumns(e.key, {'name': 'TEXT', 'メモ': 'TEXT'});
+          }
+        }
+      } catch (e) {
+        AppLogger.debug('[ProjectsHome] マイ地図を作れない: $e');
+      } finally {
+        await gpkg.dispose();
+      }
     }
-    out.sort((a, b) => b.modified.compareTo(a.modified));
-    return out;
+    return root;
   }
 
-  /// 置き場所に [name] のフォルダを作ってそのパスを返す。同じ名前があれば「名前 2」のように避ける
-  static Future<String> create(String name) async {
-    final dir = await root();
-    final base = name.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    var candidate = p.join(dir, base);
-    for (var n = 2; await fs.exists(candidate); n++) {
-      candidate = p.join(dir, '$base $n');
-    }
-    await fs.createDirectory(candidate);
-    return candidate;
-  }
+  /// いつもの地図か（受け取った地図の入れ先・写真の入れ先を決めるのに使う）
+  static Future<bool> isMyMap(String dir) async =>
+      p.equals(p.normalize(dir), p.normalize(await GlobalFolderLocator.kokageRoot()));
 
-  /// 最後に開いたプロジェクト（練習用は覚えない）
+  /// 最後に開いたフォルダを覚える（練習用は覚えない）
   static Future<void> remember(String path) async {
-    if (p.basename(path) == t.tutorial.practice.folder) return;
+    if (p.split(path).contains(GlobalFolderLocator.systemDirName)) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastKey, path);
-    final opened = _decode(prefs.getString(_openedKey))..[path] = DateTime.now().millisecondsSinceEpoch;
-    await prefs.setString(_openedKey, jsonEncode(opened));
   }
 
-  static Map<String, int> _decode(String? s) {
-    if (s == null) return {};
-    try {
-      return (jsonDecode(s) as Map).map((k, v) => MapEntry(k as String, (v as num).toInt()));
-    } catch (_) {
-      return {};
-    }
-  }
-
-  /// 最後に開いたプロジェクト。消えていれば null
+  /// 最後に開いたフォルダ。消えていれば null
   static Future<String?> last() async {
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_lastKey);

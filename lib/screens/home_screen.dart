@@ -45,7 +45,6 @@ import '../services/projects_home.dart';
 import '../tutorial/practice_project.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/folder_utils.dart';
-import '../widgets/layer_drawer/common_dialogs.dart' show RenameDialog;
 import 'changelog_screen.dart';
 import 'home/project_launcher.dart';
 import 'map_page/map_page.dart';
@@ -75,8 +74,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   bool _hasUnreadChangelog = false; // チェンジログ未読フラグ
   bool _autoOpenAttempted = false; // --dart-define=PROJECT_DIR の自動オープンを試したか
 
-  /// 置き場所の一覧と最後に開いたプロジェクト（native だけ。web は従来のフォルダ選択）
-  List<ProjectEntry> _projects = const [];
+  /// 最後に開いたのが「ほかの場所」ならそのパス（native だけ。web は従来のフォルダ選択）
   String? _lastProject;
   bool get _usesProjectsHome => !kIsWeb && PlatformCapabilities.canOpenLocalProject;
 
@@ -91,34 +89,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _loadLastFolderName();
   }
 
-  /// 置き場所の一覧を読み直す（権限が取れてから・地図から戻ったとき）
+  /// 「続きから」を読み直す（権限が取れてから・地図から戻ったとき）。いつもの地図なら出さない
   Future<void> _loadProjects() async {
     if (!_usesProjectsHome || !_permissionsGranted) return;
     try {
-      final list = await ProjectsHome.list();
       final last = await ProjectsHome.last();
+      final other = last != null && !await ProjectsHome.isMyMap(last) ? last : null;
       if (!mounted) return;
-      setState(() {
-        _projects = list;
-        _lastProject = last;
-      });
+      setState(() => _lastProject = other);
     } catch (e) {
-      AppLogger.debug('[HomeScreen] 置き場所を読めない: $e');
+      AppLogger.debug('[HomeScreen] 最後に開いたフォルダを読めない: $e');
     }
   }
 
-  /// 置き場所に新しいプロジェクトを作って開く
-  Future<void> _createProject() async {
-    final name = await RenameDialog.show(
-      context,
-      title: t.home.newProjectTitle,
-      currentName: '',
-      label: t.home.newProjectName,
-      hint: t.home.newProjectHint,
-      submitLabel: t.home.newProjectCreate,
-    );
-    if (name == null || name.trim().isEmpty || !mounted) return;
-    final dir = await ProjectsHome.create(name);
+  /// いつもの地図（Documents/KokageMap）を開く
+  Future<void> _openMyMap() async {
+    if (_isOpeningProject) return;
+    final dir = await ProjectsHome.myMap();
     await _openProjectDir(dir);
   }
 
@@ -585,6 +572,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     AppLogger.debug('[HomeScreen] フォルダ選択完了、初期化を開始');
     ref.read(projectRootDirProvider.notifier).set(dir);
     AppLogger.debug('[HomeScreen] projectRootDirProvider 設定完了');
+    // Global の置き場所を先に決める（旧 Global を .kokage へ移し、移せなかった旧フォルダを地図に出さない印を付ける）
+    if (PlatformCapabilities.hasLocalFileSystem) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await GlobalFolderLocator.resolve(customPath: prefs.getString(kGlobalFolderCustomPathKey));
+      } catch (_) {}
+    }
     if (_usesProjectsHome) unawaited(ProjectsHome.remember(dir));
     final rootNode = await FolderNode.createRootNode(dir);
     ref.read(folderTreeProvider.notifier).set(rootNode);
@@ -713,10 +707,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       children: [
         ProjectLauncher(
           last: _lastProject,
-          projects: _projects,
           enabled: !_isOpeningProject,
-          onOpen: _openProjectDir,
-          onCreate: _createProject,
+          onOpenMyMap: _openMyMap,
+          onOpenLast: _openProjectDir,
           onPickOther: _pickProjectDir,
         ),
         if (_isOpeningProject) ...[

@@ -24,7 +24,6 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../i18n/strings.g.dart';
-import '../../services/projects_home.dart';
 
 /// こかげの緑（ホームだけの色）
 const kKokageGreen = Color(0xFF2E6B4F);
@@ -101,25 +100,23 @@ class _ContourPainter extends CustomPainter {
   bool shouldRepaint(_ContourPainter old) => false;
 }
 
-/// 「続きから」「新しく作る」「ほかの場所を開く」と一覧
+/// いちばん大きい「地図を開く」と、「続きから」「QR で受け取る」「ほかの場所を開く」
 class ProjectLauncher extends StatelessWidget {
   const ProjectLauncher({
     super.key,
     required this.last,
-    required this.projects,
     required this.enabled,
-    required this.onOpen,
-    required this.onCreate,
+    required this.onOpenMyMap,
+    required this.onOpenLast,
     required this.onPickOther,
     this.onReceive,
   });
 
-  /// 最後に開いたプロジェクト（無ければ null）
+  /// 最後に開いたのが「ほかの場所」ならそのパス（いつもの地図なら null）
   final String? last;
-  final List<ProjectEntry> projects;
   final bool enabled;
-  final ValueChanged<String> onOpen;
-  final VoidCallback onCreate;
+  final VoidCallback onOpenMyMap;
+  final ValueChanged<String> onOpenLast;
   final VoidCallback onPickOther;
 
   /// 共有を受け取る（QR）。まだ無ければ null
@@ -127,19 +124,20 @@ class ProjectLauncher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final lastPath = last;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (lastPath != null) ...[
-          _ContinueCard(path: lastPath, enabled: enabled, onTap: () => onOpen(lastPath)),
-          const SizedBox(height: 10),
-        ],
+        _BigButton(
+          icon: Icons.map_outlined,
+          title: t.home.openMyMap,
+          subtitle: t.home.openMyMapHint,
+          enabled: enabled,
+          onTap: onOpenMyMap,
+        ),
+        const SizedBox(height: 10),
         Row(
           children: [
-            Expanded(child: _ActionTile(icon: Icons.add, label: t.home.newProject, enabled: enabled, onTap: onCreate)),
-            const SizedBox(width: 10),
             if (onReceive != null) ...[
               Expanded(
                 child: _ActionTile(icon: Icons.qr_code_scanner, label: t.home.receiveShared, enabled: enabled, onTap: onReceive!),
@@ -151,44 +149,29 @@ class ProjectLauncher extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 20),
-        Text(t.home.projects, style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.outline)),
-        const SizedBox(height: 4),
-        if (projects.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(t.home.noProjects, style: TextStyle(color: theme.colorScheme.outline)),
-          )
-        else
-          DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: theme.dividerColor)),
-            ),
-            child: Column(
-              children: [
-                for (final e in projects)
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    enabled: enabled,
-                    leading: const Icon(Icons.folder_outlined, color: kKokageGreen),
-                    title: Text(e.name),
-                    subtitle: Text(_ago(e.modified), style: const TextStyle(fontSize: 12)),
-                    trailing: e.driveLinked ? Icon(Icons.cloud_outlined, size: 20, color: theme.colorScheme.outline) : null,
-                    shape: Border(bottom: BorderSide(color: theme.dividerColor)),
-                    onTap: () => onOpen(e.path),
-                  ),
-              ],
+        if (lastPath != null) ...[
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: enabled ? () => onOpenLast(lastPath) : null,
+              icon: const Icon(Icons.history, size: 18),
+              label: Text(t.home.continueOther(name: p.basename(lastPath))),
+              style: TextButton.styleFrom(foregroundColor: kKokageGreen),
             ),
           ),
+        ],
       ],
     );
   }
 }
 
-/// いちばん目立つ「続きから」
-class _ContinueCard extends StatelessWidget {
-  const _ContinueCard({required this.path, required this.enabled, required this.onTap});
-  final String path;
+/// いちばん目立つ「地図を開く」
+class _BigButton extends StatelessWidget {
+  const _BigButton({required this.icon, required this.title, required this.subtitle, required this.enabled, required this.onTap});
+  final IconData icon;
+  final String title;
+  final String subtitle;
   final bool enabled;
   final VoidCallback onTap;
 
@@ -196,30 +179,27 @@ class _ContinueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: kKokageGreen,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         onTap: enabled ? onTap : null,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
           child: Row(
             children: [
-              const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 32),
-              const SizedBox(width: 12),
+              Icon(icon, color: Colors.white, size: 36),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(t.home.continueLast, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600)),
+                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
-                    Text(
-                      p.basename(path),
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Text(subtitle, style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13)),
                   ],
                 ),
               ),
+              const Icon(Icons.chevron_right, color: Colors.white),
             ],
           ),
         ),
@@ -260,16 +240,4 @@ class _ActionTile extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 「3 時間前」「昨日」など
-String _ago(DateTime d) {
-  if (d.millisecondsSinceEpoch == 0) return '';
-  final diff = DateTime.now().difference(d);
-  if (diff.inMinutes < 1) return t.home.agoNow;
-  if (diff.inHours < 1) return t.home.agoMinutes(n: '${diff.inMinutes}');
-  if (diff.inDays < 1) return t.home.agoHours(n: '${diff.inHours}');
-  if (diff.inDays < 2) return t.home.agoYesterday;
-  if (diff.inDays < 30) return t.home.agoDays(n: '${diff.inDays}');
-  return '${d.year}/${d.month}/${d.day}';
 }

@@ -31,6 +31,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../core/hidden_dirs.dart';
 import '../core/platform_capabilities.dart';
 import '../utils/app_logger.dart';
 
@@ -65,12 +66,29 @@ class GlobalFolderLocator {
   /// 念のため1世代だけ残す（アンインストールで自然に消える）
   static const String legacyMigratedDirName = 'k_maps_global.migrated';
 
+  /// こかげマップの置き場所（`/storage/emulated/0/` 配下）。「地図を開く」はここをそのまま開く
+  static const List<String> kokageRootSegments = ['Documents', 'KokageMap'];
+
+  /// 置き場所の中のアプリ用フォルダ（Global・練習用。点で始めて地図にもファイルアプリにも出さない）
+  static const String systemDirName = '.kokage';
+
   /// 共有ストレージ側の相対パス（`/storage/emulated/0/` 配下）
-  static const List<String> sharedRelativeSegments = [
-    'Documents',
-    'KokageMap',
-    'Global',
-  ];
+  static const List<String> sharedRelativeSegments = [...kokageRootSegments, systemDirName, 'Global'];
+
+  /// 2026-10-03 までの場所（`Documents/KokageMap/Global`）。初回に [sharedRelativeSegments] へ移す。
+  /// ⚠ 後方互換。オープンベータに移るときに、この移行と [hiddenLegacyDirs] をまとめて消す
+  static const List<String> previousSharedSegments = [...kokageRootSegments, 'Global'];
+
+
+  /// 置き場所（Android は `Documents/KokageMap`、それ以外はアプリの文書フォルダの下の `KokageMap`）
+  static Future<String> kokageRoot() async {
+    if (PlatformCapabilities.isAndroid) {
+      final root = await _sharedStorageRoot();
+      if (root != null) return p.joinAll([root, ...kokageRootSegments]);
+    }
+    final appDir = await getApplicationDocumentsDirectory();
+    return p.join(appDir.path, kokageRootSegments.last);
+  }
 
   /// 旧既定パス（アプリ内部領域）
   static Future<String> legacyPath() async {
@@ -127,8 +145,48 @@ class GlobalFolderLocator {
       return GlobalFolderResolution(legacyDir, fallbackReason: probeError);
     }
 
+    // 旧共有ストレージの場所（KokageMap/Global）から移す。移せなければ旧の場所をそのまま使う
+    final usable = await _migratePrevious(defaultDir);
+    if (usable != defaultDir) return GlobalFolderResolution(usable);
+
     final migrated = await _migrateLegacy(from: legacyDir, to: defaultDir);
     return GlobalFolderResolution(defaultDir, migratedFiles: migrated);
+  }
+
+  /// `Documents/KokageMap/Global` → `Documents/KokageMap/.kokage/Global`（同じ領域なので改名で移す）。
+  /// 使うパスを返す（移せなかったら旧の場所）。旧練習用フォルダは地図に出さないだけ（中身は触らない）。
+  /// ⚠ 後方互換。オープンベータに移るときに消す
+  static Future<String> _migratePrevious(String newDir) async {
+    final root = await _sharedStorageRoot();
+    if (root == null) return newDir;
+    final oldDir = Directory(p.joinAll([root, ...previousSharedSegments]));
+    _hideLegacyPractice(root);
+    if (!await oldDir.exists()) return newDir;
+    try {
+      final dst = Directory(newDir);
+      final dstEmpty = !await dst.exists() || (await dst.list().take(1).toList()).isEmpty;
+      if (!dstEmpty) {
+        AppLogger.debug('[GlobalFolder] 新しい場所に既に中身があるので旧 Global は移さない（地図には出さない）');
+        hiddenLegacyDirs.add(p.normalize(oldDir.path));
+        return newDir;
+      }
+      if (await dst.exists()) await dst.delete();
+      await dst.parent.create(recursive: true);
+      await oldDir.rename(dst.path);
+      AppLogger.debug('[GlobalFolder] Global を移した: ${oldDir.path} → $newDir');
+      return newDir;
+    } catch (e) {
+      AppLogger.debug('[GlobalFolder] Global を移せない（旧の場所を使う）: $e');
+      hiddenLegacyDirs.add(p.normalize(oldDir.path));
+      return oldDir.path;
+    }
+  }
+
+  /// 旧練習用フォルダ（`Documents/KokageMap/<練習>`）は地図に出さない。名前は言語で変わるので両方
+  static void _hideLegacyPractice(String root) {
+    for (final name in const ['練習', 'Practice']) {
+      hiddenLegacyDirs.add(p.normalize(p.joinAll([root, ...kokageRootSegments, name])));
+    }
   }
 
   /// ディレクトリを作って書き込みを試す。使えれば null、だめなら理由

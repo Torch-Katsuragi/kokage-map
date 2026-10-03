@@ -16,9 +16,11 @@
 // Root Maps: フォルダノードクラス
 // ファイルシステムのフォルダに対応するレイヤツリーノード
 
+import 'package:path/path.dart' as p;
 import 'package:root_maps/utils/app_logger.dart';
 
 import '../../core/fs/k_file_system.dart';
+import '../../core/hidden_dirs.dart';
 import '../../core/node_types.dart';
 import '../../services/google_drive/sync_base_store.dart';
 import '../../services/kmeta_service.dart';
@@ -195,6 +197,8 @@ class FolderNode extends LayerTreeNode {
     final directories = (entries ?? await fs.list(absPath))
         .where((e) => e.isDirectory)
         .where((e) => e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
+        // 点で始まるフォルダ（.kokage のアプリ用フォルダなど）と、移す前の旧 Global・旧練習用は見せない
+        .where((e) => !e.name.startsWith('.') && !hiddenLegacyDirs.contains(p.normalize(e.path)))
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 

@@ -29,6 +29,9 @@ String? checkContainmentRelation(String path1, String path2) {
     return 'Global folder and project folder point to the same directory.';
   }
   final sep = p.separator;
+  // プロジェクトの中の点で始まるフォルダ（`.kokage/Global`）は地図に出ないので重ならない（2026-10-03）
+  final inside = norm1.startsWith('$norm2$sep') ? norm1.substring(norm2.length + 1) : null;
+  if (inside != null && inside.startsWith('.')) return null;
   if (norm1.startsWith('$norm2$sep')) {
     return 'Global folder is inside the project folder.\n'
         'This may cause unexpected behavior.';

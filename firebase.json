@@ -2,7 +2,7 @@
   "hosting": {
     "site": "kokage-map",
     "public": "build/web",
-    "ignore": ["firebase.json", "**/.*"],
+    "ignore": ["firebase.json", "**/.last_build_id", "**/.DS_Store"],
     "headers": [
       {
         "source": "**",

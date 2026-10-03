@@ -40,11 +40,14 @@ import '../providers/project_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/changelog_service.dart';
 import '../services/global_folder_locator.dart';
+import '../services/google_drive/google_drive_service.dart';
 import '../services/party/party_invite.dart';
 import '../services/projects_home.dart';
+import '../services/shared_map_link.dart';
 import '../tutorial/practice_project.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/folder_utils.dart';
+import '../widgets/dialogs/drive_url_input_dialog.dart';
 import 'changelog_screen.dart';
 import 'home/project_launcher.dart';
 import 'map_page/map_page.dart';
@@ -83,6 +86,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     LaunchRequest.incoming.addListener(_onLaunchRequest);
+    LaunchRequest.sharedLinks.addListener(_onSharedLink);
     tutorialRequests.addListener(_onTutorialRequest);
     _initPermissions();
     _checkChangelogUnread();
@@ -97,8 +101,90 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       final other = last != null && !await ProjectsHome.isMyMap(last) ? last : null;
       if (!mounted) return;
       setState(() => _lastProject = other);
+      _onSharedLink(); // 権限待ちで止めていた共有リンク
     } catch (e) {
       AppLogger.debug('[HomeScreen] 最後に開いたフォルダを読めない: $e');
+    }
+  }
+
+  /// QR の共有リンクが届いた（App Links）。地図を開いていればホームに戻ってから取り込む
+  void _onSharedLink() {
+    final link = LaunchRequest.sharedLinks.value;
+    if (link == null || !_usesProjectsHome) return;
+    if (!_permissionsGranted || _isOpeningProject) {
+      // 権限が取れたら（_loadProjects の後で）もう一度見る
+      return;
+    }
+    LaunchRequest.sharedLinks.value = null;
+    final id = GoogleDriveService.extractFolderIdFromUrl(link);
+    if (id == null) return;
+    if (_navigatedToMapPage) Navigator.of(context).popUntil((r) => r.isFirst);
+    unawaited(_receiveFromDrive(id));
+  }
+
+  /// Drive フォルダを、いつもの地図の 共有/ に取り込んで開く（QR のリンク）
+  Future<void> _receiveFromDrive(String driveId) async {
+    final notifier = ref.read(notificationCenterProvider.notifier);
+    setState(() {
+      _isOpeningProject = true;
+      _openingProjectStatus = t.home.receivingShared;
+    });
+    try {
+      final drive = GoogleDriveService();
+      if (!drive.authState.isAuthenticated && !await drive.signIn()) {
+        notifier.add(title: t.home.receiveNeedsSignIn, level: NotificationLevel.warning);
+        return;
+      }
+      final info = await drive.getFolderInfo(driveId);
+      if (info == null) {
+        notifier.add(title: t.home.receiveFailed, level: NotificationLevel.error);
+        return;
+      }
+      final root = await receiveSharedMap(
+        driveId: driveId,
+        folderName: info.name ?? driveId,
+        driveUrl: 'https://drive.google.com/drive/folders/$driveId',
+        isReadOnly: !(info.capabilities?.canEdit ?? false),
+      );
+      if (!mounted) return;
+      setState(() => _isOpeningProject = false);
+      await _openProjectDir(root);
+      return;
+    } catch (e) {
+      AppLogger.debug('[HomeScreen] 共有の地図を取り込めない: $e');
+      notifier.add(title: t.home.receiveFailed, level: NotificationLevel.error);
+    } finally {
+      if (mounted && !_navigatedToMapPage) {
+        setState(() {
+          _isOpeningProject = false;
+          _openingProjectStatus = '';
+        });
+      }
+    }
+  }
+
+  /// ホームの「QR で受け取る」: アプリのカメラで読む（Drive の URL を貼っても読める）
+  Future<void> _receiveFromDialog() async {
+    final result = await DriveUrlInputDialog.show(context);
+    if (result == null || !mounted) return;
+    setState(() {
+      _isOpeningProject = true;
+      _openingProjectStatus = t.home.receivingShared;
+    });
+    try {
+      final root = await receiveSharedMap(
+        driveId: result.folderId,
+        folderName: result.folderName,
+        driveUrl: result.url,
+        isReadOnly: result.isReadOnly,
+      );
+      if (!mounted) return;
+      setState(() => _isOpeningProject = false);
+      await _openProjectDir(root);
+    } catch (e) {
+      AppLogger.debug('[HomeScreen] 共有の地図を取り込めない: $e');
+      ref.read(notificationCenterProvider.notifier).add(title: t.home.receiveFailed, level: NotificationLevel.error);
+      if (mounted) setState(() => _isOpeningProject = false);
     }
   }
 
@@ -299,6 +385,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   void dispose() {
     LaunchRequest.incoming.removeListener(_onLaunchRequest);
+    LaunchRequest.sharedLinks.removeListener(_onSharedLink);
     tutorialRequests.removeListener(_onTutorialRequest);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -711,6 +798,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           onOpenMyMap: _openMyMap,
           onOpenLast: _openProjectDir,
           onPickOther: _pickProjectDir,
+          onReceive: PlatformCapabilities.supportsDriveSync ? _receiveFromDialog : null,
         ),
         if (_isOpeningProject) ...[
           const SizedBox(height: 16),

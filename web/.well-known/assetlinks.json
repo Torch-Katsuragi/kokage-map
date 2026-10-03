@@ -1,0 +1,14 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.k_root.k_maps",
+      "sha256_cert_fingerprints": [
+        "71:09:25:12:B1:01:A5:4E:A9:29:37:44:2E:6D:78:EE:9F:7E:2C:7B:77:39:A7:88:19:D7:78:9D:4B:06:AC:DA",
+        "3D:BC:CB:3B:8C:A2:7C:57:2D:BC:1C:D7:76:58:9D:36:4C:00:F2:66:B8:E6:C7:5E:2F:2E:4D:A4:74:54:5A:8B",
+        "12:62:5D:1E:9F:55:14:D9:B9:18:62:CD:EF:01:C4:F1:93:68:BF:19:BF:00:C1:C9:37:17:D8:A2:A1:82:C0:F2"
+      ]
+    }
+  }
+]

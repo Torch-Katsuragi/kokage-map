@@ -73,6 +73,15 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- QR で共有する地図のリンク（App Links）。https://kokage-map.sleeptree.jp/.well-known/assetlinks.json で検証 -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="kokage-map.sleeptree.jp" android:path="/open"/>
+            </intent-filter>
+            <!-- リンクは自前で受ける（Flutter に渡すと Navigator が /open を知らずに落ちる） -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
         </activity>
 
         <!-- flutter_background_service のフォアグラウンドサービス定義 -->

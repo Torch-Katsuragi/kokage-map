@@ -27,9 +27,20 @@ class MainActivity : FlutterActivity() {
 
     private var launchChannel: MethodChannel? = null
 
-    // 起動中に `am start --es route "/map?..."` が来たとき（singleTop）。Dart 側の LaunchRequest に流す
+    /// 起動時に届いた共有リンク（App Links の `https://kokage-map.sleeptree.jp/open?drive=...`）。Dart が取りに来るまで持つ
+    private var pendingLink: String? = null
+
+    private fun sharedLinkOf(intent: Intent?): String? =
+        if (intent?.action == Intent.ACTION_VIEW) intent.dataString else null
+
+    // 起動中に `am start --es route "/map?..."` か共有リンクが来たとき（singleTop）。Dart 側に流す
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        sharedLinkOf(intent)?.let {
+            Log.d("MainActivity", "onNewIntent link=$it")
+            launchChannel?.invokeMethod("link", it)
+            return
+        }
         val route = intent.getStringExtra("route") ?: return
         Log.d("MainActivity", "onNewIntent route=$route")
         launchChannel?.invokeMethod("route", route)
@@ -37,6 +48,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingLink = sharedLinkOf(intent)
         
         // Android 8.0以降で通知チャンネルを作成
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -57,7 +69,16 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        launchChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LAUNCH_CHANNEL)
+        launchChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LAUNCH_CHANNEL).also { ch ->
+            ch.setMethodCallHandler { call, result ->
+                if (call.method == "initialLink") {
+                    result.success(pendingLink)
+                    pendingLink = null
+                } else {
+                    result.notImplemented()
+                }
+            }
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->

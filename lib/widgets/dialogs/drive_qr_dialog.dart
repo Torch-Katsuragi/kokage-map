@@ -28,7 +28,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../core/shared_link.dart';
 import '../../i18n/strings.g.dart';
+import '../../services/google_drive/google_drive_service.dart';
 
 /// [driveUrl] のQRコードを出すダイアログ。
 ///
@@ -57,6 +59,10 @@ class DriveQrDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // QR はこかげマップの共有リンクにする（読むとアプリが開いて取り込む。アプリが無ければ案内のページ）。
+    // Drive の URL から ID が取れなければ従来どおり Drive の URL のまま
+    final id = GoogleDriveService.extractFolderIdFromUrl(driveUrl);
+    final link = id == null ? driveUrl : sharedMapLink(id);
     final maxSide = MediaQuery.of(context).size.shortestSide;
     // ダイアログの余白ぶんを引いて、それでも大きすぎない値に収める
     final qrSize = (maxSide - 120).clamp(160.0, 320.0);
@@ -78,7 +84,7 @@ class DriveQrDialog extends StatelessWidget {
               color: Colors.white,
               padding: const EdgeInsets.all(12),
               child: QrImageView(
-                data: driveUrl,
+                data: link,
                 size: qrSize,
                 backgroundColor: Colors.white,
                 // 印刷して現場に持っていく使い方を想定し、誤り訂正は高めに
@@ -93,7 +99,7 @@ class DriveQrDialog extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             SelectableText(
-              driveUrl,
+              link,
               style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
               textAlign: TextAlign.center,
             ),
@@ -103,7 +109,7 @@ class DriveQrDialog extends StatelessWidget {
       actions: [
         TextButton.icon(
           onPressed: () async {
-            await Clipboard.setData(ClipboardData(text: driveUrl));
+            await Clipboard.setData(ClipboardData(text: link));
             if (!context.mounted) return;
             Navigator.pop(context);
           },

@@ -24,7 +24,10 @@ String? initialRoute() {
   return hash.isEmpty ? null : hash;
 }
 
-void listenRoutes(void Function(String route) onRoute) {
+/// web は共有リンクを受けない（アプリの無い人向けのページが受ける）
+Future<String?> initialLink() async => null;
+
+void listenRoutes(void Function(String route) onRoute, {void Function(String link)? onLink}) {
   web.window.addEventListener(
     'hashchange',
     ((web.Event _) => onRoute(web.window.location.hash)).toJS,

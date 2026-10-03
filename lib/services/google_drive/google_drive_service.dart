@@ -28,6 +28,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/fs/k_file_system.dart';
 import '../../core/platform_capabilities.dart';
+import '../../core/shared_link.dart';
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
 import 'drive_auth_state.dart';
@@ -978,7 +979,11 @@ class GoogleDriveService {
       AppLogger.debug('[GoogleDriveService] URL解析: $url');
       
       final uri = Uri.parse(url);
-      
+
+      // こかげマップの共有リンク（`https://kokage-map.sleeptree.jp/open?drive=<ID>`。2026-10-03 からの QR）
+      final shared = driveIdFromSharedLink(url);
+      if (shared != null) return shared;
+
       // drive.google.comドメインか確認
       if (!uri.host.contains('google.com')) {
         AppLogger.debug('[GoogleDriveService] Google Driveドメインではない: ${uri.host}');

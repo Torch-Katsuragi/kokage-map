@@ -116,6 +116,9 @@ class LaunchRequest {
   /// 起動中に届いた要求（Android の onNewIntent、web の hashchange）
   static final ValueNotifier<LaunchRequest?> incoming = ValueNotifier(null);
 
+  /// QR の共有リンク（App Links。起動時のものも起動中のものも）。ホームが拾って取り込み、null に戻す
+  static final ValueNotifier<String?> sharedLinks = ValueNotifier(null);
+
   /// 起動時に 1 回呼ぶ。起動ルートを読み、以後の到着を [incoming] に流す
   static void init() {
     if (_initialized) return;
@@ -128,6 +131,14 @@ class LaunchRequest {
       if (req == null || req.isEmpty) return;
       AppLogger.debug('[Launch] 到着 $req');
       incoming.value = req;
+    }, onLink: (link) {
+      AppLogger.debug('[Launch] 共有リンク $link');
+      sharedLinks.value = link;
+    });
+    impl.initialLink().then((link) {
+      if (link == null) return;
+      AppLogger.debug('[Launch] 起動時の共有リンク $link');
+      sharedLinks.value = link;
     });
   }
 

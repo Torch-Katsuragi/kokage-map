@@ -60,7 +60,10 @@
     "webUnsupportedBrowserTitle": "This browser can't open folders",
     "webUnsupportedBrowserDesc": "Open the app in Google Chrome or Microsoft Edge to use project folders. Other browsers can only display the base map.",
     "reopenLastFolder": "Reopen last folder",
-    "reopenLastFolderFailed": "Couldn't reopen the last folder. Please pick it again."
+    "reopenLastFolderFailed": "Couldn't reopen the last folder. Please pick it again.",
+    "receivingShared": "Getting the shared map",
+    "receiveNeedsSignIn": "Sign in to Google to receive the shared map",
+    "receiveFailed": "Couldn't open the shared map. Check its sharing settings"
   },
   "permissions": {
     "storageRequired": "Storage permission is required",
@@ -1648,7 +1651,7 @@
   "driveQr": {
     "menu": "Share via QR code",
     "title": "Hand over this folder",
-    "description": "On the receiving device, open Kokage Map and use \"Add folder\" → \"Scan QR code\".",
+    "description": "Scan it with a phone camera to open Kokage Map and add it to \"Open my map\". \"Scan a QR\" in the app works too. Phones without the app get install instructions.",
     "copyUrl": "Copy URL",
     "copied": "URL copied",
     "noUrl": "This folder has no Drive URL"

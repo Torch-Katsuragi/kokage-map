@@ -23,11 +23,19 @@ const _channel = MethodChannel('com.k_root.k_maps/launch');
 /// 起動時のルート。native は defaultRouteName に任せる（呼び出し側がそちらを読む）
 String? initialRoute() => null;
 
-void listenRoutes(void Function(String route) onRoute) {
+void listenRoutes(void Function(String route) onRoute, {void Function(String link)? onLink}) {
   _channel.setMethodCallHandler((call) async {
-    if (call.method == 'route') {
-      final route = call.arguments;
-      if (route is String) onRoute(route);
-    }
+    final arg = call.arguments;
+    if (call.method == 'route' && arg is String) onRoute(arg);
+    if (call.method == 'link' && arg is String) onLink?.call(arg);
   });
+}
+
+/// 起動時に届いた共有リンク（App Links）。無ければ null
+Future<String?> initialLink() async {
+  try {
+    return await _channel.invokeMethod<String>('initialLink');
+  } catch (_) {
+    return null;
+  }
 }

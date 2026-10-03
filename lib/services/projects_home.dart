@@ -21,7 +21,6 @@
 //   KokageMap/
 //   ├─ KokageMap.qgs        フォルダの設定（PC の QGIS でもこれで開ける）
 //   ├─ マイ地図.gpkg         書き込み先。点・線・面のレイヤを最初から作っておく
-//   ├─ 写真/                取り込んだ写真
 //   ├─ 共有/                QR で受け取った地図（Drive と同期）
 //   └─ .kokage/             アプリ用（Global・練習用。地図に出さない）
 //
@@ -41,7 +40,6 @@ class ProjectsHome {
 
   // 名前は端末の言語に依らず固定（Drive で共有しても、どの端末でも同じ形になるように）
   static const myMapName = 'マイ地図.gpkg';
-  static const photosDirName = '写真';
   static const sharedDirName = '共有';
   static const myMapLayers = {'点': GeometryType.point, '線': GeometryType.linestring, '面': GeometryType.polygon};
 
@@ -51,10 +49,9 @@ class ProjectsHome {
   static Future<String> myMap() async {
     final root = await GlobalFolderLocator.kokageRoot();
     if (!await fs.exists(root)) await fs.createDirectory(root);
-    for (final name in [photosDirName, sharedDirName]) {
-      final dir = p.join(root, name);
-      if (!await fs.exists(dir)) await fs.createDirectory(dir);
-    }
+    // 写真は決めた入れ先を作らない（取り込みはレイヤ一覧で開いている場所に入る。ほかのフォルダと同じ決まり）
+    final shared = p.join(root, sharedDirName);
+    if (!await fs.exists(shared)) await fs.createDirectory(shared);
     final gpkgPath = p.join(root, myMapName);
     if (!await fs.exists(gpkgPath)) {
       final gpkg = GeoPackageFile([myMapName], absolutePath: gpkgPath);
@@ -74,7 +71,7 @@ class ProjectsHome {
     return root;
   }
 
-  /// いつもの地図か（受け取った地図の入れ先・写真の入れ先を決めるのに使う）
+  /// いつもの地図か（受け取った地図の入れ先を決めるのに使う）
   static Future<bool> isMyMap(String dir) async =>
       p.equals(p.normalize(dir), p.normalize(await GlobalFolderLocator.kokageRoot()));
 

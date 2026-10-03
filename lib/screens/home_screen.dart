@@ -41,10 +41,13 @@ import '../providers/ui_state_providers.dart';
 import '../services/changelog_service.dart';
 import '../services/global_folder_locator.dart';
 import '../services/party/party_invite.dart';
+import '../services/projects_home.dart';
 import '../tutorial/practice_project.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/folder_utils.dart';
+import '../widgets/layer_drawer/common_dialogs.dart' show RenameDialog;
 import 'changelog_screen.dart';
+import 'home/project_launcher.dart';
 import 'map_page/map_page.dart';
 import 'onboarding_screen.dart';
 import 'settings_screen.dart' show kGlobalFolderCustomPathKey;
@@ -72,6 +75,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   bool _hasUnreadChangelog = false; // チェンジログ未読フラグ
   bool _autoOpenAttempted = false; // --dart-define=PROJECT_DIR の自動オープンを試したか
 
+  /// 置き場所の一覧と最後に開いたプロジェクト（native だけ。web は従来のフォルダ選択）
+  List<ProjectEntry> _projects = const [];
+  String? _lastProject;
+  bool get _usesProjectsHome => !kIsWeb && PlatformCapabilities.canOpenLocalProject;
+
   @override
   void initState() {
     super.initState();
@@ -81,6 +89,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _initPermissions();
     _checkChangelogUnread();
     _loadLastFolderName();
+  }
+
+  /// 置き場所の一覧を読み直す（権限が取れてから・地図から戻ったとき）
+  Future<void> _loadProjects() async {
+    if (!_usesProjectsHome || !_permissionsGranted) return;
+    try {
+      final list = await ProjectsHome.list();
+      final last = await ProjectsHome.last();
+      if (!mounted) return;
+      setState(() {
+        _projects = list;
+        _lastProject = last;
+      });
+    } catch (e) {
+      AppLogger.debug('[HomeScreen] 置き場所を読めない: $e');
+    }
+  }
+
+  /// 置き場所に新しいプロジェクトを作って開く
+  Future<void> _createProject() async {
+    final name = await RenameDialog.show(
+      context,
+      title: t.home.newProjectTitle,
+      currentName: '',
+      label: t.home.newProjectName,
+      hint: t.home.newProjectHint,
+      submitLabel: t.home.newProjectCreate,
+    );
+    if (name == null || name.trim().isEmpty || !mounted) return;
+    final dir = await ProjectsHome.create(name);
+    await _openProjectDir(dir);
   }
 
   /// 前回のフォルダ名を読む（ボタンを出すかの判断だけ。権限は要求しない）
@@ -296,6 +335,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         setState(() {
           _permissionsGranted = true;
         });
+        unawaited(_loadProjects());
       }
       return;
     }
@@ -412,6 +452,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     setState(() {
       _permissionsGranted = true;
     });
+    unawaited(_loadProjects());
   }
 
   /// 権限拒否ダイアログを表示
@@ -544,6 +585,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     AppLogger.debug('[HomeScreen] フォルダ選択完了、初期化を開始');
     ref.read(projectRootDirProvider.notifier).set(dir);
     AppLogger.debug('[HomeScreen] projectRootDirProvider 設定完了');
+    if (_usesProjectsHome) unawaited(ProjectsHome.remember(dir));
     final rootNode = await FolderNode.createRootNode(dir);
     ref.read(folderTreeProvider.notifier).set(rootNode);
     AppLogger.debug('[HomeScreen] rootNode 設定完了 (${rootNode.runtimeType})');
@@ -570,6 +612,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           _isOpeningProject = false;
           _openingProjectStatus = '';
         });
+        unawaited(_loadProjects());
         if (_tutorialPending) {
           _tutorialPending = false;
           unawaited(_startTutorial());
@@ -648,12 +691,62 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     });
   }
 
+  /// 置き場所のホーム（native）。権限が無い間は案内とやり直しだけ
+  Widget _buildLauncher() {
+    if (!_permissionsGranted) {
+      return Column(
+        children: [
+          const Icon(Icons.warning_amber, color: Colors.orange, size: 40),
+          const SizedBox(height: 8),
+          Text(t.home.permissionRequired, textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: _checkPermissions,
+            icon: const Icon(Icons.refresh),
+            label: Text(t.home.recheckPermission),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ProjectLauncher(
+          last: _lastProject,
+          projects: _projects,
+          enabled: !_isOpeningProject,
+          onOpen: _openProjectDir,
+          onCreate: _createProject,
+          onPickOther: _pickProjectDir,
+        ),
+        if (_isOpeningProject) ...[
+          const SizedBox(height: 16),
+          Text(_openingProjectStatus, style: const TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          const LinearProgressIndicator(color: kKokageGreen),
+        ],
+        if (_canTutorial && !_isOpeningProject) ...[
+          const SizedBox(height: 12),
+          Align(
+            child: TextButton.icon(
+              onPressed: _startTutorial,
+              icon: const Icon(Icons.school_outlined),
+              label: Text(t.tutorial.homeButton),
+              style: TextButton.styleFrom(foregroundColor: kKokageGreen),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(t.common.appName),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        // 名前は下の帯に出すので、ここは道具だけ
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         actions: [
           // ユーザーガイドボタン
           IconButton(
@@ -683,28 +776,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   minHeight: math.max(0, constraints.maxHeight - 40),
                 ),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  // 置き場所のホームは上から並べる（一覧が伸びる）
+                  mainAxisAlignment: _usesProjectsHome ? MainAxisAlignment.start : MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.map, size: 100, color: Colors.blue),
-                    const SizedBox(height: 32),
-                    Text(
-                      t.common.appName,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      t.home.subtitle,
-                      style: const TextStyle(fontSize: 16, color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
+                    const HomeHeader(),
                     // 更新通知バナー（未読時のみ表示）
                     AnimatedSize(
                       duration: const Duration(milliseconds: 300),
@@ -717,9 +794,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               )
                               : const SizedBox.shrink(),
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 20),
                     if (!PlatformCapabilities.canOpenLocalProject)
                       _buildWebPreviewCard()
+                    else if (_usesProjectsHome)
+                      _buildLauncher()
                     else
                       Card(
                         elevation: 4,
@@ -830,7 +909,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           ),
                         ),
                       ),
-                    if (_projectDir != null) ...[
+                    if (_projectDir != null && !_usesProjectsHome) ...[
                       const SizedBox(height: 16),
                       // 地図から戻ってきたときの導線。タップでピッカーを通さず同じフォルダを開き直す
                       Card(
@@ -930,8 +1009,8 @@ class _UpdateBannerState extends State<_UpdateBanner>
       child: ScaleTransition(
         scale: _scaleAnimation,
         child: Card(
-          elevation: 3,
-          color: Theme.of(context).colorScheme.primaryContainer,
+          elevation: 0,
+          color: const Color(0xFFFFF4D6), // ホームの緑に合う淡い黄
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -944,23 +1023,23 @@ class _UpdateBannerState extends State<_UpdateBanner>
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.auto_awesome,
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    color: Color(0xFF6B4E00),
                     size: 20,
                   ),
                   const SizedBox(width: 8),
                   Text(
                     t.changelog.updated,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      color: Color(0xFF6B4E00),
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Icon(
+                  const Icon(
                     Icons.chevron_right,
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    color: Color(0xFF6B4E00),
                     size: 18,
                   ),
                 ],

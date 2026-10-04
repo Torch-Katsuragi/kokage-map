@@ -462,8 +462,9 @@ flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world
 1. `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）。いまは `TerrainMapLayer` が
    `FeatureGeoJsonCache` と `MapStyleGroup` を直接読む形で seam ② を先取りしている
 2. ~~3D 中の機能追い付き~~（2026-10-04 時点で済み。上の「未対応」の注記）
-4. 等高線の描画コスト: 間引いた格子から引いても 1.7 万本で raster 30〜40ms（Impeller の細線）。
-   ジェスチャ中はさらに間引くか、等高線だけ間隔を広げる
+4. ~~等高線の描画コスト: 間引いた格子から引いても 1.7 万本で raster 30〜40ms（Impeller の細線）。
+   ジェスチャ中はさらに間引くか、等高線だけ間隔を広げる~~（2026-09-13 に等高線をラスタタイルにしたので線は描かない。
+   `contours.dart` は `contour_tiles.dart` のタイル生成からだけ使う。下の「等高線はラスタタイル」）
 5. DEM の dir 同梱・焼き込み CLI・タイルキャッシュからのテクスチャ合成
 6. `--wasm` ビルド: 動くが採らない（2026-09-11 計測: 純 Dart の LOD 回転が 43 → 60 fps になる一方、静止の raster が 6 → 16ms（skwasm）。WebGL2 で描く今は要らず、多スレッドには hosting の COOP/COEP も要る）
 

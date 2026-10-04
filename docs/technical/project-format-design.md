@@ -595,6 +595,7 @@ QGIS では埋め込んだ子が編集できず、QGIS の構造と対立して�
 | プロジェクトを gpkg の中に | 保存・読込とも可（`qgis_projects` テーブル） |
 | 未知の `<properties>` | 残る。ただし 4.x の書き方（`<properties name="kokage">`）に書き直される → 両方読むよう直した |
 | 設定（`kokage/meta`）の往復 | 2026-10-04 に再確認。アプリが書いた `.qgs` を 4.2.2 で開いて保存し直しても Drive ID・View・並び・可視性が読め、書き足せる。3.40.7 はタブレット PC の導入が壊れていて（`bin/setup.bat` だけ）未確認 |
+| web の移行（`.kmeta.json` のある古い dir） | 2026-10-04 に OPFS（`tool/web_opfs.py`）で確認。開くと `<dir名>.qgs` の `kokage/meta` に移り、`.kmeta.json` は `.kmeta.json.migrated` に退避される |
 
 ### 検討した案と結論
 

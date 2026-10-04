@@ -1,5 +1,11 @@
 # Changelog
 
+## Next release
+
+### Also changed
+
+- The user guide and the tutorial's "Your own data" chapter now describe "Open my map" and receiving maps by QR
+
 ## v0.11.0 — 2026/10/04
 
 ### Home

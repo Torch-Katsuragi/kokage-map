@@ -38,6 +38,7 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         sharedLinkOf(intent)?.let {
             Log.d("MainActivity", "onNewIntent link=$it")
+            pendingLink = null // 起動時の分と二重にしない
             launchChannel?.invokeMethod("link", it)
             return
         }

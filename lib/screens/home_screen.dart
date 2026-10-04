@@ -107,6 +107,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
   }
 
+  String? _lastSharedLink;
+  DateTime _lastSharedLinkAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   /// QR の共有リンクが届いた（App Links）。地図を開いていればホームに戻ってから取り込む
   void _onSharedLink() {
     final link = LaunchRequest.sharedLinks.value;
@@ -116,6 +119,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       return;
     }
     LaunchRequest.sharedLinks.value = null;
+    // 起動中に届いたリンクと起動時のリンクが同じものを二度運んでくることがある
+    final now = DateTime.now();
+    if (link == _lastSharedLink && now.difference(_lastSharedLinkAt).inSeconds < 15) return;
+    _lastSharedLink = link;
+    _lastSharedLinkAt = now;
     final id = GoogleDriveService.extractFolderIdFromUrl(link);
     if (id == null) return;
     if (_navigatedToMapPage) Navigator.of(context).popUntil((r) => r.isFirst);
@@ -131,6 +139,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     });
     try {
       final drive = GoogleDriveService();
+      // 起動直後は無音の復元が終わっていないことがある。先に無音で試し、だめなときだけサインインを出す
+      if (!drive.authState.isAuthenticated) await drive.restoreSessionSilently();
       if (!drive.authState.isAuthenticated && !await drive.signIn()) {
         notifier.add(title: t.home.receiveNeedsSignIn, level: NotificationLevel.warning);
         return;

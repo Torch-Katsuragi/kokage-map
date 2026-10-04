@@ -1,6 +1,20 @@
 # Changelog
 
-## Next release
+## v0.11.0 — 2026/10/04
+
+### Home
+
+- "Open my map" on Home opens your everyday map (Documents/KokageMap) directly. No folder needs to be chosen
+- Your everyday map comes with "マイ地図" (points, lines, areas) to write to. Maps received by QR go into "共有"
+- Other folders still open with "Open another folder". "Continue" appears when you last opened one of those
+- Folders the app uses itself (Global, practice) moved into a hidden folder (.kokage) inside your everyday map, automatically on first launch
+- Home has a new look
+
+### Receive maps by QR
+
+- Scan a "Share by QR" code with a phone camera: Kokage Map opens, adds the map and opens it at its location
+- Phones and PCs without Kokage Map get install instructions
+- "Scan a QR" on Home works too, including older QR codes (Drive URLs)
 
 ### Tutorial
 

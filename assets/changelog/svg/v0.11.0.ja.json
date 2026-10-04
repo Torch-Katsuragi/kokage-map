@@ -1,0 +1,25 @@
+{
+ "title": "「地図を開く」で、いつもの地図",
+ "chunks": [
+  {
+   "file": "v0.11.0.ja.00.svg",
+   "width": 252.0,
+   "height": 150.29
+  },
+  {
+   "file": "v0.11.0.ja.01.svg",
+   "width": 252.0,
+   "height": 194.81
+  },
+  {
+   "file": "v0.11.0.ja.02.svg",
+   "width": 252.0,
+   "height": 118.65
+  },
+  {
+   "file": "v0.11.0.ja.03.svg",
+   "width": 252.0,
+   "height": 128.17
+  }
+ ]
+}

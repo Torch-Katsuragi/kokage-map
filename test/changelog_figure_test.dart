@@ -61,15 +61,25 @@ void main() {
     expect(find.byType(SvgPicture), findsWidgets);
     // 図の版の本文は画面に文字として出さないが、読み上げでは読める
     // いちばん新しい版（開いている）の 1 行。版を足したら差し替える
-    const line = 'web 版でもチュートリアルを始められるようにしました';
+    const line = 'ホームの「地図を開く」で、いつもの地図';
     expect(find.textContaining(line, findRichText: true), findsNothing);
     expect(find.bySemanticsLabel(RegExp(line)), findsOneWidget);
     // 版ごとに畳む。開いているのはいちばん新しい版だけ
     final oldest = find.text('v0.3.0 — 2026/03/09');
     await tester.scrollUntilVisible(oldest, 600, scrollable: find.byType(Scrollable).first);
     final before = find.byType(SvgPicture).evaluate().length;
-    // 古い版の見出しを押すと開き、図の切れが続く
+    // 古い版の見出しを押すと開き、図の切れが続く（見出しが画面の端に半分だけ出ていると押し外す）
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));
+    await tester.pumpAndSettle();
     await tester.tap(oldest);
+    await tester.pumpAndSettle();
+    // 図の一覧（json）と切れの読み込みを待つ（版が増えるほど読む量が増える）
+    for (var i = 0; i < 5 && find.byType(SvgPicture).evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+      await tester.pumpAndSettle();
+    }
+    // 開いた版の図は見出しの下に続く（画面の外なら組まれないので、少し送ってから数える）
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -500));
     await tester.pumpAndSettle();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pumpAndSettle();

@@ -12,3 +12,9 @@
     box(width: 100%, stroke: 0.6pt + line-c, radius: 4pt, inset: (x: 6pt, y: 4pt), text(size: 7pt)[Scan a QR])
   }),
 )
+
+#fixes(
+  "Also",
+  [Jumping with the layer panel open lands outside the panel],
+  [Removed an unused old map engine (less traffic at startup)],
+)

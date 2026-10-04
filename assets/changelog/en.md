@@ -5,6 +5,8 @@
 ### Also changed
 
 - The user guide and the tutorial's "Your own data" chapter now describe "Open my map" and receiving maps by QR
+- Jumping to your location with the layer panel open lands where the panel doesn't cover it
+- Removed an unused old map engine; the app no longer downloads map font data at startup
 
 ## v0.11.0 — 2026/10/04
 

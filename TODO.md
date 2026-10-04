@@ -5,8 +5,6 @@
 
 ## 次にやる（実装）
 
-- [ ] **QGIS で保存しても `<properties><kokage><meta>` が残るかの実確認**（QGIS は未知の properties を残す前提で作った）。
-      タブレット PC に QGIS 4.2.2 / 3.40.7、メイン PC に 4.2.0 がある。`python-qgis` で開いて保存し、設定の JSON が残るかを見る
 - [ ] web で実フォルダ（`.kmeta.json` のある古い dir）を開いての移行確認（フォルダ選択は OS ダイアログなので手で）
 
 ## リリース・Play

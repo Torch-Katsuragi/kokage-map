@@ -77,11 +77,21 @@ PCではGoogle Drive Desktopを使用してフォルダを同期し、Root Maps�
 
 ### QRコード共有
 
-共有URLをQRコード化して、スマホで簡単にスキャンして追加可能。
+Drive連携フォルダの ⋮ →「QRコードで渡す」で QR を出す（2026-10-03〜）。中身は
+`https://kokage-map.sleeptree.jp/open?drive=<Drive フォルダ ID>`。
 
-1. オーナーがDriveで共有設定 → URLを取得
-2. URLをQRコード化（任意のQRコード生成サービス使用）
-3. 他ユーザーがRoot MapsでQRスキャン → 自動でクローン
+1. 受け取る側がスマホのカメラで読む。アプリが入っていれば App Links でアプリが開く
+   （`web/.well-known/assetlinks.json` で検証。Play 署名・アップロード鍵・開発用の debug 鍵）
+2. ホームが Google の無音復元 → だめならサインイン → フォルダ情報 → いつもの地図の `共有/<フォルダ名>` に clone して開く。
+   同じ Drive フォルダが取り込み済みなら開くだけ。開いた地図は取り込んだ地図の範囲へ寄る
+3. アプリが無いスマホ・PC では `/open/` のページがテスター募集ページ（`/beta/`）へ移る。**製品版では Play のページへ替える**
+4. ホームの「QR で受け取る」（アプリのカメラ・URL 貼り付け）でも同じ。前からの QR（Drive の URL そのもの）も読める
+
+実装: `lib/core/shared_link.dart`（リンクの形）・`lib/services/shared_map_link.dart`（取り込み）・
+`MainActivity`（起動時は `initialLink` で渡す、起動中は `link`）。`flutter_deeplinking_enabled=false` で Navigator には渡さない。
+
+> [!WARNING] オープンベータの前に
+> `assetlinks.json` の debug 鍵を外し、`web/open/index.html` の行き先を Play に替える。
 
 ### コスト
 

@@ -37,7 +37,6 @@
 
 ## 3D・描画
 
-- [ ] 焼いた DEM タイルの dir 同梱と焼き込み CLI（圏外で使えるように。配布先は GitHub Releases に決定済み）
 - [ ] `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[docs/technical/scene-model]]）
 - [ ] メモリ削減（profile 実測で 3D の増分 +200〜250MB。画像 LRU・`raw` の畳み込み・親テクスチャ 256²）
 - [ ] web の fps 計測（Chrome を前面に）・GPU の無い web の純 Dart 経路の透視（眺めモード）
@@ -59,6 +58,8 @@
 - [ ] 既存 MapTool（PenTool / SelectTool / GpsTool）の ChangeNotifier 化の統一
 - [ ] Flutter の警告「KGP を当てるプラグイン（desktop_drop / firebase_* / location）は将来ビルドできなくなる」→ プラグイン側の更新を待つ。
       `android.builtInKotlin=true` にできたら root の橋渡しは外す
+- [ ] 県点群の DTM（1 m 級）を焼いてプロジェクトの dir に入れる（アプリには入れない。配布先は GitHub Releases に決定済み）。
+      地理院の DEM1A 配信とタイルキャッシュで足りているので、細かい地形が要る現場が出るまで保留
 - [ ] `proj4dart` 3（geobase 1.5.0 が ^2.0.0 を求めるので待ち）
 - [ ] 更新履歴の v0.6.0 以前の節が開発ログ調のまま
 - [ ] ~~`layer_styles`~~（`.qgs` にレンダラを書くので冗長。gpkg 単体で渡す場合の保険のみ）

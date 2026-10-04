@@ -22,14 +22,11 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../../../core/constants.dart';
-import '../../../core/r_map_controller.dart';
 import '../../../utils/edge_indicator_geometry.dart';
 
 class OffscreenLocationIndicator extends StatelessWidget {
   /// 指し示す地点。null なら何も描かない
   final LatLng? location;
-
-  final RMapController mapController;
 
   /// カメラが動いたことを知らせる Listenable（毎フレーム再計算するため）
   final Listenable repaint;
@@ -43,13 +40,12 @@ class OffscreenLocationIndicator extends StatelessWidget {
   /// アクセシビリティ用ラベル
   final String? semanticsLabel;
 
-  /// 3D 中の投影（地形の高さで持ち上げた画面座標）。null を返したら MapLibre の投影
+  /// 3D 中の投影（地形の高さで持ち上げた画面座標）。null を返したら（3D が組み上がる前）何も描かない
   final Offset? Function(LatLng)? project;
 
   const OffscreenLocationIndicator({
     super.key,
     required this.location,
-    required this.mapController,
     required this.repaint,
     required this.onTap,
     this.obscured = EdgeInsets.zero,
@@ -115,16 +111,8 @@ class OffscreenLocationIndicator extends StatelessWidget {
   EdgeIndicatorPlacement? _placement(Size viewport) {
     final loc = location;
     if (loc == null) return null;
-    Offset? screen = project?.call(loc);
-    if (screen == null) {
-      // raw が無い間（スタイル読込前・3D 中）は toScreenLocation が使えない
-      if (mapController.raw == null) return null;
-      try {
-        screen = mapController.toScreenLocation(loc);
-      } on Object {
-        return null;
-      }
-    }
+    final screen = project?.call(loc);
+    if (screen == null) return null;
 
     return computeEdgeIndicator(
       viewport,

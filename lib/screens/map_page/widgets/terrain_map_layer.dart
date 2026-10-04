@@ -844,7 +844,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     widget.sceneRevision.removeListener(_onSceneRevision);
     TerrainAppearance.revision.removeListener(_onAppearanceChanged);
     widget.onProjectionChanged(null);
-    // 真上に戻して MapLibre へ書き戻す
+    // 最後のカメラを覚えさせる（次に組み立てるときの初期値）
     widget.mapState.mapController.moveAndRotate(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);
     _world
       ..removeListener(_onWorldChanged)
@@ -1708,7 +1708,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   void _notifyCamera() {
     widget.mapBearingNotifier.value = _camera.bearing * 180 / math.pi;
     widget.cameraTickNotifier.value++;
-    // 3D 中は MapLibre が無いので、戻すときの初期値として覚えさせる
+    // 組み立て直すときの初期値・ホルダー経由の camera として覚えさせる
     widget.mapState.mapController.rememberCamera(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);
   }
 

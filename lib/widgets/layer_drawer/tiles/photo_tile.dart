@@ -167,8 +167,8 @@ class PhotoTile extends ConsumerWidget {
     double centerLng = 139.767;
     double centerLat = 35.681;
     final mapController = ref.read(mapControllerHolderProvider);
-    if (mapController?.raw != null) {
-      final cameraCenter = mapController!.camera.center;
+    final cameraCenter = mapController?.lastCenter;
+    if (cameraCenter != null) {
       centerLng = cameraCenter.longitude;
       centerLat = cameraCenter.latitude;
     } else if (node.hasLocation) {

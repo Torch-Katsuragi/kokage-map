@@ -96,7 +96,7 @@ abstract class SceneSink {
 | 箇所 | 内容 | 対処 |
 |---|---|---|
 | `IMapState.activeOverlaySourceIds` | MapLibre のソース ID 概念が漏れている唯一の箇所 | 「オーバーレイ画像の集合」に抽象化 |
-| `RMapWidget`（`lib/widgets/map/r_map_widget.dart`） | 地図ウィジェット生成の薄いラッパ。`onMapCreated / onStyleLoaded / onEvent / layers / children` | **レンダラ切替の物理的な差し込み口**。`MapSurface` にして中で MapLibre / 3D を選ぶ |
+| `RMapWidget`（`lib/widgets/map/r_map_widget.dart`） | 地図ウィジェット生成の薄いラッパ。`onMapCreated / onStyleLoaded / onEvent / layers / children` | 2026-10-04 に削除（MapLibre ごと撤去。地図面は `TerrainMapLayer` だけ） |
 | `map_page.dart` の `ml.PolygonLayer / ml.PolylineLayer / ml.WidgetLayer` | 描画プレビュー・投げ縄・パーティ軌跡・DeviceTool のオーバーレイ・現在位置とパーティのマーカー | シーンの一時プリミティブ（線・面・マーカー）として `SceneSink` に流す |
 | `DeviceTool.buildOverlayLayers / buildOverlayMarkers`（`lib/devices/base/device_tool.dart`） | `ml.Layer` / `ml.Marker` を返す唯一のプラグイン境界 | 同上のプリミティブを返す形に |
 | `map_basemap_mixin.dart` | `addSource / addLayer / removeLayer` | ③ の実装側に移す |

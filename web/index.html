@@ -32,14 +32,6 @@
   <title>こかげマップ</title>
   <link rel="manifest" href="manifest.json">
 
-  <!--
-    maplibre_web は maplibre-gl-js をページに載っている前提で叩く（パッケージ側が
-    script を注入することはない）。これが無いと地図だけが無言で出ない。
-    バージョンは maplibre_webview が WebView に埋めているものと合わせている。
-  -->
-  <script src="https://unpkg.com/maplibre-gl@^5.15.0/dist/maplibre-gl.js"></script>
-  <link href="https://unpkg.com/maplibre-gl@^5.15.0/dist/maplibre-gl.css" rel="stylesheet"/>
-  <script src="https://unpkg.com/pmtiles@^4.0/dist/pmtiles.js"></script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

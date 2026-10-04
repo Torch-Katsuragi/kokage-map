@@ -554,7 +554,7 @@ web は新しい世代の GPU 転送が非同期で、終わるまで白だっ�
   旧 `basemap_weights` は `BaseMapLayer.fromLegacyWeights` で読み替え（α をそのまま不透明度にすると同じ絵）
 - 合成 `RasterTileComposer.composeLayers(range, List<TextureLayer>)`: 灰色の下地 → `saveLayer` の透明な板に下から `drawImage(paint..color.alpha = opacity ..blendMode = blend)` → `restore`。
   一番下の層の合成モードは透明な板に対して効かない（お絵描きソフトと同じ）。設定画面でも一番下は選べない
-- web 2D（feature_editor の MapLibre）は `raster-opacity` だけ（ラスタに合成モードは無い）。生成プロバイダは TileServer 経由でしか出せない
+- ~~web 2D（feature_editor の MapLibre）は `raster-opacity` だけ（ラスタに合成モードは無い）。生成プロバイダは TileServer 経由でしか出せない~~（2026-10-04 に MapLibre・TileServer ごと撤去）
 - 出典は地図面から消し、設定「地図・タイル」の「出典」節（いま見えているレイヤ + 標高）に。**OSM が見えているときだけ地図面にも出す**
   （OSM の attribution guideline は対話型地図で地図上のクレジットを求める。地理院タイル・Terrain Tiles は「出典の明示」で置き場所は問わない）
 - 設定画面のプレビュー `BaseMapPreview`（`lib/widgets/basemap_preview.dart`）: 地図の中心のタイル 1 枚を同じ `composeLayers` で合成して見せる（設定変更から 300 ms 待って作り直し）

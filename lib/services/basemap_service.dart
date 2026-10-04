@@ -147,7 +147,7 @@ class BaseMapService extends ChangeNotifier {
   /// 先頭が一番下。設定画面は上から並べて見せる
   List<BaseMapLayer> _layers = [];
 
-  /// 一番下の見えているレイヤのプロバイダ（互換用。一括ダウンロード・TileServer の既定 URL など）
+  /// 一番下の見えているレイヤのプロバイダ（互換用。一括ダウンロードの既定 URL など）
   BaseMapProvider get currentProvider => _currentProvider;
 
   /// オフラインモードかどうか

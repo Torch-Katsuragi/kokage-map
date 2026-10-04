@@ -81,12 +81,6 @@ class PlatformCapabilities {
   // 地図
   // =============================================
 
-  /// ローカルHTTPタイルサーバー（`dart:io` の `HttpServer`）を立てられるか。
-  ///
-  /// web は false。かつ web では**不要**で、MapLibre GL JS が
-  /// タイルURLを直接叩く（[[docs/technical/project-format-design]] 段1）。
-  static bool get supportsLocalTileServer => !kIsWeb;
-
   // =============================================
   // センサー・デバイス
   // =============================================

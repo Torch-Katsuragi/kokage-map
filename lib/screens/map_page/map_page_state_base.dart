@@ -37,7 +37,6 @@ import '../../services/basemap_service.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../services/gps_manager_service.dart';
 import '../../services/internal_gps_location_store.dart';
-import '../../services/tile_server.dart';
 import 'feature_geojson_cache.dart';
 
 /// MapPageの状態変数を定義する基底mixin
@@ -53,8 +52,8 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 地図の初期中心座標（東京駅）
   final LatLng defaultCenter = const LatLng(35.681236, 139.767125);
 
-  /// ローカルスタイルの file:// URI（TileServer起動後にセット）
-  String? basemapStyleUri;
+  /// 背景地図サービスの初期化が済んだか（済むまで地図面を組まない）
+  bool baseMapReady = false;
 
   /// 現在位置
   LatLng? currentLocation;
@@ -133,9 +132,6 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   /// 背景地図サービス
   final BaseMapService baseMapService = BaseMapService();
-
-  /// ローカルタイルサーバー
-  late final TileServer tileServer = TileServer(baseMapService);
 
 
   /// 内蔵GPS位置情報ストア
@@ -238,23 +234,15 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
       final p = terrain.unproject(offset);
       if (p != null) return p;
     }
-    try {
-      return mapControllerInstance.toLngLat(offset);
-    } catch (e) {
-      return mapControllerInstance.camera.center;
-    }
+    return mapControllerInstance.camera.center;
   }
 
   @override
   Offset latLngToOffset(LatLng latlng) {
     final terrain = terrainProjection;
     if (terrain != null) return terrain.project(latlng);
-    try {
-      return mapControllerInstance.toScreenLocation(latlng);
-    } catch (e) {
-      final size = MediaQuery.of(context).size;
-      return Offset(size.width / 2, size.height / 2);
-    }
+    final size = MediaQuery.of(context).size;
+    return Offset(size.width / 2, size.height / 2);
   }
 
   @override

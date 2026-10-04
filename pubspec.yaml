@@ -103,10 +103,7 @@ dependencies:
   flutter_gpu_shaders: ^0.5.2 # hook/build.dart でシェーダ束（terrain.shaderbundle）を作る
   hooks: ^2.2.0
   vector_math: ^2.4.2 # 透視の view / projection 行列（Flutter 同梱と同じ版）
-  maplibre: ^0.3.6
-  # ⚠ maplibre_webview（デスクトップのWebView実装）は 2026-08-25 に外した。
-  #    デスクトップ版の撤去にあわせて不要になり、推移的に入っていた
-  #    flutter_inappwebview も Android APK から落ちる。
+  # maplibre は 2026-10-04 に外した（地図は 3D の自前描画だけ）
   supercluster: ^3.2.0
   geobase: ^1.5.0
   exif: ^3.3.0

@@ -5,9 +5,6 @@
 
 ## 次にやる（実装）
 
-- [ ] **MapLibre を完全に外す**。地図ページからは 2026-09-11 に撤去済みで、最後に使っていた旧編集画面も 2026-10-01 に消えた。
-      残っているのは誰も使っていない `lib/widgets/map/r_map_widget.dart` と `lib/core/r_map_controller.dart` の attach 部分、
-      `pubspec.yaml` の `maplibre`、`web/index.html` の maplibre-gl（CDN）。`RMapController` の移動系は 3D の `jumpOverride` に流しているので、そこは残す
 - [ ] **等高線の重さ**: 間引いた格子から引いても 1.7 万本で raster 30〜40ms（[[docs/technical/terrain-3d]]）。動かしている間だけ間引くか間隔を広げる
 - [ ] **QGIS で保存しても `<properties><kokage><meta>` が残るかの実確認**（QGIS は未知の properties を残す前提で作った）。
       タブレット PC に QGIS 4.2.2 / 3.40.7、メイン PC に 4.2.0 がある。`python-qgis` で開いて保存し、設定の JSON が残るかを見る

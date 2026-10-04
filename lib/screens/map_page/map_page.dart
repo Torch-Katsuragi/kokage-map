@@ -15,7 +15,6 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: Map and edit screen
 // Main UI for map display and layer/feature editing
-// maplibre移行: FlutterMap → MapLibreMap
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -471,11 +470,11 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                     right: layout.toolbarLeft ? 0 : 44,
                     child: Stack(
                       children: [
-                        // 地図面は TerrainMapLayer（3D）。MapLibre は 2026-09-11 に撤去
+                        // 地図面は TerrainMapLayer（3D）。MapLibre は 2026-09-11 に地図ページから、2026-10-04 に依存ごと撤去
                         const SizedBox.expand(),
                         _buildGestureLayer(),
                         // 3D 地形モード: 地図面を上に重ね、ジェスチャもここで受ける
-                        if (basemapStyleUri != null)
+                        if (baseMapReady)
                           Positioned.fill(
                             child: TerrainMapLayer(
                               mapState: this,
@@ -496,7 +495,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                                   ));
                                 }
                                 // レイヤのダブルタップなど、ホルダー経由の「寄せる」「移動」も 3D に流す
-                                // （fit → jump の順。jumpOverride を置いた瞬間に attach 前の保留分が流れる）
+                                // （fit → jump の順。jumpOverride を置いた瞬間に組み上がる前の保留分が流れる）
                                 mapControllerInstance.fitOverride =
                                     p == null ? null : (c, pad) => p.fitCoordinates(c, padding: pad);
                                 mapControllerInstance.jumpOverride = p == null
@@ -791,7 +790,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     return Positioned.fill(
       child: OffscreenLocationIndicator(
         location: currentLocation,
-        mapController: mapController,
         project: (l) => terrainProjection?.project(l),
         repaint: cameraTickNotifier,
         obscured: EdgeInsets.only(

@@ -34,10 +34,8 @@ import '../../../models/nodes/layer_tree_node.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/project_providers.dart';
 import '../../../providers/ui_state_providers.dart';
-import '../../../services/basemap_style_json.dart';
 import '../../../services/google_drive/index.dart';
 import '../../../services/qgis/qgs_read_back.dart';
-import '../../../services/tile_server.dart';
 import '../../../utils/app_logger.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
 import '../../terrain_settings_screen.dart';
@@ -197,32 +195,13 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     await Future.wait(childFutures, eagerError: false);
   }
 
-  /// 背景地図サービス初期化（タイルサーバーも起動）
+  /// 背景地図サービス初期化
   Future<void> initializeBaseMapService() async {
     try {
       await baseMapService.initialize();
-
-      if (PlatformCapabilities.supportsLocalTileServer) {
-        await tileServer.start();
-
-        // フォントPBFをキャッシュ（初回オンライン時にダウンロード）
-        final fontDir = await TileServer.ensureFontCache();
-
-        // fontDir が null（オフライン初回等）でも ensureLocalStyle は
-        // オンラインフォールバックを使用する。
-        basemapStyleUri = await TileServer.ensureLocalStyle(fontDir: fontDir);
-      } else {
-        // web: TileServerは立てられず（`dart:io` の HttpServer が無い）、
-        // そして不要。MapLibre GL JS がタイルURLを直接叩く。
-        // 背景地図の**ソース**だけをスタイルJSONに焼き込む（レイヤは
-        // `_addBasemapSources()` が積む）— 理由は
-        // [[../../../services/basemap_style_json]] を読むこと。
-        basemapStyleUri = buildBasemapStyleJson();
-      }
-
       // 基図の切替は 3D 地図面（TerrainMapLayer）が baseMapService を直接購読して追従する
-      triggerSetState(() {});
-      AppLogger.debug('[Init] BaseMap ready (port=${tileServer.port})');
+      triggerSetState(() => baseMapReady = true);
+      AppLogger.debug('[Init] BaseMap ready');
     } catch (e) {
       AppLogger.debug('[ERROR] BaseMapService: 初期化エラー: $e');
     }
@@ -455,7 +434,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   /// 全サービスの破棄処理
   void disposeAllServices() {
     AutoSyncService.instance.stop();
-    tileServer.stop();
     gpsManager.removeListener(onGpsManagerUpdate);
     layerStyleSettings.removeListener(onLayerStyleChanged);
     gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);

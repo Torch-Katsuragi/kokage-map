@@ -32,15 +32,9 @@ String get platformName {
 bool get hasFirebaseConfig =>
     kIsWeb || Platform.isAndroid || Platform.isIOS;
 
-/// maplibre のプラットフォーム実装が存在するか。
-///
-/// maplibre 0.3.5 が endorse しているのは android / ios / web。
-/// 2026-08-25 にデスクトップ版を撤去したので、対象はこの3つだけになった。
-bool get hasMapBackend => kIsWeb || Platform.isAndroid || Platform.isIOS;
-
 /// スキップ理由つきの `skip` 値を作る。
 ///
-/// `testWidgets(..., skip: skipUnless(hasMapBackend, '地図バックエンド未実装'))`
+/// `testWidgets(..., skip: skipUnless(hasFirebaseConfig, 'Firebase 未設定'))`
 /// のように使う。false（＝スキップしない）か、理由文字列を返す。
 Object? skipUnless(bool supported, String reason) =>
     supported ? false : '[$platformName] $reason';

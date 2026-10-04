@@ -361,14 +361,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
-  csslib:
-    dependency: transitive
-    description:
-      name: csslib
-      sha256: "09bad715f418841f976c77db72d5398dc1253c21fb9c0c7f0b0b985860b2d58e"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.2"
   cupertino_icons:
     dependency: "direct main"
     description:
@@ -1083,14 +1075,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
-  html:
-    dependency: transitive
-    description:
-      name: html
-      sha256: "43b67b8f43321ab066817dfac5619596c98bb1b61624e77203bb4351785f9699"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.15.7"
   http:
     dependency: "direct main"
     description:
@@ -1296,46 +1280,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.19"
-  maplibre:
-    dependency: "direct main"
-    description:
-      name: maplibre
-      sha256: "576246ba113835d795dd70cbd82216b5072ed1df60aad0d9ee2ca16a969e7c3a"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.6"
-  maplibre_android:
-    dependency: transitive
-    description:
-      name: maplibre_android
-      sha256: "87f633df7c28b20fb6940bb784e3c267f0f073b6a4159412212c8447527dcb58"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.6"
-  maplibre_ios:
-    dependency: transitive
-    description:
-      name: maplibre_ios
-      sha256: "66d0a55264a5dd3efd64b30d1529ecb7041d8c417fb17caeb87892562fa1c834"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.6"
-  maplibre_platform_interface:
-    dependency: transitive
-    description:
-      name: maplibre_platform_interface
-      sha256: "484af630e4d6845711dc694e7a2e0cd44bf8eadd73928a374a36a7d86e091e6f"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.6"
-  maplibre_web:
-    dependency: transitive
-    description:
-      name: maplibre_web
-      sha256: "3fa53d3f470454d6182d8bbd6c10568c83646692b16b484e942160df3ea4e9fc"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.6"
   markdown:
     dependency: "direct main"
     description:
@@ -1640,38 +1584,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
-  pointer_interceptor:
-    dependency: transitive
-    description:
-      name: pointer_interceptor
-      sha256: "57210410680379aea8b1b7ed6ae0c3ad349bfd56fe845b8ea934a53344b9d523"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.10.1+2"
-  pointer_interceptor_ios:
-    dependency: transitive
-    description:
-      name: pointer_interceptor_ios
-      sha256: "03c5fa5896080963ab4917eeffda8d28c90f22863a496fb5ba13bc10943e40e4"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.10.1+1"
-  pointer_interceptor_platform_interface:
-    dependency: transitive
-    description:
-      name: pointer_interceptor_platform_interface
-      sha256: "0597b0560e14354baeb23f8375cd612e8bd4841bf8306ecb71fcd0bb78552506"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.10.0+1"
-  pointer_interceptor_web:
-    dependency: transitive
-    description:
-      name: pointer_interceptor_web
-      sha256: "460b600e71de6fcea2b3d5f662c92293c049c4319e27f0829310e5a953b3ee2a"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.10.3"
   pool:
     dependency: transitive
     description:

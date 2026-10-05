@@ -15,6 +15,7 @@
 
 #fixes(
   "Also",
+  [First-time Google accounts no longer get "Sign-in failed"],
   [Jumping with the layer panel open lands outside the panel],
   [Removed an unused old map engine (less traffic at startup)],
 )

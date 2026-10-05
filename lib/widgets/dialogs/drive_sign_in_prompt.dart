@@ -87,7 +87,7 @@ class _DriveSignInPromptState extends State<DriveSignInPrompt> {
     });
     try {
       final success = await _driveService.signIn();
-      if (!success) _errorMessage = t.drive.signInFailed;
+      if (!success) _errorMessage = _driveService.authState.errorMessage ?? t.drive.signInFailed;
       if (success) widget.onSignedIn?.call();
     } catch (e) {
       _errorMessage = t.drive.signInError(error: e.toString());

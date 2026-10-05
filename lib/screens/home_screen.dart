@@ -142,7 +142,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       // 起動直後は無音の復元が終わっていないことがある。先に無音で試し、だめなときだけサインインを出す
       if (!drive.authState.isAuthenticated) await drive.restoreSessionSilently();
       if (!drive.authState.isAuthenticated && !await drive.signIn()) {
-        notifier.add(title: t.home.receiveNeedsSignIn, level: NotificationLevel.warning);
+        notifier.add(title: drive.authState.errorMessage ?? t.home.receiveNeedsSignIn, level: NotificationLevel.warning);
         return;
       }
       final info = await drive.getFolderInfo(driveId);

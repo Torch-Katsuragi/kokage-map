@@ -275,16 +275,14 @@ class GoogleDriveService {
     switch (event) {
       case GoogleSignInAuthenticationEventSignIn():
         _currentUser = event.user;
+        // ボタンからのサインインは [signIn] / [switchAccount] がスコープ同意まで自分で待つ
+        if (_interactiveSignIn) return;
         try {
           // ⚠ web の認可ポップアップは**クリックの直下**でしか開けない。
           // このハンドラは One Tap から非同期に呼ばれるので、ここで
           // `authorizeScopes` を呼ぶとブラウザにポップアップを潰される。
           // 認可がまだなら「サインイン済み・認可待ち」で止め、[signIn] に託す。
-          final authorized = await _initializeDriveApi(
-            event.user,
-            promptIfUnauthorized:
-                !PlatformCapabilities.isWeb && _interactiveSignIn,
-          );
+          final authorized = await _initializeDriveApi(event.user, promptIfUnauthorized: false);
           if (!authorized) {
             authState.setUnauthenticated();
             AppLogger.debug('[GoogleDriveService] サインイン済み・スコープ認可待ち');
@@ -384,15 +382,8 @@ class GoogleDriveService {
         return true;
       }
 
-      // v7: authenticate() を呼ぶ（ここはボタン直下なので選択画面が出てよい）
-      _interactiveSignIn = true;
-      try {
-        await GoogleSignIn.instance.authenticate();
-      } finally {
-        _interactiveSignIn = false;
-      }
-      // 認証イベントハンドラが呼ばれて状態が更新される
-      return authState.status == DriveAuthStatus.authenticated;
+      // ここはボタン直下なので選択画面が出てよい
+      return await _authenticateInteractively();
     } on GoogleSignInException catch (e) {
       if (isUserCancellation(e)) {
         AppLogger.debug('[GoogleDriveService] サインインキャンセル: code=${e.code.name} description=${e.description}');
@@ -406,6 +397,34 @@ class GoogleDriveService {
       AppLogger.debug('[GoogleDriveService] サインインエラー: $e');
       authState.setError(t.services.signInFailed(error: e.toString()));
       return false;
+    }
+  }
+
+  /// アカウントを選ばせ、Drive のスコープ同意まで済ませる（native）
+  ///
+  /// ⚠ 同意は認証イベントのハンドラに任せず、ここで待つこと。以前は `authenticate()` が返った直後に
+  /// 状態を見ていて、初めてのアカウント（同意画面がまだ出ている途中）を「サインインに失敗しました」に
+  /// していた（2026-10-05、同意済みの開発者のアカウントでは起きない）。
+  /// 同意画面で戻ったときは、未確認のアプリの画面の進め方を [DriveAuthState.errorMessage] に置いて false
+  Future<bool> _authenticateInteractively() async {
+    _interactiveSignIn = true;
+    try {
+      final user = await GoogleSignIn.instance.authenticate();
+      _currentUser = user;
+      try {
+        await _initializeDriveApi(user);
+      } on GoogleSignInException catch (e) {
+        if (!isUserCancellation(e)) rethrow;
+        AppLogger.debug('[GoogleDriveService] スコープ同意キャンセル: code=${e.code.name} description=${e.description}');
+        authState.setError(t.drive.consentCanceled);
+        return false;
+      }
+      authState.setAuthenticated(DriveUser.fromGoogleAccount(user));
+      await _rememberEmail(user.email);
+      AppLogger.debug('[GoogleDriveService] サインイン成功: ${user.email}');
+      return true;
+    } finally {
+      _interactiveSignIn = false;
     }
   }
 
@@ -443,14 +462,7 @@ class GoogleDriveService {
       }
 
       // authenticate() でアカウント選択UIが表示される
-      _interactiveSignIn = true;
-      try {
-        await GoogleSignIn.instance.authenticate();
-      } finally {
-        _interactiveSignIn = false;
-      }
-      // 認証イベントハンドラが呼ばれて状態が更新される
-      return authState.status == DriveAuthStatus.authenticated;
+      return await _authenticateInteractively();
     } on GoogleSignInException catch (e) {
       if (isUserCancellation(e)) {
         AppLogger.debug('[GoogleDriveService] アカウント切替キャンセル: code=${e.code.name} description=${e.description}');

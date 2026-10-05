@@ -5,6 +5,7 @@
 ### Also changed
 
 - The user guide and the tutorial's "Your own data" chapter now describe "Open my map" and receiving maps by QR
+- Signing in with a Google account for the first time no longer shows "Sign-in failed" while the Drive permission screen is still open
 - Jumping to your location with the layer panel open lands where the panel doesn't cover it
 - Removed an unused old map engine; the app no longer downloads map font data at startup
 

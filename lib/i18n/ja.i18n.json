@@ -1132,6 +1132,7 @@
     "invalidUrl": "無効なGoogle Drive URLです",
     "accessDenied": "フォルダにアクセスできません。共有設定を確認してください。",
     "signInFailed": "サインインに失敗しました",
+    "consentCanceled": "Google ドライブを使う許可がまだです。もう一度サインインして「このアプリは Google で確認されていません」と出たら「詳細」→「（安全ではないページ）に移動」と進み、ドライブの項目にチェックを入れて「続行」を押してください",
     "signInError": "サインインエラー: $error",
     "fetchError": "フォルダ情報の取得に失敗しました: $error",
     "cancel": "キャンセル",

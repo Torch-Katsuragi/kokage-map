@@ -38,7 +38,7 @@ dependencies:
   riverpod_annotation: ^4.0.0 # @riverpod アノテーション
   latlong2: ^0.10.1 # 緯度経度座標型（maplibre 移行後も座標型として使い続けている）
   geolocator: ^14.0.0 # GPS位置情報取得
-  file_picker: ^12.3.0 # ファイル・ディレクトリ選択用（最新版に更新）
+  file_picker: ^13.1.0 # ファイル・ディレクトリ選択用（最新版に更新）
   file_selector: ^1.0.3 # 新しいファイル選択・保存ダイアログ用
   sqflite: ^2.3.0 # GeoPackageファイル操作用（sqlite3から移行）
   ffi: ^2.1.0 # geodiff（GeoPackage の行単位マージ）の dart:ffi バインディング。web は stub
@@ -84,7 +84,7 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
   connectivity_plus: ^7.0.0
   flex_color_picker: ^4.0.0
   url_launcher: ^6.3.2              # 外部URL起動用

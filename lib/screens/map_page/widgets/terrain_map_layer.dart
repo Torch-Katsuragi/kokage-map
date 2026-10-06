@@ -2059,6 +2059,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _overlayBounds = b?.inflate(50) ?? _overlayBounds;
     _lastOverlayBounds = b;
     AppLogger.debug('[3D] overlays: ${nodes.length} 枚 ${[for (final n in nodes) n.filePath]}');
+    // 見えなくなったオーバーレイの画像は手放す（原寸の画像を地図を閉じるまで抱えていた）
+    final live = {for (final n in nodes) n.filePath};
+    _overlayImages.removeWhere((path, im) {
+      if (live.contains(path)) return false;
+      im.dispose();
+      return true;
+    });
     for (final n in nodes) {
       if (_overlayImages.containsKey(n.filePath) || _overlayLoading.contains(n.filePath)) continue;
       _overlayLoading.add(n.filePath);

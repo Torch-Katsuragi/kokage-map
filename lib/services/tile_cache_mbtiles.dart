@@ -264,7 +264,8 @@ class TileCacheMBTiles {
 
     // MBTilesファイルが存在しない場合はnull
     final filePath = path.join(_cacheDirectory!, '$providerId.mbtiles');
-    if (!File(filePath).existsSync()) return null;
+    // DB を開いて持っている間はファイルがあるので、同期のファイル確認（UI isolate）を省く。タイル 1 枚ごとに確かめていた
+    if (!_databases.containsKey(providerId) && !File(filePath).existsSync()) return null;
 
     // XYZ → TMS 座標変換
     final tileRow = (1 << z) - 1 - y;

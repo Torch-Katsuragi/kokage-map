@@ -28,6 +28,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../core/terrain/terrain_worker.dart';
 import '../models/kmeta.dart';
 import '../utils/app_logger.dart';
 import '../widgets/dialogs/overlay_convert_dialog.dart';
@@ -115,7 +116,7 @@ class GeoTiffService {
   ///
   /// アプリのキャッシュ領域に `{hash}.png` を生成。
   /// キャッシュが存在し、TIFFより新しい場合は再変換をスキップ。
-  /// MapLibreがTIFFを直接読めないため、file://でこのPNGを参照する。
+  /// 3D の地図面はこの PNG を読む（TIFF を直接デコードできない）。
   /// キャッシュがOSに掃除されても自動的に再生成される。
   static Future<String> ensurePngCache(String tifPath) async {
     _pngCacheDir ??= Directory(
@@ -156,16 +157,14 @@ class GeoTiffService {
     }
   }
 
-  /// TIFFをデコードしてPNGバイト列に変換
-  ///
-  /// TileServerでMapLibre向けに配信する際に使用。
+  /// TIFFをデコードしてPNGバイト列に変換（常駐の作業用 isolate で。大きなオルソ画像だと UI が数秒止まっていた）
   static Future<Uint8List> decodeTiffToPng(String tifPath) async {
     final srcBytes = await File(tifPath).readAsBytes();
-    final image = img.decodeImage(srcBytes);
-    if (image == null) {
+    final png = await TerrainWorker.instance.run<Uint8List, Uint8List?>(_tiffToPng, srcBytes);
+    if (png == null) {
       throw Exception('TIFFのデコードに失敗: $tifPath');
     }
-    return Uint8List.fromList(img.encodePng(image));
+    return png;
   }
 
   /// TIFFファイルにGeoTIFFタグ（ModelTransformationTag）が含まれるか判定
@@ -442,4 +441,11 @@ class GeoTiffService {
         return rgba;
     }
   }
+}
+
+/// TIFF → PNG（isolate で回すので top-level・同期）
+Uint8List? _tiffToPng(Uint8List src) {
+  final image = img.decodeImage(src);
+  if (image == null) return null;
+  return Uint8List.fromList(img.encodePng(image, level: 3));
 }

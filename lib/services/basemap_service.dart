@@ -33,13 +33,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../core/platform_capabilities.dart';
+import '../core/terrain/terrain_worker.dart';
 import '../i18n/strings.g.dart';
 import '../models/basemap_layer.dart';
 import '../models/basemap_provider.dart';
 import 'tile_cache_mbtiles.dart';
 
-/// Isolateで実行するための画像処理関数（トップレベル関数）
-Future<Uint8List?> _processTileExtraction(Map<String, dynamic> params) async {
+/// Isolateで実行するための画像処理関数（トップレベル関数・同期。常駐の TerrainWorker で回す）
+Uint8List? _processTileExtraction(Map<String, dynamic> params) {
   try {
     final parentTileData = params['parentTileData'] as Uint8List;
     final targetZ = params['targetZ'] as int;
@@ -80,7 +81,7 @@ Future<Uint8List?> _processTileExtraction(Map<String, dynamic> params) async {
         width: 256,
         height: 256,
       );
-      return Uint8List.fromList(img.encodePng(resizedImage));
+      return Uint8List.fromList(img.encodePng(resizedImage, level: 1));
     }
 
     // 指定領域を切り出し
@@ -101,7 +102,7 @@ Future<Uint8List?> _processTileExtraction(Map<String, dynamic> params) async {
     );
 
     // PNG形式でエンコード
-    return Uint8List.fromList(img.encodePng(resizedImage));
+    return Uint8List.fromList(img.encodePng(resizedImage, level: 1));
   } catch (e) {
     AppLogger.debug('[TILE-ISO] ❌ Scaling error: $e');
     return null;
@@ -809,8 +810,9 @@ class BaseMapService extends ChangeNotifier {
   }
 
   /// 親タイルから指定領域を切り出してスケールアップ
-  /// 
-  /// 画像処理はCPU負荷が高いため、compute関数を使用して別Isolateで実行します。
+  ///
+  /// 画像処理は常駐の作業用 isolate（TerrainWorker）で回す。以前は compute でタイルごとに isolate を起こしていた。
+  /// 書き戻す PNG は保存しない一時データなので圧縮は軽く（level 1）
   Future<Uint8List?> _extractAndScaleTile(
     Uint8List parentTileData,
     int targetZ,
@@ -821,7 +823,7 @@ class BaseMapService extends ChangeNotifier {
     int parentY,
   ) async {
     try {
-      return await compute(_processTileExtraction, {
+      return await TerrainWorker.instance.run<Map<String, dynamic>, Uint8List?>(_processTileExtraction, {
         'parentTileData': parentTileData,
         'targetZ': targetZ,
         'targetX': targetX,

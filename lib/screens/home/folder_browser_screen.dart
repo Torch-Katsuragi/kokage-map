@@ -18,6 +18,7 @@
 /// OS のフォルダ選択はファイルが大きな四角で並び、端末のどこでも選べてしまう（2026-10-06）。ここは KokageMap より上へ
 /// 行けない。外の場所は右上のメニュー「端末の別の場所…」からだけ（OS の選択を出す）。
 /// gpkg の中身は読まない（ドロワーのノードを流用すると 1.5 万面の小班まで読み込んで重い）。ファイル名だけ並べる。
+/// 行はドロワーと同じ `DrawerRow`。
 library;
 
 import 'package:flutter/material.dart';
@@ -32,6 +33,7 @@ import '../../presentation/node_presenter.dart';
 import '../../services/global_folder_locator.dart';
 import '../../services/google_drive/sync_base_store.dart';
 import '../../services/kmeta_service.dart';
+import '../../widgets/layer_drawer/drawer_row.dart';
 
 /// 選んだフォルダの絶対パスを返す（やめたら null）
 class FolderBrowserScreen extends StatefulWidget {
@@ -218,23 +220,25 @@ class _FolderBrowserScreenState extends State<FolderBrowserScreen> {
         final e = _entries[i];
         if (!e.isDirectory) {
           final gpkg = p.extension(e.name).toLowerCase() == '.gpkg';
-          return ListTile(
-            dense: true,
-            enabled: false,
+          return DrawerRow(
+            height: 40,
+            dimmed: true,
             leading: Icon(
               gpkg ? NodePresenter.getIconForType(NodeType.geopackage) : Icons.insert_drive_file_outlined,
+              size: 20,
               color: Colors.grey.shade400,
             ),
-            title: Text(e.name),
+            title: e.name,
+            titleStyle: const TextStyle(fontSize: 13),
           );
         }
-        return ListTile(
+        return DrawerRow(
           leading: e.isDrive
-              ? const Icon(Icons.cloud, color: cloudColor)
-              : Icon(NodePresenter.getIconForType(NodeType.folder), color: NodePresenter.getColorForType(NodeType.folder)),
-          title: Text(e.name),
-          subtitle: e.isDrive ? Text(t.layerDrawer.folder.driveLinked, style: const TextStyle(fontSize: 12, color: Colors.grey)) : null,
-          trailing: const Icon(Icons.chevron_right),
+              ? const Icon(Icons.cloud, size: 22, color: cloudColor)
+              : Icon(NodePresenter.getIconForType(NodeType.folder), size: 22, color: NodePresenter.getColorForType(NodeType.folder)),
+          title: e.name,
+          subtitle: e.isDrive ? Text(t.layerDrawer.folder.driveLinked, style: const TextStyle(fontSize: 11, color: Colors.grey)) : null,
+          eye: const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.chevron_right, color: Colors.black38)),
           onTap: () => _enter(e),
         );
       },

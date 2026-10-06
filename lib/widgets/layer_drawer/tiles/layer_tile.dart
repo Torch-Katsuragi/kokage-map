@@ -80,7 +80,7 @@ class LayerTile extends ConsumerWidget {
       dimmed: dimmed,
       leading: LayerSwatch(layer: node, dimmed: dimmed),
       title: node.name,
-      trailingInfo: '${node.features.length}',
+      trailingInfo: '${node.featureCount}',
       eye: KeyedSubtree(
         key: isArea ? TutorialTargets.areaEye : null,
         child: VisibilityEye(

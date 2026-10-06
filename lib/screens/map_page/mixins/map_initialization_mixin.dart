@@ -219,9 +219,13 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       if (compassStream == null) return;
 
       compassSubscription = compassStream.listen((event) {
-        if (mounted && event.heading != null) {
-          headingNotifier.value = _smoothHeading(event.heading!);
-        }
+        if (!mounted || event.heading == null) return;
+        final h = _smoothHeading(event.heading!);
+        // 0.5° 未満の揺れは知らせない。平滑化は同じ値に落ち着かないので、そのままだとセンサーの速さ（15〜60Hz）で
+        // 聞き手（地図・詳細パネル）が動き続けていた（2026-10-06、置いたままの Fold で CPU 50〜110%）
+        final prev = headingNotifier.value;
+        if (prev != null && ((h - prev + 540) % 360 - 180).abs() < 0.5) return;
+        headingNotifier.value = h;
       });
 
       AppLogger.debug('[Init] Compass ready');
@@ -285,8 +289,11 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // Store.positionStream を購読（マップマーカー・中心移動用）
       positionSubscription = locationStore.positionStream.listen(
         (record) {
+          final next = LatLng(record.latitude, record.longitude);
+          // 同じ位置の送り直し（フォアグラウンドサービスが毎秒送る）では組み立て直さない
+          if (next == currentLocation && movedToCurrentLocationOnce) return;
           triggerSetState(() {
-            currentLocation = LatLng(record.latitude, record.longitude);
+            currentLocation = next;
             if (!movedToCurrentLocationOnce && currentLocation != null) {
               // 地図の生成より先にGPSの初回フィックスが届くことがある。
               // その場合 jumpTo() は false を返して保留され、

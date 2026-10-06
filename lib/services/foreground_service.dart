@@ -205,6 +205,9 @@ void onStart(ServiceInstance service) async {
     });
 
     // 1秒間隔で位置情報をメインisolateに送信
+    var notifiedAt = DateTime.fromMillisecondsSinceEpoch(0);
+    double? notifiedLat;
+    double? notifiedLon;
     periodicTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       try {
         final currentPosition = lastPosition;
@@ -224,8 +227,14 @@ void onStart(ServiceInstance service) async {
           service.invoke('positionUpdate', pointData);
         }
 
-        // Android通知更新
-        if (service is AndroidServiceInstance) {
+        // Android通知更新（位置が変わったときか 15 秒おき。以前は毎秒書き換えていた）
+        final moved = currentPosition != null &&
+            (currentPosition.latitude != notifiedLat || currentPosition.longitude != notifiedLon);
+        final due = DateTime.now().difference(notifiedAt).inSeconds >= 15;
+        if (service is AndroidServiceInstance && (moved || due)) {
+          notifiedAt = DateTime.now();
+          notifiedLat = currentPosition?.latitude;
+          notifiedLon = currentPosition?.longitude;
           if (await service.isForegroundService()) {
             try {
               String notificationContent =

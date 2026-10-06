@@ -216,6 +216,27 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     }
   }
 
+  /// 裏に回ったらコンパスを止める（向きは地図に出ている間しか使わない。止めないと裏でも 15〜60Hz で届き続ける）。
+  /// ⚠ pause は使わない（ブロードキャストの購読は止めている間の値を溜め込む）。解いて、戻ったら付け直す
+  bool _compassStopped = false;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_compassStopped) {
+        _compassStopped = false;
+        unawaited(initializeCompass());
+      }
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      final sub = compassSubscription;
+      if (sub != null && !_compassStopped) {
+        _compassStopped = true;
+        compassSubscription = null;
+        unawaited(sub.cancel());
+      }
+    }
+  }
+
   @override
   void dispose() {
     LaunchRequest.incoming.removeListener(_onLaunchRequest);
@@ -258,10 +279,21 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
   @override
   void updateCurrentGpsInfo() {
-    triggerSetState(() {
-      currentGpsInfo = gpsManager.getCurrentGpsInfo();
-    });
+    final info = gpsManager.getCurrentGpsInfo();
+    final before = currentGpsInfo;
+    // 表示に関わる値が同じなら組み立て直さない（フォアグラウンドサービスは同じ位置を毎秒送り直してくるので、
+    // そのたびに地図ページ全体を組み立て直していた。2026-10-06）
+    if (before != null && _gpsInfoKeys.every((k) => before[k] == info[k])) {
+      currentGpsInfo = info;
+      return;
+    }
+    triggerSetState(() => currentGpsInfo = info);
   }
+
+  static const _gpsInfoKeys = [
+    'latitude', 'longitude', 'altitude', 'accuracy', 'speed', 'bearing', 'isActive', 'isGpsActive', 'sourceType',
+    'selectedDevice', 'satelliteCount', 'hdop', 'gpsQuality', 'fixType', 'correctionSource', 'isSurveyMode',
+  ];
 
   @override
   Future<void> updateFeatures() async {

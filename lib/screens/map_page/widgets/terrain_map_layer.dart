@@ -644,7 +644,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     );
     widget.sceneRevision.addListener(_onSceneRevision);
     TerrainAppearance.revision.addListener(_onAppearanceChanged);
-    widget.heading?.addListener(_scheduleRefresh);
+    widget.heading?.addListener(_onHeading);
     widget.onProjectionChanged(this);
     _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 350))
       ..addListener(_onAnimTick)
@@ -846,7 +846,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       im.dispose();
     }
     _stopDrive();
-    widget.heading?.removeListener(_scheduleRefresh);
+    widget.heading?.removeListener(_onHeading);
     widget.sceneRevision.removeListener(_onSceneRevision);
     TerrainAppearance.revision.removeListener(_onAppearanceChanged);
     widget.onProjectionChanged(null);
@@ -890,6 +890,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   LatLng _centerLatLng() =>
       LatLng(WebMercator.latFromY(_camera.centerY), WebMercator.lonFromX(_camera.centerX));
+
+  /// 向きが 5° の刻みをまたいだときだけ描き直す（現在位置の扇は 5° 刻みで作るので、それ未満の変化では絵が変わらない）
+  int? _headingBucket;
+  void _onHeading() {
+    final h = widget.heading?.value;
+    final bucket = h == null ? null : (h / 5).round();
+    if (bucket == _headingBucket) return;
+    _headingBucket = bucket;
+    _scheduleRefresh();
+  }
 
   void _onWorldChanged() {
     _scheduleRefresh();

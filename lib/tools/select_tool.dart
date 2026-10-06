@@ -179,7 +179,8 @@ class SelectTool extends MapTool {
     } else {
       _ref.read(selectedFeaturesProvider.notifier).set([]);
     }
-    _ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    // ⚠ featureRefreshTrigger は引かない。選択の描き直しは地図ページが selectedFeaturesProvider を見て選択の一覧だけ組み直す。
+    // 引くと地物の全件の組み直し（全部の地物のラベル描画を含む）とレイヤ一覧の組み直しがタップのたびに走っていた（2026-10-06）
   }
 
   /// タップイベント（全レイヤー横断・優先度サイクル選択）
@@ -209,7 +210,6 @@ class SelectTool extends MapTool {
       if (node is FeatureNode) {
         _ref.read(selectedLayerNodeProvider.notifier).select(node.parent);
       }
-      _ref.read(featureRefreshTriggerProvider.notifier).trigger();
       return;
     }
 

@@ -423,6 +423,9 @@ abstract class LayerNode extends LayerTreeNode {
           .where((f) => !f.isDisposed) // dispose済みを除外
           .toList();
 
+  /// 地物の数（地図に読み込んだ分）。[features] のように一覧を複製しない（レイヤ一覧の行が組み立てのたびに数える）
+  int get featureCount => _featureMap.length;
+
   /// position型の座標データを取得（全フィーチャの重心座標リスト）
   List<List<double>> get positions {
     return features.map((feature) => feature.position).toList();

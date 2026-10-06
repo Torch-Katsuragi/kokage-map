@@ -222,6 +222,7 @@ class _CompassButton extends StatelessWidget {
 class _TileScene {
   _TileScene({
     required this.key,
+    this.gen = 0,
     required this.lines,
     required this.polygons,
     required this.points,
@@ -236,6 +237,12 @@ class _TileScene {
 
   /// 写真の印（カメラの記号を描くので、静的な点と分けて画面に描く）
   final List<TerrainPoint> photoPoints;
+
+  /// 何から作ったか（静的シーンは、範囲外の変化だけなら作り直さずに鍵を差し替えて使い続ける）
+  List<Object?> key;
+
+  /// 作ったときの焼き込みの世代（`_bakeGen`）。この後の変化の範囲がタイルに掛からなければ使い続けてよい
+  int gen;
 
   /// まだ持ち上げていないフィーチャがある（時間を分けて育てる静的シーン）
   bool complete;
@@ -269,7 +276,6 @@ class _TileScene {
   }
 
   /// 何から作ったか（GeoJSON リストの同一性・選択・軌跡の点数・パーティ・現在位置）
-  final List<Object?> key;
 
   /// 静的（フィーチャ本体など。投影をキャッシュする）
   final List<LiftedPolyline> lines;
@@ -921,6 +927,18 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _scheduleRefresh();
   }
 
+  /// [since] の世代より後の変化（`_bakeEvents`）が [k] のタイルに掛かるか。記録より古ければ掛かる扱い（安全側）
+  bool _touchedSince(TileKey k, int since) {
+    final oldest = _bakeEvents.isEmpty ? _bakeGen : _bakeEvents.first.$1;
+    if (since < oldest - 1) return true;
+    for (final (g, r) in _bakeEvents) {
+      if (g <= since) continue;
+      if (r == null) return true;
+      if (k.west < r.right && k.west + k.span > r.left && k.south < r.bottom && k.south + k.span > r.top) return true;
+    }
+    return false;
+  }
+
   /// 古い世代で焼かれた（またはフィーチャが届く前に焼かれた）タイルを見つけて焼き直す（400ms にまとめる）
   void _scheduleBakeCheck() {
     _bakeCheckTimer?.cancel();
@@ -933,16 +951,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final live = {for (final t in _world.tiles) t.key};
     _bakedGen.removeWhere((k, _) => !live.contains(k));
     _bakeRequested.removeWhere((k, _) => !live.contains(k));
-    final oldest = _bakeEvents.isEmpty ? gen : _bakeEvents.first.$1;
-    bool touched(TileKey k, int bakedAt) {
-      if (bakedAt < oldest - 1) return true; // 出来事の記録より古い（安全側）
-      for (final (g, r) in _bakeEvents) {
-        if (g <= bakedAt) continue;
-        if (r == null) return true;
-        if (k.west < r.right && k.west + k.span > r.left && k.south < r.bottom && k.south + k.span > r.top) return true;
-      }
-      return false;
-    }
+    bool touched(TileKey k, int bakedAt) => _touchedSince(k, bakedAt);
     final stale = <TileKey>{
       for (final k in live)
         if (_bakedGen[k] != gen && _bakeRequested[k] != gen && touched(k, _bakedGen[k] ?? -1)) k,
@@ -1273,13 +1282,27 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
     // 静的な部分。1 回あたり数 ms ずつ育てる（1 タイル 1 万面を一度に持ち上げると 0.5〜1 秒止まる）
     var stat = _staticScenes[cacheKey];
+    // 線・面・点の一覧が組み直されても、変わった範囲（`_bakeEvents`）がこのタイルに掛からなければ作り直さない。
+    // GPS 軌跡の統合で 20 秒ごとに一覧が変わり、そのたびに見えている全タイルの 1.5 万面を持ち上げ直していた（2026-10-06）。
+    // 選択・頂点・写真が変わったときと、今の一覧の変化がまだ記録されていないときは作り直す
+    if (stat != null &&
+        stat.complete &&
+        !_sameKey(stat.key, staticKey) &&
+        stat.key.length == staticKey.length &&
+        _sameKey(stat.key.sublist(3), staticKey.sublist(3)) &&
+        g.contentRevision == _bakedContentRevision &&
+        !_touchedSince(tile.key, stat.gen)) {
+      stat
+        ..key = staticKey
+        ..gen = _bakeGen;
+    }
     if (stat == null || !_sameKey(stat.key, staticKey)) {
       if (_staticBuilds >= _staticBudget) {
         // 今フレームは見送り。手持ちがあれば古いものを使い、無ければ空
         _scheduleRefresh();
         stat ??= _TileScene(key: const [], lines: const [], polygons: const [], points: const [], labels: const []);
       } else {
-        stat = _TileScene(key: staticKey, lines: [], polygons: [], points: [], labels: [], complete: false);
+        stat = _TileScene(key: staticKey, gen: _bakeGen, lines: [], polygons: [], points: [], labels: [], complete: false);
         _staticScenes[cacheKey] = stat;
         _staticProgress[cacheKey] = _StaticProgress();
       }

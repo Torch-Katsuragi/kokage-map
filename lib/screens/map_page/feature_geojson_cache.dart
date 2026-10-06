@@ -103,6 +103,15 @@ class FeatureGeoJsonCache {
   /// フィーチャごとの署名と範囲（前回の全件組み立て）。キー = (レイヤの同一性, rowId)
   Map<(int, int), (int, Rect)> _signatures = {};
 
+  /// 線・面の変換結果の使い回し（フィーチャ → 前回の turf の形・属性・変換後・署名）。
+  /// レイヤを読み直さない限り turf の形は同じオブジェクトなので、形と属性が同じなら変換も署名もやり直さない
+  /// （GPS 軌跡の統合で 20 秒ごとに全件が組み直され、1.5 万面を毎回変換していた。2026-10-06）
+  final Expando<_Conv> _conv = Expando('geojson.conv');
+
+  /// 点（MultiPoint の点ごとの Feature）と写真の Feature の使い回し。中身が同じなら同じオブジェクトを返し、リストも前のまま保てるように
+  final Expando<_PtConv> _ptConv = Expando('geojson.pt');
+  final Expando<_PtConv> _photoConv = Expando('geojson.photo');
+
   /// 全件を組み直す
   void rebuildAll(FeatureGeoJsonInput input) => _build(input, full: true);
 
@@ -181,6 +190,18 @@ class FeatureGeoJsonCache {
     void sign(FeatureNode f, (int, Rect) geom, Map<String, Object?>? props) {
       sigs![(identityHashCode(f.parent), f.rowId)] = (Object.hash(geom.$1, Object.hashAll(props?.values ?? const [])), geom.$2);
     }
+    // 変換済みを使い回す（形と属性が前回と同じとき）。無ければ変換して覚える
+    (geo.Feature<geo.Geometry>, (int, Rect))? converted(FeatureNode f, Object? turfGeom, Map<String, Object?>? props, geo.Geometry? Function() convert) {
+      final c = _conv[f];
+      if (c != null && identical(c.turfGeom, turfGeom) && _sameProps(c.props, props)) return (c.feature, c.sign);
+      final geom = convert();
+      if (geom == null) return null;
+      final feature = geo.Feature<geo.Geometry>(geometry: geom, properties: props);
+      final sg = geomSign(geom);
+      _conv[f] = _Conv(turfGeom, props, feature, sg);
+      return (feature, sg);
+    }
+
     final lines = full ? <geo.Feature<geo.Geometry>>[] : null;
     final linesSel = <geo.Feature<geo.Geometry>>[];
     final lineVerts = full ? <geo.Feature<geo.Point>>[] : null;
@@ -189,15 +210,13 @@ class FeatureGeoJsonCache {
       if (input.hidden.contains(f)) continue;
       final sel = input.selected.contains(f);
       if (!full && !sel) continue;
-      final geom = turfLineToGeo(f.turfFeature.geometry);
-      if (geom == null) continue;
+      final turfGeom = f.turfFeature.geometry;
       final props = _props(input, f);
-      final feature = geo.Feature<geo.Geometry>(
-        geometry: geom,
-        properties: props,
-      );
+      final hit = converted(f, turfGeom, props, () => turfLineToGeo(turfGeom));
+      if (hit == null) continue;
+      final feature = hit.$1;
       lines?.add(feature);
-      if (sigs != null) sign(f, geomSign(geom), props);
+      if (sigs != null) sign(f, hit.$2, props);
       if (sel) linesSel.add(feature);
       if (input.lineVertices) {
         for (final pt in turfLineVertices(f.turfFeature.geometry)) {
@@ -216,15 +235,13 @@ class FeatureGeoJsonCache {
       if (input.hidden.contains(f)) continue;
       final sel = input.selected.contains(f);
       if (!full && !sel) continue;
-      final geom = turfPolygonToGeo(f.turfFeature.geometry);
-      if (geom == null) continue;
+      final turfGeom = f.turfFeature.geometry;
       final props = _props(input, f);
-      final feature = geo.Feature<geo.Geometry>(
-        geometry: geom,
-        properties: props,
-      );
+      final hit = converted(f, turfGeom, props, () => turfPolygonToGeo(turfGeom));
+      if (hit == null) continue;
+      final feature = hit.$1;
       polys?.add(feature);
-      if (sigs != null) sign(f, geomSign(geom), props);
+      if (sigs != null) sign(f, hit.$2, props);
       if (sel) polysSel.add(feature);
       if (input.polygonVertices) {
         for (final pt in turfPolygonVertices(f.turfFeature.geometry)) {
@@ -243,7 +260,17 @@ class FeatureGeoJsonCache {
       if (!full && !sel) continue;
       final coords = f.geometry;
       if (coords == null) continue;
-      if (sigs != null) {
+      final turfGeom = f.turfFeature.geometry;
+      final props = _props(input, f, f.name);
+      final cached = _ptConv[f];
+      if (cached != null && identical(cached.ref, turfGeom) && _sameProps(cached.props, props)) {
+        if (sigs != null) sigs[(identityHashCode(f.parent), f.rowId)] = cached.sign!;
+        pts?.addAll(cached.features);
+        if (sel) ptsSel.addAll(cached.features);
+        continue;
+      }
+      (int, Rect)? ptSign;
+      {
         var sx = 0.0, sy = 0.0;
         var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;
         for (final pt in coords as List<LatLng>) {
@@ -255,16 +282,17 @@ class FeatureGeoJsonCache {
           if (pt.latitude > maxY) maxY = pt.latitude;
         }
         final box = coords.isEmpty ? Rect.zero : Rect.fromLTRB(minX, minY, maxX, maxY);
-        sign(f, (Object.hash(coords.length, sx, sy), box), _props(input, f, f.name));
+        final geomSig = (Object.hash(coords.length, sx, sy), box);
+        ptSign = (Object.hash(geomSig.$1, Object.hashAll(props?.values ?? const [])), box);
+        if (sigs != null) sigs[(identityHashCode(f.parent), f.rowId)] = ptSign;
       }
-      for (final pt in coords as List<LatLng>) {
-        final feature = geo.Feature<geo.Point>(
-          geometry: geo.Point(pt.toGeographic()),
-          properties: _props(input, f, f.name),
-        );
-        pts?.add(feature);
-        if (sel) ptsSel.add(feature);
-      }
+      final made = <geo.Feature<geo.Point>>[
+        for (final pt in coords)
+          geo.Feature<geo.Point>(geometry: geo.Point(pt.toGeographic()), properties: props),
+      ];
+      _ptConv[f] = _PtConv(turfGeom, props, made, ptSign);
+      pts?.addAll(made);
+      if (sel) ptsSel.addAll(made);
     }
 
     final imgs = full ? <geo.Feature<geo.Point>>[] : null;
@@ -273,10 +301,18 @@ class FeatureGeoJsonCache {
       if (!photo.hasLocation) continue;
       final sel = input.selected.contains(photo);
       if (!full && !sel) continue;
+      final props = _photoProps(photo);
+      final cachedPhoto = _photoConv[photo];
+      if (cachedPhoto != null && cachedPhoto.ref == photo.location && _sameProps(cachedPhoto.props, props)) {
+        imgs?.add(cachedPhoto.features.first);
+        if (sel) imgsSel.add(cachedPhoto.features.first);
+        continue;
+      }
       final feature = geo.Feature<geo.Point>(
         geometry: geo.Point(photo.location!.toGeographic()),
-        properties: _photoProps(photo),
+        properties: props,
       );
+      _photoConv[photo] = _PtConv(photo.location, props, [feature], null);
       imgs?.add(feature);
       if (sel) imgsSel.add(feature);
     }
@@ -307,18 +343,55 @@ class FeatureGeoJsonCache {
         contentRevision++;
       }
       _signatures = sigs;
-      polylines = lines!;
-      polygons = polys!;
-      markers = pts!;
-      images = imgs!;
-      lineVertices = lineVerts!;
-      polygonVertices = polyVerts!;
+      // 中身が前回と同じなら前回のリストのまま（同一性で引く描画側のキャッシュ＝タイルごとのシーンが外れない）
+      polylines = _keep(polylines, lines!);
+      polygons = _keep(polygons, polys!);
+      markers = _keep(markers, pts!);
+      images = _keep(images, imgs!);
+      lineVertices = _keep(lineVertices, lineVerts!);
+      polygonVertices = _keep(polygonVertices, polyVerts!);
     }
-    selectedPolylines = linesSel;
-    selectedPolygons = polysSel;
-    selectedMarkers = ptsSel;
-    selectedImages = imgsSel;
-    selectedLineVertices = lineVertsSel;
-    selectedPolygonVertices = polyVertsSel;
+    selectedPolylines = _keep(selectedPolylines, linesSel);
+    selectedPolygons = _keep(selectedPolygons, polysSel);
+    selectedMarkers = _keep(selectedMarkers, ptsSel);
+    selectedImages = _keep(selectedImages, imgsSel);
+    selectedLineVertices = _keep(selectedLineVertices, lineVertsSel);
+    selectedPolygonVertices = _keep(selectedPolygonVertices, polyVertsSel);
   }
+}
+
+/// 同じ要素（同一のオブジェクト）が同じ順に並んでいれば前のリストを返す
+List<T> _keep<T>(List<T> before, List<T> after) {
+  if (before.length != after.length) return after;
+  for (var i = 0; i < after.length; i++) {
+    if (!identical(before[i], after[i])) return after;
+  }
+  return before;
+}
+
+bool _sameProps(Map<String, Object?>? a, Map<String, Object?>? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null || a.length != b.length) return false;
+  for (final e in a.entries) {
+    if (b[e.key] != e.value) return false;
+  }
+  return true;
+}
+
+class _Conv {
+  _Conv(this.turfGeom, this.props, this.feature, this.sign);
+  final Object? turfGeom;
+  final Map<String, Object?>? props;
+  final geo.Feature<geo.Geometry> feature;
+  final (int, Rect) sign;
+}
+
+class _PtConv {
+  _PtConv(this.ref, this.props, this.features, this.sign);
+
+  /// 何から作ったか（点は turf の形の同一性、写真は位置の値で比べる）
+  final Object? ref;
+  final Map<String, Object?>? props;
+  final List<geo.Feature<geo.Point>> features;
+  final (int, Rect)? sign;
 }

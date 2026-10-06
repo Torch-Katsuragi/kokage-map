@@ -16,7 +16,9 @@
   - [ ] `web/open/index.html` の行き先をテスター募集ページから Play のページへ
   - [ ] `web/.well-known/assetlinks.json` から debug 鍵を外す
   - [ ] `.kokage` への移行の互換（`GlobalFolderLocator._migratePrevious`・`hiddenLegacyDirs`）を消す
-- [ ] Play のカテゴリ設定（ツール or 地図＆ナビ）を確かめる
+- [ ] Play のストアの設定（2026-10-06 に確認）: カテゴリは「仕事効率化」、タグは「地図＆ナビ」「測定」。
+      連絡先のウェブサイトが旧リポジトリ名 `github.com/Torch-Katsuragi/k_maps`、メールが `k-root@googlegroups.com` のまま。
+      どちらに直すか決める（公開の掲載情報なので本人の判断）
 - [ ] テスター募集ページ `/beta/`: テスター一覧のグループ化が審査を通ったら「準備中」の注記を書き換える
 
 ### OAuth 検証（一般公開・資金調達後）
@@ -40,7 +42,7 @@
 - [ ] `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[docs/technical/scene-model]]）
 - [ ] メモリ削減（profile 実測で 3D の増分 +200〜250MB。画像 LRU・`raw` の畳み込み・親テクスチャ 256²）
 - [ ] web の fps 計測（Chrome を前面に）・GPU の無い web の純 Dart 経路の透視（眺めモード）
-- [ ] View の z 順（同一レイヤ内の並び）は描画に未反映。選択・頂点の見た目もグループ別にできない
+- [ ] 選択・頂点の見た目を View（スタイルグループ）別にできない（View の順に描くのは 2026-10-06 に済み）
 
 ## 見張り（再発したら直す）
 
@@ -51,7 +53,7 @@
 
 ## 要判断・保留
 
-- [ ] 「この端末」（sys）の実機確認の残り: 可視性の保存・global 配下の Drive 連携 dir（表示は Pixel / Fold で確認済み）
+- [ ] 「この端末」（sys）の実機確認の残り: global 配下の Drive 連携 dir（表示は Pixel / Fold、可視性の保存は 2026-10-06 に Fold で確認済み）
 - [ ] `sys/view`（端末の写真など読み取り専用の仮想レイヤ）。写真の権限（Play の申告）と大量写真の性能の設計が先
 - [ ] リファクタリングの候補: `cascade_invocations`（好みの問題で保留）、`shapefile_exporter.dart`（914 行）、
       `settings_screen.dart`、`SmartCoordinateSystemManager` の WKT 推定を `WktParser` へ

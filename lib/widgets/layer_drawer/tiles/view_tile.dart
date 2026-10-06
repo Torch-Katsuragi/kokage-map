@@ -27,67 +27,68 @@ import '../../../i18n/strings.g.dart';
 import '../../../models/app_notification.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/view_node.dart';
-import '../../../presentation/node_presenter.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../screens/layer_style_settings_screen.dart';
 import '../../../tutorial/practice_project.dart';
 import '../../../tutorial/tutorial.dart';
 import '../common_dialogs.dart';
+import '../drawer_row.dart';
+import 'layer_swatch.dart';
 
 /// Viewノード用 ListTile（可視切り替え・フィルタ編集・並べ替え）
 class ViewTile extends ConsumerWidget {
-  const ViewTile({super.key, required this.node});
+  const ViewTile({super.key, required this.node, this.depth = 2});
 
   final ViewNode node;
+  final int depth;
 
   LayerNode get _layer => node.layerNode;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dimmed = !node.isVisibleRecursive();
-    return ListTile(
-      dense: true,
-      contentPadding: const EdgeInsets.only(left: 56, right: 8),
-      leading: KeyedSubtree(key: _guiding(ref) ? TutorialTargets.newViewEye : null, child: _VisibilityIcon(node: node)),
-      title: Text(
-        node.displayName,
-        style: TextStyle(
-          fontSize: 13,
-          color: dimmed ? Colors.grey : null,
+    final guiding = _guiding(ref);
+    final index = _layer.views.indexOf(node);
+    Widget row = DrawerRow(
+      depth: depth,
+      height: 40,
+      dimmed: dimmed,
+      leading: LayerSwatch(layer: _layer, view: node, dimmed: dimmed),
+      title: node.displayName,
+      titleStyle: const TextStyle(fontSize: 14),
+      subtitle: node.hasFilter
+          ? Text(
+              node.filter!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: dimmed ? Colors.grey : Colors.teal.shade700),
+            )
+          : null,
+      eye: KeyedSubtree(
+        key: guiding ? TutorialTargets.newViewEye : null,
+        child: VisibilityEye(
+          visible: node.visible,
+          effective: _layer.isVisibleRecursive(),
+          onToggle: () async {
+            node.visible = !node.visible;
+            await node.persistVisibility();
+            await node.layerNode.updateChildren();
+            ref.read(featureRefreshTriggerProvider.notifier).trigger();
+            ref.read(tutorialProvider.notifier).report(ViewVisibilityToggled(node));
+          },
         ),
       ),
-      subtitle:
-          node.hasFilter
-              ? Text(
-                node.filter!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                  color: dimmed ? Colors.grey : Colors.teal.shade700,
-                ),
-              )
-              : null,
-      trailing: _buildMenu(context, ref),
-    );
-  }
-
-  /// チュートリアルの案内先: 練習のエリアに足した View（いちばん上の、既定でない View）
-  bool _guiding(WidgetRef ref) =>
-      ref.watch(tutorialProvider) != null &&
-      !node.isDefaultView &&
-      _layer.views.indexOf(node) == 0 &&
-      isPracticeLayer(_layer, PracticeProject.areaLayer);
-
-  Widget _buildMenu(BuildContext context, WidgetRef ref) {
-    final index = _layer.views.indexOf(node);
-    final guiding = _guiding(ref);
-    return PopupMenuButton<String>(
-      key: guiding ? TutorialTargets.newViewMenu : null,
-      iconSize: 18,
-      onSelected: (value) async {
+      menu: () => [
+        RowMenuItem('rename', t.layerDrawer.view.rename, icon: Icons.edit),
+        RowMenuItem('style', t.layerDrawer.layer.style, icon: Icons.palette, key: guiding ? TutorialTargets.viewStyleMenuItem : null),
+        RowMenuItem('filter', t.layerDrawer.view.editFilter, icon: Icons.filter_alt),
+        RowMenuItem('duplicate', t.layerDrawer.view.duplicate, icon: Icons.copy),
+        if (index > 0) RowMenuItem('up', t.layerDrawer.view.moveUp, icon: Icons.arrow_upward),
+        if (index >= 0 && index < _layer.views.length - 1) RowMenuItem('down', t.layerDrawer.view.moveDown, icon: Icons.arrow_downward),
+        RowMenuItem('delete', t.layerDrawer.view.delete, icon: Icons.delete_outline, danger: true, dividerBefore: true),
+      ],
+      onMenu: (value) async {
         switch (value) {
           case 'rename':
             await _rename(context, ref);
@@ -105,33 +106,17 @@ class ViewTile extends ConsumerWidget {
             await _move(ref, 1);
         }
       },
-      itemBuilder:
-          (context) => [
-            PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.view.rename)),
-            PopupMenuItem(
-              key: guiding ? TutorialTargets.viewStyleMenuItem : null,
-              value: 'style',
-              child: Text(t.layerDrawer.layer.style),
-            ),
-            PopupMenuItem(
-              value: 'filter',
-              child: Text(t.layerDrawer.view.editFilter),
-            ),
-            PopupMenuItem(
-              value: 'duplicate',
-              child: Text(t.layerDrawer.view.duplicate),
-            ),
-            if (index > 0)
-              PopupMenuItem(value: 'up', child: Text(t.layerDrawer.view.moveUp)),
-            if (index >= 0 && index < _layer.views.length - 1)
-              PopupMenuItem(
-                value: 'down',
-                child: Text(t.layerDrawer.view.moveDown),
-              ),
-            PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.view.delete)),
-          ],
     );
+    if (guiding) row = KeyedSubtree(key: TutorialTargets.newViewMenu, child: row);
+    return row;
   }
+
+  /// チュートリアルの案内先: 練習のエリアに足した View（いちばん上の、既定でない View）
+  bool _guiding(WidgetRef ref) =>
+      ref.watch(tutorialProvider) != null &&
+      !node.isDefaultView &&
+      _layer.views.indexOf(node) == 0 &&
+      isPracticeLayer(_layer, PracticeProject.areaLayer);
 
   // ---------- 操作 ----------
 
@@ -273,46 +258,5 @@ class ViewTile extends ConsumerWidget {
 
   void _notify(WidgetRef ref, String title, NotificationLevel level) {
     ref.read(notificationCenterProvider.notifier).add(title: title, level: level);
-  }
-}
-
-/// View の可視トグル。
-///
-/// [NodeVisibilityIcon] を使い回さないのは、View を切り替えたとき
-/// **フィーチャの読み直しが要る**（WHERE句が変わる）ため。
-class _VisibilityIcon extends ConsumerWidget {
-  const _VisibilityIcon({required this.node});
-
-  final ViewNode node;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GestureDetector(
-      onTap: () async {
-        node.visible = !node.visible;
-        await node.persistVisibility();
-        await node.layerNode.updateChildren();
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        ref.read(tutorialProvider.notifier).report(ViewVisibilityToggled(node));
-      },
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(
-            NodePresenter.getIcon(node),
-            size: 18,
-            color:
-                node.isVisibleRecursive()
-                    ? NodePresenter.getColor(node)
-                    : Colors.grey,
-          ),
-          if (!node.visible)
-            Transform.rotate(
-              angle: -0.7,
-              child: Container(width: 22, height: 3, color: Colors.grey),
-            ),
-        ],
-      ),
-    );
   }
 }

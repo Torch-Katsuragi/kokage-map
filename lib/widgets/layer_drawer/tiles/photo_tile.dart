@@ -37,7 +37,8 @@ import '../../../tutorial/tutorial.dart';
 import '../../../utils/app_logger.dart';
 import '../../dialogs/overlay_convert_dialog.dart';
 import '../common_dialogs.dart';
-import 'node_visibility_icon.dart';
+import '../drawer_row.dart';
+import 'drag_feedback_card.dart';
 
 /// 練習フォルダの写真のうち、並びの最初のものか
 bool _isFirstPracticePhoto(ImageNode node) {
@@ -52,30 +53,48 @@ class PhotoTile extends ConsumerWidget {
   final ImageNode node;
   final VoidCallback? onRename;
   final void Function(LatLng)? onJumpTo;
+  final Object? dragData;
+  final VoidCallback? onDragStarted;
+  final VoidCallback? onDragEnded;
 
   const PhotoTile({
     super.key,
     required this.node,
     this.onRename,
     this.onJumpTo,
+    this.dragData,
+    this.onDragStarted,
+    this.onDragEnded,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isOverlay = node is OverlayImageNode;
+    final dimmed = !node.isVisibleRecursive();
 
     // チュートリアルの案内先: 練習フォルダの写真（最初の 1 枚。鍵は 1 つしか付けられない）
     final guiding = ref.watch(tutorialProvider) != null;
     final key = guiding && !isOverlay && _isFirstPracticePhoto(node) ? TutorialTargets.photoTile : null;
-    return ListTile(
+    return DrawerRow(
       key: key,
-      leading: NodeVisibilityIcon(node: node),
-      title: Text(node.name),
+      dimmed: dimmed,
+      leading: Icon(isOverlay ? Icons.image_outlined : Icons.photo_camera_outlined, size: 20, color: dimmed ? Colors.black26 : Colors.purple),
+      title: node.name,
+      titleStyle: const TextStyle(fontSize: 14),
       subtitle: isOverlay
           ? Text(t.layerDrawer.photo.overlay, style: const TextStyle(fontSize: 11, color: Colors.teal))
           : node.hasLocation
               ? null
-              : Text(t.layerDrawer.photo.noLocation, style: const TextStyle(fontSize: 11)),
+              : Text(t.layerDrawer.photo.noLocation, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      eye: VisibilityEye(
+        visible: node.visible,
+        effective: node.parent?.isVisibleRecursive() ?? true,
+        onToggle: () {
+          node.visible = !node.visible;
+          node.persistVisibility();
+          ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        },
+      ),
       onTap: () {
         ref.read(selectedFeaturesProvider.notifier).set([node]);
         ref.read(tutorialProvider.notifier).report(const PhotoSelected());
@@ -83,34 +102,28 @@ class PhotoTile extends ConsumerWidget {
           onJumpTo!(node.location!);
         }
       },
-      trailing: PopupMenuButton<String>(
-        onSelected: (value) async {
-          switch (value) {
-            case 'rename':
-              onRename?.call();
-            case 'delete':
-              await _handleDelete(context, ref);
-            case 'convert_to_overlay':
-              await _handleConvertToOverlay(context, ref);
-            case 'convert_to_normal':
-              await _handleConvertToNormal(context, ref);
-          }
-        },
-        itemBuilder: (context) => [
-          PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.photo.changeName)),
-          if (!isOverlay)
-            PopupMenuItem(
-              value: 'convert_to_overlay',
-              child: Text(t.layerDrawer.photo.convertToOverlay),
-            ),
-          if (isOverlay)
-            PopupMenuItem(
-              value: 'convert_to_normal',
-              child: Text(t.layerDrawer.photo.convertToNormal),
-            ),
-          PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.photo.deletePhoto)),
-        ],
-      ),
+      menu: () => [
+        RowMenuItem('rename', t.layerDrawer.photo.changeName, icon: Icons.edit),
+        if (!isOverlay) RowMenuItem('convert_to_overlay', t.layerDrawer.photo.convertToOverlay, icon: Icons.layers),
+        if (isOverlay) RowMenuItem('convert_to_normal', t.layerDrawer.photo.convertToNormal, icon: Icons.photo),
+        RowMenuItem('delete', t.layerDrawer.photo.deletePhoto, icon: Icons.delete_outline, danger: true, dividerBefore: true),
+      ],
+      onMenu: (value) async {
+        switch (value) {
+          case 'rename':
+            onRename?.call();
+          case 'delete':
+            await _handleDelete(context, ref);
+          case 'convert_to_overlay':
+            await _handleConvertToOverlay(context, ref);
+          case 'convert_to_normal':
+            await _handleConvertToNormal(context, ref);
+        }
+      },
+      dragData: dragData,
+      dragFeedback: dragData == null ? null : DragFeedbackCard(node: node),
+      onDragStarted: onDragStarted,
+      onDragEnded: onDragEnded,
     );
   }
 

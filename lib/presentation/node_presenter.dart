@@ -17,6 +17,7 @@
 // LayerTreeNodeからUI関連の責務を分離
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../core/node_types.dart';
 import '../i18n/strings.g.dart';
@@ -254,6 +255,11 @@ class NodePresenter {
   static String getDisplayName(LayerTreeNode node) {
     // sys の name は内部の鍵（`<sys>`）。表示は i18n
     if (node is SysNode) return t.layerDrawer.sysFolder;
+    // プロジェクトのルートの name は内部の 'Home'。表示は開いているフォルダの名前（パスの無い仮ルートは Home のまま）
+    if (node.parent == null) {
+      final path = node.getAbsoluteFilePath();
+      if (path != null && path.isNotEmpty) return p.basename(path);
+    }
     return node.name;
   }
   

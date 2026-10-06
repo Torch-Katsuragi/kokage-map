@@ -27,7 +27,6 @@ import '../../../models/nodes/geopackage_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/view_node.dart';
-import '../../../presentation/node_presenter.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
@@ -42,7 +41,9 @@ import '../../../widgets/geometry_conversion_dialogs.dart';
 import '../../../widgets/layer_import_export_dialog.dart';
 import '../../../widgets/survey_conversion_dialog.dart';
 import '../common_dialogs.dart';
+import '../drawer_row.dart';
 import 'drag_feedback_card.dart';
+import 'layer_swatch.dart';
 import 'view_tile.dart';
 
 /// レイヤノード用 ListTile（選択・可視切り替え・ドラッグ対応）
@@ -54,178 +55,112 @@ class LayerTile extends ConsumerWidget {
 
   final ValueChanged<LayerTreeNode?>? onDragActiveChanged;
 
+  /// 字下げの段（gpkg の見出しの下は 1）
+  final int depth;
+
   const LayerTile({
     super.key,
     required this.node,
     this.currentDir,
     this.onDragActiveChanged,
+    this.depth = 1,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isSelected = ref.watch(selectedLayerNodeProvider) == node;
-    // チュートリアルの案内先（練習プロジェクトのエリアの目・各レイヤの行）
+    // チュートリアルの案内先（練習プロジェクトのエリアの目・各レイヤの行・行の長押しメニュー）
     final guiding = ref.watch(tutorialProvider) != null;
-    final eyeKey = guiding && isPracticeLayer(node, PracticeProject.areaLayer) ? TutorialTargets.areaEye : null;
-    final tileKey = guiding ? TutorialTargets.tileOf(node) : null;
+    final isArea = guiding && isPracticeLayer(node, PracticeProject.areaLayer);
+    final dimmed = !node.isVisibleRecursive();
 
-    final tileContent = GestureDetector(
-      key: tileKey,
+    Widget row = DrawerRow(
+      depth: depth,
+      selected: isSelected,
+      dimmed: dimmed,
+      leading: LayerSwatch(layer: node, dimmed: dimmed),
+      title: node.name,
+      trailingInfo: '${node.features.length}',
+      eye: KeyedSubtree(
+        key: isArea ? TutorialTargets.areaEye : null,
+        child: VisibilityEye(
+          visible: node.visible,
+          effective: node.parent?.isVisibleRecursive() ?? true,
+          onToggle: () {
+            node.visible = !node.visible;
+            node.persistVisibility();
+            ref.read(featureRefreshTriggerProvider.notifier).trigger();
+            ref.read(tutorialProvider.notifier).report(LayerVisibilityToggled(node));
+          },
+        ),
+      ),
       onTap: () => ref.read(selectedLayerNodeProvider.notifier).select(node),
       onDoubleTap: () => _zoomToLayer(ref),
-      child: ListTile(
-        contentPadding: const EdgeInsets.only(left: 32, right: 16),
-        leading: KeyedSubtree(key: eyeKey, child: _buildLeadingIcon(ref, isSelected)),
-        title: Text(
-          node.name,
-          style: TextStyle(
-            color: isSelected ? Colors.blue : (node.isVisibleRecursive() ? null : Colors.grey),
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-        trailing: _buildMenu(context, ref),
-      ),
-    );
-
-    final draggable = LongPressDraggable<LayerNode>(
-      data: node,
-      dragAnchorStrategy: (_, _, _) => const Offset(0, 0),
-      feedback: DragFeedbackCard(node: node),
-      childWhenDragging: Container(
-        decoration: BoxDecoration(
-          color: Colors.grey.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Opacity(opacity: 0.5, child: tileContent),
-      ),
+      menu: () => _menuItems(isArea),
+      onMenu: (v) => _onMenu(context, ref, v),
+      dragData: node,
+      dragFeedback: DragFeedbackCard(node: node),
       onDragStarted: () => onDragActiveChanged?.call(node),
-      onDraggableCanceled: (_, _) => onDragActiveChanged?.call(null),
-      onDragEnd: (_) => onDragActiveChanged?.call(null),
-      child: tileContent,
+      onDragEnded: () => onDragActiveChanged?.call(null),
     );
+    if (guiding) {
+      row = KeyedSubtree(key: TutorialTargets.tileOf(node), child: row);
+      if (isArea) row = KeyedSubtree(key: TutorialTargets.areaLayerMenu, child: row);
+    }
 
     // 既定の View しかないときは View の行を出さない（2026-10-02 に 09-12 の「既定 1 枚でも出す」を改めた）。
-    // 既定 View の見え方はレイヤのスタイルそのもので、レイヤの ⋮ →「スタイル」で変える。
+    // 既定 View の見え方はレイヤのスタイルそのもので、レイヤの長押し →「スタイル」で変える。
     // View を足すと、既定と足した View が並ぶ
     final views = node.views;
-    if (views.isEmpty || (views.length == 1 && views.first.isDefaultView)) return draggable;
+    if (views.isEmpty || (views.length == 1 && views.first.isDefaultView)) return row;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        draggable,
-        for (final view in views) ViewTile(key: ValueKey(view.viewKey), node: view),
+        row,
+        for (final view in views) ViewTile(key: ValueKey(view.viewKey), node: view, depth: depth + 1),
       ],
     );
   }
 
-  // ---------- UI 部品 ----------
+  // ---------- メニュー（長押し・右クリック） ----------
 
-  Widget _buildLeadingIcon(WidgetRef ref, bool isSelected) {
-    return GestureDetector(
-      onTap: () {
-        node.visible = !node.visible;
-        node.persistVisibility();
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        ref.read(tutorialProvider.notifier).report(LayerVisibilityToggled(node));
-      },
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isSelected ? Colors.blue.withValues(alpha: 0.15) : Colors.transparent,
-            ),
-            padding: const EdgeInsets.all(4),
-            child: Icon(
-              NodePresenter.getIcon(node),
-              color: isSelected
-                  ? Colors.blue
-                  : (node.isVisibleRecursive() ? NodePresenter.getColor(node) : Colors.grey),
-            ),
-          ),
-          if (!node.visible)
-            Transform.rotate(
-              angle: -0.7,
-              child: Container(width: 32, height: 4, color: Colors.grey),
-            ),
-        ],
-      ),
-    );
+  List<RowMenuItem> _menuItems(bool guiding) => [
+        RowMenuItem('zoom', t.layerDrawer.layer.zoomTo, icon: Icons.center_focus_strong),
+        RowMenuItem('rename', t.layerDrawer.layer.rename, icon: Icons.edit),
+        RowMenuItem('style', t.layerDrawer.layer.style, icon: Icons.palette, key: guiding ? TutorialTargets.styleMenuItem : null),
+        RowMenuItem('add_view', t.layerDrawer.view.addView, icon: Icons.filter_alt, key: guiding ? TutorialTargets.addViewMenuItem : null),
+        RowMenuItem('export', t.layerDrawer.layer.exportLayer, icon: Icons.file_download, dividerBefore: true),
+        if (node is PointLayerNode) RowMenuItem('convert_to_line', t.layerDrawer.layer.convertToLinePolygon, icon: Icons.transform),
+        if (node is PolygonLayerNode) RowMenuItem('merge', t.layerDrawer.layer.merge, icon: Icons.join_full),
+        RowMenuItem('absorb', t.layerDrawer.layer.absorbMatchingLayers, icon: Icons.merge_type),
+        RowMenuItem('delete', t.layerDrawer.layer.delete, icon: Icons.delete_outline, danger: true, dividerBefore: true),
+      ];
+
+  Future<void> _onMenu(BuildContext context, WidgetRef ref, String value) async {
+    switch (value) {
+      case 'rename':
+        await _showRenameDialog(context, ref);
+      case 'style':
+        await _openStyleSettings(context, ref);
+      case 'export':
+        await LayerImportExportDialog.showExportDialog(context, exportLayer: node);
+      case 'convert_to_line' when node is PointLayerNode:
+        await _convertPointsToLine(context, ref, node as PointLayerNode);
+      case 'merge' when node is PolygonLayerNode:
+        await _mergePolygons(context, ref, node as PolygonLayerNode);
+      case 'absorb':
+        await _absorbMatchingLayers(context, ref);
+      case 'add_view':
+        await _addView(ref);
+      case 'zoom':
+        _zoomToLayer(ref);
+      case 'delete':
+        await _handleDelete(context, ref);
+    }
   }
 
-  PopupMenuButton<String> _buildMenu(BuildContext context, WidgetRef ref) {
-    final guiding = ref.watch(tutorialProvider) != null && isPracticeLayer(node, PracticeProject.areaLayer);
-    return PopupMenuButton<String>(
-      key: guiding ? TutorialTargets.areaLayerMenu : null,
-      onSelected: (value) async {
-        switch (value) {
-          case 'rename':
-            await _showRenameDialog(context, ref);
-          case 'style':
-            await _openStyleSettings(context, ref);
-          case 'export':
-            await LayerImportExportDialog.showExportDialog(
-              context,
-              exportLayer: node,
-            );
-          case 'convert_to_line' when node is PointLayerNode:
-            await _convertPointsToLine(context, ref, node as PointLayerNode);
-          case 'merge' when node is PolygonLayerNode:
-            await _mergePolygons(context, ref, node as PolygonLayerNode);
-          case 'absorb':
-            await _absorbMatchingLayers(context, ref);
-          case 'add_view':
-            await _addView(ref);
-          case 'zoom':
-            _zoomToLayer(ref);
-          case 'delete':
-            await _handleDelete(context, ref);
-        }
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'zoom',
-          child: Row(children: [const Icon(Icons.center_focus_strong, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.zoomTo)]),
-        ),
-        PopupMenuItem(
-          value: 'rename',
-          child: Row(children: [const Icon(Icons.edit, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.rename)]),
-        ),
-        PopupMenuItem(
-          key: guiding ? TutorialTargets.styleMenuItem : null,
-          value: 'style',
-          child: Row(children: [const Icon(Icons.palette, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.style)]),
-        ),
-        PopupMenuItem(
-          key: guiding ? TutorialTargets.addViewMenuItem : null,
-          value: 'add_view',
-          child: Row(children: [const Icon(Icons.filter_alt, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.view.addView)]),
-        ),
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'export',
-          child: Row(children: [const Icon(Icons.file_download, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.exportLayer)]),
-        ),
-        if (node is PointLayerNode)
-          PopupMenuItem(
-            value: 'convert_to_line',
-            child: Row(children: [const Icon(Icons.transform, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.convertToLinePolygon)]),
-          ),
-        if (node is PolygonLayerNode)
-          PopupMenuItem(value: 'merge', child: Text(t.layerDrawer.layer.merge)),
-        PopupMenuItem(
-          value: 'absorb',
-          child: Row(children: [const Icon(Icons.merge_type, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.absorbMatchingLayers)]),
-        ),
-        const PopupMenuDivider(),
-        PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.layer.delete)),
-      ],
-    );
-  }
-
-  /// レイヤの全フィーチャが入る範囲へ寄せる（行のダブルタップと ⋮ の「レイヤへ寄せる」）。
+  /// レイヤの全フィーチャが入る範囲へ寄せる（行のダブルタップと長押しの「レイヤへ寄せる」）。
   /// 起動時はフィーチャ全体が入る範囲で開く（2026-09-13〜）が、遠くのレイヤへ寄せる導線としても残す
   void _zoomToLayer(WidgetRef ref) {
     final coords = node.getAllCoordinates();
@@ -649,45 +584,26 @@ class LayerTile extends ConsumerWidget {
   }
 }
 
-/// GeoPackage 内レイヤ追加ボタン
-class AddLayerButton extends ConsumerWidget {
-  final GeoPackageNode node;
+/// GeoPackage にレイヤを足す（gpkg の見出しの長押しメニューと、空の gpkg の「レイヤ追加」の行から）
+Future<void> showAddLayerDialog(BuildContext context, WidgetRef ref, GeoPackageNode node) async {
+  final result = await showDialog<Map<String, String>>(
+    context: context,
+    builder: (_) => const _NewLayerDialog(),
+  );
+  if (result == null || result['name'] == null) return;
 
-  const AddLayerButton({super.key, required this.node});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GestureDetector(
-      onTap: () async {
-        final result = await showDialog<Map<String, String>>(
-          context: context,
-          builder: (_) => const _NewLayerDialog(),
-        );
-        if (result == null || result['name'] == null) return;
-
-        final geomType = GeometryType.fromString(result['geomType']!);
-        try {
-          final created = switch (geomType) {
-            GeometryType.point => await PointLayerNode.createIn(node, result['name']!),
-            GeometryType.linestring => await LineLayerNode.createIn(node, result['name']!),
-            GeometryType.polygon => await PolygonLayerNode.createIn(node, result['name']!),
-            null => null,
-          };
-          if (created != null) {
-            ref.read(featureRefreshTriggerProvider.notifier).trigger();
-          }
-        } catch (_) {}
-      },
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.add, size: 24),
-          const SizedBox(width: 8),
-          Text(t.layerDrawer.layer.addLayer, style: const TextStyle(fontSize: 16, color: Colors.black87)),
-        ],
-      ),
-    );
-  }
+  final geomType = GeometryType.fromString(result['geomType']!);
+  try {
+    final created = switch (geomType) {
+      GeometryType.point => await PointLayerNode.createIn(node, result['name']!),
+      GeometryType.linestring => await LineLayerNode.createIn(node, result['name']!),
+      GeometryType.polygon => await PolygonLayerNode.createIn(node, result['name']!),
+      null => null,
+    };
+    if (created != null) {
+      ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    }
+  } catch (_) {}
 }
 
 /// レイヤ新規作成ダイアログ

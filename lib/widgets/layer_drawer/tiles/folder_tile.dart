@@ -28,11 +28,11 @@ import '../../../presentation/node_presenter.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../dialogs/drive_qr_dialog.dart';
 import '../common_dialogs.dart';
+import '../drawer_row.dart';
 import '../sync_merge_dialog.dart';
-import 'node_visibility_icon.dart';
+import 'drag_feedback_card.dart';
 
-/// フォルダノード用の ListTile ウィジェット
-/// DriveFolderNode の場合は同期メニューを追加（モバイルのみ）
+/// フォルダの行。DriveFolderNode は同期の状態を添え、長押しメニューに同期の操作を出す（同期できない環境では QR だけ）
 class FolderTile extends ConsumerWidget {
   final FolderNode node;
   final VoidCallback onTap;
@@ -46,6 +46,11 @@ class FolderTile extends ConsumerWidget {
   /// 実体の場所はアプリが決めているので、ツリーから動かしたり消したりさせない
   final bool fixed;
 
+  /// ドラッグで動かせるとき（ローカルのフォルダ）。長押しして動かさずに離せばメニュー
+  final Object? dragData;
+  final VoidCallback? onDragStarted;
+  final VoidCallback? onDragEnded;
+
   const FolderTile({
     super.key,
     required this.node,
@@ -56,6 +61,9 @@ class FolderTile extends ConsumerWidget {
     this.onUnlinkDrive,
     this.onDeleteDrive,
     this.fixed = false,
+    this.dragData,
+    this.onDragStarted,
+    this.onDragEnded,
   });
 
   /// このプラットフォームで実際に同期できるか。
@@ -66,69 +74,78 @@ class FolderTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (node is DriveFolderNode && _canSync) {
-      final driveNode = node as DriveFolderNode;
-      return ListTile(
-        leading: NodePresenter.buildIconWithSyncOverlay(
-          driveNode,
-          size: 24,
-          syncStatus: driveNode.syncStatus,
-        ),
-        title: Text(node.name),
-        subtitle: _buildSyncSubtitle(context, driveNode),
-        onTap: onTap,
-        trailing: _buildDriveMenu(context, driveNode),
-      );
-    }
-
-    if (node is DriveFolderNode) {
-      // 同期はモバイル専用だが、**渡すことはできる**。
-      // 事務所（web）で整えたdirを現場（Android）に渡す出口がここ。
-      final driveNode = node as DriveFolderNode;
-      return ListTile(
-        leading: Icon(Icons.cloud, color: Colors.blue.shade600),
-        title: Text(node.name),
-        subtitle: Text(
-          t.layerDrawer.folder.pcSyncDisabled,
-          style: const TextStyle(fontSize: 10, color: Colors.grey),
-        ),
-        onTap: onTap,
-        trailing: IconButton(
-          icon: const Icon(Icons.qr_code_2),
-          tooltip: t.driveQr.menu,
-          onPressed:
-              () => DriveQrDialog.show(
-                context,
-                folderName: driveNode.name,
-                driveUrl: driveNode.driveUrl,
-              ),
-        ),
-      );
-    }
-
-    return ListTile(
-      leading: NodeVisibilityIcon(node: node),
-      title: Text(NodePresenter.getDisplayName(node)),
+    final dimmed = !node.isVisibleRecursive();
+    final drive = node is DriveFolderNode ? node as DriveFolderNode : null;
+    return DrawerRow(
+      dimmed: dimmed,
+      leading: drive != null && _canSync
+          ? NodePresenter.buildIconWithSyncOverlay(drive, size: 22, syncStatus: drive.syncStatus)
+          : Icon(NodePresenter.getIcon(node), size: 22, color: dimmed ? Colors.black26 : NodePresenter.getColor(node)),
+      title: NodePresenter.getDisplayName(node),
+      subtitle: drive == null
+          ? null
+          : _canSync
+              ? _buildSyncSubtitle(context, drive)
+              : Text(t.layerDrawer.folder.pcSyncDisabled, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      eye: VisibilityEye(
+        visible: node.visible,
+        effective: node.parent?.isVisibleRecursive() ?? true,
+        onToggle: () {
+          node.visible = !node.visible;
+          node.persistVisibility();
+          ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        },
+      ),
       onTap: onTap,
-      trailing: fixed ? null : _buildFolderMenu(context, ref),
+      menu: () => _menuItems(drive),
+      onMenu: (v) => _onMenu(context, ref, v, drive),
+      dragData: dragData,
+      dragFeedback: dragData == null ? null : DragFeedbackCard(node: node),
+      onDragStarted: onDragStarted,
+      onDragEnded: onDragEnded,
     );
   }
 
-  Widget _buildFolderMenu(BuildContext context, WidgetRef ref) {
-    return PopupMenuButton<String>(
-      onSelected: (value) async {
-        switch (value) {
-          case 'rename':
-            onRename?.call();
-          case 'delete':
-            await _handleDelete(context, ref);
-        }
-      },
-      itemBuilder: (_) => [
-        PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.folder.rename)),
-        PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.folder.delete)),
-      ],
-    );
+  List<RowMenuItem> _menuItems(DriveFolderNode? drive) {
+    if (drive == null) {
+      if (fixed) return const [];
+      return [
+        RowMenuItem('rename', t.layerDrawer.folder.rename, icon: Icons.edit),
+        RowMenuItem('delete', t.layerDrawer.folder.delete, icon: Icons.delete_outline, danger: true),
+      ];
+    }
+    // 同期できない環境でも、QR で渡すことはできる（事務所の web で整えた dir を現場の Android に渡す出口）
+    if (!_canSync) return [RowMenuItem('qr', t.driveQr.menu, icon: Icons.qr_code_2)];
+    return [
+      if (!drive.isReadOnly) RowMenuItem('upload', t.layerDrawer.folder.upload, icon: Icons.cloud_upload),
+      RowMenuItem('download', t.layerDrawer.folder.download, icon: Icons.cloud_download),
+      RowMenuItem('refresh', t.layerDrawer.folder.refreshStatus, icon: Icons.refresh),
+      // 連携dirは自己完結した共有単位。QRで丸ごと渡せる
+      RowMenuItem('qr', t.driveQr.menu, icon: Icons.qr_code_2),
+      RowMenuItem('unlink', t.layerDrawer.folder.unlinkDrive, icon: Icons.link_off, danger: true, dividerBefore: true),
+      RowMenuItem('delete_drive', t.layerDrawer.folder.deleteFolderAll, icon: Icons.delete_forever, danger: true),
+    ];
+  }
+
+  Future<void> _onMenu(BuildContext context, WidgetRef ref, String value, DriveFolderNode? drive) async {
+    switch (value) {
+      case 'rename':
+        onRename?.call();
+      case 'delete':
+        await _handleDelete(context, ref);
+      case 'upload':
+        await onSyncMerge?.call(context, drive!, mode: SyncMode.upload);
+      case 'download':
+        await onSyncMerge?.call(context, drive!, mode: SyncMode.download);
+      case 'refresh':
+        await onRefreshSync?.call(drive!);
+      case 'qr':
+        await DriveQrDialog.show(context, folderName: drive!.name, driveUrl: drive.driveUrl);
+      case 'unlink':
+        await onUnlinkDrive?.call(context, drive!);
+      case 'delete_drive':
+        await onDeleteDrive?.call(context, drive!);
+    }
   }
 
   Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
@@ -174,83 +191,5 @@ class FolderTile extends ConsumerWidget {
       );
     }
     return child;
-  }
-
-  Widget _buildDriveMenu(BuildContext context, DriveFolderNode driveNode) {
-    return PopupMenuButton<String>(
-      onSelected: (value) async {
-        switch (value) {
-          case 'upload':
-            await onSyncMerge?.call(context, driveNode, mode: SyncMode.upload);
-          case 'download':
-            await onSyncMerge?.call(context, driveNode, mode: SyncMode.download);
-          case 'refresh':
-            await onRefreshSync?.call(driveNode);
-          case 'qr':
-            await DriveQrDialog.show(
-              context,
-              folderName: driveNode.name,
-              driveUrl: driveNode.driveUrl,
-            );
-          case 'unlink':
-            await onUnlinkDrive?.call(context, driveNode);
-          case 'delete':
-            await onDeleteDrive?.call(context, driveNode);
-        }
-      },
-      itemBuilder: (context) => [
-        if (!driveNode.isReadOnly)
-          PopupMenuItem(
-            value: 'upload',
-            child: ListTile(
-              leading: const Icon(Icons.cloud_upload, color: Colors.orange),
-              title: Text(t.layerDrawer.folder.upload),
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
-        PopupMenuItem(
-          value: 'download',
-          child: ListTile(
-            leading: const Icon(Icons.cloud_download, color: Colors.green),
-            title: Text(t.layerDrawer.folder.download),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        PopupMenuItem(
-          value: 'refresh',
-          child: ListTile(
-            leading: const Icon(Icons.refresh, color: Colors.blue),
-            title: Text(t.layerDrawer.folder.refreshStatus),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        // 連携dirは自己完結した共有単位。QRで丸ごと渡せる
-        PopupMenuItem(
-          value: 'qr',
-          child: ListTile(
-            leading: const Icon(Icons.qr_code_2, color: Colors.blueGrey),
-            title: Text(t.driveQr.menu),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'unlink',
-          child: ListTile(
-            leading: const Icon(Icons.link_off, color: Colors.red),
-            title: Text(t.layerDrawer.folder.unlinkDrive),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        PopupMenuItem(
-          value: 'delete',
-          child: ListTile(
-            leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: Text(t.layerDrawer.folder.deleteFolderAll),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      ],
-    );
   }
 }

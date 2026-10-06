@@ -16,6 +16,13 @@
 )
 
 #fixes(
+  "Changed",
+  [Layer panel: tighter rows, only the eye at the right; long-press for the menu],
+  [Layer rows show a color sample and the feature count],
+  [A path above the list takes you back to any level],
+)
+
+#fixes(
   "Fixed",
   [Areas without a fill disappeared between zoom 14 and 15 in data with many areas],
 )

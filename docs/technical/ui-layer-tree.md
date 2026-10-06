@@ -1,4 +1,4 @@
-﻿---
+---
 tags: [technical, ui, layer-tree]
 ---
 
@@ -117,6 +117,21 @@ Future<void> initialize() async {
 ### キャッシュクリア
 
 `FolderNode.updateChildren()` は内部で `invalidateMetaCache()` を呼び出し、メタデータキャッシュをクリアする。
+
+## 行の見た目と操作（2026-10-06 に刷新）
+
+- 1 行は `lib/widgets/layer_drawer/drawer_row.dart` の `DrawerRow`（高さ 48px・細い区切り）。右端は表示/非表示の目
+  （`VisibilityEye`）だけで、⋮ は置かない。メニューは長押しか右クリック（`RowMenuItem` → `showRowMenu`）
+- ドラッグで動かせる行（レイヤ・gpkg・ローカルのフォルダ・写真）は `LongPressDraggable`。長押しして**動かさずに離したら
+  メニュー**、12px 以上動かしたら初めてドラッグとして知らせる（長押しだけで一覧がドラッグの表示にならないように）
+- ⚠ ドラッグ中の枠を `decoration: null` と付け外ししないこと。木の形が変わって中身が作り直され、長押し中の行が消える
+  （離したときのメニュー・ドラッグの終わりの合図が届かない）。枠は常に付けて色だけ変える
+- gpkg は行ではなく小さい見出し（`DrawerGroupHeader`。▾ で畳む・目で中をまとめて隠す・長押しにレイヤ追加）。
+  空の gpkg にだけ「レイヤ追加」の行を出す
+- レイヤ・View の行の左端は描画色の見本（`tiles/layer_swatch.dart`。View → レイヤ → 全体設定の順に合成）、名前の横に件数
+- タイトルバーに道筋（`KokageMap › 共有`）。ルートの name は内部の `Home` なので、表示は `NodePresenter.getDisplayName` が
+  開いているフォルダの名前にする
+- チュートリアルの「⋮ を押す」案内は「行を長押し」に替え、`areaLayerMenu` / `newViewMenu` の鍵は行に付けた
 
 ## 関連ファイル
 

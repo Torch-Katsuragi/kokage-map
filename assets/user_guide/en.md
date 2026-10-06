@@ -78,23 +78,29 @@ Tap the :icon-layers: button on the right side of the AppBar to open the **layer
 The layer panel displays the following hierarchy:
 
 - :icon-folder: **Folders** — correspond to subfolders in the project directory
-- :icon-table_chart: **GeoPackage files** — .gpkg files within folders
-- :icon-layers: **Layers** — data layers within GeoPackage files (Point, Line, Polygon)
+- :icon-table_chart: **GeoPackage files** — .gpkg files within folders, shown as small headings; tap one to fold its layers
+- :icon-layers: **Layers** — data layers within GeoPackage files (Point, Line, Polygon). The mark on the left is the color on the map, and the number next to the name is the feature count
+
+The top shows the current folder and the path above it. Tap a name in the path to go back there.
+
+### Opening a Menu
+
+**Long-press** a folder, GeoPackage, layer, or photo row (right-click on a PC) for rename, style, delete and other actions.
 - :icon-photo: **Photos** — image files within folders
 
 ### Creating a New Layer
 
 1. Use the add buttons in the layer panel's title bar.
-2. "GeoPackage" creates a new file; "Add Layer" adds a layer to an existing GeoPackage.
+2. "GeoPackage" creates a new file. To add a layer to an existing GeoPackage, long-press its heading and choose "Add layer".
 3. Select a geometry type (MultiPoint / MultiLineString / MultiPolygon) and enter a layer name.
 
 ### Toggling Layer Visibility
 
-Tap the :icon-visibility: icon next to a layer name to toggle between visible :icon-visibility: and hidden :icon-visibility_off:. You can also toggle visibility at the folder or GeoPackage level.
+Tap the :icon-visibility: at the right end of a row to toggle between visible :icon-visibility: and hidden :icon-visibility_off:. The eye on a folder or GeoPackage toggles everything inside at once; its layers then turn gray.
 
 ### Reordering Layers
 
-Drag and drop layers within the panel to reorder them. Drop a layer onto a different GeoPackage to migrate it.
+Long-press a layer and move it to drag and drop (release without moving to get the menu). Drop a layer onto a different GeoPackage to migrate it.
 
 ### Using the Global Folder
 
@@ -231,7 +237,7 @@ Files are imported into a GeoPackage in the layer panel. For GeoJSON files, laye
 
 ### Exporting Layers
 
-1. Open the menu for the layer you want to export in the layer panel.
+1. Long-press the layer you want to export in the layer panel to open its menu.
 2. Select :icon-file_download: "Export".
 3. Choose the output format:
    - **Shapefile** (.shp) — with coordinate system (EPSG) selection

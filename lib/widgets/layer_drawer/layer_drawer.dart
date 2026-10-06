@@ -52,7 +52,6 @@ import 'common_dialogs.dart';
 import 'layer_drawer_drive_sync.dart';
 import 'layer_drawer_title_bar.dart';
 import 'sync_merge_dialog.dart';
-import 'tiles/drag_feedback_card.dart';
 import 'tiles/folder_tile.dart';
 import 'tiles/geopackage_tile.dart';
 import 'tiles/photo_tile.dart';
@@ -171,14 +170,14 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
           _moveNodeToFolder(details.data, dropTarget);
         }
       },
+      // ⚠ decoration を null と付け外ししないこと。木の形が変わって中身が作り直され、長押し中の行が消える
+      // （離したときのメニュー・ドラッグの終わりの合図が届かなくなる）
       builder: (context, candidateData, _) => Container(
-        decoration: candidateData.isNotEmpty
-            ? BoxDecoration(
-                border: Border.all(color: Colors.orange, width: 2),
-                borderRadius: BorderRadius.circular(4),
-                color: Colors.orange.withValues(alpha: 0.1),
-              )
-            : null,
+        decoration: BoxDecoration(
+          border: Border.all(color: candidateData.isNotEmpty ? Colors.orange : Colors.transparent, width: 2),
+          borderRadius: BorderRadius.circular(4),
+          color: candidateData.isNotEmpty ? Colors.orange.withValues(alpha: 0.1) : null,
+        ),
         child: child,
       ),
     );
@@ -306,6 +305,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
               }
           : null,
       onBack: parent != null ? () => widget.onDirChanged(parent) : null,
+      onNavigate: widget.onDirChanged,
       syncStatus: driveRoot?.syncStatus,
       isReadOnly: driveRoot?.isReadOnly ?? false,
       onCloudAction: driveRoot != null
@@ -321,13 +321,11 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     }
 
     return Container(
-      decoration: _isDragging
-          ? BoxDecoration(
-              border: Border.all(color: Colors.blue, width: 2),
-              borderRadius: BorderRadius.circular(8),
-              color: Colors.blue.withValues(alpha: 0.1),
-            )
-          : null,
+      decoration: BoxDecoration(
+        border: Border.all(color: _isDragging ? Colors.blue : Colors.transparent, width: 2),
+        borderRadius: BorderRadius.circular(8),
+        color: _isDragging ? Colors.blue.withValues(alpha: 0.1) : null,
+      ),
       child: Column(
         children: [
           titleBar,
@@ -374,15 +372,14 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
                 }
               },
               builder: (context, candidateData, _) => Container(
-                decoration: candidateData.isNotEmpty
-                    ? BoxDecoration(
-                        border: Border.all(color: Colors.orange, width: 2),
-                        borderRadius: BorderRadius.circular(4),
-                        color: Colors.orange.withValues(alpha: 0.05),
-                      )
-                    : null,
-                child: ListView(
-                  children: widget.currentNode!.children.map(_buildNodeTile).toList(),
+                decoration: BoxDecoration(
+                  border: Border.all(color: candidateData.isNotEmpty ? Colors.orange : Colors.transparent, width: 2),
+                  borderRadius: BorderRadius.circular(4),
+                  color: candidateData.isNotEmpty ? Colors.orange.withValues(alpha: 0.05) : null,
+                ),
+                child: ListView.builder(
+                  itemCount: widget.currentNode!.children.length,
+                  itemBuilder: (_, i) => _buildNodeTile(widget.currentNode!.children[i]),
                 ),
               ),
             ),
@@ -396,6 +393,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     if (node is FolderNode) {
       // 「この端末」とグローバルフォルダ本体は、名前変更・削除・ドラッグの対象にしない
       final fixed = node is SysNode || node is GlobalFolderNode;
+      final draggable = node is! DriveFolderNode && !fixed;
       final tile = FolderTile(
         node: node,
         fixed: fixed,
@@ -405,22 +403,25 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         onRefreshSync: node is DriveFolderNode ? refreshSyncStatus : null,
         onUnlinkDrive: node is DriveFolderNode ? unlinkDriveFolder : null,
         onDeleteDrive: node is DriveFolderNode ? deleteDriveFolder : null,
+        dragData: draggable ? node : null,
+        onDragStarted: () => setState(() => _draggingNode = node),
+        onDragEnded: _endDrag,
       );
       // sys はパスが無いので落とし先にしない（遷移のためのホバーは受ける）
-      Widget result = _wrapDragNav(
+      return _wrapDragNav(
         tile,
         () => widget.onDirChanged(node),
         dropTarget: node is SysNode ? null : node,
       );
-      if (node is! DriveFolderNode && !fixed) {
-        result = _wrapDraggable(result, node);
-      }
-      return result;
     }
     if (node is ImageNode) {
-      return _wrapDraggable(
-        PhotoTile(node: node, onRename: () => _renamePhoto(context, node), onJumpTo: widget.onJumpTo),
-        node,
+      return PhotoTile(
+        node: node,
+        onRename: () => _renamePhoto(context, node),
+        onJumpTo: widget.onJumpTo,
+        dragData: node,
+        onDragStarted: () => setState(() => _draggingNode = node),
+        onDragEnded: _endDrag,
       );
     }
     if (node is GeoPackageNode) {
@@ -437,20 +438,6 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       );
     }
     return const SizedBox.shrink();
-  }
-
-  /// ファイル移動用の LongPressDraggable ラッパー
-  Widget _wrapDraggable(Widget child, LayerTreeNode node) {
-    return LongPressDraggable<LayerTreeNode>(
-      data: node,
-      dragAnchorStrategy: (_, _, _) => const Offset(0, 0),
-      feedback: DragFeedbackCard(node: node),
-      childWhenDragging: Opacity(opacity: 0.4, child: child),
-      onDragStarted: () => setState(() => _draggingNode = node),
-      onDraggableCanceled: (_, _) => _endDrag(),
-      onDragEnd: (_) => _endDrag(),
-      child: child,
-    );
   }
 
   // --- UI アクション ---

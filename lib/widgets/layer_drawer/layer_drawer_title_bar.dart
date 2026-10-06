@@ -37,6 +37,9 @@ class LayerDrawerTitleBar extends StatelessWidget {
   final void Function(AddAction action)? onAdd;
   final void Function()? onBack;
 
+  /// 道筋（上の階層の名前）を押したとき、その階層へ移る
+  final void Function(LayerTreeNode node)? onNavigate;
+
   /// Drive同期関連（null なら非表示）
   final SyncStatus? syncStatus;
   final void Function(String action)? onCloudAction;
@@ -48,6 +51,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
     required this.currentNode,
     this.onAdd,
     this.onBack,
+    this.onNavigate,
     this.syncStatus,
     this.onCloudAction,
     this.isReadOnly = false,
@@ -105,13 +109,45 @@ class LayerDrawerTitleBar extends StatelessWidget {
                 constraints: const BoxConstraints(),
               ),
             ),
-          Expanded(child: _buildTitle(isDrive)),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (currentNode.parent != null) _buildBreadcrumb(),
+                _buildTitle(isDrive),
+              ],
+            ),
+          ),
           if (currentNode is DriveFolderNode && onCloudAction != null)
             _buildCloudButton(),
           if (currentNode is FolderNode && onAdd != null) ...[
             if (currentNode is DriveFolderNode && onCloudAction != null)
               const SizedBox(width: 8),
             _buildAddButton(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 上の階層の道筋（KokageMap › 共有）。押すとその階層へ一気に戻る
+  Widget _buildBreadcrumb() {
+    final chain = <LayerTreeNode>[];
+    for (var n = currentNode.parent; n != null; n = n.parent) {
+      chain.insert(0, n);
+    }
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      reverse: true,
+      child: Row(
+        children: [
+          for (var i = 0; i < chain.length; i++) ...[
+            if (i > 0) const Text(' › ', style: TextStyle(color: Colors.white70, fontSize: 11)),
+            GestureDetector(
+              onTap: onNavigate == null ? null : () => onNavigate!(chain[i]),
+              child: Text(NodePresenter.getDisplayName(chain[i]), style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            ),
           ],
         ],
       ),

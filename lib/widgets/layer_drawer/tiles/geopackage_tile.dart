@@ -32,9 +32,10 @@ import '../../../providers/ui_state_providers.dart';
 import '../../../services/import_export/import_export_service.dart';
 import '../../../tutorial/tutorial.dart';
 import '../common_dialogs.dart';
+import '../drawer_row.dart';
 import 'drag_feedback_card.dart';
 import 'layer_tile.dart';
-import 'node_visibility_icon.dart';
+
 
 /// GeoPackage ノード用タイル（展開/折りたたみ・ドラッグ&ドロップ対応）
 class GeoPackageTile extends ConsumerWidget {
@@ -44,6 +45,7 @@ class GeoPackageTile extends ConsumerWidget {
   final void Function(GeoPackageNode?) onDragTargetChanged;
   final ValueChanged<LayerTreeNode?> onDragActiveChanged;
   final LayerTreeNode? currentDir;
+  final int depth;
 
   const GeoPackageTile({
     super.key,
@@ -53,86 +55,87 @@ class GeoPackageTile extends ConsumerWidget {
     required this.onDragActiveChanged,
     this.onRename,
     this.currentDir,
+    this.depth = 0,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(featureRefreshTriggerProvider);
     final expansionState = ref.watch(expandedGeoPackagesProvider);
     final absPath = node.geoPackageFile.getAbsolutePath();
     final isExpanded = expansionState.isExpanded(absPath);
+    // チュートリアルの案内先（練習プロジェクトの GeoPackage だけ）
+    final guiding = ref.watch(tutorialProvider) != null && isPracticeGpkg(absPath);
+    final dimmed = !node.isVisibleRecursive();
+    final layers = node.children.whereType<LayerNode>().toList();
 
-    final headerTile = ListTile(
-      // チュートリアルの案内先（練習プロジェクトの GeoPackage だけ）
-      key: ref.watch(tutorialProvider) != null && isPracticeGpkg(absPath) ? TutorialTargets.gpkgTile : null,
-      leading: NodeVisibilityIcon(node: node),
-      title: Row(
-        children: [
-          Expanded(child: Text(node.name)),
-          if (isDropTarget)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(12)),
-              child: Text(
-                t.layerDrawer.geopackage.dropLayerHere,
-                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-              ),
-            ),
-        ],
-      ),
-      onTap: () {
+    final header = DrawerGroupHeader(
+      headerKey: guiding ? TutorialTargets.gpkgTile : null,
+      depth: depth,
+      title: _stripExt(node.name),
+      expanded: isExpanded,
+      dimmed: dimmed,
+      highlight: isDropTarget,
+      badge: isDropTarget
+          ? Text(t.layerDrawer.geopackage.dropLayerHere, style: const TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold))
+          : null,
+      onToggleExpanded: () {
         if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).toggle(absPath);
       },
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          PopupMenuButton<String>(
-            onSelected: (value) async {
-              if (value == 'rename') {
-                onRename?.call();
-              } else if (value == 'delete') {
-                await _handleDelete(context, ref);
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.geopackage.changeName)),
-              PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.geopackage.deleteGpkg)),
-            ],
-          ),
-        ],
+      eye: VisibilityEye(
+        visible: node.visible,
+        effective: node.parent?.isVisibleRecursive() ?? true,
+        onToggle: () {
+          node.visible = !node.visible;
+          node.persistVisibility();
+          ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        },
       ),
+      menu: () => [
+        RowMenuItem('add_layer', t.layerDrawer.layer.addLayer, icon: Icons.add),
+        RowMenuItem('rename', t.layerDrawer.geopackage.changeName, icon: Icons.edit),
+        RowMenuItem('delete', t.layerDrawer.geopackage.deleteGpkg, icon: Icons.delete_outline, danger: true, dividerBefore: true),
+      ],
+      onMenu: (v) async {
+        switch (v) {
+          case 'add_layer':
+            await showAddLayerDialog(context, ref, node);
+          case 'rename':
+            onRename?.call();
+          case 'delete':
+            await _handleDelete(context, ref);
+        }
+      },
+      dragData: node,
+      dragFeedback: DragFeedbackCard(node: node),
+      onDragStarted: () => onDragActiveChanged(node),
+      onDragEnded: () => onDragActiveChanged(null),
     );
 
     final content = Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        LongPressDraggable<GeoPackageNode>(
-          data: node,
-          dragAnchorStrategy: (_, _, _) => const Offset(0, 0),
-          feedback: DragFeedbackCard(node: node),
-          childWhenDragging: Opacity(opacity: 0.4, child: headerTile),
-          onDragStarted: () => onDragActiveChanged(node),
-          onDraggableCanceled: (_, _) => onDragActiveChanged(null),
-          onDragEnd: (_) => onDragActiveChanged(null),
-          child: headerTile,
-        ),
+        header,
         if (isExpanded) ...[
-          ...node.children.map(
-            (layerNode) => LayerTile(
-              node: layerNode as LayerNode,
+          for (final layerNode in layers)
+            LayerTile(
+              node: layerNode,
               currentDir: currentDir,
+              depth: depth + 1,
               onDragActiveChanged: (dragNode) {
                 onDragActiveChanged(dragNode);
                 if (dragNode == null) onDragTargetChanged(null);
               },
             ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 32, top: 4, bottom: 4),
-              child: AddLayerButton(node: node),
+          // 空の gpkg にだけ「レイヤ追加」の行を出す（以前は gpkg ごとに出していてうるさかった。ふだんは見出しの長押しから）
+          if (layers.isEmpty)
+            DrawerRow(
+              depth: depth + 1,
+              height: 40,
+              leading: const Icon(Icons.add, size: 18, color: Colors.black45),
+              title: t.layerDrawer.layer.addLayer,
+              titleStyle: const TextStyle(fontSize: 14, color: Colors.black54),
+              onTap: () => showAddLayerDialog(context, ref, node),
             ),
-          ),
         ],
       ],
     );
@@ -145,23 +148,14 @@ class GeoPackageTile extends ConsumerWidget {
         onDragTargetChanged(null);
       },
       onWillAcceptWithDetails: (details) => details.data.geoPackageNode != node,
+      // 自分の中のレイヤが乗っているだけ（長押ししたところ）はドラッグ扱いにしない。長押しで離せばメニューになる
       onMove: (details) {
+        if (details.data.geoPackageNode == node) return;
         onDragActiveChanged(details.data);
         onDragTargetChanged(node);
       },
       onLeave: (_) => onDragTargetChanged(null),
-      builder: (context, _, _) {
-        return Container(
-          decoration: isDropTarget
-              ? BoxDecoration(
-                  border: Border.all(color: Colors.blue, width: 2),
-                  borderRadius: BorderRadius.circular(4),
-                  color: Colors.blue.withValues(alpha: 0.1),
-                )
-              : null,
-          child: content,
-        );
-      },
+      builder: (context, _, _) => content,
     );
 
     // ファイル D&D ターゲット（外側・デスクトップからのドロップ用）
@@ -177,6 +171,8 @@ class GeoPackageTile extends ConsumerWidget {
       child: layerDragTarget,
     );
   }
+
+  static String _stripExt(String name) => name.toLowerCase().endsWith('.gpkg') ? name.substring(0, name.length - 5) : name;
 
   Future<void> _handleFileDrop(String filePath, WidgetRef ref) async {
     try {

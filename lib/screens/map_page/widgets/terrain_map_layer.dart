@@ -1514,6 +1514,24 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
   }
 
+  /// 描きかけの線・面の範囲（Mercator m）。点の数と最後の点が同じなら前の結果を使う
+  (int, int, LatLng?, Rect?)? _strokeCache;
+  Rect? _strokeBounds(GlobalDrawingState d) {
+    final line = d.drawingLine;
+    final poly = d.drawingPolygon;
+    final last = line.isNotEmpty ? line.last : (poly.isNotEmpty ? poly.last : null);
+    final c = _strokeCache;
+    if (c != null && c.$1 == line.length && c.$2 == poly.length && c.$3 == last) return c.$4;
+    Rect? r;
+    for (final p in [...line, ...poly]) {
+      final q = Offset(WebMercator.xFromLon(p.longitude), WebMercator.yFromLat(p.latitude));
+      r = r == null ? Rect.fromPoints(q, q) : r.expandToInclude(Rect.fromPoints(q, q));
+    }
+    r = r?.inflate(5);
+    _strokeCache = (line.length, poly.length, last, r);
+    return r;
+  }
+
   /// 今日の GPS 軌跡・パーティ・現在位置（GPS の更新ごとに作り直す。軽い）
   _TileScene _buildDynamic(
     List<Object?> key,
@@ -1605,7 +1623,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       lineColor: Colors.red, lineWidth: 3, fillColor: Color(0x33FF0000),
       outlineColor: Colors.red, outlineWidth: 2, pointColor: Colors.red, pointSize: 8,
     );
-    if (drawing.drawingLine.length >= 2 || drawing.drawingPolygon.length >= 2) {
+    // 描きかけの線の範囲に掛からないタイルでは組まない（指を動かすたびに全タイルで線全体を持ち上げ直していた）
+    final strokeBox = _strokeBounds(drawing);
+    final strokeHere = strokeBox != null && strokeBox.overlaps(clip.shift(Offset(dem.originX, dem.originY)));
+    if (strokeHere && (drawing.drawingLine.length >= 2 || drawing.drawingPolygon.length >= 2)) {
       add(
         builder(const {}, drawStyle, '__no_label__').build(
           lines: [
@@ -1626,7 +1647,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       );
     }
     final survey = tool is GpsTool;
-    if (survey) {
+    if (survey && strokeHere) {
       // GPS 測量: 紫の点に「集めた点数」のラベル（2D の _buildSurveyPointMarker と同じ）
       int countOf(List<Map<String, dynamic>?> meta, int i) {
         if (i >= meta.length) return i + 1;
@@ -1657,10 +1678,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           clipRect: clip,
         ),
       );
-    } else {
+    } else if (!survey) {
       for (final p in [
-        ...drawing.drawingLine,
-        ...drawing.drawingPolygon,
+        if (strokeHere) ...drawing.drawingLine,
+        if (strokeHere) ...drawing.drawingPolygon,
         if (drawing.pointPreview != null) drawing.pointPreview!,
       ]) {
         final x = WebMercator.xFromLon(p.longitude) - dem.originX;

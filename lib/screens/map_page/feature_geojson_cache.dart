@@ -112,6 +112,16 @@ class FeatureGeoJsonCache {
   final Expando<_PtConv> _ptConv = Expando('geojson.pt');
   final Expando<_PtConv> _photoConv = Expando('geojson.photo');
 
+  /// 頂点の点（頂点の表示をオンにしているとき）。形が同じなら前と同じオブジェクトを返す（リストを前のまま保てるように）
+  final Expando<(Object?, List<geo.Feature<geo.Point>>)> _vertexConv = Expando('geojson.vertex');
+  List<geo.Feature<geo.Point>> _vertices(FeatureNode f, Object? turfGeom, Iterable<geo.Position> Function() positions) {
+    final c = _vertexConv[f];
+    if (c != null && identical(c.$1, turfGeom)) return c.$2;
+    final vs = [for (final pt in positions()) geo.Feature<geo.Point>(geometry: geo.Point(pt))];
+    _vertexConv[f] = (turfGeom, vs);
+    return vs;
+  }
+
   /// 全件を組み直す
   void rebuildAll(FeatureGeoJsonInput input) => _build(input, full: true);
 
@@ -219,11 +229,9 @@ class FeatureGeoJsonCache {
       if (sigs != null) sign(f, hit.$2, props);
       if (sel) linesSel.add(feature);
       if (input.lineVertices) {
-        for (final pt in turfLineVertices(f.turfFeature.geometry)) {
-          final v = geo.Feature<geo.Point>(geometry: geo.Point(pt));
-          lineVerts?.add(v);
-          if (sel) lineVertsSel.add(v);
-        }
+        final vs = _vertices(f, turfGeom, () => turfLineVertices(turfGeom));
+        lineVerts?.addAll(vs);
+        if (sel) lineVertsSel.addAll(vs);
       }
     }
 
@@ -244,11 +252,9 @@ class FeatureGeoJsonCache {
       if (sigs != null) sign(f, hit.$2, props);
       if (sel) polysSel.add(feature);
       if (input.polygonVertices) {
-        for (final pt in turfPolygonVertices(f.turfFeature.geometry)) {
-          final v = geo.Feature<geo.Point>(geometry: geo.Point(pt));
-          polyVerts?.add(v);
-          if (sel) polyVertsSel.add(v);
-        }
+        final vs = _vertices(f, turfGeom, () => turfPolygonVertices(turfGeom));
+        polyVerts?.addAll(vs);
+        if (sel) polyVertsSel.addAll(vs);
       }
     }
 

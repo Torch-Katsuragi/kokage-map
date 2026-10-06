@@ -29,6 +29,7 @@ import 'core/launch_request.dart';
 import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
 import 'i18n/strings.g.dart';
+import 'models/geopackage/geopackage_connection.dart';
 import 'models/nodes/feature_node.dart';
 import 'providers/drawing_provider.dart';
 import 'providers/project_providers.dart';
@@ -294,6 +295,10 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
       _cleanupOnAppExit();
     } else if (state == AppLifecycleState.paused) {
       BackgroundSaveManager.instance.flushAllChanges();
+      GeoPackageConnection.flushPendingCheckIns();
+    } else if (state == AppLifecycleState.hidden) {
+      // web はタブを隠したときがこれ（閉じる前の最後の機会になりやすい）
+      GeoPackageConnection.flushPendingCheckIns();
     }
   }
 

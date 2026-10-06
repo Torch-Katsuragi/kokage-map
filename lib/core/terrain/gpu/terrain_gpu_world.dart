@@ -221,6 +221,11 @@ class TerrainGpuWorldRenderer {
   static const _sweepMs = 3000;
   int _lastSweep = 0;
 
+  /// 動く部分（軌跡・描きかけの線など）を詰めた結果。動的シーンは変わったときだけ作り直されるので、リストの同一性で覚える
+  /// （以前は毎フレーム・タイルごとに詰め直していた）
+  final Expando<Float32List> _dynPolys = Expando('gpu.dynPolys');
+  final Expando<GpuLineGeometry> _dynLines = Expando('gpu.dynLines');
+
   /// テクスチャを別経路で上げ終えたとき（描き直しの合図）
   VoidCallback? onTextureReady;
 
@@ -524,7 +529,8 @@ class TerrainGpuWorldRenderer {
         }
       }
       if (e.tile.dynamicPolygons.isNotEmpty) {
-        final packed = GpuPolygonGeometry.packPolygons(e.tile.dynamicPolygons);
+        final dp = e.tile.dynamicPolygons;
+        final packed = _dynPolys[dp] ??= GpuPolygonGeometry.packPolygons(dp);
         if (packed.isNotEmpty) {
           pass.bindVertexBuffer(_hostBuffer.emplace(ByteData.view(packed.buffer)));
           pass.draw(GpuPolygonGeometry.vertexCountOf(packed));
@@ -557,7 +563,8 @@ class TerrainGpuWorldRenderer {
         }
       }
       if (e.tile.dynamicLines.isNotEmpty) {
-        final g = GpuLineGeometry.pack(polylines: e.tile.dynamicLines);
+        final dl = e.tile.dynamicLines;
+        final g = _dynLines[dl] ??= GpuLineGeometry.pack(polylines: dl);
         if (!g.isEmpty) {
           pass.bindVertexBuffer(_hostBuffer.emplace(ByteData.view(g.vertices.buffer)));
           pass.bindIndexBuffer(_hostBuffer.emplace(ByteData.view(g.indices.buffer)), gpu.IndexType.int32);

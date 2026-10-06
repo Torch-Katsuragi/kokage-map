@@ -64,6 +64,15 @@ class GeoPackageConnection {
 
   static String _registryKey(String path) => p.canonicalize(path);
 
+  /// 書き込みが残っている接続をすぐ書き戻す（web のみ。タブを隠した・閉じかけたとき。見回りの待ちを飛ばす）
+  static Future<void> flushPendingCheckIns() async {
+    if (fs.hasRealPaths) return;
+    for (final c in [for (final set in _openConnections.values) ...set]) {
+      c._dirtySince = DateTime.fromMillisecondsSinceEpoch(0); // 待たずに書く
+      await c._checkInIfDirty();
+    }
+  }
+
   /// [absPath] を開いている接続をすべて閉じる。閉じた数を返す。
   ///
   /// 閉じた接続は、次に [getDatabase] を呼んだときに開き直る（呼び手の作り直しは要らない）。
@@ -216,6 +225,8 @@ class GeoPackageConnection {
   static const _checkInInterval = Duration(seconds: 2);
 
   bool _checkInInProgress = false;
+  int _lastSeenChanges = -1;
+  DateTime? _dirtySince;
 
   Future<void> _checkInIfDirty() async {
     if (_checkInInProgress) return;
@@ -226,8 +237,16 @@ class GeoPackageConnection {
       final rows = await db.rawQuery('SELECT total_changes() AS c');
       final changes = (rows.first['c'] as num).toInt();
       if (changes == _checkedInChanges) return;
+      // 書き込みが続いている間は待つ（チェックインはファイル全体を書き直すので、編集の最中に 2 秒ごとに数十 MB を
+      // 書いていた）。前の見回りから変わっていなければ書く。続いていても最初の変化から 10 秒たったら書く
+      final now = DateTime.now();
+      _dirtySince ??= now;
+      final settled = changes == _lastSeenChanges;
+      _lastSeenChanges = changes;
+      if (!settled && now.difference(_dirtySince!) < const Duration(seconds: 10)) return;
       await checkIn();
       _checkedInChanges = changes;
+      _dirtySince = null;
     } catch (e) {
       AppLogger.debug('[GeoPackageConnection] 自動チェックイン失敗: $e');
     } finally {

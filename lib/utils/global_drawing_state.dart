@@ -63,13 +63,23 @@ class GlobalDrawingState {
   /// 追記対象のFeatureNode
   FeatureNode? get editingFeature => _editingFeature;
 
-  /// Getters
-  List<LatLng> get drawingLine => List.unmodifiable(_drawingLine);
-  List<LatLng> get drawingPolygon => List.unmodifiable(_drawingPolygon);
-  List<Map<String, dynamic>?> get lineMetadata =>
-      List.unmodifiable(_lineMetadata);
+  /// Getters。複製（呼んだ側が持っていても後から変わらない）は中身が変わったときだけ作り直す。
+  /// 以前は呼ぶたびに複製していて、描いている間は指の 1 動きで何十回も点の数ぶん複製していた（2026-10-06）。
+  /// 変わったかどうかは点の数と最初・最後の点で見る（追加・取消・入れ替えのどれでもどれかが変わる）
+  List<LatLng> get drawingLine => (_lineView = _view(_drawingLine, _lineView, _lineMetadata)).$1;
+  List<LatLng> get drawingPolygon => (_polygonView = _view(_drawingPolygon, _polygonView, _polygonMetadata)).$1;
+  List<Map<String, dynamic>?> get lineMetadata => (_lineView = _view(_drawingLine, _lineView, _lineMetadata)).$2;
   List<Map<String, dynamic>?> get polygonMetadata =>
-      List.unmodifiable(_polygonMetadata);
+      (_polygonView = _view(_drawingPolygon, _polygonView, _polygonMetadata)).$2;
+
+  _DrawingView? _lineView;
+  _DrawingView? _polygonView;
+
+  static _DrawingView _view(List<LatLng> pts, _DrawingView? before, List<Map<String, dynamic>?> meta) {
+    final key = (pts.length, meta.length, pts.isEmpty ? null : pts.first, pts.isEmpty ? null : pts.last);
+    if (before != null && before.$3 == key) return before;
+    return (List<LatLng>.unmodifiable(pts), List<Map<String, dynamic>?>.unmodifiable(meta), key);
+  }
 
   /// プレビュー用の点座標（点描画用）
   LatLng? _pointPreview;
@@ -82,11 +92,6 @@ class GlobalDrawingState {
     _drawingLine.add(position);
     _lineMetadata.add(metadata);
 
-    AppLogger.debug(
-      '[GlobalDrawingState] 線に点追加: $position, メタデータ: ${metadata != null ? 'あり' : 'なし'}',
-    );
-    AppLogger.debug('[GlobalDrawingState] 現在の線の点数: ${_drawingLine.length}');
-
     // 自動保存タイマーの開始/リセット
     _resetAutoSaveTimer();
   }
@@ -97,11 +102,6 @@ class GlobalDrawingState {
   void addPolygonPoint(LatLng position, Map<String, dynamic>? metadata) {
     _drawingPolygon.add(position);
     _polygonMetadata.add(metadata);
-
-    AppLogger.debug(
-      '[GlobalDrawingState] ポリゴンに点追加: $position, メタデータ: ${metadata != null ? 'あり' : 'なし'}',
-    );
-    AppLogger.debug('[GlobalDrawingState] 現在のポリゴンの点数: ${_drawingPolygon.length}');
 
     // 自動保存タイマーの開始/リセット
     _resetAutoSaveTimer();
@@ -732,3 +732,5 @@ class GlobalDrawingState {
   }
 }
 
+/// 点の一覧と付帯情報の複製、作ったときの中身の鍵（点の数・付帯情報の数・最初と最後の点）
+typedef _DrawingView = (List<LatLng>, List<Map<String, dynamic>?>, (int, int, LatLng?, LatLng?));

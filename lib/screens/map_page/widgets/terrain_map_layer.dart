@@ -86,7 +86,7 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
     required this.geoJson,
     required this.sceneRevision,
     required this.styleGroups,
-    required this.currentLocation,
+    required this.location,
     required this.gpsTrack,
     required this.onProjectionChanged,
     required this.mapBearingNotifier,
@@ -106,7 +106,8 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   /// View 固有スタイル（解決済み）
   final List<MapStyleGroup> Function() styleGroups;
 
-  final LatLng? currentLocation;
+  /// 現在位置。変わったら描き直す（ページは組み立て直さない）
+  final ValueListenable<LatLng?> location;
 
   /// 今日の GPS 軌跡（未 Consolidation 分。Consolidation 済みはレイヤ経由で届く）
   final List<LatLng> Function() gpsTrack;
@@ -645,6 +646,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     widget.sceneRevision.addListener(_onSceneRevision);
     TerrainAppearance.revision.addListener(_onAppearanceChanged);
     widget.heading?.addListener(_onHeading);
+    widget.location.addListener(_scheduleRefresh);
     widget.onProjectionChanged(this);
     _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 350))
       ..addListener(_onAnimTick)
@@ -847,6 +849,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
     _stopDrive();
     widget.heading?.removeListener(_onHeading);
+    widget.location.removeListener(_scheduleRefresh);
     widget.sceneRevision.removeListener(_onSceneRevision);
     TerrainAppearance.revision.removeListener(_onAppearanceChanged);
     widget.onProjectionChanged(null);
@@ -1244,7 +1247,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final g = widget.geoJson;
     final track = widget.gpsTrack();
     final session = ref.read(partySessionProvider);
-    final loc = widget.currentLocation;
+    final loc = widget.location.value;
     final cacheKey = (tile.key, step, tile.borderMask, tile.sourceZoom);
     final staticKey = <Object?>[
       g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images, g.selectedImages,

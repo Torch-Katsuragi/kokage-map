@@ -33,6 +33,7 @@ import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
+import '../../providers/selection_providers.dart';
 import '../../services/basemap_service.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../services/gps_manager_service.dart';
@@ -57,6 +58,13 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   /// 現在位置
   LatLng? currentLocation;
+
+  /// 現在位置の知らせ（3D の地図面と画面外の矢印だけが聞く）。歩いていると 1 秒ごとに変わるので、
+  /// そのたびに地図ページ全体を組み立て直さない（2026-10-06）
+  final ValueNotifier<LatLng?> locationNotifier = ValueNotifier<LatLng?>(null);
+
+  /// 現在位置の詳細パネルが開いているか（開いている間だけ、位置・GPS 情報の変化でページを組み立て直す）
+  bool get showsCurrentLocationDetail => ref.read(selectedFeaturesProvider).contains(currentLocationNode);
 
   /// 現在位置マーカーの擬似フィーチャ。値は地図側のフィールドをその都度読む
   @override

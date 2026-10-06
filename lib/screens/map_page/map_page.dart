@@ -21,6 +21,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/launch_request.dart';
@@ -283,7 +284,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     final before = currentGpsInfo;
     // 表示に関わる値が同じなら組み立て直さない（フォアグラウンドサービスは同じ位置を毎秒送り直してくるので、
     // そのたびに地図ページ全体を組み立て直していた。2026-10-06）
-    if (before != null && _gpsInfoKeys.every((k) => before[k] == info[k])) {
+    // 読むのは現在位置の詳細パネルだけ（開いているときに変わったら組み立て直す）
+    if (before != null && (!showsCurrentLocationDetail || _gpsInfoKeys.every((k) => before[k] == info[k]))) {
       currentGpsInfo = info;
       return;
     }
@@ -514,7 +516,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                               geoJson: geoJson,
                               sceneRevision: terrainSceneRevision,
                               styleGroups: () => styleGroups,
-                              currentLocation: currentLocation,
+                              location: locationNotifier,
                               gpsTrack: () => gpsHistoryRecorder.todayPoints,
                               onProjectionChanged: (p) {
                                 terrainProjection = p;
@@ -848,8 +850,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   /// ドロワーに隠れている部分は「見えていない」扱いにして、矢印はドロワーの手前に出す。
   Widget _buildOffscreenLocationIndicator() {
     return Positioned.fill(
-      child: OffscreenLocationIndicator(
-        location: currentLocation,
+      child: ValueListenableBuilder<LatLng?>(
+        valueListenable: locationNotifier,
+        builder: (context, loc, _) => OffscreenLocationIndicator(
+        location: loc,
         project: (l) => terrainProjection?.project(l),
         repaint: cameraTickNotifier,
         obscured: EdgeInsets.only(
@@ -858,6 +862,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         ),
         semanticsLabel: t.map.jump.toCurrentLocation,
         onTap: jumpToCurrentLocation,
+        ),
       ),
     );
   }

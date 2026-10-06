@@ -294,9 +294,13 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
           final next = LatLng(record.latitude, record.longitude);
           // 同じ位置の送り直し（フォアグラウンドサービスが毎秒送る）では組み立て直さない
           if (next == currentLocation && movedToCurrentLocationOnce) return;
-          triggerSetState(() {
-            currentLocation = next;
-            if (!movedToCurrentLocationOnce && currentLocation != null) {
+          final first = currentLocation == null;
+          currentLocation = next;
+          locationNotifier.value = next;
+          // ページを組み立て直すのは、最初に位置が取れたとき（ボタンの状態が変わる）と、現在位置の詳細パネルが開いているときだけ
+          if (first || showsCurrentLocationDetail) triggerSetState(() {});
+          {
+            if (!movedToCurrentLocationOnce) {
               // 地図の生成より先にGPSの初回フィックスが届くことがある。
               // その場合 jumpTo() は false を返して保留され、
               // onMapCreated（attach）の時点で実行される。
@@ -311,7 +315,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
                 }
               });
             }
-          });
+          }
         },
         onError: (error) {
           AppLogger.debug('[GPS] stream error: $error');
@@ -474,6 +478,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     positionSubscription?.cancel();
     compassSubscription?.cancel();
     headingNotifier.dispose();
+    locationNotifier.dispose();
     mapBearingNotifier.dispose();
     cameraTickNotifier.dispose();
     longPressCountUpdateTimer?.cancel();

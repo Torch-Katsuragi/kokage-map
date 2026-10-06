@@ -603,8 +603,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     }
 
     final input = FeatureGeoJsonInput(
-      lines: lineFeatures,
-      polygons: polygonFeatures,
+      lines: _viewOrdered(lineFeatures),
+      polygons: _viewOrdered(polygonFeatures),
       points: pointFeatures,
       photos: photoNodes,
       selected: currentSelection.toSet(),
@@ -628,6 +628,34 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
     geoJson.rebuildAll(input);
     _pushFeaturesToSources();
+  }
+
+  /// 同じレイヤの中を View の順に並べる（上の View ほど後＝手前に描く。どの View にも当たらないものはいちばん下）。
+  /// レイヤどうしの順（ツリーの並び）は変えない。固有スタイルが 1 つも無ければそのまま返す
+  List<T> _viewOrdered<T extends FeatureNode>(List<T> fs) {
+    if (styleGroups.isEmpty || fs.isEmpty) return fs;
+    final byLayer = <LayerNode, List<T>>{};
+    for (final f in fs) {
+      (byLayer[f.parent] ??= []).add(f);
+    }
+    final out = <T>[];
+    for (final MapEntry(key: layer, value: list) in byLayer.entries) {
+      final keys = layer.styleGroups.keys.toList();
+      if (keys.length < 2) {
+        out.addAll(list);
+        continue;
+      }
+      final rank = {for (var i = 0; i < keys.length; i++) keys[i]: i};
+      // 順位ごとに振り分けて下から積む（同じ View の中は元の順のまま）
+      final buckets = List.generate(keys.length + 1, (_) => <T>[]);
+      for (final f in list) {
+        buckets[rank[layer.styleKeyOf(f.rowId)] ?? keys.length].add(f);
+      }
+      for (final b in buckets.reversed) {
+        out.addAll(b);
+      }
+    }
+    return out;
   }
 
   /// フィーチャに出すラベル。View 固有 → レイヤ固有 → 全体設定の順で解決する

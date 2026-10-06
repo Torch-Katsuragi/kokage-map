@@ -16,6 +16,13 @@
 )
 
 #fixes(
+  "Lighter",
+  [Less battery drain while the map sits open],
+  [Memory no longer grows while panning],
+  [Faster loading of data with many areas],
+)
+
+#fixes(
   "Changed",
   [Layer panel: tighter rows, only the eye at the right; long-press for the menu, swipe left to move],
   [Layer rows show a color sample and the feature count],

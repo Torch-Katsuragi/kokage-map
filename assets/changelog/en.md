@@ -9,6 +9,12 @@
 - Each layer row starts with a sample of its map color and shows its feature count. GeoPackages are small headings whose eye hides everything inside
 - A path (KokageMap › 共有) above the list takes you back to any level. The top shows the folder name instead of "Home"
 
+### Lighter
+
+- Less battery drain while the map sits open (it no longer redraws the whole map on every compass and GPS update)
+- Memory no longer keeps growing while you pan
+- Data with many areas opens faster, and the basemap shows while it loads
+
 ### Fixed
 
 - In data with many areas (such as forest compartments), areas without a fill disappeared at some in-between zoom levels (between 14 and 15). They now stay visible

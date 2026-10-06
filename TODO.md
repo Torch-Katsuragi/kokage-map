@@ -40,18 +40,11 @@
 ## 3D・描画
 
 - [ ] `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[docs/technical/scene-model]]）
-- [ ] メモリ削減（profile 実測で 3D の増分 +200〜250MB。画像 LRU・`raw` の畳み込み・親テクスチャ 256²）。
-      2026-10-06 に Fold（debug）で測った: `dumpsys meminfo` の GL mtrack が 0.8〜1.2GB で大半。そのうち flutter_gpu 側
-      （地形テクスチャ 11 枚 14MB・地形バッファ・線と面のバッファ）は合わせて約 15MB しかない。残りは Impeller が持つ分
-      （`ui.Image`・`Picture.toImage`・画面の描画先など）。次は perfetto の GPU メモリか DevTools で `ui.Image` の生存数を見て、
-      どれが大きいかを突き止めてから削る（推測で LRU を縮めない）。
-      GL の推移: ホーム 70MB → 地図を開いた直後 467MB → パンを重ねると 0.8〜1.2GB → ホームへ戻ると 170MB
-      （戻っても残る 100MB は static の `_tileImages`（256 枚）などの候補）。
-      `_tileImages` を 64 枚にしても 地図直後 430MB・パン後 746MB で、256 枚（467MB・824MB）と大差なし → 主因ではない。
-      タイルが持つ合成画像も測った: 64 タイル中 55 枚・55MB（GPU に上げたのは 9 枚）。画像キャッシュ 64MB と flutter_gpu 15MB を
-      足しても 140MB ほどで、GL 830MB のうち 700MB 近くが説明できない。計測は地物の無い引いた眺め（高知のあたり、線・面は 0）
-      だったので、地物の描画は関係ない。残る候補は flutter_gpu の描画先（MSAA 4x の色・深度が画面サイズで、
-      `gpu.render` が毎フレーム `ui.Image` を返す）と、タイル合成の `Picture.toImage` の一時領域。perfetto で確かめる
+- [ ] メモリ削減の残り（2026-10-06 に大きいものは片づけた。経緯は [[docs/technical/performance]]）
+  - [ ] Dart のヒープ（profile で約 340MB）: 地物の形を turf（点ごとに数値を箱に入れて持つ）・geobase（描画用）の 2 通りで
+        持っている。turf をやめて 1 通りにできれば大きく減るが、turf はアプリ中で使っているので作り直しが大きい
+  - [ ] GL の残り（profile で地図を開いて 520〜590MB）: flutter_gpu の分は 15MB ほどで、残りは Impeller が抱えている分。
+        perfetto の GPU メモリで内訳を取ってから削る
 - [ ] web の fps 計測（Chrome を前面に）・GPU の無い web の純 Dart 経路の透視（眺めモード）
 - [ ] 選択・頂点の見た目を View（スタイルグループ）別にできない（View の順に描くのは 2026-10-06 に済み）
 

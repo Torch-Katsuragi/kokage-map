@@ -9,10 +9,15 @@
   {
    "file": "next.en.01.svg",
    "width": 252.0,
-   "height": 164.81
+   "height": 143.9
   },
   {
    "file": "next.en.02.svg",
+   "width": 252.0,
+   "height": 164.81
+  },
+  {
+   "file": "next.en.03.svg",
    "width": 252.0,
    "height": 126.16
   }

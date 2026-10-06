@@ -24,7 +24,7 @@ Folders the app uses itself (the global folder and the tutorial's practice map) 
 
 ### Opening Other Folders
 
-:icon-folder_open: "Open another folder" lets you choose any folder with GeoPackage files (.gpkg). They are recognized automatically and shown as layers. If you last opened one of those, "Continue" appears on Home.
+:icon-folder_open: "Choose a folder to open" lets you pick one folder inside your everyday map (such as a map received in "共有") and open just that. Tap a folder to go into it and "<" to go back; "New folder" at the top right creates one. GeoPackage files (.gpkg) inside are recognized automatically and shown as layers. Folders outside your everyday map can be chosen from "Another place on the device…" in the top-right menu. If you last opened another folder, "Continue" appears on Home.
 
 ---
 

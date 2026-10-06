@@ -2,6 +2,10 @@
 
 ## Next release
 
+### Changed
+
+- "Open another folder" on Home is now "Choose a folder to open". Instead of the device's file picker, you browse the folders inside your everyday map, styled like the layer panel. Places outside it are under "Another place on the device…" in the top-right menu
+
 ### Fixed
 
 - In data with many areas (such as forest compartments), areas without a fill disappeared at some in-between zoom levels (between 14 and 15). They now stay visible

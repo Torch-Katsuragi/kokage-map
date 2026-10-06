@@ -36,13 +36,23 @@
     "qrTab": "QRスキャン",
     "urlLabel": "Google Drive URL"
   },
+  "folderBrowser": {
+    "title": "フォルダを選んで開く",
+    "open": "「$name」で開く",
+    "empty": "フォルダもファイルもありません",
+    "newFolder": "新しいフォルダ",
+    "newFolderHint": "フォルダの名前",
+    "badName": "点で始まる名前や、記号（スラッシュ・コロンなど）は使えません",
+    "exists": "「$name」はもうあります",
+    "elsewhere": "端末の別の場所…"
+  },
   "home": {
     "openMyMap": "地図を開く",
     "openMyMapHint": "いつもの地図。受け取った地図もここに入ります",
     "continueOther": "続きから（$name）",
     "tagline": "山の地図を、前提なしで",
     "receiveShared": "QR で受け取る",
-    "openOther": "ほかの場所を開く",
+    "openOther": "フォルダを選んで開く",
     "title": "こかげマップ",
     "subtitle": "GeoPackageベースの地理情報管理・編集アプリケーション",
     "startProject": "プロジェクトを開始",
@@ -1482,7 +1492,7 @@
       "gps_record_t": "今いる場所を記録",
       "gps_record_b": "押すと今いる場所に測点を 1 つ記録します。長押しすると押している間は測り続けます。屋内では位置が取れないことがあります。",
       "yours_folder_t": "いつもの地図と、ほかのフォルダ",
-      "yours_folder_b": "ホームの「地図を開く」で、いつもの地図（Documents/KokageMap）が開きます。点や線は「マイ地図」に記録されます。データを入れたほかのフォルダは「ほかの場所を開く」から開けます。",
+      "yours_folder_b": "ホームの「地図を開く」で、いつもの地図（Documents/KokageMap）が開きます。点や線は「マイ地図」に記録されます。その中のフォルダだけを開くときは「フォルダを選んで開く」から選べます。",
       "yours_drive_t": "Drive と QR で共有",
       "yours_drive_b": "Drive と同期したフォルダは、ほかの端末でも同じデータを見られます。フォルダの ⋮ の「QRコードで渡す」の QR をスマホのカメラで読むと、相手のいつもの地図の「共有」に入ります。同期は設定の「Drive同期」から始めます。",
       "yours_qgis_t": "QGIS で開く",

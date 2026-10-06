@@ -4,12 +4,18 @@
 
 #hero(
   "Next release",
-  [Areas stay visible between zoom levels],
-  [In data with many areas (such as forest compartments), areas without a fill disappeared between zoom 14 and 15. Fixed.],
-  grid(
-    columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
-    box(width: 60pt, fill: white, stroke: 0.6pt + line-c, radius: 5pt, inset: 6pt, align(center, text(size: 7pt)[Zoom 14])),
-    box(width: 60pt, fill: rgb("#fff4d6"), stroke: 0.6pt + line-c, radius: 5pt, inset: 6pt, align(center, text(size: 7pt)[Shown at 14.6 too])),
-    box(width: 60pt, fill: white, stroke: 0.6pt + line-c, radius: 5pt, inset: 6pt, align(center, text(size: 7pt)[Zoom 15])),
-  ),
+  [Choose folders inside the app],
+  ["Choose a folder to open" on Home browses the folders inside your everyday map, styled like the layer panel, instead of the device's file picker. Places outside it are in the top-right menu.],
+  box(width: 150pt, fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 0pt, clip: true, {
+    box(width: 100%, fill: rgb("#424242"), inset: (x: 6pt, y: 5pt), align(left, text(size: 8pt, fill: white, weight: "bold")[KokageMap]))
+    box(width: 100%, inset: (x: 6pt, y: 4pt), align(left, grid(columns: (10pt, 1fr), column-gutter: 4pt, align: horizon, box(width: 8pt, height: 6pt, fill: rgb("#ffc107"), radius: 1pt), text(size: 7pt)[共有])))
+    box(width: 100%, inset: (x: 6pt, y: 4pt), align(left, grid(columns: (10pt, 1fr), column-gutter: 4pt, align: horizon, box(width: 8pt, height: 6pt, fill: rgb("#7eb0d5"), radius: 1pt), text(size: 7pt)[龍神村])))
+    box(width: 100%, inset: (x: 6pt, y: 4pt), align(left, grid(columns: (10pt, 1fr), column-gutter: 4pt, align: horizon, box(width: 8pt, height: 6pt, fill: rgb("#b0bec5"), radius: 1pt), text(size: 7pt, fill: gray)[マイ地図.gpkg])))
+    box(width: 100%, inset: 6pt, box(width: 100%, fill: rgb("#2e6b4f"), radius: 8pt, inset: 4pt, align(center, text(size: 7pt, fill: white)[Open "共有"])))
+  }),
+)
+
+#fixes(
+  "Fixed",
+  [Areas without a fill disappeared between zoom 14 and 15 in data with many areas],
 )

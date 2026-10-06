@@ -1,10 +1,15 @@
 {
- "title": "Areas stay visible between zoom levels",
+ "title": "Choose folders inside the app",
  "chunks": [
   {
    "file": "next.en.00.svg",
    "width": 252.0,
-   "height": 119.66
+   "height": 193.74
+  },
+  {
+   "file": "next.en.01.svg",
+   "width": 252.0,
+   "height": 126.16
   }
  ]
 }

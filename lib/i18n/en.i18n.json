@@ -36,13 +36,23 @@
     "qrTab": "Scan QR",
     "urlLabel": "Google Drive URL"
   },
+  "folderBrowser": {
+    "title": "Choose a folder to open",
+    "open": "Open \"$name\"",
+    "empty": "No folders or files",
+    "newFolder": "New folder",
+    "newFolderHint": "Folder name",
+    "badName": "Names can't start with a dot or contain symbols such as slashes or colons",
+    "exists": "\"$name\" already exists",
+    "elsewhere": "Another place on the device…"
+  },
   "home": {
     "openMyMap": "Open my map",
     "openMyMapHint": "Your everyday map. Shared maps go here too",
     "continueOther": "Continue ($name)",
     "tagline": "Maps for the mountains, no setup needed",
     "receiveShared": "Scan a QR",
-    "openOther": "Open another folder",
+    "openOther": "Choose a folder to open",
     "title": "Kokage Map",
     "subtitle": "GeoPackage-based geographic information management and editing application",
     "startProject": "Start Project",
@@ -1482,7 +1492,7 @@
       "gps_record_t": "Record where you are",
       "gps_record_b": "Tap to record a point where you are. Hold to keep measuring while pressed. Indoors there may be no fix.",
       "yours_folder_t": "Your everyday map and other folders",
-      "yours_folder_b": "\"Open my map\" on Home opens your everyday map (Documents/KokageMap). Points and lines go into \"マイ地図\". Other folders with your data open with \"Open another folder\".",
+      "yours_folder_b": "\"Open my map\" on Home opens your everyday map (Documents/KokageMap). Points and lines go into \"マイ地図\". To open just one folder inside it, use \"Choose a folder to open\".",
       "yours_drive_t": "Share with Drive and QR",
       "yours_drive_b": "A folder synced with Drive shows the same data on your other devices. Scan the code from \"Share by QR\" in the folder's ⋮ menu with a phone camera and it lands in \"共有\" in the other person's everyday map. Start syncing from Settings → Drive sync.",
       "yours_qgis_t": "Open in QGIS",

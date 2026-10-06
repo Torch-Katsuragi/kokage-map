@@ -49,6 +49,7 @@ import '../tutorial/tutorial.dart';
 import '../utils/folder_utils.dart';
 import '../widgets/dialogs/drive_url_input_dialog.dart';
 import 'changelog_screen.dart';
+import 'home/folder_browser_screen.dart';
 import 'home/project_launcher.dart';
 import 'map_page/map_page.dart';
 import 'onboarding_screen.dart';
@@ -647,8 +648,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
 
     AppLogger.debug('[HomeScreen] ファイルピッカーを開いています...');
-    // native は OS のピッカー、web は File System Access API
-    final String? dir = await pickProjectFolder();
+    // native はいつもの地図の中をたどるアプリ内の画面（外は画面のメニューから OS のピッカー）、web は File System Access API
+    final String? dir = PlatformCapabilities.hasLocalFileSystem
+        ? await FolderBrowserScreen.show(context)
+        : await pickProjectFolder();
     AppLogger.debug('[HomeScreen] 選択されたディレクトリ: $dir');
 
     if (dir != null) {

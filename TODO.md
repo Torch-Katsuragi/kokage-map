@@ -40,7 +40,11 @@
 ## 3D・描画
 
 - [ ] `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[docs/technical/scene-model]]）
-- [ ] メモリ削減（profile 実測で 3D の増分 +200〜250MB。画像 LRU・`raw` の畳み込み・親テクスチャ 256²）
+- [ ] メモリ削減（profile 実測で 3D の増分 +200〜250MB。画像 LRU・`raw` の畳み込み・親テクスチャ 256²）。
+      2026-10-06 に Fold（debug）で測った: `dumpsys meminfo` の GL mtrack が 0.8〜1.2GB で大半。そのうち flutter_gpu 側
+      （地形テクスチャ 11 枚 14MB・地形バッファ・線と面のバッファ）は合わせて約 15MB しかない。残りは Impeller が持つ分
+      （`ui.Image`・`Picture.toImage`・画面の描画先など）。次は perfetto の GPU メモリか DevTools で `ui.Image` の生存数を見て、
+      どれが大きいかを突き止めてから削る（推測で LRU を縮めない）
 - [ ] web の fps 計測（Chrome を前面に）・GPU の無い web の純 Dart 経路の透視（眺めモード）
 - [ ] 選択・頂点の見た目を View（スタイルグループ）別にできない（View の順に描くのは 2026-10-06 に済み）
 

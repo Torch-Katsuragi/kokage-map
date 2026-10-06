@@ -153,7 +153,8 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
       photos.add(node);
     }
     
-    // 子ノードを再帰的に処理
+    // 子ノードを再帰的に処理（レイヤの子は地物だけなので降りない。1.5 万面を毎回たどっていた）
+    if (node is LayerNode) return;
     for (final child in node.children) {
       collectImageNodesRecursive(child, photos, overlays);
     }

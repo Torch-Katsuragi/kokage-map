@@ -251,12 +251,19 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     // 行選択モード（複数行のチェックボックス選択を許可）
     event.stateManager.setSelectingMode(TrinaGridSelectingMode.row);
 
-    // セル選択時のフィーチャ選択処理
+    // セル選択時のフィーチャ選択処理。表の通知はスクロールや入力でも来るので、今いる行が変わったときだけ選び直す
+    // （以前は通知のたびに選択・地図の寄せ・setState をしていた）
+    int? lastAbsolute;
     event.stateManager.addListener(() {
       final currentRowIdx = event.stateManager.currentRowIdx;
       final currentCell = event.stateManager.currentCell;
 
       if (currentCell != null && currentRowIdx != null && currentRowIdx >= 0) {
+        final abs = _controller.currentPageOffset + currentRowIdx;
+        // 同じ行でも、地図で別のものを選んだあとなら選び直す
+        final rowFeature = abs < _controller.features.length ? _controller.features[abs] : null;
+        if (abs == lastAbsolute && rowFeature != null && ref.read(selectedFeaturesProvider).contains(rowFeature)) return;
+        lastAbsolute = abs;
         _controller.selectFeature(currentRowIdx);
 
         final absoluteIdx = _controller.currentPageOffset + currentRowIdx;

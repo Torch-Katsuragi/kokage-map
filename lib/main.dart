@@ -146,6 +146,12 @@ void _setupErrorHandlers() {
 
 /// Flutterエンジンが出す「Unable to parse JSON message」を抑制
 void _setupDebugPrintFilter() {
+  // リリースでは debugPrint を黙らせる（`[3D]` などの計測ログが文字列を作って logcat に流れ続けていた）。
+  // `--dart-define=K_LOG=true` のときは残す。AppLogger の控え（画面のオーバーレイ）はこれとは別に常に積む
+  if (kReleaseMode && !const bool.fromEnvironment('K_LOG')) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+    return;
+  }
   if (!kDebugMode) return;
   final original = debugPrint;
   debugPrint = (String? message, {int? wrapWidth}) {

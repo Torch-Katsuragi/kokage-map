@@ -101,6 +101,10 @@ class GpsHistoryRecorder extends ChangeNotifier {
   LatLng? _lastRecordedPosition;
   LatLng? _lastConsolidatedPosition;
 
+  /// 直近の反映で書いた今日の区間（フィーチャ ID と座標）。地図側はレイヤを読み直さず、この 1 本だけ差し替える
+  int? get todayTrackFeatureId => _todayTrackFeatureId;
+  List<LatLng>? lastConsolidatedLine;
+
   /// Consolidation完了コールバック（レイヤリフレッシュ用）
   VoidCallback? onConsolidated;
 
@@ -574,6 +578,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
       if (currentLine.isNotEmpty) {
         _lastConsolidatedPosition = currentLine.last;
       }
+      lastConsolidatedLine = currentLine;
 
       AppLogger.debug(
         '$_logTag: Consolidation完了 (${detailsToWrite.length}点反映, '

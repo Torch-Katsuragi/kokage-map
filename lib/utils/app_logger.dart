@@ -49,7 +49,8 @@ class AppLogger {
   static void _emit(String line) {
     // ⚠ 控えは条件無しで積む。ここに条件を足すと、また「何も見えない」に戻る
     buffer.add(line);
-    if (buffer.length > _kMaxLines) buffer.removeAt(0);
+    // 先頭を 1 件ずつ消すと 2000 件を毎回詰め直すので、溢れたら 200 件まとめて消す
+    if (buffer.length > _kMaxLines + 200) buffer.removeRange(0, buffer.length - _kMaxLines);
     revision.value++;
     if (_forceLog) {
       // ignore: avoid_print

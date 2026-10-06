@@ -23,7 +23,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:turf/turf.dart' as turf;
 
+import '../../../converters/turf_converter.dart';
 import '../../../core/platform_capabilities.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../models/app_notification.dart';
@@ -349,7 +351,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // gps_tracksレイヤーのフィーチャを強制再読み込みしてから全体更新
       gpsHistoryRecorder.onConsolidated = () async {
         if (!mounted) return;
-        await _refreshGpsHistoryLayer();
+        if (!_patchTodayTrack()) await _refreshGpsHistoryLayer();
         await updateFeatures();
       };
 
@@ -363,6 +365,24 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   /// Consolidation済み分はGPKGレイヤツリー経由で表示される
   void _onGpsHistoryUpdate() {
     if (mounted) terrainSceneRevision.value++;
+  }
+
+  /// 今日の区間の 1 本だけ、書いた座標で地図のフィーチャを差し替える。できなければ false（レイヤを読み直す）。
+  /// 以前は 20 秒ごとにレイヤを丸ごと読み直し、過去の日の軌跡まで毎回デコードしていた（2026-10-06）
+  bool _patchTodayTrack() {
+    final id = gpsHistoryRecorder.todayTrackFeatureId;
+    final line = gpsHistoryRecorder.lastConsolidatedLine;
+    final tree = ref.read(folderTreeProvider);
+    if (id == null || line == null || line.length < 2 || tree == null) return false;
+    final layer = _findLayerNode(tree, 'gps_tracks');
+    if (layer == null || !layer.featuresLoaded) return false;
+    final old = layer.getFeatureById(id);
+    if (old == null) return false; // 新しい区間（まだ地図に無い）
+    final geom = old.geometry is turf.MultiLineString
+        ? TurfConverter.createMultiLineString([line])
+        : TurfConverter.createLineString(line);
+    layer.addFeatureToMap(id, turf.Feature(id: old.id, geometry: geom, properties: old.properties));
+    return true;
   }
 
   /// gps_tracks レイヤーのフィーチャを強制再読み込み
@@ -384,7 +404,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// レイヤツリーから指定名のLayerNodeを再帰検索
   LayerNode? _findLayerNode(LayerTreeNode node, String layerName) {
-    if (node is LayerNode && node.layerName == layerName) return node;
+    if (node is LayerNode) return node.layerName == layerName ? node : null; // 地物の中までは降りない
     for (final child in node.children) {
       final found = _findLayerNode(child, layerName);
       if (found != null) return found;

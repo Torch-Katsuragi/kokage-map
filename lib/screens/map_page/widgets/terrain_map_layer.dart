@@ -982,7 +982,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       // 途中で別の作り直しに打ち切られた分は要求を取り下げ、少し置いてまた見る
       var left = false;
       for (final k in stale) {
-        if (_bakedGen[k] != gen && _world.tiles.any((t) => t.key == k)) {
+        if (_bakedGen[k] != gen && _world.has(k)) {
           _bakeRequested.remove(k);
           left = true;
         }

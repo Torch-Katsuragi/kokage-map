@@ -258,8 +258,6 @@ class FeatureGeoJsonCache {
       if (input.hidden.contains(f)) continue;
       final sel = input.selected.contains(f);
       if (!full && !sel) continue;
-      final coords = f.geometry;
-      if (coords == null) continue;
       final turfGeom = f.turfFeature.geometry;
       final props = _props(input, f, f.name);
       final cached = _ptConv[f];
@@ -269,11 +267,14 @@ class FeatureGeoJsonCache {
         if (sel) ptsSel.addAll(cached.features);
         continue;
       }
+      // 座標の一覧（List<LatLng>）は使い回せなかったときだけ作る
+      final coords = f.geometry as List<LatLng>?;
+      if (coords == null) continue;
       (int, Rect)? ptSign;
       {
         var sx = 0.0, sy = 0.0;
         var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;
-        for (final pt in coords as List<LatLng>) {
+        for (final pt in coords) {
           sx += pt.longitude;
           sy += pt.latitude;
           if (pt.longitude < minX) minX = pt.longitude;

@@ -1,5 +1,11 @@
 # Changelog
 
+## Next release
+
+### Fixed
+
+- In data with many areas (such as forest compartments), areas without a fill disappeared at some in-between zoom levels (between 14 and 15). They now stay visible
+
 ## v0.11.1 — 2026/10/05
 
 ### Fixed

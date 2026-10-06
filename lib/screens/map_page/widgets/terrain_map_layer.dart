@@ -1342,16 +1342,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
     final defaultStyle = _defaultStyle();
     final groups = {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
-    // 引いた段（セルが 30m 以上 = 表示ズーム 13 以下）で、このタイルに面が多いときだけ輪郭とラベルを省く。
-    // 60m の面が数ピクセルの眺めで 1 万面の輪郭（4 万本の線分）を毎フレーム描くと raster が 0.5 秒になる。
-    // ⚠ ズームだけで省くと林班の境界（塗りは薄く、輪郭が本体）が引いた途端に消える。数百面なら描く。
-    // 判定はデータ全体の面数（タイルごとに変えると継ぎ接ぎになる）
+    // 粗く間引いたタイル（セルが 30m 以上）で面が多いときはラベルを省く（判定はデータ全体の面数。タイルごとに変えると継ぎ接ぎになる）。
+    // ⚠ 輪郭は省かないこと。以前はここで輪郭も省いていたが、焼き込む段（z13 以下）は面をそもそも持ち上げないので、
+    // 省かれるのは焼き込まない z14 以上のタイルを中間の段（14.6 など）で間引いたときだけだった。塗りの無い面
+    // （森林簿の小班 1.5 万面）がその段でだけ丸ごと消えていた（2026-10-06、Fold）
     final coarse = tile.bordered.cellSize * step >= 30;
     final dense = coarse && g.polygons.length > 2000;
     void add(TerrainScene s, {bool withLabels = true}) {
       // 選択の線より手前（下）に入れる
       final at = scene.lines.length - progress.selectedLines;
-      scene.lines.insertAll(at, [if (!dense) ...s.outlines, ...s.lines]);
+      scene.lines.insertAll(at, [...s.outlines, ...s.lines]);
       scene.polygons.addAll(s.polygons);
       scene.points.addAll(s.points);
       if (withLabels) scene.labels.addAll(s.labels);

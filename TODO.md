@@ -44,7 +44,9 @@
       2026-10-06 に Fold（debug）で測った: `dumpsys meminfo` の GL mtrack が 0.8〜1.2GB で大半。そのうち flutter_gpu 側
       （地形テクスチャ 11 枚 14MB・地形バッファ・線と面のバッファ）は合わせて約 15MB しかない。残りは Impeller が持つ分
       （`ui.Image`・`Picture.toImage`・画面の描画先など）。次は perfetto の GPU メモリか DevTools で `ui.Image` の生存数を見て、
-      どれが大きいかを突き止めてから削る（推測で LRU を縮めない）
+      どれが大きいかを突き止めてから削る（推測で LRU を縮めない）。
+      GL の推移: ホーム 70MB → 地図を開いた直後 467MB → パンを重ねると 0.8〜1.2GB → ホームへ戻ると 170MB
+      （戻っても残る 100MB は static の `_tileImages`（256 枚）などの候補）
 - [ ] web の fps 計測（Chrome を前面に）・GPU の無い web の純 Dart 経路の透視（眺めモード）
 - [ ] 選択・頂点の見た目を View（スタイルグループ）別にできない（View の順に描くのは 2026-10-06 に済み）
 

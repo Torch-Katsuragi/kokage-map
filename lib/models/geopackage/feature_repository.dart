@@ -767,41 +767,50 @@ class FeatureRepository {
       final safeWhere = sanitizeFilter(where);
       if (safeWhere != null) sql.write(' WHERE $safeWhere');
 
-      final rows = await db.rawQuery(sql.toString());
-
+      // 2000 行ずつ読む。1 回で読むと 1.5 万面（24MB）が 1 通のメッセージになり、プラットフォームチャネルを塞いで
+      // 同じ時間のタイルキャッシュの読み出しまで 2.5 秒待たされていた（2026-10-06、Fold で起動時）。
+      // 大きいレイヤはページごとに isolate で解析を始め、次のページの読み込みと重ねる
+      final orderCol = pkColumn == 'rowid' ? 'rowid' : quoteIdent(pkColumn);
+      final crs = geomType == null ? null : await _getLayerCrs(tableName);
+      final needsReproject = crs != null && !crs.isWgs84 && crs.projection != null;
+      if (needsReproject) {
+        AppLogger.debug('[FeatureRepository] CRS re-projection: $tableName (${crs.epsgCode}→WGS84)');
+      }
+      const pageSize = 2000;
       final mutableRows = <Map<String, dynamic>>[];
-      for (final row in rows) {
-        final normalizedRow = Map<String, dynamic>.from(row);
-        _normalizePrimaryKey(normalizedRow, pkColumn);
-        if (normalizedRow['id'] == null) continue;
-        mutableRows.add(normalizedRow);
+      final parsing = <Future<List<Map<String, dynamic>>>>[];
+      var offset = 0;
+      while (true) {
+        final page = await db.rawQuery('$sql ORDER BY $orderCol LIMIT $pageSize OFFSET $offset');
+        final normalized = <Map<String, dynamic>>[];
+        for (final row in page) {
+          final normalizedRow = Map<String, dynamic>.from(row);
+          _normalizePrimaryKey(normalizedRow, pkColumn);
+          if (normalizedRow['id'] == null) continue;
+          normalized.add(normalizedRow);
+        }
+        final last = page.length < pageSize;
+        if (geomType != null && (!last || offset > 0 || normalized.length >= _kIsolateThreshold)) {
+          parsing.add(compute(
+            _parseGeometryBatchInIsolate,
+            _GeometryParseParams(
+              normalized,
+              geomType,
+              sourceProjection: needsReproject ? crs.projection : null,
+              needsAxisSwap: crs!.needsAxisSwap,
+            ),
+          ));
+        } else {
+          mutableRows.addAll(normalized);
+        }
+        if (last) break;
+        offset += pageSize;
       }
 
       if (geomType == null) return mutableRows;
-
-      // CRS情報を取得
-      final crs = await _getLayerCrs(tableName);
-      final needsReproject = !crs.isWgs84 && crs.projection != null;
-
-      if (needsReproject) {
-        AppLogger.debug(
-          '[FeatureRepository] CRS re-projection: $tableName (${crs.epsgCode}→WGS84, ${mutableRows.length}件)',
-        );
-      }
-
-      if (mutableRows.length >= _kIsolateThreshold) {
-        AppLogger.debug(
-          '[FeatureRepository] Isolateパース: $tableName (${mutableRows.length}件)',
-        );
-        return await compute(
-          _parseGeometryBatchInIsolate,
-          _GeometryParseParams(
-            mutableRows,
-            geomType,
-            sourceProjection: needsReproject ? crs.projection : null,
-            needsAxisSwap: crs.needsAxisSwap,
-          ),
-        );
+      if (parsing.isNotEmpty) {
+        AppLogger.debug('[FeatureRepository] Isolateパース: $tableName (${parsing.length} ページ)');
+        return [for (final part in await Future.wait(parsing)) ...part];
       }
 
       for (final row in mutableRows) {

@@ -56,13 +56,13 @@ class ViewTile extends ConsumerWidget {
       dimmed: dimmed,
       leading: LayerSwatch(layer: _layer, view: node, dimmed: dimmed),
       title: node.displayName,
-      titleStyle: const TextStyle(fontSize: 14),
+      titleStyle: const TextStyle(fontSize: 16),
       subtitle: node.hasFilter
           ? Text(
               node.filter!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: dimmed ? Colors.grey : Colors.teal.shade700),
+              style: TextStyle(fontSize: 13, fontFamily: 'monospace', color: dimmed ? Colors.grey : Colors.teal.shade700),
             )
           : null,
       eye: KeyedSubtree(

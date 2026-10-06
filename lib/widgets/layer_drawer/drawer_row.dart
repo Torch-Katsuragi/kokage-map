@@ -191,7 +191,7 @@ class _DrawerRowState extends State<DrawerRow> {
                       Text.rich(
                         TextSpan(
                           text: widget.title,
-                          style: (widget.titleStyle ?? const TextStyle(fontSize: 15)).copyWith(
+                          style: (widget.titleStyle ?? const TextStyle(fontSize: 17)).copyWith(
                             color: color,
                             fontWeight: widget.selected ? FontWeight.w600 : null,
                           ),
@@ -199,7 +199,7 @@ class _DrawerRowState extends State<DrawerRow> {
                             if (widget.trailingInfo != null)
                               TextSpan(
                                 text: '  ${widget.trailingInfo}',
-                                style: const TextStyle(fontSize: 12, color: Colors.black38, fontWeight: FontWeight.normal),
+                                style: const TextStyle(fontSize: 14, color: Colors.black38, fontWeight: FontWeight.normal),
                               ),
                           ],
                         ),
@@ -308,7 +308,7 @@ class DrawerGroupHeader extends StatelessWidget {
         height: 40,
         leading: Icon(expanded ? Icons.expand_more : Icons.chevron_right, size: 20, color: Colors.black54),
         title: title,
-        titleStyle: TextStyle(fontSize: 13, color: dimmed ? Colors.black38 : Colors.black54, fontWeight: FontWeight.w600),
+        titleStyle: TextStyle(fontSize: 15, color: dimmed ? Colors.black38 : Colors.black54, fontWeight: FontWeight.w600),
         dimmed: dimmed,
         subtitle: badge,
         eye: eye,

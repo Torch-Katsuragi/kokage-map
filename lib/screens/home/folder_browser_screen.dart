@@ -229,7 +229,7 @@ class _FolderBrowserScreenState extends State<FolderBrowserScreen> {
               color: Colors.grey.shade400,
             ),
             title: e.name,
-            titleStyle: const TextStyle(fontSize: 13),
+            titleStyle: const TextStyle(fontSize: 15),
           );
         }
         return DrawerRow(
@@ -237,7 +237,7 @@ class _FolderBrowserScreenState extends State<FolderBrowserScreen> {
               ? const Icon(Icons.cloud, size: 22, color: cloudColor)
               : Icon(NodePresenter.getIconForType(NodeType.folder), size: 22, color: NodePresenter.getColorForType(NodeType.folder)),
           title: e.name,
-          subtitle: e.isDrive ? Text(t.layerDrawer.folder.driveLinked, style: const TextStyle(fontSize: 11, color: Colors.grey)) : null,
+          subtitle: e.isDrive ? Text(t.layerDrawer.folder.driveLinked, style: const TextStyle(fontSize: 13, color: Colors.grey)) : null,
           eye: const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.chevron_right, color: Colors.black38)),
           onTap: () => _enter(e),
         );

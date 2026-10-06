@@ -76,7 +76,7 @@ class GeoPackageTile extends ConsumerWidget {
       dimmed: dimmed,
       highlight: isDropTarget,
       badge: isDropTarget
-          ? Text(t.layerDrawer.geopackage.dropLayerHere, style: const TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold))
+          ? Text(t.layerDrawer.geopackage.dropLayerHere, style: const TextStyle(fontSize: 13, color: Colors.blue, fontWeight: FontWeight.bold))
           : null,
       onToggleExpanded: () {
         if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).toggle(absPath);
@@ -133,7 +133,7 @@ class GeoPackageTile extends ConsumerWidget {
               height: 40,
               leading: const Icon(Icons.add, size: 18, color: Colors.black45),
               title: t.layerDrawer.layer.addLayer,
-              titleStyle: const TextStyle(fontSize: 14, color: Colors.black54),
+              titleStyle: const TextStyle(fontSize: 16, color: Colors.black54),
               onTap: () => showAddLayerDialog(context, ref, node),
             ),
         ],

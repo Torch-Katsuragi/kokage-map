@@ -80,12 +80,12 @@ class PhotoTile extends ConsumerWidget {
       dimmed: dimmed,
       leading: Icon(isOverlay ? Icons.image_outlined : Icons.photo_camera_outlined, size: 20, color: dimmed ? Colors.black26 : Colors.purple),
       title: node.name,
-      titleStyle: const TextStyle(fontSize: 14),
+      titleStyle: const TextStyle(fontSize: 16),
       subtitle: isOverlay
-          ? Text(t.layerDrawer.photo.overlay, style: const TextStyle(fontSize: 11, color: Colors.teal))
+          ? Text(t.layerDrawer.photo.overlay, style: const TextStyle(fontSize: 13, color: Colors.teal))
           : node.hasLocation
               ? null
-              : Text(t.layerDrawer.photo.noLocation, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              : Text(t.layerDrawer.photo.noLocation, style: const TextStyle(fontSize: 13, color: Colors.grey)),
       eye: VisibilityEye(
         visible: node.visible,
         effective: node.parent?.isVisibleRecursive() ?? true,

@@ -86,7 +86,7 @@ class FolderTile extends ConsumerWidget {
           ? null
           : _canSync
               ? _buildSyncSubtitle(context, drive)
-              : Text(t.layerDrawer.folder.pcSyncDisabled, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              : Text(t.layerDrawer.folder.pcSyncDisabled, style: const TextStyle(fontSize: 13, color: Colors.grey)),
       eye: VisibilityEye(
         visible: node.visible,
         effective: node.parent?.isVisibleRecursive() ?? true,
@@ -181,7 +181,7 @@ class FolderTile extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null) ...[Icon(icon, size: 14, color: color), const SizedBox(width: 4)],
-        Text(text, style: TextStyle(fontSize: 12, color: color)),
+        Text(text, style: TextStyle(fontSize: 13, color: color)),
       ],
     );
     if (driveNode.syncStatus == SyncStatus.conflict) {

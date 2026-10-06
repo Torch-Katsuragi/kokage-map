@@ -451,6 +451,10 @@ class TerrainWorldPainter extends CustomPainter {
           Offset.zero & size,
           Paint()..filterQuality = FilterQuality.low,
         );
+        // ⚠ 描いたらすぐ手放す（絵は Picture が自分で抱える）。`currentImage` は呼ぶたびに新しい参照を返し、
+        // 参照が生きている間は描画先（画面サイズ・約 10MB）をサーフェスが使い回せず増やす。GC は GPU の量を知らないので
+        // フレームごとの参照が溜まり、GL が 0.8〜1.2GB まで膨らんでいた（2026-10-06、Fold）
+        image.dispose();
       }
     } else {
     // スカートは全タイルぶんを先に描く（地形の前に）。

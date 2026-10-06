@@ -41,7 +41,7 @@ import 'gpu_geometry.dart';
 ///   面と線は深度を書かず、少し手前に寄せて地形との z-fight を避ける
 /// - 点とラベルは Canvas 側（[TerrainWorldPainter]）のまま。ヒットテスト・投影も Dart 側のまま
 ///
-/// 描いた結果は `GpuImageSurface` の `ui.Image` で、Canvas に `drawImageRect` する。
+/// 描いた結果は描画先の色テクスチャを `asImage()` で包んだ `ui.Image` で、Canvas に `drawImageRect` する。
 /// 設計は docs/technical/terrain-3d.md「flutter_gpu を TerrainWorld に」
 class TerrainGpuWorldRenderer {
   TerrainGpuWorldRenderer._(this._terrainPipeline, this._polygonPipeline, this._linePipeline, this._pointPipeline)
@@ -146,10 +146,17 @@ class TerrainGpuWorldRenderer {
   final gpu.RenderPipeline _pointPipeline;
   final gpu.HostBuffer _hostBuffer;
 
-  gpu.GpuImageSurface? _surface;
+  /// 描画先の色テクスチャ（画面サイズ）。3 枚を順に使う。
+  /// ⚠ `GpuImageSurface` は使わない。Flutter から参照されている描画先は使い回さず足す作りで、フレームごとの参照
+  /// （`currentImage` やフレームの `colorTexture` のラッパー）が GC まで残るため、パンしているうちに描画先が 60 枚を超え、
+  /// GL が 0.8〜1.2GB まで膨らんだ（2026-10-06、Fold で `debugBackingTextureCount` 46 → 65）。
+  /// ラスタは高々 2 フレーム遅れなので 3 枚あれば、書いている 1 枚を合成中の絵が読むことはない
+  final List<gpu.Texture> _targets = [];
+  int _targetIndex = 0;
+  static const _targetCount = 3;
   gpu.Texture? _depth;
 
-  /// MSAA 4x の色バッファ（対応機種のみ）。毎フレーム `frame.colorTexture` に resolve する
+  /// MSAA 4x の色バッファ（対応機種のみ）。毎フレーム描画先（`_targets` の 1 枚）に resolve する
   gpu.Texture? _msaaColor;
   static const _sampleCount = 4;
   late final bool _msaa = gpu.gpuContext.doesSupportOffscreenMSAA;
@@ -254,8 +261,14 @@ class TerrainGpuWorldRenderer {
     final sw = Stopwatch()..start();
     final w = math.max(1, (size.width * pixelRatio).round());
     final h = math.max(1, (size.height * pixelRatio).round());
-    if (_surface == null || _surfaceWidth != w || _surfaceHeight != h) {
-      _surface = gpu.gpuContext.createImageSurface(w, h);
+    final colorFormat = gpu.gpuContext.defaultColorFormat;
+    if (_targets.isEmpty || _surfaceWidth != w || _surfaceHeight != h) {
+      _targets
+        ..clear()
+        ..addAll([
+          for (var i = 0; i < _targetCount; i++)
+            gpu.gpuContext.createTexture(gpu.StorageMode.devicePrivate, w, h, format: colorFormat),
+        ]);
       var depthFormat = gpu.gpuContext.defaultDepthStencilFormat;
       if (depthFormat == gpu.PixelFormat.unknown) depthFormat = gpu.PixelFormat.d32FloatS8UInt;
       _depth = gpu.gpuContext.createTexture(
@@ -271,7 +284,7 @@ class TerrainGpuWorldRenderer {
               gpu.StorageMode.deviceTransient,
               w,
               h,
-              format: _surface!.format,
+              format: colorFormat,
               sampleCount: _sampleCount,
               enableShaderReadUsage: false,
             )
@@ -418,17 +431,18 @@ class TerrainGpuWorldRenderer {
     // 4. 描く
     var draws = 0;
     final commandBuffer = gpu.gpuContext.createCommandBuffer();
-    final frame = _surface!.acquireNextFrame();
+    final target = _targets[_targetIndex];
+    _targetIndex = (_targetIndex + 1) % _targetCount;
     // 透視は地平線の上が空になるので空色で塗る（靄と同じ色）。正射影は透明（下の 2D 地図が透ける）
     final clear = persp ? vm.Vector4(0.78, 0.86, 0.95, 1) : vm.Vector4(0, 0, 0, 0);
     final color = _msaa
         ? gpu.ColorAttachment(
             texture: _msaaColor!,
-            resolveTexture: frame.colorTexture,
+            resolveTexture: target,
             storeAction: gpu.StoreAction.multisampleResolve,
             clearValue: clear,
           )
-        : gpu.ColorAttachment(texture: frame.colorTexture, clearValue: clear);
+        : gpu.ColorAttachment(texture: target, clearValue: clear);
     final pass = commandBuffer.createRenderPass(
       gpu.RenderTarget.singleColor(
         color,
@@ -573,13 +587,12 @@ class TerrainGpuWorldRenderer {
         draws++;
       }
     }
-    frame.present(commandBuffer);
     commandBuffer.submit();
     sw.stop();
     lastEncode = sw.elapsed - lastUpload;
     lastDrawCalls = draws;
     _sweep(nowMs);
-    return _surface!.currentImage;
+    return target.asImage();
   }
 
   /// タイルのテクスチャ。まず `ui.Image` を包んで（`Picture.toImage` 由来ならコピー無し・ミップ無し）すぐ描き、
@@ -747,7 +760,7 @@ class TerrainGpuWorldRenderer {
     _lines.clear();
     _points.clear();
     _segments.clear();
-    _surface = null;
+    _targets.clear();
     _depth = null;
     _msaaColor = null;
     _white = null;

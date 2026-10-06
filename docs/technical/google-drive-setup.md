@@ -1,4 +1,4 @@
-﻿---
+---
 title: Google Drive連携セットアップ
 tags: [technical, google-drive, setup]
 ---
@@ -162,6 +162,20 @@ Google Drive連携機能を有効にするためのセットアップ手順。
 - `drive`スコープは機密性が高いため、追加のセキュリティ審査が必要になる場合あり
 
 ### 1.4 OAuthクライアントID作成（Android）
+
+> [!WARNING] 今の登録（2026-10-06、プロジェクト `nemurigi-kobo`、パッケージ `com.k_root.k_maps`）は **3 つ要る**
+> | 名前 | 鍵 | SHA-1 |
+> |---|---|---|
+> | K-Maps Android (Debug) | 開発用の debug 鍵 | （debug.keystore） |
+> | K-Maps Android (Upload) | アップロード鍵（`k-maps-release.keystore`） | `59:7B:60:7F:…:D4:1F` |
+> | **K-Maps Android (Play)** | **Play のアプリ署名鍵**（Play から入れた端末はこれで動く） | `36:7E:1C:6E:4A:B7:E5:FE:41:B0:2A:60:BD:D1:C7:F1:C5:8F:EE:65` |
+>
+> Play の分が無く、Play から入れた端末だけ `[28444] Developer console is not set up correctly` でサインインできなかった
+> （父の端末で発覚。開発者の端末は debug 版なので踏まない）。Play の鍵の SHA-1 は Play Console の「アプリの署名」に出ないので、
+> アプリ署名鍵の証明書（`deployment_cert.der`）を落として SHA-1 を計算する（SHA-256 が `71:09:25:12:…:AC:DA` と合うことを確かめる）。
+> ⚠ 同じパッケージ名と SHA-1 の組は 1 か所にしか登録できない。旧プロジェクト `k-maps-484306`（RootMap GIS）に残っていた
+> Play 用のクライアントが組を押さえていたので消してから作った。サインインはアプリの Web クライアントと同じプロジェクトに
+> Android クライアントが無いと通らない
 
 **重要**: デバッグビルドとリリースビルドで異なるSHA-1フィンガープリントが使われるため、**両方のクライアントIDを作成**する必要がある。両方登録しておけば、GoogleがSHA-1を見て自動で正しいクライアントIDを選択する。
 

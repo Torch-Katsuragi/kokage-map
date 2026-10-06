@@ -5,7 +5,7 @@
 ### Changed
 
 - "Open another folder" on Home is now "Choose a folder to open". Instead of the device's file picker, you browse the folders inside your everyday map, styled like the layer panel. Places outside it are under "Another place on the device…" in the top-right menu
-- The layer panel is redone: tighter rows, and only the visibility eye at the right end. Long-press a row (right-click on a PC) for its menu
+- The layer panel is redone: tighter rows, and only the visibility eye at the right end. Long-press a row (right-click on a PC) for its menu; swipe it left to move it elsewhere
 - Each layer row starts with a sample of its map color and shows its feature count. GeoPackages are small headings whose eye hides everything inside
 - A path (KokageMap › 共有) above the list takes you back to any level. The top shows the folder name instead of "Home"
 

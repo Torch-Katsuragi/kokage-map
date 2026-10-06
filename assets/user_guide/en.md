@@ -98,9 +98,9 @@ The top shows the current folder and the path above it. Tap a name in the path t
 
 Tap the :icon-visibility: at the right end of a row to toggle between visible :icon-visibility: and hidden :icon-visibility_off:. The eye on a folder or GeoPackage toggles everything inside at once; its layers then turn gray.
 
-### Reordering Layers
+### Moving Elsewhere
 
-Long-press a layer and move it to drag and drop (release without moving to get the menu). Drop a layer onto a different GeoPackage to migrate it.
+**Swipe a row to the left** in the layer panel for "Move" and choose where it goes. Folders, GeoPackages and photos move to a folder; a layer moves to another GeoPackage (migration).
 
 ### Using the Global Folder
 

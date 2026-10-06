@@ -16,12 +16,14 @@
 /// レイヤドロワーとフォルダ選択の 1 行（2026-10-06 に刷新）
 ///
 /// 右端は表示/非表示の目だけ。メニューは長押しか右クリックで出す（⋮ は置かない）。
-/// ドラッグで動かせる行は、長押しして動かさずに離したらメニュー、動かしたらドラッグ。
+/// 動かせる行は左へスワイプすると「移動」（移動先を選ぶ）。以前の長押しドラッグは、長押しのメニューと取り合うのでやめた。
 library;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../../i18n/strings.g.dart';
 
 /// 行の高さ（詰めた行。以前は ListTile の 68px で、スマホでは数行しか入らなかった）
 const double kDrawerRowHeight = 48;
@@ -104,10 +106,7 @@ class DrawerRow extends StatefulWidget {
     this.onDoubleTap,
     this.menu,
     this.onMenu,
-    this.dragData,
-    this.onDragStarted,
-    this.onDragEnded,
-    this.dragFeedback,
+    this.onSwipeMove,
     this.titleStyle,
     this.height = kDrawerRowHeight,
   });
@@ -129,11 +128,8 @@ class DrawerRow extends StatefulWidget {
   final List<RowMenuItem> Function()? menu;
   final void Function(String value)? onMenu;
 
-  /// ドラッグで動かせる行の中身。null ならドラッグしない
-  final Object? dragData;
-  final VoidCallback? onDragStarted;
-  final VoidCallback? onDragEnded;
-  final Widget? dragFeedback;
+  /// 左スワイプで呼ぶ（移動先を選ぶ）。null なら動かせない行
+  final VoidCallback? onSwipeMove;
   final TextStyle? titleStyle;
   final double height;
 
@@ -143,7 +139,6 @@ class DrawerRow extends StatefulWidget {
 
 class _DrawerRowState extends State<DrawerRow> {
   Offset? _downAt;
-  bool _dragReported = false;
 
   Future<void> _openMenu(Offset at) async {
     final build = widget.menu;
@@ -167,8 +162,7 @@ class _DrawerRowState extends State<DrawerRow> {
       child: InkWell(
         onTap: widget.onTap,
         onDoubleTap: widget.onDoubleTap,
-        // ドラッグできる行の長押しは Draggable が受ける（離したらメニュー）
-        onLongPress: widget.dragData == null && widget.menu != null
+        onLongPress: widget.menu != null
             ? () {
                 HapticFeedback.selectionClick();
                 if (_downAt != null) _openMenu(_downAt!);
@@ -223,32 +217,29 @@ class _DrawerRowState extends State<DrawerRow> {
       },
       child: row,
     );
-    final data = widget.dragData;
-    if (data == null) return listened;
-    return LongPressDraggable<Object>(
-      data: data,
-      dragAnchorStrategy: (_, _, _) => Offset.zero,
-      feedback: widget.dragFeedback ?? const SizedBox.shrink(),
-      childWhenDragging: Opacity(opacity: 0.4, child: row),
-      hapticFeedbackOnStart: true,
-      onDragStarted: () => _dragReported = false,
-      // 動かし始めて初めてドラッグとして知らせる（長押ししただけで画面全体がドラッグの表示にならないように）
-      onDragUpdate: (d) {
-        if (_dragReported || _downAt == null) return;
-        if ((d.globalPosition - _downAt!).distance > 12) {
-          _dragReported = true;
-          widget.onDragStarted?.call();
-        }
-      },
-      onDraggableCanceled: (_, offset) {
-        final moved = _downAt == null ? 99.0 : (offset - _downAt!).distance;
-        if (_dragReported) widget.onDragEnded?.call();
-        _dragReported = false;
-        if (moved <= 12 && _downAt != null) _openMenu(_downAt!);
-      },
-      onDragEnd: (_) {
-        if (_dragReported) widget.onDragEnded?.call();
-        _dragReported = false;
+    final move = widget.onSwipeMove;
+    if (move == null) return listened;
+    return Dismissible(
+      key: ValueKey(widget.title),
+      direction: DismissDirection.endToStart,
+      dismissThresholds: const {DismissDirection.endToStart: 0.3},
+      background: Container(
+        color: Colors.blue.shade600,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.drive_file_move_outline, color: Colors.white),
+            const SizedBox(width: 6),
+            Text(t.layerDrawer.moveAction, style: const TextStyle(color: Colors.white, fontSize: 15)),
+          ],
+        ),
+      ),
+      // 消さずに戻し、移動先を選ばせる
+      confirmDismiss: (_) async {
+        move();
+        return false;
       },
       child: listened,
     );
@@ -269,10 +260,7 @@ class DrawerGroupHeader extends StatelessWidget {
     this.onMenu,
     this.highlight = false,
     this.badge,
-    this.dragData,
-    this.dragFeedback,
-    this.onDragStarted,
-    this.onDragEnded,
+    this.onSwipeMove,
     this.headerKey,
   });
   final String title;
@@ -287,10 +275,7 @@ class DrawerGroupHeader extends StatelessWidget {
   /// ドロップ先として光らせる
   final bool highlight;
   final Widget? badge;
-  final Object? dragData;
-  final Widget? dragFeedback;
-  final VoidCallback? onDragStarted;
-  final VoidCallback? onDragEnded;
+  final VoidCallback? onSwipeMove;
 
   /// 見出しの行に付ける鍵（チュートリアルの案内先）
   final Key? headerKey;
@@ -315,10 +300,7 @@ class DrawerGroupHeader extends StatelessWidget {
         onTap: onToggleExpanded,
         menu: menu,
         onMenu: onMenu,
-        dragData: dragData,
-        dragFeedback: dragFeedback,
-        onDragStarted: onDragStarted,
-        onDragEnded: onDragEnded,
+        onSwipeMove: onSwipeMove,
       ),
     );
   }

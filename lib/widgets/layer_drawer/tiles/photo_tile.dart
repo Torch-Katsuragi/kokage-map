@@ -38,7 +38,6 @@ import '../../../utils/app_logger.dart';
 import '../../dialogs/overlay_convert_dialog.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
-import 'drag_feedback_card.dart';
 
 /// 練習フォルダの写真のうち、並びの最初のものか
 bool _isFirstPracticePhoto(ImageNode node) {
@@ -53,18 +52,14 @@ class PhotoTile extends ConsumerWidget {
   final ImageNode node;
   final VoidCallback? onRename;
   final void Function(LatLng)? onJumpTo;
-  final Object? dragData;
-  final VoidCallback? onDragStarted;
-  final VoidCallback? onDragEnded;
+  final VoidCallback? onSwipeMove;
 
   const PhotoTile({
     super.key,
     required this.node,
     this.onRename,
     this.onJumpTo,
-    this.dragData,
-    this.onDragStarted,
-    this.onDragEnded,
+    this.onSwipeMove,
   });
 
   @override
@@ -120,10 +115,7 @@ class PhotoTile extends ConsumerWidget {
             await _handleConvertToNormal(context, ref);
         }
       },
-      dragData: dragData,
-      dragFeedback: dragData == null ? null : DragFeedbackCard(node: node),
-      onDragStarted: onDragStarted,
-      onDragEnded: onDragEnded,
+      onSwipeMove: onSwipeMove,
     );
   }
 

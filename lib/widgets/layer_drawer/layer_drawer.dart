@@ -18,7 +18,6 @@
 /// 可視切り替え・リネーム・削除などの操作を提供するUI。
 library;
 
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,6 +50,7 @@ import '../dialogs/drive_url_input_dialog.dart';
 import 'common_dialogs.dart';
 import 'layer_drawer_drive_sync.dart';
 import 'layer_drawer_title_bar.dart';
+import 'move_target_dialog.dart';
 import 'sync_merge_dialog.dart';
 import 'tiles/folder_tile.dart';
 import 'tiles/geopackage_tile.dart';
@@ -77,17 +77,8 @@ class LayerDrawer extends ConsumerStatefulWidget {
 
 class _LayerDrawerState extends ConsumerState<LayerDrawer>
     with LayerDrawerDriveSync {
-  LayerTreeNode? _draggingNode;
-  GeoPackageNode? _dragTarget;
-
-  bool get _isDragging => _draggingNode != null;
-  bool get _isLayerDrag => _draggingNode is LayerNode;
-  Timer? _dragNavTimer;
-
-  void _endDrag() {
-    if (!_isDragging) return;
-    setState(() { _draggingNode = null; _dragTarget = null; });
-  }
+  /// デスクトップからファイルを落としている先の gpkg（光らせる）
+  GeoPackageNode? _dropTarget;
 
   @override
   void triggerMapRefresh() =>
@@ -107,17 +98,10 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
   void didUpdateWidget(LayerDrawer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentNode != widget.currentNode) {
-      _cancelDragNavTimer();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _syncExpansionState(reset: true);
       });
     }
-  }
-
-  @override
-  void dispose() {
-    _dragNavTimer?.cancel();
-    super.dispose();
   }
 
   void _syncExpansionState({required bool reset}) {
@@ -139,54 +123,24 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     ];
   }
 
-  // --- ドラッグ中フォルダナビゲーション ---
-
-  void _startDragNavTimer(VoidCallback navigate) {
-    if (_dragNavTimer != null) return;
-    _dragNavTimer = Timer(const Duration(milliseconds: 500), () {
-      _dragNavTimer = null;
-      if (mounted) navigate();
-    });
-  }
-
-  void _cancelDragNavTimer() {
-    _dragNavTimer?.cancel();
-    _dragNavTimer = null;
-  }
-
-  /// ドラッグ中に0.5秒ホバーでディレクトリ遷移 + ファイル移動ドロップを受け付ける DragTarget ラッパー。
-  /// [dropTarget] が指定された場合、非LayerNode のドロップでファイル移動を実行する。
-  Widget _wrapDragNav(Widget child, VoidCallback onNavigate, {FolderNode? dropTarget}) {
-    return DragTarget<LayerTreeNode>(
-      onWillAcceptWithDetails: (details) {
-        if (dropTarget != null && identical(details.data, dropTarget)) return false;
-        return true;
-      },
-      onMove: (_) => _startDragNavTimer(onNavigate),
-      onLeave: (_) => _cancelDragNavTimer(),
-      onAcceptWithDetails: (details) {
-        _cancelDragNavTimer();
-        if (dropTarget != null && details.data is! LayerNode) {
-          _moveNodeToFolder(details.data, dropTarget);
-        }
-      },
-      // ⚠ decoration を null と付け外ししないこと。木の形が変わって中身が作り直され、長押し中の行が消える
-      // （離したときのメニュー・ドラッグの終わりの合図が届かなくなる）
-      builder: (context, candidateData, _) => Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: candidateData.isNotEmpty ? Colors.orange : Colors.transparent, width: 2),
-          borderRadius: BorderRadius.circular(4),
-          color: candidateData.isNotEmpty ? Colors.orange.withValues(alpha: 0.1) : null,
-        ),
-        child: child,
-      ),
-    );
-  }
-
   // --- ファイル移動 ---
 
+  /// 行の左スワイプ「移動」: 行き先を選ばせて動かす（フォルダ・gpkg・写真はフォルダへ、レイヤは別の gpkg へ移植）
+  Future<void> _swipeMove(LayerTreeNode source) async {
+    LayerTreeNode root = widget.currentNode!;
+    while (root.parent != null) {
+      root = root.parent!;
+    }
+    final target = await MoveTargetDialog.show(context, source: source, root: root);
+    if (target == null || !mounted) return;
+    if (source is LayerNode && target is GeoPackageNode) {
+      await migrateLayerTo(context, ref, source, target);
+    } else if (target is FolderNode) {
+      await _moveNodeToFolder(source, target);
+    }
+  }
+
   Future<void> _moveNodeToFolder(LayerTreeNode source, FolderNode target) async {
-    _endDrag();
 
     final sourcePath = source.getAbsoluteFilePath();
     final targetDir = target.getAbsoluteFilePath();
@@ -294,7 +248,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     // ⚠ パスを解決できないフォルダ（プロジェクト未設定の仮ルート `Home`。web の地図プレビューや
     //   `#/map` 直開き）には何も作らせない。作れてしまうと web では IndexedDB にだけ残る幽霊 gpkg になる
     final canAddHere = widget.currentNode is FolderNode && widget.currentNode!.getAbsoluteFilePath() != null;
-    Widget titleBar = LayerDrawerTitleBar(
+    final titleBar = LayerDrawerTitleBar(
       title: NodePresenter.getDisplayName(widget.currentNode!),
       currentNode: widget.currentNode!,
       onAdd: canAddHere
@@ -312,80 +266,17 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
           ? (action) => _handleCloudAction(context, driveRoot, action)
           : null,
     );
-    if (parent != null) {
-      titleBar = _wrapDragNav(
-        titleBar,
-        () => widget.onDirChanged(parent),
-        dropTarget: parent is FolderNode && parent is! SysNode ? parent : null,
-      );
-    }
 
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: _isDragging ? Colors.blue : Colors.transparent, width: 2),
-        borderRadius: BorderRadius.circular(8),
-        color: _isDragging ? Colors.blue.withValues(alpha: 0.1) : null,
-      ),
-      child: Column(
-        children: [
-          titleBar,
-          if (_isDragging)
-            Container(
-              padding: const EdgeInsets.all(8),
-              margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: (_isLayerDrag ? Colors.blue : Colors.orange).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _isLayerDrag ? Icons.cloud_upload : Icons.drive_file_move,
-                    color: _isLayerDrag ? Colors.blue : Colors.orange,
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      _isLayerDrag
-                          ? t.layerDrawer.dropOnGeoPackage
-                          : t.layerDrawer.dropToMove,
-                      style: TextStyle(
-                        color: _isLayerDrag ? Colors.blue : Colors.orange,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            const SizedBox.shrink(),
-          Expanded(
-            child: DragTarget<LayerTreeNode>(
-              onWillAcceptWithDetails: (details) =>
-                  details.data is! LayerNode &&
-                  canAddHere &&
-                  details.data.parent != widget.currentNode,
-              onAcceptWithDetails: (details) {
-                if (widget.currentNode case final FolderNode folder) {
-                  _moveNodeToFolder(details.data, folder);
-                }
-              },
-              builder: (context, candidateData, _) => Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: candidateData.isNotEmpty ? Colors.orange : Colors.transparent, width: 2),
-                  borderRadius: BorderRadius.circular(4),
-                  color: candidateData.isNotEmpty ? Colors.orange.withValues(alpha: 0.05) : null,
-                ),
-                child: ListView.builder(
-                  itemCount: widget.currentNode!.children.length,
-                  itemBuilder: (_, i) => _buildNodeTile(widget.currentNode!.children[i]),
-                ),
-              ),
-            ),
+    return Column(
+      children: [
+        titleBar,
+        Expanded(
+          child: ListView.builder(
+            itemCount: widget.currentNode!.children.length,
+            itemBuilder: (_, i) => _buildNodeTile(widget.currentNode!.children[i]),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -393,7 +284,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     if (node is FolderNode) {
       // 「この端末」とグローバルフォルダ本体は、名前変更・削除・ドラッグの対象にしない
       final fixed = node is SysNode || node is GlobalFolderNode;
-      final draggable = node is! DriveFolderNode && !fixed;
+      final movable = node is! DriveFolderNode && !fixed;
       final tile = FolderTile(
         node: node,
         fixed: fixed,
@@ -403,37 +294,25 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         onRefreshSync: node is DriveFolderNode ? refreshSyncStatus : null,
         onUnlinkDrive: node is DriveFolderNode ? unlinkDriveFolder : null,
         onDeleteDrive: node is DriveFolderNode ? deleteDriveFolder : null,
-        dragData: draggable ? node : null,
-        onDragStarted: () => setState(() => _draggingNode = node),
-        onDragEnded: _endDrag,
+        onSwipeMove: movable ? () => _swipeMove(node) : null,
       );
-      // sys はパスが無いので落とし先にしない（遷移のためのホバーは受ける）
-      return _wrapDragNav(
-        tile,
-        () => widget.onDirChanged(node),
-        dropTarget: node is SysNode ? null : node,
-      );
+      return tile;
     }
     if (node is ImageNode) {
       return PhotoTile(
         node: node,
         onRename: () => _renamePhoto(context, node),
         onJumpTo: widget.onJumpTo,
-        dragData: node,
-        onDragStarted: () => setState(() => _draggingNode = node),
-        onDragEnded: _endDrag,
+        onSwipeMove: () => _swipeMove(node),
       );
     }
     if (node is GeoPackageNode) {
       return GeoPackageTile(
         node: node,
-        isDropTarget: (_isLayerDrag || !_isDragging) && _dragTarget == node,
+        isDropTarget: _dropTarget == node,
         onRename: () => _renameGeoPackage(context, node),
-        onDragTargetChanged: (t) => setState(() => _dragTarget = t),
-        onDragActiveChanged: (dragNode) => setState(() {
-          _draggingNode = dragNode;
-          if (dragNode == null) _dragTarget = null;
-        }),
+        onDropTargetChanged: (t) => setState(() => _dropTarget = t),
+        onSwipeMove: _swipeMove,
         currentDir: widget.currentNode,
       );
     }

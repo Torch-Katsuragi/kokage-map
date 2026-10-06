@@ -42,7 +42,6 @@ import '../../../widgets/layer_import_export_dialog.dart';
 import '../../../widgets/survey_conversion_dialog.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
-import 'drag_feedback_card.dart';
 import 'layer_swatch.dart';
 import 'view_tile.dart';
 
@@ -53,7 +52,8 @@ class LayerTile extends ConsumerWidget {
   /// ジオメトリ変換時にターゲットレイヤーを検索するための親ディレクトリ
   final LayerTreeNode? currentDir;
 
-  final ValueChanged<LayerTreeNode?>? onDragActiveChanged;
+  /// 左スワイプの「移動」（別の gpkg へ移植）
+  final ValueChanged<LayerNode>? onSwipeMove;
 
   /// 字下げの段（gpkg の見出しの下は 1）
   final int depth;
@@ -62,7 +62,7 @@ class LayerTile extends ConsumerWidget {
     super.key,
     required this.node,
     this.currentDir,
-    this.onDragActiveChanged,
+    this.onSwipeMove,
     this.depth = 1,
   });
 
@@ -98,10 +98,7 @@ class LayerTile extends ConsumerWidget {
       onDoubleTap: () => _zoomToLayer(ref),
       menu: () => _menuItems(isArea),
       onMenu: (v) => _onMenu(context, ref, v),
-      dragData: node,
-      dragFeedback: DragFeedbackCard(node: node),
-      onDragStarted: () => onDragActiveChanged?.call(node),
-      onDragEnded: () => onDragActiveChanged?.call(null),
+      onSwipeMove: onSwipeMove == null ? null : () => onSwipeMove!(node),
     );
     if (guiding) {
       row = KeyedSubtree(key: TutorialTargets.tileOf(node), child: row);

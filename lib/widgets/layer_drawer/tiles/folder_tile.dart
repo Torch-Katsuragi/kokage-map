@@ -30,7 +30,6 @@ import '../../dialogs/drive_qr_dialog.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
 import '../sync_merge_dialog.dart';
-import 'drag_feedback_card.dart';
 
 /// フォルダの行。DriveFolderNode は同期の状態を添え、長押しメニューに同期の操作を出す（同期できない環境では QR だけ）
 class FolderTile extends ConsumerWidget {
@@ -46,10 +45,8 @@ class FolderTile extends ConsumerWidget {
   /// 実体の場所はアプリが決めているので、ツリーから動かしたり消したりさせない
   final bool fixed;
 
-  /// ドラッグで動かせるとき（ローカルのフォルダ）。長押しして動かさずに離せばメニュー
-  final Object? dragData;
-  final VoidCallback? onDragStarted;
-  final VoidCallback? onDragEnded;
+  /// 左スワイプの「移動」（ローカルのフォルダだけ）
+  final VoidCallback? onSwipeMove;
 
   const FolderTile({
     super.key,
@@ -61,9 +58,7 @@ class FolderTile extends ConsumerWidget {
     this.onUnlinkDrive,
     this.onDeleteDrive,
     this.fixed = false,
-    this.dragData,
-    this.onDragStarted,
-    this.onDragEnded,
+    this.onSwipeMove,
   });
 
   /// このプラットフォームで実際に同期できるか。
@@ -99,10 +94,7 @@ class FolderTile extends ConsumerWidget {
       onTap: onTap,
       menu: () => _menuItems(drive),
       onMenu: (v) => _onMenu(context, ref, v, drive),
-      dragData: dragData,
-      dragFeedback: dragData == null ? null : DragFeedbackCard(node: node),
-      onDragStarted: onDragStarted,
-      onDragEnded: onDragEnded,
+      onSwipeMove: onSwipeMove,
     );
   }
 

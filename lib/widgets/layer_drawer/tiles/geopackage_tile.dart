@@ -33,7 +33,6 @@ import '../../../services/import_export/import_export_service.dart';
 import '../../../tutorial/tutorial.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
-import 'drag_feedback_card.dart';
 import 'layer_tile.dart';
 
 
@@ -42,8 +41,11 @@ class GeoPackageTile extends ConsumerWidget {
   final GeoPackageNode node;
   final bool isDropTarget;
   final VoidCallback? onRename;
-  final void Function(GeoPackageNode?) onDragTargetChanged;
-  final ValueChanged<LayerTreeNode?> onDragActiveChanged;
+  /// デスクトップからファイルを落としている先（光らせる）
+  final void Function(GeoPackageNode?) onDropTargetChanged;
+
+  /// 左スワイプの「移動」（gpkg はフォルダへ、中のレイヤは別の gpkg へ）
+  final ValueChanged<LayerTreeNode>? onSwipeMove;
   final LayerTreeNode? currentDir;
   final int depth;
 
@@ -51,8 +53,8 @@ class GeoPackageTile extends ConsumerWidget {
     super.key,
     required this.node,
     required this.isDropTarget,
-    required this.onDragTargetChanged,
-    required this.onDragActiveChanged,
+    required this.onDropTargetChanged,
+    this.onSwipeMove,
     this.onRename,
     this.currentDir,
     this.depth = 0,
@@ -105,10 +107,7 @@ class GeoPackageTile extends ConsumerWidget {
             await _handleDelete(context, ref);
         }
       },
-      dragData: node,
-      dragFeedback: DragFeedbackCard(node: node),
-      onDragStarted: () => onDragActiveChanged(node),
-      onDragEnded: () => onDragActiveChanged(null),
+      onSwipeMove: onSwipeMove == null ? null : () => onSwipeMove!(node),
     );
 
     final content = Column(
@@ -121,10 +120,7 @@ class GeoPackageTile extends ConsumerWidget {
               node: layerNode,
               currentDir: currentDir,
               depth: depth + 1,
-              onDragActiveChanged: (dragNode) {
-                onDragActiveChanged(dragNode);
-                if (dragNode == null) onDragTargetChanged(null);
-              },
+              onSwipeMove: onSwipeMove,
             ),
           // 空の gpkg にだけ「レイヤ追加」の行を出す（以前は gpkg ごとに出していてうるさかった。ふだんは見出しの長押しから）
           if (layers.isEmpty)
@@ -140,35 +136,17 @@ class GeoPackageTile extends ConsumerWidget {
       ],
     );
 
-    // レイヤ D&D ターゲット
-    final layerDragTarget = DragTarget<LayerNode>(
-      onAcceptWithDetails: (details) async {
-        await _handleLayerDrop(context, ref, details.data, node);
-        onDragActiveChanged(null);
-        onDragTargetChanged(null);
-      },
-      onWillAcceptWithDetails: (details) => details.data.geoPackageNode != node,
-      // 自分の中のレイヤが乗っているだけ（長押ししたところ）はドラッグ扱いにしない。長押しで離せばメニューになる
-      onMove: (details) {
-        if (details.data.geoPackageNode == node) return;
-        onDragActiveChanged(details.data);
-        onDragTargetChanged(node);
-      },
-      onLeave: (_) => onDragTargetChanged(null),
-      builder: (context, _, _) => content,
-    );
-
     // ファイル D&D ターゲット（外側・デスクトップからのドロップ用）
     return DropTarget(
-      onDragEntered: (_) => onDragTargetChanged(node),
-      onDragExited: (_) => onDragTargetChanged(null),
+      onDragEntered: (_) => onDropTargetChanged(node),
+      onDragExited: (_) => onDropTargetChanged(null),
       onDragDone: (details) async {
         for (final file in details.files) {
           await _handleFileDrop(file.path, ref);
         }
-        onDragTargetChanged(null);
+        onDropTargetChanged(null);
       },
-      child: layerDragTarget,
+      child: content,
     );
   }
 
@@ -196,43 +174,6 @@ class GeoPackageTile extends ConsumerWidget {
     } catch (_) {}
   }
 
-  Future<void> _handleLayerDrop(
-    BuildContext context,
-    WidgetRef ref,
-    LayerNode sourceLayer,
-    GeoPackageNode targetGpkg,
-  ) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(t.layerDrawer.geopackage.migrateTitle),
-        content: Text(
-          t.layerDrawer.geopackage.migrateConfirm(source: sourceLayer.name, target: targetGpkg.name),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.common.cancel)),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(t.common.confirm)),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-
-    final migrated = await sourceLayer.migrateToGeoPackage(targetGpkg, moveLayer: true);
-    if (migrated != null) {
-      ref.read(featureRefreshTriggerProvider.notifier).trigger();
-      ref.read(selectedLayerNodeProvider.notifier).select(migrated);
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.geopackage.migrateSuccess(source: sourceLayer.name, target: targetGpkg.name),
-            level: NotificationLevel.success,
-          );
-    } else {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.geopackage.migrateFailed,
-            level: NotificationLevel.error,
-          );
-    }
-  }
-
   Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
     await confirmAndExecute(
       context,
@@ -257,5 +198,43 @@ class GeoPackageTile extends ConsumerWidget {
         ref.read(featureRefreshTriggerProvider.notifier).trigger();
       },
     );
+  }
+}
+
+/// レイヤを別の gpkg へ移す（行の左スワイプ「移動」から）。確かめてから移植し、移した先を選ぶ
+Future<void> migrateLayerTo(
+  BuildContext context,
+  WidgetRef ref,
+  LayerNode sourceLayer,
+  GeoPackageNode targetGpkg,
+) async {
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(t.layerDrawer.geopackage.migrateTitle),
+      content: Text(
+        t.layerDrawer.geopackage.migrateConfirm(source: sourceLayer.name, target: targetGpkg.name),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.common.cancel)),
+        TextButton(onPressed: () => Navigator.pop(context, true), child: Text(t.common.confirm)),
+      ],
+    ),
+  );
+  if (confirm != true) return;
+
+  final migrated = await sourceLayer.migrateToGeoPackage(targetGpkg, moveLayer: true);
+  if (migrated != null) {
+    ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    ref.read(selectedLayerNodeProvider.notifier).select(migrated);
+    ref.read(notificationCenterProvider.notifier).add(
+          title: t.layerDrawer.geopackage.migrateSuccess(source: sourceLayer.name, target: targetGpkg.name),
+          level: NotificationLevel.success,
+        );
+  } else {
+    ref.read(notificationCenterProvider.notifier).add(
+          title: t.layerDrawer.geopackage.migrateFailed,
+          level: NotificationLevel.error,
+        );
   }
 }

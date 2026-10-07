@@ -32,9 +32,9 @@
 import 'package:flutter/painting.dart' show Color;
 import 'package:xml/xml.dart';
 
-import '../../models/geometry_type.dart';
 import 'qgs_model.dart';
 import 'qgs_writer.dart';
+import 'qgs_xml.dart';
 
 /// `kokage` 名前空間に書く印。「この `.qgs` を最後に書いたのは誰か」の根拠。
 class KokageStamp {
@@ -166,7 +166,7 @@ class QgsDocument {
 
   /// 印を書く。root の `saveDateTime` も同じ値にする（QGIS が保存すると上書きされる）。
   void setStamp(KokageStamp stamp) {
-    final props = _ensureChild(root, 'properties');
+    final props = ensureChild(root, 'properties');
     final k = _ensureProperty(props, _kokageScope);
     _setProperty(k, 'schemaVersion', '${stamp.schemaVersion}', type: 'int');
     _setProperty(k, 'app', stamp.app);
@@ -176,7 +176,7 @@ class QgsDocument {
       _setProperty(k, 'savedBy', stamp.savedBy!);
     } else {
       final stale = _property(k, 'savedBy');
-      if (stale != null) _detach(stale);
+      if (stale != null) detachNode(stale);
     }
     root.setAttribute('saveDateTime', stamp.savedAtText);
     root.setAttribute('saveUser', 'kokage-map');
@@ -209,10 +209,10 @@ class QgsDocument {
     if (json == null) {
       final k = _kokageElement;
       final stale = k == null ? null : _property(k, 'meta');
-      if (stale != null) _detach(stale);
+      if (stale != null) detachNode(stale);
       return;
     }
-    final props = _ensureChild(root, 'properties');
+    final props = ensureChild(root, 'properties');
     _setProperty(_ensureProperty(props, _kokageScope), 'meta', json);
   }
 
@@ -228,7 +228,7 @@ class QgsDocument {
   // レイヤ
   // =============================================
 
-  XmlElement get _projectLayers => _ensureChild(root, 'projectlayers');
+  XmlElement get _projectLayers => ensureChild(root, 'projectlayers');
 
   /// 文書内の `<maplayer>`
   Iterable<XmlElement> get mapLayers => _projectLayers.findElements('maplayer');
@@ -258,7 +258,7 @@ class QgsDocument {
   QgsApplyReport apply(QgsProject project) {
     final report = QgsApplyReport();
     root.setAttribute('projectname', project.name);
-    _ensureChild(root, 'title')
+    ensureChild(root, 'title')
       ..children.clear()
       ..children.add(XmlText(project.name));
 
@@ -271,7 +271,7 @@ class QgsDocument {
   // ---- レイヤツリー ----
 
   void _applyTree(QgsProject project) {
-    final treeRoot = _ensureChild(root, 'layer-tree-group');
+    final treeRoot = ensureChild(root, 'layer-tree-group');
 
     // 既存ノードを控える（id とグループ名で引く）
     final oldLayers = <String, XmlElement>{
@@ -309,53 +309,69 @@ class QgsDocument {
     final result = <XmlElement>[];
     for (final node in nodes) {
       switch (node) {
-        case QgsGroup(:final name, :final children, :final visible, :final expanded):
-          final old = oldGroups[name];
-          final group = old?.copy() ?? _writer.treeGroupElement(name, visible: visible);
-          // 以前は埋め込みだったが、いまは普通のグループ（2026-09-30 に埋め込みをやめて写しにした）。
-          // QGIS 4 は同じ印を customproperties にも書く（`<Option name="embedded" …/>`）
-          group.removeAttribute('embedded');
-          group.removeAttribute('embedded_project');
-          for (final props in group.findElements('customproperties')) {
-            props.descendantElements
-                .where((e) => _embeddingKeys.contains(e.getAttribute('name') ?? e.getAttribute('key')))
-                .toList()
-                .forEach(_detach);
-          }
-          group.setAttribute('name', name);
-          group.setAttribute('checked', QgsWriter.checkedValue(visible));
-          group.setAttribute('expanded', expanded ? '1' : '0');
-          // 子は組み直す。customproperties 等の非ツリー要素は残す
-          final nonTree = [
-            for (final c in group.childElements)
-              if (c.name.local != 'layer-tree-group' && c.name.local != 'layer-tree-layer') c.copy(),
-          ];
-          final rebuilt = _rebuildChildren(children, old, oldLayers);
-          group.children.clear();
-          group.children.addAll(nonTree);
-          group.children.addAll(rebuilt);
-          result.add(group);
+        case QgsGroup():
+          result.add(_rebuildGroup(node, oldGroups[node.name], oldLayers));
         case QgsLayer():
-          final old = oldLayers[node.id];
-          final el = old?.copy() ?? _writer.treeLayerElement(node);
-          el.setAttribute('id', node.id);
-          el.setAttribute('name', node.name);
-          el.setAttribute('source', node.dataSourceUri);
-          el.setAttribute('providerKey', 'ogr');
-          el.setAttribute('checked', QgsWriter.checkedValue(node.visible));
-          result.add(el);
+          result.add(
+            _treeLayer(oldLayers[node.id] ?? _writer.treeLayerElement(node), node.id, node.name, node.dataSourceUri, 'ogr', node.visible),
+          );
         case QgsRasterLayer():
-          final old = oldLayers[node.id];
-          final el = old?.copy() ?? _writer.treeRasterLayerElement(node);
-          el.setAttribute('id', node.id);
-          el.setAttribute('name', node.name);
-          el.setAttribute('source', node.dataSourcePath);
-          el.setAttribute('providerKey', 'gdal');
-          el.setAttribute('checked', QgsWriter.checkedValue(node.visible));
-          result.add(el);
+          result.add(
+            _treeLayer(
+              oldLayers[node.id] ?? _writer.treeRasterLayerElement(node),
+              node.id,
+              node.name,
+              node.dataSourcePath,
+              'gdal',
+              node.visible,
+            ),
+          );
       }
     }
     return result;
+  }
+
+  /// `<layer-tree-group>` を組み直す。[old]（同じ名前の既存グループ）があれば属性と
+  /// ツリー以外の子（customproperties 等）を引き継ぐ。子のグループ・レイヤは [node] の構造で作り直す
+  XmlElement _rebuildGroup(QgsGroup node, XmlElement? old, Map<String, XmlElement> oldLayers) {
+    final XmlElement group;
+    if (old == null) {
+      group = _writer.treeGroupElement(node.name, visible: node.visible);
+    } else {
+      // 子は作り直すので、丸ごと写さず殻とツリー以外の子だけ写す（深いツリーで写しが重ならないように）
+      group = XmlElement(XmlName.qualified(old.name.qualified), [
+        for (final a in old.attributes) a.copy(),
+      ], [
+        for (final c in old.childElements)
+          if (c.name.local != 'layer-tree-group' && c.name.local != 'layer-tree-layer') c.copy(),
+      ]);
+    }
+    // 以前は埋め込みだったが、いまは普通のグループ（2026-09-30 に埋め込みをやめて写しにした）。
+    // QGIS 4 は同じ印を customproperties にも書く（`<Option name="embedded" …/>`）
+    group.removeAttribute('embedded');
+    group.removeAttribute('embedded_project');
+    for (final props in group.findElements('customproperties')) {
+      props.descendantElements
+          .where((e) => _embeddingKeys.contains(e.getAttribute('name') ?? e.getAttribute('key')))
+          .toList()
+          .forEach(detachNode);
+    }
+    group.setAttribute('name', node.name);
+    group.setAttribute('checked', qgsCheckedValue(node.visible));
+    group.setAttribute('expanded', node.expanded ? '1' : '0');
+    group.children.addAll(_rebuildChildren(node.children, old, oldLayers));
+    return group;
+  }
+
+  /// `<layer-tree-layer>` を [base] の写しから作り、管轄の属性だけ合わせる（他の属性と子は引き継ぐ）
+  static XmlElement _treeLayer(XmlElement base, String id, String name, String source, String provider, bool visible) {
+    final el = base.copy();
+    el.setAttribute('id', id);
+    el.setAttribute('name', name);
+    el.setAttribute('source', source);
+    el.setAttribute('providerKey', provider);
+    el.setAttribute('checked', qgsCheckedValue(visible));
+    return el;
   }
 
   // ---- maplayer ----
@@ -372,7 +388,7 @@ class QgsDocument {
     // 埋め込みスタブは外す。子 dir も写しとして平らに入る（2026-09-30 に埋め込みをやめた。
     // それ以前に書いた `.qgs` と、手で足された埋め込み）
     for (final e in container.findElements('maplayer').toList()) {
-      if (isEmbedded(e)) _detach(e);
+      if (isEmbedded(e)) detachNode(e);
     }
 
     // 既存: 直す or 外す
@@ -386,11 +402,11 @@ class QgsDocument {
       if (layer == null) {
         final name = e.getElement('layername')?.innerText ?? id ?? '?';
         report.removedLayers.add(name);
-        _detach(e);
+        detachNode(e);
         continue;
       }
       if (!seen.add(id!)) {
-        _detach(e);
+        detachNode(e);
         continue;
       }
       switch (layer) {
@@ -398,8 +414,8 @@ class QgsDocument {
           _patchMapLayer(e, layer, report);
         case QgsRasterLayer():
           // ラスタは参照と名前だけが管轄。レンダラ（pipe）は QGIS 側の設定を残す
-          _setText(e, 'datasource', layer.dataSourcePath);
-          _setText(e, 'layername', layer.name);
+          setChildText(e, 'datasource', layer.dataSourcePath);
+          setChildText(e, 'layername', layer.name);
         default:
           break;
       }
@@ -422,23 +438,14 @@ class QgsDocument {
 
   /// 既存の `<maplayer>` を [layer] に合わせる。自分の管轄だけ触る
   void _patchMapLayer(XmlElement e, QgsLayer layer, QgsApplyReport report) {
-    _setText(e, 'datasource', layer.dataSourceUri);
-    _setText(e, 'layername', layer.name);
-    e.setAttribute('geometry', _geometryName(layer.geometryType));
+    setChildText(e, 'datasource', layer.dataSourceUri);
+    setChildText(e, 'layername', layer.name);
+    e.setAttribute('geometry', qgsGeometryName(layer.geometryType));
 
     final renderer = e.getElement('renderer-v2');
     if (renderer == null) {
       final fresh = _writer.rendererElement(layer);
-      if (fresh != null) {
-        // QGIS の並び（srs/provider の後、customproperties の前）に厳密さは要らない。
-        // `previewExpression` の前に置けば読める
-        final anchor = e.getElement('previewExpression');
-        if (anchor != null) {
-          e.children.insert(e.children.indexOf(anchor), fresh);
-        } else {
-          e.children.add(fresh);
-        }
-      }
+      if (fresh != null) insertIntoMapLayer(e, fresh);
       return;
     }
     if (renderer.getAttribute('type') != 'singleSymbol') {
@@ -467,13 +474,7 @@ class QgsDocument {
     final labeling = e.getElement('labeling');
     if (labeling == null) {
       final fresh = _writer.labelingElement(layer);
-      if (fresh == null) return;
-      final anchor = e.getElement('previewExpression');
-      if (anchor != null) {
-        e.children.insert(e.children.indexOf(anchor), fresh);
-      } else {
-        e.children.add(fresh);
-      }
+      if (fresh != null) insertIntoMapLayer(e, fresh);
       return;
     }
     if (labeling.getAttribute('type') != 'simple') return;
@@ -526,16 +527,10 @@ class QgsDocument {
     if (values.isEmpty) return;
 
     // `<layer>` 直下の `<Option type="Map">` だけを見る（data_defined_properties は触らない）
-    final map = symbolLayer
-        .findElements('Option')
-        .where((o) => o.getAttribute('type') == 'Map')
-        .firstOrNull;
+    final map = symbolOptionMap(symbolLayer);
     if (map == null) return;
     for (final entry in values.entries) {
-      final option = map
-          .findElements('Option')
-          .where((o) => o.getAttribute('name') == entry.key)
-          .firstOrNull;
+      final option = namedOption(map, entry.key);
       if (option != null) {
         option.setAttribute('value', entry.value);
       } else {
@@ -552,15 +547,8 @@ class QgsDocument {
 
   /// 既存の色（`R,G,B,A,...`）を読む。読めなければ黒
   static Color _readColor(XmlElement symbolLayer, String name) {
-    final map = symbolLayer
-        .findElements('Option')
-        .where((o) => o.getAttribute('type') == 'Map')
-        .firstOrNull;
-    final value = map
-        ?.findElements('Option')
-        .where((o) => o.getAttribute('name') == name)
-        .firstOrNull
-        ?.getAttribute('value');
+    final map = symbolOptionMap(symbolLayer);
+    final value = map == null ? null : namedOption(map, name)?.getAttribute('value');
     final parts = value?.split(',') ?? const [];
     if (parts.length < 3) return const Color(0xFF000000);
     int channel(int i) => int.tryParse(parts[i].trim())?.clamp(0, 255) ?? 0;
@@ -570,7 +558,7 @@ class QgsDocument {
   // ---- layerorder ----
 
   void _applyLayerOrder(QgsProject project) {
-    final order = _ensureChild(root, 'layerorder');
+    final order = ensureChild(root, 'layerorder');
     order.children.clear();
     for (final id in project.orderedLayerIds) {
       order.children.add(
@@ -578,32 +566,4 @@ class QgsDocument {
       );
     }
   }
-
-  // =============================================
-  // 小道具
-  // =============================================
-
-  static XmlElement _ensureChild(XmlElement parent, String name) {
-    final existing = parent.getElement(name);
-    if (existing != null) return existing;
-    final created = XmlElement(XmlName.parts(name));
-    parent.children.add(created);
-    return created;
-  }
-
-  static void _setText(XmlElement parent, String name, String text) {
-    final el = _ensureChild(parent, name);
-    el.children.clear();
-    el.children.add(XmlText(text));
-  }
-
-  static void _detach(XmlNode node) {
-    node.parent?.children.remove(node);
-  }
-
-  static String _geometryName(GeometryType type) => switch (type) {
-    GeometryType.point => 'Point',
-    GeometryType.linestring => 'Line',
-    GeometryType.polygon => 'Polygon',
-  };
 }

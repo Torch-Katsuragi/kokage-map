@@ -30,6 +30,7 @@ import 'package:xml/xml.dart';
 
 import '../../models/geometry_type.dart';
 import 'qgs_model.dart';
+import 'qgs_xml.dart';
 
 /// 生成する `.qgs` の想定QGISバージョン。
 ///
@@ -99,16 +100,6 @@ class QgsWriter {
     return b.buildFragment().childElements.first.copy();
   }
 
-  /// QGIS の色表記 `R,G,B,A`（各0-255）
-  static String formatColor(Color color, {double? opacity}) =>
-      const QgsWriter()._color(color, opacity: opacity);
-
-  /// px → QGIS のシンボル単位（MM）
-  static String formatMm(double px) => const QgsWriter()._mm(px);
-
-  /// 可視性属性の値
-  static String checkedValue(bool visible) => const QgsWriter()._checked(visible);
-
   /// `.qgs` の中身を作る。
   String build(QgsProject project) {
     final builder = XmlBuilder();
@@ -177,7 +168,7 @@ class QgsWriter {
           attributes: {
             'name': name,
             'expanded': expanded ? '1' : '0',
-            'checked': _checked(visible),
+            'checked': qgsCheckedValue(visible),
           },
           nest: () {
             builder.element('customproperties', nest: () {});
@@ -187,41 +178,29 @@ class QgsWriter {
           },
         );
       case QgsLayer():
-        builder.element(
-          'layer-tree-layer',
-          attributes: {
-            'id': node.id,
-            'name': node.name,
-            'source': node.dataSourceUri,
-            'providerKey': 'ogr',
-            'expanded': '1',
-            'checked': _checked(node.visible),
-            'patch_size': '-1,-1',
-          },
-          nest: () {
-            builder.element('customproperties', nest: () {});
-          },
-        );
+        _writeTreeLayer(builder, node.id, node.name, node.dataSourceUri, 'ogr', node.visible);
       case QgsRasterLayer():
-        builder.element(
-          'layer-tree-layer',
-          attributes: {
-            'id': node.id,
-            'name': node.name,
-            'source': node.dataSourcePath,
-            'providerKey': 'gdal',
-            'expanded': '1',
-            'checked': _checked(node.visible),
-            'patch_size': '-1,-1',
-          },
-          nest: () {
-            builder.element('customproperties', nest: () {});
-          },
-        );
+        _writeTreeLayer(builder, node.id, node.name, node.dataSourcePath, 'gdal', node.visible);
     }
   }
 
-  String _checked(bool visible) => visible ? 'Qt::Checked' : 'Qt::Unchecked';
+  void _writeTreeLayer(XmlBuilder builder, String id, String name, String source, String provider, bool visible) {
+    builder.element(
+      'layer-tree-layer',
+      attributes: {
+        'id': id,
+        'name': name,
+        'source': source,
+        'providerKey': provider,
+        'expanded': '1',
+        'checked': qgsCheckedValue(visible),
+        'patch_size': '-1,-1',
+      },
+      nest: () {
+        builder.element('customproperties', nest: () {});
+      },
+    );
+  }
 
   // =============================================
   // レイヤ本体
@@ -271,7 +250,7 @@ class QgsWriter {
       'maplayer',
       attributes: {
         'type': 'vector',
-        'geometry': _geometryName(layer.geometryType),
+        'geometry': qgsGeometryName(layer.geometryType),
         'hasScaleBasedVisibilityFlag': '0',
         'minScale': '1e+08',
         'maxScale': '0',
@@ -341,12 +320,6 @@ class QgsWriter {
   // レンダラ
   // =============================================
 
-  String _geometryName(GeometryType type) => switch (type) {
-    GeometryType.point => 'Point',
-    GeometryType.linestring => 'Line',
-    GeometryType.polygon => 'Polygon',
-  };
-
   /// 単一シンボルのレンダラを書く。
   ///
   /// スタイルが無いレイヤには書かない。QGIS がランダムな既定シンボルを割り当てる
@@ -407,7 +380,7 @@ class QgsWriter {
                     'bufferDraw': '1',
                     'bufferSize': '1',
                     'bufferSizeUnits': 'MM',
-                    'bufferColor': _color(style.labelHaloColor ?? Colors.white),
+                    'bufferColor': formatColor(style.labelHaloColor ?? Colors.white),
                   },
                 );
               },
@@ -428,7 +401,7 @@ class QgsWriter {
     'isExpression': '1',
     'fontSize': (style.labelFontSizePt ?? 10).toStringAsFixed(1),
     'fontSizeUnit': 'Point',
-    'textColor': const QgsWriter()._color(style.labelColor ?? Colors.black),
+    'textColor': formatColor(style.labelColor ?? Colors.black),
   };
 
   /// `<labeling>` の断片
@@ -492,7 +465,7 @@ class QgsWriter {
     _writeSymbol(builder, 'marker', 'SimpleMarker', {
       'angle': '0',
       'cap_style': 'square',
-      'color': _color(style.pointColor ?? Colors.red),
+      'color': formatColor(style.pointColor ?? Colors.red),
       'horizontal_anchor_point': '1',
       'joinstyle': 'bevel',
       'name': 'circle',
@@ -506,7 +479,7 @@ class QgsWriter {
       'outline_width_unit': 'MM',
       'scale_method': 'diameter',
       // こかげマップ の pointSize は半径感覚の px。QGIS の size は直径(MM)。
-      'size': _mm((style.pointSizePx ?? 6) * 2),
+      'size': formatMm((style.pointSizePx ?? 6) * 2),
       'size_map_unit_scale': '3x:0,0,0,0,0,0',
       'size_unit': 'MM',
       'vertical_anchor_point': '1',
@@ -525,9 +498,9 @@ class QgsWriter {
       'dash_pattern_offset_unit': 'MM',
       'draw_inside_polygon': '0',
       'joinstyle': 'bevel',
-      'line_color': _color(style.lineColor ?? Colors.blue),
+      'line_color': formatColor(style.lineColor ?? Colors.blue),
       'line_style': 'solid',
-      'line_width': _mm(style.lineWidthPx ?? 2),
+      'line_width': formatMm(style.lineWidthPx ?? 2),
       'line_width_unit': 'MM',
       'offset': '0',
       'offset_map_unit_scale': '3x:0,0,0,0,0,0',
@@ -544,7 +517,7 @@ class QgsWriter {
   void _writeFillSymbol(XmlBuilder builder, QgsStyle style) {
     _writeSymbol(builder, 'fill', 'SimpleFill', {
       'border_width_map_unit_scale': '3x:0,0,0,0,0,0',
-      'color': _color(
+      'color': formatColor(
         style.fillColor ?? Colors.orange,
         opacity: style.fillOpacity,
       ),
@@ -552,19 +525,19 @@ class QgsWriter {
       'offset': '0,0',
       'offset_map_unit_scale': '3x:0,0,0,0,0,0',
       'offset_unit': 'MM',
-      'outline_color': _color(
+      'outline_color': formatColor(
         style.strokeColor ?? Colors.black,
         opacity: style.strokeOpacity,
       ),
       'outline_style': 'solid',
-      'outline_width': _mm(style.strokeWidthPx ?? 1),
+      'outline_width': formatMm(style.strokeWidthPx ?? 1),
       'outline_width_unit': 'MM',
       'style': 'solid',
     });
   }
 
-  /// QGIS の色は `R,G,B,A`（各0-255）
-  String _color(Color color, {double? opacity}) {
+  /// QGIS の色表記 `R,G,B,A`（各0-255）。[opacity] があればアルファはそれにする
+  static String formatColor(Color color, {double? opacity}) {
     final argb = color.toARGB32();
     final a = opacity != null
         ? (opacity.clamp(0.0, 1.0) * 255).round()
@@ -575,5 +548,6 @@ class QgsWriter {
     return '$r,$g,$b,$a';
   }
 
-  String _mm(double px) => (px * _kPxToMm).toStringAsFixed(2);
+  /// px → QGIS のシンボル単位（MM）
+  static String formatMm(double px) => (px * _kPxToMm).toStringAsFixed(2);
 }

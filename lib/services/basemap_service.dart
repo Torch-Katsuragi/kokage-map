@@ -109,11 +109,18 @@ Uint8List? _processTileExtraction(Map<String, dynamic> params) {
   }
 }
 
+/// 一括ダウンロードの 1 枚の結果
+enum _DownloadResult { downloaded, skipped, error }
+
 /// 背景地図管理サービス
 class BaseMapService extends ChangeNotifier {
   /// タイル取得用の HTTP クライアント。1 つを使い回して接続（TLS）を保つ。
   /// `http.get` はそのたびに接続を張り直すので、Pixel 9 で 1 枚 0.4〜1.4 秒掛かっていた
   final http.Client _http = http.Client();
+
+  /// アプリを特定できるUAを常に送る（OSMポリシー要件。GSIにも礼儀として）。
+  /// webはブラウザのUAが付く上、User-Agentは禁止ヘッダなので送らない
+  static const Map<String, String> _tileHeaders = {if (!kIsWeb) 'User-Agent': kTileUserAgent};
 
   static final BaseMapService _instance = BaseMapService._internal();
   factory BaseMapService() => _instance;
@@ -123,7 +130,7 @@ class BaseMapService extends ChangeNotifier {
   bool _isOfflineMode = false;
   String? _cacheDirectory;
   TileCacheMBTiles? _tileCacheDb;
-  
+
   // ネットワーク状態監視
   final Connectivity _connectivity = Connectivity();
   bool _isNetworkAvailable = false;
@@ -162,7 +169,7 @@ class BaseMapService extends ChangeNotifier {
     if (generate == null) return null;
     try {
       final data = await generate(z, x, y);
-      if (data != null && data.length >= 100) await _cacheTile(provider.cacheId, z, x, y, data);
+      if (data != null && TileCacheMBTiles.isPlausibleTile(data)) await _cacheTile(provider.cacheId, z, x, y, data);
       return data;
     } catch (e) {
       AppLogger.debug('[TILE] ${provider.id} $z/$x/$y の生成に失敗: $e');
@@ -175,10 +182,11 @@ class BaseMapService extends ChangeNotifier {
   Future<void> _dropStaleGeneratedCaches() async {
     final db = _tileCacheDb;
     if (db == null) return;
+    // 本体が無く -wal などの残骸だけのものも拾う
+    final cached = await db.cachedProviderIds();
     for (final p in BaseMapProvider.availableProviders) {
       if (p.type != BaseMapType.generated || p.cacheId == p.id) continue;
-      for (final name in db.cachedProviderIds()) {
-        // 本体が無く -wal などの残骸だけのものも拾う（cachedProviderIds は .mbtiles だけ見る）
+      for (final name in cached) {
         if (name != p.cacheId && name.startsWith('${p.id}_v')) {
           AppLogger.debug('[BaseMapService] 古い生成キャッシュを消す: $name');
           await db.clearCache(providerId: name);
@@ -187,14 +195,12 @@ class BaseMapService extends ChangeNotifier {
     }
   }
 
-  /// ネットワークが利用可能かどうか
   /// ネットが使えるか。「インターフェイスがある」かつ「実際に届いている」
   bool get isNetworkAvailable => _isNetworkAvailable && _reachable;
 
   /// 実到達性。connectivity_plus は**インターフェイスの有無**しか見ないので、
   /// 圏外でもモバイル回線が「接続中」なら true のまま。タイル取得が
-  /// [_failuresToGoOffline] 回続けて失敗（タイムアウト等）したら false に落とし、
-  /// [isNetworkAvailable] 経由で地図側に伝える（Android なら mbtiles 直読みに切り替わる）。
+  /// [_failuresToGoOffline] 回続けて失敗（タイムアウト等）したら false に落とす。
   /// false の間は [_probeInterval] ごとに 1 本だけ短いタイムアウトで試し、
   /// 成功したら true に戻す
   bool _reachable = true;
@@ -232,13 +238,6 @@ class BaseMapService extends ChangeNotifier {
         DateTime.now().difference(since) < _probeInterval;
   }
 
-  /// 指定プロバイダーのMBTilesファイルパスを取得
-  String? getMBTilesPath(String providerId) => _tileCacheDb?.getMBTilesPath(providerId);
-
-  /// 利用可能なプロバイダー一覧
-  List<BaseMapProvider> get availableProviders =>
-      BaseMapProvider.availableProviders;
-
   /// 背景地図のレイヤ（下から上へ）。変更は [setLayers] / [updateLayer] / [addLayer] / [removeLayer] / [moveLayer]
   List<BaseMapLayer> get layers => List.unmodifiable(_layers);
 
@@ -254,8 +253,14 @@ class BaseMapService extends ChangeNotifier {
     _currentProvider = active.isNotEmpty ? active.first.$1 : BaseMapProvider.defaultProvider;
   }
 
-  /// サービス初期化
-  Future<void> initialize() async {
+  /// 初期化の実行中・済みの印。起動時（main）と地図ページの両方から呼ばれるので、2 回目以降は同じ Future を返す
+  /// （以前は呼ばれるたびにキャッシュ DB を開き直し、全タイルを数え、ネットワークの購読を足していた）
+  Future<void>? _initialization;
+
+  /// サービス初期化。何度呼んでもよい（初期化は 1 回だけ。失敗していたら次の呼び出しでやり直す）
+  Future<void> initialize() => _initialization ??= _initialize();
+
+  Future<void> _initialize() async {
     try {
       // タイルキャッシュはローカルファイルシステムが前提。
       // web には無いので飛ばす（ブラウザのHTTPキャッシュに任せる）。
@@ -265,7 +270,7 @@ class BaseMapService extends ChangeNotifier {
         // キャッシュディレクトリの設定
         await _initializeCacheDirectory();
 
-        // GeoPackageキャッシュの初期化
+        // タイルキャッシュの初期化
         await _initializeTileCacheDatabase();
       }
 
@@ -277,6 +282,7 @@ class BaseMapService extends ChangeNotifier {
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Init error: $e');
       _currentProvider = BaseMapProvider.defaultProvider;
+      _initialization = null;
     }
   }
 
@@ -285,7 +291,7 @@ class BaseMapService extends ChangeNotifier {
     try {
       final result = await _connectivity.checkConnectivity();
       _updateConnectionStatus(result);
-      
+
       _connectivitySubscription = _connectivity.onConnectivityChanged.listen(_updateConnectionStatus);
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Connectivity init error: $e');
@@ -313,12 +319,9 @@ class BaseMapService extends ChangeNotifier {
   Future<void> _initializeCacheDirectory() async {
     try {
       final appDir = await getApplicationDocumentsDirectory();
-      _cacheDirectory = path.join(appDir.path, 'k_maps_tiles');
-
-      final cacheDir = Directory(_cacheDirectory!);
-      if (!cacheDir.existsSync()) {
-        cacheDir.createSync(recursive: true);
-      }
+      final dir = path.join(appDir.path, 'k_maps_tiles');
+      await Directory(dir).create(recursive: true);
+      _cacheDirectory = dir;
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Cache dir error: $e');
       rethrow;
@@ -331,11 +334,10 @@ class BaseMapService extends ChangeNotifier {
       // 旧GeoPackageからの移行チェック
       await _migrateFromGeoPackage();
 
-      _tileCacheDb = TileCacheMBTiles();
-      await _tileCacheDb!.initialize(_cacheDirectory!);
+      final db = TileCacheMBTiles();
+      await db.initialize(_cacheDirectory!);
+      _tileCacheDb = db;
       await _dropStaleGeneratedCaches();
-      final total = await _tileCacheDb!.getTotalTileCount();
-      AppLogger.debug('[BaseMapService] Cache: $total tiles');
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ TileDB init error: $e');
       rethrow;
@@ -348,7 +350,7 @@ class BaseMapService extends ChangeNotifier {
 
     final oldDbPath = path.join(_cacheDirectory!, 'tile_cache.gpkg');
     final oldFile = File(oldDbPath);
-    if (!oldFile.existsSync()) return;
+    if (!await oldFile.exists()) return;
 
     AppLogger.debug('[BaseMapService] 🔄 Migrating GeoPackage → MBTiles...');
     try {
@@ -375,18 +377,14 @@ class BaseMapService extends ChangeNotifier {
 
         for (final tile in tiles) {
           final z = tile['zoom_level'] as int;
-          final tileCol = tile['tile_column'] as int;
           // tile_row は既にTMS形式で格納されているので逆変換してXYZのyに戻す
-          final tileRow = tile['tile_row'] as int;
-          final y = (1 << z) - 1 - tileRow;
-          final data = tile['tile_data'] as Uint8List;
-
+          final y = (1 << z) - 1 - (tile['tile_row'] as int);
           await tempMbtiles.saveTile(
             providerId: providerId,
             z: z,
-            x: tileCol,
+            x: tile['tile_column'] as int,
             y: y,
-            data: data,
+            data: tile['tile_data'] as Uint8List,
           );
         }
       }
@@ -394,13 +392,11 @@ class BaseMapService extends ChangeNotifier {
       await tempMbtiles.close();
       await oldDb.close();
 
-      // 旧DBを削除
-      await oldFile.delete();
-      // WALファイルも削除
-      final walFile = File('$oldDbPath-wal');
-      if (walFile.existsSync()) await walFile.delete();
-      final shmFile = File('$oldDbPath-shm');
-      if (shmFile.existsSync()) await shmFile.delete();
+      // 旧DBを削除（WAL の相方も）
+      for (final suffix in const ['', '-wal', '-shm']) {
+        final file = File('$oldDbPath$suffix');
+        if (await file.exists()) await file.delete();
+      }
 
       AppLogger.debug('[BaseMapService] ✅ Migration complete');
     } catch (e) {
@@ -497,140 +493,85 @@ class BaseMapService extends ChangeNotifier {
     }
   }
 
+  // =============================================
+  // タイルの取得
+  // =============================================
+
   /// タイルをキャッシュに保存
-  Future<void> _cacheTile(
-    String providerId,
-    int z,
-    int x,
-    int y,
-    Uint8List data,
-  ) async {
-    if (_tileCacheDb == null) return;
-    
+  Future<void> _cacheTile(String cacheId, int z, int x, int y, Uint8List data) async {
     try {
-      await _tileCacheDb!.saveTile(
-        providerId: providerId,
-        z: z,
-        x: x,
-        y: y,
-        data: data,
-      );
+      await _tileCacheDb?.saveTile(providerId: cacheId, z: z, x: x, y: y, data: data);
     } catch (e) {
       AppLogger.debug('[TILE] ❌ Cache save error: $e');
     }
   }
 
-  /// キャッシュからタイルを取得
-  Future<Uint8List?> _getCachedTile(
-    String providerId,
-    int z,
-    int x,
-    int y, {
-    bool allowCrossPlatformCache = false,
-  }) async {
-    if (_tileCacheDb == null) return null;
-    
-    try {
-      // 指定プロバイダーのキャッシュを取得
-      final data = await _tileCacheDb!.getTile(
-        providerId: providerId,
-        z: z,
-        x: x,
-        y: y,
-      );
-      
-      if (data != null) {
-        // データサイズチェック
-        if (data.length < 100) {
-          AppLogger.debug('[TILE] ⚠️ Corrupted cache (too small)');
-          return null;
-        }
-        
-        // PNGヘッダーチェック
-        if (data.length >= 8) {
-          // ヘッダーチェックは行わず、データサイズのみで簡易チェックとする
-          // サーバーによっては異なるフォーマット（WebPなど）を返す可能性や、
-          // ヘッダーが微妙に異なる場合も考慮して、厳密なチェックは廃止する。
-          // decodeImageで失敗すれば最終的に弾かれるため問題ない。
-        }
-        
-        return data;
-      }
-      
-      return null;
-    } catch (e) {
-      AppLogger.debug('[TILE] ❌ Cache read error: $e');
-      return null;
-    }
-  }
+  /// キャッシュからタイルを取得（壊れたタイルはキャッシュ側で弾いて消す）
+  Future<Uint8List?> _getCachedTile(String cacheId, int z, int x, int y) async =>
+      _tileCacheDb?.getTile(providerId: cacheId, z: z, x: x, y: y);
 
-  /// タイルをダウンロード（キャッシュ機能付き・フォールバック対応）
-  Future<Uint8List?> getTile(
-    BaseMapProvider provider,
-    int z,
-    int x,
-    int y,
-  ) async {
-    // 同じタイルが同時に何度も頼まれる（等高線の生成が同じ DEM を 4 回、テクスチャの層が同じ地図を…）。
-    // キャッシュに書く前に次が来るとみんなネットへ行くので、進行中の要求は 1 本にまとめる（2026-09-13 に同じ DEM が 4〜5 回）
-    final inflightKey = '${provider.id}/$z/$x/$y';
-    final running = _inflight[inflightKey];
-    if (running != null) return running;
-    final future = _inflight[inflightKey] = _getTileUncoalesced(provider, z, x, y);
-    try {
-      return await future;
-    } finally {
-      final _ = _inflight.remove(inflightKey); // Map.remove は Future を返す（unawaited_futures 避け）
-    }
-  }
-
+  /// 進行中の要求。同じ鍵の要求が重なったら 1 本にまとめる
   final Map<String, Future<Uint8List?>> _inflight = {};
 
+  Future<Uint8List?> _coalesce(String key, Future<Uint8List?> Function() run) {
+    final running = _inflight[key];
+    if (running != null) return running;
+    final future = _inflight[key] = run();
+    future.whenComplete(() {
+      _inflight.remove(key);
+    }).ignore();
+    return future;
+  }
+
+  /// タイルを取得（キャッシュ機能付き・フォールバック対応）
+  ///
+  /// 同じタイルが同時に何度も頼まれる（等高線の生成が同じ DEM を 4 回、テクスチャの層が同じ地図を…）。
+  /// キャッシュに書く前に次が来るとみんなネットへ行くので、進行中の要求は 1 本にまとめる（2026-09-13 に同じ DEM が 4〜5 回）
+  Future<Uint8List?> getTile(BaseMapProvider provider, int z, int x, int y) =>
+      _coalesce('tile:${provider.id}/$z/$x/$y', () => _getTileUncoalesced(provider, z, x, y));
+
   Future<Uint8List?> _getTileUncoalesced(BaseMapProvider provider, int z, int x, int y) async {
-    // 標高タイル（Terrarium）は親を拡大して返さない。RGB を拡大すると高さがブロック状の階段になり、
-    // 3D の崖にギザギザの溝が出る（Pixel 9 で実測）。3D 側は自前のピラミッドで親タイルを正しい形で描く
     if (provider.type == BaseMapType.generated) {
       return z < provider.minZoom || z > provider.maxZoom ? null : _getGeneratedTile(provider, z, x, y);
     }
-    final noFallback = provider.type == BaseMapType.terrain;
-
-    // プロバイダーの最大ズームレベルを超えている場合は直接フォールバック
-    if (z > provider.maxZoom) {
-      return noFallback ? null : _getTileWithFallback(provider, z, x, y);
-    }
-
-    // まず通常のタイル取得を試行
-    final normalTile = await _getTileInternal(provider, z, x, y);
-    if (normalTile != null) {
-      return normalTile;
-    }
-
-    // 通常のタイル取得に失敗した場合、フォールバック機能を使用
-    return noFallback ? null : _getTileWithFallback(provider, z, x, y);
+    // プロバイダーの最大ズームレベルを超えている場合は取りに行かず直接フォールバック
+    final tile = z > provider.maxZoom ? null : await _fetchTileShared(provider, z, x, y);
+    // 標高タイル（Terrarium）は親を拡大して返さない。RGB を拡大すると高さがブロック状の階段になり、
+    // 3D の崖にギザギザの溝が出る（Pixel 9 で実測）。3D 側は自前のピラミッドで親タイルを正しい形で描く
+    if (tile != null || provider.type == BaseMapType.terrain) return tile;
+    return _getTileWithFallback(provider, z, x, y);
   }
 
-  /// 内部用のタイル取得メソッド（フォールバックなし）
-  Future<Uint8List?> _getTileInternal(
+  /// [_fetchTile] の、同じタイルの要求を 1 本にまとめる版。隣り合う子タイルのフォールバックは同じ先祖を同時に取りに行くので
+  Future<Uint8List?> _fetchTileShared(BaseMapProvider provider, int z, int x, int y) =>
+      _coalesce('fetch:${provider.cacheId}/$z/$x/$y', () => _fetchTile(provider, z, x, y));
+
+  /// キャッシュ → ネット（フォールバックなし）。
+  ///
+  /// [attempt] は何回目の試行から始めるか。HTTP のエラー（404 以外）は 2 回目まで、通信の例外は 1 回目まで間を置いて取り直す
+  /// （一括ダウンロードは 2 から始めて取り直さない）。取り直さずに諦めるときはキャッシュをもう一度見る（その間に入ったかもしれない）。
+  /// [checkCache] が false なら最初の試行ではキャッシュを見ない（呼び出し側で見たばかりのとき）
+  Future<Uint8List?> _fetchTile(
     BaseMapProvider provider,
     int z,
     int x,
     int y, {
-    bool allowNetworkAccess = true,
-    int retryCount = 0,
+    int attempt = 0,
+    bool checkCache = true,
   }) async {
-    final swTile = Stopwatch()..start();
-    try {
-      final cachedData = await _getCachedTile(provider.id, z, x, y);
-      final cacheMs = swTile.elapsedMilliseconds;
-      if (cachedData != null) {
-        if (cacheMs > 100) AppLogger.debug('[TILE] cache hit ${provider.id} $z/$x/$y ${cacheMs}ms');
-        return cachedData;
+    for (var first = true;; first = false, attempt++) {
+      final sw = Stopwatch()..start();
+      if (checkCache || !first) {
+        final cached = await _getCachedTile(provider.cacheId, z, x, y);
+        if (cached != null) {
+          if (sw.elapsedMilliseconds > 100) AppLogger.debug('[TILE] cache hit ${provider.id} $z/$x/$y ${sw.elapsedMilliseconds}ms');
+          return cached;
+        }
       }
+      final cacheMs = sw.elapsedMilliseconds;
 
-      // 明示的オフラインモードまたはネットワークアクセス禁止の場合のみ終了
-      if (_isOfflineMode || !allowNetworkAccess) {
-        return null;
-      }
+      // 明示的オフラインモードなら取りに行かない
+      if (_isOfflineMode) return null;
 
       // 到達不能と判定中は、次の試行時刻まで待たずに諦める（1タイルごとに
       // タイムアウトを待つと、圏外で画面が分単位で固まる）
@@ -638,110 +579,47 @@ class BaseMapService extends ChangeNotifier {
 
       // ネットワークからダウンロード（connectivity_plusはヒントのみ、短いタイムアウトで実際に試行）
       final timeout = _reachable && _isNetworkAvailable ? 10 : 3;
-      final url = provider.urlTemplate
-          .replaceAll('{z}', z.toString())
-          .replaceAll('{x}', x.toString())
-          .replaceAll('{y}', y.toString());
+      final http.Response response;
+      try {
+        response = await _http
+            .get(Uri.parse(provider.tileUrl(z, x, y)), headers: _tileHeaders)
+            .timeout(Duration(seconds: timeout));
+      } catch (e) {
+        AppLogger.debug('[TILE] ❌ Network error');
+        _noteFetchFailure();
+        // 取り直す（到達不能と判定したら粘らない）
+        if (attempt < 1 && _reachable) {
+          await Future<void>.delayed(const Duration(milliseconds: 1000));
+          continue;
+        }
+        // ネットワークエラーでもキャッシュがあれば利用
+        return _getCachedTile(provider.cacheId, z, x, y);
+      }
 
-      final response = await _http
-          .get(
-            Uri.parse(url),
-            headers: {
-              // アプリを特定できるUAを常に送る（OSMポリシー要件。GSIにも礼儀として）。
-              // webはブラウザのUAが付く上、User-Agentは禁止ヘッダなので送らない
-              if (!kIsWeb) 'User-Agent': kTileUserAgent,
-            },
-          )
-          .timeout(Duration(seconds: timeout));
-
-      final httpMs = swTile.elapsedMilliseconds - cacheMs;
+      final httpMs = sw.elapsedMilliseconds - cacheMs;
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         _noteFetchSuccess();
         final data = response.bodyBytes;
-        
-        // ダウンロードデータの妥当性チェック
-        if (data.length < 100) {
-          return null;
-        }
-        
-        // PNGヘッダーチェック
-        if (data.length >= 8) {
-          // ヘッダーチェックは行わず、データサイズのみで簡易チェックとする
-          // サーバーによっては異なるフォーマット（WebPなど）を返す可能性や、
-          // ヘッダーが微妙に異なる場合も考慮して、厳密なチェックは廃止する。
-          // decodeImageで失敗すれば最終的に弾かれるため問題ない。
-        }
+        // 小さすぎるものは壊れている（形式は見ない。WebP などを返すサーバーもある。読めなければ描く側で弾く）
+        if (!TileCacheMBTiles.isPlausibleTile(data)) return null;
 
-        await _cacheTile(provider.id, z, x, y, data);
-        if (swTile.elapsedMilliseconds > 300) {
-          AppLogger.debug('[TILE] ${provider.id} $z/$x/$y cache ${cacheMs}ms http ${httpMs}ms write ${swTile.elapsedMilliseconds - cacheMs - httpMs}ms');
+        await _cacheTile(provider.cacheId, z, x, y, data);
+        if (sw.elapsedMilliseconds > 300) {
+          AppLogger.debug('[TILE] ${provider.id} $z/$x/$y cache ${cacheMs}ms http ${httpMs}ms write ${sw.elapsedMilliseconds - cacheMs - httpMs}ms');
         }
-
         return data;
-      } else if (response.statusCode == 404) {
-        if (swTile.elapsedMilliseconds > 300) AppLogger.debug('[TILE] ${provider.id} $z/$x/$y 404 cache ${cacheMs}ms http ${httpMs}ms');
+      }
+      if (response.statusCode == 404) {
+        if (sw.elapsedMilliseconds > 300) AppLogger.debug('[TILE] ${provider.id} $z/$x/$y 404 cache ${cacheMs}ms http ${httpMs}ms');
         // 無いものは無い（標高タイルの整備範囲外など）。粘ると 1 枚 1.5 秒になる
         _noteFetchSuccess();
         return null;
-      } else {
-        // ネットワーク取得失敗時にキャッシュを再確認（別プロバイダーや古いキャッシュの可能性）
-        final fallbackCachedData = await _getCachedTile(
-          provider.id,
-          z,
-          x,
-          y,
-          allowCrossPlatformCache: true,
-        );
-        if (fallbackCachedData != null) {
-          return fallbackCachedData;
-        }
-
-        // リトライ機能（最大2回）
-        if (retryCount < 2) {
-          final delayMs = 500 * (retryCount + 1);
-          await Future.delayed(Duration(milliseconds: delayMs));
-          return await _getTileInternal(
-            provider,
-            z,
-            x,
-            y,
-            allowNetworkAccess: allowNetworkAccess,
-            retryCount: retryCount + 1,
-          );
-        }
-
-        return null;
       }
-    } catch (e) {
-      AppLogger.debug('[TILE] ❌ Network error');
-      _noteFetchFailure();
-      
-      // エラー時もキャッシュを確認（ネットワークエラーでもキャッシュがあれば利用）
-      final errorFallbackData = await _getCachedTile(
-        provider.id,
-        z,
-        x,
-        y,
-        allowCrossPlatformCache: true,
-      );
-      if (errorFallbackData != null) {
-        return errorFallbackData;
+      if (attempt < 2) {
+        await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+        continue;
       }
-
-      // リトライ機能（エラー時も適用。到達不能と判定したら粘らない）
-      if (retryCount < 1 && allowNetworkAccess && _reachable) {
-        await Future.delayed(const Duration(milliseconds: 1000));
-        return _getTileInternal(
-          provider,
-          z,
-          x,
-          y,
-          allowNetworkAccess: allowNetworkAccess,
-          retryCount: retryCount + 1,
-        );
-      }
-
-      return null;
+      return _getCachedTile(provider.cacheId, z, x, y);
     }
   }
 
@@ -749,6 +627,8 @@ class BaseMapService extends ChangeNotifier {
   ///
   /// 目的のタイルが取れないとき、先祖のタイル（1〜[maxFallbackLevels] 段上）から
   /// 該当部分を切り出して拡大したものを返す。
+  /// プロバイダの最大ズームより上の段は取りに行かない（サーバーに無い。地理院は 404、OSM は 400 を返し、
+  /// 400 は取り直しで 1.5 秒待っていた。2026-10-07 に curl で確認）。
   ///
   /// ⚠ 拡大したタイルは**キャッシュに保存しない**。以前は目的の z/x/y の
   ///   正規タイルとして保存していたため、一度でも圏外・404 を踏んだ場所は
@@ -766,27 +646,14 @@ class BaseMapService extends ChangeNotifier {
     for (var level = 1; level <= maxFallbackLevels; level++) {
       final ancestorZ = z - level;
       if (ancestorZ < provider.minZoom) break;
+      if (ancestorZ > provider.maxZoom) continue;
       final ancestorX = x >> level;
       final ancestorY = y >> level;
 
-      final ancestorTile = await _getTileInternal(
-        provider,
-        ancestorZ,
-        ancestorX,
-        ancestorY,
-        allowNetworkAccess: !_isOfflineMode,
-      );
+      final ancestorTile = await _fetchTileShared(provider, ancestorZ, ancestorX, ancestorY);
       if (ancestorTile == null) continue;
 
-      final scaled = await _extractAndScaleTile(
-        ancestorTile,
-        z,
-        x,
-        y,
-        ancestorZ,
-        ancestorX,
-        ancestorY,
-      );
+      final scaled = await _extractAndScaleTile(ancestorTile, z, x, y, ancestorZ, ancestorX, ancestorY);
       if (scaled != null) return scaled;
     }
     return null;
@@ -821,13 +688,16 @@ class BaseMapService extends ChangeNotifier {
     }
   }
 
+  // =============================================
+  // キャッシュの管理（設定画面）
+  // =============================================
+
   /// キャッシュサイズを取得（MB単位）
   Future<double> getCacheSizeMB() async {
-    if (_tileCacheDb == null) return 0.0;
-    
+    final db = _tileCacheDb;
+    if (db == null) return 0.0;
     try {
-      final sizeBytes = await _tileCacheDb!.getCacheSize();
-      return sizeBytes / (1024 * 1024);
+      return await db.getCacheSize() / (1024 * 1024);
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Size error: $e');
       return 0.0;
@@ -836,10 +706,8 @@ class BaseMapService extends ChangeNotifier {
 
   /// キャッシュクリア
   Future<void> clearCache({String? providerId}) async {
-    if (_tileCacheDb == null) return;
-    
     try {
-      await _tileCacheDb!.clearCache(providerId: providerId);
+      await _tileCacheDb?.clearCache(providerId: providerId);
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Clear error: $e');
     }
@@ -847,10 +715,10 @@ class BaseMapService extends ChangeNotifier {
 
   /// プロバイダー別のキャッシュ統計を取得
   Future<Map<String, int>> getCacheStatistics() async {
-    if (_tileCacheDb == null) return {};
-    
+    final db = _tileCacheDb;
+    if (db == null) return {};
     try {
-      return await _tileCacheDb!.getStatistics();
+      return await db.getStatistics();
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Stats error: $e');
       return {};
@@ -859,35 +727,58 @@ class BaseMapService extends ChangeNotifier {
 
   /// キャッシュ検証（破損タイルの確認・修復）
   Future<Map<String, dynamic>> validateAndRepairCache() async {
-    if (_tileCacheDb == null) {
-      return {
-        'totalTiles': 0,
-        'validTiles': 0,
-        'invalidTiles': 0,
-        'removedTiles': 0,
-      };
-    }
-    
+    const empty = {'totalTiles': 0, 'validTiles': 0, 'invalidTiles': 0, 'removedTiles': 0};
+    final db = _tileCacheDb;
+    if (db == null) return empty;
     try {
-      return await _tileCacheDb!.validateAndRepair();
+      return await db.validateAndRepair();
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Validation error: $e');
-      return {
-        'totalTiles': 0,
-        'validTiles': 0,
-        'invalidTiles': 0,
-        'removedTiles': 0,
-      };
+      return empty;
     }
   }
 
+  // =============================================
+  // エリア一括ダウンロード
+  // =============================================
+
   /// 緯度経度からタイル座標を取得
-  math.Point<int> _getTileCoordinates(double lat, double lon, int zoom) {
+  static math.Point<int> _getTileCoordinates(double lat, double lon, int zoom) {
     final n = math.pow(2, zoom);
     final x = ((lon + 180.0) / 360.0 * n).floor();
     final latRad = lat * math.pi / 180.0;
     final y = ((1.0 - math.log(math.tan(latRad) + 1.0 / math.cos(latRad)) / math.pi) / 2.0 * n).floor();
     return math.Point(x, y);
+  }
+
+  /// 中心と半径の範囲に掛かるタイルの範囲（ズームごと）
+  static List<({int z, int minX, int maxX, int minY, int maxY})> _tileRanges(
+    LatLng center,
+    double radiusMeters,
+    int minZoom,
+    int maxZoom,
+  ) {
+    // 半径を緯度経度の差分に変換（概算）
+    // 緯度1度 ≒ 111km, 経度1度 ≒ 111km * cos(lat)
+    final latDiff = radiusMeters / 111000.0;
+    final lonDiff = radiusMeters / (111000.0 * math.cos(center.latitude * math.pi / 180.0));
+
+    final north = center.latitude + latDiff;
+    final south = center.latitude - latDiff;
+    final east = center.longitude + lonDiff;
+    final west = center.longitude - lonDiff;
+
+    return [
+      for (var z = minZoom; z <= maxZoom; z++)
+        if ((_getTileCoordinates(north, west, z), _getTileCoordinates(south, east, z)) case (final a, final b))
+          (
+            z: z,
+            minX: math.min(a.x, b.x),
+            maxX: math.max(a.x, b.x),
+            minY: math.min(a.y, b.y),
+            maxY: math.max(a.y, b.y),
+          ),
+    ];
   }
 
   /// ダウンロードキャンセル
@@ -905,38 +796,19 @@ class BaseMapService extends ChangeNotifier {
     required int minZoom,
     required int maxZoom,
   }) {
-    int totalTiles = 0;
-    
-    // 半径を緯度経度の差分に変換（概算）
-    // 緯度1度 ≒ 111km, 経度1度 ≒ 111km * cos(lat)
-    final latDiff = radiusMeters / 111000.0;
-    final lonDiff = radiusMeters / (111000.0 * math.cos(center.latitude * math.pi / 180.0));
-
-    final north = center.latitude + latDiff;
-    final south = center.latitude - latDiff;
-    final east = center.longitude + lonDiff;
-    final west = center.longitude - lonDiff;
-
-    for (var z = minZoom; z <= maxZoom; z++) {
-      final topLeft = _getTileCoordinates(north, west, z);
-      final bottomRight = _getTileCoordinates(south, east, z);
-      
-      final tilesX = (bottomRight.x - topLeft.x).abs() + 1;
-      final tilesY = (bottomRight.y - topLeft.y).abs() + 1;
-      
-      totalTiles += tilesX * tilesY;
+    var totalTiles = 0;
+    for (final r in _tileRanges(center, radiusMeters, minZoom, maxZoom)) {
+      totalTiles += (r.maxX - r.minX + 1) * (r.maxY - r.minY + 1);
     }
-
-    return {
-      'totalTiles': totalTiles,
-    };
+    return {'totalTiles': totalTiles};
   }
 
-  /// エリア一括ダウンロード実行 (並列処理対応)
   /// 一括ダウンロードの対象: 見えているレイヤのプロバイダ（OSM は方針で除外。等高線などの生成プロバイダは作ってキャッシュに入れる）
   List<BaseMapProvider> get downloadableProviders =>
       [for (final (p, _) in activeLayers) if (p.type != BaseMapType.openStreetMap) p];
 
+  /// エリア一括ダウンロード実行 (並列処理対応)
+  ///
   /// [providers] を省くと [downloadableProviders]（見えているレイヤ全部）。タイル数は 枚数 × プロバイダ数
   Stream<Map<String, dynamic>> downloadArea({
     required LatLng center,
@@ -954,40 +826,21 @@ class BaseMapService extends ChangeNotifier {
     _cancelDownload = false;
     notifyListeners();
 
-    // 半径を緯度経度の差分に変換
-    final latDiff = radiusMeters / 111000.0;
-    final lonDiff = radiusMeters / (111000.0 * math.cos(center.latitude * math.pi / 180.0));
-
-    final north = center.latitude + latDiff;
-    final south = center.latitude - latDiff;
-    final east = center.longitude + lonDiff;
-    final west = center.longitude - lonDiff;
-
     // ダウンロード対象のタイルリストを作成
-    final tilesToDownload = <_TileRequest>[];
-    
-    for (var z = minZoom; z <= maxZoom; z++) {
-      final topLeft = _getTileCoordinates(north, west, z);
-      final bottomRight = _getTileCoordinates(south, east, z);
-
-      final minX = math.min(topLeft.x, bottomRight.x);
-      final maxX = math.max(topLeft.x, bottomRight.x);
-      final minY = math.min(topLeft.y, bottomRight.y);
-      final maxY = math.max(topLeft.y, bottomRight.y);
-
-      for (var x = minX; x <= maxX; x++) {
-        for (var y = minY; y <= maxY; y++) {
-          tilesToDownload.add(_TileRequest(z, x, y));
-        }
-      }
-    }
+    final tiles = [
+      for (final r in _tileRanges(center, radiusMeters, minZoom, maxZoom))
+        for (var x = r.minX; x <= r.maxX; x++)
+          for (var y = r.minY; y <= r.maxY; y++) (z: r.z, x: x, y: y),
+    ];
 
     final targets = providers ?? downloadableProviders;
-    final totalTiles = tilesToDownload.length * targets.length;
-    int processedTiles = 0;
-    int downloadedTiles = 0;
-    int skippedTiles = 0;
-    int errorTiles = 0;
+    final queue = [for (final p in targets) for (final t in tiles) (p, t)];
+    final totalTiles = queue.length;
+    var next = 0;
+    var processedTiles = 0;
+    var downloadedTiles = 0;
+    var skippedTiles = 0;
+    var errorTiles = 0;
 
     yield {
       'status': 'start',
@@ -999,46 +852,38 @@ class BaseMapService extends ChangeNotifier {
     // OpenStreetMapの推奨は最大2スレッドだが、ユーザーの要望により4スレッドまで許可
     // 待機時間を短くしてスループットを上げる
     const int maxConcurrentDownloads = 4;
-    final activeFutures = <Future<void>>[];
-    final queue = [for (final p in targets) for (final t in tilesToDownload) (p, t)];
+    final activeFutures = <Future<void>>{};
 
     try {
-      while (queue.isNotEmpty || activeFutures.isNotEmpty) {
+      while (next < queue.length || activeFutures.isNotEmpty) {
         if (_cancelDownload) break;
 
         // キューから取り出して並列実行数までタスクを追加
-        while (activeFutures.length < maxConcurrentDownloads && queue.isNotEmpty) {
-          final (provider, tile) = queue.removeAt(0);
+        while (activeFutures.length < maxConcurrentDownloads && next < queue.length) {
+          final (provider, tile) = queue[next++];
           late final Future<void> future;
-          future = _processSingleTile(
-            provider, 
-            tile, 
-            (result) {
-              // 完了コールバック
-              processedTiles++;
-              if (result == 'downloaded') {
+          future = _downloadTile(provider, tile.z, tile.x, tile.y).then((result) {
+            processedTiles++;
+            switch (result) {
+              case _DownloadResult.downloaded:
                 downloadedTiles++;
-              } else if (result == 'skipped') {
+              case _DownloadResult.skipped:
                 skippedTiles++;
-              } else {
+              case _DownloadResult.error:
                 errorTiles++;
-              }
             }
-          ).then((_) {
-            // 完了したらリストから自分自身を削除
             activeFutures.remove(future);
           });
-          
           activeFutures.add(future);
         }
-        
+
         // スロットが空くか、全タスク完了まで待機
         if (activeFutures.isNotEmpty) {
           await Future.any(activeFutures);
-          
+
           // 進捗通知 (高頻度すぎると重くなるので間引く)
           if (processedTiles % 5 == 0 || processedTiles == totalTiles) {
-             yield {
+            yield {
               'status': 'progress',
               'total': totalTiles,
               'processed': processedTiles,
@@ -1059,7 +904,6 @@ class BaseMapService extends ChangeNotifier {
         'skipped': skippedTiles,
         'errors': errorTiles,
       };
-
     } catch (e) {
       AppLogger.debug('[Downloader] Critical error: $e');
       yield {
@@ -1073,50 +917,28 @@ class BaseMapService extends ChangeNotifier {
     }
   }
 
-  /// 単一タイルの処理（並列実行用）
-  Future<void> _processSingleTile(
-    BaseMapProvider provider, 
-    _TileRequest tile,
-    Function(String) onComplete,
-  ) async {
+  /// 一括ダウンロードの 1 枚（並列実行用）
+  Future<_DownloadResult> _downloadTile(BaseMapProvider provider, int z, int x, int y) async {
     try {
       // その段を持たないプロバイダは飛ばす（等高線は z9〜、地理院は z18 まで）
-      if (tile.z < provider.minZoom || tile.z > provider.maxZoom) {
-        onComplete('skipped');
-        return;
-      }
+      if (z < provider.minZoom || z > provider.maxZoom) return _DownloadResult.skipped;
       // キャッシュ確認
-      final cached = await _getCachedTile(provider.cacheId, tile.z, tile.x, tile.y);
-      if (cached != null) {
-        onComplete('skipped');
-        return;
-      }
+      if (await _getCachedTile(provider.cacheId, z, x, y) != null) return _DownloadResult.skipped;
       // 生成プロバイダ（等高線）は作ってキャッシュに入れる（DEM は取りに行く）
       if (provider.type == BaseMapType.generated) {
-        final made = await getTile(provider, tile.z, tile.x, tile.y);
-        onComplete(made != null ? 'downloaded' : 'error');
-        return;
+        return await getTile(provider, z, x, y) != null ? _DownloadResult.downloaded : _DownloadResult.error;
       }
-      // ダウンロード実行
-      final data = await _getTileInternal(
-        provider, 
-        tile.z, tile.x, tile.y, 
-        allowNetworkAccess: true,
-        retryCount: 2,
-      );
-      
-      if (data != null) {
-        // BAN対策: 短い待機時間を入れる
-        // 4並列 × 50ms待機 = 理論最大80req/sec (通信時間除く)
-        // 実際は通信時間があるため、サーバー負荷はそこまで高くならないはず
-        await Future.delayed(const Duration(milliseconds: 50));
-        onComplete('downloaded');
-      } else {
-        onComplete('error');
-      }
+      // ダウンロード実行（キャッシュは今見たので見ない。取り直しもしない）
+      final data = await _fetchTile(provider, z, x, y, attempt: 2, checkCache: false);
+      if (data == null) return _DownloadResult.error;
+      // BAN対策: 短い待機時間を入れる
+      // 4並列 × 50ms待機 = 理論最大80req/sec (通信時間除く)
+      // 実際は通信時間があるため、サーバー負荷はそこまで高くならないはず
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      return _DownloadResult.downloaded;
     } catch (e) {
       AppLogger.debug('[Downloader] ❌ Download failed (Offline/Network Error)');
-      onComplete('error');
+      return _DownloadResult.error;
     }
   }
 
@@ -1128,13 +950,3 @@ class BaseMapService extends ChangeNotifier {
     super.dispose();
   }
 }
-
-/// タイルリクエスト管理用クラス
-class _TileRequest {
-  final int z;
-  final int x;
-  final int y;
-  
-  _TileRequest(this.z, this.x, this.y);
-}
-

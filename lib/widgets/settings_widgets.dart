@@ -38,8 +38,6 @@ class SettingsSection extends StatefulWidget {
   final List<Widget> children;
   final IconData? icon;
   final Color? iconColor;
-  final Color? backgroundColor;
-  final double elevation;
   final Widget? trailing;
   final bool collapsible;
   final bool initiallyExpanded;
@@ -50,8 +48,6 @@ class SettingsSection extends StatefulWidget {
     required this.children,
     this.icon,
     this.iconColor,
-    this.backgroundColor,
-    this.elevation = 1.0,
     this.trailing,
     this.collapsible = false,
     this.initiallyExpanded = true,
@@ -61,20 +57,15 @@ class SettingsSection extends StatefulWidget {
   State<SettingsSection> createState() => _SettingsSectionState();
 }
 
-class _SettingsSectionState extends State<SettingsSection>
-    with SingleTickerProviderStateMixin {
+class _SettingsSectionState extends State<SettingsSection> {
   late bool _expanded = widget.initiallyExpanded;
 
-  void _toggleExpanded() {
-    if (!widget.collapsible) return;
-    setState(() => _expanded = !_expanded);
-  }
+  void _toggleExpanded() => setState(() => _expanded = !_expanded);
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: widget.elevation,
-      color: widget.backgroundColor,
+      elevation: 1.0,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -190,6 +181,10 @@ class SettingsHighlightSection extends StatelessWidget {
   }
 }
 
+/// タイルの題と副題。無効なら灰色にする
+Widget _tileText(String text, {required bool enabled}) =>
+    Text(text, style: enabled ? null : const TextStyle(color: Colors.grey));
+
 /// 設定タイル（基本）
 ///
 /// アイコン、タイトル、サブタイトルを持つ基本的な設定項目。
@@ -199,8 +194,6 @@ class SettingsTile extends StatelessWidget {
   final String title;
   final String? subtitle;
   final Widget? trailing;
-  final VoidCallback? onTap;
-  final bool enabled;
 
   const SettingsTile({
     super.key,
@@ -209,32 +202,17 @@ class SettingsTile extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.trailing,
-    this.onTap,
-    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       leading: leadingIcon != null
-          ? Icon(
-              leadingIcon,
-              color: enabled ? (leadingIconColor ?? Colors.blue) : Colors.grey,
-            )
+          ? Icon(leadingIcon, color: leadingIconColor ?? Colors.blue)
           : null,
-      title: Text(
-        title,
-        style: TextStyle(color: enabled ? null : Colors.grey),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle!,
-              style: TextStyle(color: enabled ? null : Colors.grey),
-            )
-          : null,
+      title: Text(title),
+      subtitle: subtitle != null ? Text(subtitle!) : null,
       trailing: trailing,
-      onTap: enabled ? onTap : null,
-      enabled: enabled,
     );
   }
 }
@@ -250,7 +228,6 @@ class SettingsSwitchTile extends StatelessWidget {
   final String? subtitle;
   final bool value;
   final ValueChanged<bool>? onChanged;
-  final bool enabled;
 
   const SettingsSwitchTile({
     super.key,
@@ -261,7 +238,6 @@ class SettingsSwitchTile extends StatelessWidget {
     this.subtitle,
     required this.value,
     this.onChanged,
-    this.enabled = true,
   });
 
   @override
@@ -275,18 +251,10 @@ class SettingsSwitchTile extends StatelessWidget {
                   : (inactiveIconColor ?? Colors.grey),
             )
           : null,
-      title: Text(
-        title,
-        style: TextStyle(color: enabled ? null : Colors.grey),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle!,
-              style: TextStyle(color: enabled ? null : Colors.grey),
-            )
-          : null,
+      title: Text(title),
+      subtitle: subtitle != null ? Text(subtitle!) : null,
       value: value,
-      onChanged: enabled ? onChanged : null,
+      onChanged: onChanged,
     );
   }
 }
@@ -370,22 +338,11 @@ class SettingsActionTile extends StatelessWidget {
               color: enabled ? (leadingIconColor ?? Colors.blue) : Colors.grey,
             )
           : null,
-      title: Text(
-        title,
-        style: TextStyle(color: enabled ? null : Colors.grey),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle!,
-              style: TextStyle(color: enabled ? null : Colors.grey),
-            )
-          : null,
+      title: _tileText(title, enabled: enabled),
+      subtitle: subtitle != null ? _tileText(subtitle!, enabled: enabled) : null,
       trailing: ElevatedButton(
         onPressed: enabled ? onPressed : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: buttonColor ?? Colors.blue,
-          foregroundColor: Colors.white,
-        ),
+        style: settingsButtonStyle(buttonColor ?? Colors.blue),
         child: Text(buttonLabel),
       ),
     );
@@ -424,6 +381,101 @@ class SettingsErrorCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// セクション冒頭の説明文（灰色・小さめ）
+class SettingsDescription extends StatelessWidget {
+  final String text;
+  final EdgeInsetsGeometry padding;
+
+  const SettingsDescription(
+    this.text, {
+    super.key,
+    this.padding = const EdgeInsets.symmetric(horizontal: 12),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: padding,
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 13, color: Colors.grey[600], height: 1.4),
+      ),
+    );
+  }
+}
+
+/// セクション内の地の文（行間広め）
+class SettingsParagraph extends StatelessWidget {
+  final String text;
+  final Color? color;
+
+  const SettingsParagraph(this.text, {super.key, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Text(text, style: TextStyle(height: 1.5, color: color)),
+    );
+  }
+}
+
+/// 「情報」セクション（灰色の補足文だけ）
+class SettingsInfoSection extends StatelessWidget {
+  final String text;
+
+  const SettingsInfoSection(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsSection(
+      title: t.settings.info,
+      icon: Icons.info_outline,
+      iconColor: Colors.grey,
+      children: [SettingsParagraph(text, color: Colors.grey)],
+    );
+  }
+}
+
+/// 色付きの塗りボタン（文字は白）
+ButtonStyle settingsButtonStyle(Color color, {EdgeInsetsGeometry? padding}) =>
+    ElevatedButton.styleFrom(
+      backgroundColor: color,
+      foregroundColor: Colors.white,
+      padding: padding,
+    );
+
+/// 「キャンセル／[confirmLabel]」の確認ダイアログ。確定なら true
+Future<bool> showSettingsConfirmDialog(
+  BuildContext context, {
+  Widget? icon,
+  required String title,
+  required String message,
+  required String confirmLabel,
+  ButtonStyle? confirmStyle,
+}) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: icon,
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(t.common.cancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: confirmStyle,
+              child: Text(confirmLabel),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 }
 
 /// 設定画面の共通Scaffold
@@ -579,8 +631,10 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
     );
   }
 
-  void _notifyChange() {
+  /// 値が変わったら知らせて描き直す
+  void _changed() {
     widget.onValueChanged?.call();
+    setState(() {});
   }
 
   List<Widget> _buildSections() {
@@ -601,16 +655,9 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
       initiallyExpanded: section.initiallyExpanded,
       children: [
         if (section.description != null) ...[
-          Padding(
+          SettingsDescription(
+            section.description!,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              section.description!,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey[600],
-                height: 1.4,
-              ),
-            ),
           ),
           const SizedBox(height: 8),
         ],
@@ -628,50 +675,52 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
     final ColorDef c => _buildColorTile(c),
     final IntDef i => _buildIntTile(i),
     final StringDef s => _buildStringTile(s),
-    final CustomDef c => c.builder(context, _store, () {
-        _notifyChange();
-        setState(() {});
-      }),
+    final CustomDef c => c.builder(context, _store, _changed),
   };
 
-  Widget _buildDoubleTile(DoubleDef def) {
-    final value = _store.getDouble(def);
+  /// 題と値の行・説明・スライダー（数値の項目で共通）
+  Widget _sliderTile({
+    required String title,
+    required String valueLabel,
+    required String? description,
+    required Slider slider,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(def.title),
-              Text(
-                def.formatValue(value),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: SettingsInfoRow(label: title, value: valueLabel),
         ),
-        if (def.description != null)
+        if (description != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              def.description!,
+              description,
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ),
-        Slider(
-          value: value,
-          min: def.min,
-          max: def.max,
-          divisions: def.divisions,
-          onChanged: (v) {
-            _store.setDouble(def, double.parse(v.toStringAsFixed(2)));
-            _notifyChange();
-            setState(() {});
-          },
-        ),
+        slider,
       ],
+    );
+  }
+
+  Widget _buildDoubleTile(DoubleDef def) {
+    final value = _store.getDouble(def);
+    return _sliderTile(
+      title: def.title,
+      valueLabel: def.formatValue(value),
+      description: def.description,
+      slider: Slider(
+        value: value,
+        min: def.min,
+        max: def.max,
+        divisions: def.divisions,
+        onChanged: (v) {
+          _store.setDouble(def, double.parse(v.toStringAsFixed(2)));
+          _changed();
+        },
+      ),
     );
   }
 
@@ -683,8 +732,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
       value: _store.getBool(def),
       onChanged: (v) {
         _store.setBool(def, v);
-        _notifyChange();
-        setState(() {});
+        _changed();
       },
     );
   }
@@ -712,42 +760,20 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
 
   Widget _buildIntTile(IntDef def) {
     final value = _store.getInt(def);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(def.title),
-              Text(
-                def.formatValue(value),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-        ),
-        if (def.description != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              def.description!,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ),
-        Slider(
-          value: value.toDouble(),
-          min: def.min.toDouble(),
-          max: def.max.toDouble(),
-          divisions: def.divisions,
-          onChanged: (v) {
-            _store.setInt(def, v.round());
-            _notifyChange();
-            setState(() {});
-          },
-        ),
-      ],
+    return _sliderTile(
+      title: def.title,
+      valueLabel: def.formatValue(value),
+      description: def.description,
+      slider: Slider(
+        value: value.toDouble(),
+        min: def.min.toDouble(),
+        max: def.max.toDouble(),
+        divisions: def.divisions,
+        onChanged: (v) {
+          _store.setInt(def, v.round());
+          _changed();
+        },
+      ),
     );
   }
 
@@ -768,8 +794,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
             final trimmed = v.trim();
             if (trimmed.isNotEmpty) {
               _store.setString(def, trimmed);
-              _notifyChange();
-              setState(() {});
+              _changed();
             }
           },
         ),
@@ -811,8 +836,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
     );
     if (result != currentColor) {
       await _store.setColor(def, result);
-      _notifyChange();
-      setState(() {});
+      _changed();
     }
   }
 }

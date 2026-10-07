@@ -92,65 +92,42 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     }
   }
 
+  void _notify(String title, NotificationLevel level) =>
+      ref.read(notificationCenterProvider.notifier).add(title: title, level: level);
+
   /// オフラインモード切り替え
   Future<void> _toggleOfflineMode(bool value) async {
     try {
       await _baseMapService.setOfflineMode(value);
-
-      ref.read(notificationCenterProvider.notifier).add(
-            title: value ? t.basemap.notifications.offlineEnabled : t.basemap.notifications.offlineDisabled,
-            level: value ? NotificationLevel.warning : NotificationLevel.info,
-          );
+      _notify(
+        value ? t.basemap.notifications.offlineEnabled : t.basemap.notifications.offlineDisabled,
+        value ? NotificationLevel.warning : NotificationLevel.info,
+      );
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.basemap.notifications.offlineChangeFailed(error: e.toString()),
-            level: NotificationLevel.error,
-          );
+      _notify(t.basemap.notifications.offlineChangeFailed(error: e.toString()), NotificationLevel.error);
     }
   }
 
   /// キャッシュクリア
   Future<void> _clearCache({String? providerId}) async {
     try {
-      // 確認ダイアログ
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder:
-            (context) => AlertDialog(
-              title: Text(t.basemap.cacheDialog.title),
-              content: Text(
-                providerId != null
-                    ? t.basemap.cacheDialog.confirmProvider
-                    : t.basemap.cacheDialog.confirmAll,
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: Text(t.common.cancel),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: Text(t.common.clear),
-                ),
-              ],
-            ),
+      final confirmed = await showSettingsConfirmDialog(
+        context,
+        title: t.basemap.cacheDialog.title,
+        message: providerId != null
+            ? t.basemap.cacheDialog.confirmProvider
+            : t.basemap.cacheDialog.confirmAll,
+        confirmLabel: t.common.clear,
+        confirmStyle: TextButton.styleFrom(foregroundColor: Colors.red),
       );
 
-      if (confirmed == true) {
+      if (confirmed) {
         await _baseMapService.clearCache(providerId: providerId);
         await _loadCacheInfo(); // キャッシュ情報を再読み込み
-
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.basemap.cacheDialog.cleared,
-              level: NotificationLevel.success,
-            );
+        _notify(t.basemap.cacheDialog.cleared, NotificationLevel.success);
       }
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.basemap.cacheDialog.clearFailed(error: e.toString()),
-            level: NotificationLevel.error,
-          );
+      _notify(t.basemap.cacheDialog.clearFailed(error: e.toString()), NotificationLevel.error);
     }
   }
 
@@ -159,7 +136,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     try {
       // 進行状況ダイアログを表示
       if (!mounted) return;
-      
+
       unawaited(showDialog(
         context: context,
         barrierDismissible: false,
@@ -184,70 +161,70 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
 
       // 結果を表示
       if (mounted) {
-        await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(t.basemap.cacheValidation.resultTitle),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(t.basemap.cacheValidation.totalTiles(count: result['totalTiles'].toString())),
-                Text(
-                  t.basemap.cacheValidation.validTiles(count: result['validTiles'].toString()),
-                  style: const TextStyle(color: Colors.green),
-                ),
-                Text(
-                  t.basemap.cacheValidation.invalidTiles(count: result['invalidTiles'].toString()),
-                  style: const TextStyle(color: Colors.orange),
-                ),
-                Text(
-                  t.basemap.cacheValidation.removedTiles(count: '${result['removedTiles']}'),
-                  style: const TextStyle(color: Colors.red),
-                ),
-                const SizedBox(height: 8),
-                if ((result['removedTiles'] as int) > 0)
-                  Text(
-                    t.basemap.cacheValidation.corruptedRemoved,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  )
-                else
-                  Text(
-                    t.basemap.cacheValidation.noIssues,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(t.common.close),
-              ),
-            ],
-          ),
-        );
+        await _showValidationResult(result);
 
         // キャッシュ情報を再読み込み
         await _loadCacheInfo();
 
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.basemap.cacheValidation.complete(count: result['removedTiles'].toString()),
-              level: NotificationLevel.info,
-            );
+        _notify(t.basemap.cacheValidation.complete(count: result['removedTiles'].toString()), NotificationLevel.info);
       }
     } catch (e) {
       // エラー時はダイアログを閉じる
       if (mounted) {
         Navigator.pop(context);
       }
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.basemap.cacheValidation.failed(error: e.toString()),
-            level: NotificationLevel.error,
-          );
+      _notify(t.basemap.cacheValidation.failed(error: e.toString()), NotificationLevel.error);
     }
+  }
+
+  /// キャッシュ検証の結果ダイアログ
+  Future<void> _showValidationResult(Map<String, dynamic> result) {
+    final tr = t.basemap.cacheValidation;
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr.resultTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tr.totalTiles(count: result['totalTiles'].toString())),
+            Text(
+              tr.validTiles(count: result['validTiles'].toString()),
+              style: const TextStyle(color: Colors.green),
+            ),
+            Text(
+              tr.invalidTiles(count: result['invalidTiles'].toString()),
+              style: const TextStyle(color: Colors.orange),
+            ),
+            Text(
+              tr.removedTiles(count: '${result['removedTiles']}'),
+              style: const TextStyle(color: Colors.red),
+            ),
+            const SizedBox(height: 8),
+            if ((result['removedTiles'] as int) > 0)
+              Text(
+                tr.corruptedRemoved,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              )
+            else
+              Text(
+                tr.noIssues,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green,
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(t.common.close),
+          ),
+        ],
+      ),
+    );
   }
 
   /// ダウンロード設定ダイアログを表示
@@ -256,46 +233,21 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     final providers = _baseMapService.downloadableProviders;
     final hasOsm = _baseMapService.activeLayers.any((e) => e.$1.type == BaseMapType.openStreetMap);
     if (providers.isEmpty) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.basemap.download.osmNotAllowed,
-            level: NotificationLevel.warning,
-          );
+      _notify(t.basemap.download.osmNotAllowed, NotificationLevel.warning);
       return;
     }
     if (hasOsm) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.basemap.download.osmSkipped,
-            level: NotificationLevel.info,
-          );
+      _notify(t.basemap.download.osmSkipped, NotificationLevel.info);
     }
 
-    // 現在の地図中心座標を取得
-    LatLng center;
-    try {
-      final mapController = ref.read(mapControllerHolderProvider);
-      if (mapController != null) {
-        center = mapController.camera.center;
-      } else {
-        center = const LatLng(35.681236, 139.767125);
-      }
-    } catch (e) {
-      center = const LatLng(35.681236, 139.767125);
-    }
+    final center = _mapCenter;
 
     // 段の範囲はプロバイダの和（等高線の z19 は地理院の切り出しになるので 18 で止める）
     final zMinAll = providers.map((p) => p.minZoom).reduce(math.min);
     final zMaxAll = math.min(18, providers.map((p) => p.maxZoom).reduce(math.max));
 
-    // デフォルト設定
     // 初期ズーム範囲: 現在のズームレベル前後
-    double currentZoom = 15.0;
-    try {
-      final mapController = ref.read(mapControllerHolderProvider);
-      if (mapController != null) {
-        currentZoom = mapController.camera.zoom;
-      }
-    } catch (_) {}
-
+    final currentZoom = _mapZoom ?? 15.0;
     double minZoom = (currentZoom - 2).clamp(zMinAll.toDouble(), zMaxAll.toDouble());
     final double maxZoom = (currentZoom + 2).clamp(zMinAll.toDouble(), zMaxAll.toDouble());
     if (minZoom > maxZoom) minZoom = maxZoom;
@@ -316,8 +268,8 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         initialZoomRange: zoomRange,
         baseMapService: _baseMapService,
         onStartDownload: (r, zMin, zMax) {
-            Navigator.pop(context); // 設定ダイアログを閉じる
-            _startDownload(center, r, zMin, zMax); // ダウンロード開始
+          Navigator.pop(context); // 設定ダイアログを閉じる
+          _startDownload(center, r, zMin, zMax); // ダウンロード開始
         },
       ),
     );
@@ -336,8 +288,8 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         baseMapService: _baseMapService,
       ),
     ).then((_) {
-        // ダイアログが閉じたらキャッシュ情報を更新
-        _loadCacheInfo();
+      // ダイアログが閉じたらキャッシュ情報を更新
+      _loadCacheInfo();
     });
   }
 
@@ -380,9 +332,8 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         onPressed: _showDownloadDialog,
         icon: const Icon(Icons.download),
         label: Text(t.basemap.download.openSettings),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue,
-          foregroundColor: Colors.white,
+        style: settingsButtonStyle(
+          Colors.blue,
           padding: const EdgeInsets.symmetric(vertical: 12),
         ),
       ),
@@ -453,7 +404,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              BaseMapPreview(service: svc, center: _previewCenter, zoom: _previewZoom),
+              BaseMapPreview(service: svc, center: _mapCenter, zoom: _previewZoom),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -479,8 +430,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
           onReorderItem: (oldIndex, newIndex) async {
             // 上から数えた番号 → サービス（下から）の番号
             final n = svc.layers.length;
-            await svc.moveLayer(n - 1 - oldIndex, n - 1 - newIndex);
-            if (mounted) setState(() {});
+            await _editLayers(() => svc.moveLayer(n - 1 - oldIndex, n - 1 - newIndex));
           },
           itemBuilder: (context, i) {
             final layer = layers[i];
@@ -494,15 +444,11 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
               blendLabel: _blendLabel,
               onChanged: (l) async {
                 final opacityChanged = l.opacity != layer.opacity;
-                await svc.updateLayer(l.providerId, (_) => l);
-                if (mounted) setState(() {});
+                await _editLayers(() => svc.updateLayer(l.providerId, (_) => l));
                 if (opacityChanged) ref.read(tutorialProvider.notifier).report(BasemapOpacityChanged(l.providerId));
               },
               onRemove: layers.length > 1
-                  ? () async {
-                      await svc.removeLayer(layer.providerId);
-                      if (mounted) setState(() {});
-                    }
+                  ? () => _editLayers(() => svc.removeLayer(layer.providerId))
                   : null,
             );
           },
@@ -523,8 +469,14 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     );
   }
 
-  /// プレビューのタイル: 地図の中心（無ければ東京）、ズームは地図のもの（12〜17 に収める）
-  LatLng get _previewCenter {
+  /// レイヤを変えて描き直す
+  Future<void> _editLayers(Future<void> Function() edit) async {
+    await edit();
+    if (mounted) setState(() {});
+  }
+
+  /// 地図の中心（地図がまだ無ければ東京駅）
+  LatLng get _mapCenter {
     try {
       final c = ref.read(mapControllerHolderProvider)?.camera.center;
       if (c != null) return c;
@@ -532,13 +484,17 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     return const LatLng(35.681236, 139.767125);
   }
 
-  int get _previewZoom {
+  /// 地図のズーム（地図がまだ無ければ null）
+  double? get _mapZoom {
     try {
-      final z = ref.read(mapControllerHolderProvider)?.camera.zoom;
-      if (z != null) return z.round().clamp(12, 17);
-    } catch (_) {}
-    return 15;
+      return ref.read(mapControllerHolderProvider)?.camera.zoom;
+    } catch (_) {
+      return null;
+    }
   }
+
+  /// プレビューのタイルのズーム: 地図のもの（12〜17 に収める）
+  int get _previewZoom => _mapZoom?.round().clamp(12, 17) ?? 15;
 
   /// 追加する地図を選ぶ（一覧にまだ無いものだけ）
   Future<void> _showAddLayerSheet() async {
@@ -574,8 +530,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     );
     if (picked == null) return;
     // 等高線のように「重ねる前提」の地図は乗算で足す（白地に線だけなので、通常でもほぼ同じ）
-    await svc.addLayer(picked.id, blend: picked.type == BaseMapType.generated ? BaseMapBlend.multiply : BaseMapBlend.normal);
-    if (mounted) setState(() {});
+    await _editLayers(() => svc.addLayer(picked.id, blend: picked.type == BaseMapType.generated ? BaseMapBlend.multiply : BaseMapBlend.normal));
     ref.read(tutorialProvider.notifier).report(BasemapLayerAdded(picked.id));
   }
 
@@ -629,6 +584,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
 
   /// キャッシュ管理セクション
   Widget _buildCacheManagementSection() {
+    final hasCache = _cacheStats.isNotEmpty;
     return SettingsSection(
       title: t.basemap.cacheManagement,
       trailing: Text(
@@ -644,8 +600,8 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
           subtitle: t.basemap.validateRepairDesc,
           buttonLabel: t.basemap.validate,
           buttonColor: Colors.blue,
-          onPressed: _cacheStats.isNotEmpty ? _validateAndRepairCache : null,
-          enabled: _cacheStats.isNotEmpty,
+          onPressed: _validateAndRepairCache,
+          enabled: hasCache,
         ),
         const Divider(),
 
@@ -658,8 +614,8 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
               '${_cacheStats.values.fold(0, (sum, count) => sum + count)}タイル',
           buttonLabel: t.common.clear,
           buttonColor: Colors.red,
-          onPressed: _cacheStats.isNotEmpty ? _clearCache : null,
-          enabled: _cacheStats.isNotEmpty,
+          onPressed: _clearCache,
+          enabled: hasCache,
         ),
         const Divider(),
 
@@ -672,7 +628,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        if (_cacheStats.isEmpty)
+        if (!hasCache)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
@@ -711,7 +667,7 @@ class _DownloadSettingsDialog extends StatefulWidget {
   final double initialRadius;
   final RangeValues initialZoomRange;
   final BaseMapService baseMapService;
-  final Function(double, int, int) onStartDownload;
+  final void Function(double radius, int minZoom, int maxZoom) onStartDownload;
 
   const _DownloadSettingsDialog({
     required this.center,
@@ -729,27 +685,26 @@ class _DownloadSettingsDialog extends StatefulWidget {
 }
 
 class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
-  late double _radius;
-  late RangeValues _zoomRange;
-  int _estimatedTiles = 0;
+  late double _radius = widget.initialRadius;
+  late RangeValues _zoomRange = widget.initialZoomRange;
+  late int _estimatedTiles = _estimateTiles();
 
-  @override
-  void initState() {
-    super.initState();
-    _radius = widget.initialRadius;
-    _zoomRange = widget.initialZoomRange;
-    _calculateTiles();
-  }
-
-  void _calculateTiles() {
+  /// いまの範囲・段で落とすタイル数（全レイヤ分）
+  int _estimateTiles() {
     final result = widget.baseMapService.estimateDownloadSize(
       center: widget.center,
       radiusMeters: _radius,
       minZoom: _zoomRange.start.round(),
       maxZoom: _zoomRange.end.round(),
     );
+    return (result['totalTiles'] ?? 0) * widget.providers.length;
+  }
+
+  void _update({double? radius, RangeValues? zoomRange}) {
     setState(() {
-      _estimatedTiles = (result['totalTiles'] ?? 0) * widget.providers.length;
+      _radius = radius ?? _radius;
+      _zoomRange = zoomRange ?? _zoomRange;
+      _estimatedTiles = _estimateTiles();
     });
   }
 
@@ -777,12 +732,7 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
                     max: 10000,
                     divisions: 99,
                     label: '${(_radius / 1000).toStringAsFixed(1)} km',
-                    onChanged: (value) {
-                      setState(() {
-                        _radius = value;
-                      });
-                      _calculateTiles();
-                    },
+                    onChanged: (value) => _update(radius: value),
                   ),
                 ),
                 Text('${(_radius / 1000).toStringAsFixed(1)} km'),
@@ -799,12 +749,7 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
                 _zoomRange.start.round().toString(),
                 _zoomRange.end.round().toString(),
               ),
-              onChanged: (values) {
-                setState(() {
-                  _zoomRange = values;
-                });
-                _calculateTiles();
-              },
+              onChanged: (values) => _update(zoomRange: values),
             ),
             Center(child: Text('${_zoomRange.start.round()} 〜 ${_zoomRange.end.round()}')),
             
@@ -879,14 +824,16 @@ class _DownloadProgressDialog extends StatefulWidget {
 class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
   Map<String, dynamic> _status = {};
   bool _isFinished = false;
-  
+
+  static const _finishedStatuses = {'completed', 'cancelled', 'error'};
+
   @override
   void initState() {
     super.initState();
     _startDownload();
   }
 
-  void _startDownload() async {
+  void _startDownload() {
     final stream = widget.baseMapService.downloadArea(
       center: widget.center,
       radiusMeters: widget.radius,
@@ -898,15 +845,8 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
       if (mounted) {
         setState(() {
           _status = status;
+          if (_finishedStatuses.contains(status['status'])) _isFinished = true;
         });
-        
-        if (status['status'] == 'completed' || 
-            status['status'] == 'cancelled' || 
-            status['status'] == 'error') {
-          setState(() {
-            _isFinished = true;
-          });
-        }
       }
     }, onError: (e) {
       if (mounted) {
@@ -942,29 +882,19 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
           const SizedBox(height: 16),
           
           if (statusStr == 'completed')
-            Center(
-              child: Text(
-                t.basemap.download.complete, 
-                style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-            )
+            _resultText(t.basemap.download.complete, Colors.green)
           else if (statusStr == 'cancelled')
-            Center(
-              child: Text(
-                t.basemap.download.cancelled, 
-                style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-            )
+            _resultText(t.basemap.download.cancelled, Colors.orange)
           else if (statusStr == 'error')
-             Text(
-                t.common.errorOccurred(error: _status['message'].toString()), 
-                style: const TextStyle(color: Colors.red),
-              ),
-              
+            Text(
+              t.common.errorOccurred(error: _status['message'].toString()),
+              style: const TextStyle(color: Colors.red),
+            ),
+
           const Divider(),
-          _buildStatRow(t.basemap.download.successDownloaded, downloaded.toString(), Colors.blue),
-          _buildStatRow(t.basemap.download.skipped, skipped.toString(), Colors.grey),
-          _buildStatRow(t.basemap.download.errors, errors.toString(), Colors.red),
+          SettingsInfoRow(label: t.basemap.download.successDownloaded, value: downloaded.toString(), valueColor: Colors.blue),
+          SettingsInfoRow(label: t.basemap.download.skipped, value: skipped.toString(), valueColor: Colors.grey),
+          SettingsInfoRow(label: t.basemap.download.errors, value: errors.toString(), valueColor: Colors.red),
         ],
       ),
       actions: [
@@ -983,22 +913,14 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
       ],
     );
   }
-  
-  Widget _buildStatRow(String label, String value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label),
-          Text(
-            value,
-            style: TextStyle(fontWeight: FontWeight.bold, color: color),
-          ),
-        ],
-      ),
-    );
-  }
+
+  /// 終わったときの一言（完了・中止）
+  Widget _resultText(String text, Color color) => Center(
+        child: Text(
+          text,
+          style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+      );
 }
 
 /// レイヤ 1 行: 持ち手・目・名前・合成モード・外す、下に不透明度

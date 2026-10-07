@@ -116,7 +116,6 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
 
   @override
   Widget build(BuildContext context) {
-    final ctrl = widget.controller;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
       decoration: BoxDecoration(
@@ -132,34 +131,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
           Row(
             children: [
               // 左側（レイヤー名と座標系）。縦持ちで幅が足りなければこちらを縮める（右端のアイコン群は削らない）
-              Expanded(
-                child: Row(
-                  children: [
-                    // レイヤー名
-                    Flexible(
-                      child: Text(
-                        ctrl.isFiltered
-                            ? '${ctrl.layer.layerName} (${ctrl.filteredCount}/${ctrl.totalCount})'
-                            : '${ctrl.layer.layerName} (${ctrl.totalCount})',
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 13,
-                          height: 1.2,
-                          color: ctrl.isFiltered ? Colors.orange.shade800 : null,
-                        ),
-                      ),
-                    ),
-
-                    if (ctrl.isPointLayer) ...[
-                      const SizedBox(width: 8),
-                      _buildWgs84Checkbox(context),
-                      const SizedBox(width: 8),
-                      Flexible(child: _buildEpsgSelector(context)),
-                    ],
-                  ],
-                ),
-              ),
+              Expanded(child: _buildTitle(context)),
 
               // ラベルの組み立て（列を選んで並べる）
               _buildIconButton(
@@ -204,6 +176,36 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
     );
   }
 
+  /// レイヤー名（件数）と、点レイヤなら座標の出し方
+  Widget _buildTitle(BuildContext context) {
+    final ctrl = widget.controller;
+    return Row(
+      children: [
+        // レイヤー名
+        Flexible(
+          child: Text(
+            ctrl.isFiltered
+                ? '${ctrl.layer.layerName} (${ctrl.filteredCount}/${ctrl.totalCount})'
+                : '${ctrl.layer.layerName} (${ctrl.totalCount})',
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+              height: 1.2,
+              color: ctrl.isFiltered ? Colors.orange.shade800 : null,
+            ),
+          ),
+        ),
+        if (ctrl.isPointLayer) ...[
+          const SizedBox(width: 8),
+          _buildWgs84Checkbox(context),
+          const SizedBox(width: 8),
+          Flexible(child: _buildEpsgSelector(context)),
+        ],
+      ],
+    );
+  }
+
   Widget _buildFilterBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 2, bottom: 2),
@@ -221,66 +223,43 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
               child: TextField(
                 controller: _filterController,
                 style: const TextStyle(fontSize: 13),
-                decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  hintText: '"name" = \'Tokyo\'  |  "pop" > 1000',
-                  hintStyle: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade400,
-                  ),
-                  suffixIcon:
-                      _isFilterApplied
-                          ? GestureDetector(
-                            onTap: _clearFilter,
-                            child: Icon(
-                              Icons.clear,
-                              size: 14,
-                              color: Colors.orange.shade700,
-                            ),
-                          )
-                          : null,
+                decoration: _fieldDecoration(
+                  '"name" = \'Tokyo\'  |  "pop" > 1000',
+                  hintSize: 11,
+                  horizontalPadding: 8,
+                  suffixIcon: _isFilterApplied
+                      ? GestureDetector(
+                          onTap: _clearFilter,
+                          child: Icon(
+                            Icons.clear,
+                            size: 14,
+                            color: Colors.orange.shade700,
+                          ),
+                        )
+                      : null,
                 ),
                 onSubmitted: (_) => _applyFilter(),
               ),
             ),
             const SizedBox(width: 4),
-            SizedBox(
+            _smallButton(
+              t.attributeTable.apply,
+              _applyFilter,
               height: 24,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  foregroundColor: Colors.blue,
-                ),
-                onPressed: _applyFilter,
-                child: Text(t.attributeTable.apply, style: const TextStyle(fontSize: 11)),
-              ),
+              horizontalPadding: 8,
+              fontSize: 11,
+              color: Colors.blue,
             ),
             if (_isFilterApplied && widget.onDuplicateFiltered != null) ...[
               const SizedBox(width: 2),
-              SizedBox(
+              _smallButton(
+                t.attributeTable.duplicate,
+                () => widget.onDuplicateFiltered?.call(widget.controller.filterSql),
                 height: 24,
-                child: TextButton.icon(
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: Colors.green.shade700,
-                  ),
-                  icon: const Icon(Icons.copy_all, size: 14),
-                  label: Text(t.attributeTable.duplicate, style: const TextStyle(fontSize: 11)),
-                  onPressed: () {
-                    widget.onDuplicateFiltered?.call(
-                      widget.controller.filterSql,
-                    );
-                  },
-                ),
+                horizontalPadding: 6,
+                fontSize: 11,
+                color: Colors.green.shade700,
+                icon: Icons.copy_all,
               ),
             ],
           ],
@@ -290,10 +269,6 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
   }
 
   Widget _buildSearchReplaceBar(BuildContext context) {
-    final ctrl = widget.controller;
-    final editableColumns =
-        ctrl.columnNames.where((c) => !c.startsWith('_')).toList();
-
     return Padding(
       padding: const EdgeInsets.only(top: 2, bottom: 2),
       child: SizedBox(
@@ -307,19 +282,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
               child: TextField(
                 controller: _searchController,
                 style: const TextStyle(fontSize: 11),
-                decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  hintText: t.attributeTable.search,
-                  hintStyle: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey.shade400,
-                  ),
-                ),
+                decoration: _fieldDecoration(t.attributeTable.search, hintSize: 10),
                 onSubmitted: (_) => _doSearch(),
               ),
             ),
@@ -329,19 +292,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
               child: TextField(
                 controller: _replaceController,
                 style: const TextStyle(fontSize: 11),
-                decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  hintText: t.attributeTable.replace,
-                  hintStyle: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey.shade400,
-                  ),
-                ),
+                decoration: _fieldDecoration(t.attributeTable.replace, hintSize: 10),
               ),
             ),
             const SizedBox(width: 4),
@@ -359,46 +310,31 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
                 ),
                 style: const TextStyle(fontSize: 10, color: Colors.black87),
                 hint: Text(t.attributeTable.column, style: const TextStyle(fontSize: 10)),
-                items:
-                    editableColumns
-                        .map(
-                          (c) => DropdownMenuItem(
-                            value: c,
-                            child: Text(
-                              c,
-                              style: const TextStyle(fontSize: 10),
-                            ),
-                          ),
-                        )
-                        .toList(),
+                items: [
+                  for (final c in widget.controller.userColumnNames)
+                    DropdownMenuItem(
+                      value: c,
+                      child: Text(c, style: const TextStyle(fontSize: 10)),
+                    ),
+                ],
                 onChanged: (v) => setState(() => _selectedReplaceColumn = v),
               ),
             ),
             const SizedBox(width: 4),
-            SizedBox(
+            _smallButton(
+              t.attributeTable.searchButton,
+              _doSearch,
               height: 22,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: _doSearch,
-                child: Text(t.attributeTable.searchButton, style: const TextStyle(fontSize: 10)),
-              ),
+              horizontalPadding: 6,
+              fontSize: 10,
             ),
-            SizedBox(
+            _smallButton(
+              t.attributeTable.replaceButton,
+              _doReplace,
               height: 22,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  foregroundColor: Colors.orange.shade800,
-                ),
-                onPressed: _doReplace,
-                child: Text(t.attributeTable.replaceButton, style: const TextStyle(fontSize: 10)),
-              ),
+              horizontalPadding: 6,
+              fontSize: 10,
+              color: Colors.orange.shade800,
             ),
             if (_searchResultCount > 0)
               Padding(
@@ -411,6 +347,56 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
           ],
         ),
       ),
+    );
+  }
+
+  /// フィルタ・検索・置換の小さな入力欄の枠
+  static InputDecoration _fieldDecoration(
+    String hint, {
+    required double hintSize,
+    double horizontalPadding = 6,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding,
+        vertical: 4,
+      ),
+      border: const OutlineInputBorder(),
+      isDense: true,
+      hintText: hint,
+      hintStyle: TextStyle(fontSize: hintSize, color: Colors.grey.shade400),
+      suffixIcon: suffixIcon,
+    );
+  }
+
+  /// フィルタ・検索・置換の小さな文字ボタン（[icon] があればアイコン付き）
+  static Widget _smallButton(
+    String label,
+    VoidCallback onPressed, {
+    required double height,
+    required double horizontalPadding,
+    required double fontSize,
+    Color? color,
+    IconData? icon,
+  }) {
+    final style = TextButton.styleFrom(
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      minimumSize: Size.zero,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      foregroundColor: color,
+    );
+    final text = Text(label, style: TextStyle(fontSize: fontSize));
+    return SizedBox(
+      height: height,
+      child: icon == null
+          ? TextButton(style: style, onPressed: onPressed, child: text)
+          : TextButton.icon(
+              style: style,
+              icon: Icon(icon, size: 14),
+              label: text,
+              onPressed: onPressed,
+            ),
     );
   }
 
@@ -583,7 +569,6 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
 
   /// カラム表示/非表示メニューを表示
   void _showColumnMenu(BuildContext context) {
-    // _buildColumnMenuButtonの中身を再利用
     final ctrl = widget.controller;
     showMenu<String>(
       context: context,
@@ -619,52 +604,8 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
           ),
         ),
         const PopupMenuDivider(),
-        ...ctrl.columnNames.map(
-          (col) => PopupMenuItem<String>(
-            value: col,
-            height: 28,
-            child: Row(
-              children: [
-                Icon(
-                  ctrl.hiddenColumns.contains(col)
-                      ? Icons.visibility_off
-                      : Icons.visibility,
-                  size: 14,
-                  color: ctrl.hiddenColumns.contains(col) ? Colors.grey : null,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    col,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: ctrl.hiddenColumns.contains(col)
-                          ? Colors.grey
-                          : null,
-                    ),
-                  ),
-                ),
-                if (widget.onColumnAction != null) ...[
-                  InkWell(
-                    onTap: () {
-                      Navigator.pop(context);
-                      widget.onColumnAction!(col, 'rename');
-                    },
-                    child: const Icon(Icons.edit, size: 14),
-                  ),
-                  const SizedBox(width: 4),
-                  InkWell(
-                    onTap: () {
-                      Navigator.pop(context);
-                      widget.onColumnAction!(col, 'delete');
-                    },
-                    child: const Icon(Icons.delete, size: 14, color: Colors.red),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+        for (final col in ctrl.columnNames)
+          _columnMenuItem(context, col, hidden: ctrl.hiddenColumns.contains(col)),
       ],
     ).then((value) {
       if (value == '_show_all') {
@@ -673,6 +614,52 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
         ctrl.toggleColumnVisibility(value);
       }
     });
+  }
+
+  /// 列の表示/非表示メニューの 1 行（押すと切り替え。右に改名・削除）
+  PopupMenuItem<String> _columnMenuItem(
+    BuildContext context,
+    String col, {
+    required bool hidden,
+  }) {
+    final onColumnAction = widget.onColumnAction;
+    return PopupMenuItem<String>(
+      value: col,
+      height: 28,
+      child: Row(
+        children: [
+          Icon(
+            hidden ? Icons.visibility_off : Icons.visibility,
+            size: 14,
+            color: hidden ? Colors.grey : null,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              col,
+              style: TextStyle(fontSize: 12, color: hidden ? Colors.grey : null),
+            ),
+          ),
+          if (onColumnAction != null) ...[
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                onColumnAction(col, 'rename');
+              },
+              child: const Icon(Icons.edit, size: 14),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                onColumnAction(col, 'delete');
+              },
+              child: const Icon(Icons.delete, size: 14, color: Colors.red),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   /// 地図に出すラベルを列の組み合わせで決める。結果はレイヤ固有スタイル
@@ -686,7 +673,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
         .whereType<FeatureNode>()
         .map((f) => f.turfFeature.properties?.cast<String, Object?>())
         .toList();
-    final columns = widget.controller.columnNames.where((c) => !c.startsWith('_')).toList();
+    final columns = widget.controller.userColumnNames;
     if (!context.mounted) return;
     final result = await showLabelComposerDialog(
       context,
@@ -729,8 +716,9 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
   }
 }
 
-/// EPSG座標系オートコンプリート
-class _EpsgAutocomplete extends StatefulWidget {
+/// EPSG座標系オートコンプリート。
+/// 選び直すと表を読み直してツールバーごと作り直すので、入っている文字は [initialValue] から始まる
+class _EpsgAutocomplete extends StatelessWidget {
   final EpsgDefinition? initialValue;
   final ValueChanged<EpsgDefinition> onSelected;
   final VoidCallback onCleared;
@@ -741,42 +729,17 @@ class _EpsgAutocomplete extends StatefulWidget {
     required this.onCleared,
   });
 
-  @override
-  State<_EpsgAutocomplete> createState() => _EpsgAutocompleteState();
-}
-
-class _EpsgAutocompleteState extends State<_EpsgAutocomplete> {
-  final _registry = EpsgRegistry.instance;
-  late TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(
-      text: widget.initialValue?.displayString ?? '',
-    );
-  }
-
-  @override
-  void didUpdateWidget(_EpsgAutocomplete oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.initialValue != oldWidget.initialValue) {
-      _controller.text = widget.initialValue?.displayString ?? '';
-    }
-  }
+  static EpsgRegistry get _registry => EpsgRegistry.instance;
 
   @override
   Widget build(BuildContext context) {
     return Autocomplete<EpsgDefinition>(
-      initialValue: TextEditingValue(text: _controller.text),
+      initialValue: TextEditingValue(text: initialValue?.displayString ?? ''),
       optionsBuilder: (TextEditingValue value) {
         return _registry.search(value.text);
       },
       displayStringForOption: (option) => option.displayString,
-      onSelected: (selection) {
-        _controller.text = selection.displayString;
-        widget.onSelected(selection);
-      },
+      onSelected: onSelected,
       fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
         return TextField(
           controller: controller,
@@ -792,11 +755,11 @@ class _EpsgAutocompleteState extends State<_EpsgAutocomplete> {
             hintText: t.attributeTable.epsgHint,
             hintStyle: const TextStyle(fontSize: 8),
             suffixIcon:
-                widget.initialValue != null
+                initialValue != null
                     ? GestureDetector(
                       onTap: () {
                         controller.clear();
-                        widget.onCleared();
+                        onCleared();
                       },
                       child: const Icon(Icons.clear, size: 12),
                     )
@@ -807,7 +770,7 @@ class _EpsgAutocompleteState extends State<_EpsgAutocomplete> {
             if (code.isNotEmpty) {
               final epsg = _registry.getByCode(code);
               if (epsg != null) {
-                widget.onSelected(epsg);
+                onSelected(epsg);
               }
             }
           },
@@ -846,12 +809,6 @@ class _EpsgAutocompleteState extends State<_EpsgAutocomplete> {
         );
       },
     );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
   }
 }
 

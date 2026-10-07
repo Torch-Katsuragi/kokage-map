@@ -36,6 +36,7 @@ import '../providers/ui_state_providers.dart';
 import '../tools/map_tool.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
+import '../utils/attribute_columns.dart';
 import '../utils/feature_calc_utils.dart';
 import '../widgets/feature_editor/shared/sub_table_helper.dart';
 import 'edit_tool.dart';
@@ -139,7 +140,10 @@ class EditState {
 
   Snap get snap => (geom, ids);
   bool get shapeChanged => !_sameShape(geom, original);
-  bool get attrsChanged => columns.any((c) => '${attrs[c] ?? ''}' != '${originalAttrs[c] ?? ''}');
+  bool get attrsChanged => columns.any(attrChanged);
+
+  /// 列 [c] の値を書き換えたか（null と空は同じとみなす）
+  bool attrChanged(String c) => '${attrs[c] ?? ''}' != '${originalAttrs[c] ?? ''}';
   bool get dirty => shapeChanged || attrsChanged;
 
   EditState copyWith({
@@ -250,18 +254,14 @@ class FeatureEditor extends Notifier<EditState?> {
     } catch (_) {}
   }
 
-  /// 書き換えてよい列（番号・形・内部用は除く。属性テーブルと同じ決まり。
-  /// sub_table は頂点ごとの記録なので形と一緒に扱う）
+  /// 書き換えてよい列（番号・形・内部用は除く。属性テーブルと同じ決まり [isReadOnlyColumn]。
+  /// メタデータと、頂点ごとの記録 sub_table（形と一緒に扱う）も除く）
   static bool _editable(String name) {
+    if (isReadOnlyColumn(name)) return false;
     final n = name.toLowerCase();
-    return !(n == 'id' ||
-        n == 'fid' ||
-        n == 'geom' ||
-        n == 'geometry' ||
-        n == metadataColumn ||
+    return !(n == metadataColumn ||
         n == 'rmaps_metadata' || // 旧名
-        n == 'sub_table' ||
-        n.startsWith('_'));
+        n == 'sub_table');
   }
 
   void setMode(EditMode m) {
@@ -465,10 +465,8 @@ class FeatureEditor extends Notifier<EditState?> {
       if (ok && s.kind != EditKind.point) await _syncSubTable(s);
     }
     if (ok) {
-      for (final c in s.columns) {
-        if ('${s.attrs[c] ?? ''}' != '${s.originalAttrs[c] ?? ''}') {
-          await f.setAttributeValue(c, s.attrs[c]);
-        }
+      for (final c in s.columns.where(s.attrChanged)) {
+        await f.setAttributeValue(c, s.attrs[c]);
       }
     }
     if (!ok) {

@@ -1,6 +1,6 @@
 // 属性フォームの数値の列: 全角で打っても半角の数値として保存する
 import 'package:flutter_test/flutter_test.dart';
-import 'package:root_maps/widgets/attribute_table/attribute_form_view.dart';
+import 'package:root_maps/utils/attribute_columns.dart';
 
 void main() {
   test('全角の数字・小数点・符号を半角にする', () {

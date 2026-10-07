@@ -29,6 +29,7 @@ import '../../services/coordinate/index.dart';
 import '../../tutorial/practice_project.dart';
 import '../../tutorial/tutorial.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/attribute_columns.dart';
 import '../../utils/qgis_expression_filter.dart';
 
 /// 属性テーブルの表示設定
@@ -62,8 +63,9 @@ class AttributeTableController extends ChangeNotifier {
   // 状態
   TrinaGridStateManager? _stateManager;
   List<TrinaColumn> _columns = [];
-  List<TrinaRow> _rows = [];
   List<String> _columnNames = [];
+  List<String> _userColumnNames = [];
+  List<String> _writableColumnNames = [];
   Map<String, String> _columnTypeMap = {};
   List<FeatureNode> _features = [];
   bool _isLoading = true;
@@ -77,9 +79,8 @@ class AttributeTableController extends ChangeNotifier {
   List<FeatureNode> _displayFeatures = [];
   List<TrinaRow> _displayRows = [];
 
-  // ページング状態
-  int _currentPageOffset = 0;
-  static const int defaultPageSize = 100;
+  // ページング
+  static const int _pageSize = 100;
 
   // エラー状態
   String? _lastError;
@@ -88,20 +89,23 @@ class AttributeTableController extends ChangeNotifier {
   final Set<String> _hiddenColumns = {};
 
   // ゲッター
-  TrinaGridStateManager? get stateManager => _stateManager;
   List<TrinaColumn> get columns => _columns;
   List<TrinaRow> get rows => _displayRows;
   List<String> get columnNames => _columnNames;
+
+  /// 内部用（`_` で始まる）を除いた列。統計・検索置換・ラベル・計算の候補
+  List<String> get userColumnNames => _userColumnNames;
+
+  /// 書き換えられる列（一括編集の候補）
+  List<String> get writableColumnNames => _writableColumnNames;
   List<FeatureNode> get features => _displayFeatures;
   bool get isLoading => _isLoading;
   AttributeTableSettings get settings => _settings;
   bool get isPointLayer => layer is PointLayerNode;
   bool get isFiltered => _isFiltered;
   String get filterSql => _filterSql;
-  String? get filterError => _filterError;
   int get totalCount => _features.length;
   int get filteredCount => _displayFeatures.length;
-  int get currentPageOffset => _currentPageOffset;
   String? get lastError => _lastError;
 
   /// エラーをクリア
@@ -159,6 +163,10 @@ class AttributeTableController extends ChangeNotifier {
         getAll: true,
         skipPrimaryKey: true,
       );
+      _userColumnNames =
+          _columnNames.where((c) => !isInternalColumn(c)).toList();
+      _writableColumnNames =
+          _columnNames.where((c) => !isReadOnlyColumn(c)).toList();
       AppLogger.debug(
         '[AttributeTableController] カラム名: ${_columnNames.length}個',
       );
@@ -180,17 +188,13 @@ class AttributeTableController extends ChangeNotifier {
       // カラムを構築
       _columns = _createColumns();
 
-      // フィルタが有効ならフィルタ済みビューを構築
+      // フィルタが有効ならフィルタ済みビュー、そうでなければ全件（複製しない）
       if (_isFiltered && _filterSql.isNotEmpty) {
-        await _applyFilterToDisplay();
+        _applyFilterToDisplay();
       } else {
-        _displayFeatures = List.of(_features);
+        _displayFeatures = _features;
+        _displayRows = _createRowsForRange(0, _pageSize);
       }
-
-      // 初回ページのデータを構築
-      _currentPageOffset = 0;
-      _displayRows = await _createRowsForRange(0, defaultPageSize);
-      _rows = _displayRows;
 
       AppLogger.debug('[AttributeTableController] 初期化完了');
     } catch (e) {
@@ -198,9 +202,10 @@ class AttributeTableController extends ChangeNotifier {
       AppLogger.debug('[AttributeTableController] $msg');
       _lastError = msg;
       _columnNames = [];
+      _userColumnNames = [];
+      _writableColumnNames = [];
       _features = [];
       _columns = [];
-      _rows = [];
       _displayFeatures = [];
       _displayRows = [];
     } finally {
@@ -211,10 +216,12 @@ class AttributeTableController extends ChangeNotifier {
 
   /// TrinaGridのStateManagerを設定
   void setStateManager(TrinaGridStateManager manager) {
+    // 表を作り直したときは前の表の監視を外す
+    _stateManager?.removeListener(_onStateChanged);
     _stateManager = manager;
 
     // 編集モードの監視
-    _stateManager?.addListener(_onStateChanged);
+    manager.addListener(_onStateChanged);
   }
 
   /// 設定を更新
@@ -235,35 +242,10 @@ class AttributeTableController extends ChangeNotifier {
     }
 
     final featureCount = currentSelection.length;
-    final selectedFeaturesToDelete = List.from(
-      currentSelection.whereType<FeatureNode>(),
-    );
-
     AppLogger.debug('[AttributeTableController] 削除開始: $featureCount個');
 
-    // TrinaGridから行を削除
-    final rowIndicesToRemove = <int>[];
-    for (final feature in selectedFeaturesToDelete) {
-      final index = _features.indexOf(feature);
-      if (index >= 0) rowIndicesToRemove.add(index);
-    }
-
-    if (_stateManager != null && rowIndicesToRemove.isNotEmpty) {
-      rowIndicesToRemove.sort((a, b) => b.compareTo(a));
-      final rowsToRemove = <TrinaRow>[];
-      for (final index in rowIndicesToRemove) {
-        if (index < _rows.length) {
-          rowsToRemove.add(_rows[index]);
-        }
-      }
-      _stateManager!.removeRows(rowsToRemove);
-    }
-
-    // ローカルリストから削除
-    for (final feature in selectedFeaturesToDelete) {
-      _features.remove(feature);
-    }
-
+    // 表の行は消さずに読み直しに任せる（読み直すと表ごと作り直す）。
+    // 以前は全件の中の番目で表の行を消しており、2 ページ目以降やフィルタ中は別の行を消していた
     await _ref
         .read(selectedFeaturesProvider.notifier)
         .disposeSelectedFeatures();
@@ -280,16 +262,7 @@ class AttributeTableController extends ChangeNotifier {
     String field,
     dynamic value,
   ) async {
-    if (field == 'id' ||
-        field == 'fid' ||
-        field == 'geom' ||
-        field == 'geometry') {
-      return null;
-    }
-
-    if (field.startsWith('_')) {
-      return null;
-    }
+    if (isReadOnlyColumn(field)) return null;
 
     try {
       await feature.setAttributeValue(field, value);
@@ -356,24 +329,18 @@ class AttributeTableController extends ChangeNotifier {
     _isFiltered = true;
     _filterError = null;
 
-    await _applyFilterToDisplay();
+    _applyFilterToDisplay();
     notifyListeners();
     return null;
   }
 
   /// フィルタ結果を表示用リストに適用
-  Future<void> _applyFilterToDisplay() async {
-    _displayFeatures = [];
-
-    for (var i = 0; i < _features.length; i++) {
-      if (_filteredRowIds.contains(_features[i].rowId)) {
-        _displayFeatures.add(_features[i]);
-      }
-    }
-
-    _currentPageOffset = 0;
-    _displayRows = await _createRowsForRange(0, defaultPageSize);
-    _rows = _displayRows;
+  void _applyFilterToDisplay() {
+    _displayFeatures = [
+      for (final f in _features)
+        if (_filteredRowIds.contains(f.rowId)) f,
+    ];
+    _displayRows = _createRowsForRange(0, _pageSize);
 
     AppLogger.debug(
       '[AttributeTableController] フィルタ適用: '
@@ -387,20 +354,19 @@ class AttributeTableController extends ChangeNotifier {
     _filteredRowIds = {};
     _isFiltered = false;
     _filterError = null;
-    _displayFeatures = List.of(_features);
-    _currentPageOffset = 0;
-    _displayRows = await _createRowsForRange(0, defaultPageSize);
-    _rows = _displayRows;
+    _displayFeatures = _features;
+    _displayRows = _createRowsForRange(0, _pageSize);
     notifyListeners();
   }
 
-  /// フィーチャを選択（ページオフセットを考慮）
-  void selectFeature(int rowIndex) {
-    final absoluteIndex = _currentPageOffset + rowIndex;
-    if (absoluteIndex < 0 || absoluteIndex >= _displayFeatures.length) return;
+  /// 表の行の地物。行を並べ替えても行と地物の組は崩れない（位置から数えると別の地物を指していた）
+  static FeatureNode? featureOfRow(TrinaRow? row) {
+    final data = row?.data;
+    return data is FeatureNode ? data : null;
+  }
 
-    final feature = _displayFeatures[absoluteIndex];
-
+  /// フィーチャを選択
+  void selectFeature(FeatureNode feature) {
     final currentSelection = _ref.read(selectedFeaturesProvider);
     if (currentSelection.length == 1 && currentSelection.first == feature) {
       return;
@@ -416,38 +382,26 @@ class AttributeTableController extends ChangeNotifier {
   void highlightFeatureOnCurrentPage(FeatureNode feature) {
     if (_stateManager == null) return;
 
-    final absoluteIndex = _displayFeatures.indexOf(feature);
-    if (absoluteIndex < 0) return;
+    // 表に出ている行（今のページ）だけを探す
+    final rows = _stateManager!.refRows;
+    final localIndex = rows.indexWhere((r) => identical(r.data, feature));
+    if (localIndex < 0) return;
 
-    final pageEnd = _currentPageOffset + defaultPageSize;
-    if (absoluteIndex < _currentPageOffset || absoluteIndex >= pageEnd) return;
-
-    final localIndex = absoluteIndex - _currentPageOffset;
     // 表のマスを押した選択が地図を回って戻ってきたときは動かさない。
     // 動かすと押したマスから行の先頭へ飛び、そのマスを編集できなかった（2026-10-01 チュートリアルで発覚）
     if (_stateManager!.currentRowIdx == localIndex) return;
-    if (localIndex >= 0 && localIndex < _stateManager!.refRows.length) {
-      _stateManager!.setCurrentCell(
-        _stateManager!.refRows[localIndex].cells.values.first,
-        localIndex,
-      );
-    }
+    _stateManager!.setCurrentCell(rows[localIndex].cells.values.first, localIndex);
   }
 
   // ========== Phase 3: 複数行操作 ==========
 
   /// チェックされた行のフィーチャを取得
-  List<FeatureNode> getCheckedFeatures() {
+  List<FeatureNode> _checkedFeatures() {
     if (_stateManager == null) return [];
-    final checkedRows = _stateManager!.checkedRows;
-    final result = <FeatureNode>[];
-    for (final row in checkedRows) {
-      final rowNum = row.cells['_row_num']?.value;
-      if (rowNum is int && rowNum > 0 && rowNum <= _displayFeatures.length) {
-        result.add(_displayFeatures[rowNum - 1]);
-      }
-    }
-    return result;
+    return [
+      for (final row in _stateManager!.checkedRows)
+        ?featureOfRow(row),
+    ];
   }
 
   /// チェックされた行数を取得
@@ -455,7 +409,7 @@ class AttributeTableController extends ChangeNotifier {
 
   /// チェックされた行に対して一括値設定
   Future<int> batchSetValue(String columnName, dynamic value) async {
-    final features = getCheckedFeatures();
+    final features = _checkedFeatures();
     if (features.isEmpty) return 0;
 
     int count = 0;
@@ -487,16 +441,12 @@ class AttributeTableController extends ChangeNotifier {
 
     // データ行
     for (final feature in _displayFeatures) {
-      final values = <String>[];
-      for (final col in _columnNames) {
-        try {
-          final value = await feature.getAttributeValue(col);
-          values.add(_escapeCsvField(value?.toString() ?? ''));
-        } catch (e) {
-          values.add('');
-        }
-      }
-      buffer.writeln(values.join(','));
+      buffer.writeln(
+        _columnNames
+            .map((col) =>
+                _escapeCsvField(readAttribute(feature, col)?.toString() ?? ''))
+            .join(','),
+      );
     }
 
     return buffer.toString();
@@ -562,48 +512,15 @@ class AttributeTableController extends ChangeNotifier {
       ),
     );
 
-    // Pointレイヤーの座標カラム
+    // Pointレイヤーの座標カラム（読み取り専用）
     if (isPointLayer) {
       if (_settings.showWgs84) {
-        tableColumns.add(
-          TrinaColumn(
-            title: '_lat',
-            field: '_lat',
-            type: TrinaColumnType.text(),
-            enableEditingMode: false,
-            width: 100,
-          ),
-        );
-        tableColumns.add(
-          TrinaColumn(
-            title: '_lon',
-            field: '_lon',
-            type: TrinaColumnType.text(),
-            enableEditingMode: false,
-            width: 100,
-          ),
-        );
+        tableColumns.add(_coordinateColumn('_lat', 100));
+        tableColumns.add(_coordinateColumn('_lon', 100));
       }
-
       if (_settings.additionalEpsg != null) {
-        tableColumns.add(
-          TrinaColumn(
-            title: '_x',
-            field: '_x',
-            type: TrinaColumnType.text(),
-            enableEditingMode: false,
-            width: 110,
-          ),
-        );
-        tableColumns.add(
-          TrinaColumn(
-            title: '_y',
-            field: '_y',
-            type: TrinaColumnType.text(),
-            enableEditingMode: false,
-            width: 110,
-          ),
-        );
+        tableColumns.add(_coordinateColumn('_x', 110));
+        tableColumns.add(_coordinateColumn('_y', 110));
       }
     }
 
@@ -614,7 +531,7 @@ class AttributeTableController extends ChangeNotifier {
           title: columnName,
           field: columnName,
           type: _determineColumnType(columnName),
-          enableEditingMode: _isColumnEditable(columnName),
+          enableEditingMode: !isReadOnlyColumn(columnName),
           enableSorting: true, // Phase 3: カラムヘッダーでソート
           enableColumnDrag: true, // Phase 3: ドラッグで並替え
           enableContextMenu: true, // Phase 3: 右クリックメニュー
@@ -627,13 +544,22 @@ class AttributeTableController extends ChangeNotifier {
     return tableColumns;
   }
 
+  static TrinaColumn _coordinateColumn(String field, double width) => TrinaColumn(
+        title: field,
+        field: field,
+        type: TrinaColumnType.text(),
+        enableEditingMode: false,
+        width: width,
+      );
+
   /// Phase 3: NULL/空値ハイライト用セルレンダラー
   TrinaColumnRenderer _nullHighlightRenderer(String columnName) {
     // チュートリアル: 練習の測点の表では、色の付いた行の name のマスを案内先にする
     final guideName = columnName == 'name' && isPracticeLayer(layer, PracticeProject.pointsLayer);
     return (TrinaColumnRendererContext ctx) {
       final value = ctx.cell.value;
-      final isNull = value == null || value.toString().isEmpty;
+      final text = value?.toString() ?? '';
+      final isNull = text.isEmpty;
       final key = guideName &&
               _ref.read(tutorialProvider) != null &&
               ctx.rowIdx == (ctx.stateManager.currentRowIdx ?? 0)
@@ -644,50 +570,42 @@ class AttributeTableController extends ChangeNotifier {
         padding: const EdgeInsets.symmetric(horizontal: 4),
         alignment: Alignment.centerLeft,
         child: Text(
-          isNull ? '(NULL)' : value.toString(),
-          style: TextStyle(
-            fontSize: 13,
-            height: 1.2,
-            color: isNull ? Colors.grey.shade400 : Colors.black87,
-            fontStyle: isNull ? FontStyle.italic : FontStyle.normal,
-          ),
+          isNull ? '(NULL)' : text,
+          style: isNull ? _nullCellStyle : _cellStyle,
           overflow: TextOverflow.ellipsis,
         ),
       );
     };
   }
 
+  // マスの文字（マスごとに作らない）
+  static const _cellStyle = TextStyle(
+    fontSize: 13,
+    height: 1.2,
+    color: Colors.black87,
+    fontStyle: FontStyle.normal,
+  );
+  static final _nullCellStyle = TextStyle(
+    fontSize: 13,
+    height: 1.2,
+    color: Colors.grey.shade400,
+    fontStyle: FontStyle.italic,
+  );
+
   /// 列の SQLite の型（大文字）。分からなければ空文字
   String columnSqlType(String columnName) => _columnTypeMap[columnName] ?? '';
 
   /// SQLiteのカラム型からTrinaColumnTypeにマッピング
   TrinaColumnType _determineColumnType(String columnName) {
-    final sqlType = _columnTypeMap[columnName] ?? '';
-    if (sqlType.contains('INT')) {
-      return TrinaColumnType.number();
-    } else if (sqlType.contains('REAL') ||
-        sqlType.contains('DOUBLE') ||
-        sqlType.contains('FLOAT') ||
-        sqlType.contains('NUMERIC')) {
+    final sqlType = columnSqlType(columnName);
+    if (isIntegerSqlType(sqlType)) return TrinaColumnType.number();
+    if (isNumericSqlType(sqlType)) {
       return TrinaColumnType.number(format: '#,##0.######');
-    } else if (sqlType.contains('DATE') || sqlType.contains('TIMESTAMP')) {
+    }
+    if (sqlType.contains('DATE') || sqlType.contains('TIMESTAMP')) {
       return TrinaColumnType.date();
-    } else if (sqlType.contains('BOOL')) {
-      return TrinaColumnType.text();
     }
     return TrinaColumnType.text();
-  }
-
-  bool _isColumnEditable(String columnName) {
-    final lowerName = columnName.toLowerCase();
-    if (lowerName == 'id' ||
-        lowerName == 'fid' ||
-        lowerName == 'geom' ||
-        lowerName == 'geometry' ||
-        lowerName.startsWith('_')) {
-      return false;
-    }
-    return true;
   }
 
   double _getColumnWidth(String columnName) {
@@ -706,14 +624,13 @@ class AttributeTableController extends ChangeNotifier {
     TrinaLazyPaginationRequest request,
   ) async {
     final page = request.page;
-    const pageSize = defaultPageSize;
+    const pageSize = _pageSize;
     final totalFeatures = _displayFeatures.length;
     final totalPages =
         (totalFeatures / pageSize).ceil().clamp(1, double.infinity).toInt();
     final start = (page - 1) * pageSize;
 
-    _currentPageOffset = start;
-    final rows = await _createRowsForRange(start, pageSize);
+    final rows = _createRowsForRange(start, pageSize);
 
     return TrinaLazyPaginationResponse(totalPage: totalPages, rows: rows);
   }
@@ -721,7 +638,7 @@ class AttributeTableController extends ChangeNotifier {
   // ========== 行データ構築 ==========
 
   /// 指定範囲のフィーチャからTrinaRowを構築
-  Future<List<TrinaRow>> _createRowsForRange(int start, int count) async {
+  List<TrinaRow> _createRowsForRange(int start, int count) {
     if (_displayFeatures.isEmpty) return [];
 
     final end = (start + count).clamp(0, _displayFeatures.length);
@@ -737,12 +654,8 @@ class AttributeTableController extends ChangeNotifier {
       cells['_row_num'] = TrinaCell(value: i + 1);
 
       for (final columnName in _columnNames) {
-        try {
-          final value = await feature.getAttributeValue(columnName);
-          cells[columnName] = TrinaCell(value: value ?? '');
-        } catch (e) {
-          cells[columnName] = TrinaCell(value: '');
-        }
+        cells[columnName] =
+            TrinaCell(value: readAttribute(feature, columnName) ?? '');
       }
 
       if (isPointLayer && feature is PointFeatureNode) {
@@ -763,7 +676,7 @@ class AttributeTableController extends ChangeNotifier {
         }
       }
 
-      tableRows.add(TrinaRow(cells: cells));
+      tableRows.add(TrinaRow(cells: cells, data: feature));
     }
 
     return tableRows;

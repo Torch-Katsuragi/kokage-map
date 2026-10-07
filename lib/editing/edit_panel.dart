@@ -23,6 +23,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../i18n/strings.g.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 import '../tutorial/tutorial.dart';
 import '../widgets/feature_silhouette.dart';
 import 'edit_session.dart';
@@ -69,8 +71,6 @@ class _EditPanelState extends ConsumerState<EditPanel> {
     super.dispose();
   }
 
-  Future<void> _cancel(EditState s) => cancelEdit(context, ref);
-
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(featureEditorProvider);
@@ -112,7 +112,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
               Expanded(child: s.attrsTab ? _attrs(s, theme) : _shape(s, theme)),
               Row(
                 children: [
-                  TextButton(onPressed: s.saving ? null : () => _cancel(s), child: Text(t.featureEdit.cancel)),
+                  TextButton(onPressed: s.saving ? null : () => cancelEdit(context, ref), child: Text(t.featureEdit.cancel)),
                   const Spacer(),
                   FilledButton.icon(
                     key: TutorialTargets.editSaveButton,
@@ -122,7 +122,10 @@ class _EditPanelState extends ConsumerState<EditPanel> {
                             FocusScope.of(context).unfocus();
                             final ok = await ref.read(featureEditorProvider.notifier).save();
                             if (!ok && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.featureEdit.saveFailed)));
+                              ref.read(notificationCenterProvider.notifier).add(
+                                    title: t.featureEdit.saveFailed,
+                                    level: NotificationLevel.error,
+                                  );
                             }
                           },
                     icon: const Icon(Icons.check, size: 18),
@@ -159,8 +162,8 @@ class _EditPanelState extends ConsumerState<EditPanel> {
         ),
         const SizedBox(height: 4),
         Text(hint, style: theme.textTheme.bodyMedium),
-        if (s.mode == EditMode.simplify) _simplifySlider(s, theme),
-        if (s.mode == EditMode.trim) _trimSlider(s, theme),
+        if (s.mode == EditMode.simplify) _simplifySlider(s),
+        if (s.mode == EditMode.trim) _trimSlider(s),
         const SizedBox(height: 4),
         Text(t.featureEdit.hints.twoFingers, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
         const SizedBox(height: 10),
@@ -170,7 +173,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
   }
 
   /// 間引く: 許す幅（m）。0〜50 m、0.5 m 刻み
-  Widget _simplifySlider(EditState s, ThemeData theme) {
+  Widget _simplifySlider(EditState s) {
     final ed = ref.read(featureEditorProvider.notifier);
     return Row(
       children: [
@@ -191,7 +194,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
   }
 
   /// 切り落とす: 残す頂点の範囲
-  Widget _trimSlider(EditState s, ThemeData theme) {
+  Widget _trimSlider(EditState s) {
     final ed = ref.read(featureEditorProvider.notifier);
     final max = ed.trimMax;
     if (max < 2) return const SizedBox.shrink();

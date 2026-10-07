@@ -33,6 +33,42 @@ void _notify(WidgetRef? ref, String title, NotificationLevel level) {
       .add(title: title, level: level);
 }
 
+/// アイコン付きのダイアログの見出し
+Widget _iconTitle(IconData icon, Color color, String text) => Row(
+      children: [
+        Icon(icon, color: color),
+        const SizedBox(width: 8),
+        Text(text),
+      ],
+    );
+
+/// 「キャンセル」（何も返さずに閉じる）
+Widget _cancelButton(BuildContext context, [Object? result]) => TextButton(
+      onPressed: () => Navigator.of(context).pop(result),
+      child: Text(t.common.cancel),
+    );
+
+/// 列を足す・改名する・消す。済んだら列名の控えを捨てて [onDone] を呼び、結果を通知する
+Future<void> _changeColumn(
+  LayerNode layer,
+  WidgetRef? ref, {
+  required Future<void> Function() change,
+  required VoidCallback onDone,
+  required String success,
+  required String Function(Object e) failure,
+  required String logTag,
+}) async {
+  try {
+    await change();
+    layer.clearColumnNamesCache();
+    onDone();
+    _notify(ref, success, NotificationLevel.success);
+  } catch (e) {
+    AppLogger.debug('$logTag $e');
+    _notify(ref, failure(e), NotificationLevel.error);
+  }
+}
+
 /// カラム追加ダイアログを表示
 Future<void> showAddColumnDialog(
   BuildContext context,
@@ -49,13 +85,7 @@ Future<void> showAddColumnDialog(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: Row(
-              children: [
-                const Icon(Icons.add_box, color: Colors.blue),
-                const SizedBox(width: 8),
-                Text(t.attributeTable.addColumn),
-              ],
-            ),
+            title: _iconTitle(Icons.add_box, Colors.blue, t.attributeTable.addColumn),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -93,10 +123,7 @@ Future<void> showAddColumnDialog(
               ],
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(t.common.cancel),
-              ),
+              _cancelButton(dialogContext),
               ElevatedButton.icon(
                 onPressed: () {
                   final columnName = columnNameController.text.trim();
@@ -120,21 +147,19 @@ Future<void> showAddColumnDialog(
 
   if (result != null && context.mounted) {
     final columnName = result['name']!;
-    final columnType = result['type']!;
-
-    try {
-      await layer.geoPackageFile.addAttributeColumn(
+    await _changeColumn(
+      layer,
+      ref,
+      change: () => layer.geoPackageFile.addAttributeColumn(
         layer.layerName,
         columnName,
-        columnType,
-      );
-      layer.clearColumnNamesCache();
-      onColumnAdded();
-      _notify(ref, t.attributeTable.columnAdded(name: columnName), NotificationLevel.success);
-    } catch (e) {
-      AppLogger.debug('[AttributeTableDialogs] カラム追加エラー: $e');
-      _notify(ref, t.attributeTable.columnAddError(error: '$e'), NotificationLevel.error);
-    }
+        result['type']!,
+      ),
+      onDone: onColumnAdded,
+      success: t.attributeTable.columnAdded(name: columnName),
+      failure: (e) => t.attributeTable.columnAddError(error: '$e'),
+      logTag: '[AttributeTableDialogs] カラム追加エラー:',
+    );
   }
 }
 
@@ -161,13 +186,7 @@ Future<void> showDuplicateFilteredDialog(
     context: context,
     builder: (BuildContext dialogContext) {
       return AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.copy_all, color: Colors.green),
-            const SizedBox(width: 8),
-            Text(t.attributeTable.duplicateFiltered),
-          ],
-        ),
+        title: _iconTitle(Icons.copy_all, Colors.green, t.attributeTable.duplicateFiltered),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,10 +214,7 @@ Future<void> showDuplicateFilteredDialog(
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(t.common.cancel),
-          ),
+          _cancelButton(dialogContext),
           ElevatedButton.icon(
             onPressed: () {
               final name = layerNameController.text.trim();
@@ -256,7 +272,7 @@ Future<void> showDuplicateFilteredDialog(
   }
 }
 
-/// フィールド計算機ダイアログ
+/// フィールド計算機ダイアログ。[columnNames] は対象の候補（内部用の列を除いたもの）
 Future<void> showFieldCalculatorDialog(
   BuildContext context,
   LayerNode layer,
@@ -276,13 +292,7 @@ Future<void> showFieldCalculatorDialog(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: Row(
-              children: [
-                const Icon(Icons.calculate, color: Colors.deepPurple),
-                const SizedBox(width: 8),
-                Text(t.attributeTable.fieldCalculator),
-              ],
-            ),
+            title: _iconTitle(Icons.calculate, Colors.deepPurple, t.attributeTable.fieldCalculator),
             content: SizedBox(
               width: 400,
               child: Column(
@@ -354,7 +364,6 @@ Future<void> showFieldCalculatorDialog(
                       ),
                       items:
                           columnNames
-                              .where((c) => !c.startsWith('_'))
                               .map(
                                 (c) =>
                                     DropdownMenuItem(value: c, child: Text(c)),
@@ -382,10 +391,7 @@ Future<void> showFieldCalculatorDialog(
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(t.common.cancel),
-              ),
+              _cancelButton(dialogContext),
               ElevatedButton.icon(
                 onPressed: () {
                   final expr = expressionController.text.trim();
@@ -472,10 +478,7 @@ Future<void> showRenameColumnDialog(
             autofocus: true,
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(t.common.cancel),
-            ),
+            _cancelButton(ctx),
             ElevatedButton(
               onPressed: () {
                 final name = controller.text.trim();
@@ -490,23 +493,19 @@ Future<void> showRenameColumnDialog(
   );
 
   if (newName != null && context.mounted) {
-    try {
-      await layer.geoPackageFile.renameColumn(
+    await _changeColumn(
+      layer,
+      ref,
+      change: () => layer.geoPackageFile.renameColumn(
         layer.layerName,
         currentName,
         newName,
-      );
-      layer.clearColumnNamesCache();
-      onRenamed();
-      _notify(
-        ref,
-        t.attributeTable.columnRenamed(from: currentName, to: newName),
-        NotificationLevel.success,
-      );
-    } catch (e) {
-      AppLogger.debug('[RenameColumn] エラー: $e');
-      _notify(ref, t.attributeTable.renameColumnError(error: '$e'), NotificationLevel.error);
-    }
+      ),
+      onDone: onRenamed,
+      success: t.attributeTable.columnRenamed(from: currentName, to: newName),
+      failure: (e) => t.attributeTable.renameColumnError(error: '$e'),
+      logTag: '[RenameColumn] エラー:',
+    );
   }
 }
 
@@ -525,10 +524,7 @@ Future<void> showDeleteColumnDialog(
           title: Text(t.attributeTable.deleteColumn),
           content: Text(t.attributeTable.deleteColumnConfirm(name: columnName)),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(t.common.cancel),
-            ),
+            _cancelButton(ctx, false),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () => Navigator.of(ctx).pop(true),
@@ -539,14 +535,75 @@ Future<void> showDeleteColumnDialog(
   );
 
   if (confirmed == true && context.mounted) {
-    try {
-      await layer.geoPackageFile.dropColumn(layer.layerName, columnName);
-      layer.clearColumnNamesCache();
-      onDeleted();
-      _notify(ref, t.attributeTable.columnDeleted(name: columnName), NotificationLevel.success);
-    } catch (e) {
-      AppLogger.debug('[DeleteColumn] エラー: $e');
-      _notify(ref, t.attributeTable.deleteColumnError(error: '$e'), NotificationLevel.error);
-    }
+    await _changeColumn(
+      layer,
+      ref,
+      change: () => layer.geoPackageFile.dropColumn(layer.layerName, columnName),
+      onDone: onDeleted,
+      success: t.attributeTable.columnDeleted(name: columnName),
+      failure: (e) => t.attributeTable.deleteColumnError(error: '$e'),
+      logTag: '[DeleteColumn] エラー:',
+    );
   }
+}
+
+/// 一括編集ダイアログ。チェックした [checkedCount] 行の、選んだ列に値を入れる。
+/// 値が空なら null（NULL を入れる）。やめたときは null を返す
+Future<({String column, String? value})?> showBatchEditDialog(
+  BuildContext context, {
+  required int checkedCount,
+  required List<String> columns,
+}) async {
+  String? selectedColumn;
+  final valueController = TextEditingController();
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) => AlertDialog(
+        title: Text(t.attributeTable.batchEditTitle(count: '$checkedCount')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: selectedColumn,
+              decoration: InputDecoration(
+                labelText: t.attributeTable.targetColumn,
+                isDense: true,
+              ),
+              items: columns
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                  .toList(),
+              onChanged: (v) => setDialogState(() => selectedColumn = v),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: valueController,
+              decoration: InputDecoration(
+                labelText: t.attributeTable.setValue,
+                isDense: true,
+                hintText: t.attributeTable.setValueHint,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          _cancelButton(ctx, false),
+          FilledButton(
+            onPressed: selectedColumn != null
+                ? () => Navigator.pop(ctx, true)
+                : null,
+            child: Text(t.attributeTable.apply),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  final column = selectedColumn;
+  final text = valueController.text;
+  valueController.dispose();
+  if (ok != true || column == null) return null;
+  return (column: column, value: text.isEmpty ? null : text);
 }

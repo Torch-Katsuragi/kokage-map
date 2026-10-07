@@ -24,20 +24,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
+import '../../utils/attribute_columns.dart';
 import 'attribute_table_controller.dart';
 
 /// 個別フィーチャの属性をフォーム形式で表示
 class AttributeFormView extends ConsumerStatefulWidget {
   final AttributeTableController controller;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
 
-  const AttributeFormView({
-    super.key,
-    required this.controller,
-    this.onPrevious,
-    this.onNext,
-  });
+  const AttributeFormView({super.key, required this.controller});
 
   @override
   ConsumerState<AttributeFormView> createState() => _AttributeFormViewState();
@@ -89,21 +83,16 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
     super.dispose();
   }
 
-  Future<void> _loadCurrentFeature() async {
+  void _loadCurrentFeature() {
     if (ctrl.features.isEmpty) return;
     _currentIndex = _currentIndex.clamp(0, ctrl.features.length - 1);
     final feature = ctrl.features[_currentIndex];
 
     for (final col in ctrl.columnNames) {
-      try {
-        final value = await feature.getAttributeValue(col);
-        _fieldControllers[col]?.text = value?.toString() ?? '';
-      } catch (_) {
-        _fieldControllers[col]?.text = '';
-      }
+      final text = readAttribute(feature, col)?.toString() ?? '';
+      _fieldControllers[col]?.text = text;
       _loaded[col] = _fieldControllers[col]?.text ?? '';
     }
-    if (mounted) setState(() {});
   }
 
   Future<void> _saveField(String field, String value) async {
@@ -138,8 +127,10 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
   void _goTo(int index) {
     if (index < 0 || index >= ctrl.features.length) return;
     _commitAll();
-    _currentIndex = index;
-    _loadCurrentFeature();
+    setState(() {
+      _currentIndex = index;
+      _loadCurrentFeature();
+    });
   }
 
   @override
@@ -220,14 +211,9 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
             itemCount: ctrl.columnNames.length,
             itemBuilder: (context, index) {
               final col = ctrl.columnNames[index];
-              final isEditable =
-                  !col.startsWith('_') &&
-                  col.toLowerCase() != 'id' &&
-                  col.toLowerCase() != 'fid' &&
-                  col.toLowerCase() != 'geom' &&
-                  col.toLowerCase() != 'geometry';
-
-              final numeric = isNumericSqlType(ctrl.columnSqlType(col));
+              final isEditable = !isReadOnlyColumn(col);
+              final sqlType = ctrl.columnSqlType(col);
+              final numeric = isNumericSqlType(sqlType);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Focus(
@@ -240,7 +226,7 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
                     keyboardType: numeric
                         ? TextInputType.numberWithOptions(
                             signed: true,
-                            decimal: !ctrl.columnSqlType(col).contains('INT'),
+                            decimal: !isIntegerSqlType(sqlType),
                           )
                         : null,
                     style: TextStyle(
@@ -274,33 +260,4 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
       ],
     );
   }
-}
-
-/// 数値の列か（SQLite の型名から）
-bool isNumericSqlType(String sqlType) {
-  final t = sqlType.toUpperCase();
-  return t.contains('INT') ||
-      t.contains('REAL') ||
-      t.contains('DOUB') ||
-      t.contains('FLOA') ||
-      t.contains('NUMERIC');
-}
-
-/// 全角の数字・小数点・符号を半角にする（日本語入力のまま打つと「３３」になる）
-String toHalfWidthNumber(String text) {
-  final b = StringBuffer();
-  for (final r in text.runes) {
-    if (r >= 0xFF10 && r <= 0xFF19) {
-      b.writeCharCode(r - 0xFF10 + 0x30);
-    } else if (r == 0xFF0E) {
-      b.write('.');
-    } else if (r == 0xFF0D || r == 0x2212 || r == 0x30FC) {
-      b.write('-');
-    } else if (r == 0xFF0B) {
-      b.write('+');
-    } else {
-      b.writeCharCode(r);
-    }
-  }
-  return b.toString().trim();
 }

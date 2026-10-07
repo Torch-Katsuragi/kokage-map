@@ -54,23 +54,55 @@ class AttributeTableWidget extends ConsumerStatefulWidget {
 
 enum _ViewMode { table, form }
 
+/// 統計バーで選んだ列とその統計
+typedef _ColumnStats = ({String column, Map<String, dynamic> stats});
+
 class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   late AttributeTableController _controller;
   Key _plutoGridKey = UniqueKey();
-  Map<String, dynamic>? _columnStats;
-  String? _statsColumnName;
   _ViewMode _viewMode = _ViewMode.table;
+
+  /// 統計バーの中身。統計バーだけを描き直す（表ごと組み立て直さない）
+  final _columnStats = ValueNotifier<_ColumnStats?>(null);
 
   /// 表示中のフィーチャを読んだときの [LayerNode.featuresRevision]
   int _loadedRevision = -1;
 
+  /// 表に渡す列・行の写し（[_gridInput]）
+  List<TrinaColumn>? _gridColumnsSource;
+  List<TrinaRow>? _gridRowsSource;
+  List<TrinaColumn> _gridColumns = const [];
+  List<TrinaRow> _gridRows = const [];
+
+  /// 表の見た目（毎回作らない）
+  static final _gridConfiguration = TrinaGridConfiguration(
+    columnSize: const TrinaGridColumnSizeConfig(
+      autoSizeMode: TrinaAutoSizeMode.none,
+      resizeMode: TrinaResizeMode.normal,
+    ),
+    style: TrinaGridStyleConfig(
+      rowHeight: 32,
+      columnHeight: 36,
+      cellTextStyle: const TextStyle(fontSize: 13, height: 1.2),
+      columnTextStyle: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.bold,
+        height: 1.2,
+      ),
+      borderColor: Colors.grey.shade300,
+      activatedBorderColor: Colors.blue.shade300,
+      evenRowColor: Colors.grey.shade50,
+      oddRowColor: Colors.white,
+    ),
+    scrollbar: const TrinaGridScrollbarConfig(thickness: 8),
+    shortcut: const TrinaGridShortcut(actions: {}),
+    enterKeyAction: TrinaGridEnterKeyAction.none,
+  );
+
   @override
   void initState() {
     super.initState();
-    _controller = AttributeTableController(widget.layer, ref);
-    _controller.addListener(_onControllerChanged);
-    _loadedRevision = widget.layer.featuresRevision;
-    _controller.initialize();
+    _attachController();
   }
 
   @override
@@ -84,18 +116,23 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       // dispose中のプロバイダ変更を遅延実行
       final oldController = _controller;
       Future.microtask(oldController.dispose);
-      _controller = AttributeTableController(widget.layer, ref);
-      _controller.addListener(_onControllerChanged);
-      _loadedRevision = widget.layer.featuresRevision;
-      _controller.initialize();
+      _attachController();
       _plutoGridKey = UniqueKey();
     }
+  }
+
+  void _attachController() {
+    _controller = AttributeTableController(widget.layer, ref);
+    _controller.addListener(_onControllerChanged);
+    _loadedRevision = widget.layer.featuresRevision;
+    _controller.initialize();
   }
 
   @override
   void dispose() {
     _controller.removeListener(_onControllerChanged);
     _controller.dispose();
+    _columnStats.dispose();
     super.dispose();
   }
 
@@ -110,6 +147,10 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     _controller.initialize();
   }
 
+  void _notify(String title, NotificationLevel level) {
+    ref.read(notificationCenterProvider.notifier).add(title: title, level: level);
+  }
+
   @override
   Widget build(BuildContext context) {
     // 地図からの選択変更を監視してテーブル側に反映
@@ -119,130 +160,136 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       }
     });
 
+    final showGrid = !_controller.isLoading &&
+        _controller.lastError == null &&
+        _controller.columns.isNotEmpty &&
+        _viewMode == _ViewMode.table;
+    // 表が消えたら写しを捨てる（次に表を作るときは読み込んだままの行から）
+    if (!showGrid) _gridRowsSource = null;
+
     if (_controller.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-
-    if (_controller.lastError != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 32),
-            const SizedBox(height: 8),
-            Text(
-              _controller.lastError!,
-              style: const TextStyle(color: Colors.red, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () {
-                _controller.clearError();
-                _rebuildGrid();
-              },
-              child: Text(t.attributeTable.retryButton),
-            ),
-          ],
-        ),
-      );
-    }
-
+    if (_controller.lastError != null) return _buildError();
     if (_controller.columns.isEmpty) {
       return Center(child: Text(t.attributeTable.noColumns));
     }
 
     return Column(
       children: [
-        // ツールバー
-        AttributeTableToolbar(
-          controller: _controller,
-          onRefresh: _rebuildGrid,
-          onCopyTable: () => copyTableToClipboard(context, _controller, ref: ref),
-          onAddFeature: widget.onAddFeature,
-          onDeleteSelected: _handleDeleteSelected,
-          onSave: _handleSave,
-          onAddColumn:
-              () => showAddColumnDialog(context, widget.layer, _rebuildGrid, ref: ref),
-          onFieldCalculator:
-              () => showFieldCalculatorDialog(
-                context,
-                widget.layer,
-                _controller.columnNames,
-                _rebuildGrid,
-                ref: ref,
-              ),
-          onColumnAction: (columnName, action) {
-            if (action == 'rename') {
-              showRenameColumnDialog(
-                context,
-                widget.layer,
-                columnName,
-                _rebuildGrid,
-                ref: ref,
-              );
-            } else if (action == 'delete') {
-              showDeleteColumnDialog(
-                context,
-                widget.layer,
-                columnName,
-                _rebuildGrid,
-                ref: ref,
-              );
-            }
-          },
-          onToggleView: () {
-            setState(() {
-              _viewMode =
-                  _viewMode == _ViewMode.table
-                      ? _ViewMode.form
-                      : _ViewMode.table;
-            });
-          },
-          isFormView: _viewMode == _ViewMode.form,
-          onDuplicateFiltered:
-              (filterSql) => showDuplicateFilteredDialog(
-                context,
-                widget.layer,
-                filterSql,
-                _rebuildGrid,
-                ref: ref,
-              ),
-          onBatchEdit: _handleBatchEdit,
-          onCsvExport: _handleCsvExport,
-        ),
-
+        _buildToolbar(),
         // メインコンテンツ: テーブル or フォーム
         if (_viewMode == _ViewMode.form)
           Expanded(child: AttributeFormView(controller: _controller))
         else ...[
-          Expanded(
-            child: TrinaGrid(
-              key: _plutoGridKey,
-              columns: List.of(_controller.columns),
-              rows: List.of(_controller.rows),
-              mode: TrinaGridMode.normal,
-              onLoaded: _onGridLoaded,
-              onChanged: _onGridChanged,
-              onRowChecked: _onRowChecked,
-              createFooter: (stateManager) {
-                return TrinaLazyPagination(
-                  initialPage: 1,
-                  initialFetch: false,
-                  fetchWithSorting: false,
-                  fetchWithFiltering: false,
-                  fetch: _controller.fetchPage,
-                  stateManager: stateManager,
-                );
-              },
-              configuration: _buildGridConfiguration(),
-            ),
-          ),
-
-          // 統計サマリバー
+          Expanded(child: _buildGrid()),
           _buildStatisticsBar(),
         ],
       ],
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 32),
+          const SizedBox(height: 8),
+          Text(
+            _controller.lastError!,
+            style: const TextStyle(color: Colors.red, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () {
+              _controller.clearError();
+              _rebuildGrid();
+            },
+            child: Text(t.attributeTable.retryButton),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolbar() {
+    return AttributeTableToolbar(
+      controller: _controller,
+      onRefresh: _rebuildGrid,
+      onCopyTable: () => copyTableToClipboard(context, _controller, ref: ref),
+      onAddFeature: widget.onAddFeature,
+      onDeleteSelected: _handleDeleteSelected,
+      onSave: _handleSave,
+      onAddColumn: () =>
+          showAddColumnDialog(context, widget.layer, _rebuildGrid, ref: ref),
+      onFieldCalculator: () => showFieldCalculatorDialog(
+        context,
+        widget.layer,
+        _controller.userColumnNames,
+        _rebuildGrid,
+        ref: ref,
+      ),
+      onColumnAction: _handleColumnAction,
+      onToggleView: () => setState(() {
+        _viewMode =
+            _viewMode == _ViewMode.table ? _ViewMode.form : _ViewMode.table;
+      }),
+      isFormView: _viewMode == _ViewMode.form,
+      onDuplicateFiltered: (filterSql) => showDuplicateFilteredDialog(
+        context,
+        widget.layer,
+        filterSql,
+        _rebuildGrid,
+        ref: ref,
+      ),
+      onBatchEdit: _handleBatchEdit,
+      onCsvExport: _handleCsvExport,
+    );
+  }
+
+  void _handleColumnAction(String columnName, String action) {
+    if (action == 'rename') {
+      showRenameColumnDialog(context, widget.layer, columnName, _rebuildGrid, ref: ref);
+    } else if (action == 'delete') {
+      showDeleteColumnDialog(context, widget.layer, columnName, _rebuildGrid, ref: ref);
+    }
+  }
+
+  /// TrinaGrid は作るときにしか列・行を読まず、渡した一覧を書き換える（ページ送り・並べ替え）。
+  /// コントローラの一覧を守るため写して渡すが、写すのは一覧が替わったときだけにする（以前は組み立てのたびに写していた）
+  (List<TrinaColumn>, List<TrinaRow>) _gridInput() {
+    if (!identical(_gridColumnsSource, _controller.columns) ||
+        !identical(_gridRowsSource, _controller.rows)) {
+      _gridColumnsSource = _controller.columns;
+      _gridRowsSource = _controller.rows;
+      _gridColumns = List.of(_controller.columns);
+      _gridRows = List.of(_controller.rows);
+    }
+    return (_gridColumns, _gridRows);
+  }
+
+  Widget _buildGrid() {
+    final (columns, rows) = _gridInput();
+    return TrinaGrid(
+      key: _plutoGridKey,
+      columns: columns,
+      rows: rows,
+      mode: TrinaGridMode.normal,
+      onLoaded: _onGridLoaded,
+      onChanged: _onGridChanged,
+      createFooter: (stateManager) {
+        return TrinaLazyPagination(
+          initialPage: 1,
+          initialFetch: false,
+          fetchWithSorting: false,
+          fetchWithFiltering: false,
+          fetch: _controller.fetchPage,
+          stateManager: stateManager,
+        );
+      },
+      configuration: _gridConfiguration,
     );
   }
 
@@ -253,24 +300,18 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
 
     // セル選択時のフィーチャ選択処理。表の通知はスクロールや入力でも来るので、今いる行が変わったときだけ選び直す
     // （以前は通知のたびに選択・地図の寄せ・setState をしていた）
-    int? lastAbsolute;
-    event.stateManager.addListener(() {
-      final currentRowIdx = event.stateManager.currentRowIdx;
-      final currentCell = event.stateManager.currentCell;
-
-      if (currentCell != null && currentRowIdx != null && currentRowIdx >= 0) {
-        final abs = _controller.currentPageOffset + currentRowIdx;
-        // 同じ行でも、地図で別のものを選んだあとなら選び直す
-        final rowFeature = abs < _controller.features.length ? _controller.features[abs] : null;
-        if (abs == lastAbsolute && rowFeature != null && ref.read(selectedFeaturesProvider).contains(rowFeature)) return;
-        lastAbsolute = abs;
-        _controller.selectFeature(currentRowIdx);
-
-        final absoluteIdx = _controller.currentPageOffset + currentRowIdx;
-        if (absoluteIdx < _controller.features.length) {
-          widget.onFeatureSelected?.call(_controller.features[absoluteIdx]);
-        }
-      }
+    final stateManager = event.stateManager;
+    FeatureNode? lastFeature;
+    stateManager.addListener(() {
+      final currentRowIdx = stateManager.currentRowIdx;
+      if (stateManager.currentCell == null || currentRowIdx == null || currentRowIdx < 0) return;
+      final feature = AttributeTableController.featureOfRow(stateManager.currentRow);
+      if (feature == null) return;
+      // 同じ行でも、地図で別のものを選んだあとなら選び直す
+      if (identical(feature, lastFeature) && ref.read(selectedFeaturesProvider).contains(feature)) return;
+      lastFeature = feature;
+      _controller.selectFeature(feature);
+      widget.onFeatureSelected?.call(feature);
     });
 
     // 開いたときに地図で選んでいるものがあれば、その行に色を付ける（選択の変化しか見ていなかったので、
@@ -285,134 +326,54 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   }
 
   void _onGridChanged(TrinaGridOnChangedEvent event) async {
-    final rowIndex = event.rowIdx;
-    final field = event.column.field;
-    final newValue = event.value;
-
-    final absoluteIndex = _controller.currentPageOffset + rowIndex;
-    if (absoluteIndex < _controller.features.length) {
-      final feature = _controller.features[absoluteIndex];
-      final error = await _controller.saveAttributeChange(
-        feature,
-        field,
-        newValue,
-      );
-      if (error != null) {
-        ref.read(notificationCenterProvider.notifier).add(
-          title: error,
-          level: NotificationLevel.error,
-        );
-      }
-    }
+    final feature = AttributeTableController.featureOfRow(event.row);
+    if (feature == null) return;
+    final error = await _controller.saveAttributeChange(
+      feature,
+      event.column.field,
+      event.value,
+    );
+    if (error != null) _notify(error, NotificationLevel.error);
   }
 
   Future<void> _handleDeleteSelected() async {
     await _controller.deleteSelectedFeatures();
-    ref.read(notificationCenterProvider.notifier).add(
-      title: t.attributeTable.featureDeleted,
-      level: NotificationLevel.success,
-    );
+    _notify(t.attributeTable.featureDeleted, NotificationLevel.success);
   }
 
   Future<void> _handleSave() async {
     try {
       await widget.layer.geoPackageFile.flushChanges();
-      ref.read(notificationCenterProvider.notifier).add(
-        title: t.attributeTable.saved,
-        level: NotificationLevel.info,
-      );
+      _notify(t.attributeTable.saved, NotificationLevel.info);
     } catch (e) {
       AppLogger.debug('[AttributeTableWidget] 保存エラー: $e');
-      ref.read(notificationCenterProvider.notifier).add(
-        title: t.attributeTable.saveError(field: '', error: e.toString()),
-        level: NotificationLevel.error,
+      _notify(
+        t.attributeTable.saveError(field: '', error: e.toString()),
+        NotificationLevel.error,
       );
     }
   }
 
-  /// Phase 3: 行チェック変更時
-  void _onRowChecked(TrinaGridOnRowCheckedEvent event) {
-    setState(() {});
-  }
-
-  /// Phase 3: 一括編集ダイアログ
+  /// Phase 3: 一括編集
   Future<void> _handleBatchEdit() async {
     final checkedCount = _controller.checkedRowCount;
     if (checkedCount == 0) {
-      ref.read(notificationCenterProvider.notifier).add(
-        title: t.attributeTable.checkRows,
-        level: NotificationLevel.warning,
-      );
+      _notify(t.attributeTable.checkRows, NotificationLevel.warning);
       return;
     }
 
-    final editableColumns = _controller.columnNames
-        .where((c) =>
-            !c.startsWith('_') &&
-            c.toLowerCase() != 'id' &&
-            c.toLowerCase() != 'fid')
-        .toList();
-
-    String? selectedColumn;
-    final valueController = TextEditingController();
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(t.attributeTable.batchEditTitle(count: '$checkedCount')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                // ignore: deprecated_member_use
-                value: selectedColumn,
-                decoration: InputDecoration(
-                  labelText: t.attributeTable.targetColumn,
-                  isDense: true,
-                ),
-                items: editableColumns
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (v) => setDialogState(() => selectedColumn = v),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: valueController,
-                decoration: InputDecoration(
-                  labelText: t.attributeTable.setValue,
-                  isDense: true,
-                  hintText: t.attributeTable.setValueHint,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(t.common.cancel),
-            ),
-            FilledButton(
-              onPressed: selectedColumn != null
-                  ? () => Navigator.pop(ctx, true)
-                  : null,
-              child: Text(t.attributeTable.apply),
-            ),
-          ],
-        ),
-      ),
+    final result = await showBatchEditDialog(
+      context,
+      checkedCount: checkedCount,
+      columns: _controller.writableColumnNames,
     );
-
-    if (result == true && selectedColumn != null) {
-      final value = valueController.text.isEmpty ? null : valueController.text;
-      final count = await _controller.batchSetValue(selectedColumn!, value);
-      _rebuildGrid();
-      ref.read(notificationCenterProvider.notifier).add(
-        title: t.attributeTable.batchUpdated(count: '$count'),
-        level: NotificationLevel.success,
-      );
-    }
-    valueController.dispose();
+    if (result == null) return;
+    final count = await _controller.batchSetValue(result.column, result.value);
+    _rebuildGrid();
+    _notify(
+      t.attributeTable.batchUpdated(count: '$count'),
+      NotificationLevel.success,
+    );
   }
 
   /// Phase 3: CSVエクスポート
@@ -429,84 +390,79 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       final file = File(fileName);
       await file.writeAsString(csv);
 
-      ref.read(notificationCenterProvider.notifier).add(
-        title: t.attributeTable.csvExported(name: fileName),
-        level: NotificationLevel.success,
+      _notify(
+        t.attributeTable.csvExported(name: fileName),
+        NotificationLevel.success,
       );
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-        title: t.attributeTable.csvExportError(error: e.toString()),
-        level: NotificationLevel.error,
+      _notify(
+        t.attributeTable.csvExportError(error: e.toString()),
+        NotificationLevel.error,
       );
     }
   }
 
-
-
   Widget _buildStatisticsBar() {
-    final editableColumns =
-        _controller.columnNames.where((c) => !c.startsWith('_')).toList();
-
+    final theme = Theme.of(context);
     return Container(
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: theme.colorScheme.surfaceContainerHighest,
         border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
+          top: BorderSide(color: theme.dividerColor, width: 0.5),
         ),
       ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 120,
-            height: 24,
-            child: DropdownButtonFormField<String>(
-              initialValue: _statsColumnName,
-              isDense: true,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                contentPadding: EdgeInsets.symmetric(horizontal: 4),
-                border: InputBorder.none,
+      child: ValueListenableBuilder<_ColumnStats?>(
+        valueListenable: _columnStats,
+        builder: (context, selected, _) => Row(
+          children: [
+            SizedBox(
+              width: 120,
+              height: 24,
+              child: DropdownButtonFormField<String>(
+                initialValue: selected?.column,
                 isDense: true,
-              ),
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
-              hint: Text(t.attributeTable.statsColumn, style: const TextStyle(fontSize: 12)),
-              items:
-                  editableColumns
-                      .map(
-                        (c) => DropdownMenuItem(
-                          value: c,
-                          child: Text(c, style: const TextStyle(fontSize: 12)),
-                        ),
-                      )
-                      .toList(),
-              onChanged: (v) async {
-                if (v != null) {
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  contentPadding: EdgeInsets.symmetric(horizontal: 4),
+                  border: InputBorder.none,
+                  isDense: true,
+                ),
+                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                hint: Text(t.attributeTable.statsColumn, style: const TextStyle(fontSize: 12)),
+                items: [
+                  for (final c in _controller.userColumnNames)
+                    DropdownMenuItem(
+                      value: c,
+                      child: Text(c, style: const TextStyle(fontSize: 12)),
+                    ),
+                ],
+                onChanged: (v) async {
+                  if (v == null) return;
                   final stats = await _controller.getColumnStatistics(v);
-                  setState(() {
-                    _statsColumnName = v;
-                    _columnStats = stats;
-                  });
-                }
-              },
+                  if (mounted) _columnStats.value = (column: v, stats: stats);
+                },
+              ),
             ),
-          ),
-          if (_columnStats != null) ...[
-            const SizedBox(width: 8),
-            _buildStatChip(t.attributeTable.statCount, '${_columnStats!['count']}'),
-            _buildStatChip(t.attributeTable.statUnique, '${_columnStats!['unique']}'),
-            if (_columnStats!['sum'] != null)
-              _buildStatChip(t.attributeTable.statSum, _formatStat(_columnStats!['sum'])),
-            if (_columnStats!['avg'] != null)
-              _buildStatChip(t.attributeTable.statAvg, _formatStat(_columnStats!['avg'])),
-            _buildStatChip(t.attributeTable.statMin, '${_columnStats!['min'] ?? '-'}'),
-            _buildStatChip(t.attributeTable.statMax, '${_columnStats!['max'] ?? '-'}'),
+            if (selected != null) ..._statChips(selected.stats),
           ],
-        ],
+        ),
       ),
     );
   }
+
+  List<Widget> _statChips(Map<String, dynamic> stats) => [
+        const SizedBox(width: 8),
+        _buildStatChip(t.attributeTable.statCount, '${stats['count']}'),
+        _buildStatChip(t.attributeTable.statUnique, '${stats['unique']}'),
+        if (stats['sum'] != null)
+          _buildStatChip(t.attributeTable.statSum, _formatStat(stats['sum'])),
+        if (stats['avg'] != null)
+          _buildStatChip(t.attributeTable.statAvg, _formatStat(stats['avg'])),
+        _buildStatChip(t.attributeTable.statMin, '${stats['min'] ?? '-'}'),
+        _buildStatChip(t.attributeTable.statMax, '${stats['max'] ?? '-'}'),
+      ];
 
   Widget _buildStatChip(String label, String value) {
     return Padding(
@@ -521,33 +477,5 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   String _formatStat(dynamic value) {
     if (value is double) return value.toStringAsFixed(2);
     return '$value';
-  }
-
-  TrinaGridConfiguration _buildGridConfiguration() {
-    return TrinaGridConfiguration(
-      columnSize: const TrinaGridColumnSizeConfig(
-        autoSizeMode: TrinaAutoSizeMode.none,
-        resizeMode: TrinaResizeMode.normal,
-      ),
-      style: TrinaGridStyleConfig(
-        rowHeight: 32,
-        columnHeight: 36,
-        cellTextStyle: const TextStyle(fontSize: 13, height: 1.2),
-        columnTextStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.bold,
-          height: 1.2,
-        ),
-        borderColor: Colors.grey.shade300,
-        activatedBorderColor: Colors.blue.shade300,
-        evenRowColor: Colors.grey.shade50,
-        oddRowColor: Colors.white,
-      ),
-      scrollbar: const TrinaGridScrollbarConfig(
-        thickness: 8,
-      ),
-      shortcut: const TrinaGridShortcut(actions: {}),
-      enterKeyAction: TrinaGridEnterKeyAction.none,
-    );
   }
 }

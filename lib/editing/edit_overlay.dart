@@ -24,6 +24,32 @@ import 'edit_session.dart';
 
 const _red = Color(0xFFD32F2F);
 
+// 筆（頂点ごと・描くたびに作らない）
+final _fillPaint = Paint()..color = _red.withValues(alpha: 0.18);
+final _outlinePaint = Paint()
+  ..style = PaintingStyle.stroke
+  ..strokeWidth = 3
+  ..strokeJoin = StrokeJoin.round
+  ..color = _red;
+final _midFillPaint = Paint()..color = Colors.white.withValues(alpha: 0.9);
+final _midRimPaint = Paint()
+  ..style = PaintingStyle.stroke
+  ..strokeWidth = 1.5
+  ..color = _red;
+final _vertexSelectedPaint = Paint()..color = _red;
+final _vertexPaint = Paint()..color = Colors.white;
+final _vertexRimPaint = Paint()
+  ..style = PaintingStyle.stroke
+  ..strokeWidth = 2.5
+  ..color = _red;
+final _centreLinePaint = Paint()
+  ..strokeWidth = 2
+  ..color = _red;
+final _centreRingPaint = Paint()
+  ..strokeWidth = 2
+  ..color = _red
+  ..style = PaintingStyle.stroke;
+
 class EditOverlay extends ConsumerWidget {
   const EditOverlay({super.key, required this.project, required this.cameraTick});
 
@@ -56,31 +82,19 @@ class _EditPainter extends CustomPainter {
       for (final r in rings) {
         if (r.length > 1) path.addPolygon(r, closed);
       }
-      if (closed) canvas.drawPath(path, Paint()..color = _red.withValues(alpha: 0.18));
-      canvas.drawPath(
-        path,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..strokeJoin = StrokeJoin.round
-          ..color = _red,
-      );
+      if (closed) canvas.drawPath(path, _fillPaint);
+      canvas.drawPath(path, _outlinePaint);
     }
 
     // 辺の中点（頂点を足すところ）
     if (s.mode == EditMode.vertex) {
       // 線の上でも見えるように白地に赤の縁（頂点より小さく）
-      final fill = Paint()..color = Colors.white.withValues(alpha: 0.9);
-      final rim = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..color = _red;
       for (final r in rings) {
         final edges = closed ? r.length : r.length - 1;
         for (var i = 0; i < edges; i++) {
           final c = (r[i] + r[(i + 1) % r.length]) / 2;
-          canvas.drawCircle(c, 4.5, fill);
-          canvas.drawCircle(c, 4.5, rim);
+          canvas.drawCircle(c, 4.5, _midFillPaint);
+          canvas.drawCircle(c, 4.5, _midRimPaint);
         }
       }
     }
@@ -99,15 +113,8 @@ class _EditPainter extends CustomPainter {
           // 延ばす道具では端点だけ大きく（そこから続く）
           final end = s.mode == EditMode.extend && (i == 0 || i == rings[ri].length - 1);
           final radius = sel ? 10.0 : (end ? 8.0 : 6.5);
-          canvas.drawCircle(rings[ri][i], radius, Paint()..color = sel ? _red : Colors.white);
-          canvas.drawCircle(
-            rings[ri][i],
-            radius,
-            Paint()
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 2.5
-              ..color = _red,
-          );
+          canvas.drawCircle(rings[ri][i], radius, sel ? _vertexSelectedPaint : _vertexPaint);
+          canvas.drawCircle(rings[ri][i], radius, _vertexRimPaint);
         }
       }
     }
@@ -115,12 +122,9 @@ class _EditPainter extends CustomPainter {
     // 回す・大きさを変えるときは重心に印
     if (s.mode == EditMode.rotate || s.mode == EditMode.scale) {
       final c = project(centroidOf(s.geom));
-      final p = Paint()
-        ..strokeWidth = 2
-        ..color = _red;
-      canvas.drawLine(c - const Offset(10, 0), c + const Offset(10, 0), p);
-      canvas.drawLine(c - const Offset(0, 10), c + const Offset(0, 10), p);
-      canvas.drawCircle(c, 14, p..style = PaintingStyle.stroke);
+      canvas.drawLine(c - const Offset(10, 0), c + const Offset(10, 0), _centreLinePaint);
+      canvas.drawLine(c - const Offset(0, 10), c + const Offset(0, 10), _centreLinePaint);
+      canvas.drawCircle(c, 14, _centreRingPaint);
     }
   }
 

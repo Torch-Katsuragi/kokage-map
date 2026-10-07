@@ -349,6 +349,44 @@ class SettingsActionTile extends StatelessWidget {
   }
 }
 
+/// 情報表示行
+///
+/// ラベルと値のペアを表示するシンプルな行。
+class SettingsInfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+  final FontWeight? valueFontWeight;
+
+  const SettingsInfoRow({
+    super.key,
+    required this.label,
+    required this.value,
+    this.valueColor,
+    this.valueFontWeight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: valueFontWeight ?? FontWeight.bold,
+              color: valueColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// エラー表示カード
 ///
 /// エラーメッセージを目立つ形で表示。

@@ -168,7 +168,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
               () => showFieldCalculatorDialog(
                 context,
                 widget.layer,
-                _controller.columnNames,
+                _controller.userColumnNames,
                 _rebuildGrid,
                 ref: ref,
               ),
@@ -346,12 +346,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       return;
     }
 
-    final editableColumns = _controller.columnNames
-        .where((c) =>
-            !c.startsWith('_') &&
-            c.toLowerCase() != 'id' &&
-            c.toLowerCase() != 'fid')
-        .toList();
+    final editableColumns = _controller.writableColumnNames;
 
     String? selectedColumn;
     final valueController = TextEditingController();
@@ -444,8 +439,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
 
 
   Widget _buildStatisticsBar() {
-    final editableColumns =
-        _controller.columnNames.where((c) => !c.startsWith('_')).toList();
+    final editableColumns = _controller.userColumnNames;
 
     return Container(
       height: 28,

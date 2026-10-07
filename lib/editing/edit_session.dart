@@ -36,6 +36,7 @@ import '../providers/ui_state_providers.dart';
 import '../tools/map_tool.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
+import '../utils/attribute_columns.dart';
 import '../utils/feature_calc_utils.dart';
 import '../widgets/feature_editor/shared/sub_table_helper.dart';
 import 'edit_tool.dart';
@@ -250,18 +251,14 @@ class FeatureEditor extends Notifier<EditState?> {
     } catch (_) {}
   }
 
-  /// 書き換えてよい列（番号・形・内部用は除く。属性テーブルと同じ決まり。
-  /// sub_table は頂点ごとの記録なので形と一緒に扱う）
+  /// 書き換えてよい列（番号・形・内部用は除く。属性テーブルと同じ決まり [isReadOnlyColumn]。
+  /// メタデータと、頂点ごとの記録 sub_table（形と一緒に扱う）も除く）
   static bool _editable(String name) {
+    if (isReadOnlyColumn(name)) return false;
     final n = name.toLowerCase();
-    return !(n == 'id' ||
-        n == 'fid' ||
-        n == 'geom' ||
-        n == 'geometry' ||
-        n == metadataColumn ||
+    return !(n == metadataColumn ||
         n == 'rmaps_metadata' || // 旧名
-        n == 'sub_table' ||
-        n.startsWith('_'));
+        n == 'sub_table');
   }
 
   void setMode(EditMode m) {

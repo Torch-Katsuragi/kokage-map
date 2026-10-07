@@ -29,6 +29,7 @@ import '../../services/coordinate/index.dart';
 import '../../tutorial/practice_project.dart';
 import '../../tutorial/tutorial.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/attribute_columns.dart';
 import '../../utils/qgis_expression_filter.dart';
 
 /// 属性テーブルの表示設定
@@ -64,6 +65,8 @@ class AttributeTableController extends ChangeNotifier {
   List<TrinaColumn> _columns = [];
   List<TrinaRow> _rows = [];
   List<String> _columnNames = [];
+  List<String> _userColumnNames = [];
+  List<String> _writableColumnNames = [];
   Map<String, String> _columnTypeMap = {};
   List<FeatureNode> _features = [];
   bool _isLoading = true;
@@ -92,6 +95,12 @@ class AttributeTableController extends ChangeNotifier {
   List<TrinaColumn> get columns => _columns;
   List<TrinaRow> get rows => _displayRows;
   List<String> get columnNames => _columnNames;
+
+  /// 内部用（`_` で始まる）を除いた列。統計・検索置換・ラベル・計算の候補
+  List<String> get userColumnNames => _userColumnNames;
+
+  /// 書き換えられる列（一括編集の候補）
+  List<String> get writableColumnNames => _writableColumnNames;
   List<FeatureNode> get features => _displayFeatures;
   bool get isLoading => _isLoading;
   AttributeTableSettings get settings => _settings;
@@ -159,6 +168,10 @@ class AttributeTableController extends ChangeNotifier {
         getAll: true,
         skipPrimaryKey: true,
       );
+      _userColumnNames =
+          _columnNames.where((c) => !isInternalColumn(c)).toList();
+      _writableColumnNames =
+          _columnNames.where((c) => !isReadOnlyColumn(c)).toList();
       AppLogger.debug(
         '[AttributeTableController] カラム名: ${_columnNames.length}個',
       );
@@ -198,6 +211,8 @@ class AttributeTableController extends ChangeNotifier {
       AppLogger.debug('[AttributeTableController] $msg');
       _lastError = msg;
       _columnNames = [];
+      _userColumnNames = [];
+      _writableColumnNames = [];
       _features = [];
       _columns = [];
       _rows = [];
@@ -280,16 +295,7 @@ class AttributeTableController extends ChangeNotifier {
     String field,
     dynamic value,
   ) async {
-    if (field == 'id' ||
-        field == 'fid' ||
-        field == 'geom' ||
-        field == 'geometry') {
-      return null;
-    }
-
-    if (field.startsWith('_')) {
-      return null;
-    }
+    if (isReadOnlyColumn(field)) return null;
 
     try {
       await feature.setAttributeValue(field, value);
@@ -487,16 +493,12 @@ class AttributeTableController extends ChangeNotifier {
 
     // データ行
     for (final feature in _displayFeatures) {
-      final values = <String>[];
-      for (final col in _columnNames) {
-        try {
-          final value = await feature.getAttributeValue(col);
-          values.add(_escapeCsvField(value?.toString() ?? ''));
-        } catch (e) {
-          values.add('');
-        }
-      }
-      buffer.writeln(values.join(','));
+      buffer.writeln(
+        _columnNames
+            .map((col) =>
+                _escapeCsvField(readAttribute(feature, col)?.toString() ?? ''))
+            .join(','),
+      );
     }
 
     return buffer.toString();
@@ -614,7 +616,7 @@ class AttributeTableController extends ChangeNotifier {
           title: columnName,
           field: columnName,
           type: _determineColumnType(columnName),
-          enableEditingMode: _isColumnEditable(columnName),
+          enableEditingMode: !isReadOnlyColumn(columnName),
           enableSorting: true, // Phase 3: カラムヘッダーでソート
           enableColumnDrag: true, // Phase 3: ドラッグで並替え
           enableContextMenu: true, // Phase 3: 右クリックメニュー
@@ -662,32 +664,15 @@ class AttributeTableController extends ChangeNotifier {
 
   /// SQLiteのカラム型からTrinaColumnTypeにマッピング
   TrinaColumnType _determineColumnType(String columnName) {
-    final sqlType = _columnTypeMap[columnName] ?? '';
-    if (sqlType.contains('INT')) {
-      return TrinaColumnType.number();
-    } else if (sqlType.contains('REAL') ||
-        sqlType.contains('DOUBLE') ||
-        sqlType.contains('FLOAT') ||
-        sqlType.contains('NUMERIC')) {
+    final sqlType = columnSqlType(columnName);
+    if (isIntegerSqlType(sqlType)) return TrinaColumnType.number();
+    if (isNumericSqlType(sqlType)) {
       return TrinaColumnType.number(format: '#,##0.######');
-    } else if (sqlType.contains('DATE') || sqlType.contains('TIMESTAMP')) {
+    }
+    if (sqlType.contains('DATE') || sqlType.contains('TIMESTAMP')) {
       return TrinaColumnType.date();
-    } else if (sqlType.contains('BOOL')) {
-      return TrinaColumnType.text();
     }
     return TrinaColumnType.text();
-  }
-
-  bool _isColumnEditable(String columnName) {
-    final lowerName = columnName.toLowerCase();
-    if (lowerName == 'id' ||
-        lowerName == 'fid' ||
-        lowerName == 'geom' ||
-        lowerName == 'geometry' ||
-        lowerName.startsWith('_')) {
-      return false;
-    }
-    return true;
   }
 
   double _getColumnWidth(String columnName) {
@@ -737,12 +722,8 @@ class AttributeTableController extends ChangeNotifier {
       cells['_row_num'] = TrinaCell(value: i + 1);
 
       for (final columnName in _columnNames) {
-        try {
-          final value = await feature.getAttributeValue(columnName);
-          cells[columnName] = TrinaCell(value: value ?? '');
-        } catch (e) {
-          cells[columnName] = TrinaCell(value: '');
-        }
+        cells[columnName] =
+            TrinaCell(value: readAttribute(feature, columnName) ?? '');
       }
 
       if (isPointLayer && feature is PointFeatureNode) {

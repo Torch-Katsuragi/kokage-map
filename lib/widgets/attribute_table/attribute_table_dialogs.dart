@@ -256,7 +256,7 @@ Future<void> showDuplicateFilteredDialog(
   }
 }
 
-/// フィールド計算機ダイアログ
+/// フィールド計算機ダイアログ。[columnNames] は対象の候補（内部用の列を除いたもの）
 Future<void> showFieldCalculatorDialog(
   BuildContext context,
   LayerNode layer,
@@ -354,7 +354,6 @@ Future<void> showFieldCalculatorDialog(
                       ),
                       items:
                           columnNames
-                              .where((c) => !c.startsWith('_'))
                               .map(
                                 (c) =>
                                     DropdownMenuItem(value: c, child: Text(c)),

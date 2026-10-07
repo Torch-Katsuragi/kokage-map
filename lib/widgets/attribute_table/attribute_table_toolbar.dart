@@ -291,8 +291,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
 
   Widget _buildSearchReplaceBar(BuildContext context) {
     final ctrl = widget.controller;
-    final editableColumns =
-        ctrl.columnNames.where((c) => !c.startsWith('_')).toList();
+    final editableColumns = ctrl.userColumnNames;
 
     return Padding(
       padding: const EdgeInsets.only(top: 2, bottom: 2),
@@ -686,7 +685,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
         .whereType<FeatureNode>()
         .map((f) => f.turfFeature.properties?.cast<String, Object?>())
         .toList();
-    final columns = widget.controller.columnNames.where((c) => !c.startsWith('_')).toList();
+    final columns = widget.controller.userColumnNames;
     if (!context.mounted) return;
     final result = await showLabelComposerDialog(
       context,

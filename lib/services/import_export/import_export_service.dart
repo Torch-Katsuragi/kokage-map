@@ -177,19 +177,5 @@ class ImportExportService {
     }
     return extensions;
   }
-
-  /// 現在のレイヤーからファイルをインポート
-  /// 後方互換性のために維持（GeoPackageNodeが必要）
-  /// [filePath] インポート対象のファイルパス
-  /// [targetGeoPackage] インポート先のGeoPackageNode（nullの場合はエラー）
-  Future<ImportExportResult> importFileFromCurrentLayer(
-    String filePath,
-    GeoPackageNode? targetGeoPackage,
-  ) async {
-    if (targetGeoPackage == null) {
-      return ImportExportResult.error('GeoPackageNodeが指定されていません');
-    }
-    return importFile(filePath, targetGeoPackage);
-  }
 }
 

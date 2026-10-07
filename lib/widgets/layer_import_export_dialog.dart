@@ -19,30 +19,20 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../i18n/strings.g.dart';
-import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../services/coordinate/epsg_registry.dart';
 import '../services/import_export/import_export_service.dart';
 
-/// レイヤー全体のImport/Export機能を提供するダイアログ
+/// レイヤーの書き出しダイアログ（取り込みはドロワーの GeoPackage 行から直接）
 class LayerImportExportDialog extends StatefulWidget {
-  /// 対象のGeoPackageNode（新規レイヤー作成先）
-  final GeoPackageNode? targetGeoPackage;
+  /// エクスポート対象のレイヤー
+  final LayerNode exportLayer;
 
-  /// エクスポート対象のレイヤー（エクスポート時のみ）
-  final LayerNode? exportLayer;
-
-  /// コンストラクタ
-  const LayerImportExportDialog({
-    super.key,
-    this.targetGeoPackage,
-    this.exportLayer,
-  });
+  const LayerImportExportDialog({super.key, required this.exportLayer});
 
   /// エクスポート用ダイアログを表示
   static Future<void> showExportDialog(
@@ -72,15 +62,6 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   double _progressValue = 0.0;
   String _progressMessage = '';
 
-  // ファイル情報（インポート時）
-  String? _selectedFilePath;
-  String? _selectedFileName;
-  int? _selectedFileSize;
-  bool _isDragging = false;
-
-  // インポート設定
-  int _maxFeaturesToImport = 50;
-
   // エクスポート設定
   FileFormat _exportFormat = FileFormat.shapefile;
   bool _exportAsPointCloud = false; // 初期値はオフ
@@ -88,14 +69,10 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   EpsgDefinition? _selectedCrs = _lastUsedCrs; // 最後に使用したCRSを初期値に
   String _crsSearchQuery = ''; // CRS検索クエリ
 
-  /// ダイアログのモード判定
-  bool get isImportMode => widget.targetGeoPackage != null;
-  bool get isExportMode => widget.exportLayer != null;
-
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(isImportMode ? t.importExport.importTitle : t.importExport.exportTitle),
+      title: Text(t.importExport.exportTitle),
       content: SizedBox(
         width: 450,
         child: SingleChildScrollView(
@@ -107,9 +84,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
               _buildContextCard(),
               const SizedBox(height: 16),
 
-              // モード別UI
-              if (isImportMode) ..._buildImportUI(),
-              if (isExportMode) ..._buildExportUI(),
+              ..._buildExportUI(),
 
               // 進行状況表示
               if (_isProcessing) _buildProgressCard(),
@@ -122,9 +97,8 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       ),
       actionsAlignment: MainAxisAlignment.spaceBetween,
       actions: [
-        // エクスポートボタン（エクスポートモード時、左寄せ）
-        if (isExportMode)
-          ElevatedButton.icon(
+        // エクスポートボタン（左寄せ）
+        ElevatedButton.icon(
             onPressed: _isProcessing ? null : _handleExport,
             icon: _isProcessing
                 ? const SizedBox(
@@ -134,9 +108,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                   )
                 : const Icon(Icons.file_download),
             label: Text(_isProcessing ? t.importExport.exporting : t.importExport.exportTitle),
-          )
-        else
-          const SizedBox.shrink(), // インポートモード時はプレースホルダー
+          ),
         // Closeボタン（右寄せ）
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
@@ -156,92 +128,21 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isImportMode ? t.importExport.importTarget : t.importExport.exportSource,
+              t.importExport.exportSource,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 4),
             Text(
-              isImportMode
-                  ? t.importExport.geoPackageLabel(name: widget.targetGeoPackage!.name)
-                  : t.importExport.layerLabel(
-                      name: widget.exportLayer!.name,
-                      type: '${widget.exportLayer!.runtimeType}',
-                    ),
+              t.importExport.layerLabel(
+                name: widget.exportLayer.name,
+                type: '${widget.exportLayer.runtimeType}',
+              ),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),
       ),
     );
-  }
-
-  /// インポートUI構築
-  List<Widget> _buildImportUI() {
-    return [
-      // サポート形式表示
-      Text(
-        t.importExport.supportedImportFormats,
-        style: Theme.of(context).textTheme.titleSmall,
-      ),
-      const SizedBox(height: 4),
-      Wrap(
-        spacing: 8,
-        children:
-            _importExportService
-                .getSupportedImportExtensions()
-                .map(
-                  (ext) => Chip(
-                    label: Text(ext),
-                    backgroundColor: Colors.green[100],
-                  ),
-                )
-                .toList(),
-      ),
-      const SizedBox(height: 16),
-
-      // ドラッグ&ドロップエリア
-      _buildDropArea(),
-      const SizedBox(height: 8),
-
-      // ファイル選択ボタン
-      SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed: _isProcessing ? null : _handleFileSelection,
-          icon: const Icon(Icons.folder_open),
-          label: Text(t.importExport.selectLayerFile),
-        ),
-      ),
-
-      // 選択ファイル情報
-      if (_selectedFilePath != null) ...[
-        const SizedBox(height: 8),
-        _buildSelectedFileCard(),
-        const SizedBox(height: 8),
-        _buildImportOptions(),
-      ],
-
-      // インポートボタン
-      const SizedBox(height: 8),
-      SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed:
-              (_isProcessing || _selectedFilePath == null)
-                  ? null
-                  : _handleImport,
-          icon:
-              _isProcessing
-                  ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                  : const Icon(Icons.file_upload),
-          label: Text(_isProcessing ? t.importExport.importing : t.importExport.importTitle),
-        ),
-      ),
-    ];
   }
 
   /// エクスポートUI構築
@@ -316,72 +217,6 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         const SizedBox(height: 16),
       ],
     ];
-  }
-
-  /// ドラッグ&ドロップエリア
-  Widget _buildDropArea() {
-    return DropTarget(
-      onDragDone: _handleDrop,
-      onDragEntered: (_) => setState(() => _isDragging = true),
-      onDragExited: (_) => setState(() => _isDragging = false),
-      child: Container(
-        width: double.infinity,
-        height: 100,
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: _isDragging ? Colors.blue : Colors.grey[400]!,
-            width: _isDragging ? 2 : 1,
-          ),
-          borderRadius: BorderRadius.circular(8),
-          color: _isDragging ? Colors.blue[50] : Colors.grey[50],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.cloud_upload,
-              size: 32,
-              color: _isDragging ? Colors.blue : Colors.grey[600],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _isDragging
-                  ? t.importExport.dropHere
-                  : t.importExport.dragDropHere,
-              style: TextStyle(
-                color: _isDragging ? Colors.blue : Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 選択ファイル情報カード
-  Widget _buildSelectedFileCard() {
-    return Card(
-      color: Colors.green[50],
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              t.importExport.selectedFile,
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 4),
-            Text(t.importExport.fileName(name: _selectedFileName ?? '')),
-            if (_selectedFileSize != null)
-              Text(
-                t.importExport.fileSize(size: (_selectedFileSize! / 1024).toStringAsFixed(1)),
-              ),
-          ],
-        ),
-      ),
-    );
   }
 
   /// CRS選択ウィジェット
@@ -521,45 +356,6 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
     );
   }
 
-  /// インポートオプション
-  Widget _buildImportOptions() {
-    return Card(
-      color: Colors.grey[50],
-      child: ExpansionTile(
-        leading: const Icon(Icons.settings),
-        title: Text(t.importExport.importOptions),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Text(t.importExport.maxFeatures),
-                    Expanded(
-                      child: Slider(
-                        value: _maxFeaturesToImport.toDouble(),
-                        min: 10,
-                        max: 100,
-                        divisions: 9,
-                        label: _maxFeaturesToImport.toString(),
-                        onChanged:
-                            (value) => setState(
-                              () => _maxFeaturesToImport = value.toInt(),
-                            ),
-                      ),
-                    ),
-                    Text('$_maxFeaturesToImport'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// 進行状況カード
   Widget _buildProgressCard() {
     return Card(
@@ -570,7 +366,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isImportMode ? t.importExport.importProgress : t.importExport.exportProgress,
+              t.importExport.exportProgress,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 8),
@@ -621,110 +417,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
     );
   }
 
-  // 以下、処理メソッド（既存のコードから移植・調整）
-  Future<void> _handleFileSelection() async {
-    try {
-      final result = await FilePicker.pickFile(
-        type: FileType.custom,
-        allowedExtensions:
-            _importExportService
-                .getSupportedImportExtensions()
-                .map((ext) => ext.substring(1))
-                .toList(),
-      );
-
-      if (result == null) return;
-
-      final file = result;
-      // file_picker 12 の path は file:// のときだけ。Android の content:// は一時ファイルに写して同じ経路に載せる
-      var path = file.path;
-      if (path == null) {
-        final tmp = File('${Directory.systemTemp.path}${Platform.pathSeparator}${file.name}');
-        await tmp.writeAsBytes(await file.readAsBytes());
-        path = tmp.path;
-      }
-      // PlatformFile はサイズを持たないので実ファイルから
-      final size = await File(path).length();
-
-      setState(() {
-        _selectedFilePath = path;
-        _selectedFileName = file.name;
-        _selectedFileSize = size;
-        _statusMessage = null;
-        _lastResult = null;
-      });
-    } catch (e) {
-      setState(() {
-        _statusMessage = t.importExport.fileSelectionFailed(error: e.toString());
-      });
-    }
-  }
-
-  Future<void> _handleDrop(DropDoneDetails details) async {
-    setState(() => _isDragging = false);
-
-    if (details.files.isEmpty) return;
-
-    final droppedFile = details.files.first;
-    final filePath = droppedFile.path;
-
-    try {
-      final fileStat = await File(filePath).stat();
-      setState(() {
-        _selectedFilePath = filePath;
-        _selectedFileName = filePath.split('/').last.split('\\').last;
-        _selectedFileSize = fileStat.size;
-        _statusMessage = null;
-        _lastResult = null;
-      });
-    } catch (e) {
-      setState(() {
-        _statusMessage = t.importExport.dropFailed(error: e.toString());
-      });
-    }
-  }
-
-  Future<void> _handleImport() async {
-    if (_selectedFilePath == null || widget.targetGeoPackage == null) return;
-
-    setState(() {
-      _isProcessing = true;
-      _statusMessage = null;
-      _progressValue = 0.0;
-      _progressMessage = t.importExport.startingImport;
-    });
-
-    try {
-      _updateProgress(0.2, t.importExport.readingFile);
-
-      final importResult = await _importExportService
-          .importFileFromCurrentLayer(
-            _selectedFilePath!,
-            widget.targetGeoPackage,
-          );
-
-      _updateProgress(1.0, t.importExport.importCompleted);
-
-      setState(() {
-        _isProcessing = false;
-        _lastResult = importResult;
-        _statusMessage =
-            importResult.success
-                ? t.importExport.importCompletedSuccess
-                : importResult.errorMessage ?? t.importExport.importFailedShort;
-      });
-    } catch (e) {
-      setState(() {
-        _isProcessing = false;
-        _statusMessage = t.importExport.importFailed(error: e.toString());
-        _lastResult = ImportExportResult.error(e.toString());
-      });
-    }
-  }
-
   Future<void> _handleExport() async {
-    if (widget.exportLayer == null) return;
-
     // file_picker 12 の saveFile は中身（bytes）を先に渡す作り（Android の SAF は「保存先を選んでから書く」ができない）。
     // 一時フォルダに書き出してから保存ダイアログへ。Shapefile は .shp/.shx/.dbf/.prj の組なので zip にまとめる
     Directory? tmpDir;
@@ -746,12 +439,12 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       );
 
       final ext = _exportFormat.extension.replaceFirst('.', '');
-      final baseName = widget.exportLayer!.name;
+      final baseName = widget.exportLayer.name;
       tmpDir = await Directory.systemTemp.createTemp('kokage_export_');
       final tmpPath = '${tmpDir.path}${Platform.pathSeparator}$baseName.$ext';
 
       final exportResult = await _importExportService.exportLayer(
-        widget.exportLayer!,
+        widget.exportLayer,
         tmpPath,
         format: _exportFormat,
         options: exportOptions,

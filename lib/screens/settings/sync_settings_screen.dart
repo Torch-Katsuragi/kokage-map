@@ -14,23 +14,26 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../i18n/strings.g.dart';
+import '../../models/app_notification.dart';
+import '../../providers/notification_providers.dart';
 import '../../services/google_drive/auto_sync_service.dart';
 import '../../services/google_drive/google_drive_service.dart';
 import '../../widgets/settings_widgets.dart';
 
 /// Drive同期設定画面
-class SyncSettingsScreen extends StatefulWidget {
+class SyncSettingsScreen extends ConsumerStatefulWidget {
   final bool isEmbedded;
   const SyncSettingsScreen({super.key, this.isEmbedded = false});
 
   @override
-  State<SyncSettingsScreen> createState() => _SyncSettingsScreenState();
+  ConsumerState<SyncSettingsScreen> createState() => _SyncSettingsScreenState();
 }
 
-class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
+class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
   final GoogleDriveService _driveService = GoogleDriveService();
   bool _autoSyncEnabled = true;
   int _intervalMinutes = kAutoSyncDefaultInterval;
@@ -84,9 +87,7 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
   void _showAuthError() {
     final message = _driveService.authState.errorMessage;
     if (message == null || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ref.read(notificationCenterProvider.notifier).add(title: message, level: NotificationLevel.error);
   }
 
   Future<void> _handleSignOut() async {

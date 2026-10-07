@@ -22,6 +22,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
@@ -29,21 +30,23 @@ import '../../core/fs/project_folder_picker.dart';
 import '../../core/hidden_dirs.dart';
 import '../../core/node_types.dart';
 import '../../i18n/strings.g.dart';
+import '../../models/app_notification.dart';
 import '../../presentation/node_presenter.dart';
+import '../../providers/notification_providers.dart';
 import '../../services/global_folder_locator.dart';
 import '../../services/google_drive/sync_base_store.dart';
 import '../../services/kmeta_service.dart';
 import '../../widgets/layer_drawer/drawer_row.dart';
 
 /// 選んだフォルダの絶対パスを返す（やめたら null）
-class FolderBrowserScreen extends StatefulWidget {
+class FolderBrowserScreen extends ConsumerStatefulWidget {
   const FolderBrowserScreen({super.key});
 
   static Future<String?> show(BuildContext context) =>
       Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const FolderBrowserScreen()));
 
   @override
-  State<FolderBrowserScreen> createState() => _FolderBrowserScreenState();
+  ConsumerState<FolderBrowserScreen> createState() => _FolderBrowserScreenState();
 }
 
 class _Entry {
@@ -54,7 +57,7 @@ class _Entry {
   String get name => p.basename(path);
 }
 
-class _FolderBrowserScreenState extends State<FolderBrowserScreen> {
+class _FolderBrowserScreenState extends ConsumerState<FolderBrowserScreen> {
   String? _root;
 
   /// たどった道（先頭が root）。Drive 連携かどうかも持つ（タイトルの色）
@@ -142,17 +145,20 @@ class _FolderBrowserScreenState extends State<FolderBrowserScreen> {
     final n = name?.trim() ?? '';
     if (n.isEmpty || !mounted) return;
     if (n.startsWith('.') || n.contains(RegExp(r'[\\/:*?"<>|]'))) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.folderBrowser.badName)));
+      _warn(t.folderBrowser.badName);
       return;
     }
     final path = p.join(_current, n);
     if (await fs.exists(path)) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.folderBrowser.exists(name: n))));
+      if (mounted) _warn(t.folderBrowser.exists(name: n));
       return;
     }
     await fs.createDirectory(path);
     await _load();
   }
+
+  void _warn(String title) =>
+      ref.read(notificationCenterProvider.notifier).add(title: title, level: NotificationLevel.warning);
 
   Future<void> _pickElsewhere() async {
     final dir = await pickProjectFolder();

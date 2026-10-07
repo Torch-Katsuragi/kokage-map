@@ -25,6 +25,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../devices/base/device_service.dart';
 import '../devices/trupulse/trupulse_providers.dart';
 import '../i18n/strings.g.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 import '../utils/app_logger.dart';
 import '../utils/app_permissions.dart';
 import '../widgets/settings_widgets.dart';
@@ -66,10 +68,10 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
     if (mounted) setState(() {});
   }
 
-  /// 画面の下に短い知らせを出す（画面が閉じていれば何もしない）
+  /// 通知センターに出す（画面が閉じていれば何もしない）
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ref.read(notificationCenterProvider.notifier).add(title: message, level: NotificationLevel.warning);
   }
 
   Future<bool> _ensureBluetoothPermissions() async {

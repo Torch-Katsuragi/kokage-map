@@ -77,4 +77,38 @@ void main() {
     expect(contents['min_x']! as num, lessThan(1));
     expect(contents['max_x']! as num, lessThan(1000));
   });
+  test('EPSG:6674 のレイヤへ面を書いて読み戻すと元の位置（座標が潰れない）', () async {
+    final path = '${tmp.path}/g.gpkg';
+    var gpkg = GeoPackageFile(const ['g.gpkg'], absolutePath: path);
+    await gpkg.addLayer('polys', GeometryType.polygon);
+    await gpkg.flushChanges();
+    await gpkg.dispose();
+    final db = await openDatabase(path, singleInstance: false);
+    await db.execute(
+      'INSERT OR IGNORE INTO gpkg_spatial_ref_sys (srs_name, srs_id, organization, organization_coordsys_id, definition) '
+      "VALUES ('JGD2011 / Japan Plane Rectangular CS VI', 6674, 'EPSG', 6674, 'undefined')",
+    );
+    await db.execute("UPDATE gpkg_geometry_columns SET srs_id = 6674 WHERE table_name = 'polys'");
+    await db.close();
+
+    gpkg = GeoPackageFile(const ['g.gpkg'], absolutePath: path);
+    const ring = [LatLng(33.90, 135.95), LatLng(33.90, 135.97), LatLng(33.92, 135.97), LatLng(33.90, 135.95)];
+    final id = await gpkg.addPolygonWithAttributes('polys', [ring], {});
+    final stored = (await (await gpkg.getDatabase()).rawQuery('SELECT geom FROM polys')).single;
+    final g = parseGpkgGeometry(stored['geom']! as dynamic)!;
+    final back = await gpkg.getFeature('polys', id!);
+    await gpkg.dispose();
+
+    // 保存した値は m（数万 m 台）。緯度経度の範囲に丸められていない
+    final p0 = (g as geo.MultiPolygon).polygons.first.exterior!.positions.first;
+    expect(p0.x.abs() + p0.y.abs(), greaterThan(10000));
+    // 読み戻すと元の緯度経度
+    Object first = back!['geometry'] as List;
+    while (first is List) {
+      first = first.first as Object; // 多重の面・リングの入れ子を最初の点までたどる
+    }
+    first as LatLng;
+    expect(first.latitude, closeTo(33.90, 1e-6));
+    expect(first.longitude, closeTo(135.95, 1e-6));
+  });
 }

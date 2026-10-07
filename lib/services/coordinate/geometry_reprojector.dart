@@ -176,7 +176,8 @@ class GeometryReprojector {
   }) {
     final positions = _transformPositions(geom.positions, source, target,
         needsAxisSwap: needsAxisSwap, toWgs84: toWgs84);
-    return geo.MultiPoint.from(positions.map((p) => geo.Geographic(lon: p.x, lat: p.y)));
+    // ⚠ Geographic に入れ直すと投影座標（m）が経度の正規化・緯度のクランプで潰れる
+    return geo.MultiPoint.from(positions);
   }
 
   static geo.LineString _reprojectLineString(
@@ -233,15 +234,7 @@ class GeometryReprojector {
       return _reprojectPolygon(polygon, source, target,
           needsAxisSwap: needsAxisSwap, toWgs84: toWgs84);
     }).toList();
-    // MultiPolygon.from expects Iterable<Iterable<Iterable<Position>>>
-    return geo.MultiPolygon.from(
-      reprojectedPolygons.map(
-        (poly) => poly.rings.map(
-          (ring) => ring.positions.map(
-            (p) => geo.Geographic(lon: p.x, lat: p.y),
-          ),
-        ),
-      ),
-    );
+    // ⚠ 座標は Geographic に入れ直さない（投影座標の m が経度の正規化・緯度のクランプで潰れる）
+    return geo.MultiPolygon([for (final poly in reprojectedPolygons) poly.rings]);
   }
 }

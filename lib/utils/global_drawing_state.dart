@@ -175,7 +175,8 @@ class GlobalDrawingState extends ChangeNotifier {
     }
 
     try {
-      final closed = isLine ? null : closeRing(points);
+      // 写しを渡す（閉じ済みだと closeRing は描きかけのリストをそのまま返し、確定後の clear で中身が消える）
+      final closed = isLine ? null : List<LatLng>.of(closeRing(points));
 
       // メタデータを統合（GPS測量データまたはpen_toolデータを含める）
       final metadata = <String, dynamic>{...?additionalMetadata};

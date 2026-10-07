@@ -15,16 +15,12 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 /// 統合GPS管理サービス
 ///
-/// 内蔵GPSと外部GNSS機器を統一的に管理し、GPS記録・追跡機能を提供
+/// 内蔵GPSと外部GNSS機器を統一的に管理し、GPS測量に位置を渡す
 ///
-/// Features:
 /// - 内蔵GPS: InternalGpsLocationStore に委譲（常に1ストリーム）
 /// - 外部GNSS機器の切り替え管理
-/// - 統一されたGPS位置情報取得API
-/// - GPS記録の開始・停止機能
-/// - オプション設定対応（取得インターバル、最短記録移動距離）
-/// - GPS履歴データの管理・提供
-/// - リアルタイム位置情報監視
+/// - 今の状態は [GpsManagerService.currentInfo]（[GpsInfo]）で読む
+/// - 長押し測量の点集め
 library;
 
 import 'dart:async';
@@ -36,24 +32,21 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../i18n/strings.g.dart';
 import '../models/bluetooth_gnss_service.dart';
+import '../models/gps_info.dart';
 import '../models/gps_position_record.dart';
 import '../providers/gps_providers.dart';
 import 'internal_gps_location_store.dart';
 
-/// GPS データソースの種類
-enum GpsSourceType {
-  internal('GPS'),
-  external('GNSS');
+export '../models/gps_info.dart';
 
-  const GpsSourceType(this.sourceCode);
-
-  final String sourceCode;
-
-  String get displayName => switch (this) {
-    GpsSourceType.internal => t.gps.internalGpsName,
-    GpsSourceType.external => t.gps.externalGnssName,
-  };
-}
+/// GPS 設定画面のソース一覧の 1 行
+typedef GpsSourceOption = ({
+  GpsSourceType type,
+  String name,
+  String description,
+  BluetoothDevice? device,
+  bool isSelected,
+});
 
 /// GPS管理サービス（シングルトン）
 class GpsManagerService extends ChangeNotifier {
@@ -89,24 +82,18 @@ class GpsManagerService extends ChangeNotifier {
   List<BluetoothDevice> _availableGnssDevices = [];
   BluetoothDevice? _selectedGnssDevice;
 
-  // 現在の位置情報（内蔵GPS時はStoreから取得、外部GNSS時は直接保持）
-  double? _latitude;
-  double? _longitude;
-  double? _altitude;
-  double? _accuracy;
-  double? _speed;
-  double? _bearing;
-  DateTime? _timestamp;
+  /// 最新の位置（内蔵 GPS・外部 GNSS 共通）
+  GpsPositionRecord? _position;
 
-  // 衛星情報・HDOP情報（外部GNSS用）
+  // 外部 GNSS: 位置が届いたときの衛星数・HDOP・品質
   int? _satelliteCount;
   double? _hdop;
   int? _gpsQuality;
 
   // 連続測量（長押し測量）関連
   bool _isContinuousSurvey = false;
-  void Function()? _onContinuousSurveyUpdate;
-  final List<Map<String, dynamic>> _continuousSurveyData = [];
+  VoidCallback? _onContinuousSurveyUpdate;
+  final List<GpsSurveySample> _continuousSurveyData = [];
 
   // Getters
   bool get isInitialized => _isInitialized;
@@ -117,47 +104,28 @@ class GpsManagerService extends ChangeNotifier {
       List.unmodifiable(_availableGnssDevices);
   BluetoothDevice? get selectedGnssDevice => _selectedGnssDevice;
 
-  /// 内蔵GPS位置情報ストアへのアクセス
-  InternalGpsLocationStore get locationStore => _locationStore;
-
-  // 現在位置情報
-  double? get latitude => _latitude;
-  double? get longitude => _longitude;
-  double? get altitude => _altitude;
-  double? get accuracy => _accuracy;
-  double? get speed => _speed;
-  double? get bearing => _bearing;
-  DateTime? get timestamp => _timestamp;
-
   /// 利用可能なGPSソースリストを取得
-  List<Map<String, dynamic>> getAvailableGpsSources() {
-    final sources = <Map<String, dynamic>>[];
-
+  List<GpsSourceOption> getAvailableGpsSources() => [
     // 内蔵GPS（常に利用可能）
-    sources.add({
-      'type': GpsSourceType.internal,
-      'name': GpsSourceType.internal.displayName,
-      'description': t.gps.internalDescription,
-      'isAvailable': true,
-      'isSelected': _currentSource == GpsSourceType.internal,
-    });
-
+    (
+      type: GpsSourceType.internal,
+      name: GpsSourceType.internal.displayName,
+      description: t.gps.internalDescription,
+      device: null,
+      isSelected: _currentSource == GpsSourceType.internal,
+    ),
     // 外部GNSS機器
-    for (final device in _availableGnssDevices) {
-      sources.add({
-        'type': GpsSourceType.external,
-        'name': device.name ?? t.gps.unknownDevice,
-        'description': 'Bluetooth GNSS機器 (${device.address})',
-        'device': device,
-        'isAvailable': true,
-        'isSelected':
+    for (final device in _availableGnssDevices)
+      (
+        type: GpsSourceType.external,
+        name: device.name ?? t.gps.unknownDevice,
+        description: 'Bluetooth GNSS機器 (${device.address})',
+        device: device,
+        isSelected:
             _currentSource == GpsSourceType.external &&
             _selectedGnssDevice?.address == device.address,
-      });
-    }
-
-    return sources;
-  }
+      ),
+  ];
 
   /// GPS管理サービスを初期化（待機状態・二重実行防止）
   Future<void> initialize() async {
@@ -248,8 +216,9 @@ class GpsManagerService extends ChangeNotifier {
     }
   }
 
-  /// GPS測量専用開始（軌跡記録とは独立した位置取得）
-  Future<Map<String, dynamic>?> startGpsSurveyWithWait({
+  /// GPS測量専用開始（軌跡記録とは独立した位置取得）。
+  /// 位置が取れたらそのときの状態（NMEA 付き）を返す。[timeout] までに取れなければ null
+  Future<GpsInfo?> startGpsSurveyWithWait({
     Duration timeout = const Duration(seconds: 10),
   }) async {
     if (!_isInitialized) {
@@ -259,9 +228,6 @@ class GpsManagerService extends ChangeNotifier {
     try {
       AppLogger.debug('$_logTag: GPS測量開始 - 測量専用GPS位置取得...');
       _isSurveyMode = true;
-
-      // GPS測量専用開始（フォアグラウンドサービスとは独立）
-      AppLogger.debug('$_logTag: 測量専用GPS開始');
 
       // 外部GNSS接続が既にある場合は再利用
       if (!_isGpsActive) {
@@ -281,14 +247,10 @@ class GpsManagerService extends ChangeNotifier {
       // 位置情報取得まで待機（ポーリング方式）
       final stopwatch = Stopwatch()..start();
       while (stopwatch.elapsed < timeout) {
-        final gpsInfo = getCurrentGpsInfo();
-
-        if (gpsInfo['isActive'] == true &&
-            gpsInfo['latitude'] != null &&
-            gpsInfo['longitude'] != null) {
+        if (_position != null && _isGpsActive) {
           AppLogger.debug('$_logTag: GPS測量用位置取得成功（測量専用GPS）');
           notifyListeners();
-          return gpsInfo;
+          return _buildInfo(withNmea: true);
         }
 
         // 500ms間隔でポーリング
@@ -305,19 +267,12 @@ class GpsManagerService extends ChangeNotifier {
   }
 
   /// GPS測量専用停止
+  ///
+  /// Store（内蔵GPS）は常時稼働、外部GNSSも接続を維持するので、測量モードを下ろすだけ
   Future<void> stopGpsSurvey() async {
-    try {
-      AppLogger.debug('$_logTag: GPS測量停止中...');
-      _isSurveyMode = false;
-
-      // Store（内蔵GPS）は常時稼働のため停止しない
-      // 外部GNSSの場合も接続を維持
-
-      AppLogger.debug('$_logTag: GPS測量停止完了 - 測量モード: $_isSurveyMode');
-      notifyListeners();
-    } catch (e) {
-      AppLogger.debug('$_logTag: GPS測量停止エラー: $e');
-    }
+    _isSurveyMode = false;
+    AppLogger.debug('$_logTag: GPS測量停止');
+    notifyListeners();
   }
 
   /// 外部GNSS機器をスキャン
@@ -336,7 +291,7 @@ class GpsManagerService extends ChangeNotifier {
     }
   }
 
-  /// GPSソースを切り替え
+  /// 参照GPS（基準GPS）を切り替える。Store は常時稼働なので止めず、購読先だけ替える
   Future<void> switchGpsSource(
     GpsSourceType sourceType, [
     BluetoothDevice? device,
@@ -361,7 +316,7 @@ class GpsManagerService extends ChangeNotifier {
       }
 
       // グローバル設定に保存
-      await _saveSourceToGlobalConfig();
+      _saveSourceToGlobalConfig();
 
       AppLogger.debug('$_logTag: GPSソース切り替え完了: ${sourceType.displayName}');
       notifyListeners();
@@ -369,19 +324,6 @@ class GpsManagerService extends ChangeNotifier {
       AppLogger.debug('$_logTag: GPSソース切り替えエラー: $e');
       rethrow;
     }
-  }
-
-  /// 参照GPS（基準GPS）切り替えメソッド
-  Future<void> switchReferenceGps(
-    GpsSourceType sourceType, [
-    BluetoothDevice? device,
-  ]) async {
-    AppLogger.debug('$_logTag: 参照GPS（基準GPS）を${sourceType.displayName}に切り替え...');
-
-    // Store は常時稼働のため停止不要。ソース切り替えのみ。
-    await switchGpsSource(sourceType, device);
-
-    AppLogger.debug('$_logTag: 参照GPS（基準GPS）切り替え完了: ${sourceType.displayName}');
   }
 
   /// 内蔵GPS開始（InternalGpsLocationStoreに委譲）
@@ -424,234 +366,99 @@ class GpsManagerService extends ChangeNotifier {
     }
 
     // 位置情報クリア
-    _clearCurrentPosition();
-  }
-
-  /// Store位置更新コールバック（内蔵GPS）
-  void _onStorePositionUpdate(GpsPositionRecord record) {
-    if (_currentSource == GpsSourceType.internal) {
-      _latitude = record.latitude;
-      _longitude = record.longitude;
-      _altitude = record.altitude;
-      _accuracy = record.accuracy;
-      _speed = record.speed;
-      _bearing = record.bearing;
-      _timestamp = record.timestamp;
-
-      // 連続測量中の場合はデータを収集
-      if (_isContinuousSurvey) {
-        _collectContinuousSurveyData(
-          latitude: record.latitude,
-          longitude: record.longitude,
-          altitude: record.altitude,
-          accuracy: record.accuracy,
-          speed: record.speed,
-          bearing: record.bearing,
-          timestamp: record.timestamp,
-          sourceType: GpsSourceType.internal.sourceCode,
-        );
-      }
-
-      notifyListeners();
-    }
-  }
-
-  /// 外部GNSS位置更新コールバック
-  void _onExternalGnssUpdate() {
-    if (_currentSource == GpsSourceType.external &&
-        _externalGnssService != null) {
-      final service = _externalGnssService!;
-
-      if (service.latitude != null && service.longitude != null) {
-        _updateCurrentPosition(
-          latitude: service.latitude!,
-          longitude: service.longitude!,
-          altitude: service.altitude,
-          accuracy: service.accuracy,
-          speed: service.speed,
-          bearing: service.bearing,
-          timestamp: service.timestamp ?? DateTime.now(),
-          sourceType: GpsSourceType.external.sourceCode,
-          satelliteCount: service.satelliteCount,
-          hdop: service.hdop,
-          pdop: service.pdop,
-          vdop: service.vdop,
-          gpsQuality: service.gpsQuality,
-          fixType: service.fixTypeString,
-          nmea: service.getNmeaBufferAsString(),
-        );
-      }
-    }
-  }
-
-  /// 現在位置情報を更新（外部GNSS用）
-  void _updateCurrentPosition({
-    required double latitude,
-    required double longitude,
-    double? altitude,
-    double? accuracy,
-    double? speed,
-    double? bearing,
-    required DateTime timestamp,
-    required String sourceType,
-    int? satelliteCount,
-    double? hdop,
-    double? pdop,
-    double? vdop,
-    int? gpsQuality,
-    String? fixType,
-    String? nmea,
-  }) {
-    _latitude = latitude;
-    _longitude = longitude;
-    _altitude = altitude;
-    _accuracy = accuracy;
-    _speed = speed;
-    _bearing = bearing;
-    _timestamp = timestamp;
-    _satelliteCount = satelliteCount;
-    _hdop = hdop;
-    _gpsQuality = gpsQuality;
-
-    // 連続測量中の場合はデータを収集
-    if (_isContinuousSurvey) {
-      _collectContinuousSurveyData(
-        latitude: latitude,
-        longitude: longitude,
-        altitude: altitude,
-        accuracy: accuracy,
-        speed: speed,
-        bearing: bearing,
-        timestamp: timestamp,
-        sourceType: sourceType,
-        satelliteCount: satelliteCount,
-        hdop: hdop,
-        pdop: pdop,
-        vdop: vdop,
-        gpsQuality: gpsQuality,
-        fixType: fixType,
-        correctionSource: _externalGnssService?.correctionSource,
-        nmea: nmea,
-      );
-    }
-
-    notifyListeners();
-  }
-
-  /// 連続測量データを収集（位置更新時に呼び出される）
-  void _collectContinuousSurveyData({
-    required double latitude,
-    required double longitude,
-    double? altitude,
-    double? accuracy,
-    double? speed,
-    double? bearing,
-    required DateTime timestamp,
-    required String sourceType,
-    int? satelliteCount,
-    double? hdop,
-    double? pdop,
-    double? vdop,
-    int? gpsQuality,
-    String? fixType,
-    String? correctionSource,
-    String? nmea,
-  }) {
-    final gpsData = {
-      'latitude': latitude,
-      'longitude': longitude,
-      'altitude': altitude,
-      'accuracy': accuracy,
-      'speed': speed,
-      'bearing': bearing,
-      'timestamp': timestamp.toIso8601String(),
-      'sourceType': sourceType,
-      'sourceName': _currentSource.displayName,
-      'selectedDevice': _selectedGnssDevice?.name,
-      'collectedAt': DateTime.now().toIso8601String(),
-      // 外部GNSS機器の場合のみ衛星情報を追加
-      'satelliteCount': ?satelliteCount,
-      'hdop': ?hdop,
-      'pdop': ?pdop,
-      'vdop': ?vdop,
-      'gpsQuality': ?gpsQuality,
-      'fixType': ?fixType,
-      'correctionSource': ?correctionSource,
-      'nmea': ?nmea,
-    };
-
-    _continuousSurveyData.add(gpsData);
-
-    AppLogger.debug(
-      '$_logTag: 連続測量データ収集 - ${_continuousSurveyData.length}ポイント目 '
-      '(Lat: ${latitude.toStringAsFixed(6)}, Lon: ${longitude.toStringAsFixed(6)})',
-    );
-
-    // 外部コールバック呼び出し（UI更新用）
-    if (_onContinuousSurveyUpdate != null) {
-      _onContinuousSurveyUpdate!();
-    }
-  }
-
-  /// 現在位置情報をクリア
-  void _clearCurrentPosition() {
-    _latitude = null;
-    _longitude = null;
-    _altitude = null;
-    _accuracy = null;
-    _speed = null;
-    _bearing = null;
-    _timestamp = null;
+    _position = null;
     _satelliteCount = null;
     _hdop = null;
     _gpsQuality = null;
     notifyListeners();
   }
 
-  /// 現在のGPS情報を取得
-  Map<String, dynamic> getCurrentGpsInfo() {
-    // 内蔵GPS使用時はStoreからhasNewUpdateを取得
-    final bool hasNewUpdate;
-    if (_currentSource == GpsSourceType.internal) {
-      final response = _locationStore.requestPosition();
-      hasNewUpdate = response.hasNewUpdate;
-    } else {
-      hasNewUpdate = true; // 外部GNSSは常に最新
+  /// Store位置更新コールバック（内蔵GPS）
+  void _onStorePositionUpdate(GpsPositionRecord record) {
+    if (_currentSource != GpsSourceType.internal) return;
+    _onPosition(record);
+  }
+
+  /// 外部GNSS位置更新コールバック
+  void _onExternalGnssUpdate() {
+    final service = _externalGnssService;
+    if (_currentSource != GpsSourceType.external || service == null) return;
+    final latitude = service.latitude;
+    final longitude = service.longitude;
+    if (latitude == null || longitude == null) return;
+
+    _satelliteCount = service.satelliteCount;
+    _hdop = service.hdop;
+    _gpsQuality = service.gpsQuality;
+    _onPosition(
+      GpsPositionRecord(
+        latitude: latitude,
+        longitude: longitude,
+        altitude: service.altitude,
+        accuracy: service.accuracy,
+        speed: service.speed,
+        bearing: service.bearing,
+        timestamp: service.timestamp ?? DateTime.now(),
+      ),
+    );
+  }
+
+  /// 位置が届いた（内蔵・外部共通）。連続測量中ならその時点の状態を 1 点として集める
+  void _onPosition(GpsPositionRecord position) {
+    _position = position;
+
+    if (_isContinuousSurvey) {
+      _continuousSurveyData.add(
+        GpsSurveySample(_buildInfo(withNmea: true), DateTime.now()),
+      );
+      AppLogger.debug(
+        '$_logTag: 連続測量データ収集 - ${_continuousSurveyData.length}ポイント目 '
+        '(Lat: ${position.latitude.toStringAsFixed(6)}, Lon: ${position.longitude.toStringAsFixed(6)})',
+      );
+      // 外部コールバック呼び出し（UI更新用）
+      _onContinuousSurveyUpdate?.call();
     }
 
+    notifyListeners();
+  }
+
+  /// 現在のGPS情報
+  GpsInfo get currentInfo => _buildInfo();
+
+  /// [withNmea] は測量で記録するときだけ（NMEA の連結を毎回しない）
+  GpsInfo _buildInfo({bool withNmea = false}) {
+    final p = _position;
+    final gnss =
+        _currentSource == GpsSourceType.external ? _externalGnssService : null;
     final isExternal = _currentSource == GpsSourceType.external;
-    return {
-      'sourceType': _currentSource.sourceCode,
-      'sourceName': _currentSource.displayName,
-      'selectedDevice': _selectedGnssDevice?.name,
-      'latitude': _latitude,
-      'longitude': _longitude,
-      'altitude': _altitude,
-      'accuracy': _accuracy,
-      'speed': _speed,
-      'bearing': _bearing,
-      'timestamp': _timestamp?.toIso8601String(),
-      'isActive': _latitude != null && _longitude != null && _isGpsActive,
-      'isGpsActive': _isGpsActive,
-      'isInitialized': _isInitialized,
-      'isSurveyMode': _isSurveyMode,
-      'usesForegroundService': _locationStore.isDelegated,
-      'hasNewUpdate': hasNewUpdate,
-      // 外部GNSS機器の場合のみ衛星情報・NMEA情報を追加
-      'satelliteCount': isExternal ? _satelliteCount : null,
-      'hdop': isExternal ? _hdop : null,
-      'pdop': isExternal ? _externalGnssService?.pdop : null,
-      'vdop': isExternal ? _externalGnssService?.vdop : null,
-      'gpsQuality': isExternal ? _gpsQuality : null,
-      'fixType': isExternal ? _externalGnssService?.fixTypeString : null,
-      'correctionSource':
-          isExternal ? _externalGnssService?.correctionSource : null,
-      'nmea': isExternal ? _externalGnssService?.getNmeaBufferAsString() : null,
-    };
+    return GpsInfo(
+      sourceType: _currentSource,
+      selectedDevice: _selectedGnssDevice?.name,
+      latitude: p?.latitude,
+      longitude: p?.longitude,
+      altitude: p?.altitude,
+      accuracy: p?.accuracy,
+      speed: p?.speed,
+      bearing: p?.bearing,
+      timestamp: p?.timestamp,
+      isGpsActive: _isGpsActive,
+      isInitialized: _isInitialized,
+      isSurveyMode: _isSurveyMode,
+      usesForegroundService: _locationStore.isDelegated,
+      // 外部GNSS機器の場合のみ衛星情報・NMEA情報を入れる
+      satelliteCount: isExternal ? _satelliteCount : null,
+      hdop: isExternal ? _hdop : null,
+      pdop: gnss?.pdop,
+      vdop: gnss?.vdop,
+      gpsQuality: isExternal ? _gpsQuality : null,
+      fixType: gnss?.fixTypeString,
+      correctionSource: gnss?.correctionSource,
+      nmea: withNmea ? gnss?.getNmeaBufferAsString() : null,
+    );
   }
 
   /// グローバル設定にソース設定を保存
-  Future<void> _saveSourceToGlobalConfig() async {
+  void _saveSourceToGlobalConfig() {
     final sourceType =
         _currentSource == GpsSourceType.internal ? 'internal' : 'external';
     _ref?.read(preferredGpsSourceTypeProvider.notifier).set(sourceType);
@@ -706,7 +513,7 @@ class GpsManagerService extends ChangeNotifier {
   }
 
   /// 連続測量開始（位置更新ベース）
-  void startContinuousSurvey({void Function()? onPositionUpdate}) {
+  void startContinuousSurvey({VoidCallback? onPositionUpdate}) {
     AppLogger.debug('$_logTag: 連続測量開始（位置更新ベース）');
     _isContinuousSurvey = true;
     _onContinuousSurveyUpdate = onPositionUpdate;
@@ -729,10 +536,14 @@ class GpsManagerService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 連続測量の収集データを取得
-  List<Map<String, dynamic>> getContinuousSurveyData() {
-    return List.unmodifiable(_continuousSurveyData);
-  }
+  /// 連続測量中に集めた点の数（点が届くたびに一覧を複製しないで済むように）。
+  /// 測量していないときは 0（前の測量の点を数えない）
+  int get continuousSurveyCount =>
+      _isContinuousSurvey ? _continuousSurveyData.length : 0;
+
+  /// 連続測量の収集データ（測量の記録に書く形）
+  List<Map<String, dynamic>> getContinuousSurveyData() =>
+      [for (final sample in _continuousSurveyData) sample.toMap()];
 
   @override
   void dispose() {

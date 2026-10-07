@@ -27,123 +27,51 @@ library;
 
 import 'package:flutter/material.dart';
 import '../i18n/strings.g.dart';
+import '../models/gps_info.dart';
 
 /// GPS情報表示ウィジェット
 class GpsInfoWidget extends StatelessWidget {
   /// GPS情報データ
-  final Map<String, dynamic> gpsInfo;
+  final GpsInfo gpsInfo;
 
-  /// 詳細情報の表示/非表示
-  final bool showDetails;
-
-  /// コンパクト表示モード
-  final bool isCompact;
-
-  const GpsInfoWidget({
-    super.key,
-    required this.gpsInfo,
-    this.showDetails = true,
-    this.isCompact = false,
-  });
+  const GpsInfoWidget({super.key, required this.gpsInfo});
 
   @override
   Widget build(BuildContext context) {
-    if (isCompact) {
-      return _buildCompactView(context);
-    } else {
-      return _buildDetailedView(context);
-    }
-  }
-
-  /// 詳細表示ビュー
-  Widget _buildDetailedView(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // GPS状態表示
         _buildGpsStatusRow(),
+        const SizedBox(height: 12),
+        const Divider(),
 
-        if (showDetails) ...[
-          const SizedBox(height: 12),
-          const Divider(),
+        // 位置情報
+        _buildPositionSection(),
 
-          // 位置情報
-          _buildPositionSection(),
+        const SizedBox(height: 12),
 
-          const SizedBox(height: 12),
+        // 精度・信号情報
+        _buildAccuracySection(),
 
-          // 精度・信号情報
-          _buildAccuracySection(),
+        const SizedBox(height: 12),
 
-          const SizedBox(height: 12),
+        // ソース情報
+        _buildSourceSection(),
 
-          // ソース情報
-          _buildSourceSection(),
+        const SizedBox(height: 12),
 
-          const SizedBox(height: 12),
-
-          // 時刻情報
-          _buildTimestampSection(),
-        ],
-      ],
-    );
-  }
-
-  /// コンパクト表示ビュー
-  Widget _buildCompactView(BuildContext context) {
-    final isActive = gpsInfo['isActive'] == true;
-    final latitude = (gpsInfo['latitude'] as num?)?.toDouble();
-    final longitude = (gpsInfo['longitude'] as num?)?.toDouble();
-    final accuracy = (gpsInfo['accuracy'] as num?)?.toDouble();
-
-    return Row(
-      children: [
-        // GPS状態アイコン
-        Icon(
-          isActive ? Icons.gps_fixed : Icons.gps_off,
-          color: isActive ? Colors.green : Colors.grey,
-          size: 20,
-        ),
-        const SizedBox(width: 8),
-
-        // 位置情報（簡略表示）
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (latitude != null && longitude != null)
-                Text(
-                  '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}',
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                )
-              else
-                Text(
-                  t.common.acquiring,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              if (accuracy != null)
-                Text(
-                  '${t.gps.accuracy.positionAccuracy}: ±${accuracy.toStringAsFixed(1)}m',
-                  style: const TextStyle(fontSize: 10, color: Colors.grey),
-                ),
-            ],
-          ),
-        ),
-
-        // ソース表示
-        Text(
-          gpsInfo['sourceName'] ?? 'GPS',
-          style: const TextStyle(fontSize: 10, color: Colors.blue),
-        ),
+        // 時刻情報
+        _buildTimestampSection(),
       ],
     );
   }
 
   /// GPS状態表示行
   Widget _buildGpsStatusRow() {
-    final isActive = gpsInfo['isActive'] == true;
-    final isInitialized = gpsInfo['isInitialized'] == true;
-    final sourceName = gpsInfo['sourceName'] ?? t.common.unknown;
+    final isActive = gpsInfo.isActive;
+    final isInitialized = gpsInfo.isInitialized;
+    final sourceName = gpsInfo.sourceName;
 
     Color statusColor;
     String statusText;
@@ -179,7 +107,7 @@ class GpsInfoWidget extends StatelessWidget {
                   color: statusColor,
                 ),
               ),
-              if (gpsInfo['usesForegroundService'] == true)
+              if (gpsInfo.usesForegroundService)
                 Text(
                   t.gps.status.foregroundService,
                   style: const TextStyle(fontSize: 12, color: Colors.blue),
@@ -193,9 +121,9 @@ class GpsInfoWidget extends StatelessWidget {
 
   /// 位置情報セクション
   Widget _buildPositionSection() {
-    final latitude = (gpsInfo['latitude'] as num?)?.toDouble();
-    final longitude = (gpsInfo['longitude'] as num?)?.toDouble();
-    final altitude = (gpsInfo['altitude'] as num?)?.toDouble();
+    final latitude = gpsInfo.latitude;
+    final longitude = gpsInfo.longitude;
+    final altitude = gpsInfo.altitude;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,14 +149,13 @@ class GpsInfoWidget extends StatelessWidget {
 
   /// 精度・信号情報セクション
   Widget _buildAccuracySection() {
-    final accuracy = (gpsInfo['accuracy'] as num?)?.toDouble();
-    final speed = (gpsInfo['speed'] as num?)?.toDouble();
-    final bearing = (gpsInfo['bearing'] as num?)?.toDouble();
-    final satelliteCount = gpsInfo['satelliteCount'] as int?;
-    final hdop = (gpsInfo['hdop'] as num?)?.toDouble();
-    final gpsQuality = gpsInfo['gpsQuality'] as int?;
-    final sourceType = gpsInfo['sourceType'];
-    final isExternalGnss = sourceType == 'GNSS';
+    final accuracy = gpsInfo.accuracy;
+    final speed = gpsInfo.speed;
+    final bearing = gpsInfo.bearing;
+    final satelliteCount = gpsInfo.satelliteCount;
+    final hdop = gpsInfo.hdop;
+    final gpsQuality = gpsInfo.gpsQuality;
+    final isExternalGnss = gpsInfo.isExternal;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -303,9 +230,9 @@ class GpsInfoWidget extends StatelessWidget {
 
   /// ソース情報セクション
   Widget _buildSourceSection() {
-    final sourceType = gpsInfo['sourceType'] ?? t.common.unknown;
-    final sourceName = gpsInfo['sourceName'] ?? t.common.unknown;
-    final selectedDevice = gpsInfo['selectedDevice'];
+    final sourceType = gpsInfo.sourceType.sourceCode;
+    final sourceName = gpsInfo.sourceName;
+    final selectedDevice = gpsInfo.selectedDevice;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -324,8 +251,8 @@ class GpsInfoWidget extends StatelessWidget {
 
   /// 時刻情報セクション
   Widget _buildTimestampSection() {
-    final timestamp = gpsInfo['timestamp'];
-    final isSurveyMode = gpsInfo['isSurveyMode'] == true;
+    final timestamp = gpsInfo.timestamp;
+    final isSurveyMode = gpsInfo.isSurveyMode;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -517,23 +444,17 @@ class GpsInfoWidget extends StatelessWidget {
   }
 
   /// タイムスタンプのフォーマット
-  String _formatTimestamp(String timestamp) {
-    try {
-      final dateTime = DateTime.parse(timestamp);
-      final now = DateTime.now();
-      final difference = now.difference(dateTime);
+  String _formatTimestamp(DateTime dateTime) {
+    final difference = DateTime.now().difference(dateTime);
 
-      if (difference.inSeconds < 60) {
-        return t.common.seconds(count: difference.inSeconds.toString());
-      } else if (difference.inMinutes < 60) {
-        return t.common.minutes(count: difference.inMinutes.toString());
-      } else {
-        return '${dateTime.hour.toString().padLeft(2, '0')}:'
-            '${dateTime.minute.toString().padLeft(2, '0')}:'
-            '${dateTime.second.toString().padLeft(2, '0')}';
-      }
-    } catch (e) {
-      return timestamp;
+    if (difference.inSeconds < 60) {
+      return t.common.seconds(count: difference.inSeconds.toString());
+    } else if (difference.inMinutes < 60) {
+      return t.common.minutes(count: difference.inMinutes.toString());
+    } else {
+      return '${dateTime.hour.toString().padLeft(2, '0')}:'
+          '${dateTime.minute.toString().padLeft(2, '0')}:'
+          '${dateTime.second.toString().padLeft(2, '0')}';
     }
   }
 }

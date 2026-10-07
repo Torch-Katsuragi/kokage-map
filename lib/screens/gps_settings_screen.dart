@@ -55,7 +55,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
   final GpsManagerService _gpsManager = GpsManagerService();
   bool _isScanning = false;
   String? _errorMessage;
-  Map<String, dynamic>? _currentGpsInfo;
+  GpsInfo? _currentGpsInfo;
 
   @override
   void initState() {
@@ -106,7 +106,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
   /// 現在のGPS情報を更新
   void _updateCurrentGpsInfo() {
     setState(() {
-      _currentGpsInfo = _gpsManager.getCurrentGpsInfo();
+      _currentGpsInfo = _gpsManager.currentInfo;
     });
   }
 
@@ -323,22 +323,22 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
                           leading: Icon(
                             _sourceIcon(source),
                             color:
-                                source['isSelected']
+                                source.isSelected
                                     ? Colors.green
                                     : Colors.grey,
                           ),
                           title: Text(
-                            source['name'],
+                            source.name,
                             style: TextStyle(
                               fontWeight:
-                                  source['isSelected']
+                                  source.isSelected
                                       ? FontWeight.bold
                                       : FontWeight.normal,
                             ),
                           ),
-                          subtitle: Text(source['description']),
+                          subtitle: Text(source.description),
                           trailing:
-                              source['isSelected']
+                              source.isSelected
                                   ? const Icon(
                                     Icons.check_circle,
                                     color: Colors.green,
@@ -379,22 +379,15 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       ref.read(notificationCenterProvider.notifier).add(title: title, level: level);
 
   /// ソースの種類のアイコン
-  static IconData _sourceIcon(Map<String, dynamic> source) =>
-      source['type'] == GpsSourceType.internal ? Icons.gps_fixed : Icons.bluetooth;
+  static IconData _sourceIcon(GpsSourceOption source) =>
+      source.type == GpsSourceType.internal ? Icons.gps_fixed : Icons.bluetooth;
 
   /// GPSソースを切り替え
-  Future<void> _switchGpsSource(Map<String, dynamic> source) async {
+  Future<void> _switchGpsSource(GpsSourceOption source) async {
     try {
-      if (source['type'] == GpsSourceType.internal) {
-        await _gpsManager.switchReferenceGps(GpsSourceType.internal);
-      } else {
-        await _gpsManager.switchReferenceGps(
-          GpsSourceType.external,
-          source['device'],
-        );
-      }
+      await _gpsManager.switchGpsSource(source.type, source.device);
 
-      _notify(t.gps.switchedTo(name: source['name']), NotificationLevel.success);
+      _notify(t.gps.switchedTo(name: source.name), NotificationLevel.success);
     } catch (e) {
       _notify(t.gps.switchError(error: e.toString()), NotificationLevel.error);
     }
@@ -418,16 +411,16 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${t.gps.position.latitude}: ${(gpsInfo['latitude'] as num?)?.toStringAsFixed(6) ?? t.common.unknown}',
+                    '${t.gps.position.latitude}: ${gpsInfo.latitude?.toStringAsFixed(6) ?? t.common.unknown}',
                   ),
                   Text(
-                    '${t.gps.position.longitude}: ${(gpsInfo['longitude'] as num?)?.toStringAsFixed(6) ?? t.common.unknown}',
+                    '${t.gps.position.longitude}: ${gpsInfo.longitude?.toStringAsFixed(6) ?? t.common.unknown}',
                   ),
                   Text(
-                    t.gps.accuracyLabel(value: (gpsInfo['accuracy'] as num?)?.toStringAsFixed(1) ?? t.common.unknown),
+                    t.gps.accuracyLabel(value: gpsInfo.accuracy?.toStringAsFixed(1) ?? t.common.unknown),
                   ),
-                  Text(t.gps.sourceLabel(name: gpsInfo['sourceName'] ?? t.common.unknown)),
-                  Text('${t.gps.timestamp.lastUpdate}: ${gpsInfo['timestamp'] ?? t.common.unknown}'),
+                  Text(t.gps.sourceLabel(name: gpsInfo.sourceName)),
+                  Text('${t.gps.timestamp.lastUpdate}: ${gpsInfo.timestamp?.toIso8601String() ?? t.common.unknown}'),
                 ],
               ),
               actions: [
@@ -561,7 +554,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
   }
 
   /// GPS情報表示カード
-  Widget _buildGpsInfoCard(Map<String, dynamic> gpsInfo) {
+  Widget _buildGpsInfoCard(GpsInfo gpsInfo) {
     return SettingsSection(
       title: t.gps.info,
       icon: Icons.satellite_alt,
@@ -604,9 +597,9 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
             (source) => SettingsSelectionTile(
               leadingIcon: _sourceIcon(source),
               leadingIconColor: Colors.green,
-              title: source['name'],
-              subtitle: source['description'],
-              isSelected: source['isSelected'],
+              title: source.name,
+              subtitle: source.description,
+              isSelected: source.isSelected,
               onTap: () => _switchGpsSource(source),
             ),
           ),

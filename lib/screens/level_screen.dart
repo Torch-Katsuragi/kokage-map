@@ -59,10 +59,6 @@ class _LevelScreenState extends State<LevelScreen> {
   // ストリームサブスクリプション
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
   StreamSubscription<CompassEvent>? _compassSubscription;
-  Timer? _gpsTimer;
-
-  // GPS情報キャッシュ
-  Map<String, dynamic> _gpsInfo = {};
 
   // ローパスフィルタ係数（加速度計用）
   static const double _alpha = 0.12;
@@ -81,14 +77,15 @@ class _LevelScreenState extends State<LevelScreen> {
   void initState() {
     super.initState();
     _startSensors();
-    _startGpsPolling();
+    // GPS は位置が届いたら組み直す（以前は 2 秒おきのタイマーで読み直していた）
+    _gpsManager.addListener(_onGpsUpdate);
   }
 
   @override
   void dispose() {
     _accelSubscription?.cancel();
     _compassSubscription?.cancel();
-    _gpsTimer?.cancel();
+    _gpsManager.removeListener(_onGpsUpdate);
     super.dispose();
   }
 
@@ -115,6 +112,10 @@ class _LevelScreenState extends State<LevelScreen> {
     });
   }
 
+  void _onGpsUpdate() {
+    if (mounted) setState(() {});
+  }
+
   /// 循環角度対応 EMA 平滑化
   double _smoothHeading(double rawHeading) {
     final prev = _lastSmoothedHeading;
@@ -130,17 +131,6 @@ class _LevelScreenState extends State<LevelScreen> {
     if (smoothed < 0) smoothed += 360;
     _lastSmoothedHeading = smoothed;
     return smoothed;
-  }
-
-  void _startGpsPolling() {
-    _gpsInfo = _gpsManager.getCurrentGpsInfo();
-    _gpsTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (mounted) {
-        setState(() {
-          _gpsInfo = _gpsManager.getCurrentGpsInfo();
-        });
-      }
-    });
   }
 
   /// Pitch（前後の傾き）を度で取得
@@ -293,11 +283,12 @@ class _LevelScreenState extends State<LevelScreen> {
 
   /// 情報パネル
   Widget _buildInfoPanel({required bool isVertical}) {
-    final lat = _gpsInfo['latitude'] as double?;
-    final lng = _gpsInfo['longitude'] as double?;
-    final alt = _gpsInfo['altitude'] as double?;
-    final acc = _gpsInfo['accuracy'] as double?;
-    final bearing = _gpsInfo['bearing'] as double?;
+    final gps = _gpsManager.currentInfo;
+    final lat = gps.latitude;
+    final lng = gps.longitude;
+    final alt = gps.altitude;
+    final acc = gps.accuracy;
+    final bearing = gps.bearing;
 
     // 三角形計算は getter (_triangleBase, _triangleHypotenuse, _triangleHeight) で算出
 

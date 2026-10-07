@@ -277,22 +277,17 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
   @override
   void updateCurrentGpsInfo() {
-    final info = gpsManager.getCurrentGpsInfo();
+    final info = gpsManager.currentInfo;
     final before = currentGpsInfo;
     // 表示に関わる値が同じなら組み立て直さない（フォアグラウンドサービスは同じ位置を毎秒送り直してくるので、
     // そのたびに地図ページ全体を組み立て直していた。2026-10-06）
     // 読むのは現在位置の詳細パネルだけ（開いているときに変わったら組み立て直す）
-    if (before != null && (!showsCurrentLocationDetail || _gpsInfoKeys.every((k) => before[k] == info[k]))) {
+    if (before != null && (!showsCurrentLocationDetail || before.sameDisplayAs(info))) {
       currentGpsInfo = info;
       return;
     }
     triggerSetState(() => currentGpsInfo = info);
   }
-
-  static const _gpsInfoKeys = [
-    'latitude', 'longitude', 'altitude', 'accuracy', 'speed', 'bearing', 'isActive', 'isGpsActive', 'sourceType',
-    'selectedDevice', 'satelliteCount', 'hdop', 'gpsQuality', 'fixType', 'correctionSource', 'isSurveyMode',
-  ];
 
   @override
   Future<void> updateFeatures() async {

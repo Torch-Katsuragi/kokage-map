@@ -232,7 +232,9 @@ void main() {
 
       final geojson = p.join(tmp.path, 'q.geojson');
       await ImportExportService().exportLayer(layer, geojson);
-      final coords = (jsonDecode(File(geojson).readAsStringSync())['features'] as List).single['geometry']['coordinates'] as List;
+      final collection = jsonDecode(File(geojson).readAsStringSync()) as Map<String, dynamic>;
+      final feature = (collection['features'] as List).single as Map<String, dynamic>;
+      final coords = (feature['geometry'] as Map<String, dynamic>)['coordinates'] as List;
       expect(coords[0] as num, closeTo(136.01, 1e-7));
       expect(coords[1] as num, closeTo(36.0, 1e-7));
       await gpkg.geoPackageFile.dispose();
@@ -366,6 +368,51 @@ void main() {
       );
       final lns = await ImportExportService().importFile(p.join(src.path, 'roads.shp'), target);
       _expectGoldenText('import/shp_lines.json', _prettyJson(await dumpImport(lns, target)));
+      await target.geoPackageFile.dispose();
+    });
+
+    test('Shapefile: 読めない頂点を持つ面を捨てても、次の面から読み続ける', () async {
+      final src = await Directory(p.join(tmp.path, 'src')).create();
+      final base = p.join(src.path, 'bad');
+      List<List<double>> square(double x, double y) => [
+        [x, y],
+        [x + 0.1, y],
+        [x + 0.1, y + 0.1],
+        [x, y + 0.1],
+        [x, y],
+      ];
+      writeShapefile(
+        base,
+        5,
+        [
+          [square(135.0, 33.0)],
+          [
+            [
+              [135.0, 33.0],
+              [200.0, 33.0], // WGS84 の範囲外。この面は捨てる
+              [135.1, 33.1],
+              [135.0, 33.0],
+            ],
+          ],
+          [square(136.0, 34.0)],
+          [square(137.0, 35.0)],
+        ],
+        [
+          {'NAME': 'a'},
+          {'NAME': 'bad'},
+          {'NAME': 'c'},
+          {'NAME': 'd'},
+        ],
+      );
+      final records = ShapefileBinaryParser.records(File('$base.shp').readAsBytesSync()).toList();
+      expect(records.map((r) => r.index), [0, 2, 3]);
+      expect((records[1].geometry as List<List<LatLng>>).first.first, const LatLng(34.0, 136.0));
+
+      final target = await targetGpkg();
+      final result = await ImportExportService().importFile('$base.shp', target);
+      final rows = await (await target.geoPackageFile.getDatabase()).rawQuery('SELECT NAME FROM bad ORDER BY fid');
+      expect(rows.map((r) => r['NAME']), ['a', 'c', 'd']);
+      expect(result.metadata?['featureCount'], 3);
       await target.geoPackageFile.dispose();
     });
 
@@ -770,7 +817,7 @@ void main() {
       String masked(String path) => File(path)
           .readAsStringSync()
           .replaceAll(RegExp('(saveDateTime|saveUserFull)="[^"]*"'), '')
-          .replaceAllMapped(RegExp(r'(<(savedAt|app)[^>]*>)[^<]*(</(savedAt|app)>)'), (m) => '${m[1]}${m[3]}');
+          .replaceAllMapped(RegExp('(<(savedAt|app)[^>]*>)[^<]*(</(savedAt|app)>)'), (m) => '${m[1]}${m[3]}');
       _expectGoldenText('qgs/tree_root.qgs', masked(written!.path));
       _expectGoldenText('qgs/tree_sub.qgs', masked(p.join(sub.path, 'sub.qgs')));
 

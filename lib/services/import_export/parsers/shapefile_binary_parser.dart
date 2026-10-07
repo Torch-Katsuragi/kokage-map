@@ -289,17 +289,21 @@ class _RecordReader {
     }
 
     final allPoints = <LatLng>[];
+    var failed = false;
     for (int i = 0; i < numPoints && offset + 16 <= bytes.length; i++) {
       final x = _f64(offset);
       final y = _f64(offset + 8);
       offset += 16;
-      if (x.isFinite && y.isFinite) {
-        final point = toWgs84(x, y);
-        // 座標変換に失敗した場合、このポリゴンは無効
-        if (point == null) return (null, offset - start);
+      if (failed || !x.isFinite || !y.isFinite) continue;
+      final point = toWgs84(x, y);
+      if (point == null) {
+        failed = true;
+      } else {
         allPoints.add(point);
       }
     }
+    // 座標変換に失敗した場合、このポリゴンは無効（点は最後まで読み進めて、次のレコードの頭に合わせる）
+    if (failed) return (null, offset - start);
 
     // リングに分割
     final rings = <List<LatLng>>[];

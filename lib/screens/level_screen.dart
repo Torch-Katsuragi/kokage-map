@@ -49,6 +49,9 @@ class _LevelScreenState extends State<LevelScreen> {
   double _filteredY = 0.0;
   double _filteredZ = 9.8;
 
+  /// フィルタ済み加速度から求めた傾き（加速度が届くたびに 1 回だけ計算する）
+  _Tilt _tilt = _Tilt.fromAccel(0.0, 0.0, 9.8);
+
   // コンパス
   double? _heading;
   double _compassAccuracy = -1; // 15=高精度, 30=中, 45=低, -1=不明
@@ -76,6 +79,7 @@ class _LevelScreenState extends State<LevelScreen> {
   @override
   void initState() {
     super.initState();
+    _checkLevelHaptic();
     _startSensors();
     // GPS は位置が届いたら組み直す（以前は 2 秒おきのタイマーで読み直していた）
     _gpsManager.addListener(_onGpsUpdate);
@@ -98,18 +102,30 @@ class _LevelScreenState extends State<LevelScreen> {
         _filteredX = _alpha * event.x + (1 - _alpha) * _filteredX;
         _filteredY = _alpha * event.y + (1 - _alpha) * _filteredY;
         _filteredZ = _alpha * event.z + (1 - _alpha) * _filteredZ;
+        _tilt = _Tilt.fromAccel(_filteredX, _filteredY, _filteredZ);
       });
+      _checkLevelHaptic();
     });
 
     // コンパスストリーム（マップと同じEMA平滑化ロジック alpha=0.08）
     _compassSubscription = FlutterCompass.events?.listen((event) {
-      if (event.heading != null) {
+      final heading = event.heading;
+      if (heading != null) {
         setState(() {
-          _heading = _smoothHeading(event.heading!);
+          _heading = _smoothHeading(heading);
           _compassAccuracy = event.accuracy ?? -1;
         });
       }
     });
+  }
+
+  /// 水平に入った瞬間だけ触覚フィードバックを返す
+  void _checkLevelHaptic() {
+    final isLevel = _LevelStatus.of(_tilt.tiltDeg) == _LevelStatus.level;
+    if (isLevel && !_wasLevel) {
+      HapticFeedback.lightImpact();
+    }
+    _wasLevel = isLevel;
   }
 
   void _onGpsUpdate() {
@@ -133,102 +149,34 @@ class _LevelScreenState extends State<LevelScreen> {
     return smoothed;
   }
 
-  /// Pitch（前後の傾き）を度で取得
-  /// Y軸 = デバイス縦方向（前後）
-  double get _pitchDeg =>
-      math.atan2(_filteredY, math.sqrt(_filteredX * _filteredX + _filteredZ * _filteredZ)) *
-      180 / math.pi;
-
-  /// Roll（左右の傾き）を度で取得
-  /// X軸 = デバイス横方向（左右）
-  double get _rollDeg =>
-      math.atan2(_filteredX, math.sqrt(_filteredY * _filteredY + _filteredZ * _filteredZ)) *
-      180 / math.pi;
-
-  /// 合成傾斜角（度）
-  double get _tiltDeg => math.sqrt(_pitchDeg * _pitchDeg + _rollDeg * _rollDeg);
-
-  /// 三角形の各辺（選択中の基準辺 = 1 として計算）
-  double get _triangleBase {
-    final tiltRad = _tiltDeg * math.pi / 180;
-    switch (_triangleRef) {
-      case _TriangleRef.base: return 1.0;
-      case _TriangleRef.hypotenuse: return math.cos(tiltRad);
-      case _TriangleRef.height:
-        final s = math.sin(tiltRad);
-        return s != 0 ? math.cos(tiltRad) / s : double.infinity;
-    }
-  }
-
-  double get _triangleHypotenuse {
-    final tiltRad = _tiltDeg * math.pi / 180;
-    switch (_triangleRef) {
-      case _TriangleRef.base:
-        final c = math.cos(tiltRad);
-        return c != 0 ? 1.0 / c : double.infinity;
-      case _TriangleRef.hypotenuse: return 1.0;
-      case _TriangleRef.height:
-        final s = math.sin(tiltRad);
-        return s != 0 ? 1.0 / s : double.infinity;
-    }
-  }
-
-  double get _triangleHeight {
-    final tiltRad = _tiltDeg * math.pi / 180;
-    switch (_triangleRef) {
-      case _TriangleRef.base: return math.tan(tiltRad);
-      case _TriangleRef.hypotenuse: return math.sin(tiltRad);
-      case _TriangleRef.height: return 1.0;
-    }
-  }
-
-  /// 三角形セクションタイトル（基準辺に応じて変化）
-  String get _triangleCalcTitle {
-    switch (_triangleRef) {
-      case _TriangleRef.base: return t.level.triangleCalcBase;
-      case _TriangleRef.hypotenuse: return t.level.triangleCalcHypotenuse;
-      case _TriangleRef.height: return t.level.triangleCalcHeight;
-    }
-  }
-
-  /// 各辺のラベル（基準辺に応じて数式が変わる）
-  String get _triangleBaseLabel {
-    switch (_triangleRef) {
-      case _TriangleRef.base: return t.level.base;
-      case _TriangleRef.hypotenuse: return '${t.level.base} (cos)';
-      case _TriangleRef.height: return '${t.level.base} (cos/sin)';
-    }
-  }
-
-  String get _triangleHypotenuseLabel {
-    switch (_triangleRef) {
-      case _TriangleRef.base: return '${t.level.hypotenuse} (1/cos)';
-      case _TriangleRef.hypotenuse: return t.level.hypotenuse;
-      case _TriangleRef.height: return '${t.level.hypotenuse} (1/sin)';
-    }
-  }
-
-  String get _triangleHeightLabel {
-    switch (_triangleRef) {
-      case _TriangleRef.base: return '${t.level.height} (tan)';
-      case _TriangleRef.hypotenuse: return '${t.level.height} (sin)';
-      case _TriangleRef.height: return t.level.height;
-    }
+  void _selectTriangleRef(_TriangleRef ref) {
+    if (ref == _triangleRef) return;
+    setState(() => _triangleRef = ref);
+    HapticFeedback.selectionClick();
   }
 
   @override
   Widget build(BuildContext context) {
-    // 水平判定フィードバック
-    final isLevel = _tiltDeg < 1.0;
-    if (isLevel && !_wasLevel) {
-      HapticFeedback.lightImpact();
-    }
-    _wasLevel = isLevel;
+    final status = _LevelStatus.of(_tilt.tiltDeg);
+    final levelView = _LevelView(
+      tilt: _tilt,
+      heading: _heading,
+      statusColor: status.color,
+    );
+    final infoPanel = _LevelInfoPanel(
+      tilt: _tilt,
+      status: status,
+      heading: _heading,
+      compassAccuracy: _compassAccuracy,
+      gps: _gpsManager.currentInfo,
+      triangleRef: _triangleRef,
+      onTriangleRefSelected: _selectTriangleRef,
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: Text(t.level.title),
-        backgroundColor: _getStatusColor().withValues(alpha: 0.7),
+        backgroundColor: status.color.withValues(alpha: 0.7),
         foregroundColor: Colors.white,
       ),
       backgroundColor: Colors.grey[900],
@@ -237,28 +185,151 @@ class _LevelScreenState extends State<LevelScreen> {
           if (orientation == Orientation.landscape) {
             return Row(
               children: [
-                Expanded(child: _buildLevelView()),
-                SizedBox(
-                  width: 280,
-                  child: _buildInfoPanel(isVertical: true),
-                ),
-              ],
-            );
-          } else {
-            return Column(
-              children: [
-                Expanded(child: _buildLevelView()),
-                _buildInfoPanel(isVertical: false),
+                Expanded(child: levelView),
+                SizedBox(width: 280, child: infoPanel),
               ],
             );
           }
+          return Column(
+            children: [
+              Expanded(child: levelView),
+              infoPanel,
+            ],
+          );
         },
       ),
     );
   }
+}
 
-  /// 水準器メインビュー（大きな円と流動点）
-  Widget _buildLevelView() {
+// =============================================
+// 傾き・水平状態・三角形の基準辺
+// =============================================
+
+/// 加速度から求めた傾き（度）
+class _Tilt {
+  /// Pitch（前後の傾き）。Y軸 = デバイス縦方向（前後）
+  final double pitchDeg;
+
+  /// Roll（左右の傾き）。X軸 = デバイス横方向（左右）
+  final double rollDeg;
+
+  /// 合成傾斜角
+  final double tiltDeg;
+
+  const _Tilt(this.pitchDeg, this.rollDeg, this.tiltDeg);
+
+  factory _Tilt.fromAccel(double x, double y, double z) {
+    final pitch = math.atan2(y, math.sqrt(x * x + z * z)) * 180 / math.pi;
+    final roll = math.atan2(x, math.sqrt(y * y + z * z)) * 180 / math.pi;
+    return _Tilt(pitch, roll, math.sqrt(pitch * pitch + roll * roll));
+  }
+}
+
+/// 水平状態（1° 未満で水平、5° 未満でほぼ水平）
+enum _LevelStatus {
+  level(Colors.greenAccent, Icons.check_circle),
+  almost(Colors.amberAccent, Icons.warning_amber_rounded),
+  tilted(Colors.redAccent, Icons.error_outline);
+
+  const _LevelStatus(this.color, this.icon);
+
+  final Color color;
+  final IconData icon;
+
+  static _LevelStatus of(double tiltDeg) {
+    if (tiltDeg < 1.0) return level;
+    if (tiltDeg < 5.0) return almost;
+    return tilted;
+  }
+
+  String get label => switch (this) {
+        level => t.level.level,
+        almost => t.level.almostLevel,
+        tilted => t.level.tilted,
+      };
+}
+
+typedef _TriangleSides = ({double base, double hypotenuse, double height});
+
+/// 三角形の基準辺（タップで切り替え）
+enum _TriangleRef {
+  base,
+  hypotenuse,
+  height;
+
+  /// 各辺の長さ（選択中の基準辺 = 1 として計算）
+  _TriangleSides sides(double tiltDeg) {
+    final tiltRad = tiltDeg * math.pi / 180;
+    final s = math.sin(tiltRad);
+    final c = math.cos(tiltRad);
+    return switch (this) {
+      _TriangleRef.base => (
+          base: 1.0,
+          hypotenuse: c != 0 ? 1.0 / c : double.infinity,
+          height: math.tan(tiltRad),
+        ),
+      _TriangleRef.hypotenuse => (base: c, hypotenuse: 1.0, height: s),
+      _TriangleRef.height => (
+          base: s != 0 ? c / s : double.infinity,
+          hypotenuse: s != 0 ? 1.0 / s : double.infinity,
+          height: 1.0,
+        ),
+    };
+  }
+
+  /// 三角形セクションタイトル（基準辺に応じて変化）
+  String get title => switch (this) {
+        _TriangleRef.base => t.level.triangleCalcBase,
+        _TriangleRef.hypotenuse => t.level.triangleCalcHypotenuse,
+        _TriangleRef.height => t.level.triangleCalcHeight,
+      };
+
+  /// 各辺のラベル（基準辺に応じて数式が変わる）
+  String get baseLabel => switch (this) {
+        _TriangleRef.base => t.level.base,
+        _TriangleRef.hypotenuse => '${t.level.base} (cos)',
+        _TriangleRef.height => '${t.level.base} (cos/sin)',
+      };
+
+  String get hypotenuseLabel => switch (this) {
+        _TriangleRef.base => '${t.level.hypotenuse} (1/cos)',
+        _TriangleRef.hypotenuse => t.level.hypotenuse,
+        _TriangleRef.height => '${t.level.hypotenuse} (1/sin)',
+      };
+
+  String get heightLabel => switch (this) {
+        _TriangleRef.base => '${t.level.height} (tan)',
+        _TriangleRef.hypotenuse => '${t.level.height} (sin)',
+        _TriangleRef.height => t.level.height,
+      };
+}
+
+/// 方位角を方角文字に変換
+String _headingToDirection(double heading) {
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  final index = ((heading + 22.5) % 360 / 45).floor();
+  return directions[index];
+}
+
+// =============================================
+// 画面の部品
+// =============================================
+
+/// 水準器メインビュー（大きな円と流動点）
+class _LevelView extends StatelessWidget {
+  final _Tilt tilt;
+  final double? heading;
+  final Color statusColor;
+
+  const _LevelView({
+    required this.tilt,
+    required this.heading,
+    required this.statusColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = math.min(constraints.maxWidth, constraints.maxHeight);
@@ -268,11 +339,11 @@ class _LevelScreenState extends State<LevelScreen> {
             height: size,
             child: CustomPaint(
               painter: _LevelPainter(
-                pitchDeg: _pitchDeg,
-                rollDeg: _rollDeg,
-                tiltDeg: _tiltDeg,
-                heading: _heading,
-                statusColor: _getStatusColor(),
+                pitchDeg: tilt.pitchDeg,
+                rollDeg: tilt.rollDeg,
+                tiltDeg: tilt.tiltDeg,
+                heading: heading,
+                statusColor: statusColor,
               ),
             ),
           ),
@@ -280,19 +351,40 @@ class _LevelScreenState extends State<LevelScreen> {
       },
     );
   }
+}
 
-  /// 情報パネル
-  Widget _buildInfoPanel({required bool isVertical}) {
-    final gps = _gpsManager.currentInfo;
-    final lat = gps.latitude;
-    final lng = gps.longitude;
-    final alt = gps.altitude;
-    final acc = gps.accuracy;
+/// 情報パネル（水平状態・傾斜・方位・GPS・直角三角形）
+class _LevelInfoPanel extends StatelessWidget {
+  final _Tilt tilt;
+  final _LevelStatus status;
+  final double? heading;
+  final double compassAccuracy;
+  final GpsInfo gps;
+  final _TriangleRef triangleRef;
+  final ValueChanged<_TriangleRef> onTriangleRefSelected;
+
+  const _LevelInfoPanel({
+    required this.tilt,
+    required this.status,
+    required this.heading,
+    required this.compassAccuracy,
+    required this.gps,
+    required this.triangleRef,
+    required this.onTriangleRefSelected,
+  });
+
+  static const _divider = Divider(color: Colors.white24);
+
+  static String _fixed(double? v, int digits, [String suffix = '']) =>
+      v != null ? '${v.toStringAsFixed(digits)}$suffix' : '—';
+
+  @override
+  Widget build(BuildContext context) {
+    final heading = this.heading;
     final bearing = gps.bearing;
+    final sides = triangleRef.sides(tilt.tiltDeg);
 
-    // 三角形計算は getter (_triangleBase, _triangleHypotenuse, _triangleHeight) で算出
-
-    final content = Container(
+    return Container(
       color: Colors.black87,
       padding: const EdgeInsets.all(12),
       child: SingleChildScrollView(
@@ -303,32 +395,37 @@ class _LevelScreenState extends State<LevelScreen> {
             // 水平状態インジケータ
             _buildStatusIndicator(),
             const SizedBox(height: 8),
-            const Divider(color: Colors.white24),
+            _divider,
             // 傾斜情報
-            _buildInfoRow(t.level.tilt, '${_tiltDeg.toStringAsFixed(1)}°'),
-            _buildInfoRow('Pitch', '${_pitchDeg.toStringAsFixed(1)}°'),
-            _buildInfoRow('Roll', '${_rollDeg.toStringAsFixed(1)}°'),
-            const Divider(color: Colors.white24),
+            _InfoRow(t.level.tilt, '${tilt.tiltDeg.toStringAsFixed(1)}°'),
+            _InfoRow('Pitch', '${tilt.pitchDeg.toStringAsFixed(1)}°'),
+            _InfoRow('Roll', '${tilt.rollDeg.toStringAsFixed(1)}°'),
+            _divider,
             // 方位
-            _buildInfoRow(
+            _InfoRow(
               t.level.bearing,
-              _heading != null ? '${_heading!.toStringAsFixed(1)}° ${_headingToDirection(_heading!)}' : '—',
+              heading != null
+                  ? '${heading.toStringAsFixed(1)}° ${_headingToDirection(heading)}'
+                  : '—',
             ),
-            _buildCompassAccuracyIndicator(),
+            _CompassAccuracyRow(compassAccuracy),
             if (bearing != null)
-              _buildInfoRow(t.level.gpsBearing, '${bearing.toStringAsFixed(1)}°'),
-            const Divider(color: Colors.white24),
+              _InfoRow(t.level.gpsBearing, '${bearing.toStringAsFixed(1)}°'),
+            _divider,
             // GPS座標
-            _buildInfoRow(t.level.latitude, lat != null ? lat.toStringAsFixed(6) : '—'),
-            _buildInfoRow(t.level.longitude, lng != null ? lng.toStringAsFixed(6) : '—'),
-            _buildInfoRow(t.level.altitude, alt != null ? '${alt.toStringAsFixed(1)} m' : '—'),
-            _buildInfoRow(t.level.accuracy, acc != null ? '${acc.toStringAsFixed(1)} m' : '—'),
-            const Divider(color: Colors.white24),
+            _InfoRow(t.level.latitude, _fixed(gps.latitude, 6)),
+            _InfoRow(t.level.longitude, _fixed(gps.longitude, 6)),
+            _InfoRow(t.level.altitude, _fixed(gps.altitude, 1, ' m')),
+            _InfoRow(t.level.accuracy, _fixed(gps.accuracy, 1, ' m')),
+            _divider,
             // 直角三角形の計算
-            _buildSectionTitle(_triangleCalcTitle),
-            _buildTriangleRow(_triangleBaseLabel, _triangleBase, _TriangleRef.base),
-            _buildTriangleRow(_triangleHypotenuseLabel, _triangleHypotenuse, _TriangleRef.hypotenuse),
-            _buildTriangleRow(_triangleHeightLabel, _triangleHeight, _TriangleRef.height),
+            _SectionTitle(triangleRef.title),
+            _buildTriangleRow(
+                triangleRef.baseLabel, sides.base, _TriangleRef.base),
+            _buildTriangleRow(triangleRef.hypotenuseLabel, sides.hypotenuse,
+                _TriangleRef.hypotenuse),
+            _buildTriangleRow(
+                triangleRef.heightLabel, sides.height, _TriangleRef.height),
             const SizedBox(height: 8),
             // 三角形図示
             SizedBox(
@@ -336,10 +433,10 @@ class _LevelScreenState extends State<LevelScreen> {
               child: CustomPaint(
                 size: const Size(double.infinity, 100),
                 painter: _TrianglePainter(
-                  tiltDeg: _tiltDeg,
-                  base: _triangleBase,
-                  hypotenuse: _triangleHypotenuse,
-                  height: _triangleHeight,
+                  tiltDeg: tilt.tiltDeg,
+                  base: sides.base,
+                  hypotenuse: sides.hypotenuse,
+                  height: sides.height,
                 ),
               ),
             ),
@@ -347,30 +444,17 @@ class _LevelScreenState extends State<LevelScreen> {
         ),
       ),
     );
-
-    return content;
   }
 
   Widget _buildStatusIndicator() {
-    final color = _getStatusColor();
-    final label = _tiltDeg < 1.0
-        ? t.level.level
-        : _tiltDeg < 5.0
-            ? t.level.almostLevel
-            : t.level.tilted;
-    final icon = _tiltDeg < 1.0
-        ? Icons.check_circle
-        : _tiltDeg < 5.0
-            ? Icons.warning_amber_rounded
-            : Icons.error_outline;
-
+    final color = status.color;
     return Row(
       children: [
-        Icon(icon, color: color, size: 28),
+        Icon(status.icon, color: color, size: 28),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            '$label (${_tiltDeg.toStringAsFixed(1)}°)',
+            '${status.label} (${tilt.tiltDeg.toStringAsFixed(1)}°)',
             style: TextStyle(
               color: color,
               fontSize: 16,
@@ -382,22 +466,90 @@ class _LevelScreenState extends State<LevelScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  /// 三角形の辺の行（タップで基準切り替え）
+  Widget _buildTriangleRow(String label, double value, _TriangleRef ref) {
+    final isSelected = triangleRef == ref;
+    final valueStr = isSelected
+        ? '= 1.0000'
+        : (value.isFinite ? value.toStringAsFixed(4) : '∞');
+
+    return GestureDetector(
+      onTap: () => onTriangleRefSelected(ref),
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isSelected)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 4),
+                    child: Icon(Icons.touch_app,
+                        color: Colors.cyanAccent, size: 12),
+                  ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isSelected ? Colors.cyanAccent : Colors.white70,
+                    fontSize: 13,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              valueStr,
+              style: TextStyle(
+                color: isSelected ? Colors.cyanAccent : Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ラベルと値の 1 行
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          Text(label,
+              style: const TextStyle(color: Colors.white70, fontSize: 13)),
           Text(value,
               style: const TextStyle(
-                  color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
+}
 
-  Widget _buildSectionTitle(String title) {
+class _SectionTitle extends StatelessWidget {
+  final String title;
+
+  const _SectionTitle(this.title);
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(
@@ -412,30 +564,24 @@ class _LevelScreenState extends State<LevelScreen> {
       ),
     );
   }
+}
 
-  /// コンパス精度インジケータ
-  Widget _buildCompassAccuracyIndicator() {
-    final Color color;
-    final String label;
-    final IconData icon;
+/// コンパス精度インジケータ
+class _CompassAccuracyRow extends StatelessWidget {
+  /// 15=高精度, 30=中, 45=低, 0 以下=不明
+  final double accuracy;
 
-    if (_compassAccuracy <= 0) {
-      color = Colors.grey;
-      label = '—';
-      icon = Icons.help_outline;
-    } else if (_compassAccuracy <= 15) {
-      color = Colors.greenAccent;
-      label = '±${_compassAccuracy.toStringAsFixed(0)}°';
-      icon = Icons.check_circle_outline;
-    } else if (_compassAccuracy <= 30) {
-      color = Colors.amberAccent;
-      label = '±${_compassAccuracy.toStringAsFixed(0)}°';
-      icon = Icons.warning_amber_rounded;
-    } else {
-      color = Colors.redAccent;
-      label = '±${_compassAccuracy.toStringAsFixed(0)}°';
-      icon = Icons.error_outline;
-    }
+  const _CompassAccuracyRow(this.accuracy);
+
+  @override
+  Widget build(BuildContext context) {
+    final (Color color, IconData icon) = switch (accuracy) {
+      <= 0 => (Colors.grey, Icons.help_outline),
+      <= 15 => (Colors.greenAccent, Icons.check_circle_outline),
+      <= 30 => (Colors.amberAccent, Icons.warning_amber_rounded),
+      _ => (Colors.redAccent, Icons.error_outline),
+    };
+    final label = accuracy <= 0 ? '—' : '±${accuracy.toStringAsFixed(0)}°';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -464,71 +610,6 @@ class _LevelScreenState extends State<LevelScreen> {
         ],
       ),
     );
-  }
-
-  /// 三角形の辺の行（タップで基準切り替え）
-  Widget _buildTriangleRow(String label, double value, _TriangleRef ref) {
-    final isSelected = _triangleRef == ref;
-    final valueStr = isSelected
-        ? '= 1.0000'
-        : (value.isFinite ? value.toStringAsFixed(4) : '∞');
-
-    return GestureDetector(
-      onTap: () {
-        if (!isSelected) {
-          setState(() => _triangleRef = ref);
-          HapticFeedback.selectionClick();
-        }
-      },
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isSelected)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 4),
-                    child: Icon(Icons.touch_app, color: Colors.cyanAccent, size: 12),
-                  ),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: isSelected ? Colors.cyanAccent : Colors.white70,
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-              ],
-            ),
-            Text(
-              valueStr,
-              style: TextStyle(
-                color: isSelected ? Colors.cyanAccent : Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Color _getStatusColor() {
-    if (_tiltDeg < 1.0) return Colors.greenAccent;
-    if (_tiltDeg < 5.0) return Colors.amberAccent;
-    return Colors.redAccent;
-  }
-
-  /// 方位角を方角文字に変換
-  String _headingToDirection(double heading) {
-    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-    final index = ((heading + 22.5) % 360 / 45).floor();
-    return directions[index];
   }
 }
 
@@ -722,7 +803,12 @@ class _LevelPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _LevelPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _LevelPainter oldDelegate) =>
+      oldDelegate.pitchDeg != pitchDeg ||
+      oldDelegate.rollDeg != rollDeg ||
+      oldDelegate.tiltDeg != tiltDeg ||
+      oldDelegate.heading != heading ||
+      oldDelegate.statusColor != statusColor;
 }
 
 // =============================================
@@ -861,11 +947,9 @@ class _TrianglePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _TrianglePainter oldDelegate) => true;
+  bool shouldRepaint(covariant _TrianglePainter oldDelegate) =>
+      oldDelegate.tiltDeg != tiltDeg ||
+      oldDelegate.base != base ||
+      oldDelegate.hypotenuse != hypotenuse ||
+      oldDelegate.height != height;
 }
-
-// =============================================
-// 三角形基準辺の列挙型
-// =============================================
-
-enum _TriangleRef { base, hypotenuse, height }

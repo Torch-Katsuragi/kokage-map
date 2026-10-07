@@ -565,11 +565,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
+  /// グローバルフォルダの置き場所を決める（旧場所からの移行もここで走る）。web・失敗時は null
+  Future<GlobalFolderResolution?> _resolveGlobalFolder() async {
+    if (!PlatformCapabilities.hasLocalFileSystem) return null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return await GlobalFolderLocator.resolve(customPath: prefs.getString(kGlobalFolderCustomPathKey));
+    } catch (e) {
+      AppLogger.debug('[HomeScreen] グローバルフォルダの置き場所を決められない: $e');
+      return null;
+    }
+  }
+
   /// グローバルフォルダの初期化
   /// SharedPreferencesにカスタムパスがあればそちらを使用、なければデフォルト
   /// （Android の既定は共有ストレージ。場所決めと旧場所からの移行は
   /// `GlobalFolderLocator` に集約）
-  Future<void> _initializeGlobalFolder() async {
+  ///
+  /// [resolved] は [_resolveGlobalFolder] で先に決めた結果（決められなかったら null で、ここでもう一度試す）
+  Future<void> _initializeGlobalFolder(GlobalFolderResolution? resolved) async {
     // ⚠ グローバルフォルダは「アプリのドキュメント領域」に置く仕組みで、
     // web にはその概念が無い（path_provider が未対応）。
     // web でプロジェクトを開いたときは黙って飛ばす。
@@ -578,10 +592,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       return;
     }
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final customPath = prefs.getString(kGlobalFolderCustomPathKey);
-
-      final resolution = await GlobalFolderLocator.resolve(customPath: customPath);
+      final resolution = resolved ?? await _resolveGlobalFolder();
+      if (resolution == null) return;
       final globalPath = resolution.path;
 
       // グローバルフォルダパスを保存
@@ -672,13 +684,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     AppLogger.debug('[HomeScreen] フォルダ選択完了、初期化を開始');
     ref.read(projectRootDirProvider.notifier).set(dir);
     AppLogger.debug('[HomeScreen] projectRootDirProvider 設定完了');
-    // Global の置き場所を先に決める（旧 Global を .kokage へ移し、移せなかった旧フォルダを地図に出さない印を付ける）
-    if (PlatformCapabilities.hasLocalFileSystem) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await GlobalFolderLocator.resolve(customPath: prefs.getString(kGlobalFolderCustomPathKey));
-      } catch (_) {}
-    }
+    // Global の置き場所を先に決める（旧 Global を .kokage へ移し、移せなかった旧フォルダを地図に出さない印を付ける）。
+    // 決めた結果は下の _initializeGlobalFolder でそのまま使う（以前は二度決めていて、移した件数のお知らせが出なかった）
+    final globalResolution = await _resolveGlobalFolder();
     if (_usesProjectsHome) unawaited(ProjectsHome.remember(dir));
     final rootNode = await FolderNode.createRootNode(dir);
     ref.read(folderTreeProvider.notifier).set(rootNode);
@@ -687,7 +695,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     setState(() {
       _openingProjectStatus = t.home.preparingSharedFolder;
     });
-    await _initializeGlobalFolder();
+    await _initializeGlobalFolder(globalResolution);
     AppLogger.debug('[HomeScreen] GlobalFolder 初期化完了');
 
     // フォルダ選択後すぐ地図編集画面へ遷移

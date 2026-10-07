@@ -21,7 +21,6 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
-import '../../i18n/strings.g.dart';
 import '../../services/kmeta_service.dart';
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
@@ -83,22 +82,7 @@ class GeoPackageNode extends LayerTreeNode {
     // DBから現在のレイヤ構造を取得
     final nodes = await LayerNode.loadNodes(this);
 
-    // 現在のDBに存在するレイヤ名のセットを作成
-    final currentLayerNames = nodes.map((n) => n.name).toSet();
-
-    // 既存の子ノードで、DBに存在しないものを削除
-    children.removeWhere((child) {
-      final shouldRemove = !currentLayerNames.contains(child.name);
-      if (shouldRemove) {
-        child.parent = null;
-      }
-      return shouldRemove;
-    });
-
-    // 新しいレイヤノードを追加（既存ノードは再利用）
-    for (final node in nodes) {
-      addChildIfNotExists(node);
-    }
+    syncChildren(nodes);
 
     // KMetaの可視性設定をレイヤーに適用
     await _applyMetaVisibility();
@@ -185,22 +169,8 @@ class GeoPackageNode extends LayerTreeNode {
       final currentPath =
           getAbsoluteFilePath() ?? geoPackageFile.getAbsolutePath() ?? p.joinAll([projectRootDir, ...geoPackageFile.pathList]);
       
-      if (!await fs.exists(currentPath)) {
-        throw Exception(t.services.fileNotFound(path: currentPath));
-      }
-
-      final directory = p.dirname(currentPath);
-      const extension = '.gpkg';
-      // 拡張子が含まれていない場合は付与
-      final newFileName = newName.endsWith(extension) ? newName : '$newName$extension';
-      final newPath = p.join(directory, newFileName);
-
-      if (await fs.exists(newPath)) {
-        throw Exception(t.services.fileAlreadyExists(name: newFileName));
-      }
-
-      // リネーム実行
-      await fs.rename(currentPath, newPath);
+      final newPath = await renameFileInSameDir(currentPath, newName, '.gpkg');
+      final newFileName = p.basename(newPath);
       // SQLite の付属ファイル（-journal / -wal / -shm）も連れていく（古い名前で残ると散らかる）
       for (final suffix in const ['-journal', '-wal', '-shm']) {
         if (await fs.exists('$currentPath$suffix') && !await fs.exists('$newPath$suffix')) {

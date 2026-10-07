@@ -72,6 +72,28 @@ class LayerRepository {
     }
   }
 
+  /// レイヤ名（[getLayerNames] の順）→ ジオメトリタイプ。1 回の問い合わせで引く（レイヤごとに [getGeometryType] を呼ばない）
+  Future<Map<String, GeometryType?>> getLayerGeometryTypes() async {
+    final names = await getLayerNames();
+    if (names.isEmpty) return {};
+    final types = <String, String?>{};
+    try {
+      final db = await connection.getDatabase();
+      for (final row in await db.rawQuery('SELECT table_name, geometry_type_name FROM gpkg_geometry_columns')) {
+        types.putIfAbsent(row['table_name'] as String, () => row['geometry_type_name'] as String?);
+      }
+    } catch (e) {
+      AppLogger.debug('[LayerRepository] getLayerGeometryTypes: エラー発生 - $e');
+    }
+    return {
+      for (final name in names)
+        name: switch (types[name]) {
+          final String t => GeometryType.fromString(t),
+          null => null,
+        },
+    };
+  }
+
   /// レイヤ追加（DBにテーブル作成）
   /// QGIS互換性のため、PRIMARY KEYは fid を使用
   Future<void> addLayer(String name, GeometryType geomType) async {

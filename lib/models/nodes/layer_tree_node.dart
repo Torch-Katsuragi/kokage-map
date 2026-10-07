@@ -17,9 +17,12 @@
 // FolderNode, GeoPackageGroup, Layerの共通実装
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+
 import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
 import '../../core/path_resolver.dart';
+import '../../i18n/strings.g.dart';
 
 /// レイヤツリーのノード共通基底クラス
 abstract class LayerTreeNode {
@@ -170,6 +173,37 @@ abstract class LayerTreeNode {
     return newChild;
   }
 
+  /// 今の子を [current]（ファイルや DB から作り直した子）に合わせる。
+  ///
+  /// [current] に名前の無い子は外す（[keep] が真の子は残す）。[current] のうち同名・同型の子が
+  /// 既にあればそれを使い回し、無ければ足す（[addChildIfNotExists]）。展開状態などを保つため。
+  @protected
+  void syncChildren(
+    List<LayerTreeNode> current, {
+    bool Function(LayerTreeNode child)? keep,
+  }) {
+    final names = {for (final node in current) node.name};
+    children.removeWhere((child) {
+      if (keep != null && keep(child)) return false;
+      if (names.contains(child.name)) return false;
+      child.parent = null;
+      return true;
+    });
+    for (final node in current) {
+      addChildIfNotExists(node);
+    }
+  }
+
+  /// 祖先のうち最も近い [T]（無ければ null）
+  T? ancestorOf<T extends LayerTreeNode>() {
+    var current = parent;
+    while (current != null) {
+      if (current is T) return current;
+      current = current.parent;
+    }
+    return null;
+  }
+
   bool isVisibleRecursive() {
     if (!visible) {
       return false;
@@ -217,4 +251,24 @@ abstract class LayerTreeNode {
     if (absPath == null) return const [];
     return fs.list(absPath);
   }
+}
+
+/// [currentPath] のファイルを同じフォルダの [newName] へ改名し、新しいパスを返す。
+///
+/// [newName] が [extension] で終わっていなければ足す。元が無い・先が既にあるときは投げる。
+Future<String> renameFileInSameDir(
+  String currentPath,
+  String newName,
+  String extension,
+) async {
+  if (!await fs.exists(currentPath)) {
+    throw Exception(t.services.fileNotFound(path: currentPath));
+  }
+  final newFileName = newName.endsWith(extension) ? newName : '$newName$extension';
+  final newPath = p.join(p.dirname(currentPath), newFileName);
+  if (await fs.exists(newPath)) {
+    throw Exception(t.services.fileAlreadyExists(name: newFileName));
+  }
+  await fs.rename(currentPath, newPath);
+  return newPath;
 }

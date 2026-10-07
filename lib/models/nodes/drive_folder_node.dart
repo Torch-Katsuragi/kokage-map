@@ -21,31 +21,37 @@ import 'package:path/path.dart' as p;
 import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
 import '../../services/google_drive/sync_base_store.dart';
-import '../../utils/app_logger.dart';
 import 'folder_node.dart';
-import 'geopackage_node.dart';
 import 'global_folder_node.dart';
-import 'image_node.dart';
 import 'layer_tree_node.dart';
-import 'sys_node.dart';
 
 /// グローバルフォルダ内のノードのパスを解決するヘルパー
 /// 親チェインにGlobalFolderNodeがあればそこからパスを構築、なければnull
 String? _resolveGlobalPath(LayerTreeNode node) {
-  LayerTreeNode? ancestor = node.parent;
-  while (ancestor != null) {
-    if (ancestor is GlobalFolderNode) {
-      final segments = <String>[];
-      LayerTreeNode? current = node;
-      while (current != null && current is! GlobalFolderNode) {
-        segments.insert(0, current.name);
-        current = current.parent;
-      }
-      return p.joinAll([ancestor.globalPath, ...segments]);
-    }
-    ancestor = ancestor.parent;
-  }
-  return null;
+  final (global, segments) = segmentsBelowGlobalFolder(node);
+  return global == null ? null : p.joinAll([global.globalPath, ...segments]);
+}
+
+/// Drive 連携フォルダ直下のサブフォルダ（[root] の同期情報を共有する）
+List<LayerTreeNode> _driveSubFolders(
+  FolderNode parent,
+  DriveFolderNode root,
+  List<KFileEntry> entries,
+) {
+  final directories = entries
+      .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
+      .toList()
+    ..sort((a, b) => a.name.compareTo(b.name));
+  return [
+    for (final entity in directories)
+      DriveSubFolderNode(
+        entity.name,
+        rootDriveNode: root,
+        visible: true,
+        parent: parent,
+        children: [],
+      ),
+  ];
 }
 
 /// 同期状態
@@ -107,83 +113,10 @@ class DriveFolderNode extends FolderNode {
   String? getAbsoluteFilePath() =>
       _resolveGlobalPath(this) ?? super.getAbsoluteFilePath();
 
-  /// このフォルダ直下の子ノードを更新
+  /// サブフォルダもDriveSubFolderNodeとして作成（同じdriveIdを共有）
   @override
-  Future<void> updateChildren() async {
-    // メタデータを読み込み
-    await loadMetaState();
-
-    // ファイルシステムから現在の構造を取得（列挙は1回だけ。FolderNodeと同じ理由）
-    final entries = await listOnce();
-    final folderNodes = await _loadDriveFolderNodes(this, entries);
-    final gpkgNodes = await GeoPackageNode.loadNodes(this, entries: entries);
-    final photoNodes = await ImageNode.loadNodes(this, entries: entries);
-
-    // 現在のファイルシステムに存在するノード名のセットを作成
-    final currentFolderNames = folderNodes.map((n) => n.name).toSet();
-    final currentGpkgNames = gpkgNodes.map((n) => n.name).toSet();
-    final currentPhotoNames = photoNodes.map((n) => n.name).toSet();
-    final allCurrentNames = {
-      ...currentFolderNames,
-      ...currentGpkgNames,
-      ...currentPhotoNames,
-    };
-
-    // 既存の子ノードで、ファイルシステムに存在しないものを削除
-    children.removeWhere((child) {
-      if (child is SysNode || child is GlobalFolderNode || child is GlobalSubFolderNode) return false;
-      final shouldRemove = !allCurrentNames.contains(child.name);
-      if (shouldRemove) {
-        AppLogger.debug(
-          '[DriveFolderNode] removing ${child.name} (no longer exists)',
-        );
-        child.parent = null;
-      }
-      return shouldRemove;
-    });
-
-    // 新しいノードを追加
-    for (final node in folderNodes) {
-      addChildIfNotExists(node);
-    }
-    for (final node in gpkgNodes) {
-      addChildIfNotExists(node);
-    }
-    for (final node in photoNodes) {
-      addChildIfNotExists(node);
-    }
-
-    // KMetaの可視性設定を子ノードに適用
-    await applyMetaVisibility();
-  }
-
-  /// Drive連携フォルダ内のサブフォルダをロード
-  /// サブフォルダもDriveFolderNodeとして作成（同じdriveIdを共有）
-  static Future<List<LayerTreeNode>> _loadDriveFolderNodes(
-    DriveFolderNode parent,
-    List<KFileEntry> entries,
-  ) async {
-    final nodes = <LayerTreeNode>[];
-
-    final directories = entries
-        .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    for (final entity in directories) {
-      // サブフォルダはDriveSubFolderNodeとして作成
-      nodes.add(
-        DriveSubFolderNode(
-          entity.name,
-          rootDriveNode: parent,
-          visible: true,
-          parent: parent,
-          children: [],
-        ),
-      );
-    }
-    return nodes;
-  }
+  Future<List<LayerTreeNode>> loadFolderNodes(List<KFileEntry> entries) async =>
+      _driveSubFolders(this, this, entries);
 }
 
 /// Drive連携フォルダ内のサブフォルダノード
@@ -208,67 +141,6 @@ class DriveSubFolderNode extends FolderNode {
       _resolveGlobalPath(this) ?? super.getAbsoluteFilePath();
 
   @override
-  Future<void> updateChildren() async {
-    await loadMetaState();
-
-    final entries = await listOnce();
-    final folderNodes = await _loadSubFolderNodes(this, entries);
-    final gpkgNodes = await GeoPackageNode.loadNodes(this, entries: entries);
-    final photoNodes = await ImageNode.loadNodes(this, entries: entries);
-
-    final currentFolderNames = folderNodes.map((n) => n.name).toSet();
-    final currentGpkgNames = gpkgNodes.map((n) => n.name).toSet();
-    final currentPhotoNames = photoNodes.map((n) => n.name).toSet();
-    final allCurrentNames = {
-      ...currentFolderNames,
-      ...currentGpkgNames,
-      ...currentPhotoNames,
-    };
-
-    children.removeWhere((child) {
-      if (child is SysNode || child is GlobalFolderNode || child is GlobalSubFolderNode) return false;
-      final shouldRemove = !allCurrentNames.contains(child.name);
-      if (shouldRemove) {
-        child.parent = null;
-      }
-      return shouldRemove;
-    });
-
-    for (final node in folderNodes) {
-      addChildIfNotExists(node);
-    }
-    for (final node in gpkgNodes) {
-      addChildIfNotExists(node);
-    }
-    for (final node in photoNodes) {
-      addChildIfNotExists(node);
-    }
-
-    await applyMetaVisibility();
-  }
-
-  static Future<List<LayerTreeNode>> _loadSubFolderNodes(
-    DriveSubFolderNode parent,
-    List<KFileEntry> entries,
-  ) async {
-    final nodes = <LayerTreeNode>[];
-
-    final directories = entries
-        .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    for (final entity in directories) {
-      nodes.add(
-        DriveSubFolderNode(
-          entity.name,
-          rootDriveNode: parent.rootDriveNode,
-          visible: true,
-          parent: parent,
-          children: [],
-        ),
-      );
-    }
-    return nodes;
-  }
+  Future<List<LayerTreeNode>> loadFolderNodes(List<KFileEntry> entries) async =>
+      _driveSubFolders(this, rootDriveNode, entries);
 }

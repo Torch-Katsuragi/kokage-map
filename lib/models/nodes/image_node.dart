@@ -22,7 +22,6 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
-import '../../i18n/strings.g.dart';
 import '../../models/kmeta.dart';
 import '../../services/geotiff_service.dart';
 import '../../services/kmeta_service.dart';
@@ -157,22 +156,9 @@ class ImageNode extends LayerTreeNode {
   Future<void> rename(String newName) async {
     AppLogger.debug('[DEBUG] ImageNode.rename: 開始 - $name → $newName');
     try {
-      if (!await fs.exists(filePath)) {
-        throw Exception(t.services.fileNotFound(path: filePath));
-      }
-
-      final directory = p.dirname(filePath);
-      final extension = p.extension(filePath);
-      final newFileName = newName.endsWith(extension) ? newName : '$newName$extension';
-      final newPath = p.join(directory, newFileName);
-
+      final newPath =
+          await renameFileInSameDir(filePath, newName, p.extension(filePath));
       AppLogger.debug('[DEBUG] ImageNode.rename: $filePath → $newPath');
-
-      if (await fs.exists(newPath)) {
-        throw Exception(t.services.fileAlreadyExists(name: newFileName));
-      }
-
-      await fs.rename(filePath, newPath);
       AppLogger.debug('[DEBUG] ImageNode.rename: ファイルリネーム完了');
       
       if (parent != null) {

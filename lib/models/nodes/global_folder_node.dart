@@ -16,7 +16,7 @@
 // Root Maps: グローバルフォルダノードクラス
 // どのプロジェクトを開いても表示される共有フォルダ
 // 実体はアプリケーションのDocumentsディレクトリに存在
-// 
+//
 // NOTE: 将来的にはFolderNode + GlobalPathResolverで代替予定
 // 現在はPathResolverを注入してisGlobalNodeを自動判定
 
@@ -37,15 +37,102 @@ import 'image_node.dart';
 import 'layer_tree_node.dart';
 import 'overlay_image_node.dart';
 
-/// グローバルフォルダ内サブフォルダのDrive連携チェック
-/// フォルダ設定（`.qgs`）にDrive連携情報があればDriveFolderNodeを作成
-Future<LayerTreeNode?> _tryCreateGlobalDriveNode(
-  String folderPath,
-  String folderName,
-  String basePath,
-  LayerTreeNode parent,
-) async {
-  return FolderNode.tryCreateDriveFolderNode(folderPath, folderName, parent);
+/// [node] から上へ、グローバルフォルダの手前までの名前（上から順）と、そのグローバルフォルダ。
+/// グローバルフォルダが無ければ根までの名前と null
+(GlobalFolderNode?, List<String>) segmentsBelowGlobalFolder(LayerTreeNode node) {
+  final segments = <String>[];
+  LayerTreeNode? current = node;
+  while (current != null && current is! GlobalFolderNode) {
+    segments.insert(0, current.name);
+    current = current.parent;
+  }
+  return (current as GlobalFolderNode?, segments);
+}
+
+/// グローバルフォルダとその下のサブフォルダの子の作り方（どちらも [_globalBase] 起点の絶対パスで作る）
+///
+/// 通常のフォルダとの違い: 点で始まるフォルダも見せる・画像は .gif/.webp も読む・
+/// 子は Global* のノードにする・ファイルシステムに無い子は全部外す
+mixin _GlobalChildren on FolderNode {
+  /// グローバルフォルダの実体パス
+  String get _globalBase;
+
+  @override
+  bool keepsChild(LayerTreeNode child) => false;
+
+  @override
+  Future<List<LayerTreeNode>> loadFolderNodes(List<KFileEntry> entries) async {
+    final nodes = <LayerTreeNode>[];
+    final directories = entries
+        .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+
+    for (final entity in directories) {
+      // フォルダ設定（`.qgs`）にDrive連携情報があればDriveFolderNodeとして作成
+      nodes.add(
+        await FolderNode.tryCreateDriveFolderNode(entity.path, entity.name, this) ??
+            GlobalSubFolderNode(
+              entity.name,
+              basePath: _globalBase,
+              visible: true,
+              parent: this,
+              children: [],
+            ),
+      );
+    }
+    return nodes;
+  }
+
+  @override
+  Future<List<LayerTreeNode>> loadGeoPackageNodes(List<KFileEntry> entries) async {
+    final gpkgFiles = entries
+        .where((e) => !e.isDirectory && e.path.endsWith('.gpkg'))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return [
+      for (final entity in gpkgFiles)
+        // 絶対パスモードでGeoPackageFileを作成
+        GlobalGeoPackageNode(
+          GeoPackageFile([entity.name], absolutePath: entity.path),
+          parent: this,
+        ),
+    ];
+  }
+
+  @override
+  Future<List<LayerTreeNode>> loadImageNodes(List<KFileEntry> entries) async {
+    final nodes = <LayerTreeNode>[];
+    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
+    final imageFiles = entries
+        .where((e) =>
+            !e.isDirectory &&
+            supportedExtensions.contains(p.extension(e.path).toLowerCase()))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+
+    for (final entity in imageFiles) {
+      final ext = p.extension(entity.path).toLowerCase();
+      final isTiff = ext == '.tif' || ext == '.tiff';
+
+      // GeoTIFFタグの判定（.tifファイルのみ）
+      KMetaImageOverlay? overlayParams;
+      if (isTiff) {
+        final bytes = await fs.readAsBytes(entity.path);
+        overlayParams = GeoTiffService.readGeoTiffParams(bytes);
+      }
+
+      if (overlayParams != null) {
+        nodes.add(await GlobalOverlayImageNode._fromGeoTiff(
+          entity.path, overlayParams, parent: this,
+        ));
+      } else {
+        final node = await GlobalImageNode.fromPath(entity.path, parent: this);
+        if (node != null) nodes.add(node);
+      }
+    }
+    return nodes;
+  }
 }
 
 /// グローバルフォルダノード
@@ -53,7 +140,7 @@ Future<LayerTreeNode?> _tryCreateGlobalDriveNode(
 /// - 実体の置き場所は GlobalFolderLocator が決める
 ///   （Android: 共有ストレージ `Documents/KokageMap/Global`。旧: アプリ内部の k_maps_global）
 /// - 青色アイコンで通常フォルダと差別化（NodePresenter経由）
-class GlobalFolderNode extends FolderNode {
+class GlobalFolderNode extends FolderNode with _GlobalChildren {
   /// グローバルフォルダの実体パス
   final String globalPath;
 
@@ -67,7 +154,10 @@ class GlobalFolderNode extends FolderNode {
     // GlobalPathResolverを注入（isGlobalNodeが自動的にtrueになる）
     pathResolver = GlobalPathResolver.instance;
   }
-  
+
+  @override
+  String get _globalBase => globalPath;
+
   // isGlobalNodeはPathResolverベースで判断される（pathResolver.isGlobal）
   // UI関連（baseIconColor）はNodePresenterに移動
 
@@ -77,165 +167,20 @@ class GlobalFolderNode extends FolderNode {
     return globalPath;
   }
 
-  /// グローバルフォルダの子ノードを更新
-  /// 通常のFolderNodeと同様だが、子フォルダはGlobalSubFolderNodeとして生成
+  /// ディレクトリが存在しなければ作成
   @override
-  Future<void> updateChildren() async {
-    // ディレクトリが存在しなければ作成
+  Future<bool> prepareDirectory() async {
     if (!await fs.isDirectory(globalPath)) {
       await fs.createDirectory(globalPath);
       AppLogger.debug('[GlobalFolderNode] Created global folder: $globalPath');
     }
-
-    // メタデータを読み込み（展開状態を復元）
-    await loadMetaState();
-
-    // 列挙は1回だけ（web はハンドル走査が高い。FolderNodeと同じ理由）
-    final entries = await fs.list(globalPath);
-    // サブフォルダを読み込み
-    final folderNodes = await _loadGlobalSubFolders(entries);
-    // GeoPackageを読み込み
-    final gpkgNodes = await _loadGeoPackageNodes(entries);
-    // 画像ファイルを読み込み
-    final photoNodes = await _loadImageNodes(entries);
-
-    // 現在のファイルシステムに存在するノード名のセットを作成
-    final currentFolderNames = folderNodes.map((n) => n.name).toSet();
-    final currentGpkgNames = gpkgNodes.map((n) => n.name).toSet();
-    final currentPhotoNames = photoNodes.map((n) => n.name).toSet();
-    final allCurrentNames = {
-      ...currentFolderNames,
-      ...currentGpkgNames,
-      ...currentPhotoNames,
-    };
-
-    // 既存の子ノードで、ファイルシステムに存在しないものを削除
-    children.removeWhere((child) {
-      final shouldRemove = !allCurrentNames.contains(child.name);
-      if (shouldRemove) {
-        AppLogger.debug(
-          '[GlobalFolderNode] Removing ${child.name} (no longer exists)',
-        );
-        child.parent = null;
-      }
-      return shouldRemove;
-    });
-
-    // 新しいノードを追加（既存ノードは再利用）
-    for (final node in folderNodes) {
-      addChildIfNotExists(node);
-    }
-    for (final node in gpkgNodes) {
-      addChildIfNotExists(node);
-    }
-    for (final node in photoNodes) {
-      addChildIfNotExists(node);
-    }
-
-    // KMetaの可視性設定を子ノードに適用
-    await applyMetaVisibility();
-
-    AppLogger.debug(
-      '[GlobalFolderNode] ${children.length} children after update',
-    );
-  }
-
-  /// グローバルフォルダ直下のサブフォルダを読み込み
-  Future<List<LayerTreeNode>> _loadGlobalSubFolders(
-    List<KFileEntry> entries,
-  ) async {
-    final nodes = <LayerTreeNode>[];
-    final directories = entries
-        .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    for (final entity in directories) {
-      final name = entity.name;
-      // フォルダ設定（`.qgs`）にDrive連携情報があればGlobalDriveFolderNodeとして作成
-      final driveNode = await _tryCreateGlobalDriveNode(
-        entity.path, name, globalPath, this,
-      );
-      if (driveNode != null) {
-        nodes.add(driveNode);
-      } else {
-        nodes.add(
-          GlobalSubFolderNode(
-            name,
-            basePath: globalPath,
-            visible: true,
-            parent: this,
-            children: [],
-          ),
-        );
-      }
-    }
-    return nodes;
-  }
-
-  /// グローバルフォルダ直下のGeoPackageノードを読み込み
-  Future<List<LayerTreeNode>> _loadGeoPackageNodes(
-    List<KFileEntry> entries,
-  ) async {
-    final nodes = <LayerTreeNode>[];
-    final gpkgFiles = entries
-        .where((e) => !e.isDirectory && e.path.endsWith('.gpkg'))
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    for (final entity in gpkgFiles) {
-      final fileName = entity.name;
-      // 絶対パスモードでGeoPackageFileを作成
-      final gpkgFile = GeoPackageFile([fileName], absolutePath: entity.path);
-      nodes.add(
-        GlobalGeoPackageNode(gpkgFile, absolutePath: entity.path, parent: this),
-      );
-      AppLogger.debug('[GlobalFolderNode] Found GeoPackage: $fileName');
-    }
-    return nodes;
-  }
-
-  /// グローバルフォルダ直下の画像ノードを読み込み
-  Future<List<LayerTreeNode>> _loadImageNodes(
-    List<KFileEntry> entries,
-  ) async {
-    final nodes = <LayerTreeNode>[];
-    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
-    final imageFiles = entries
-        .where((e) =>
-            !e.isDirectory &&
-            supportedExtensions.contains(p.extension(e.path).toLowerCase()))
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    for (final entity in imageFiles) {
-      final ext = p.extension(entity.path).toLowerCase();
-      final isTiff = ext == '.tif' || ext == '.tiff';
-
-      // GeoTIFFタグの判定（.tifファイルのみ）
-      KMetaImageOverlay? overlayParams;
-      if (isTiff) {
-        final bytes = await fs.readAsBytes(entity.path);
-        overlayParams = GeoTiffService.readGeoTiffParams(bytes);
-      }
-
-      if (overlayParams != null) {
-        final node = await GlobalOverlayImageNode._fromGeoTiff(
-          entity.path, overlayParams, parent: this,
-        );
-        nodes.add(node);
-      } else {
-        final node = await GlobalImageNode.fromPath(entity.path, parent: this);
-        if (node != null) nodes.add(node);
-      }
-    }
-    return nodes;
+    return true;
   }
 }
 
 /// グローバルフォルダ内のサブフォルダノード
 /// 青色アイコン＆グローバルフォルダベースのパス解決
-class GlobalSubFolderNode extends FolderNode {
+class GlobalSubFolderNode extends FolderNode with _GlobalChildren {
   /// グローバルフォルダのベースパス
   final String basePath;
 
@@ -247,173 +192,33 @@ class GlobalSubFolderNode extends FolderNode {
     super.children,
   });
 
+  @override
+  String get _globalBase => basePath;
+
   // isGlobalNodeはPathResolverベースで判断されるため、オーバーライド不要
   // UI関連（baseIconColor）はNodePresenterに移動
 
   /// グローバルフォルダベースの絶対パスを返す
   @override
-  String? getAbsoluteFilePath() {
-    // 親をたどってパスセグメントを構築
-    final segments = <String>[];
-    LayerTreeNode? current = this;
-    while (current != null && current is! GlobalFolderNode) {
-      segments.insert(0, current.name);
-      current = current.parent;
-    }
-    return p.joinAll([basePath, ...segments]);
-  }
+  String? getAbsoluteFilePath() =>
+      p.joinAll([basePath, ...segmentsBelowGlobalFolder(this).$2]);
 
-  /// 子ノードを更新（サブフォルダ・GeoPackage・画像）
+  /// フォルダが無ければ子を作り直さない
   @override
-  Future<void> updateChildren() async {
+  Future<bool> prepareDirectory() async {
     final absPath = getAbsoluteFilePath();
-    if (absPath == null) return;
-
-    if (!await fs.isDirectory(absPath)) return;
-
-    // メタデータを読み込み（展開状態を復元）
-    await loadMetaState();
-
-    // 列挙は1回だけ（web はハンドル走査が高い。FolderNodeと同じ理由）
-    final entries = await fs.list(absPath);
-    // サブフォルダを読み込み
-    final folderNodes = await _loadSubFolders(entries);
-    // GeoPackageを読み込み
-    final gpkgNodes = await _loadGeoPackageNodes(entries);
-    // 画像ファイルを読み込み
-    final photoNodes = await _loadImageNodes(entries);
-
-    // 現在のファイルシステムに存在するノード名のセットを作成
-    final allCurrentNames = {
-      ...folderNodes.map((n) => n.name),
-      ...gpkgNodes.map((n) => n.name),
-      ...photoNodes.map((n) => n.name),
-    };
-
-    // 既存の子ノードで、ファイルシステムに存在しないものを削除
-    children.removeWhere((child) {
-      final shouldRemove = !allCurrentNames.contains(child.name);
-      if (shouldRemove) {
-        child.parent = null;
-      }
-      return shouldRemove;
-    });
-
-    // 新しいノードを追加
-    for (final node in folderNodes) {
-      addChildIfNotExists(node);
-    }
-    for (final node in gpkgNodes) {
-      addChildIfNotExists(node);
-    }
-    for (final node in photoNodes) {
-      addChildIfNotExists(node);
-    }
-
-    // KMetaの可視性設定を子ノードに適用
-    await applyMetaVisibility();
-  }
-
-  Future<List<LayerTreeNode>> _loadSubFolders(List<KFileEntry> entries) async {
-    final nodes = <LayerTreeNode>[];
-    final directories = entries
-        .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    for (final entity in directories) {
-      final name = entity.name;
-      // フォルダ設定（`.qgs`）にDrive連携情報があればGlobalDriveFolderNodeとして作成
-      final driveNode = await _tryCreateGlobalDriveNode(
-        entity.path, name, basePath, this,
-      );
-      if (driveNode != null) {
-        nodes.add(driveNode);
-      } else {
-        nodes.add(
-          GlobalSubFolderNode(
-            name,
-            basePath: basePath,
-            visible: true,
-            parent: this,
-            children: [],
-          ),
-        );
-      }
-    }
-    return nodes;
-  }
-
-  Future<List<LayerTreeNode>> _loadGeoPackageNodes(
-    List<KFileEntry> entries,
-  ) async {
-    final nodes = <LayerTreeNode>[];
-    final gpkgFiles = entries
-        .where((e) => !e.isDirectory && e.path.endsWith('.gpkg'))
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    for (final entity in gpkgFiles) {
-      final fileName = entity.name;
-      // 絶対パスモードでGeoPackageFileを作成
-      final gpkgFile = GeoPackageFile([fileName], absolutePath: entity.path);
-      nodes.add(
-        GlobalGeoPackageNode(gpkgFile, absolutePath: entity.path, parent: this),
-      );
-    }
-    return nodes;
-  }
-
-  Future<List<LayerTreeNode>> _loadImageNodes(
-    List<KFileEntry> entries,
-  ) async {
-    final nodes = <LayerTreeNode>[];
-    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
-    final imageFiles = entries
-        .where((e) =>
-            !e.isDirectory &&
-            supportedExtensions.contains(p.extension(e.path).toLowerCase()))
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    for (final entity in imageFiles) {
-      final ext = p.extension(entity.path).toLowerCase();
-      final isTiff = ext == '.tif' || ext == '.tiff';
-
-      // GeoTIFFタグの判定（.tifファイルのみ）
-      KMetaImageOverlay? overlayParams;
-      if (isTiff) {
-        final bytes = await fs.readAsBytes(entity.path);
-        overlayParams = GeoTiffService.readGeoTiffParams(bytes);
-      }
-
-      if (overlayParams != null) {
-        final node = await GlobalOverlayImageNode._fromGeoTiff(
-          entity.path, overlayParams, parent: this,
-        );
-        nodes.add(node);
-      } else {
-        final node = await GlobalImageNode.fromPath(entity.path, parent: this);
-        if (node != null) nodes.add(node);
-      }
-    }
-    return nodes;
+    return absPath != null && await fs.isDirectory(absPath);
   }
 }
 
 /// グローバルフォルダ用のGeoPackageノード
-/// 絶対パスを使用してパス解決
 class GlobalGeoPackageNode extends GeoPackageNode {
-  /// ファイルの絶対パス
-  final String absolutePath;
-
   GlobalGeoPackageNode(
     super.geoPackageFile, {
-    required this.absolutePath,
     super.visible,
     super.parent,
   });
-  
+
   // isGlobalNodeはPathResolverベースで判断されるため、オーバーライド不要
   // UI関連（baseIconColor）はNodePresenterに移動
 }
@@ -430,7 +235,7 @@ class GlobalImageNode extends ImageNode {
     super.visible,
     super.parent,
   });
-  
+
   // isGlobalNodeはPathResolverベースで判断されるため、オーバーライド不要
   // UI関連（baseIconColor）はNodePresenterに移動
 

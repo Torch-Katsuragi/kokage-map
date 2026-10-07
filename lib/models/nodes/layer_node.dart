@@ -88,28 +88,12 @@ abstract class LayerNode extends LayerTreeNode {
   bool get isDisposed => _isDisposed;
 
   /// 親のGeoPackageNodeを取得
-  GeoPackageNode get geoPackageNode {
-    LayerTreeNode? current = parent;
-    while (current != null) {
-      if (current is GeoPackageNode) {
-        return current;
-      }
-      current = current.parent;
-    }
-    throw StateError('LayerNode must have a GeoPackageNode parent');
-  }
+  GeoPackageNode get geoPackageNode =>
+      ancestorOf<GeoPackageNode>() ??
+      (throw StateError('LayerNode must have a GeoPackageNode parent'));
 
   /// 親のFolderNodeを取得
-  FolderNode? get folderNode {
-    LayerTreeNode? current = parent;
-    while (current != null) {
-      if (current is FolderNode) {
-        return current;
-      }
-      current = current.parent;
-    }
-    return null;
-  }
+  FolderNode? get folderNode => ancestorOf<FolderNode>();
 
   @override
   Future<void> persistVisibility() async {
@@ -515,42 +499,17 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
-    final nodes = <LayerTreeNode>[];
-    if (parent is! GeoPackageNode) return nodes;
-    final gpkgNode = parent;
-    final tableNames = await gpkgNode.geoPackageFile.getLayerNames();
-    for (final tableName in tableNames) {
-      final type = await gpkgNode.geoPackageFile.getGeometryType(tableName);
-      if (type == GeometryType.point) {
-        nodes.add(
-          PointLayerNode(
-            gpkgNode.geoPackageFile,
-            tableName,
-            visible: true,
-            parent: parent,
-          ),
-        );
-      } else if (type == GeometryType.linestring) {
-        nodes.add(
-          LineLayerNode(
-            gpkgNode.geoPackageFile,
-            tableName,
-            visible: true,
-            parent: parent,
-          ),
-        );
-      } else if (type == GeometryType.polygon) {
-        nodes.add(
-          PolygonLayerNode(
-            gpkgNode.geoPackageFile,
-            tableName,
-            visible: true,
-            parent: parent,
-          ),
-        );
-      }
-    }
-    return nodes;
+    if (parent is! GeoPackageNode) return [];
+    final file = parent.geoPackageFile;
+    return [
+      for (final MapEntry(key: table, value: type) in (await file.getLayerGeometryTypes()).entries)
+        ?switch (type) {
+          GeometryType.point => PointLayerNode(file, table, visible: true, parent: parent),
+          GeometryType.linestring => LineLayerNode(file, table, visible: true, parent: parent),
+          GeometryType.polygon => PolygonLayerNode(file, table, visible: true, parent: parent),
+          null => null,
+        },
+    ];
   }
 
   @override

@@ -257,6 +257,9 @@ class GeoPackageFile {
   Future<GeometryType?> getGeometryType(String tableName) =>
       _layers.getGeometryType(tableName);
 
+  /// レイヤ名（[getLayerNames] の順）→ ジオメトリタイプ
+  Future<Map<String, GeometryType?>> getLayerGeometryTypes() => _layers.getLayerGeometryTypes();
+
   /// レイヤ追加
   Future<void> addLayer(String name, GeometryType geomType) =>
       _layers.addLayer(name, geomType);

@@ -91,6 +91,11 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
   final _reading = <String>{};
   bool _onlyWithLocation = false;
 
+  /// 日付の見出しと並び。写真の追加・絞り込みの切り替えで組み直す
+  /// （位置を 1 枚読むたびの組み直しで毎回全部を並べ直さない）
+  List<_Row>? _rowsCache;
+  DateTime? _rowsDay;
+
   @override
   void initState() {
     super.initState();
@@ -120,6 +125,7 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
       _album = album;
       _total = total;
       _assets.clear();
+      _rowsCache = null;
       _loading = false;
     });
     await _loadMore();
@@ -133,6 +139,7 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
     if (!mounted || album != _album) return;
     setState(() {
       _assets.addAll(page);
+      _rowsCache = null;
       _loading = false;
     });
   }
@@ -146,8 +153,17 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
     } catch (_) {}
     _reading.remove(a.id);
     if (!mounted) return;
-    setState(() => _hasLocation[a.id] = has);
+    setState(() {
+      _hasLocation[a.id] = has;
+      // 位置ありだけを出しているときは並びが変わる
+      if (_onlyWithLocation) _rowsCache = null;
+    });
   }
+
+  void _toggleOnlyWithLocation() => setState(() {
+        _onlyWithLocation = !_onlyWithLocation;
+        _rowsCache = null;
+      });
 
   void _tap(AssetEntity a) {
     if (!_multi) {
@@ -238,15 +254,64 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
     if (picked != null && picked != _album) await _openAlbum(picked);
   }
 
+  /// 上の題名: 今のアルバム。2 つ以上あれば押して切り替える
+  Widget _buildAlbumTitle() {
+    final album = _album;
+    return InkWell(
+      onTap: _albums.length > 1 ? _chooseAlbum : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                album == null || album.isAll ? t.photoPicker.allPhotos : album.name,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (_albums.length > 1) const Icon(Icons.arrow_drop_down),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 写真 1 枚。組むときに位置を読み始める（画面に出た枠から順に読む）
+  Widget _buildTile(AssetEntity a, {GlobalKey? tutorialKey}) => Builder(builder: (_) {
+        _checkLocation(a);
+        return _Tile(
+          key: tutorialKey,
+          asset: a,
+          hasLocation: _hasLocation[a.id],
+          selected: _selected.contains(a),
+          onTap: () => _tap(a),
+          onLongPress: () => _longPress(a),
+        );
+      });
+
+  /// 見せる写真の並び（日付が替わったら見出しの「今日」「昨日」を付け直す）
+  List<_Row> _currentRows() {
+    final today = _day(DateTime.now());
+    if (_rowsCache == null || _rowsDay != today) {
+      _rowsDay = today;
+      _rowsCache = _rows(_shown());
+    }
+    return _rowsCache!;
+  }
+
+  List<AssetEntity> _shown() =>
+      _onlyWithLocation ? _assets.where((a) => _hasLocation[a.id] == true).toList() : _assets;
+
   @override
   Widget build(BuildContext context) {
-    final shown = _onlyWithLocation ? _assets.where((a) => _hasLocation[a.id] == true).toList() : _assets;
-    final rows = _rows(shown);
+    final rows = _currentRows();
     final theme = Theme.of(context);
-    final album = _album;
-    // チュートリアルの案内先: 最初に見つかった位置つき・位置なしの写真
-    final firstLocated = shown.where((x) => _hasLocation[x.id] == true).firstOrNull;
-    final firstUnlocated = shown.where((x) => _hasLocation[x.id] == false).firstOrNull;
+    // チュートリアルの案内先: 最初に見つかった位置つき・位置なしの写真（位置ありだけのときは位置なしは並ばない）
+    final firstLocated = _assets.where((x) => _hasLocation[x.id] == true).firstOrNull;
+    final firstUnlocated =
+        _onlyWithLocation ? null : _assets.where((x) => _hasLocation[x.id] == false).firstOrNull;
 
     return PopScope(
       canPop: !_multi,
@@ -259,34 +324,14 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
             icon: const Icon(Icons.close),
             onPressed: () => _multi ? _endMulti() : Navigator.pop(context),
           ),
-          title: _multi
-              ? Text(t.photoPicker.selected(count: _selected.length))
-              : InkWell(
-                  onTap: _albums.length > 1 ? _chooseAlbum : null,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            album == null || album.isAll ? t.photoPicker.allPhotos : album.name,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (_albums.length > 1) const Icon(Icons.arrow_drop_down),
-                      ],
-                    ),
-                  ),
-                ),
+          title: _multi ? Text(t.photoPicker.selected(count: _selected.length)) : _buildAlbumTitle(),
           actions: [
             IconButton(
               tooltip: t.photoPicker.onlyWithLocation,
               isSelected: _onlyWithLocation,
               icon: const Icon(Icons.location_on_outlined),
               selectedIcon: Icon(Icons.location_on, color: theme.colorScheme.primary),
-              onPressed: () => setState(() => _onlyWithLocation = !_onlyWithLocation),
+              onPressed: _toggleOnlyWithLocation,
             ),
           ],
         ),
@@ -314,21 +359,14 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
                             SizedBox(
                               width: side,
                               height: side,
-                              child: Builder(builder: (_) {
-                                _checkLocation(a);
-                                return _Tile(
-                                  key: identical(a, firstLocated)
-                                      ? TutorialTargets.locatedPhoto
-                                      : identical(a, firstUnlocated)
-                                          ? TutorialTargets.unlocatedPhoto
-                                          : null,
-                                  asset: a,
-                                  hasLocation: _hasLocation[a.id],
-                                  selected: _selected.contains(a),
-                                  onTap: () => _tap(a),
-                                  onLongPress: () => _longPress(a),
-                                );
-                              }),
+                              child: _buildTile(
+                                a,
+                                tutorialKey: identical(a, firstLocated)
+                                    ? TutorialTargets.locatedPhoto
+                                    : identical(a, firstUnlocated)
+                                        ? TutorialTargets.unlocatedPhoto
+                                        : null,
+                              ),
                             ),
                           ],
                         ],

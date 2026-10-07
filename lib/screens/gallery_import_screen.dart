@@ -33,7 +33,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_manager/photo_manager.dart' show AssetEntity;
@@ -86,16 +85,9 @@ class GalleryImporter {
     final result = await FilePicker.pickFiles(type: FileType.image);
     if (result.isEmpty) return false;
 
-    final folderPath = targetFolder.getAbsoluteFilePath();
-    if (folderPath == null) {
-      if (ref != null) {
-        ref.read(notificationCenterProvider.notifier).add(
-          title: t.galleryImport.folderPathFailed,
-          level: NotificationLevel.error,
-        );
-      }
-      return false;
-    }
+    final notifier = ref?.read(notificationCenterProvider.notifier);
+    final folderPath = _folderPathOrNotify(targetFolder, notifier);
+    if (folderPath == null) return false;
 
     int imported = 0;
     // リダクションされた可能性があり、実際に位置情報が取れなかった枚数
@@ -136,33 +128,43 @@ class GalleryImporter {
       }
     }
 
-    if (ref != null) {
-      final notifier = ref.read(notificationCenterProvider.notifier);
-      if (imported > 0) {
-        notifier.add(
-          title: t.galleryImport.imported(count: imported),
-          level: NotificationLevel.success,
-        );
-      }
-      if (strippedLocation > 0) {
-        notifier.add(
-          title: t.galleryImport.locationMayBeStripped(count: strippedLocation),
-          detail: t.galleryImport.locationMayBeStrippedHint,
-          level: NotificationLevel.warning,
-        );
-      }
+    _notifyImported(notifier, imported);
+    if (strippedLocation > 0) {
+      notifier?.add(
+        title: t.galleryImport.locationMayBeStripped(count: strippedLocation),
+        detail: t.galleryImport.locationMayBeStrippedHint,
+        level: NotificationLevel.warning,
+      );
     }
     return imported > 0;
   }
 
+  /// 取り込み先フォルダの絶対パス。取れなければ知らせて null
+  static String? _folderPathOrNotify(
+      FolderNode targetFolder, NotificationCenter? notifier) {
+    final folderPath = targetFolder.getAbsoluteFilePath();
+    if (folderPath == null) {
+      notifier?.add(
+        title: t.galleryImport.folderPathFailed,
+        level: NotificationLevel.error,
+      );
+    }
+    return folderPath;
+  }
+
+  static void _notifyImported(NotificationCenter? notifier, int imported) {
+    if (imported == 0) return;
+    notifier?.add(
+      title: t.galleryImport.imported(count: imported),
+      level: NotificationLevel.success,
+    );
+  }
+
   /// アプリ内のギャラリーで選んだ写真を取り込む。原本（EXIF つき）をそのまま写す
   static Future<bool> _importAssets(List<AssetEntity> assets, FolderNode targetFolder, {WidgetRef? ref}) async {
-    final folderPath = targetFolder.getAbsoluteFilePath();
     final notifier = ref?.read(notificationCenterProvider.notifier);
-    if (folderPath == null) {
-      notifier?.add(title: t.galleryImport.folderPathFailed, level: NotificationLevel.error);
-      return false;
-    }
+    final folderPath = _folderPathOrNotify(targetFolder, notifier);
+    if (folderPath == null) return false;
     var imported = 0;
     for (final a in assets) {
       try {
@@ -182,9 +184,7 @@ class GalleryImporter {
         AppLogger.debug('[GalleryImport] Error importing ${a.id}: $e');
       }
     }
-    if (imported > 0) {
-      notifier?.add(title: t.galleryImport.imported(count: imported), level: NotificationLevel.success);
-    }
+    _notifyImported(notifier, imported);
     return imported > 0;
   }
 
@@ -206,17 +206,19 @@ class GalleryImporter {
     }
   }
 
-  /// 元のファイル名を解決する（Android のみ MediaStore へ問い合わせ）。
-  /// 取れなければピッカーが報告した表示名のまま。
-  /// Android の content URI（file_picker 12 で `identifier` は `uri` になった。キャッシュにコピーされたものは file://）
-  static String? _contentUri(PlatformFile file) {
+  /// ネイティブ側へ渡せる content URI（Android のみ）。
+  /// file_picker 12 で `identifier` は `uri` になった。キャッシュにコピーされたものは file:// なので null
+  static String? _nativeContentUri(PlatformFile file) {
+    if (!PlatformCapabilities.supportsNativeGalleryCopy) return null;
     final uri = file.uri;
     return uri.scheme == 'content' ? uri.toString() : null;
   }
 
+  /// 元のファイル名を解決する（Android のみ MediaStore へ問い合わせ）。
+  /// 取れなければピッカーが報告した表示名のまま。
   static Future<String> _resolveSourceName(PlatformFile file) async {
-    final contentUri = _contentUri(file);
-    if (PlatformCapabilities.supportsNativeGalleryCopy && contentUri != null) {
+    final contentUri = _nativeContentUri(file);
+    if (contentUri != null) {
       try {
         final name = await _channel.invokeMethod<String>(
           'resolveDisplayName',
@@ -234,8 +236,8 @@ class GalleryImporter {
   /// 非 Android や identifier が無い場合は File.copy でフォールバック。
   static Future<_CopyResult> _copyFile(PlatformFile file, String destPath) async {
     // Android: content URI が取れればネイティブ側で実ファイルコピー
-    final contentUri = _contentUri(file);
-    if (PlatformCapabilities.supportsNativeGalleryCopy && contentUri != null) {
+    final contentUri = _nativeContentUri(file);
+    if (contentUri != null) {
       try {
         final mode = await _channel.invokeMethod<String>('copyOriginal', {
           'uri': contentUri,
@@ -265,9 +267,9 @@ class GalleryImporter {
         AppLogger.debug('[GalleryImport] readAsBytes failed: $e');
         return _CopyResult.failed;
       }
-      return PlatformCapabilities.supportsNativeGalleryCopy ? _CopyResult.maybeRedacted : _CopyResult.original;
+    } else {
+      await File(srcPath).copy(destPath);
     }
-    await File(srcPath).copy(destPath);
     return PlatformCapabilities.supportsNativeGalleryCopy
         ? _CopyResult.maybeRedacted
         : _CopyResult.original;
@@ -278,33 +280,19 @@ class GalleryImporter {
     String destPath,
     FolderNode parent,
   ) async {
-    LatLng? location;
-    DateTime? takenAt;
-    double? direction;
-    int? width;
-    int? height;
-
     final exif = await ExifParser.extractFromFile(destPath);
-    if (exif != null) {
-      location = exif.location;
-      takenAt = exif.takenAt;
-      direction = exif.direction;
-      width = exif.metadata.width;
-      height = exif.metadata.height;
-    }
-
     final stats = await File(destPath).stat();
     return ImageNode(
       destPath,
-      location,
+      exif?.location,
       ImageMetadata(
         fileSize: stats.size,
-        width: width,
-        height: height,
+        width: exif?.metadata.width,
+        height: exif?.metadata.height,
         camera: null,
       ),
-      takenAt: takenAt,
-      direction: direction,
+      takenAt: exif?.takenAt,
+      direction: exif?.direction,
       visible: true,
       parent: parent,
       isPhoto: true,

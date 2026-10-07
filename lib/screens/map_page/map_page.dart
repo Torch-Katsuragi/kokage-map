@@ -32,6 +32,7 @@ import '../../editing/edit_panel.dart';
 import '../../editing/edit_session.dart';
 import '../../editing/edit_toolbar.dart';
 import '../../i18n/strings.g.dart';
+import '../../interfaces/terrain_projection.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/folder_node.dart';
@@ -40,7 +41,6 @@ import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
 import '../../providers/device_tool_providers.dart';
 import '../../providers/notification_providers.dart';
-import '../../providers/party_providers.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
@@ -48,6 +48,7 @@ import '../../providers/ui_state_providers.dart';
 import '../../services/kmeta_service.dart';
 import '../../services/party/party_invite.dart';
 import '../../tools/gps_tool.dart';
+import '../../tools/map_tool.dart';
 import '../../tools/pen_tool.dart';
 import '../../tutorial/practice_project.dart';
 import '../../tutorial/tutorial.dart';
@@ -103,32 +104,39 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     // チュートリアルは「レイヤ一覧を開く」「ペンを押す」から教えるので、閉じた一覧・パン・未選択で始める
     // （道具と選択は前の地図から持ち越される。プロバイダは組み立て中に変えられないので次のフレームで）
     final tutorial = ref.read(tutorialProvider) != null;
+    _decideInitialLayout(tutorial: tutorial);
+    initializeAllServices();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onFirstFrame(tutorial: tutorial));
+    LaunchRequest.incoming.addListener(_onLaunchRequest);
+  }
+
+  /// 始めの配置: レイヤ一覧を開くか、起動時のカメラを GPS の初回の位置に任せるか
+  void _decideInitialLayout({required bool tutorial}) {
     // レイヤ一覧を開いて始めるかは画面の幅で決める（MediaQuery は initState では読めないので views から）
     final view = WidgetsBinding.instance.platformDispatcher.views.first;
     drawerOpen = !tutorial && MapLayout.layerListOpenAtStart(view.physicalSize / view.devicePixelRatio);
     // チュートリアルは「データが全部入る範囲」に合わせず、GPS の初回の位置へ飛ぶ（松本 2026-10-01。
     // 自分のいる場所から始め、練習のデータへはダブルタップで飛んでもらう）
     if (tutorial) initialViewDecided = true;
-    initializeAllServices();
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      tutorialRoutes.mapRoute = ModalRoute.of(context);
-      ref.read(mapControllerHolderProvider.notifier).set(mapController);
-      if (tutorial) {
-        ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
-        ref.read(selectedLayerNodeProvider.notifier).select(null);
-        ref.read(selectedFeaturesProvider.notifier).set([]); // 前の練習の地物が選ばれたまま残る
-      }
-      // 招待URL（web の `?room=CODE`）経由の起動なら、参加ダイアログを
-      // コード充填済みで開く（「ルーム参加がURLで済む」の受け側）。
-      final inviteCode = consumePendingRoomCode();
-      if (inviteCode != null && mounted) {
-        showPartyEntry(context, ref, initialCode: inviteCode);
-      }
-      // 起動ルートのカメラ指定（`/map?lat=...`）。3D が attach したら合わせる
-      _applyLaunchRequest(LaunchRequest.consumePending());
-    });
-    LaunchRequest.incoming.addListener(_onLaunchRequest);
+  /// 最初のフレームの後: ルートとコントローラの登録、チュートリアルの初期状態、招待 URL・起動ルートの要求
+  void _onFirstFrame({required bool tutorial}) {
+    tutorialRoutes.mapRoute = ModalRoute.of(context);
+    ref.read(mapControllerHolderProvider.notifier).set(mapController);
+    if (tutorial) {
+      ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
+      ref.read(selectedLayerNodeProvider.notifier).select(null);
+      ref.read(selectedFeaturesProvider.notifier).set([]); // 前の練習の地物が選ばれたまま残る
+    }
+    // 招待URL（web の `?room=CODE`）経由の起動なら、参加ダイアログを
+    // コード充填済みで開く（「ルーム参加がURLで済む」の受け側）。
+    final inviteCode = consumePendingRoomCode();
+    if (inviteCode != null && mounted) {
+      showPartyEntry(context, ref, initialCode: inviteCode);
+    }
+    // 起動ルートのカメラ指定（`/map?lat=...`）。3D が attach したら合わせる
+    _applyLaunchRequest(LaunchRequest.consumePending());
   }
 
   /// 3D が attach するまで待たせるカメラ指定
@@ -149,10 +157,28 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     }
     final p = terrainProjection;
     if (p == null) {
-      _pendingLaunchCamera = req; // attach 時（onProjectionChanged）に流す
+      _pendingLaunchCamera = req; // attach 時（_onProjectionChanged）に流す
       return;
     }
-    unawaited(p.lookAt(center: req.center, zoom: req.zoom, bearingDeg: req.bearing, pitchDeg: req.pitch, animate: false));
+    _lookAtLaunch(p, req);
+  }
+
+  void _lookAtLaunch(TerrainProjection p, LaunchRequest req) => unawaited(
+      p.lookAt(center: req.center, zoom: req.zoom, bearingDeg: req.bearing, pitchDeg: req.pitch, animate: false));
+
+  /// 3D の地図面が組み上がった（null なら外れた）。保留していたカメラ指定を流し、
+  /// レイヤのダブルタップなど、ホルダー経由の「寄せる」「移動」も 3D に流す
+  /// （fit → jump の順。jumpOverride を置いた瞬間に組み上がる前の保留分が流れる）
+  void _onProjectionChanged(TerrainProjection? p) {
+    terrainProjection = p;
+    final pendingLaunch = _pendingLaunchCamera;
+    if (p != null && pendingLaunch != null) {
+      _pendingLaunchCamera = null;
+      _lookAtLaunch(p, pendingLaunch);
+    }
+    mapController.fitOverride = p == null ? null : (c, pad) => p.fitCoordinates(c, padding: pad);
+    mapController.jumpOverride =
+        p == null ? null : (c, z, _, {required animate}) => unawaited(p.jumpTo(c, z, animate: animate));
   }
 
   /// チュートリアルの決まった配置: 地図だけが前に出ていて、レイヤ一覧・表は閉じ、パン・何も選んでいない
@@ -321,22 +347,58 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   }
 
   // =============================================
-  // コンパス方向付きの現在位置マーカー
-  // =============================================
-
-  // AppBar: タイトル
-  // =============================================
-
-  Widget _buildAppBarTitle(LayerTreeNode? rootNode) {
-    return Text(p.basename(ref.watch(projectRootDirProvider) ?? t.common.appName));
-  }
-
-  // =============================================
   // ビルドメソッド
   // =============================================
 
   @override
   Widget build(BuildContext context) {
+    _listenProviders();
+
+    // 選択状態を監視（変更時に自動rebuild）
+    final selectedFeatures = ref.watch(selectedFeaturesProvider);
+    final folderTree = ref.watch(folderTreeProvider);
+    currentNode ??= folderTree;
+    final currentTool = ref.watch(currentToolProvider);
+    // 編集中なら属性タブか（編集中でなければ null）。頂点を動かすたびに変わる編集の中身では組み直さない
+    // （編集の形・パネル・ツールバーはそれぞれが featureEditorProvider を聞いている）
+    final editAttrsTab = ref.watch(featureEditorProvider.select((s) => s?.attrsTab));
+    final editing = editAttrsTab != null;
+    final layout = MapLayout.resolve(ref.watch(mapLayoutPresetSettingProvider), MediaQuery.of(context).size);
+
+    // 編集中の ← （と端末の戻る）はホームへ戻らず編集をやめる（つい押してしまうので）
+    return PopScope(
+      canPop: !editing,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) cancelEdit(context, ref);
+      },
+      child: KeyboardShortcutWrapper(
+        mapState: this,
+        child: Scaffold(
+          appBar: _buildAppBar(editing: editing),
+          body: Column(
+            children: [
+              // 地図エリア（ボトムパネル表示時に縮む）
+              Expanded(child: _buildMapArea(layout, currentTool, selectedFeatures, editing: editing)),
+              // 下パネル: 属性テーブルが開いていればそれ、閉じていれば情報カード（排他。
+              // 属性テーブルの行を選ぶ流れを切らないよう、表が開いている間の情報カードは地図の上に浮く）
+              if (showAttributeTable && attributeTableLayer != null)
+                _buildAttributeTablePanel()
+              else if (layout.info == InfoPlacement.bottom && selectedFeatures.isNotEmpty)
+                _buildInfoBottomPanel(selectedFeatures),
+            ],
+          ),
+          floatingActionButton: DrawingActionButtons(
+            onConfirmDrawing: onConfirmDrawing,
+            onConfirmGpsSurvey: onConfirmGpsSurvey,
+          ),
+          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        ),
+      ),
+    );
+  }
+
+  /// プロバイダの変化を地図ページの状態へつなぐ（build から呼ぶ）
+  void _listenProviders() {
     ref.listen<int>(featureRefreshTriggerProvider, (prev, next) {
       if (prev != null && prev != next) {
         updateFeatures();
@@ -350,9 +412,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       }
     });
 
-    // 選択状態の変更をリッスンしてフィーチャソースを再同期
-    ref.listen<List<LayerTreeNode>>(selectedFeaturesProvider, (_, _) {
+    ref.listen<List<LayerTreeNode>>(selectedFeaturesProvider, (_, sel) {
+      // 選択状態の変更でフィーチャソースを再同期
       syncFeatureSources();
+      // 編集中の地物の選択が外れたら（パネルを閉じたら）編集を取り消す
+      final ed = ref.read(featureEditorProvider);
+      if (ed != null && !sel.contains(ed.feature)) ref.read(featureEditorProvider.notifier).cancel();
     });
 
     // 選択レイヤー変更 → 属性テーブルが開いていれば自動で切り替え
@@ -375,7 +440,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       _resetForTutorial(s.chapter);
     });
 
-    // 編集の始まり・終わり: 元の地物を地図から隠す／戻す。パネルを閉じたら（選択が外れたら）取消
+    // 編集の始まり・終わり: 元の地物を地図から隠す／戻す
     ref.listen(featureEditorProvider, (prev, next) {
       if ((prev == null) == (next == null)) return;
       invalidateLayerCache();
@@ -389,189 +454,139 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         });
       }
     });
-    ref.listen<List<LayerTreeNode>>(selectedFeaturesProvider, (_, sel) {
-      final ed = ref.read(featureEditorProvider);
-      if (ed != null && !sel.contains(ed.feature)) ref.read(featureEditorProvider.notifier).cancel();
-    });
+  }
 
-    // 選択状態を監視（変更時に自動rebuild）
-    final selectedFeatures = ref.watch(selectedFeaturesProvider);
-
-    // パーティ位置共有: peers/接続状態の変化で地図マーカーを再描画
-    ref.watch(partySessionProvider);
-
-    final folderTree = ref.watch(folderTreeProvider);
-    currentNode ??= folderTree;
-
-    final currentTool = ref.watch(currentToolProvider);
-    final editing = ref.watch(featureEditorProvider) != null;
-    final layout = MapLayout.resolve(ref.watch(mapLayoutPresetSettingProvider), MediaQuery.of(context).size);
-
-    // 編集中の ← （と端末の戻る）はホームへ戻らず編集をやめる（つい押してしまうので）
-    return PopScope(
-      canPop: !editing,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) cancelEdit(context, ref);
-      },
-      child: KeyboardShortcutWrapper(
-      mapState: this,
-      child: Scaffold(
-        appBar: AppBar(
-          title: _buildAppBarTitle(folderTree),
-          actions: [
-            ...buildMapAppBarActions(
-              context: context,
-              showAttributeTable: showAttributeTable,
-              drawerOpen: drawerOpen,
-              onAttributeTableToggle: () {
-                // 編集中は属性も編集のパネルで書き換える（表を開くと編集のパネルが隠れる）
-                if (editing) return;
-                if (showAttributeTable) {
-                  _closeAttributeTable();
-                } else {
-                  _openAttributeTable();
-                }
-              },
-              onDrawerToggle: () {
-                triggerSetState(() {
-                  if (drawerOpen) {
-                    drawerOpen = false;
-                  } else {
-                    drawerOpen = true;
-                    drawerWidth = 320;
-                  }
-                });
-                ref.read(tutorialProvider.notifier).report(LayersPanelToggled(drawerOpen));
-              },
-              // ≡ メニュー（パーティ・水準器・設定を集約）はレイヤ一覧の左
-              beforeLayerButton: [KeyedSubtree(key: TutorialTargets.menuButton, child: MapMenuButton(onReload: reloadProjectFromDisk))],
-            ),
-          ],
-        ),
-        body: Column(
-          children: [
-            // 地図エリア（ボトムパネル表示時に縮む）
-            Expanded(
-              child: Stack(
-                children: [
-                  // ツールバー（左右は配置プリセットで決まる）
-                  if (editing)
-                    EditToolbar(side: layout.toolbar)
-                  else
-                    MapToolbar(onToolChanged: () => triggerSetState(() {}), side: layout.toolbar),
-                  // 地図本体
-                  Positioned.fill(
-                    left: layout.toolbarLeft ? 44 : 0,
-                    right: layout.toolbarLeft ? 0 : 44,
-                    child: Stack(
-                      children: [
-                        // 地図面は TerrainMapLayer（3D）。MapLibre は 2026-09-11 に地図ページから、2026-10-04 に依存ごと撤去
-                        const SizedBox.expand(),
-                        _buildGestureLayer(),
-                        // 3D 地形モード: 地図面を上に重ね、ジェスチャもここで受ける
-                        if (baseMapReady)
-                          Positioned.fill(
-                            child: TerrainMapLayer(
-                              mapState: this,
-                              baseMapService: baseMapService,
-                              geoJson: geoJson,
-                              sceneRevision: terrainSceneRevision,
-                              styleGroups: () => styleGroups,
-                              location: locationNotifier,
-                              gpsTrack: () => gpsHistoryRecorder.todayPoints,
-                              onProjectionChanged: (p) {
-                                terrainProjection = p;
-                                final pendingLaunch = _pendingLaunchCamera;
-                                if (p != null && pendingLaunch != null) {
-                                  _pendingLaunchCamera = null;
-                                  unawaited(p.lookAt(
-                                    center: pendingLaunch.center, zoom: pendingLaunch.zoom,
-                                    bearingDeg: pendingLaunch.bearing, pitchDeg: pendingLaunch.pitch, animate: false,
-                                  ));
-                                }
-                                // レイヤのダブルタップなど、ホルダー経由の「寄せる」「移動」も 3D に流す
-                                // （fit → jump の順。jumpOverride を置いた瞬間に組み上がる前の保留分が流れる）
-                                mapController.fitOverride =
-                                    p == null ? null : (c, pad) => p.fitCoordinates(c, padding: pad);
-                                mapController.jumpOverride = p == null
-                                    ? null
-                                    : (c, z, _, {required animate}) => unawaited(p.jumpTo(c, z, animate: animate));
-                              },
-                              mapBearingNotifier: mapBearingNotifier,
-                              cameraTickNotifier: cameraTickNotifier,
-                              heading: headingNotifier,
-                            ),
-                          ),
-                        // 編集中の形と取っ手（地図の場面には焼かず、カメラが動くたびに描き直す）
-                        EditOverlay(project: latLngToOffset, cameraTick: cameraTickNotifier),
-                        _buildDrawingPreviewInfo(),
-                        if (!editing) _buildOffscreenLocationIndicator(),
-                        const ToolNameFlash(),
-                      ],
-                    ),
-                  ),
-                  // Layer Drawer Panel（右サイド — 属性テーブルとは独立）
-                  if (drawerOpen) _buildLayerDrawerPanel(),
-                  // 情報カード。置き場所は配置プリセット（浮かせる／右パネル。下パネルは Column 側）
-                  if (selectedFeatures.isNotEmpty && _infoFloats(layout))
-                    Positioned(
-                      left: layout.toolbarLeft ? 60 : null,
-                      right: layout.toolbarLeft ? null : 60,
-                      top: 20,
-                      child: _buildInfoContent(selectedFeatures),
-                    ),
-                  if (selectedFeatures.isNotEmpty && layout.info == InfoPlacement.side)
-                    _buildInfoSidePanel(selectedFeatures),
-                  // 外部機器ツールのステータスパネル（DeviceTool抽象経由）
-                  if (currentTool is DeviceTool)
-                    ListenableBuilder(
-                      listenable: currentTool,
-                      builder: (ctx, _) => currentTool.buildStatusPanel(ctx),
-                    ),
-                  // 下のフローティングボタン列（ツールバーと同じ側）
-                  Positioned(
-                    left: layout.toolbarLeft ? 56 : null,
-                    right: layout.toolbarLeft ? null : 56,
-                    bottom: 24,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (currentTool is GpsTool)
-                          // 長押し中の点数はツールが通知する（ここだけ組み直す）
-                          ListenableBuilder(
-                            listenable: currentTool,
-                            builder: (_, _) => GpsSurveyButtons(
-                              isLongPressing: isLongPressing,
-                              longPressGpsCount: currentTool.longPressGpsCount,
-                              onRecordGpsPosition: recordGpsPosition,
-                              onStartLongPressGpsSurvey: startLongPressGpsSurvey,
-                              onStopLongPressGpsSurvey: stopLongPressGpsSurvey,
-                              onOpenTrackExtraction: openTrackExtractionDialog,
-                            ),
-                          ),
-                        // 地物の編集中は地図の上のボタンを出さない
-                        if (!editing) const LeftBottomFab(),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // 下パネル: 属性テーブルが開いていればそれ、閉じていれば情報カード（排他。
-            // 属性テーブルの行を選ぶ流れを切らないよう、表が開いている間の情報カードは地図の上に浮く）
-            if (showAttributeTable && attributeTableLayer != null)
-              _buildAttributeTablePanel()
-            else if (layout.info == InfoPlacement.bottom && selectedFeatures.isNotEmpty)
-              _buildInfoBottomPanel(selectedFeatures),
-          ],
-        ),
-        floatingActionButton: DrawingActionButtons(
-          onConfirmDrawing: onConfirmDrawing,
-          onConfirmGpsSurvey: onConfirmGpsSurvey,
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+  AppBar _buildAppBar({required bool editing}) {
+    return AppBar(
+      title: Text(p.basename(ref.watch(projectRootDirProvider) ?? t.common.appName)),
+      actions: buildMapAppBarActions(
+        context: context,
+        showAttributeTable: showAttributeTable,
+        drawerOpen: drawerOpen,
+        onAttributeTableToggle: () {
+          // 編集中は属性も編集のパネルで書き換える（表を開くと編集のパネルが隠れる）
+          if (editing) return;
+          if (showAttributeTable) {
+            _closeAttributeTable();
+          } else {
+            _openAttributeTable();
+          }
+        },
+        onDrawerToggle: () {
+          triggerSetState(() {
+            if (drawerOpen) {
+              drawerOpen = false;
+            } else {
+              drawerOpen = true;
+              drawerWidth = 320;
+            }
+          });
+          ref.read(tutorialProvider.notifier).report(LayersPanelToggled(drawerOpen));
+        },
+        // ≡ メニュー（パーティ・水準器・設定を集約）はレイヤ一覧の左
+        beforeLayerButton: [KeyedSubtree(key: TutorialTargets.menuButton, child: MapMenuButton(onReload: reloadProjectFromDisk))],
       ),
-      ),
+    );
+  }
+
+  /// 地図エリア: ツールバー・地図本体・レイヤ一覧・情報カード・下のボタン列
+  Widget _buildMapArea(
+    MapLayout layout,
+    MapTool currentTool,
+    List<LayerTreeNode> selectedFeatures, {
+    required bool editing,
+  }) {
+    return Stack(
+      children: [
+        // ツールバー（左右は配置プリセットで決まる）
+        if (editing)
+          EditToolbar(side: layout.toolbar)
+        else
+          MapToolbar(onToolChanged: () => triggerSetState(() {}), side: layout.toolbar),
+        // 地図本体
+        Positioned.fill(
+          left: layout.toolbarLeft ? 44 : 0,
+          right: layout.toolbarLeft ? 0 : 44,
+          child: _buildMapSurface(editing: editing),
+        ),
+        // Layer Drawer Panel（右サイド — 属性テーブルとは独立）
+        if (drawerOpen) _buildLayerDrawerPanel(),
+        // 情報カード。置き場所は配置プリセット（浮かせる／右パネル。下パネルは Column 側）
+        if (selectedFeatures.isNotEmpty && _infoFloats(layout))
+          Positioned(
+            left: layout.toolbarLeft ? 60 : null,
+            right: layout.toolbarLeft ? null : 60,
+            top: 20,
+            child: _buildInfoContent(selectedFeatures),
+          ),
+        if (selectedFeatures.isNotEmpty && layout.info == InfoPlacement.side)
+          _buildInfoSidePanel(selectedFeatures),
+        // 外部機器ツールのステータスパネル（DeviceTool抽象経由）
+        if (currentTool is DeviceTool)
+          ListenableBuilder(
+            listenable: currentTool,
+            builder: (ctx, _) => currentTool.buildStatusPanel(ctx),
+          ),
+        // 下のフローティングボタン列（ツールバーと同じ側）
+        Positioned(
+          left: layout.toolbarLeft ? 56 : null,
+          right: layout.toolbarLeft ? null : 56,
+          bottom: 24,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (currentTool is GpsTool)
+                // 長押し中の点数はツールが通知する（ここだけ組み直す）
+                ListenableBuilder(
+                  listenable: currentTool,
+                  builder: (_, _) => GpsSurveyButtons(
+                    isLongPressing: isLongPressing,
+                    longPressGpsCount: currentTool.longPressGpsCount,
+                    onRecordGpsPosition: recordGpsPosition,
+                    onStartLongPressGpsSurvey: startLongPressGpsSurvey,
+                    onStopLongPressGpsSurvey: stopLongPressGpsSurvey,
+                    onOpenTrackExtraction: openTrackExtractionDialog,
+                  ),
+                ),
+              // 地物の編集中は地図の上のボタンを出さない
+              if (!editing) const LeftBottomFab(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 地図本体: ジェスチャ・3D の地図面・編集の重ね絵・描きかけの寸法・画面外の現在位置
+  Widget _buildMapSurface({required bool editing}) {
+    return Stack(
+      children: [
+        // 地図面は TerrainMapLayer（3D）。MapLibre は 2026-09-11 に地図ページから、2026-10-04 に依存ごと撤去
+        const SizedBox.expand(),
+        _buildGestureLayer(),
+        // 3D 地形モード: 地図面を上に重ね、ジェスチャもここで受ける
+        if (baseMapReady)
+          Positioned.fill(
+            child: TerrainMapLayer(
+              mapState: this,
+              baseMapService: baseMapService,
+              geoJson: geoJson,
+              sceneRevision: terrainSceneRevision,
+              styleGroups: () => styleGroups,
+              location: locationNotifier,
+              gpsTrack: () => gpsHistoryRecorder.todayPoints,
+              onProjectionChanged: _onProjectionChanged,
+              mapBearingNotifier: mapBearingNotifier,
+              cameraTickNotifier: cameraTickNotifier,
+              heading: headingNotifier,
+            ),
+          ),
+        // 編集中の形と取っ手（地図の場面には焼かず、カメラが動くたびに描き直す）
+        EditOverlay(project: latLngToOffset, cameraTick: cameraTickNotifier),
+        _buildDrawingPreviewInfo(),
+        if (!editing) _buildOffscreenLocationIndicator(),
+        const ToolNameFlash(),
+      ],
     );
   }
 
@@ -819,13 +834,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
   /// レイヤードロワーパネル構築
   Widget _buildLayerDrawerPanel() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final maxWidth = screenWidth * 0.67;
+    final maxWidth = MediaQuery.of(context).size.width * 0.67;
     return Positioned(
       right: 0,
       top: 0,
       bottom: 0,
-      width: drawerWidth.clamp(minDrawerWidth, maxWidth),
+      width: _effectiveDrawerWidth,
       child: ResizableSidePanel(
         initialWidth: drawerWidth,
         minWidth: minDrawerWidth,

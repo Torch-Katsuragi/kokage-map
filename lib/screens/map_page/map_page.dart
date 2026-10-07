@@ -33,7 +33,6 @@ import '../../editing/edit_session.dart';
 import '../../editing/edit_toolbar.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
-import '../../models/map_style_group.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/layer_node.dart';
@@ -56,28 +55,18 @@ import '../../utils/app_logger.dart';
 import '../../utils/feature_calc_utils.dart';
 import '../../utils/global_drawing_state.dart';
 import '../../utils/keyboard_handler.dart';
-import '../../utils/label_template.dart';
 import '../../widgets/attribute_table/attribute_table_widget.dart';
 import '../../widgets/feature_detail_panel.dart';
 import '../../widgets/feature_set_panel.dart';
 import '../../widgets/feature_silhouette.dart';
 import '../../widgets/info_panel_card.dart';
-// gps_track.dart は不要に（GpsHistoryRecorder に統合）
 import '../../widgets/layer_drawer/layer_drawer.dart';
 import '../../widgets/left_bottom_fab.dart';
 import '../../widgets/map_appbar_actions.dart';
 import '../../widgets/map_toolbar.dart';
 import '../../widgets/resizable_bottom_panel.dart';
 import '../../widgets/resizable_side_panel.dart';
-import '../layer_style_settings_screen.dart'
-    show
-        layerStyleSettings,
-        labelEnabledDef,
-        labelPropertyDef,
-        lineVertexPointsEnabledDef,
-        polygonVertexPointsEnabledDef;
 // Mixins
-import 'feature_geojson_cache.dart';
 import 'map_page_state_base.dart';
 import 'mixins/index.dart';
 // Widgets
@@ -189,7 +178,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           if (isPracticeGpkg(l.geoPackageFile.getAbsolutePath())) ...l.getAllCoordinates(),
       ];
       // 下は案内の札の分を空ける（札の裏に練習のデータが隠れて、色を変えても見えなかった）
-      if (coords.isNotEmpty) mapControllerInstance.fitCoordinates(coords, padding: const EdgeInsets.fromLTRB(60, 60, 60, 260));
+      if (coords.isNotEmpty) mapController.fitCoordinates(coords, padding: const EdgeInsets.fromLTRB(60, 60, 60, 260));
     }
   }
 
@@ -214,24 +203,13 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     }
   }
 
-  /// 裏に回ったらコンパスを止める（向きは地図に出ている間しか使わない。止めないと裏でも 15〜60Hz で届き続ける）。
-  /// ⚠ pause は使わない（ブロードキャストの購読は止めている間の値を溜め込む）。解いて、戻ったら付け直す
-  bool _compassStopped = false;
-
+  /// 裏に回ったらコンパスを止め、戻ったら付け直す
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      if (_compassStopped) {
-        _compassStopped = false;
-        unawaited(initializeCompass());
-      }
+      resumeCompass();
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
-      final sub = compassSubscription;
-      if (sub != null && !_compassStopped) {
-        _compassStopped = true;
-        compassSubscription = null;
-        unawaited(sub.cancel());
-      }
+      pauseCompass();
     }
   }
 
@@ -254,14 +232,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     }
   }
 
-  /// dirtyフラグ設定と同時にフィーチャソースを再同期
-  /// build()からの毎フレーム呼び出しを排除し、データ変更時のみ同期する
-  @override
-  void invalidateLayerCache() {
-    super.invalidateLayerCache();
-    _syncFeatureSources();
-  }
-
   /// オーバーレイ画像の変形（ドラッグ中）。3D 地図面が枠とハンドルを描き直す
   @override
   void updateOverlayTransform(OverlayImageNode node) => terrainSceneRevision.value++;
@@ -269,8 +239,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   @override
   void onLayerStyleChanged() {
     if (mounted) {
-      applyLayerStyles();
-      invalidateLayerCache(); // dirty設定 + _syncFeatureSources() 呼び出し
+      invalidateLayerCache(); // View 固有スタイルを持ち直して GeoJSON を組み直す
       triggerSetState(() {});
     }
   }
@@ -293,11 +262,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     'latitude', 'longitude', 'altitude', 'accuracy', 'speed', 'bearing', 'isActive', 'isGpsActive', 'sourceType',
     'selectedDevice', 'satelliteCount', 'hdop', 'gpsQuality', 'fixType', 'correctionSource', 'isSurveyMode',
   ];
-
-  @override
-  Future<void> updateFeatures() async {
-    await updateFeaturesImpl();
-  }
 
   // =============================================
   // 属性テーブル管理
@@ -375,7 +339,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   Widget build(BuildContext context) {
     ref.listen<int>(featureRefreshTriggerProvider, (prev, next) {
       if (prev != null && prev != next) {
-        updateFeaturesImpl();
+        updateFeatures();
       }
     });
 
@@ -388,7 +352,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
     // 選択状態の変更をリッスンしてフィーチャソースを再同期
     ref.listen<List<LayerTreeNode>>(selectedFeaturesProvider, (_, _) {
-      _syncFeatureSources();
+      syncFeatureSources();
     });
 
     // 選択レイヤー変更 → 属性テーブルが開いていれば自動で切り替え
@@ -527,9 +491,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                                 }
                                 // レイヤのダブルタップなど、ホルダー経由の「寄せる」「移動」も 3D に流す
                                 // （fit → jump の順。jumpOverride を置いた瞬間に組み上がる前の保留分が流れる）
-                                mapControllerInstance.fitOverride =
+                                mapController.fitOverride =
                                     p == null ? null : (c, pad) => p.fitCoordinates(c, padding: pad);
-                                mapControllerInstance.jumpOverride = p == null
+                                mapController.jumpOverride = p == null
                                     ? null
                                     : (c, z, _, {required animate}) => unawaited(p.jumpTo(c, z, animate: animate));
                               },
@@ -609,99 +573,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       ),
       ),
     );
-  }
-
-  /// フィーチャキャッシュを再構築し、MapSourceManager経由でGeoJSONソースを更新
-  /// オーバーレイ方式: 通常ソースは常に全フィーチャ、選択ソースは選択分だけ上乗せ
-  /// → 選択変更時に通常ソースのGeoJSONが不変のため送信スキップされ、チラつきが解消
-  void _syncFeatureSources() {
-    final currentSelection = ref.read(selectedFeaturesProvider);
-    final selectionChanged = !identical(lastCacheSelection, currentSelection);
-
-    if (!layerCacheDirty && !selectionChanged) return;
-    final dataChanged = layerCacheDirty;
-    layerCacheDirty = false;
-    lastCacheSelection = currentSelection;
-
-    // View / レイヤのスタイル指定が変わっていたらレイヤを積み直す。
-    // ⚠ フィーチャを組み立てる**前**に済ませること。`k-style` を載せるかどうかの
-    //   判断が `sourceManager.styleGroups` を見ているため。
-    final groups = buildStyleGroups();
-    if (setStyleGroups(groups)) {
-      applyLayerStyles(groups: groups);
-    }
-
-    final input = FeatureGeoJsonInput(
-      lines: _viewOrdered(lineFeatures),
-      polygons: _viewOrdered(polygonFeatures),
-      points: pointFeatures,
-      photos: photoNodes,
-      selected: currentSelection.toSet(),
-      hidden: {?ref.read(featureEditorProvider)?.feature},
-      // 固有スタイルが1つでもあれば、フィーチャに「どのグループのものか」を載せる
-      styleKeyOf: styleGroups.isEmpty
-          ? null
-          : (f) => f.parent.styleKeyOf(f.rowId),
-      stylePropKey: kStyleProp,
-      labelOf: _labelFor,
-      lineVertices: layerStyleSettings.getBool(lineVertexPointsEnabledDef),
-      polygonVertices: layerStyleSettings.getBool(polygonVertexPointsEnabledDef),
-    );
-
-    if (!dataChanged) {
-      // 選択のみ変更: 選択ソースだけ再構築（通常ソースは不変→送信スキップ）
-      geoJson.rebuildSelection(input);
-      _pushFeaturesToSources();
-      return;
-    }
-
-    geoJson.rebuildAll(input);
-    _pushFeaturesToSources();
-  }
-
-  /// 同じレイヤの中を View の順に並べる（上の View ほど後＝手前に描く。どの View にも当たらないものはいちばん下）。
-  /// レイヤどうしの順（ツリーの並び）は変えない。固有スタイルが 1 つも無ければそのまま返す
-  List<T> _viewOrdered<T extends FeatureNode>(List<T> fs) {
-    if (styleGroups.isEmpty || fs.isEmpty) return fs;
-    final byLayer = <LayerNode, List<T>>{};
-    for (final f in fs) {
-      (byLayer[f.parent] ??= []).add(f);
-    }
-    final out = <T>[];
-    for (final MapEntry(key: layer, value: list) in byLayer.entries) {
-      final keys = layer.styleGroups.keys.toList();
-      if (keys.length < 2) {
-        out.addAll(list);
-        continue;
-      }
-      final rank = {for (var i = 0; i < keys.length; i++) keys[i]: i};
-      // 順位ごとに振り分けて下から積む（同じ View の中は元の順のまま）
-      final buckets = List.generate(keys.length + 1, (_) => <T>[]);
-      for (final f in list) {
-        buckets[rank[layer.styleKeyOf(f.rowId)] ?? keys.length].add(f);
-      }
-      for (final b in buckets.reversed) {
-        out.addAll(b);
-      }
-    }
-    return out;
-  }
-
-  /// フィーチャに出すラベル。View 固有 → レイヤ固有 → 全体設定の順で解決する
-  String? _labelFor(FeatureNode f) {
-    final layer = f.parent;
-    final kmeta =
-        layer.styleGroups[layer.styleKeyOf(f.rowId)] ?? layer.kmetaStyleIfLoaded;
-    if (!layerStyleSettings.resolveBool(labelEnabledDef, kmeta)) return null;
-    return renderLabelTemplate(
-      layerStyleSettings.resolveString(labelPropertyDef, kmeta),
-      f.turfFeature.properties,
-    );
-  }
-
-  /// 組み立て済みの GeoJSON を 3D 地図面に流す（シーンを組み直す合図）
-  void _pushFeaturesToSources() {
-    terrainSceneRevision.value++;
   }
 
   /// ジェスチャーレイヤー構築

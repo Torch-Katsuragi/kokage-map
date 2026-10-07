@@ -43,9 +43,6 @@ abstract class IMapState {
   /// フィーチャキャッシュを更新し、地図を再描画
   void refreshFeatures();
 
-  /// マップの強制更新処理（レイヤ削除時などに使用）
-  void forceMapRefresh();
-
   /// このStateに関連付けられたBuildContext
   BuildContext get context;
 

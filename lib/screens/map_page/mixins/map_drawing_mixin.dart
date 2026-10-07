@@ -106,29 +106,15 @@ mixin MapDrawingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
     ref.read(currentToolProvider.notifier).set(ref.read(penToolProvider));
     
     // 2. 選択レイヤーを該当フィーチャのレイヤーに設定
-    LayerNode? targetLayer;
-    if (feature is LineFeatureNode) {
-      targetLayer = feature.parent as LayerNode?;
-    } else if (feature is PolygonFeatureNode) {
-      targetLayer = feature.parent as LayerNode?;
-    }
-    
+    final targetLayer = feature is LineFeatureNode || feature is PolygonFeatureNode ? feature.parent as LayerNode? : null;
     if (targetLayer != null) {
       ref.read(selectedLayerNodeProvider.notifier).select(targetLayer);
       AppLogger.debug('[MAP] 選択レイヤーを設定: ${targetLayer.name}');
     }
-    
-    // 3. UI状態を更新
+
+    // 3. UI状態を更新（地図ページは選択レイヤーを watch していない）
     triggerSetState(() {});
-    
+
     AppLogger.debug('[MAP] 追記モード開始完了');
   }
-  
-  // =============================================
-  // 抽象メソッド（サブクラスで実装）
-  // =============================================
-  
-  /// マップUIを更新
-  void refreshMapUI();
 }
-

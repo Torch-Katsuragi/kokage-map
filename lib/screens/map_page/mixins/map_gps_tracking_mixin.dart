@@ -54,11 +54,4 @@ mixin MapGpsTrackingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<
       triggerSetState(() {});
     }
   }
-
-  // =============================================
-  // 抽象メソッド（サブクラスで実装）
-  // =============================================
-
-  /// フィーチャデータを更新
-  Future<void> updateFeatures();
 }

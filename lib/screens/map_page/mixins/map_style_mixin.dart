@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// こかげマップ: レイヤスタイル設定（グローバル＋View 固有）を MapSourceManager に落とす
+// こかげマップ: View 固有のレイヤスタイルを、全体設定と合成して描画用のグループに落とす
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -39,7 +39,7 @@ mixin MapStyleMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
   ///
   /// > [!IMPORTANT] 「グローバル設定にKMetaを重ねる」規則はここにしか無い
   /// > `SettingsStore.resolveXxx(def, kmeta)` が合成を担当する。
-  /// > `MapSourceManager` には解決済みの値だけを渡し、設定の知識を持ち込まない。
+  /// > 描画側には解決済みの値だけを渡し、設定の知識を持ち込まない。
   ///
   /// 固有スタイルが1つも無ければ空リストを返す。そのとき描画は
   /// View 導入前とまったく同じになる。
@@ -83,15 +83,5 @@ mixin MapStyleMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
       }
     }
     return groups;
-  }
-
-  /// レイヤスタイル設定をMapSourceManagerに反映
-  ///
-  /// [groups] を渡せば View 固有スタイルの再計算を省く（`_syncFeatureSources` が
-  /// 直前に組んだものをそのまま使う）
-  void applyLayerStyles({List<MapStyleGroup>? groups}) {
-    // View 固有スタイルの束を持ち直す。全体設定の値は 3D 地図面（TerrainMapLayer）が layerStyleSettings から直接読む
-    setStyleGroups(groups ?? buildStyleGroups());
-    terrainSceneRevision.value++;
   }
 }

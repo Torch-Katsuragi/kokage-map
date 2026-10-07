@@ -53,12 +53,12 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 背景地図サービスの初期化が済んだか（済むまで地図面を組まない）
   bool baseMapReady = false;
 
-  /// 現在位置
-  LatLng? currentLocation;
-
   /// 現在位置の知らせ（3D の地図面と画面外の矢印だけが聞く）。歩いていると 1 秒ごとに変わるので、
   /// そのたびに地図ページ全体を組み立て直さない（2026-10-06）
   final ValueNotifier<LatLng?> locationNotifier = ValueNotifier<LatLng?>(null);
+
+  /// 現在位置（[locationNotifier] の値）
+  LatLng? get currentLocation => locationNotifier.value;
 
   /// 現在位置の詳細パネルが開いているか（開いている間だけ、位置・GPS 情報の変化でページを組み立て直す）
   bool get showsCurrentLocationDetail => ref.read(selectedFeaturesProvider).contains(currentLocationNode);
@@ -82,10 +82,8 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   bool initialViewDecided = false;
 
   /// 地図コントローラー（旧 flutter_map 互換ラッパー）
-  final RMapController mapControllerInstance = RMapController();
-
   @override
-  RMapController get mapController => mapControllerInstance;
+  final RMapController mapController = RMapController();
 
   // =============================================
   // コンパス関連
@@ -101,9 +99,6 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 画面座標に依存するオーバーレイ（画面外の現在位置インジケータ等）が
   /// ページ全体を再ビルドせずに追従するための通知用。
   final ValueNotifier<int> cameraTickNotifier = ValueNotifier<int>(0);
-
-  /// コンパスヘディングの前回スムーズ値（ローパスフィルタ用）
-  double? lastSmoothedHeading;
 
   /// コンパスイベントサブスクリプション
   StreamSubscription<CompassEvent>? compassSubscription;
@@ -204,23 +199,11 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
     return true;
   }
 
-  /// キャッシュ再構築フラグ
-  bool layerCacheDirty = true;
-
   /// 地図面の投影。null なら地図面がまだ組み上がっていない（`TerrainMapLayer` が登録 / 解除する）
   TerrainProjection? terrainProjection;
 
   /// 地図に流す GeoJSON が更新されたら増える（3D 地図面がシーンを組み直す合図）
   final ValueNotifier<int> terrainSceneRevision = ValueNotifier<int>(0);
-
-  /// 前回キャッシュ構築時の選択状態（identity比較用）
-  List<LayerTreeNode>? lastCacheSelection;
-
-  /// レンダリングキャッシュを無効化（次回build時に再構築）
-  @override
-  void invalidateLayerCache() {
-    layerCacheDirty = true;
-  }
 
   // =============================================
   // IMapState実装
@@ -233,7 +216,7 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
       final p = terrain.unproject(offset);
       if (p != null) return p;
     }
-    return mapControllerInstance.camera.center;
+    return mapController.camera.center;
   }
 
   @override
@@ -270,6 +253,12 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   /// 現在のGPS情報を更新
   void updateCurrentGpsInfo();
+
+  /// 可視レイヤのフィーチャを集め直して地図に流す（`MapFeatureCacheMixin`）
+  Future<void> updateFeatures();
+
+  /// フィーチャの追加・削除のあとに地図を更新する（`MapFeatureCacheMixin`）
+  void refreshMapUI();
 
   // =============================================
   // ヘルパーメソッド

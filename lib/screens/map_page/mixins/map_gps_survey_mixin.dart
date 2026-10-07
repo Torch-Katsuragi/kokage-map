@@ -292,15 +292,4 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       }
     }
   }
-  
-  // =============================================
-  // 抽象メソッド（サブクラスで実装）
-  // =============================================
-  
-  /// フィーチャデータを更新
-  Future<void> updateFeatures();
-  
-  /// マップUIを更新
-  void refreshMapUI();
 }
-

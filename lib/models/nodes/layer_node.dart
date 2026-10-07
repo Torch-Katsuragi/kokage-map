@@ -570,18 +570,13 @@ abstract class LayerNode extends LayerTreeNode {
       final featureList = await _loadFeaturesFromDB();
       _featuresLoaded = true;
 
-      // コンストラクタで _featureMap に登録済みの新エントリを退避
-      final newEntries = <int, turf.Feature>{};
-      for (final node in featureList) {
-        final f = _featureMap[node.rowId];
-        if (f != null) newEntries[node.rowId] = f;
-      }
+      // 新しいノードはコンストラクタで _featureMap に登録（上書き）済み。読み直しで無くなった行だけ落とす
+      // （以前は新しい分を別の Map に写してから入れ直していた。1.5 万件で 2 回の写し）
+      final loadedIds = {for (final node in featureList) node.rowId};
 
       // 同期的にスワップ（ここでは await しない）
       children.clear();
-      _featureMap
-        ..clear()
-        ..addAll(newEntries);
+      _featureMap.removeWhere((rowId, _) => !loadedIds.contains(rowId));
 
       for (final node in featureList) {
         super.addChild(node);
@@ -589,7 +584,7 @@ abstract class LayerNode extends LayerTreeNode {
 
       // 子ノードの変更があったためキャッシュをクリア
       clearColumnNamesCache();
-        _featuresRevision++;
+      _featuresRevision++;
       // フィーチャが入れ替わったので、どれがどの View のものかも取り直す
       await refreshStyleGroups();
       _updateChildrenCompleter!.complete();

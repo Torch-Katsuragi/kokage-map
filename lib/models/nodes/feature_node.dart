@@ -176,17 +176,17 @@ abstract class FeatureNode extends LayerTreeNode {
   }
 
   /// 変更フラグをセット
+  ///
+  /// ⚠ ここと [setAttributeValue] は属性表の一括設定で地物ごとに呼ばれる。1 回ごとのログ
+  /// （以前は行の中身まで出していた）を足さない。AppLogger はリリースでも控えに積む
   void _markDirty() {
-    AppLogger.debug('[DEBUG] FeatureNode: _markDirty呼び出し - レイヤー:$layerName, 行ID:$rowId');
     _invalidateCache();
-    
+
     if (_isDisposed) return;
-    
+
     // GeoPackageFileの遅延保存キューに追加
     final rowData = TurfConverter.featureToRowData(turfFeature);
     if (rowData != null) {
-      AppLogger.debug('[DEBUG] FeatureNode: rowData変換成功 - 属性数:${rowData.length}');
-      AppLogger.debug('[DEBUG] FeatureNode: rowData内容: $rowData');
       geoPackageFile.queueAttributeUpdates(layerName, rowId, rowData);
     } else {
       AppLogger.debug('[ERROR] FeatureNode: rowData変換に失敗しました');
@@ -277,8 +277,6 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// 属性値の設定（親のMapを更新し、バックグラウンドでDB書き込み）
   Future<void> setAttributeValue(String attributeName, dynamic value) async {
-    AppLogger.debug('[DEBUG] FeatureNode: Setting attribute $attributeName = $value');
-
     if (_isDisposed) {
       AppLogger.debug('[WARNING] FeatureNode is disposed, cannot set attribute');
       return;
@@ -298,8 +296,6 @@ abstract class FeatureNode extends LayerTreeNode {
   /// 複数の属性値を一括設定
   /// カラムが存在しない場合は自動的に作成する（TEXT型）
   Future<void> setAttributeValues(Map<String, dynamic> attributes) async {
-    AppLogger.debug('[DEBUG] FeatureNode: Setting ${attributes.length} attributes');
-
     if (_isDisposed) {
       AppLogger.debug('[WARNING] FeatureNode is disposed, cannot set attributes');
       return;
@@ -399,13 +395,6 @@ abstract class FeatureNode extends LayerTreeNode {
     _isDisposed = true;
     
     try {
-      // nameアクセス時のエラーを回避するため、try-catchで囲む
-      AppLogger.debug('[DEBUG] FeatureNode.dispose: disposing rowId=$rowId ($runtimeType)');
-    } catch (e) {
-      AppLogger.debug('[DEBUG] FeatureNode.dispose: disposing rowId=$rowId (name取得失敗)');
-    }
-
-    try {
       // 保留中の変更を即座に保存（エラーが発生しても続行）
       await flushChanges();
     } catch (e) {
@@ -416,12 +405,10 @@ abstract class FeatureNode extends LayerTreeNode {
     // LayerNode.removeFeature()を使用することで、childrenと_featureMapの両方から削除される
     try {
       parent.removeFeature(this);
-      AppLogger.debug('[DEBUG] FeatureNode.dispose: removed from parent children and featureMap');
     } catch (e) {
       AppLogger.debug('[WARNING] FeatureNode.dispose: removeFeature failed: $e');
       // フォールバック: 直接削除を試みる
       parent.children.remove(this);
-      AppLogger.debug('[DEBUG] FeatureNode.dispose: fallback - removed from parent children only');
     }
 
     _onDispose?.call(this);
@@ -434,18 +421,15 @@ abstract class FeatureNode extends LayerTreeNode {
     //   レイヤ」を DB から読み直すと、まだ消えていない行が新しいノードとして
     //   復活していた（「たまに削除したフィーチャが残る」の正体）
     try {
-      final removed = await geoPackageFile.removeFeature(layerName, rowId);
-      AppLogger.debug(
-        '[DEBUG] FeatureNode.dispose: DB deletion ${removed ? 'completed' : 'matched no row'} (rowId=$rowId)',
-      );
+      if (!await geoPackageFile.removeFeature(layerName, rowId)) {
+        AppLogger.debug('[DEBUG] FeatureNode.dispose: DB deletion matched no row (rowId=$rowId)');
+      }
     } catch (e) {
       // エラーが発生しても処理は続行（壊れたデータでも削除できるようにする）
       AppLogger.debug(
         '[ERROR] FeatureNode.dispose: DB deletion failed (rowId=$rowId): $e',
       );
     }
-
-    AppLogger.debug('[DEBUG] FeatureNode.dispose: base dispose completed');
 
     // 基底クラスのdisposeを呼び出し
     try {

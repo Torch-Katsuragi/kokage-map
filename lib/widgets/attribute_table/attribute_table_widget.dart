@@ -253,24 +253,18 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
 
     // セル選択時のフィーチャ選択処理。表の通知はスクロールや入力でも来るので、今いる行が変わったときだけ選び直す
     // （以前は通知のたびに選択・地図の寄せ・setState をしていた）
-    int? lastAbsolute;
-    event.stateManager.addListener(() {
-      final currentRowIdx = event.stateManager.currentRowIdx;
-      final currentCell = event.stateManager.currentCell;
-
-      if (currentCell != null && currentRowIdx != null && currentRowIdx >= 0) {
-        final abs = _controller.currentPageOffset + currentRowIdx;
-        // 同じ行でも、地図で別のものを選んだあとなら選び直す
-        final rowFeature = abs < _controller.features.length ? _controller.features[abs] : null;
-        if (abs == lastAbsolute && rowFeature != null && ref.read(selectedFeaturesProvider).contains(rowFeature)) return;
-        lastAbsolute = abs;
-        _controller.selectFeature(currentRowIdx);
-
-        final absoluteIdx = _controller.currentPageOffset + currentRowIdx;
-        if (absoluteIdx < _controller.features.length) {
-          widget.onFeatureSelected?.call(_controller.features[absoluteIdx]);
-        }
-      }
+    final stateManager = event.stateManager;
+    FeatureNode? lastFeature;
+    stateManager.addListener(() {
+      final currentRowIdx = stateManager.currentRowIdx;
+      if (stateManager.currentCell == null || currentRowIdx == null || currentRowIdx < 0) return;
+      final feature = AttributeTableController.featureOfRow(stateManager.currentRow);
+      if (feature == null) return;
+      // 同じ行でも、地図で別のものを選んだあとなら選び直す
+      if (identical(feature, lastFeature) && ref.read(selectedFeaturesProvider).contains(feature)) return;
+      lastFeature = feature;
+      _controller.selectFeature(feature);
+      widget.onFeatureSelected?.call(feature);
     });
 
     // 開いたときに地図で選んでいるものがあれば、その行に色を付ける（選択の変化しか見ていなかったので、
@@ -285,24 +279,18 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   }
 
   void _onGridChanged(TrinaGridOnChangedEvent event) async {
-    final rowIndex = event.rowIdx;
-    final field = event.column.field;
-    final newValue = event.value;
-
-    final absoluteIndex = _controller.currentPageOffset + rowIndex;
-    if (absoluteIndex < _controller.features.length) {
-      final feature = _controller.features[absoluteIndex];
-      final error = await _controller.saveAttributeChange(
-        feature,
-        field,
-        newValue,
+    final feature = AttributeTableController.featureOfRow(event.row);
+    if (feature == null) return;
+    final error = await _controller.saveAttributeChange(
+      feature,
+      event.column.field,
+      event.value,
+    );
+    if (error != null) {
+      ref.read(notificationCenterProvider.notifier).add(
+        title: error,
+        level: NotificationLevel.error,
       );
-      if (error != null) {
-        ref.read(notificationCenterProvider.notifier).add(
-          title: error,
-          level: NotificationLevel.error,
-        );
-      }
     }
   }
 

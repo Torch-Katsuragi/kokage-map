@@ -80,8 +80,7 @@ class AttributeTableController extends ChangeNotifier {
   List<FeatureNode> _displayFeatures = [];
   List<TrinaRow> _displayRows = [];
 
-  // ページング状態
-  int _currentPageOffset = 0;
+  // ページング
   static const int defaultPageSize = 100;
 
   // エラー状態
@@ -110,7 +109,6 @@ class AttributeTableController extends ChangeNotifier {
   String? get filterError => _filterError;
   int get totalCount => _features.length;
   int get filteredCount => _displayFeatures.length;
-  int get currentPageOffset => _currentPageOffset;
   String? get lastError => _lastError;
 
   /// エラーをクリア
@@ -201,7 +199,6 @@ class AttributeTableController extends ChangeNotifier {
       }
 
       // 初回ページのデータを構築
-      _currentPageOffset = 0;
       _displayRows = await _createRowsForRange(0, defaultPageSize);
       _rows = _displayRows;
 
@@ -377,7 +374,6 @@ class AttributeTableController extends ChangeNotifier {
       }
     }
 
-    _currentPageOffset = 0;
     _displayRows = await _createRowsForRange(0, defaultPageSize);
     _rows = _displayRows;
 
@@ -394,19 +390,19 @@ class AttributeTableController extends ChangeNotifier {
     _isFiltered = false;
     _filterError = null;
     _displayFeatures = List.of(_features);
-    _currentPageOffset = 0;
     _displayRows = await _createRowsForRange(0, defaultPageSize);
     _rows = _displayRows;
     notifyListeners();
   }
 
-  /// フィーチャを選択（ページオフセットを考慮）
-  void selectFeature(int rowIndex) {
-    final absoluteIndex = _currentPageOffset + rowIndex;
-    if (absoluteIndex < 0 || absoluteIndex >= _displayFeatures.length) return;
+  /// 表の行の地物。行を並べ替えても行と地物の組は崩れない（位置から数えると別の地物を指していた）
+  static FeatureNode? featureOfRow(TrinaRow? row) {
+    final data = row?.data;
+    return data is FeatureNode ? data : null;
+  }
 
-    final feature = _displayFeatures[absoluteIndex];
-
+  /// フィーチャを選択
+  void selectFeature(FeatureNode feature) {
     final currentSelection = _ref.read(selectedFeaturesProvider);
     if (currentSelection.length == 1 && currentSelection.first == feature) {
       return;
@@ -422,22 +418,15 @@ class AttributeTableController extends ChangeNotifier {
   void highlightFeatureOnCurrentPage(FeatureNode feature) {
     if (_stateManager == null) return;
 
-    final absoluteIndex = _displayFeatures.indexOf(feature);
-    if (absoluteIndex < 0) return;
+    // 表に出ている行（今のページ）だけを探す
+    final rows = _stateManager!.refRows;
+    final localIndex = rows.indexWhere((r) => identical(r.data, feature));
+    if (localIndex < 0) return;
 
-    final pageEnd = _currentPageOffset + defaultPageSize;
-    if (absoluteIndex < _currentPageOffset || absoluteIndex >= pageEnd) return;
-
-    final localIndex = absoluteIndex - _currentPageOffset;
     // 表のマスを押した選択が地図を回って戻ってきたときは動かさない。
     // 動かすと押したマスから行の先頭へ飛び、そのマスを編集できなかった（2026-10-01 チュートリアルで発覚）
     if (_stateManager!.currentRowIdx == localIndex) return;
-    if (localIndex >= 0 && localIndex < _stateManager!.refRows.length) {
-      _stateManager!.setCurrentCell(
-        _stateManager!.refRows[localIndex].cells.values.first,
-        localIndex,
-      );
-    }
+    _stateManager!.setCurrentCell(rows[localIndex].cells.values.first, localIndex);
   }
 
   // ========== Phase 3: 複数行操作 ==========
@@ -445,15 +434,10 @@ class AttributeTableController extends ChangeNotifier {
   /// チェックされた行のフィーチャを取得
   List<FeatureNode> getCheckedFeatures() {
     if (_stateManager == null) return [];
-    final checkedRows = _stateManager!.checkedRows;
-    final result = <FeatureNode>[];
-    for (final row in checkedRows) {
-      final rowNum = row.cells['_row_num']?.value;
-      if (rowNum is int && rowNum > 0 && rowNum <= _displayFeatures.length) {
-        result.add(_displayFeatures[rowNum - 1]);
-      }
-    }
-    return result;
+    return [
+      for (final row in _stateManager!.checkedRows)
+        ?featureOfRow(row),
+    ];
   }
 
   /// チェックされた行数を取得
@@ -697,7 +681,6 @@ class AttributeTableController extends ChangeNotifier {
         (totalFeatures / pageSize).ceil().clamp(1, double.infinity).toInt();
     final start = (page - 1) * pageSize;
 
-    _currentPageOffset = start;
     final rows = await _createRowsForRange(start, pageSize);
 
     return TrinaLazyPaginationResponse(totalPage: totalPages, rows: rows);
@@ -744,7 +727,7 @@ class AttributeTableController extends ChangeNotifier {
         }
       }
 
-      tableRows.add(TrinaRow(cells: cells));
+      tableRows.add(TrinaRow(cells: cells, data: feature));
     }
 
     return tableRows;

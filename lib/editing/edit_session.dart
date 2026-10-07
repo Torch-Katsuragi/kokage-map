@@ -140,7 +140,10 @@ class EditState {
 
   Snap get snap => (geom, ids);
   bool get shapeChanged => !_sameShape(geom, original);
-  bool get attrsChanged => columns.any((c) => '${attrs[c] ?? ''}' != '${originalAttrs[c] ?? ''}');
+  bool get attrsChanged => columns.any(attrChanged);
+
+  /// 列 [c] の値を書き換えたか（null と空は同じとみなす）
+  bool attrChanged(String c) => '${attrs[c] ?? ''}' != '${originalAttrs[c] ?? ''}';
   bool get dirty => shapeChanged || attrsChanged;
 
   EditState copyWith({
@@ -462,10 +465,8 @@ class FeatureEditor extends Notifier<EditState?> {
       if (ok && s.kind != EditKind.point) await _syncSubTable(s);
     }
     if (ok) {
-      for (final c in s.columns) {
-        if ('${s.attrs[c] ?? ''}' != '${s.originalAttrs[c] ?? ''}') {
-          await f.setAttributeValue(c, s.attrs[c]);
-        }
+      for (final c in s.columns.where(s.attrChanged)) {
+        await f.setAttributeValue(c, s.attrs[c]);
       }
     }
     if (!ok) {

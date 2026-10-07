@@ -69,8 +69,6 @@ class _EditPanelState extends ConsumerState<EditPanel> {
     super.dispose();
   }
 
-  Future<void> _cancel(EditState s) => cancelEdit(context, ref);
-
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(featureEditorProvider);
@@ -112,7 +110,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
               Expanded(child: s.attrsTab ? _attrs(s, theme) : _shape(s, theme)),
               Row(
                 children: [
-                  TextButton(onPressed: s.saving ? null : () => _cancel(s), child: Text(t.featureEdit.cancel)),
+                  TextButton(onPressed: s.saving ? null : () => cancelEdit(context, ref), child: Text(t.featureEdit.cancel)),
                   const Spacer(),
                   FilledButton.icon(
                     key: TutorialTargets.editSaveButton,
@@ -159,8 +157,8 @@ class _EditPanelState extends ConsumerState<EditPanel> {
         ),
         const SizedBox(height: 4),
         Text(hint, style: theme.textTheme.bodyMedium),
-        if (s.mode == EditMode.simplify) _simplifySlider(s, theme),
-        if (s.mode == EditMode.trim) _trimSlider(s, theme),
+        if (s.mode == EditMode.simplify) _simplifySlider(s),
+        if (s.mode == EditMode.trim) _trimSlider(s),
         const SizedBox(height: 4),
         Text(t.featureEdit.hints.twoFingers, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
         const SizedBox(height: 10),
@@ -170,7 +168,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
   }
 
   /// 間引く: 許す幅（m）。0〜50 m、0.5 m 刻み
-  Widget _simplifySlider(EditState s, ThemeData theme) {
+  Widget _simplifySlider(EditState s) {
     final ed = ref.read(featureEditorProvider.notifier);
     return Row(
       children: [
@@ -191,7 +189,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
   }
 
   /// 切り落とす: 残す頂点の範囲
-  Widget _trimSlider(EditState s, ThemeData theme) {
+  Widget _trimSlider(EditState s) {
     final ed = ref.read(featureEditorProvider.notifier);
     final max = ed.trimMax;
     if (max < 2) return const SizedBox.shrink();

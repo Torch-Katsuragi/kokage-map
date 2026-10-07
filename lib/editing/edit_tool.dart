@@ -94,6 +94,12 @@ class EditTool extends MapTool {
     return best;
   }
 
+  /// ドラッグを始める（離したときに今の形を 1 手の前として積む）
+  void _grab(EditState s) {
+    _base = s.geom;
+    _snap = s.snap;
+  }
+
   void _reset() {
     _base = null;
     _snap = null;
@@ -114,8 +120,7 @@ class EditTool extends MapTool {
       case EditMode.vertex:
         final v = _hitVertex(s.geom, p, mapState, _vertexHit);
         if (v != null) {
-          _base = s.geom;
-          _snap = s.snap;
+          _grab(s);
           _dragVertex = v;
           _ed.select(v);
           return;
@@ -123,22 +128,19 @@ class EditTool extends MapTool {
         final mid = _hitMid(s, p, mapState);
         if (mid != null) {
           // 中点を掴んだら、そこに頂点を足してそのまま動かす（足すのと動かすのを 1 手にする）
-          _base = s.geom;
-          _snap = s.snap;
+          _grab(s);
           final (r, i, ll) = mid;
           _ed.previewInsert(r, i + 1, ll);
           _dragVertex = (r, i + 1);
           _ed.select(_dragVertex);
         }
       case EditMode.move:
-        _base = s.geom;
-        _snap = s.snap;
+        _grab(s);
         _dragAll = true;
         _startLatLng = mapState.offsetToLatLng(p);
       case EditMode.rotate:
       case EditMode.scale:
-        _base = s.geom;
-        _snap = s.snap;
+        _grab(s);
         _centre = mapState.latLngToOffset(centroidOf(s.geom));
         _startVec = p - _centre!;
       case EditMode.extend:

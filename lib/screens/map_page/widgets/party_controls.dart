@@ -32,27 +32,17 @@ import '../../../services/party/party_connection_monitor.dart';
 import '../../../services/party/party_invite.dart';
 
 /// 接続状態の表示ラベル
-String partyConnectionLabel(PartyConnectionState s) {
-  switch (s) {
-    case PartyConnectionState.online:
-      return t.party.connSharing;
-    case PartyConnectionState.connecting:
-      return t.party.connConnecting;
-    case PartyConnectionState.offline:
-      return t.party.connOffline;
-  }
-}
+String partyConnectionLabel(PartyConnectionState s) => switch (s) {
+      PartyConnectionState.online => t.party.connSharing,
+      PartyConnectionState.connecting => t.party.connConnecting,
+      PartyConnectionState.offline => t.party.connOffline,
+    };
 
-Color partyConnectionColor(PartyConnectionState s) {
-  switch (s) {
-    case PartyConnectionState.online:
-      return Colors.green;
-    case PartyConnectionState.connecting:
-      return Colors.orange;
-    case PartyConnectionState.offline:
-      return Colors.grey;
-  }
-}
+Color partyConnectionColor(PartyConnectionState s) => switch (s) {
+      PartyConnectionState.online => Colors.green,
+      PartyConnectionState.connecting => Colors.orange,
+      PartyConnectionState.offline => Colors.grey,
+    };
 
 /// パーティ機能の入口。参加中はステータスシート、未参加は作成/参加ダイアログを開く。
 ///
@@ -80,11 +70,7 @@ class PartyButton extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: GestureDetector(
-        onTap:
-            () =>
-                active
-                    ? _showStatusSheet(context, ref)
-                    : _showJoinCreateDialog(context, ref),
+        onTap: () => showPartyEntry(context, ref),
         child: Container(
           width: 56,
           height: 56,
@@ -363,127 +349,20 @@ class _PartyStatusSheet extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text(
-                  t.party.roomCode,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                Chip(
-                  backgroundColor: partyConnectionColor(
-                    session.connection,
-                  ).withValues(alpha: 0.15),
-                  label: Text(partyConnectionLabel(session.connection)),
-                ),
-              ],
-            ),
+            _buildRoomHeader(session),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                SelectableText(
-                  session.roomCode ?? '',
-                  style: const TextStyle(
-                    fontSize: 28,
-                    letterSpacing: 4,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.copy),
-                  tooltip: t.party.copy,
-                  onPressed:
-                      () => Clipboard.setData(
-                        ClipboardData(text: session.roomCode ?? ''),
-                      ),
-                ),
-              ],
-            ),
-            // 招待の出口: リンクコピーとQR。どちらも招待URL（web参加ページ）を渡す
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.link, size: 18),
-                    label: Text(t.party.copyInviteLink),
-                    onPressed: () async {
-                      final code = session.roomCode;
-                      if (code == null) return;
-                      await Clipboard.setData(
-                        ClipboardData(text: buildInviteUrl(code)),
-                      );
-                      ref.read(notificationCenterProvider.notifier).add(
-                            title: t.party.inviteLinkCopied,
-                            level: NotificationLevel.info,
-                          );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.qr_code, size: 18),
-                    label: Text(t.party.showQr),
-                    onPressed: () {
-                      final code = session.roomCode;
-                      if (code == null) return;
-                      _PartyInviteQrDialog.show(context, roomCode: code);
-                    },
-                  ),
-                ),
-              ],
-            ),
+            _buildRoomCode(session),
+            _buildInviteButtons(context, ref, session),
             const Divider(),
-            // ゴーストモード: 自分の位置を一時的に隠す
-            SwitchListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              secondary: Icon(
-                session.ghost ? Icons.visibility_off : Icons.visibility,
-                color: session.ghost ? Colors.deepPurple : null,
-              ),
-              title: Text(t.party.ghostMode),
-              subtitle: Text(
-                session.ghost ? t.party.ghostOn : t.party.ghostOff,
-                style: const TextStyle(fontSize: 12),
-              ),
-              value: session.ghost,
-              onChanged:
-                  (v) => ref.read(partySessionProvider.notifier).setGhost(v),
-            ),
+            _buildGhostSwitch(ref, session),
             const Divider(),
             Text(
               t.party.members(count: session.members.length),
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
-            ...session.members.map((m) {
-              final battery = session.peers[m.uid]?.battery;
-              // host は他メンバーを退出させられる（RTDBルールが特権を担保）
-              final canKick = session.role == PartyRole.host &&
-                  m.uid != session.selfUid;
-              return ListTile(
-                dense: true,
-                leading: Icon(
-                  m.role == PartyRole.host ? Icons.star : Icons.person,
-                  color: m.role == PartyRole.host ? Colors.amber : null,
-                ),
-                title: Text(m.name),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (battery != null) _BatteryBadge(percent: battery),
-                    if (canKick)
-                      IconButton(
-                        icon: const Icon(Icons.person_remove_outlined,
-                            size: 20),
-                        tooltip: t.party.kick,
-                        onPressed: () => _confirmKick(context, ref, m),
-                      ),
-                  ],
-                ),
-              );
-            }),
+            for (final m in session.members)
+              _buildMemberTile(context, ref, session, m),
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
@@ -501,6 +380,135 @@ class _PartyStatusSheet extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 「ルームコード」見出しと接続状態のチップ
+  Widget _buildRoomHeader(PartySessionState session) => Row(
+        children: [
+          Text(
+            t.party.roomCode,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const Spacer(),
+          Chip(
+            backgroundColor: partyConnectionColor(
+              session.connection,
+            ).withValues(alpha: 0.15),
+            label: Text(partyConnectionLabel(session.connection)),
+          ),
+        ],
+      );
+
+  /// ルームコードとコピーボタン
+  Widget _buildRoomCode(PartySessionState session) => Row(
+        children: [
+          SelectableText(
+            session.roomCode ?? '',
+            style: const TextStyle(
+              fontSize: 28,
+              letterSpacing: 4,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy),
+            tooltip: t.party.copy,
+            onPressed:
+                () => Clipboard.setData(
+                  ClipboardData(text: session.roomCode ?? ''),
+                ),
+          ),
+        ],
+      );
+
+  /// 招待の出口: リンクコピーとQR。どちらも招待URL（web参加ページ）を渡す
+  Widget _buildInviteButtons(
+    BuildContext context,
+    WidgetRef ref,
+    PartySessionState session,
+  ) => Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.link, size: 18),
+              label: Text(t.party.copyInviteLink),
+              onPressed: () async {
+                final code = session.roomCode;
+                if (code == null) return;
+                await Clipboard.setData(
+                  ClipboardData(text: buildInviteUrl(code)),
+                );
+                ref.read(notificationCenterProvider.notifier).add(
+                      title: t.party.inviteLinkCopied,
+                      level: NotificationLevel.info,
+                    );
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.qr_code, size: 18),
+              label: Text(t.party.showQr),
+              onPressed: () {
+                final code = session.roomCode;
+                if (code == null) return;
+                _PartyInviteQrDialog.show(context, roomCode: code);
+              },
+            ),
+          ),
+        ],
+      );
+
+  /// ゴーストモード: 自分の位置を一時的に隠す
+  Widget _buildGhostSwitch(WidgetRef ref, PartySessionState session) =>
+      SwitchListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        secondary: Icon(
+          session.ghost ? Icons.visibility_off : Icons.visibility,
+          color: session.ghost ? Colors.deepPurple : null,
+        ),
+        title: Text(t.party.ghostMode),
+        subtitle: Text(
+          session.ghost ? t.party.ghostOn : t.party.ghostOff,
+          style: const TextStyle(fontSize: 12),
+        ),
+        value: session.ghost,
+        onChanged: (v) => ref.read(partySessionProvider.notifier).setGhost(v),
+      );
+
+  /// メンバー1人の行（バッテリーと、host ならキック）
+  Widget _buildMemberTile(
+    BuildContext context,
+    WidgetRef ref,
+    PartySessionState session,
+    PartyMember m,
+  ) {
+    final battery = session.peers[m.uid]?.battery;
+    // host は他メンバーを退出させられる（RTDBルールが特権を担保）
+    final canKick = session.role == PartyRole.host && m.uid != session.selfUid;
+    final isHost = m.role == PartyRole.host;
+    return ListTile(
+      dense: true,
+      leading: Icon(
+        isHost ? Icons.star : Icons.person,
+        color: isHost ? Colors.amber : null,
+      ),
+      title: Text(m.name),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (battery != null) _BatteryBadge(percent: battery),
+          if (canKick)
+            IconButton(
+              icon: const Icon(Icons.person_remove_outlined, size: 20),
+              tooltip: t.party.kick,
+              onPressed: () => _confirmKick(context, ref, m),
+            ),
+        ],
       ),
     );
   }

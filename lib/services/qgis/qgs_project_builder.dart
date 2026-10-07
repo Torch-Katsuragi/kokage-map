@@ -46,6 +46,7 @@ import 'qgs_document.dart';
 import 'qgs_meta_store.dart';
 import 'qgs_model.dart';
 import 'qgs_writer.dart';
+import 'qgs_xml.dart';
 
 /// [QgsProjectBuilder.writeTo] の結果
 class QgsWriteResult {
@@ -193,14 +194,7 @@ class QgsProjectBuilder {
     }
 
     final report = doc.apply(built);
-    doc.setStamp(
-      KokageStamp(
-        schemaVersion: kQgsSchemaVersion,
-        app: await QgsMetaStore.appLabel(),
-        savedAt: DateTime.now(),
-        dirName: dirName,
-      ),
-    );
+    doc.setStamp(await QgsMetaStore.newStamp(dirName));
     final xml = doc.toXmlString();
     // 保存時刻の印しか変わらないなら書かない。書くと更新時刻が進み、Drive 同期が毎回
     // 「端末で変更あり」と見てアップロードし続ける（2026-09-24、Fold で 5 分ごとに上げていた）
@@ -384,18 +378,12 @@ class QgsProjectBuilder {
   // 部品
   // =============================================
 
-  /// `.qgs` から見た相対パス。root外を指していたら null。
-  ///
-  /// ⚠ 判定は**正規化した絶対パス**で行う。`../shared/kyoyu.gpkg` のように
-  /// 相対で外に出るケースが林業では現実にありそうなので、素朴な文字列比較では足りない。
+  /// `.qgs` から見た相対パス（[relativeInside]）。root外を指していたら null。
+  /// QGIS は `./` 始まりを相対パスとして扱う。区切りは常に `/`
   String? _relativeTo(String? rootPath, String? absPath) {
     if (rootPath == null || absPath == null) return null;
-    final root = p.normalize(rootPath);
-    final target = p.normalize(absPath);
-    final rel = p.relative(target, from: root);
-    if (rel.startsWith('..') || p.isAbsolute(rel)) return null;
-    // QGIS は `./` 始まりを相対パスとして扱う。区切りは常に `/`
-    return './${rel.replaceAll(r'\', '/')}';
+    final rel = relativeInside(rootPath, absPath);
+    return rel == null ? null : './${rel.replaceAll(r'\', '/')}';
   }
 
   /// View の一意ID。

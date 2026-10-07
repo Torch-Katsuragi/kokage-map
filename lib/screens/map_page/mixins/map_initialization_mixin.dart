@@ -481,7 +481,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     locationNotifier.dispose();
     mapBearingNotifier.dispose();
     cameraTickNotifier.dispose();
-    longPressCountUpdateTimer?.cancel();
   }
 
   // =============================================

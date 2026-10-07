@@ -15,8 +15,6 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // lib/tools/pen_tool.dart
 // ペンツール（レイヤ描画）
-import 'dart:async';
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,9 +51,6 @@ class PenTool extends MapTool {
 
   @override
   IconData get icon => Icons.edit;
-
-  /// UI更新デバウンス用タイマー
-  Timer? _uiUpdateTimer;
 
   bool _isDrawing = false;
   int _pointerCount = 0;
@@ -119,12 +114,10 @@ class PenTool extends MapTool {
         mapState.refreshFeatures();
         _ref.read(tutorialProvider.notifier).report(PointPlaced(selected));
       });
-      mapState.setState(() {});
     } else if (selected is LineLayerNode) {
       AppLogger.debug('[DEBUG] PenTool.onTap: ラインレイヤー処理');
 
       drawingState.addPoint(latlng, null, isLine: true);
-      mapState.setState(() {});
     } else if (selected is PolygonLayerNode) {
       AppLogger.debug(
         '[DEBUG] PenTool.onTap: ポリゴンレイヤー処理開始 - 現在の点数: ${drawingPolygon.length}',
@@ -133,12 +126,6 @@ class PenTool extends MapTool {
       // タップ時のポリゴン描画
       try {
         drawingState.addPoint(latlng, null, isLine: false);
-
-        // デバウンス機能：50ms後にUI更新を実行
-        _uiUpdateTimer?.cancel();
-        _uiUpdateTimer = Timer(const Duration(milliseconds: 50), () {
-          mapState.setState(() {});
-        });
 
         AppLogger.debug(
           '[DEBUG] PenTool.onTap: ポリゴン点追加完了 - 新しい点数: ${drawingPolygon.length}',
@@ -207,17 +194,14 @@ class PenTool extends MapTool {
       final latlng = mapState.offsetToLatLng(details.localFocalPoint);
       if (selected is PointLayerNode) {
         drawingState.setPointPreview(latlng);
-        mapState.setState(() {});
       } else if (selected is LineLayerNode) {
         if (drawingLine.isEmpty) {
           drawingState.addPoint(latlng, null, isLine: true);
-          mapState.setState(() {});
         }
         _isDrawing = true;
       } else if (selected is PolygonLayerNode) {
         if (drawingPolygon.isEmpty) {
           drawingState.addPoint(latlng, null, isLine: false);
-          mapState.setState(() {});
         }
         _isDrawing = true;
       }
@@ -258,13 +242,10 @@ class PenTool extends MapTool {
       final latlng = mapState.offsetToLatLng(details.localFocalPoint);
       if (selected is PointLayerNode) {
         drawingState.setPointPreview(latlng);
-        mapState.setState(() {});
       } else if (selected is LineLayerNode && _isDrawing) {
         drawingState.addPoint(latlng, null, isLine: true);
-        mapState.setState(() {});
       } else if (selected is PolygonLayerNode && _isDrawing) {
         drawingState.addPoint(latlng, null, isLine: false);
-        mapState.setState(() {});
       }
     }
   }
@@ -298,7 +279,6 @@ class PenTool extends MapTool {
           mapState.refreshFeatures();
         });
         drawingState.setPointPreview(null);
-        mapState.setState(() {});
       } else if (selected is LineLayerNode && drawingLine.length >= 2) {
         LineFeatureNode.createIn(
           selected,
@@ -309,7 +289,6 @@ class PenTool extends MapTool {
           mapState.refreshFeatures();
         });
         drawingState.clear(isLine: true);
-        mapState.setState(() {});
       } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
         final closed = mapState.closeRing(drawingPolygon);
         PolygonFeatureNode.createIn(
@@ -322,7 +301,6 @@ class PenTool extends MapTool {
         });
         drawingState.clear(isLine: false);
         _isDrawing = false;
-        mapState.setState(() {});
       }
     }
     _pointerCount = 0;

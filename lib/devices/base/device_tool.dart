@@ -28,7 +28,7 @@ import 'package:latlong2/latlong.dart';
 import '../../tools/map_tool.dart';
 import 'device_service.dart';
 
-abstract class DeviceTool extends MapTool with ChangeNotifier {
+abstract class DeviceTool extends MapTool {
   /// このツールが使用する機器サービス
   ExternalDeviceService get service;
 

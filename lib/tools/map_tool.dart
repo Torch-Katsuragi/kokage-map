@@ -17,12 +17,15 @@
 // 地図操作ツールの抽象基底クラス
 // 各ツール（てのひら・ペン・選択等）はこのクラスを継承
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 
 import '../interfaces/map_state_interface.dart';
 
 /// 地図操作ツールの抽象基底クラス
-abstract class MapTool {
+///
+/// ツール自身の状態（外部機器の計測値、GPS 長押し測量の点数など）が変わったら [notifyListeners] する。
+/// 画面側は今のツールを [ListenableBuilder] などで聞いて、その部分だけ描き直す。
+/// ペン・GPS 測量の描きかけは [GlobalDrawingState] が持ち、そちらが通知する
+abstract class MapTool extends ChangeNotifier {
   /// PointerEventバッファ（Listener等でonPointerMove時に記録）
   final List<Offset> pointerBuffer = [];
 

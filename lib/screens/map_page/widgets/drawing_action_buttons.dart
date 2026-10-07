@@ -30,59 +30,48 @@ import '../../../tutorial/tutorial.dart';
 import '../../../utils/global_drawing_state.dart';
 
 /// 描画・測量操作用のFABボタン群
+///
+/// 描きかけ（[GlobalDrawingState]）を聞いて、点が入った・消えたときにここだけ組み直す
 class DrawingActionButtons extends ConsumerWidget {
   final VoidCallback onConfirmDrawing;
   final VoidCallback onConfirmGpsSurvey;
-  final VoidCallback onTriggerSetState;
-  final GpsTool? Function() getGpsTool;
 
   const DrawingActionButtons({
     super.key,
     required this.onConfirmDrawing,
     required this.onConfirmGpsSurvey,
-    required this.onTriggerSetState,
-    required this.getGpsTool,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedLayerNodeProvider);
     final currentTool = ref.watch(currentToolProvider);
-    final drawingState = GlobalDrawingState.instance;
-    final gpsTool = currentTool is GpsTool ? currentTool : null;
 
     // 消しゴム: 集めた候補（＝選択）を確定するまで消さない
     final eraserCandidates =
         currentTool is PenTool && ref.watch(isFabActiveProvider)
             ? ref.watch(selectedFeaturesProvider).whereType<FeatureNode>().length
             : 0;
-
-    final isGpsSurveyLine =
-        selected is LineLayerNode &&
-        gpsTool != null &&
-        gpsTool.surveyLine.isNotEmpty;
-    final isGpsSurveyPolygon =
-        selected is PolygonLayerNode &&
-        gpsTool != null &&
-        gpsTool.surveyPolygon.isNotEmpty;
-
-    final isLineDrawing =
-        selected is LineLayerNode &&
-        currentTool is PenTool &&
-        drawingState.drawingLine.isNotEmpty;
-    final isPolygonDrawing =
-        selected is PolygonLayerNode &&
-        currentTool is PenTool &&
-        drawingState.drawingPolygon.isNotEmpty;
-
     if (eraserCandidates > 0) {
       return _buildEraserButtons(ref, eraserCandidates);
-    } else if (isGpsSurveyLine || isGpsSurveyPolygon) {
-      return _buildGpsSurveyButtons(ref, gpsTool, drawingState);
-    } else if (isLineDrawing || isPolygonDrawing) {
-      return _buildDrawingButtons(drawingState, isLineDrawing);
     }
-    return const SizedBox.shrink();
+
+    final drawingState = GlobalDrawingState.instance;
+    return ListenableBuilder(
+      listenable: drawingState,
+      builder: (context, _) {
+        final lineDrawing = selected is LineLayerNode && drawingState.isLineDrawing;
+        final polygonDrawing = selected is PolygonLayerNode && drawingState.isPolygonDrawing;
+        if (!lineDrawing && !polygonDrawing) return const SizedBox.shrink();
+        if (currentTool is GpsTool) {
+          return _buildGpsSurveyButtons(ref, currentTool, drawingState);
+        }
+        if (currentTool is PenTool) {
+          return _buildDrawingButtons(drawingState, lineDrawing);
+        }
+        return const SizedBox.shrink();
+      },
+    );
   }
 
   Widget _buildEraserButtons(WidgetRef ref, int count) {
@@ -120,8 +109,7 @@ class DrawingActionButtons extends ConsumerWidget {
         FloatingActionButton(
           heroTag: 'gps_undo',
           onPressed: () {
-            drawingState.undo(isLine: gpsTool.surveyLine.isNotEmpty);
-            onTriggerSetState();
+            drawingState.undo(isLine: drawingState.isLineDrawing);
           },
           tooltip: t.gps.undoLastPointTooltip,
           child: const Icon(Icons.undo),
@@ -131,7 +119,6 @@ class DrawingActionButtons extends ConsumerWidget {
           heroTag: 'gps_cancel',
           onPressed: () async {
             await gpsTool.cancelSurveyWithGpsStop();
-            onTriggerSetState();
             ref
                 .read(notificationCenterProvider.notifier)
                 .add(
@@ -164,7 +151,6 @@ class DrawingActionButtons extends ConsumerWidget {
           heroTag: 'undo',
           onPressed: () {
             drawingState.undo(isLine: isLineDrawing);
-            onTriggerSetState();
           },
           tooltip: t.map.drawing.undo,
           child: const Icon(Icons.undo),
@@ -174,7 +160,6 @@ class DrawingActionButtons extends ConsumerWidget {
           heroTag: 'cancel',
           onPressed: () {
             drawingState.clear(isLine: isLineDrawing);
-            onTriggerSetState();
           },
           tooltip: t.map.drawing.cancel,
           child: const Icon(Icons.clear),

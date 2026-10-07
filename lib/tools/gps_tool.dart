@@ -491,6 +491,7 @@ class GpsTool extends MapTool {
     _longPressGpsData.addAll(continuousData);
 
     AppLogger.debug('[GpsTool] 連続測量位置更新 - 現在${_longPressGpsData.length}ポイント');
+    notifyListeners(); // 長押し中の点数の表示
   }
 
   /// マウスホイールスクロールイベント（ズーム機能）

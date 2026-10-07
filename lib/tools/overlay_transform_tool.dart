@@ -46,9 +46,6 @@ class OverlayTransformTool extends MapTool {
 
   OverlayTransformTool(this._ref);
 
-  /// 変形更新通知（ハンドルマーカーの局所rebuild用）
-  final ValueNotifier<int> transformNotifier = ValueNotifier<int>(0);
-
   /// 操作対象のオーバーレイノード
   OverlayImageNode? _target;
 
@@ -338,16 +335,9 @@ class OverlayTransformTool extends MapTool {
     _notifyOverlayChanged(mapState);
   }
 
-  /// オーバーレイ変更を通知
-  ///
-  /// ハンドルUIは即時更新（transformNotifier）し、地図への反映は 100ms で間引く
+  /// オーバーレイ変更を地図へ反映する（枠とハンドルは地図面が描くので、反映は 100ms で間引く）
   void _notifyOverlayChanged(IMapState mapState) {
     if (_target == null) return;
-
-    // ハンドル位置は即座に更新（Flutter側の軽量描画）
-    transformNotifier.value++;
-
-    // 地図への反映は 100ms 間隔に間引く
     _lastMapState = mapState;
     _mapUpdateDebounce?.cancel();
     _mapUpdateDebounce = Timer(_mapUpdateInterval, () {

@@ -646,6 +646,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     TerrainAppearance.revision.addListener(_onAppearanceChanged);
     widget.heading?.addListener(_onHeading);
     widget.location.addListener(_scheduleRefresh);
+    // 描きかけの線・面・点（ペン・GPS 測量）。地図ページは組み直さないのでここで聞く
+    GlobalDrawingState.instance.addListener(_scheduleRefresh);
     widget.onProjectionChanged(this);
     _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 350))
       ..addListener(_onAnimTick)
@@ -849,6 +851,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _stopDrive();
     widget.heading?.removeListener(_onHeading);
     widget.location.removeListener(_scheduleRefresh);
+    GlobalDrawingState.instance.removeListener(_scheduleRefresh);
     widget.sceneRevision.removeListener(_onSceneRevision);
     TerrainAppearance.revision.removeListener(_onAppearanceChanged);
     widget.onProjectionChanged(null);
@@ -873,7 +876,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   void didUpdateWidget(covariant TerrainMapLayer old) {
     super.didUpdateWidget(old);
     // build の最中なので、描き直しはフレームの後で（同期に通知すると setState during build）。
-    // 親の setState（描画中の線・現在位置など）は全部ここに来るので、毎回 1 回だけ予約する
+    // 親の setState は全部ここに来るので、毎回 1 回だけ予約する
     _scheduleRefresh();
   }
 

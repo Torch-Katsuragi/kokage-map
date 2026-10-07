@@ -40,9 +40,6 @@ abstract class IMapState {
   /// 現在位置マーカーの擬似フィーチャ（タップ選択の候補に混ざる）
   CurrentLocationNode get currentLocationNode;
 
-  /// UIの再描画をトリガー
-  void setState(VoidCallback fn);
-
   /// フィーチャキャッシュを更新し、地図を再描画
   void refreshFeatures();
 

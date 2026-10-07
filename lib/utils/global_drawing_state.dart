@@ -15,6 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
@@ -26,8 +27,11 @@ import '../providers/selection_providers.dart';
 
 /// グローバルな描画状態とメタデータを管理するクラス
 /// GPS測量とペンツールでの描画状態を共有する。
-/// 線と面は同じ形の描きかけ（[_Stroke]）を 1 本ずつ持ち、どちらを触るかは `isLine` で選ぶ
-class GlobalDrawingState {
+/// 線と面は同じ形の描きかけ（[_Stroke]）を 1 本ずつ持ち、どちらを触るかは `isLine` で選ぶ。
+///
+/// 描きかけが変わると [notifyListeners] する。描きかけを描く・読む側（地図面、確定ボタン、長さ・面積の札）は
+/// これを聞いて描き直す（以前はツールが地図ページ全体を setState していた）
+class GlobalDrawingState extends ChangeNotifier {
   static final GlobalDrawingState instance = GlobalDrawingState._internal();
   factory GlobalDrawingState() => instance;
   GlobalDrawingState._internal();
@@ -68,17 +72,21 @@ class GlobalDrawingState {
 
     // 自動保存タイマーの開始/リセット
     _resetAutoSaveTimer();
+    notifyListeners();
   }
 
   /// 点プレビューの設定
   void setPointPreview(LatLng? position) {
+    if (_pointPreview == position) return;
     _pointPreview = position;
+    notifyListeners();
   }
 
   /// 線（[isLine]）か面の描きかけを捨てる
   void clear({required bool isLine}) {
     _stroke(isLine).clear();
     AppLogger.debug('[GlobalDrawingState] ${isLine ? '線' : 'ポリゴン'}描画データをクリア');
+    notifyListeners();
   }
 
   /// 全描画データをクリア
@@ -89,6 +97,7 @@ class GlobalDrawingState {
     _editingFeature = null; // 追記モードもクリア
     _stopAutoSaveTimer(); // 自動保存タイマーも停止
     AppLogger.debug('[GlobalDrawingState] 全描画データをクリア');
+    notifyListeners();
   }
 
   /// 線描画が進行中かチェック
@@ -106,6 +115,7 @@ class GlobalDrawingState {
     AppLogger.debug(removed == null
         ? '[GlobalDrawingState] Undo: 削除する点がありません'
         : '[GlobalDrawingState] ${isLine ? '線' : 'ポリゴン'}の最後の点を削除: $removed');
+    if (removed != null) notifyListeners();
   }
 
   /// 線（[isLine]）か面の点ごとの付帯情報（GPS 測量の値。ペンの点は座標だけ）
@@ -245,6 +255,7 @@ class GlobalDrawingState {
     clearAll();
     _editingFeature = feature;
     final stroke = _stroke(feature is LineFeatureNode)..restore(points, feature.metadata);
+    notifyListeners();
 
     AppLogger.debug(
       '[GlobalDrawingState] フィーチャの追記開始: ${feature.name} (${stroke.points.length}点)',

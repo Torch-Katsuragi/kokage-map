@@ -270,7 +270,6 @@ class SelectTool extends MapTool {
     }
     if (_pointerCount == 1) {
       _lassoPoints = [details.localFocalPoint];
-      mapState.setState(() {});
     }
   }
 
@@ -285,7 +284,6 @@ class SelectTool extends MapTool {
     }
     if (_pointerCount == 1) {
       _lassoPoints.add(details.localFocalPoint);
-      mapState.setState(() {});
     }
   }
 
@@ -376,7 +374,6 @@ class SelectTool extends MapTool {
         }
       }
       _lassoPoints.clear();
-      mapState.setState(() {});
     }
     _pointerCount = 0;
   }

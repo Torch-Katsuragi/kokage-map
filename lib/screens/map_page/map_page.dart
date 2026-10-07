@@ -575,14 +575,18 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (currentTool.name == 'GPS')
-                          GpsSurveyButtons(
-                            isLongPressing: isLongPressing,
-                            longPressGpsCount: longPressGpsCount,
-                            onRecordGpsPosition: recordGpsPosition,
-                            onStartLongPressGpsSurvey: startLongPressGpsSurvey,
-                            onStopLongPressGpsSurvey: stopLongPressGpsSurvey,
-                            onOpenTrackExtraction: openTrackExtractionDialog,
+                        if (currentTool is GpsTool)
+                          // 長押し中の点数はツールが通知する（ここだけ組み直す）
+                          ListenableBuilder(
+                            listenable: currentTool,
+                            builder: (_, _) => GpsSurveyButtons(
+                              isLongPressing: isLongPressing,
+                              longPressGpsCount: currentTool.longPressGpsCount,
+                              onRecordGpsPosition: recordGpsPosition,
+                              onStartLongPressGpsSurvey: startLongPressGpsSurvey,
+                              onStopLongPressGpsSurvey: stopLongPressGpsSurvey,
+                              onOpenTrackExtraction: openTrackExtractionDialog,
+                            ),
                           ),
                         // 地物の編集中は地図の上のボタンを出さない
                         if (!editing) const LeftBottomFab(),
@@ -603,12 +607,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         floatingActionButton: DrawingActionButtons(
           onConfirmDrawing: onConfirmDrawing,
           onConfirmGpsSurvey: onConfirmGpsSurvey,
-          onTriggerSetState: () => triggerSetState(() {}),
-          getGpsTool:
-              () =>
-                  ref.read(currentToolProvider) is GpsTool
-                      ? ref.read(currentToolProvider) as GpsTool
-                      : null,
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
@@ -760,20 +758,26 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     );
   }
 
-  /// 描画プレビュー情報構築
+  /// 描画プレビュー情報構築（描きかけが変わるたびにここだけ組み直す）
   Widget _buildDrawingPreviewInfo() {
     if (ref.read(currentToolProvider) is! PenTool) {
       return const SizedBox.shrink();
     }
-
-    final selected = ref.read(selectedLayerNodeProvider);
-    final penTool = ref.read(currentToolProvider) as PenTool;
     final drawingState = GlobalDrawingState.instance;
+    return ListenableBuilder(
+      listenable: drawingState,
+      builder: (_, _) => _drawingPreviewLabel(drawingState),
+    );
+  }
+
+  Widget _drawingPreviewLabel(GlobalDrawingState drawingState) {
+    final selected = ref.read(selectedLayerNodeProvider);
     String? previewText;
     Offset? previewOffset;
 
-    if (selected is PointLayerNode && penTool.pointPreview != null) {
-      final pt = penTool.pointPreview!;
+    final pointPreview = drawingState.pointPreview;
+    if (selected is PointLayerNode && pointPreview != null) {
+      final pt = pointPreview;
       previewText =
           'Coordinates: (${pt.latitude.toStringAsFixed(6)}, ${pt.longitude.toStringAsFixed(6)})';
       previewOffset = latLngToOffset(pt);

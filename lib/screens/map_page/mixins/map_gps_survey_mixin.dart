@@ -15,8 +15,6 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: GPS測量Mixin
 // GPS測量（単一点記録、長押し測量）関連の機能を提供
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -79,7 +77,6 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       // GPS位置を記録
       final success = await currentTool.recordCurrentGpsPosition();
       if (success) {
-        triggerSetState(() {}); // プレビュー更新
         ref.read(tutorialProvider.notifier).report(const GpsPointRecorded());
         
         if (mounted) {
@@ -124,26 +121,11 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         return;
       }
       
-      triggerSetState(() {
-        isLongPressing = true;
-        longPressGpsCount = 0;
-      });
-      
+      triggerSetState(() => isLongPressing = true);
+
+      // 長押し中の点数はツールが通知する（地図ページの GpsSurveyButtons が聞く）
       AppLogger.debug('[MapGpsSurveyMixin] GPS長押し測量開始');
       currentTool.startLongPressGpsSurvey();
-      
-      // 長押し中の個数更新タイマーを開始（0.5秒間隔で更新）
-      longPressCountUpdateTimer = Timer.periodic(
-        const Duration(milliseconds: 500),
-        (timer) {
-          final newCount = currentTool.longPressGpsCount;
-          if (longPressGpsCount != newCount) {
-            triggerSetState(() {
-              longPressGpsCount = newCount;
-            });
-          }
-        },
-      );
       
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
@@ -153,12 +135,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       }
     } catch (e) {
       AppLogger.debug('[MapGpsSurveyMixin] GPS長押し測量開始エラー: $e');
-      longPressCountUpdateTimer?.cancel();
-      longPressCountUpdateTimer = null;
-      triggerSetState(() {
-        isLongPressing = false;
-        longPressGpsCount = 0;
-      });
+      triggerSetState(() => isLongPressing = false);
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
           title: t.gps.longPressSurveyStartError(error: '$e'),
@@ -184,14 +161,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         throw Exception(t.gps.insufficientData);
       }
       
-      triggerSetState(() {
-        isLongPressing = false;
-        longPressGpsCount = 0;
-      });
-      
-      // 長押しカウンタータイマーを停止
-      longPressCountUpdateTimer?.cancel();
-      longPressCountUpdateTimer = null;
+      triggerSetState(() => isLongPressing = false);
       
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
@@ -201,12 +171,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       }
     } catch (e) {
       AppLogger.debug('[MapGpsSurveyMixin] GPS長押し測量停止エラー: $e');
-      longPressCountUpdateTimer?.cancel();
-      longPressCountUpdateTimer = null;
-      triggerSetState(() {
-        isLongPressing = false;
-        longPressGpsCount = 0;
-      });
+      triggerSetState(() => isLongPressing = false);
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
           title: t.gps.longPressSurveyStopError(error: '$e'),

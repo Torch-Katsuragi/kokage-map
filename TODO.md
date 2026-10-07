@@ -60,9 +60,6 @@
 - [ ] 「この端末」（sys）の実機確認の残り: global 配下の Drive 連携 dir（表示は Pixel / Fold、可視性の保存は 2026-10-06 に Fold で確認済み）
 - [ ] `sys/view`（端末の写真など読み取り専用の仮想レイヤ）。写真の権限（Play の申告）と大量写真の性能の設計が先
 - [ ] リファクタリングの候補: `cascade_invocations`（好みの問題で保留）
-- [ ] 平面直角座標系のレイヤへ書くとき、CRS の定義が gpkg に無く登録済みの proj4（軸の指定なし）で変換する経路では
-      x に北方向の値が入る（`GeometryReprojector` の `needsAxisSwap`）。GeoPackage の決まりは x = 東。
-      QGIS 製の gpkg（WKT に AXIS がある）では打ち消し合っている見込み。実ファイルを QGIS で開いて確かめてから直す
 - [ ] Flutter の警告「KGP を当てるプラグイン（desktop_drop / firebase_* / location）は将来ビルドできなくなる」→ プラグイン側の更新を待つ。
       `android.builtInKotlin=true` にできたら root の橋渡しは外す
 - [ ] 県点群の DTM（1 m 級）を焼いてプロジェクトの dir に入れる（アプリには入れない。配布先は GitHub Releases に決定済み）。

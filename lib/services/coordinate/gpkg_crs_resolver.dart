@@ -138,8 +138,6 @@ class GpkgCrsResolver {
           ? 'EPSG:$orgCoordSysId'
           : 'EPSG:$srsId';
 
-      final needsAxisSwap = _registry.needsAxisSwap(epsgCode);
-
       // ① GPKG内蔵WKTから解決
       if (definition != null &&
           definition.isNotEmpty &&
@@ -153,7 +151,7 @@ class GpkgCrsResolver {
             name: srsName,
             definitionWkt: definition,
             isWgs84: false,
-            needsAxisSwap: needsAxisSwap,
+            needsAxisSwap: _northFirst(projection),
             projection: projection,
           );
           _cache[key] = info;
@@ -173,7 +171,7 @@ class GpkgCrsResolver {
             name: registryDef.name,
             proj4String: registryDef.proj4String,
             isWgs84: false,
-            needsAxisSwap: needsAxisSwap,
+            needsAxisSwap: _northFirst(projection),
             projection: projection,
           );
           _cache[key] = info;
@@ -198,7 +196,7 @@ class GpkgCrsResolver {
             name: srsName,
             proj4String: httpResult,
             isWgs84: false,
-            needsAxisSwap: needsAxisSwap,
+            needsAxisSwap: _northFirst(projection),
             projection: projection,
           );
           _cache[key] = info;
@@ -323,4 +321,10 @@ class GpkgCrsResolver {
         return 'Unknown';
     }
   }
+
+  /// GeoPackage は CRS の軸順によらず x = 東・y = 北で持つ。proj4dart の Projection が
+  /// 北から並べる軸（WKT の AXIS が北・東の順 → `neu`）なら、渡す前と受け取った後に入れ替える。
+  /// ⚠ 平面直角座標系かどうか（EPSG コード）では決めない。定義に AXIS が無いと proj4dart は `enu` で、
+  ///   そこで入れ替えると QGIS と x・y が逆の gpkg になる
+  static bool _northFirst(Projection projection) => projection.axis.startsWith('n');
 }

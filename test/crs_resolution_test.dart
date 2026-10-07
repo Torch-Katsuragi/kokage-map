@@ -115,7 +115,7 @@ void main() {
     });
   });
 
-  group('GPKG のレイヤ CRS（平面直角は X=Northing, Y=Easting で保存）', () {
+  group('GPKG のレイヤ CRS（どの定義でも GDAL と同じ x = 東・y = 北で保存）', () {
     Future<GeoPackageFile> layerWithSrs(int srsId, String definition) async {
       final path = '${tmp.path}/c.gpkg';
       final gpkg = GeoPackageFile(const ['c.gpkg'], absolutePath: path);
@@ -152,8 +152,8 @@ void main() {
     ]) {
       test('EPSG:6674 $label', () async {
         final (raw, back) = await writeAndRead(await layerWithSrs(6674, definition));
-        expect(raw.x, closeTo(-230000, 10000)); // Northing
-        expect(raw.y, closeTo(-3700, 1000)); // Easting
+        expect(raw.x, closeTo(-3700, 1000)); // Easting
+        expect(raw.y, closeTo(-230000, 10000)); // Northing
         expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
         expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
       });

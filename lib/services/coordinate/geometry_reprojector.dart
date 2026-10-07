@@ -28,7 +28,7 @@ class GeometryReprojector {
   ///
   /// [geom] 変換元ジオメトリ（ソースCRSの座標値）
   /// [sourceProj] ソースCRSのProjection
-  /// [needsAxisSwap] JGD2011/2000平面直角座標系ではX=Northing, Y=Easting のため入替が必要
+  /// [needsAxisSwap] Projection の軸が北から並ぶ（`neu`）とき true（[GpkgCrsInfo.needsAxisSwap]）
   static geo.Geometry reprojectToWgs84(
     geo.Geometry geom,
     Projection sourceProj, {
@@ -47,7 +47,7 @@ class GeometryReprojector {
   ///
   /// [geom] 変換元ジオメトリ（WGS84のlon/lat）
   /// [targetProj] ターゲットCRSのProjection
-  /// [needsAxisSwap] JGD2011/2000平面直角座標系ではX=Northing, Y=Easting のため入替が必要
+  /// [needsAxisSwap] Projection の軸が北から並ぶ（`neu`）とき true（[GpkgCrsInfo.needsAxisSwap]）
   static geo.Geometry reprojectFromWgs84(
     geo.Geometry geom,
     Projection targetProj, {
@@ -117,7 +117,7 @@ class GeometryReprojector {
     double srcX, srcY;
 
     if (toWgs84 && needsAxisSwap) {
-      // ソースCRS → WGS84 への変換時: JGD平面直角ではX=Northing(Y), Y=Easting(X)
+      // 保存は (E, N)。北から並ぶ Projection には (N, E) で渡す
       srcX = pos.y; // Easting
       srcY = pos.x; // Northing
     } else {
@@ -135,7 +135,7 @@ class GeometryReprojector {
     // 結果は投影座標（メートル等）→ Projected を使う
     // Geographic に入れると正規化/クランプで値が破壊される
     if (needsAxisSwap) {
-      // WGS84 → JGD平面直角: X=Northing, Y=Easting
+      // 北から並ぶ Projection の結果 (N, E) を保存の (E, N) に戻す
       return geo.Projected(x: result.y, y: result.x);
     }
     return geo.Projected(x: result.x, y: result.y);

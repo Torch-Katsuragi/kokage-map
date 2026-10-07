@@ -20,6 +20,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
@@ -570,7 +571,7 @@ class GoogleDriveService {
     }
   }
 
-  /// [q] に当たるもの（共有ドライブも含めて探す）
+  /// [q] に当たるもの（共有ドライブも含めて探す）。最初の 1 ページだけ（名前で 1 件を探すとき用）
   static Future<List<drive.File>> _list(drive.DriveApi api, String q, {String? fields}) async {
     final result = await api.files.list(
       q: q,
@@ -579,6 +580,29 @@ class GoogleDriveService {
       includeItemsFromAllDrives: true,
     );
     return result.files ?? [];
+  }
+
+  /// [q] に当たるものを全ページたどって全部返す（[fields] は `files(...)` の形）。
+  ///
+  /// ⚠ files.list は 1 ページ 100 件で切れる。以前はたどっておらず、101 件目からは
+  /// 「Drive に無い」と見て、同期が手元のファイルを消していた（写真の多いフォルダ）
+  @visibleForTesting
+  static Future<List<drive.File>> listAllPages(drive.DriveApi api, String q, {required String fields}) async {
+    final out = <drive.File>[];
+    String? pageToken;
+    do {
+      final page = await api.files.list(
+        q: q,
+        $fields: 'nextPageToken, $fields',
+        pageSize: 1000,
+        pageToken: pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      );
+      out.addAll(page.files ?? const []);
+      pageToken = page.nextPageToken;
+    } while (pageToken != null && pageToken.isNotEmpty);
+    return out;
   }
 
   /// 中身を上げる。[existingFileId] があればその版を更新し、無ければ [parentId] に作る
@@ -777,7 +801,7 @@ class GoogleDriveService {
   Future<List<drive.File>> listFiles(String parentId) => _call(
         'ファイル一覧取得エラー',
         <drive.File>[],
-        (api) => _list(
+        (api) => listAllPages(
           api,
           "'$parentId' in parents and trashed = false",
           fields: 'files(id, name, mimeType, modifiedTime, size, parents)',

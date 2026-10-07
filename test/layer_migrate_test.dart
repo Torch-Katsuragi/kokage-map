@@ -1,5 +1,6 @@
 // レイヤを別の GeoPackage へ移す・写す（レイヤ一覧で gpkg へドラッグ）で、地物と属性が全部渡るか
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
@@ -113,5 +114,20 @@ void main() {
       {'n': 1},
       {'n': 2},
     ]);
+  });
+
+  test('渡らない地物があれば移さない（写し先を消し、写し元は残す）', () async {
+    await src.addLayer('stands', GeometryType.polygon);
+    await src.addAttributeColumns('stands', {'name': 'TEXT'});
+    await src.addPolygonWithAttributes('stands', [
+      [a, b, c, a],
+    ], {'name': 'ok'});
+    // 読めない形の行は書き先に渡せない
+    await (await src.getDatabase()).rawInsert('INSERT INTO stands (name, geom) VALUES (?, ?)', ['broken', Uint8List.fromList([0x47, 0x50, 0, 1])]);
+
+    final moved = await (await layer('stands')).migrateToGeoPackage(dstNode);
+    expect(moved, isNull);
+    expect(await src.getLayerNames(), contains('stands'));
+    expect(await dst.getLayerNames(), isNot(contains('stands')));
   });
 }

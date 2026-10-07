@@ -642,13 +642,21 @@ abstract class LayerNode extends LayerTreeNode {
       await _migrateAttributeSchema(targetGeoPackage, targetLayerName);
 
       // すべてのフィーチャデータを移植
-      final migratedFeatureCount = await _migrateFeatureData(
+      final (migratedFeatureCount, sourceCount) = await _migrateFeatureData(
         targetGeoPackage,
         targetLayerName,
         geometryType,
       );
 
-      AppLogger.debug('[LayerNode] フィーチャデータ移植完了: $migratedFeatureCount個のフィーチャ');
+      AppLogger.debug('[LayerNode] フィーチャデータ移植完了: $migratedFeatureCount / $sourceCount 個のフィーチャ');
+      // 全部渡らなかったら移し先の途中までの写しを消して失敗にする（移し元は消さない）。
+      // ⚠ 以前は取りこぼしがあっても移し元を消していた（2026-10-07）
+      if (migratedFeatureCount < sourceCount) {
+        AppLogger.debug('[LayerNode] 移植失敗: ${sourceCount - migratedFeatureCount} 個が渡らなかったので取り消す');
+        await targetGeoPackage.geoPackageFile.removeLayer(targetLayerName);
+        await targetGeoPackage.updateChildren();
+        return null;
+      }
 
       // 移植先のレイヤツリーを更新
       AppLogger.debug('[LayerNode] 移植先レイヤツリー更新開始');
@@ -752,7 +760,8 @@ abstract class LayerNode extends LayerTreeNode {
   ///
   /// 移植元を 1 回で読み（形は WGS84 に直してある）、1000 件ずつ書く。
   /// 形は Multi のまま渡す（以前は最初の 1 部分しか取れず、線・面は Multi で読めるので 1 件も渡らなかった）
-  Future<int> _migrateFeatureData(
+  /// 戻り値: (書けた数, 移植元の行数)
+  Future<(int, int)> _migrateFeatureData(
     GeoPackageNode targetGeoPackage,
     String targetLayerName,
     GeometryType geometryType,
@@ -761,7 +770,7 @@ abstract class LayerNode extends LayerTreeNode {
       final sourceFeatures = await geoPackageFile.getFeaturesWithGeometry(layerName);
       if (sourceFeatures.isEmpty) {
         AppLogger.debug('[LayerNode] 移植するフィーチャがありません');
-        return 0;
+        return (0, 0);
       }
       AppLogger.debug('[LayerNode] 移植対象フィーチャ数: ${sourceFeatures.length}個');
 
@@ -797,11 +806,11 @@ abstract class LayerNode extends LayerTreeNode {
       AppLogger.debug(
         '[LayerNode] 移植完了: $migratedCount個成功, $skippedCount個スキップ',
       );
-      return migratedCount;
+      return (migratedCount, sourceFeatures.length);
     } catch (e, stack) {
       AppLogger.debug('[LayerNode] フィーチャデータ移植エラー: $e');
       AppLogger.debug('[LayerNode] スタックトレース: $stack');
-      return 0;
+      return (0, 1); // 読み書きに失敗したら取り消す側へ
     }
   }
 

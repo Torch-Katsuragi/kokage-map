@@ -24,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/platform_capabilities.dart';
 import '../i18n/strings.g.dart';
 import '../utils/app_logger.dart';
+import '../utils/app_permissions.dart';
 
 /// オンボーディング完了フラグのSharedPreferencesキー
 const kOnboardingCompletedKey = 'onboarding_completed';
@@ -51,8 +52,7 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen>
-    with TickerProviderStateMixin {
+class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   static const _totalPages = 4;
@@ -79,16 +79,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   /// 現在の権限状態をチェック
   Future<void> _checkCurrentPermissions() async {
-    final storage = await Permission.manageExternalStorage.isGranted;
-    final location = await Permission.location.isGranted;
-    final btScan = await Permission.bluetoothScan.isGranted;
-    final btConnect = await Permission.bluetoothConnect.isGranted;
-
+    final p = await AppPermissions.current();
     if (mounted) {
       setState(() {
-        _storageGranted = storage;
-        _locationGranted = location;
-        _bluetoothGranted = btScan && btConnect;
+        _storageGranted = p.storage;
+        _locationGranted = p.location;
+        _bluetoothGranted = p.bluetooth;
       });
     }
   }
@@ -103,93 +99,75 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     }
   }
 
-  /// ストレージ権限をリクエスト
-  Future<void> _requestStoragePermission() async {
+  /// 権限を求める共通の流れ。[request] は許可されたかを返す。
+  /// 許可されたら少し待って次のページへ（[advanceOnGrant] が false なら留まる）
+  Future<void> _requestPermission(
+    String label,
+    Future<bool> Function() request,
+    void Function(bool granted) apply, {
+    bool advanceOnGrant = true,
+  }) async {
     if (_isRequestingPermission) return;
     setState(() => _isRequestingPermission = true);
 
     try {
-      final status = await Permission.manageExternalStorage.request();
-      AppLogger.debug('[Onboarding] Storage permission result: $status');
-
-      if (mounted) {
-        setState(() {
-          _storageGranted = status.isGranted;
-          _isRequestingPermission = false;
-        });
-        if (status.isGranted) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          _goToNextPage();
-        }
+      final granted = await request();
+      if (!mounted) return;
+      setState(() {
+        apply(granted);
+        _isRequestingPermission = false;
+      });
+      if (granted && advanceOnGrant) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) _goToNextPage();
       }
     } catch (e) {
-      AppLogger.debug('[Onboarding] Storage permission error: $e');
+      AppLogger.debug('[Onboarding] $label permission error: $e');
       if (mounted) setState(() => _isRequestingPermission = false);
     }
   }
+
+  /// ストレージ権限をリクエスト
+  Future<void> _requestStoragePermission() => _requestPermission(
+        'Storage',
+        () async {
+          final status = await Permission.manageExternalStorage.request();
+          AppLogger.debug('[Onboarding] Storage permission result: $status');
+          return status.isGranted;
+        },
+        (granted) => _storageGranted = granted,
+      );
 
   /// 位置情報権限をリクエスト
-  Future<void> _requestLocationPermission() async {
-    if (_isRequestingPermission) return;
-    setState(() => _isRequestingPermission = true);
+  Future<void> _requestLocationPermission() => _requestPermission(
+        'Location',
+        () async {
+          final status = await Permission.location.request();
+          AppLogger.debug('[Onboarding] Location permission result: $status');
 
-    try {
-      final status = await Permission.location.request();
-      AppLogger.debug('[Onboarding] Location permission result: $status');
+          // Android 13+ は通知権限が無いと前景サービスの常時通知が表示されない。
+          // 位置情報が許可された流れで続けて要求する（GPS記録・位置共有の実行中表示）。
+          if (status.isGranted) {
+            final notif = await Permission.notification.request();
+            AppLogger.debug(
+                '[Onboarding] Notification permission result: $notif');
+          }
+          return status.isGranted;
+        },
+        (granted) => _locationGranted = granted,
+      );
 
-      // Android 13+ は通知権限が無いと前景サービスの常時通知が表示されない。
-      // 位置情報が許可された流れで続けて要求する（GPS記録・位置共有の実行中表示）。
-      if (status.isGranted) {
-        final notif = await Permission.notification.request();
-        AppLogger.debug('[Onboarding] Notification permission result: $notif');
-      }
-
-      if (mounted) {
-        setState(() {
-          _locationGranted = status.isGranted;
-          _isRequestingPermission = false;
-        });
-        if (status.isGranted) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          _goToNextPage();
-        }
-      }
-    } catch (e) {
-      AppLogger.debug('[Onboarding] Location permission error: $e');
-      if (mounted) setState(() => _isRequestingPermission = false);
-    }
-  }
-
-  /// Bluetooth権限をリクエスト
-  Future<void> _requestBluetoothPermission() async {
-    if (_isRequestingPermission) return;
-    setState(() => _isRequestingPermission = true);
-
-    try {
-      final statuses = await [
-        Permission.bluetoothScan,
-        Permission.bluetoothConnect,
-      ].request();
-
-      final scanGranted =
-          statuses[Permission.bluetoothScan]?.isGranted ?? false;
-      final connectGranted =
-          statuses[Permission.bluetoothConnect]?.isGranted ?? false;
-
-      AppLogger.debug(
-          '[Onboarding] Bluetooth permission result: scan=$scanGranted, connect=$connectGranted');
-
-      if (mounted) {
-        setState(() {
-          _bluetoothGranted = scanGranted && connectGranted;
-          _isRequestingPermission = false;
-        });
-      }
-    } catch (e) {
-      AppLogger.debug('[Onboarding] Bluetooth permission error: $e');
-      if (mounted) setState(() => _isRequestingPermission = false);
-    }
-  }
+  /// Bluetooth権限をリクエスト（最後のページなので許可されても留まる）
+  Future<void> _requestBluetoothPermission() => _requestPermission(
+        'Bluetooth',
+        () async {
+          final granted = await AppPermissions.requestBluetooth();
+          AppLogger.debug('[Onboarding] Bluetooth permission result: $granted');
+          return granted;
+        },
+        (granted) => _bluetoothGranted = granted,
+        advanceOnGrant: false,
+      );
 
   /// オンボーディング完了処理
   Future<void> _completeOnboarding() async {
@@ -298,39 +276,47 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   // ================================================================
-  // ページ2: ストレージ権限
+  // ページ2・3: ストレージ権限 / 位置情報権限（Prominent Disclosure）
   // ================================================================
-  Widget _buildStoragePage() {
+
+  /// 権限を求めるページ。許可済みなら印と「次へ」、まだなら求めるボタンと「あとで」
+  Widget _buildPermissionPage({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String description,
+    required bool granted,
+    required String requestLabel,
+    required VoidCallback onRequest,
+  }) {
     return _OnboardingPage(
-      icon: Icons.folder_rounded,
-      iconColor: const Color(0xFFFFB74D),
-      title: t.onboarding.storageTitle,
-      description: t.onboarding.storageDisclosure,
+      icon: icon,
+      iconColor: iconColor,
+      title: title,
+      description: description,
       bottomWidget: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_storageGranted)
-              _buildGrantedBadge()
-            else ...[
+            if (granted) ...[
+              _buildGrantedBadge(),
+              const SizedBox(height: 16),
               _buildPrimaryButton(
-                label: t.onboarding.storageButton,
+                label: t.onboarding.next,
+                icon: Icons.arrow_forward_rounded,
+                onPressed: _goToNextPage,
+              ),
+            ] else ...[
+              _buildPrimaryButton(
+                label: requestLabel,
                 icon: Icons.check_circle_outline,
-                onPressed: _requestStoragePermission,
+                onPressed: onRequest,
                 isLoading: _isRequestingPermission,
               ),
               const SizedBox(height: 12),
               _buildSecondaryButton(
                 label: t.onboarding.laterSettings,
-                onPressed: _goToNextPage,
-              ),
-            ],
-            if (_storageGranted) ...[
-              const SizedBox(height: 16),
-              _buildPrimaryButton(
-                label: t.onboarding.next,
-                icon: Icons.arrow_forward_rounded,
                 onPressed: _goToNextPage,
               ),
             ],
@@ -340,48 +326,25 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  // ================================================================
-  // ページ3: 位置情報権限（Prominent Disclosure）
-  // ================================================================
-  Widget _buildLocationPage() {
-    return _OnboardingPage(
-      icon: Icons.gps_fixed_rounded,
-      iconColor: const Color(0xFF66BB6A),
-      title: t.onboarding.locationTitle,
-      description: t.onboarding.locationDisclosure,
-      bottomWidget: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_locationGranted)
-              _buildGrantedBadge()
-            else ...[
-              _buildPrimaryButton(
-                label: t.onboarding.locationButton,
-                icon: Icons.check_circle_outline,
-                onPressed: _requestLocationPermission,
-                isLoading: _isRequestingPermission,
-              ),
-              const SizedBox(height: 12),
-              _buildSecondaryButton(
-                label: t.onboarding.laterSettings,
-                onPressed: _goToNextPage,
-              ),
-            ],
-            if (_locationGranted) ...[
-              const SizedBox(height: 16),
-              _buildPrimaryButton(
-                label: t.onboarding.next,
-                icon: Icons.arrow_forward_rounded,
-                onPressed: _goToNextPage,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _buildStoragePage() => _buildPermissionPage(
+        icon: Icons.folder_rounded,
+        iconColor: const Color(0xFFFFB74D),
+        title: t.onboarding.storageTitle,
+        description: t.onboarding.storageDisclosure,
+        granted: _storageGranted,
+        requestLabel: t.onboarding.storageButton,
+        onRequest: _requestStoragePermission,
+      );
+
+  Widget _buildLocationPage() => _buildPermissionPage(
+        icon: Icons.gps_fixed_rounded,
+        iconColor: const Color(0xFF66BB6A),
+        title: t.onboarding.locationTitle,
+        description: t.onboarding.locationDisclosure,
+        granted: _locationGranted,
+        requestLabel: t.onboarding.locationButton,
+        onRequest: _requestLocationPermission,
+      );
 
   // ================================================================
   // ページ4: Bluetooth権限 + 完了

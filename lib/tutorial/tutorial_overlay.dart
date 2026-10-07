@@ -67,6 +67,9 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
 
   // ── 案内先 ──
 
+  /// 部品がいちばん上の画面にあるか（画面の外の部品は上にあるとみなす）
+  static bool _onTopRoute(BuildContext ctx) => ModalRoute.of(ctx)?.isCurrent ?? true;
+
   Rect? _measure(TutorialState s) {
     if (s.menu) return null;
     final me = context.findRenderObject();
@@ -84,9 +87,12 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
         continue;
       }
       final ctx = key.currentContext;
-      if (ctx != null && !(ModalRoute.of(ctx)?.isCurrent ?? true)) covered = true;
+      if (ctx == null) continue;
       // 下に隠れた画面の部品は囲まない（地図の上に設定を開いたときなど。地図は裏で生きている）
-      if (ctx == null || !(ModalRoute.of(ctx)?.isCurrent ?? true)) continue;
+      if (!_onTopRoute(ctx)) {
+        covered = true;
+        continue;
+      }
       final box = ctx.findRenderObject();
       if (box is RenderBox && box.hasSize && box.attached) {
         return box.localToGlobal(Offset.zero, ancestor: me) & box.size;
@@ -103,13 +109,11 @@ class _TutorialOverlayState extends ConsumerState<TutorialOverlay> with TickerPr
     if (s.menu || identical(_revealedFor, s.step)) return;
     for (final key in s.step.targets) {
       final ctx = key.currentContext;
-      if (ctx == null || !(ModalRoute.of(ctx)?.isCurrent ?? true)) continue;
-      if (Scrollable.maybeOf(ctx) == null) {
-        _revealedFor = s.step;
-        return;
-      }
+      if (ctx == null || !_onTopRoute(ctx)) continue;
       _revealedFor = s.step;
-      Scrollable.ensureVisible(ctx, alignment: 0.5, duration: const Duration(milliseconds: 200));
+      if (Scrollable.maybeOf(ctx) != null) {
+        Scrollable.ensureVisible(ctx, alignment: 0.5, duration: const Duration(milliseconds: 200));
+      }
       return;
     }
   }
@@ -298,7 +302,7 @@ class _MenuCard extends ConsumerWidget {
           ),
           if (!state.justFinished) Text(t.tutorial.menuBody, style: theme.textTheme.bodySmall),
           const SizedBox(height: 4),
-          for (final c in chapters)
+          for (final (i, c) in chapters.indexed)
             ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
@@ -307,7 +311,7 @@ class _MenuCard extends ConsumerWidget {
                 state.finished.contains(c) ? Icons.check_circle : Icons.circle_outlined,
                 color: state.finished.contains(c) ? Colors.green : theme.colorScheme.outline,
               ),
-              title: Text('${chapters.indexOf(c) + 1}. ${_chapterName(c)}',
+              title: Text('${i + 1}. ${_chapterName(c)}',
                   style: TextStyle(fontWeight: c == next ? FontWeight.bold : null)),
               subtitle: Text(t.tutorial.chapterHints[c.name] ?? ''),
               onTap: () => tutorial.openChapter(c),

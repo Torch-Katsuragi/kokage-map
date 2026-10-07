@@ -145,6 +145,24 @@ class PeerPosition {
   }
 
   @override
+  bool operator ==(Object other) =>
+      other is PeerPosition &&
+      other.uid == uid &&
+      other.latitude == latitude &&
+      other.longitude == longitude &&
+      other.altitude == altitude &&
+      other.accuracy == accuracy &&
+      other.bearing == bearing &&
+      other.speed == speed &&
+      other.serverTimeMs == serverTimeMs &&
+      other.battery == battery &&
+      other.connected == connected;
+
+  @override
+  int get hashCode => Object.hash(uid, latitude, longitude, altitude, accuracy,
+      bearing, speed, serverTimeMs, battery, connected);
+
+  @override
   String toString() =>
       'PeerPosition(uid: $uid, lat: ${latitude.toStringAsFixed(6)}, '
       'lng: ${longitude.toStringAsFixed(6)}, ts: $serverTimeMs, '

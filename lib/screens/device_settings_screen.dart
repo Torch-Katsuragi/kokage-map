@@ -21,12 +21,12 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../devices/base/device_service.dart';
 import '../devices/trupulse/trupulse_providers.dart';
 import '../i18n/strings.g.dart';
 import '../utils/app_logger.dart';
+import '../utils/app_permissions.dart';
 import '../widgets/settings_widgets.dart';
 
 class DeviceSettingsScreen extends ConsumerStatefulWidget {
@@ -66,22 +66,16 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
     if (mounted) setState(() {});
   }
 
+  /// 画面の下に短い知らせを出す（画面が閉じていれば何もしない）
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<bool> _ensureBluetoothPermissions() async {
-    if (await Permission.bluetoothScan.isGranted &&
-        await Permission.bluetoothConnect.isGranted) {
-      return true;
-    }
-    final statuses = await [
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-    ].request();
-    final ok = (statuses[Permission.bluetoothScan]?.isGranted ?? false) &&
-        (statuses[Permission.bluetoothConnect]?.isGranted ?? false);
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(t.devices.bluetoothPermission),
-      ));
-    }
+    if (await AppPermissions.bluetoothGranted()) return true;
+    final ok = await AppPermissions.requestBluetooth();
+    if (!ok) _showMessage(t.devices.bluetoothPermission);
     return ok;
   }
 
@@ -93,11 +87,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
       final isEnabled =
           await FlutterBluetoothSerial.instance.isEnabled ?? false;
       if (!isEnabled) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(t.devices.enableBluetooth),
-          ));
-        }
+        _showMessage(t.devices.enableBluetooth);
         return;
       }
       final devices =
@@ -109,11 +99,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
       if (mounted) setState(() => _bondedDevices = devices);
     } catch (e) {
       AppLogger.debug('[DeviceSettings] scan error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t.devices.scanError(error: e.toString()))),
-        );
-      }
+      _showMessage(t.devices.scanError(error: e.toString()));
     } finally {
       if (mounted) setState(() => _isScanning = false);
     }
@@ -139,11 +125,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
       AppLogger.debug('[DeviceSettings] connected successfully');
     } catch (e) {
       AppLogger.debug('[DeviceSettings] connection failed: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t.devices.connectionFailed(error: e.toString()))),
-        );
-      }
+      _showMessage(t.devices.connectionFailed(error: e.toString()));
     }
   }
 

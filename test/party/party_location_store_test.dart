@@ -112,6 +112,35 @@ void main() {
       expect(store.peers.keys, ['other']);
     });
 
+    test('自分の位置だけが変わったときは peersStream を流さない', () async {
+      store = build();
+      store.start();
+      final emitted = <Map<String, PeerPosition>>[];
+      final sub = store.peersStream.listen(emitted.add);
+      const other =
+          PeerPosition(uid: 'other', latitude: 2, longitude: 2, serverTimeMs: 0);
+      source.peersCtrl.add({
+        'self': const PeerPosition(
+            uid: 'self', latitude: 1, longitude: 1, serverTimeMs: 0),
+        'other': other,
+      });
+      source.peersCtrl.add({
+        'self': const PeerPosition(
+            uid: 'self', latitude: 1.1, longitude: 1, serverTimeMs: 5),
+        'other': other,
+      });
+      source.peersCtrl.add({
+        'self': const PeerPosition(
+            uid: 'self', latitude: 1.1, longitude: 1, serverTimeMs: 5),
+        'other': const PeerPosition(
+            uid: 'other', latitude: 2, longitude: 2, serverTimeMs: 9),
+      });
+      await pumpEventQueue();
+      await sub.cancel();
+      expect(emitted.length, 2);
+      expect(emitted.last['other']!.serverTimeMs, 9);
+    });
+
     test('tracksStream は自分を除外する', () async {
       store = build();
       store.start();

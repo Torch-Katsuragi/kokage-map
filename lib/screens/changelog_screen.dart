@@ -26,6 +26,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../i18n/strings.g.dart';
 import '../services/changelog_service.dart';
+import '../widgets/icon_markdown.dart';
 
 /// チェンジログ表示画面
 class ChangelogScreen extends StatefulWidget {
@@ -77,37 +78,9 @@ class _ChangelogScreenState extends State<ChangelogScreen> {
                     style: const TextStyle(color: Colors.grey),
                   ),
                 )
-              : _Sections(content: _content!, styleSheet: _styleSheet(context)),
+              : _Sections(content: _content!, styleSheet: documentMarkdownStyleSheet(Theme.of(context))),
     );
   }
-
-  MarkdownStyleSheet _styleSheet(BuildContext context) => MarkdownStyleSheet.fromTheme(
-                    Theme.of(context),
-                  ).copyWith(
-                    // h1スタイル
-                    h1: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                    // h2スタイル（バージョン見出し）
-                    h2: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                    // h3スタイル（カテゴリ見出し）
-                    h3: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                    // 水平線のスタイル
-                    horizontalRuleDecoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: Theme.of(context).dividerColor,
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                  );
 }
 
 /// 更新履歴を版（`## `）ごとに畳んで並べる。見出し（版・日付・その版の一言）を押すと開き、

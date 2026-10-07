@@ -42,19 +42,23 @@ class DeviceToolOverlayRefresh extends _$DeviceToolOverlayRefresh {
 /// 接続済みで利用可能なDeviceToolのリストを返す
 ///
 /// 各サービスの ChangeNotifier を addListener で購読し、
-/// isConnected 変更時にプロバイダを再評価する。
+/// isConnected 変更時にプロバイダを再評価する
+/// （計測 1 回ごとの通知では組み直さない。道具の並びは変わらないので）。
 @riverpod
 List<DeviceTool> connectedDeviceTools(Ref ref) {
   final trupulseService = ref.watch(trupulseServiceProvider);
   final trupulseTool = ref.watch(trupulseToolProvider);
+  final trupulseAvailable = trupulseTool.isAvailable;
 
   // Bridge: ChangeNotifier → Riverpod
-  void onServiceChange() => ref.invalidateSelf();
+  void onServiceChange() {
+    if (trupulseTool.isAvailable != trupulseAvailable) ref.invalidateSelf();
+  }
   trupulseService.addListener(onServiceChange);
   ref.onDispose(() => trupulseService.removeListener(onServiceChange));
 
   return [
-    if (trupulseTool.isAvailable) trupulseTool,
+    if (trupulseAvailable) trupulseTool,
     // 将来のデバイス: ここにサービス購読 + 条件行を追加するだけ
   ];
 }

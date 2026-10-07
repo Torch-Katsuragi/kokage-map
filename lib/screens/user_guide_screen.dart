@@ -84,63 +84,29 @@ class _UserGuideScreenState extends State<UserGuideScreen> {
                   selectable: true,
                   inlineSyntaxes: [IconInlineSyntax()],
                   builders: {'flutterIcon': IconMarkdownBuilder()},
-                  styleSheet: MarkdownStyleSheet.fromTheme(
-                    Theme.of(context),
-                  ).copyWith(
-                    // h1スタイル
-                    h1: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                    // h2スタイル
-                    h2: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                    // h3スタイル
-                    h3: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                    // テーブルヘッダースタイル
-                    tableHead: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    // テーブルボーダー
-                    tableBorder: TableBorder.all(
-                      color: Theme.of(context).dividerColor,
-                      width: 0.5,
-                    ),
-                    // テーブルセルパディング
-                    tableCellsPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    // 水平線のスタイル
-                    horizontalRuleDecoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: Theme.of(context).dividerColor,
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    // blockquote スタイル
-                    blockquoteDecoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primaryContainer
-                          .withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border(
-                        left: BorderSide(
-                          color: Theme.of(context).colorScheme.primary,
-                          width: 4,
-                        ),
-                      ),
-                    ),
-                  ),
+                  styleSheet: _styleSheet(Theme.of(context)),
                   padding: const EdgeInsets.all(16),
                 ),
     );
   }
+
+  /// 文書共通の見出しに、使い方の表と引用の見た目を足す
+  static MarkdownStyleSheet _styleSheet(ThemeData theme) =>
+      documentMarkdownStyleSheet(theme).copyWith(
+        // テーブルヘッダースタイル
+        tableHead: const TextStyle(fontWeight: FontWeight.bold),
+        // テーブルボーダー
+        tableBorder: TableBorder.all(color: theme.dividerColor, width: 0.5),
+        // テーブルセルパディング
+        tableCellsPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        // blockquote スタイル
+        blockquoteDecoration: BoxDecoration(
+          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(4),
+          border: Border(
+            left: BorderSide(color: theme.colorScheme.primary, width: 4),
+          ),
+        ),
+      );
 }

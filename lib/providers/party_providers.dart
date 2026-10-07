@@ -133,11 +133,9 @@ class PartySession extends Notifier<PartySessionState> {
   PartyConnectionMonitor? _monitor;
   PartyLocationStore? _store;
   BatteryMonitor? _battery;
-  StreamSubscription<Map<String, PeerPosition>>? _peersSub;
-  StreamSubscription<Map<String, List<PeerTrack>>>? _tracksSub;
-  StreamSubscription<PartyConnectionState>? _connSub;
-  StreamSubscription<List<PartyMember>>? _membersSub;
-  StreamSubscription<bool>? _ghostSub;
+
+  /// 参加中に張っている購読（退出で全部止める）
+  final _subs = <StreamSubscription<Object?>>[];
 
   @override
   PartySessionState build() {
@@ -148,33 +146,31 @@ class PartySession extends Notifier<PartySessionState> {
   RtdbRoomRepository get _repository => _repo ??= RtdbRoomRepository();
 
   /// ルームを作成（host）
-  Future<void> createRoom({String? name}) async {
-    if (state.busy || state.active) return;
-    state = state.copyWith(busy: true, clearError: true);
-    if (!await PartyFirebase.ensureInitialized()) {
-      state = state.copyWith(busy: false, error: t.party.initFailed);
-      return;
-    }
-    try {
-      final meta = await _repository.createRoom(name: name);
-      await _activate(meta.roomCode, PartyRole.host);
-    } catch (e) {
-      state = state.copyWith(busy: false, error: '$e');
-    }
-  }
+  Future<void> createRoom({String? name}) => _enter(PartyRole.host, () async {
+        final meta = await _repository.createRoom(name: name);
+        return meta.roomCode;
+      });
 
   /// ルームに参加（guest）
-  Future<void> joinRoom({required String code, required String name}) async {
-    if (state.busy || state.active) return;
+  Future<void> joinRoom({required String code, required String name}) {
     final normalized = code.trim().toUpperCase();
+    return _enter(PartyRole.guest, () async {
+      await _repository.joinRoom(code: normalized, name: name);
+      return normalized;
+    });
+  }
+
+  /// 作成・参加の共通の入口。[enterRoom] はルームに入ってそのコードを返す
+  Future<void> _enter(
+      PartyRole role, Future<String> Function() enterRoom) async {
+    if (state.busy || state.active) return;
     state = state.copyWith(busy: true, clearError: true);
     if (!await PartyFirebase.ensureInitialized()) {
       state = state.copyWith(busy: false, error: t.party.initFailed);
       return;
     }
     try {
-      await _repository.joinRoom(code: normalized, name: name);
-      await _activate(normalized, PartyRole.guest);
+      await _activate(await enterRoom(), role);
     } catch (e) {
       state = state.copyWith(busy: false, error: '$e');
     }
@@ -214,27 +210,26 @@ class PartySession extends Notifier<PartySessionState> {
     _store = store;
     _battery = battery;
 
-    _peersSub = store.peersStream
-        .listen((peers) => state = state.copyWith(peers: peers));
-    _tracksSub = store.tracksStream
-        .listen((tracks) => state = state.copyWith(tracks: tracks));
-    _connSub = monitor.stateStream
-        .listen((c) => state = state.copyWith(connection: c));
-    _membersSub = _repository.watchMembers(code).listen(
-      (m) {
-        state = state.copyWith(members: m);
-        // 一覧から自分が消えた＝hostに退出させられた。
-        // （自発的な退出は _teardown が先に購読を止めるのでここへ来ない）
-        if (m.isNotEmpty && !m.any((member) => member.uid == uid)) {
-          unawaited(_onKicked());
-        }
-      },
-      // members から外れると room 全体の `.read` が失効し購読がエラーで死ぬ。
-      // これもキック（またはルーム消滅）として扱う。
-      onError: (Object _) => unawaited(_onKicked()),
-    );
-    _ghostSub =
-        store.ghostStream.listen((g) => state = state.copyWith(ghost: g));
+    _subs.addAll([
+      store.peersStream.listen((peers) => state = state.copyWith(peers: peers)),
+      store.tracksStream
+          .listen((tracks) => state = state.copyWith(tracks: tracks)),
+      monitor.stateStream.listen((c) => state = state.copyWith(connection: c)),
+      _repository.watchMembers(code).listen(
+        (m) {
+          state = state.copyWith(members: m);
+          // 一覧から自分が消えた＝hostに退出させられた。
+          // （自発的な退出は _teardown が先に購読を止めるのでここへ来ない）
+          if (m.isNotEmpty && !m.any((member) => member.uid == uid)) {
+            unawaited(_onKicked());
+          }
+        },
+        // members から外れると room 全体の `.read` が失効し購読がエラーで死ぬ。
+        // これもキック（またはルーム消滅）として扱う。
+        onError: (Object _) => unawaited(_onKicked()),
+      ),
+      store.ghostStream.listen((g) => state = state.copyWith(ghost: g)),
+    ]);
 
     state = state.copyWith(
       roomCode: code,
@@ -291,20 +286,15 @@ class PartySession extends Notifier<PartySessionState> {
   }
 
   Future<void> _teardown() async {
-    await _peersSub?.cancel();
-    await _tracksSub?.cancel();
-    await _connSub?.cancel();
-    await _membersSub?.cancel();
-    await _ghostSub?.cancel();
+    final subs = List.of(_subs);
+    _subs.clear();
+    for (final sub in subs) {
+      await sub.cancel();
+    }
     await _store?.dispose();
     await _monitor?.dispose();
     await _source?.dispose();
     await _battery?.dispose();
-    _peersSub = null;
-    _tracksSub = null;
-    _connSub = null;
-    _membersSub = null;
-    _ghostSub = null;
     _store = null;
     _monitor = null;
     _source = null;

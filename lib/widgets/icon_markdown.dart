@@ -124,3 +124,24 @@ class IconMarkdownBuilder extends MarkdownElementBuilder {
     );
   }
 }
+
+/// アプリ内の文書（更新履歴・使い方）に共通の見出しと区切り線
+MarkdownStyleSheet documentMarkdownStyleSheet(ThemeData theme) =>
+    MarkdownStyleSheet.fromTheme(theme).copyWith(
+      // h1スタイル
+      h1: theme.textTheme.headlineMedium?.copyWith(
+        fontWeight: FontWeight.bold,
+        color: theme.colorScheme.primary,
+      ),
+      // h2スタイル（更新履歴では版の見出し）
+      h2: theme.textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.bold,
+        color: theme.colorScheme.onSurface,
+      ),
+      // h3スタイル（更新履歴ではカテゴリ見出し）
+      h3: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+      // 水平線のスタイル
+      horizontalRuleDecoration: BoxDecoration(
+        border: Border(top: BorderSide(color: theme.dividerColor, width: 1)),
+      ),
+    );

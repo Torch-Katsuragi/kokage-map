@@ -56,12 +56,9 @@ class ExifParser {
   /// GPS座標が含まれていない場合はnullを返す
   static Future<ExifImageData?> extractFromFile(String filePath) async {
     try {
-      final fileSize = await fs.length(filePath);
-      if (fileSize == null) return null;
-
-      // 電子小黒板等のメタデータが大きい画像にも対応するため1MBまで読む
-      final bytes = await _readFileHeader(filePath, 1024 * 1024);
-      final tags = await readExifFromBytes(bytes);
+      // 電子小黒板等のメタデータが大きい画像にも対応するため1MBまで見る
+      final (:header, :fileSize) = await _readFileHeader(filePath, 1024 * 1024);
+      final tags = await readExifFromBytes(header);
       if (tags.isEmpty) return null;
 
       final location = _extractGpsLocation(tags);
@@ -91,10 +88,14 @@ class ExifParser {
   /// ⚠ 以前は `RandomAccessFile` で部分読みしていたが、ファイルシステム抽象には
   /// 部分読みが無い（File System Access API 側も Blob.slice 経由になり、
   /// 抽象に載せると面倒が増える）。EXIFを見るのは高々1MBなので全部読んで切る。
-  static Future<Uint8List> _readFileHeader(String filePath, int maxBytes) async {
+  /// 全部読むのでファイルの大きさもここで分かる（別に問い合わせない）。
+  static Future<({Uint8List header, int fileSize})> _readFileHeader(
+      String filePath, int maxBytes) async {
     final bytes = await fs.readAsBytes(filePath);
-    if (bytes.length <= maxBytes) return bytes;
-    return Uint8List.sublistView(bytes, 0, maxBytes);
+    final header = bytes.length <= maxBytes
+        ? bytes
+        : Uint8List.sublistView(bytes, 0, maxBytes);
+    return (header: header, fileSize: bytes.length);
   }
 
   static LatLng? _extractGpsLocation(Map<String, IfdTag> tags) {

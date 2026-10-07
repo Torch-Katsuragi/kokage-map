@@ -464,8 +464,6 @@ class GpsManagerService extends ChangeNotifier {
     _ref?.read(preferredGpsSourceTypeProvider.notifier).set(sourceType);
     _ref?.read(selectedGnssDeviceAddressProvider.notifier)
         .set(_selectedGnssDevice?.address);
-    _ref?.read(selectedGnssDeviceNameProvider.notifier)
-        .set(_selectedGnssDevice?.name);
 
     AppLogger.debug(
       '$_logTag: GPS設定をグローバル設定に保存: $sourceType',

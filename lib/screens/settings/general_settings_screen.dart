@@ -30,6 +30,7 @@ import '../../providers/project_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../services/global_folder_locator.dart';
 import '../../tutorial/tutorial.dart';
+import '../../utils/app_permissions.dart';
 import '../../utils/folder_utils.dart';
 import '../../widgets/settings_widgets.dart';
 
@@ -83,16 +84,12 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
   static bool get _isMobileDevice => PlatformCapabilities.isMobile;
 
   Future<void> _loadPermissions() async {
-    final storage = await Permission.manageExternalStorage.isGranted;
-    final location = await Permission.location.isGranted;
-    final btScan = await Permission.bluetoothScan.isGranted;
-    final btConnect = await Permission.bluetoothConnect.isGranted;
-
+    final p = await AppPermissions.current();
     if (mounted) {
       setState(() {
-        _storageGranted = storage;
-        _locationGranted = location;
-        _bluetoothGranted = btScan && btConnect;
+        _storageGranted = p.storage;
+        _locationGranted = p.location;
+        _bluetoothGranted = p.bluetooth;
       });
     }
   }

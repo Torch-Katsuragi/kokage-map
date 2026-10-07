@@ -14,14 +14,15 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: フォルダメタデータモデル
-// 各フォルダに配置されるフォルダ設定（`.qgs`）の読み書き・継承マージを担当
+// 各フォルダの設定。JSON にして `<dir名>.qgs` の `kokage/meta` に置く（読み書きは QgsMetaStore）
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../core/fs/k_file_system.dart';
 import '../utils/app_logger.dart';
 
-/// フォルダ設定（`.qgs`）ファイル名
+/// 旧フォルダ設定のファイル名。2026-09-29 に `.qgs` へ移した。
+/// 残っていれば読んで `.qgs` に移す（[KMeta.loadFromFile]・QgsMetaStore.read）
 const String kMetaFileName = '.kmeta.json';
 
 /// 現在のスキーマバージョン
@@ -130,39 +131,25 @@ class KMetaLayerStyle {
     );
   }
 
-  /// JSONへシリアライズ
-  Map<String, dynamic> toJson() {
-    final json = <String, dynamic>{};
-    if (pointSize != null) json['pointSize'] = pointSize;
-    if (pointColor != null) json['pointColor'] = _colorToHex(pointColor!);
-    if (lineWidth != null) json['lineWidth'] = lineWidth;
-    if (lineColor != null) json['lineColor'] = _colorToHex(lineColor!);
-    if (polygonBorderWidth != null) {
-      json['polygonBorderWidth'] = polygonBorderWidth;
-    }
-    if (polygonBorderColor != null) {
-      json['polygonBorderColor'] = _colorToHex(polygonBorderColor!);
-    }
-    if (polygonFillColor != null) {
-      json['polygonFillColor'] = _colorToHex(polygonFillColor!);
-    }
-    if (polygonFillOpacity != null) {
-      json['polygonFillOpacity'] = polygonFillOpacity;
-    }
-    if (polygonBorderOpacity != null) {
-      json['polygonBorderOpacity'] = polygonBorderOpacity;
-    }
-    if (labelEnabled != null) json['labelEnabled'] = labelEnabled;
-    if (labelProperty != null) json['labelProperty'] = labelProperty;
-    if (labelFontSize != null) json['labelFontSize'] = labelFontSize;
-    if (labelColor != null) json['labelColor'] = _colorToHex(labelColor!);
-    if (labelHaloColor != null) {
-      json['labelHaloColor'] = _colorToHex(labelHaloColor!);
-    }
-    if (labelOpacity != null) json['labelOpacity'] = labelOpacity;
-    if (qgisRenderer != null) json['qgisRenderer'] = qgisRenderer;
-    return json;
-  }
+  /// JSONへシリアライズ（null の項目は書かない）
+  Map<String, dynamic> toJson() => {
+    if (pointSize != null) 'pointSize': pointSize,
+    if (pointColor != null) 'pointColor': _colorToHex(pointColor!),
+    if (lineWidth != null) 'lineWidth': lineWidth,
+    if (lineColor != null) 'lineColor': _colorToHex(lineColor!),
+    if (polygonBorderWidth != null) 'polygonBorderWidth': polygonBorderWidth,
+    if (polygonBorderColor != null) 'polygonBorderColor': _colorToHex(polygonBorderColor!),
+    if (polygonFillColor != null) 'polygonFillColor': _colorToHex(polygonFillColor!),
+    if (polygonFillOpacity != null) 'polygonFillOpacity': polygonFillOpacity,
+    if (polygonBorderOpacity != null) 'polygonBorderOpacity': polygonBorderOpacity,
+    if (labelEnabled != null) 'labelEnabled': labelEnabled,
+    if (labelProperty != null) 'labelProperty': labelProperty,
+    if (labelFontSize != null) 'labelFontSize': labelFontSize,
+    if (labelColor != null) 'labelColor': _colorToHex(labelColor!),
+    if (labelHaloColor != null) 'labelHaloColor': _colorToHex(labelHaloColor!),
+    if (labelOpacity != null) 'labelOpacity': labelOpacity,
+    if (qgisRenderer != null) 'qgisRenderer': qgisRenderer,
+  };
 
   /// 親スタイルとマージ（子の設定が優先）
   KMetaLayerStyle mergeWith(KMetaLayerStyle? parent) {
@@ -249,27 +236,14 @@ class KMetaVisibility {
     return value.map((k, v) => MapEntry(k, v as bool));
   }
 
-  /// JSONへシリアライズ
-  Map<String, dynamic> toJson() {
-    final json = <String, dynamic>{};
-    if (layers.isNotEmpty) json['layers'] = layers;
-    if (geopackages.isNotEmpty) json['geopackages'] = geopackages;
-    if (folders.isNotEmpty) json['folders'] = folders;
-    if (images.isNotEmpty) json['images'] = images;
-    if (views.isNotEmpty) json['views'] = views;
-    return json;
-  }
-
-  /// 親設定とマージ
-  KMetaVisibility mergeWith(KMetaVisibility? parent) {
-    if (parent == null) return this;
-    return KMetaVisibility(
-      layers: {...parent.layers, ...layers},
-      geopackages: {...parent.geopackages, ...geopackages},
-      folders: {...parent.folders, ...folders},
-      images: {...parent.images, ...images},
-    );
-  }
+  /// JSONへシリアライズ（空の項目は書かない）
+  Map<String, dynamic> toJson() => {
+    if (layers.isNotEmpty) 'layers': layers,
+    if (geopackages.isNotEmpty) 'geopackages': geopackages,
+    if (folders.isNotEmpty) 'folders': folders,
+    if (images.isNotEmpty) 'images': images,
+    if (views.isNotEmpty) 'views': views,
+  };
 
   /// 空かどうか
   bool get isEmpty =>
@@ -280,7 +254,6 @@ class KMetaVisibility {
       views.isEmpty;
 }
 
-/// スタイル設定（デフォルト＋レイヤー個別）
 /// View: 親レイヤに対する「フィルタ＋スタイル」の集合体。
 ///
 /// > [!IMPORTANT] View は見せ方であって、データではない
@@ -321,17 +294,11 @@ class KMetaView {
     return json;
   }
 
-  KMetaView copyWith({String? name, String? filter, KMetaLayerStyle? style}) =>
-      KMetaView(
-        name: name ?? this.name,
-        filter: filter ?? this.filter,
-        style: style ?? this.style,
-      );
-
   @override
   String toString() => 'KMetaView($name, filter=$filter)';
 }
 
+/// スタイル設定（デフォルト＋レイヤー個別）
 class KMetaStyles {
   /// デフォルトスタイル
   final KMetaLayerStyle? defaultStyle;
@@ -374,18 +341,6 @@ class KMetaStyles {
     return json;
   }
 
-  /// 親設定とマージ
-  /// 注意: layersは継承しない（各フォルダで独立管理）
-  /// defaultStyleのみ親から継承される
-  KMetaStyles mergeWith(KMetaStyles? parent) {
-    if (parent == null) return this;
-    return KMetaStyles(
-      defaultStyle:
-          defaultStyle?.mergeWith(parent.defaultStyle) ?? parent.defaultStyle,
-      layers: layers, // 継承しない（自フォルダの設定のみ）
-    );
-  }
-
   /// 空かどうか
   bool get isEmpty =>
       (defaultStyle == null || defaultStyle!.isEmpty) && layers.isEmpty;
@@ -416,15 +371,6 @@ class KMetaLayout {
     if (sortOrder != null) json['sortOrder'] = sortOrder;
     if (expanded != null) json['expanded'] = expanded;
     return json;
-  }
-
-  /// 親設定とマージ
-  KMetaLayout mergeWith(KMetaLayout? parent) {
-    if (parent == null) return this;
-    return KMetaLayout(
-      sortOrder: sortOrder ?? parent.sortOrder,
-      expanded: expanded ?? parent.expanded,
-    );
   }
 
   /// 空かどうか
@@ -606,9 +552,6 @@ class KMetaSync {
     }
     return json;
   }
-
-  /// 親設定とマージ（同期設定は継承しない = 各フォルダ独立）
-  KMetaSync mergeWith(KMetaSync? parent) => this;
 
   /// 共有ファイルに書くぶん（リンク情報だけ）。帳簿は [SyncLedger] へ
   KMetaSync linkOnly() => KMetaSync(
@@ -835,19 +778,6 @@ class KMeta {
       );
     }
     return json;
-  }
-
-  /// 親メタデータとマージ（継承処理）
-  KMeta mergeWith(KMeta? parent) {
-    if (parent == null) return this;
-    return KMeta(
-      version: version,
-      visibility: visibility.mergeWith(parent.visibility),
-      styles: styles.mergeWith(parent.styles),
-      layout: layout.mergeWith(parent.layout),
-      sync: sync.mergeWith(parent.sync),
-      imageOverlays: imageOverlays, // 継承しない（各フォルダ独立管理）
-    );
   }
 
   /// ファイルから読み込み

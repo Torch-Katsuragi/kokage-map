@@ -309,6 +309,8 @@ class TileCacheMBTiles {
 
     try {
       final ids = providerId != null ? [providerId] : {...await cachedProviderIds(), ..._databases.keys};
+      // 書き込み待ちのタイルも捨てる（残すと消した直後に書き込まれ、そのプロバイダのファイルができ直す）
+      _writeQueue.removeWhere((_, t) => providerId == null || t.providerId == providerId);
       for (final id in ids) {
         final db = _databases.remove(id);
         if (db != null) await (await db).close();

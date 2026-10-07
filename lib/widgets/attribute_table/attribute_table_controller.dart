@@ -514,48 +514,15 @@ class AttributeTableController extends ChangeNotifier {
       ),
     );
 
-    // Pointレイヤーの座標カラム
+    // Pointレイヤーの座標カラム（読み取り専用）
     if (isPointLayer) {
       if (_settings.showWgs84) {
-        tableColumns.add(
-          TrinaColumn(
-            title: '_lat',
-            field: '_lat',
-            type: TrinaColumnType.text(),
-            enableEditingMode: false,
-            width: 100,
-          ),
-        );
-        tableColumns.add(
-          TrinaColumn(
-            title: '_lon',
-            field: '_lon',
-            type: TrinaColumnType.text(),
-            enableEditingMode: false,
-            width: 100,
-          ),
-        );
+        tableColumns.add(_coordinateColumn('_lat', 100));
+        tableColumns.add(_coordinateColumn('_lon', 100));
       }
-
       if (_settings.additionalEpsg != null) {
-        tableColumns.add(
-          TrinaColumn(
-            title: '_x',
-            field: '_x',
-            type: TrinaColumnType.text(),
-            enableEditingMode: false,
-            width: 110,
-          ),
-        );
-        tableColumns.add(
-          TrinaColumn(
-            title: '_y',
-            field: '_y',
-            type: TrinaColumnType.text(),
-            enableEditingMode: false,
-            width: 110,
-          ),
-        );
+        tableColumns.add(_coordinateColumn('_x', 110));
+        tableColumns.add(_coordinateColumn('_y', 110));
       }
     }
 
@@ -578,6 +545,14 @@ class AttributeTableController extends ChangeNotifier {
 
     return tableColumns;
   }
+
+  static TrinaColumn _coordinateColumn(String field, double width) => TrinaColumn(
+        title: field,
+        field: field,
+        type: TrinaColumnType.text(),
+        enableEditingMode: false,
+        width: width,
+      );
 
   /// Phase 3: NULL/空値ハイライト用セルレンダラー
   TrinaColumnRenderer _nullHighlightRenderer(String columnName) {

@@ -409,11 +409,8 @@ abstract class LayerNode extends LayerTreeNode {
     return coords;
   }
 
-  /// 属性テーブルのカラム名キャッシュ
-  List<String>? _cachedColumnNames;
-
-  /// PRIMARY KEYスキップ時のカラム名キャッシュ
-  List<String>? _cachedColumnNamesWithoutPK;
+  /// 属性テーブルのカラム名キャッシュ（引数の組ごと。以前は最初に呼んだ getAll の結果を使い続けていた）
+  final Map<(bool getAll, bool skipPrimaryKey), List<String>> _columnNamesCache = {};
 
   /// 属性テーブルのカラム名を取得（キャッシュ機能付き）
   /// [skipPrimaryKey] trueの場合、PRIMARY KEYカラムを除外（属性テーブル表示用）
@@ -421,25 +418,16 @@ abstract class LayerNode extends LayerTreeNode {
     bool getAll = false,
     bool skipPrimaryKey = false,
   }) async {
-    if (skipPrimaryKey) {
-      _cachedColumnNamesWithoutPK ??= await geoPackageFile.getColumnNames(
-        layerName,
-        getAll: getAll,
-        skipPrimaryKey: true,
-      );
-      return _cachedColumnNamesWithoutPK!;
-    }
-    _cachedColumnNames ??= await geoPackageFile.getColumnNames(
+    return _columnNamesCache[(getAll, skipPrimaryKey)] ??= await geoPackageFile.getColumnNames(
       layerName,
       getAll: getAll,
+      skipPrimaryKey: skipPrimaryKey,
     );
-    return _cachedColumnNames!;
   }
 
   /// 属性テーブルのカラム名キャッシュをクリア
   void clearColumnNamesCache() {
-    _cachedColumnNames = null;
-    _cachedColumnNamesWithoutPK = null;
+    _columnNamesCache.clear();
   }
 
   /// 行から地物のノードを作る（形の種類ごと）

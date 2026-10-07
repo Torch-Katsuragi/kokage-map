@@ -63,7 +63,6 @@ class AttributeTableController extends ChangeNotifier {
   // 状態
   TrinaGridStateManager? _stateManager;
   List<TrinaColumn> _columns = [];
-  List<TrinaRow> _rows = [];
   List<String> _columnNames = [];
   List<String> _userColumnNames = [];
   List<String> _writableColumnNames = [];
@@ -191,16 +190,13 @@ class AttributeTableController extends ChangeNotifier {
       // カラムを構築
       _columns = _createColumns();
 
-      // フィルタが有効ならフィルタ済みビューを構築
+      // フィルタが有効ならフィルタ済みビュー、そうでなければ全件（複製しない）
       if (_isFiltered && _filterSql.isNotEmpty) {
-        await _applyFilterToDisplay();
+        _applyFilterToDisplay();
       } else {
-        _displayFeatures = List.of(_features);
+        _displayFeatures = _features;
+        _displayRows = _createRowsForRange(0, defaultPageSize);
       }
-
-      // 初回ページのデータを構築
-      _displayRows = await _createRowsForRange(0, defaultPageSize);
-      _rows = _displayRows;
 
       AppLogger.debug('[AttributeTableController] 初期化完了');
     } catch (e) {
@@ -212,7 +208,6 @@ class AttributeTableController extends ChangeNotifier {
       _writableColumnNames = [];
       _features = [];
       _columns = [];
-      _rows = [];
       _displayFeatures = [];
       _displayRows = [];
     } finally {
@@ -223,10 +218,12 @@ class AttributeTableController extends ChangeNotifier {
 
   /// TrinaGridのStateManagerを設定
   void setStateManager(TrinaGridStateManager manager) {
+    // 表を作り直したときは前の表の監視を外す
+    _stateManager?.removeListener(_onStateChanged);
     _stateManager = manager;
 
     // 編集モードの監視
-    _stateManager?.addListener(_onStateChanged);
+    manager.addListener(_onStateChanged);
   }
 
   /// 設定を更新
@@ -247,35 +244,10 @@ class AttributeTableController extends ChangeNotifier {
     }
 
     final featureCount = currentSelection.length;
-    final selectedFeaturesToDelete = List.from(
-      currentSelection.whereType<FeatureNode>(),
-    );
-
     AppLogger.debug('[AttributeTableController] 削除開始: $featureCount個');
 
-    // TrinaGridから行を削除
-    final rowIndicesToRemove = <int>[];
-    for (final feature in selectedFeaturesToDelete) {
-      final index = _features.indexOf(feature);
-      if (index >= 0) rowIndicesToRemove.add(index);
-    }
-
-    if (_stateManager != null && rowIndicesToRemove.isNotEmpty) {
-      rowIndicesToRemove.sort((a, b) => b.compareTo(a));
-      final rowsToRemove = <TrinaRow>[];
-      for (final index in rowIndicesToRemove) {
-        if (index < _rows.length) {
-          rowsToRemove.add(_rows[index]);
-        }
-      }
-      _stateManager!.removeRows(rowsToRemove);
-    }
-
-    // ローカルリストから削除
-    for (final feature in selectedFeaturesToDelete) {
-      _features.remove(feature);
-    }
-
+    // 表の行は消さずに読み直しに任せる（読み直すと表ごと作り直す）。
+    // 以前は全件の中の番目で表の行を消しており、2 ページ目以降やフィルタ中は別の行を消していた
     await _ref
         .read(selectedFeaturesProvider.notifier)
         .disposeSelectedFeatures();
@@ -359,23 +331,18 @@ class AttributeTableController extends ChangeNotifier {
     _isFiltered = true;
     _filterError = null;
 
-    await _applyFilterToDisplay();
+    _applyFilterToDisplay();
     notifyListeners();
     return null;
   }
 
   /// フィルタ結果を表示用リストに適用
-  Future<void> _applyFilterToDisplay() async {
-    _displayFeatures = [];
-
-    for (var i = 0; i < _features.length; i++) {
-      if (_filteredRowIds.contains(_features[i].rowId)) {
-        _displayFeatures.add(_features[i]);
-      }
-    }
-
-    _displayRows = await _createRowsForRange(0, defaultPageSize);
-    _rows = _displayRows;
+  void _applyFilterToDisplay() {
+    _displayFeatures = [
+      for (final f in _features)
+        if (_filteredRowIds.contains(f.rowId)) f,
+    ];
+    _displayRows = _createRowsForRange(0, defaultPageSize);
 
     AppLogger.debug(
       '[AttributeTableController] フィルタ適用: '
@@ -389,9 +356,8 @@ class AttributeTableController extends ChangeNotifier {
     _filteredRowIds = {};
     _isFiltered = false;
     _filterError = null;
-    _displayFeatures = List.of(_features);
-    _displayRows = await _createRowsForRange(0, defaultPageSize);
-    _rows = _displayRows;
+    _displayFeatures = _features;
+    _displayRows = _createRowsForRange(0, defaultPageSize);
     notifyListeners();
   }
 
@@ -619,7 +585,8 @@ class AttributeTableController extends ChangeNotifier {
     final guideName = columnName == 'name' && isPracticeLayer(layer, PracticeProject.pointsLayer);
     return (TrinaColumnRendererContext ctx) {
       final value = ctx.cell.value;
-      final isNull = value == null || value.toString().isEmpty;
+      final text = value?.toString() ?? '';
+      final isNull = text.isEmpty;
       final key = guideName &&
               _ref.read(tutorialProvider) != null &&
               ctx.rowIdx == (ctx.stateManager.currentRowIdx ?? 0)
@@ -630,18 +597,27 @@ class AttributeTableController extends ChangeNotifier {
         padding: const EdgeInsets.symmetric(horizontal: 4),
         alignment: Alignment.centerLeft,
         child: Text(
-          isNull ? '(NULL)' : value.toString(),
-          style: TextStyle(
-            fontSize: 13,
-            height: 1.2,
-            color: isNull ? Colors.grey.shade400 : Colors.black87,
-            fontStyle: isNull ? FontStyle.italic : FontStyle.normal,
-          ),
+          isNull ? '(NULL)' : text,
+          style: isNull ? _nullCellStyle : _cellStyle,
           overflow: TextOverflow.ellipsis,
         ),
       );
     };
   }
+
+  // マスの文字（マスごとに作らない）
+  static const _cellStyle = TextStyle(
+    fontSize: 13,
+    height: 1.2,
+    color: Colors.black87,
+    fontStyle: FontStyle.normal,
+  );
+  static final _nullCellStyle = TextStyle(
+    fontSize: 13,
+    height: 1.2,
+    color: Colors.grey.shade400,
+    fontStyle: FontStyle.italic,
+  );
 
   /// 列の SQLite の型（大文字）。分からなければ空文字
   String columnSqlType(String columnName) => _columnTypeMap[columnName] ?? '';
@@ -681,7 +657,7 @@ class AttributeTableController extends ChangeNotifier {
         (totalFeatures / pageSize).ceil().clamp(1, double.infinity).toInt();
     final start = (page - 1) * pageSize;
 
-    final rows = await _createRowsForRange(start, pageSize);
+    final rows = _createRowsForRange(start, pageSize);
 
     return TrinaLazyPaginationResponse(totalPage: totalPages, rows: rows);
   }
@@ -689,7 +665,7 @@ class AttributeTableController extends ChangeNotifier {
   // ========== 行データ構築 ==========
 
   /// 指定範囲のフィーチャからTrinaRowを構築
-  Future<List<TrinaRow>> _createRowsForRange(int start, int count) async {
+  List<TrinaRow> _createRowsForRange(int start, int count) {
     if (_displayFeatures.isEmpty) return [];
 
     final end = (start + count).clamp(0, _displayFeatures.length);

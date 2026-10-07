@@ -549,3 +549,67 @@ Future<void> showDeleteColumnDialog(
     }
   }
 }
+
+/// 一括編集ダイアログ。チェックした [checkedCount] 行の、選んだ列に値を入れる。
+/// 値が空なら null（NULL を入れる）。やめたときは null を返す
+Future<({String column, String? value})?> showBatchEditDialog(
+  BuildContext context, {
+  required int checkedCount,
+  required List<String> columns,
+}) async {
+  String? selectedColumn;
+  final valueController = TextEditingController();
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) => AlertDialog(
+        title: Text(t.attributeTable.batchEditTitle(count: '$checkedCount')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: selectedColumn,
+              decoration: InputDecoration(
+                labelText: t.attributeTable.targetColumn,
+                isDense: true,
+              ),
+              items: columns
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                  .toList(),
+              onChanged: (v) => setDialogState(() => selectedColumn = v),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: valueController,
+              decoration: InputDecoration(
+                labelText: t.attributeTable.setValue,
+                isDense: true,
+                hintText: t.attributeTable.setValueHint,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(t.common.cancel),
+          ),
+          FilledButton(
+            onPressed: selectedColumn != null
+                ? () => Navigator.pop(ctx, true)
+                : null,
+            child: Text(t.attributeTable.apply),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  final column = selectedColumn;
+  final text = valueController.text;
+  valueController.dispose();
+  if (ok != true || column == null) return null;
+  return (column: column, value: text.isEmpty ? null : text);
+}

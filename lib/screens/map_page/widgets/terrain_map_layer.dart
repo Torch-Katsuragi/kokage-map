@@ -66,8 +66,12 @@ import '../../layer_style_settings_screen.dart';
 import '../feature_geojson_cache.dart';
 import 'terrain_texture_paint.dart';
 
+part 'terrain_map_layer_bake.dart';
+part 'terrain_map_layer_camera.dart';
+part 'terrain_map_layer_controls.dart';
 part 'terrain_map_layer_drive.dart';
 part 'terrain_map_layer_gestures.dart';
+part 'terrain_map_layer_scene.dart';
 
 /// 地図面（v2: タイルの世界）。地図はこれだけ（MapLibre は 2026-10-04 に外した）
 ///
@@ -127,247 +131,16 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   ConsumerState<TerrainMapLayer> createState() => _TerrainMapLayerState();
 }
 
-/// タイル 1 枚ぶんの貼り付け済みフィーチャ（step ごと）
-class _ZoomButton extends StatelessWidget {
-  const _ZoomButton({required this.icon, required this.tooltip, required this.onPressed});
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-        message: tooltip,
-        child: Material(
-          color: Colors.white.withValues(alpha: 0.9),
-          shape: const CircleBorder(),
-          elevation: 2,
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onPressed,
-            child: SizedBox(width: 40, height: 40, child: Icon(icon, size: 22)),
-          ),
-        ),
-      );
-}
-
-/// 方位に合わせて回るコンパス = **2D / 3D の切替の入り口**（松本 2026-09-13「移動じゃなくてモード変更の入り口に」）。
-/// タップで 2D（真上固定）⇄ 3D、ダブルタップで北を上に、長押しで眺めモード（透視。3D のときだけ、透視中は縁が空色）。
-/// 3D で傾いていれば縁を少し濃くする。下に今のモードを小さく書く
-class _CompassButton extends StatelessWidget {
-  const _CompassButton({
-    super.key,
-    required this.bearingDeg,
-    required this.pitchDeg,
-    required this.flat,
-    required this.onPressed,
-    required this.onDoubleTap,
-    this.perspective = false,
-    this.onLongPress,
-  });
-
-  final double bearingDeg;
-  final double pitchDeg;
-
-  /// 2D（真上固定）か
-  final bool flat;
-  final bool perspective;
-  final VoidCallback onPressed;
-  final VoidCallback onDoubleTap;
-  final VoidCallback? onLongPress;
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-        message: t.map.terrain.compassTip,
-        child: Material(
-          color: perspective ? const Color(0xFFDDEBF8) : Colors.white.withValues(alpha: 0.9),
-          shape: CircleBorder(
-            side: BorderSide(
-              color: perspective ? Colors.lightBlue : (pitchDeg > 1 ? Colors.blueGrey : Colors.black26),
-              width: pitchDeg > 1 || perspective ? 2 : 1,
-            ),
-          ),
-          elevation: 2,
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onPressed,
-            onDoubleTap: onDoubleTap,
-            onLongPress: onLongPress,
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Transform.translate(
-                    offset: const Offset(0, -3),
-                    child: Transform.rotate(
-                      angle: -bearingDeg * math.pi / 180,
-                      child: const Icon(Icons.navigation, size: 22, color: Colors.redAccent),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 3,
-                    child: Text(
-                      flat ? '2D' : '3D',
-                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: flat ? Colors.black54 : Colors.blueGrey, height: 1),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-}
-
-class _TileScene {
-  _TileScene({
-    required this.key,
-    this.gen = 0,
-    required this.lines,
-    required this.polygons,
-    required this.points,
-    required this.labels,
-    this.dynamicLines = const [],
-    this.dynamicPolygons = const [],
-    this.dynamicPoints = const [],
-    this.staticSource,
-    this.complete = true,
-    List<TerrainPoint>? photoPoints,
-  }) : photoPoints = photoPoints ?? [];
-
-  /// 写真の印（カメラの記号を描くので、静的な点と分けて画面に描く）
-  final List<TerrainPoint> photoPoints;
-
-  /// 何から作ったか（静的シーンは、範囲外の変化だけなら作り直さずに鍵を差し替えて使い続ける）
-  List<Object?> key;
-
-  /// 作ったときの焼き込みの世代（`_bakeGen`）。この後の変化の範囲がタイルに掛からなければ使い続けてよい
-  int gen;
-
-  /// まだ持ち上げていないフィーチャがある（時間を分けて育てる静的シーン）
-  bool complete;
-
-  Map<int, List<PolygonBatch>>? _batches;
-  int _batchesFor = 0;
-  bool _coalesced = false;
-
-  /// 合成したシーンは静的シーンの束を指す（静的シーンが育っても同じ束を見る）
-  final _TileScene? staticSource;
-
-  /// チャンクごとの面の束。育つ間は増えたぶんだけ束を足す（作り直すと描画側の投影キャッシュが全部飛ぶ）。
-  /// 育ち切ったらチャンクごとに 1 本につなぐ
-  Map<int, List<PolygonBatch>> get polygonBatches {
-    final src = staticSource;
-    if (src != null) return src.polygonBatches;
-    final batches = _batches ??= {};
-    if (_batchesFor != polygons.length) {
-      for (final e in PolygonBatch.byChunk(polygons, from: _batchesFor).entries) {
-        (batches[e.key] ??= []).add(e.value);
-      }
-      _batchesFor = polygons.length;
-    }
-    if (complete && !_coalesced) {
-      _coalesced = true;
-      for (final e in batches.entries) {
-        if (e.value.length > 1) batches[e.key] = [PolygonBatch.concat(e.value)];
-      }
-    }
-    return batches;
-  }
-
-  /// 何から作ったか（GeoJSON リストの同一性・選択・軌跡の点数・パーティ・現在位置）
-
-  /// 静的（フィーチャ本体など。投影をキャッシュする）
-  final List<LiftedPolyline> lines;
-  final List<LiftedPolygon> polygons;
-
-  /// 動的（描画中の線・軌跡・向きなど。毎フレーム投影）
-  final List<LiftedPolyline> dynamicLines;
-  final List<LiftedPolygon> dynamicPolygons;
-  final List<TerrainPoint> dynamicPoints;
-
-  /// 静的な点（投影をキャッシュする）。合成シーンでは静的シーンのリストをそのまま指す
-  final List<TerrainPoint> points;
-  final List<TerrainLabel> labels;
-}
-
-/// 静的シーンの育ち具合
-class _StaticProgress {
-  int phase = 0; // 0: 頂点・選択・写真、1: 面、2: 線、3: 完了
-  int polygon = 0;
-  int line = 0;
-
-  /// 線の並びの末尾にある選択の線の数。選択は先に作るが、あとから足す地物の線はこの手前に差し込む
-  /// （後ろに足すと地物の線が選択の上に描かれていた）
-  int selectedLines = 0;
-
-  /// このタイルに掛かるフィーチャの番号（bbox で先に絞る。1 万面を 40 枚のタイルで毎回総当たりしない）
-  List<int>? polygonIdx;
-  List<int>? lineIdx;
-
-  /// 1 回の持ち上げに渡すフィーチャ数。直前の実測から 2ms ぶんに合わせる（寄った段の面は 1 つが重い）
-  int chunk = 64;
-
-  void tune(int n, int micros) {
-    chunk = (n * 2000 / math.max(micros, 50)).round().clamp(8, 1000);
-  }
-}
-
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
-    with SingleTickerProviderStateMixin, _TerrainDrive, _TerrainGestures
-    implements TerrainProjection {
+    with
+        SingleTickerProviderStateMixin,
+        _TerrainDrive,
+        _TerrainGestures,
+        _TerrainScenes,
+        _TerrainBakes,
+        _TerrainCameraControl {
   /// 入ったときの傾き。起動時は真上（松本 2026-09-11 決定。2D と同じ絵で始まり、傾けたい人が傾ける）
   static const _defaultPitchDeg = 0.0;
-
-  /// 引いた段の焼き込み: この段以下のタイルは、フィーチャ（面・線・点）を形として持ち上げず、
-  /// テクスチャに描き込む（真上からの投影。松本 2026-09-12「重いときはクラスタ省略でなく投影で」）。
-  /// 引いた段なので傾けても粗さは目立たず、描画は基図と同じ 1 枚のテクスチャで済む。
-  /// 選択・頂点・写真は形のまま（少ないし、光らせたい）。ヒットテストはデータから引くので影響しない
-  static const kBakeMaxZoom = 13;
-  static bool _bakesFeatures(TileKey key) => key.z <= kBakeMaxZoom;
-
-  /// 最後にテクスチャへ焼き込んだフィーチャの中身の世代（`FeatureGeoJsonCache.contentRevision`）。
-  /// ⚠ リストの同一性で比べると、GPS 軌跡の統合などで中身が同じまま全件が組み直されるたびに全部焼き直していた
-  int? _bakedContentRevision;
-
-  /// 最後に焼いたときのスタイルの中身（[_onSceneRevision]）
-  String? _bakedStyleSignature;
-  String _styleSignature() {
-    final d = _defaultStyle();
-    return [
-      '${d.fillColor.toARGB32()} ${d.outlineColor.toARGB32()} ${d.lineColor.toARGB32()} ${d.pointColor.toARGB32()} '
-          '${d.outlineWidth} ${d.lineWidth} ${d.pointSize}',
-      for (final g in widget.styleGroups())
-        '${g.key} ${g.fillHex} ${g.fillOpacity} ${g.outlineHex} ${g.outlineOpacity} ${g.borderWidth} '
-            '${g.lineHex} ${g.lineWidth} ${g.pointHex} ${g.pointSize}',
-    ].join('|');
-  }
-
-  /// 焼き込みの世代。フィーチャの一覧が変わるたびに進む。タイルごとに「どの世代で焼いたか」を [_bakedGen] に記録し、
-  /// 世代が古いタイルは焼き直す（[_checkBakes]）。
-  /// ⚠ 以前は「一覧が変わった瞬間に読み込み済みのタイル」だけ焼き直していたので、その瞬間に読み込み中だった親タイルは
-  ///   フィーチャ無しのテクスチャのまま残り、寄せる最中に親と子が入れ替わるたびにフィーチャが出たり消えたりした
-  ///   （松本 2026-09-13「地形読み込み中だけフィーチャが表示されたりされなかったり」。web で目立つ）
-  int _bakeGen = 0;
-  final Map<TileKey, int> _bakedGen = {};
-
-  /// 描いたがまだ貼っていないテクスチャの世代。作り直しが打ち切られると絵は捨てられるので、ここに描いただけでは
-  /// 焼いたことにしない（スタイルを戻してすぐ消灯すると、古い色のタイルが焼いた扱いで残っていた。2026-10-02）
-  final Map<TileKey, int> _composedGen = {};
-
-  void _onTextureApplied(TileKey key) {
-    final g = _composedGen.remove(key);
-    if (g != null) _bakedGen[key] = g;
-  }
-  final Map<TileKey, int> _bakeRequested = {};
-  Timer? _bakeCheckTimer;
-
-  /// フィーチャが変わった出来事（世代, 範囲 Mercator。null は全部）。この範囲に掛かる、古い世代のタイルだけ焼き直す
-  /// （記録中の GPS 軌跡は 30 秒ごとに伸びるので、全部焼き直すと 46 枚 × 40〜90ms が毎回来る）
-  final List<(int, ui.Rect?)> _bakeEvents = [];
-  static const _bakeEventsKept = 64;
 
   /// 傾きの上限。正射影では 90° で地面が線に潰れる（横顔になる）ので手前で止める。
   /// 寝かせるほど画面に掛かる地面が広がり、計画が段を下げて粗くなる（枚数は上限内に収まる）
@@ -397,9 +170,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   @override
   late final TerrainWorld _world;
   late final TerrainFramePlanner _planner;
+  @override
   late final TerrainWorldPainter _painter;
 
   /// 地形・面・線を描く GPU 経路（flutter_gpu）。用意できるまで／web では null（純 Dart 経路）
+  @override
   TerrainGpuWorldRenderer? _gpu;
   @override
   TerrainFramePlan? _lastPlan;
@@ -460,7 +235,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// 地図面に出す出典。普段は出さず（出典は設定の「地図・タイル」にまとめた。松本 2026-09-13）、
   /// OpenStreetMap が見えているときだけ出す（OSM の表示ガイドラインは対話型地図では地図上のクレジットを求める。
   /// 地理院タイルと Terrain Tiles は「出典を明示」で、置き場所は問わない）
-  String _attributionFor(BaseMapProvider? basemap) => {
+  String _osmAttribution() => {
         for (final (p, _) in widget.baseMapService.activeLayers)
           if (p.type == BaseMapType.openStreetMap) p.attribution,
       }.join(' / ');
@@ -470,13 +245,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final key = _textureLayersKey();
     if (key == _textureKey) return;
     _textureKey = key;
-    final b = _currentBasemap();
-    _basemap = b;
-    _attribution = _attributionFor(b);
+    _basemap = _currentBasemap();
+    _attribution = _osmAttribution();
     _tileImages.clear(); // 画像 LRU は層番号で引くので、前の基図の絵が混ざる
     _world.retexture();
     if (mounted) setState(() {});
   }
+
   @override
   bool _gesturing = false;
 
@@ -487,68 +262,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// メッシュを最後に描いた時刻（ms）。しばらく描いていないメッシュは捨てる（Vertices は native 側で 1 枚 1〜2MB）
   final Map<TerrainMeshBuilder, int> _meshUsed = {};
   static const _meshKeepMs = 3000;
-  // キー: (タイル, step, 縁の組み合わせ, 高さの出どころの段)。近似 → 本物の差し替えで作り直す
-  final Map<(TileKey, int, int, int), _TileScene> _scenes = {};
-  final Map<(TileKey, int, int, int), _TileScene> _staticScenes = {};
-  final Map<(TileKey, int, int, int), _TileScene> _dynamicScenes = {};
-  final Map<(TileKey, int, int, int), _StaticProgress> _staticProgress = {};
-
-  /// 1 フレームに育てる静的な貼り付けの枚数と上限（ジェスチャ中は控えめに、静止中は速く）
-  int _staticBuilds = 0;
-  int get _staticBudget => _gesturing ? 2 : 3;
-
-  /// 1 フレームの貼り付けに使う時間（タイル合計）
-  Duration get _sliceBudget => _gesturing ? const Duration(milliseconds: 4) : const Duration(milliseconds: 12);
-  final Stopwatch _staticSw = Stopwatch();
-
   /// 1 フレームのメッシュ生成に使う時間。超えたぶんは手持ちの段か穴埋めで繋いで次のフレームに回す
   /// （新しいタイルが 5 枚同時に届くと 20ms × 5 で 1 フレーム 100ms になっていた）
   static const _meshBudgetMs = 20;
   final Stopwatch _meshSw = Stopwatch();
   int _frameMs = 0;
 
-  /// フィーチャの bbox（Mercator m）。リストごとに一度だけ
-  final Expando<Float64List> _bboxCache = Expando();
-
-  Float64List _bboxes(List<geo.Feature<geo.Geometry>> fs) {
-    var b = _bboxCache[fs];
-    if (b != null) return b;
-    b = Float64List(fs.length * 4);
-    for (var i = 0; i < fs.length; i++) {
-      final box = fs[i].geometry?.calculateBounds();
-      if (box == null) {
-        b[i * 4] = double.nan;
-        continue;
-      }
-      final x0 = WebMercator.xFromLon(box.minX), x1 = WebMercator.xFromLon(box.maxX);
-      final y0 = WebMercator.yFromLat(box.minY), y1 = WebMercator.yFromLat(box.maxY);
-      b[i * 4] = math.min(x0, x1);
-      b[i * 4 + 1] = math.min(y0, y1);
-      b[i * 4 + 2] = math.max(x0, x1);
-      b[i * 4 + 3] = math.max(y0, y1);
-    }
-    _bboxCache[fs] = b;
-    return b;
-  }
-
-  /// [clip]（Mercator m）に bbox が掛かるフィーチャの番号
-  List<int> _featureIndexes(List<geo.Feature<geo.Geometry>> fs, Rect clip) {
-    final b = _bboxes(fs);
-    final out = <int>[];
-    for (var i = 0; i < fs.length; i++) {
-      final x0 = b[i * 4];
-      if (x0.isNaN) continue;
-      if (b[i * 4 + 2] < clip.left || x0 > clip.right || b[i * 4 + 3] < clip.top || b[i * 4 + 1] > clip.bottom) continue;
-      out.add(i);
-    }
-    return out;
-  }
   int _worldRevisionSeen = -1;
-
-  // カメラのアニメ（コンパスタップ・ペンの真上ロック）
-  late final AnimationController _anim;
-  ({double bearing, double pitch, double centerX, double centerY, double zoom})? _animFrom;
-  ({double bearing, double pitch, double centerX, double centerY, double zoom})? _animTo;
 
   /// 2D モード（真上固定。1 本指 = 移動、2 本指 = 移動・拡縮・回転。3D 導入前のパンと同じ）。
   /// 中身は 3D を真上から見ているだけ。3D モードは 1 本指 = 回転・傾き、2 本指 = 移動・拡縮。
@@ -556,28 +276,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   @override
   bool _flat = true;
 
-  /// 3D に戻したときの傾き（2D に入る前のもの。無ければ [_default3dPitchDeg]）
-  double? _pitchBefore2d;
-  static const _default3dPitchDeg = 50.0;
-
   /// ペン選択中: 真上に寄せて 1 本指をツール（描画）に渡す。離れたら元の傾きに戻す（2D モードなら真上のまま）
   @override
   bool _penLock = false;
+  @override
   double? _pitchBeforePen;
-
-  // オーバーレイ画像（GeoTIFF など）: 地形のテクスチャに焼く
-  final Map<String, ui.Image> _overlayImages = {};
-  final Set<String> _overlayLoading = {};
-  String _overlayKey = '';
-
-  /// 次の作り直しで触る範囲（Mercator）。前回と今回のオーバーレイの四隅を含む。null なら全部
-  Rect? _overlayBounds;
-  Timer? _retextureTimer;
-  Rect? _lastOverlayBounds;
-
-  /// 選んだ面の塗り（テクスチャに描く）: いま描いてある選択と、その範囲（Mercator）
-  List<geo.Feature<geo.Geometry>> _selFillDrawn = const [];
-  Rect? _selFillBounds;
 
   @override
   void initState() {
@@ -597,7 +300,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     );
     _basemap = _currentBasemap();
     _textureKey = _textureLayersKey();
-    _attribution = _attributionFor(_basemap);
+    _attribution = _osmAttribution();
     widget.baseMapService.addListener(_onBasemapChanged);
     widget.baseMapService.registerTileGenerator(BaseMapProvider.contourOverlay.id, _renderContourTile);
     _world = TerrainWorld(
@@ -695,106 +398,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
   }
 
-  // ── カメラのアニメ ──────────────────────────────────
-
-  /// 指定した項目だけ 350ms で滑らかに動かす（方位は近い方へ回る）
-  void _animateTo({double? bearing, double? pitch, double? centerX, double? centerY, double? zoom}) {
-    var b = bearing ?? _camera.bearing;
-    // 近い方へ回る
-    var d = b - _camera.bearing;
-    while (d > math.pi) {
-      d -= 2 * math.pi;
-    }
-    while (d < -math.pi) {
-      d += 2 * math.pi;
-    }
-    b = _camera.bearing + d;
-    _animFrom = (bearing: _camera.bearing, pitch: _camera.pitch, centerX: _camera.centerX, centerY: _camera.centerY, zoom: _camera.zoom);
-    _animTo = (bearing: b, pitch: pitch ?? _camera.pitch, centerX: centerX ?? _camera.centerX, centerY: centerY ?? _camera.centerY, zoom: zoom ?? _camera.zoom);
-  }
-
-  /// [_animateTo] で決めた先へ動かす（待てる）
-
-  void _onAnimTick() {
-    final a = _animFrom;
-    final z = _animTo;
-    if (a == null || z == null) return;
-    final t = Curves.easeInOutCubic.transform(_anim.value);
-    double lerp(double x, double y) => x + (y - x) * t;
-    _camera
-      ..bearing = lerp(a.bearing, z.bearing)
-      ..pitch = lerp(a.pitch, z.pitch)
-      ..centerX = lerp(a.centerX, z.centerX)
-      ..centerY = lerp(a.centerY, z.centerY)
-      ..zoom = lerp(a.zoom, z.zoom);
-    _gesturing = _anim.isAnimating;
-    _refresh();
-  }
-
-  /// コンパスのタップ: 2D ⇄ 3D。2D は真上に固定（眺めモードも解く）。3D は 2D に入る前の傾きに戻す
-  void _toggleMode() {
-    if (ref.read(currentToolProvider).name == 'Edit') return; // 編集中は 2D のまま
-    if (_flat) {
-      _flat = false;
-      final p = _pitchBefore2d ?? _default3dPitchDeg * math.pi / 180;
-      if (_penLock) {
-        _pitchBeforePen = p; // ペンを離したときにこの傾きへ
-      } else {
-        _animateTo(pitch: p);
-        _anim.forward(from: 0);
-      }
-    } else {
-      _flat = true;
-      _pitchBefore2d = _camera.pitch > 0.02 ? _camera.pitch : null;
-      _camera.perspective = false;
-      _pitchBeforePen = 0;
-      _animateTo(pitch: 0);
-      _anim.forward(from: 0);
-    }
-    ref.read(mapFlashProvider.notifier).show(_flat ? t.map.flash.mode2d : t.map.flash.mode3d);
-    ref.read(tutorialProvider.notifier).report(const MapModeToggled());
-    setState(() {});
-  }
-
-  /// 2D・北が上に（知らせもフラッシュも出さない。チュートリアルの章の始め）
-  void _resetToFlatNorth() {
-    if (!_flat) {
-      _flat = true;
-      _pitchBefore2d = _camera.pitch > 0.02 ? _camera.pitch : null;
-      _camera.perspective = false;
-      _pitchBeforePen = 0;
-    }
-    if (_camera.pitch == 0 && _camera.bearing == 0) {
-      setState(() {});
-      return;
-    }
-    _animateTo(pitch: 0, bearing: 0);
-    _anim.forward(from: 0);
-    setState(() {});
-  }
-
-  /// コンパスのダブルタップ: 北を上に（モードはそのまま）
-  void _resetNorth() {
-    _animateTo(bearing: 0);
-    _anim.forward(from: 0);
-    ref.read(mapFlashProvider.notifier).show(t.map.flash.northUp);
-  }
-
-  /// 眺めモード（透視投影）の切替。コンパスの長押し（3D のときだけ）。GPU 経路のみ（純 Dart は正射影の線形性に頼る）
-  void _togglePerspective() {
-    if (_gpu == null || _flat) return;
-    setState(() => _camera.perspective = !_camera.perspective);
-    ref.read(mapFlashProvider.notifier).show(_camera.perspective ? t.map.flash.perspectiveOn : t.map.flash.perspectiveOff);
-    _refresh();
-  }
-
   /// 1 本指を取るツール（真上ロックの対象）
   static bool _toolTakesDrag(String toolName) =>
       toolName == 'Pen' || toolName == 'Overlay Transform' || toolName == 'Edit';
 
-  /// ツールが変わった: 1 本指を取るツールなら真上に寄せて 1 本指を渡す。離れたら傾きを戻す
+  /// 購読している外部機器ツール
   DeviceTool? _listenedDevice;
 
+  /// ツールが変わった: 1 本指を取るツールなら真上に寄せて 1 本指を渡す。離れたら傾きを戻す
   void _onToolChanged(String toolName) {
     // 外部機器ツールは計測のたびに notify するので、その間だけ購読する
     final tool = ref.read(currentToolProvider);
@@ -814,12 +425,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _penLock = true;
       _pitchBeforePen = _camera.pitch;
       _animateTo(pitch: 0);
-      _anim.forward(from: 0);
     } else if (!pen && _penLock) {
       _penLock = false;
       _toolDrag = false;
       _animateTo(pitch: _flat ? 0 : (_pitchBeforePen ?? _defaultPitchDeg * math.pi / 180));
-      _anim.forward(from: 0);
     }
   }
 
@@ -839,11 +448,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     widget.baseMapService.removeListener(_onBasemapChanged);
     widget.baseMapService.unregisterTileGenerator(BaseMapProvider.contourOverlay.id, _renderContourTile);
     _anim.dispose();
-    _retextureTimer?.cancel();
-    _bakeCheckTimer?.cancel();
-    for (final im in _overlayImages.values) {
-      im.dispose();
-    }
+    _disposeBakes();
     _stopDrive();
     widget.heading?.removeListener(_onHeading);
     widget.location.removeListener(_scheduleRefresh);
@@ -880,6 +485,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   /// 次のフレームの頭で 1 回だけ描き直す。タイル到着・メッシュ完成・シーン更新など
   /// 非同期のきっかけはすべてここを通す（同期に呼ぶと到着のたびに連鎖して止まる）
+  @override
   void _scheduleRefresh() {
     if (_refreshScheduled || !mounted) return;
     _refreshScheduled = true;
@@ -907,99 +513,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _scheduleBakeCheck();
   }
 
-  void _onSceneRevision() {
-    final g = widget.geoJson;
-    final rev = g.contentRevision;
-    // 色や濃さだけ変えたときは地物の署名（形とスタイルの鍵）が変わらないので、スタイルの中身でも見る。
-    // 塗りはどの段もテクスチャに描くので、変われば全部焼き直す
-    final styleSig = _styleSignature();
-    if (_bakedStyleSignature != null && _bakedStyleSignature != styleSig) {
-      _bakeGen++;
-      _bakeEvents.add((_bakeGen, null));
-      if (_bakeEvents.length > _bakeEventsKept) _bakeEvents.removeRange(0, _bakeEvents.length - _bakeEventsKept);
-    }
-    _bakedStyleSignature = styleSig;
-    if (_bakedContentRevision != rev) {
-      _bakedContentRevision = rev;
-      _bakeGen++;
-      final ll = g.lastChangeLonLat;
-      final merc = ll == null
-          ? null
-          : ui.Rect.fromLTRB(
-              WebMercator.xFromLon(ll.left),
-              WebMercator.yFromLat(ll.top),
-              WebMercator.xFromLon(ll.right),
-              WebMercator.yFromLat(ll.bottom),
-            ).inflate(50);
-      _bakeEvents.add((_bakeGen, merc));
-      if (_bakeEvents.length > _bakeEventsKept) _bakeEvents.removeRange(0, _bakeEvents.length - _bakeEventsKept);
-    }
-    _scheduleBakeCheck();
-    _scheduleRefresh();
-  }
-
-  /// [since] の世代より後の変化（`_bakeEvents`）が [k] のタイルに掛かるか。記録より古ければ掛かる扱い（安全側）
-  bool _touchedSince(TileKey k, int since) {
-    final oldest = _bakeEvents.isEmpty ? _bakeGen : _bakeEvents.first.$1;
-    if (since < oldest - 1) return true;
-    for (final (g, r) in _bakeEvents) {
-      if (g <= since) continue;
-      if (r == null) return true;
-      if (k.west < r.right && k.west + k.span > r.left && k.south < r.bottom && k.south + k.span > r.top) return true;
-    }
-    return false;
-  }
-
-  /// 古い世代で焼かれた（またはフィーチャが届く前に焼かれた）タイルを見つけて焼き直す（400ms にまとめる）
-  void _scheduleBakeCheck() {
-    _bakeCheckTimer?.cancel();
-    _bakeCheckTimer = Timer(const Duration(milliseconds: 400), _checkBakes);
-  }
-
-  void _checkBakes() {
-    if (!mounted) return;
-    final gen = _bakeGen;
-    final live = {for (final t in _world.tiles) t.key};
-    _bakedGen.removeWhere((k, _) => !live.contains(k));
-    _bakeRequested.removeWhere((k, _) => !live.contains(k));
-    bool touched(TileKey k, int bakedAt) => _touchedSince(k, bakedAt);
-    final stale = <TileKey>{
-      for (final k in live)
-        if (_bakedGen[k] != gen && _bakeRequested[k] != gen && touched(k, _bakedGen[k] ?? -1)) k,
-    };
-    // 触れていないタイルは今の世代で焼けているのと同じ扱い（次の出来事まで見ない）
-    for (final k in live) {
-      if (!stale.contains(k) && _bakedGen.containsKey(k) && _bakedGen[k] != gen && _bakeRequested[k] != gen) {
-        _bakedGen[k] = gen;
-      }
-    }
-    if (stale.isEmpty) return;
-    for (final k in stale) {
-      _bakeRequested[k] = gen;
-    }
-    debugPrint('[3D] bake: ${stale.length} 枚を世代 $gen で焼き直す');
-    unawaited(_world.retexture(where: stale.contains).then((_) {
-      if (!mounted) return;
-      // 途中で別の作り直しに打ち切られた分は要求を取り下げ、少し置いてまた見る
-      var left = false;
-      for (final k in stale) {
-        if (_bakedGen[k] != gen && _world.has(k)) {
-          _bakeRequested.remove(k);
-          left = true;
-        }
-      }
-      if (left) _scheduleBakeCheck();
-    }));
-  }
-
-  /// 地形の見た目（色分け）の設定が変わった。合成を捨てる
-  void _onAppearanceChanged() {
-    _scenes.clear();
-    _scheduleRefresh();
-  }
-
-  // ── 等高線（タイルごと・isolate で抽出） ──────────────────
-
   // ── フレームの組み立て ──────────────────────────────
 
   /// 見える範囲のタイルを揃え、描けるものを描画順に painter へ渡す
@@ -1011,11 +524,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final sw = Stopwatch()..start();
     _meshBuilds = 0;
     _placeholders = 0;
-    _sceneBuilds = 0;
-    _staticBuilds = 0;
-    _staticSw
-      ..reset()
-      ..start();
+    _startSceneFrame();
     _meshSw.reset();
     _frameMs = DateTime.now().millisecondsSinceEpoch;
     _camera.viewport = _size;
@@ -1024,10 +533,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _lastPlan = plan;
     if (_world.revision != _worldRevisionSeen) {
       // タイルの出入り: 消えたタイルのぶんだけ捨てる（縁が変わったタイルはキーが変わるので自然に入れ替わる）
-      _scenes.removeWhere((k, _) => !_world.has(k.$1));
-      _staticScenes.removeWhere((k, _) => !_world.has(k.$1));
-      _staticProgress.removeWhere((k, _) => !_world.has(k.$1));
-      _dynamicScenes.removeWhere((k, _) => !_world.has(k.$1));
+      _pruneScenes();
       _pruneMeshes();
       // GPU 側のテクスチャは生きているタイルの世代だけ残す（`ui.Image` を手放した後の唯一の実体なので時間では捨てない）
       final gpu = _gpu;
@@ -1045,7 +551,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final drawables = <TerrainTileDrawable>[];
     for (final tile in plan.tiles) {
       final step = plan.stepFor(tile);
-      final skirt = tile.key.span * 0.03; // タイル幅の 3%
+      final skirt = _skirtOf(tile);
       var useStep = step;
       TerrainMeshBuilder builder;
       final ideal = tile.builders[step];
@@ -1089,16 +595,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
   }
 
+  /// タイルの縁の垂れ（タイル幅の 3%）
+  static double _skirtOf(TerrainTile tile) => tile.key.span * 0.03;
+
   /// 一度でも全面が揃ったか（揃うまで背景は透明）
   bool _everCovered = false;
   int _meshBuilds = 0;
   @override
   int _placeholders = 0;
-  int _sceneBuilds = 0;
-
-  bool _hasStaticScene(TerrainTile tile, int step) =>
-      _staticScenes.containsKey((tile.key, step, tile.borderMask, tile.sourceZoom));
-
   /// [step] に一番近いビルダーの段。[preferScene] なら貼り付けが揃っている段を優先
   int _nearestStep(TerrainTile tile, int step, {bool preferScene = false}) {
     int best(Iterable<int> keys) => keys.reduce((a, b) => (a - step).abs() <= (b - step).abs() ? a : b);
@@ -1154,7 +658,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           if (c != null && c.$1 == _camera.bearing && c.$2 == _camera.pitch) return _drawable(tile, e.value, e.key);
         }
         _placeholders++;
-        return _drawable(tile, tile.placeholderBuilder(chunkSize: _world.chunkSize, skirtDepth: tile.key.span * 0.03), 16);
+        return _drawable(tile, tile.placeholderBuilder(chunkSize: _world.chunkSize, skirtDepth: _skirtOf(tile)), 16);
       }
       _meshSw.start();
       mesh = builder.build(_camera);
@@ -1188,831 +692,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     );
   }
 
-  // ── シーン（タイル単位の貼り付け） ─────────────────
-
-  TerrainFeatureStyle _styleFromGroup(MapStyleGroup g) => TerrainFeatureStyle(
-        lineColor: TerrainFeatureStyle.fromHex(g.lineHex),
-        lineWidth: g.lineWidth,
-        fillColor: TerrainFeatureStyle.fromHex(g.fillHex, g.fillOpacity),
-        outlineColor: TerrainFeatureStyle.fromHex(g.outlineHex, g.outlineOpacity),
-        outlineWidth: g.borderWidth,
-        pointColor: TerrainFeatureStyle.fromHex(g.pointHex),
-        pointSize: g.pointSize,
-      );
-
-  TerrainFeatureStyle _defaultStyle() {
-    final s = layerStyleSettings;
-    return TerrainFeatureStyle(
-      lineColor: s.getColor(lineColorDef),
-      lineWidth: s.getDouble(lineWidthDef),
-      fillColor: s.getColor(polygonFillColorDef).withValues(alpha: s.getDouble(polygonFillOpacityDef)),
-      outlineColor: s.getColor(polygonBorderColorDef).withValues(alpha: s.getDouble(polygonBorderOpacityDef)),
-      outlineWidth: s.getDouble(polygonBorderWidthDef),
-      pointColor: s.getColor(pointColorDef),
-      pointSize: s.getDouble(pointSizeDef),
-    );
-  }
-
-  TerrainFeatureStyle _selectedStyle(TerrainFeatureStyle base, {bool fill = true}) {
-    final s = layerStyleSettings;
-    final color = s.getColor(selectedColorDef);
-    final k = s.getDouble(selectedMultiplierDef);
-    return TerrainFeatureStyle(
-      lineColor: color,
-      lineWidth: base.lineWidth * k,
-      fillColor: fill ? color.withValues(alpha: 0.4) : Colors.transparent,
-      outlineColor: color,
-      outlineWidth: base.outlineWidth * k,
-      pointColor: color,
-      pointSize: base.pointSize * k,
-    );
-  }
-
-  static bool _sameKey(List<Object?> a, List<Object?> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (!identical(a[i], b[i]) && a[i] != b[i]) return false;
-    }
-    return true;
-  }
-
-  /// タイル 1 枚の貼り付け。静的な部分（フィーチャ・頂点・写真・選択）と動的な部分（軌跡・パーティ・現在位置）を
-  /// 別々にキャッシュする。GPS の更新（1 秒ごと）で作り直すのは動的な部分だけ（数本・数点で軽い）
-  ///
-  /// 静的な部分は 1 フレーム [_staticBudget] 枚まで。超えたぶんは空のまま描いて次のフレームで足す
-  /// （引いた直後に 10 枚ぶん同時に届くと 1 枚 30〜150ms × 10 で止まる）
-  _TileScene _sceneFor(TerrainTile tile, TerrainMesh mesh, int step) {
-    final g = widget.geoJson;
-    final track = widget.gpsTrack();
-    final session = ref.read(partySessionProvider);
-    final loc = widget.location.value;
-    final cacheKey = (tile.key, step, tile.borderMask, tile.sourceZoom);
-    final staticKey = <Object?>[
-      g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images, g.selectedImages,
-      g.lineVertices, g.polygonVertices,
-    ];
-    final drawing = GlobalDrawingState.instance;
-    final tool = ref.read(currentToolProvider);
-    final selectedOverlays = <OverlayImageNode>[
-      ...ref.read(selectedFeaturesProvider).whereType<OverlayImageNode>(),
-      if (tool is OverlayTransformTool && tool.target != null) tool.target!,
-    ];
-    final overlayFrameKey = [for (final n in selectedOverlays) '${n.filePath}@${n.cornerCoordinates}'].join(';');
-    final deviceLines = tool is DeviceTool ? tool.overlayLines() : const <geo.Feature<geo.LineString>>[];
-    final deviceStation = tool is DeviceTool ? tool.overlayStation : null;
-    final headingDeg = widget.heading?.value;
-    final headingKey = headingDeg == null ? null : (headingDeg / 5).round();
-    final dynamicKey = <Object?>[
-      track.length, session, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview,
-      overlayFrameKey, tool is OverlayTransformTool ? tool.rotationHandlePosition : null,
-      deviceLines.length, deviceStation, headingKey, tool.name,
-    ];
-    final key = <Object?>[...staticKey, ...dynamicKey];
-    final cached = _scenes[cacheKey];
-    if (cached != null && _sameKey(cached.key, key)) return cached;
-
-    final dem = mesh.dem;
-    final clip = Rect.fromLTWH(0, 0, dem.width, dem.height);
-    // 面を地形に沿わせる格子の粗さ: 約 20m、ただし最低 4 セル（引いた段では 1 セルまで切り分けても画面上 1〜2px で意味が無く、
-    // 1 万面で貼り付けが 1 秒を超えた）
-    final clipCells = math.max(4, (20 / (dem.cellSize * step)).round());
-    final labelStyle = TextStyle(
-      fontSize: layerStyleSettings.getDouble(labelFontSizeDef),
-      color: layerStyleSettings.getColor(labelColorDef),
-    );
-    TerrainSceneBuilder builder(Map<String, TerrainFeatureStyle> styles, TerrainFeatureStyle def, String labelProp) =>
-        TerrainSceneBuilder(
-          mesh: mesh,
-          stylesByKey: styles,
-          defaultStyle: def,
-          styleKeyProp: kStyleProp,
-          labelProp: labelProp,
-          labelTextStyle: labelStyle,
-          polygonClipCells: clipCells,
-        );
-
-    // 静的な部分。1 回あたり数 ms ずつ育てる（1 タイル 1 万面を一度に持ち上げると 0.5〜1 秒止まる）
-    var stat = _staticScenes[cacheKey];
-    // 線・面・点の一覧が組み直されても、変わった範囲（`_bakeEvents`）がこのタイルに掛からなければ作り直さない。
-    // GPS 軌跡の統合で 20 秒ごとに一覧が変わり、そのたびに見えている全タイルの 1.5 万面を持ち上げ直していた（2026-10-06）。
-    // 選択・頂点・写真が変わったときと、今の一覧の変化がまだ記録されていないときは作り直す
-    if (stat != null &&
-        stat.complete &&
-        !_sameKey(stat.key, staticKey) &&
-        stat.key.length == staticKey.length &&
-        _sameKey(stat.key.sublist(3), staticKey.sublist(3)) &&
-        g.contentRevision == _bakedContentRevision &&
-        !_touchedSince(tile.key, stat.gen)) {
-      stat
-        ..key = staticKey
-        ..gen = _bakeGen;
-    }
-    if (stat == null || !_sameKey(stat.key, staticKey)) {
-      if (_staticBuilds >= _staticBudget) {
-        // 今フレームは見送り。手持ちがあれば古いものを使い、無ければ空
-        _scheduleRefresh();
-        stat ??= _TileScene(key: const [], lines: const [], polygons: const [], points: const [], labels: const []);
-      } else {
-        stat = _TileScene(key: staticKey, gen: _bakeGen, lines: [], polygons: [], points: [], labels: [], complete: false);
-        _staticScenes[cacheKey] = stat;
-        _staticProgress[cacheKey] = _StaticProgress();
-      }
-    }
-    if (!stat.complete && _staticBuilds < _staticBudget) {
-      _staticBuilds++;
-      _sceneBuilds++;
-      _advanceStatic(tile, step, stat, _staticProgress[cacheKey] ??= _StaticProgress(), g, builder, clip);
-    }
-    // 育ち切っていないタイルがある限り次のフレームも来る（今フレームの予算に漏れたタイルも）
-    if (!stat.complete) _scheduleRefresh();
-    // 動的な部分
-    var dyn = _dynamicScenes[cacheKey];
-    if (dyn == null || !_sameKey(dyn.key, dynamicKey)) {
-      dyn = _buildDynamic(dynamicKey, track, session, loc, dem, builder, clip,
-          selectedOverlays: selectedOverlays, tool: tool, deviceLines: deviceLines, deviceStation: deviceStation,
-          headingDeg: headingDeg);
-      _dynamicScenes[cacheKey] = dyn;
-    }
-    // 静的な線・面はそのまま（リストと束の同一性を保つ → 描画側の投影キャッシュが効く）。動的な方は別に持つ
-    final scene = _TileScene(
-      key: key,
-      lines: stat.lines,
-      polygons: stat.polygons,
-      staticSource: stat,
-      dynamicLines: dyn.lines,
-      dynamicPolygons: dyn.polygons,
-      dynamicPoints: stat.photoPoints.isEmpty ? dyn.points : [...stat.photoPoints, ...dyn.points],
-      points: stat.points,
-      // 動的なラベルが無ければ静的のリストをそのまま（同一性を保つ → 描画側のラベル投影キャッシュが効く）
-      labels: dyn.labels.isEmpty ? stat.labels : [...stat.labels, ...dyn.labels],
-      complete: stat.complete,
-    );
-    // 静的シーンが育ち切るまでは合成も作り直す（点・ラベルは合成時に写すため）
-    if (stat.complete) _scenes[cacheKey] = scene;
-    return scene;
-  }
-
-  /// フィーチャ本体・頂点・写真・選択を [scene] に足す。1 回に [sliceBudget] まで（残りは次の呼び出し）
-  static const labelStyleForClusters = TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF3F51B5));
-
-  void _advanceStatic(
-    TerrainTile tile,
-    int step,
-    _TileScene scene,
-    _StaticProgress progress,
-    FeatureGeoJsonCache g,
-    TerrainSceneBuilder Function(Map<String, TerrainFeatureStyle>, TerrainFeatureStyle, String) builder,
-    Rect clip,
-  ) {
-    final sliceBudget = _sliceBudget;
-    final sw = Stopwatch()..start();
-    bool over() {
-      if (_staticSw.elapsed <= sliceBudget) return false;
-      if (sw.elapsedMilliseconds > 30) {
-        debugPrint('[3D] tile ${tile.key} step $step 貼り付け 一片 ${sw.elapsedMilliseconds}ms '
-            '(phase ${progress.phase} polys ${progress.polygon}/${progress.polygonIdx?.length} chunk ${progress.chunk})');
-      }
-      return true;
-    }
-    final defaultStyle = _defaultStyle();
-    final groups = {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
-    // 粗く間引いたタイル（セルが 30m 以上）で面が多いときはラベルを省く（判定はデータ全体の面数。タイルごとに変えると継ぎ接ぎになる）。
-    // ⚠ 輪郭は省かないこと。以前はここで輪郭も省いていたが、焼き込む段（z13 以下）は面をそもそも持ち上げないので、
-    // 省かれるのは焼き込まない z14 以上のタイルを中間の段（14.6 など）で間引いたときだけだった。塗りの無い面
-    // （森林簿の小班 1.5 万面）がその段でだけ丸ごと消えていた（2026-10-06、Fold）
-    final coarse = tile.bordered.cellSize * step >= 30;
-    final dense = coarse && g.polygons.length > 2000;
-    void add(TerrainScene s, {bool withLabels = true}) {
-      // 選択の線より手前（下）に入れる
-      final at = scene.lines.length - progress.selectedLines;
-      scene.lines.insertAll(at, [...s.outlines, ...s.lines]);
-      scene.polygons.addAll(s.polygons);
-      scene.points.addAll(s.points);
-      if (withLabels) scene.labels.addAll(s.labels);
-    }
-
-    if (progress.phase == 0) {
-      // 選択（先に見せたい）・頂点・写真は少ないので一度に
-      add(
-        // 選んだ面の塗りはテクスチャに描くので、ここは枠線だけ（平らな板の塗りは尾根で地形に埋もれていた）
-        builder({for (final e in groups.entries) e.key: _selectedStyle(e.value, fill: false)}, _selectedStyle(defaultStyle, fill: false),
-                '__no_label__')
-            .build(lines: g.selectedPolylines, polygons: g.selectedPolygons, points: g.selectedMarkers, clipRect: clip),
-        withLabels: false,
-      );
-      progress.selectedLines = scene.lines.length;
-      add(
-        builder(const {}, TerrainFeatureStyle(
-          lineColor: defaultStyle.lineColor, lineWidth: 1, fillColor: defaultStyle.fillColor,
-          outlineColor: defaultStyle.outlineColor, outlineWidth: 1, pointColor: Colors.white,
-          pointSize: math.max(2.0, defaultStyle.pointSize * 0.45),
-        ), '__no_label__').build(
-          points: [
-            if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) ...g.lineVertices,
-            if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) ...g.polygonVertices,
-          ],
-          clipRect: clip,
-        ),
-      );
-      // 写真はレイヤ一覧と同じカメラの印で（ただの黄色い丸では地物の点と見分けにくかった。松本 2026-10-02）。
-      // 選んだ写真は選択の色。記号を描くので GPU の点ではなく画面に描く点（[photoPoints]）にする
-      final selImages = Set<geo.Feature>.identity()..addAll(g.selectedImages);
-      final selColor = layerStyleSettings.getColor(selectedColorDef);
-      for (final (images, color) in [
-        ([for (final f in g.images) if (!selImages.contains(f)) f], const Color(0xFFF9A825)),
-        (g.selectedImages, selColor),
-      ]) {
-        if (images.isEmpty) continue;
-        final s = builder(const {}, TerrainFeatureStyle(
-          lineColor: color, lineWidth: 1, fillColor: color, outlineColor: color,
-          outlineWidth: 1, pointColor: color, pointSize: 13,
-        ), 'name').build(points: images, clipRect: clip);
-        for (final p in s.points) {
-          scene.photoPoints.add(TerrainPoint(x: p.x, y: p.y, color: color, sizePx: 13, icon: Icons.photo_camera));
-        }
-        scene.labels.addAll(s.labels);
-      }
-      // 点フィーチャ。焼き込む段はテクスチャに描いてあるので持ち上げない。
-      // それ以外の引いた段では格子（画面 60px 相当）でまとめて数を出す（1 万点を 1 点ずつ描かない）
-      final baked = _bakesFeatures(tile.key);
-      final pointScene = baked
-          ? TerrainScene.empty
-          : builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey).build(points: g.markers, clipRect: clip);
-      if (baked) {
-        // テクスチャ側で描いてある
-      } else if (coarse && pointScene.points.length > 50) {
-        final cellM = tile.bordered.cellSize * step * 30; // 1 セル ≒ 2px → 60px
-        final buckets = <(int, int), List<TerrainPoint>>{};
-        for (final p in pointScene.points) {
-          (buckets[((p.x / cellM).floor(), (p.y / cellM).floor())] ??= []).add(p);
-        }
-        for (final e in buckets.entries) {
-          final ps = e.value;
-          if (ps.length == 1) {
-            scene.points.add(ps.first);
-            continue;
-          }
-          var cx = 0.0, cy = 0.0;
-          for (final p in ps) {
-            cx += p.x;
-            cy += p.y;
-          }
-          cx /= ps.length;
-          cy /= ps.length;
-          scene.points.add(TerrainPoint(x: cx, y: cy, color: const Color(0xFF3F51B5), sizePx: 12));
-          scene.labels.add(TerrainLabel(x: cx, y: cy, text: '${ps.length}', style: labelStyleForClusters, markerGap: 14));
-        }
-      } else {
-        add(pointScene); // 引いた段でも点が少なければラベルは出す（多ければ上でまとめている）
-      }
-      final worldClip = clip.shift(Offset(tile.bordered.originX, tile.bordered.originY));
-      progress.polygonIdx = baked ? const [] : _featureIndexes(g.polygons, worldClip);
-      progress.lineIdx = baked ? const [] : _featureIndexes(g.polylines, worldClip);
-      progress.phase = 1;
-      if (over()) return;
-    }
-    // 面（引いた段ではラベル無し）。塗りはテクスチャに描いてある（[_decorateTexture]）。ここは枠線とラベル
-    final polygonIdx = progress.polygonIdx!;
-    final outlines = progress.phase == 1
-        ? builder({for (final e in groups.entries) e.key: e.value.withoutFill()}, defaultStyle.withoutFill(),
-            FeatureGeoJsonInput.labelPropKey)
-        : null;
-    while (progress.phase == 1) {
-      if (progress.polygon >= polygonIdx.length) {
-        progress.phase = 2;
-        break;
-      }
-      final end = math.min(progress.polygon + progress.chunk, polygonIdx.length);
-      final t0 = sw.elapsedMicroseconds;
-      add(
-        outlines!.build(polygons: [for (var i = progress.polygon; i < end; i++) g.polygons[polygonIdx[i]]], clipRect: clip),
-        withLabels: !dense,
-      );
-      progress.tune(end - progress.polygon, sw.elapsedMicroseconds - t0);
-      progress.polygon = end;
-      if (over()) return;
-    }
-    // 線
-    final lineIdx = progress.lineIdx!;
-    final lines = progress.phase == 2 ? builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey) : null;
-    while (progress.phase == 2) {
-      if (progress.line >= lineIdx.length) {
-        progress.phase = 3;
-        break;
-      }
-      final end = math.min(progress.line + progress.chunk, lineIdx.length);
-      final t0 = sw.elapsedMicroseconds;
-      add(lines!.build(lines: [for (var i = progress.line; i < end; i++) g.polylines[lineIdx[i]]], clipRect: clip));
-      progress.tune(end - progress.line, sw.elapsedMicroseconds - t0);
-      progress.line = end;
-      if (over()) return;
-    }
-    scene.complete = true;
-    if (sw.elapsedMilliseconds > 20) {
-      debugPrint('[3D] tile ${tile.key} step $step 貼り付け 最後の一片 ${sw.elapsedMilliseconds}ms '
-          '(lines ${scene.lines.length} polys ${scene.polygons.length} pts ${scene.points.length})');
-    }
-  }
-
-  /// 描きかけの線・面の範囲（Mercator m）。点の数と最後の点が同じなら前の結果を使う
-  (int, int, LatLng?, Rect?)? _strokeCache;
-  Rect? _strokeBounds(GlobalDrawingState d) {
-    final line = d.drawingLine;
-    final poly = d.drawingPolygon;
-    final last = line.isNotEmpty ? line.last : (poly.isNotEmpty ? poly.last : null);
-    final c = _strokeCache;
-    if (c != null && c.$1 == line.length && c.$2 == poly.length && c.$3 == last) return c.$4;
-    Rect? r;
-    for (final p in [...line, ...poly]) {
-      final q = Offset(WebMercator.xFromLon(p.longitude), WebMercator.yFromLat(p.latitude));
-      r = r == null ? Rect.fromPoints(q, q) : r.expandToInclude(Rect.fromPoints(q, q));
-    }
-    r = r?.inflate(5);
-    _strokeCache = (line.length, poly.length, last, r);
-    return r;
-  }
-
-  /// 今日の GPS 軌跡・パーティ・現在位置（GPS の更新ごとに作り直す。軽い）
-  _TileScene _buildDynamic(
-    List<Object?> key,
-    List<LatLng> track,
-    PartySessionState session,
-    LatLng? loc,
-    DemGrid dem,
-    TerrainSceneBuilder Function(Map<String, TerrainFeatureStyle>, TerrainFeatureStyle, String) builder,
-    Rect clip, {
-    List<OverlayImageNode> selectedOverlays = const [],
-    MapTool? tool,
-    List<geo.Feature<geo.LineString>> deviceLines = const [],
-    LatLng? deviceStation,
-    double? headingDeg,
-  }) {
-    final lines = <LiftedPolyline>[];
-    final polygons = <LiftedPolygon>[];
-    final points = <TerrainPoint>[];
-    final labels = <TerrainLabel>[];
-    void add(TerrainScene s) {
-      lines
-        ..addAll(s.outlines)
-        ..addAll(s.lines);
-      polygons.addAll(s.polygons);
-      points.addAll(s.points);
-      labels.addAll(s.labels);
-    }
-
-    // 1. 今日の GPS 軌跡（青緑・細め）
-    if (track.length >= 2) {
-      add(
-        builder(const {}, const TerrainFeatureStyle(
-          lineColor: Color(0xCC00897B), lineWidth: 3, fillColor: Color(0x00000000),
-          outlineColor: Color(0x00000000), outlineWidth: 0, pointColor: Color(0xFF00897B), pointSize: 4,
-        ), '__no_label__').build(
-          lines: [
-            geo.Feature<geo.Geometry>(
-              geometry: geo.LineString.from([for (final p in track) geo.Geographic(lon: p.longitude, lat: p.latitude)]),
-            ),
-          ],
-          clipRect: clip,
-        ),
-      );
-    }
-    // 2. パーティの他メンバー（橙）と圏外区間の軌跡
-    const peerStyle = TerrainFeatureStyle(
-      lineColor: Color(0x80FF5722), lineWidth: 3, fillColor: Color(0x00000000),
-      outlineColor: Color(0x00000000), outlineWidth: 0, pointColor: Colors.deepOrange, pointSize: 8,
-    );
-    bool listed(String uid) => session.members.isEmpty || session.members.any((m) => m.uid == uid);
-    add(
-      builder(const {}, peerStyle, 'name').build(
-        points: [
-          for (final peer in session.peers.values)
-            if (listed(peer.uid))
-              geo.Feature<geo.Point>(
-                geometry: geo.Point(geo.Geographic(lon: peer.longitude, lat: peer.latitude)),
-                properties: {
-                  'name': session.members
-                      .firstWhere((m) => m.uid == peer.uid, orElse: () => PartyMember(uid: peer.uid, name: '', role: PartyRole.guest))
-                      .name,
-                },
-              ),
-        ],
-        lines: [
-          for (final entry in session.tracks.entries)
-            if (listed(entry.key))
-              for (final t in entry.value)
-                if (t.points.length >= 2)
-                  geo.Feature<geo.Geometry>(
-                    geometry: geo.LineString.from([for (final p in t.points) geo.Geographic(lon: p.longitude, lat: p.latitude)]),
-                  ),
-        ],
-        clipRect: clip,
-      ),
-    );
-    // 3. 現在位置（青）と端末の向き（画面上の 60° の扇。2D と同じ。描くのは painter の `_paintHeadingFan`）
-    if (loc != null) {
-      final x = WebMercator.xFromLon(loc.longitude) - dem.originX;
-      final y = WebMercator.yFromLat(loc.latitude) - dem.originY;
-      if (clip.contains(Offset(x, y))) {
-        // 半透明: 不透明だと真下の点や短い線を隠す（2026-09-01 実機で確認）
-        points.add(TerrainPoint(x: x, y: y, color: Colors.blue.withValues(alpha: 0.55), sizePx: 9, headingDeg: headingDeg));
-      }
-    }
-    // 4. 描画中の線・面・点（ペン）。2D の描画プレビューと同じ赤
-    final drawing = GlobalDrawingState.instance;
-    const drawStyle = TerrainFeatureStyle(
-      lineColor: Colors.red, lineWidth: 3, fillColor: Color(0x33FF0000),
-      outlineColor: Colors.red, outlineWidth: 2, pointColor: Colors.red, pointSize: 8,
-    );
-    // 描きかけの線の範囲に掛からないタイルでは組まない（指を動かすたびに全タイルで線全体を持ち上げ直していた）
-    final strokeBox = _strokeBounds(drawing);
-    final strokeHere = strokeBox != null && strokeBox.overlaps(clip.shift(Offset(dem.originX, dem.originY)));
-    if (strokeHere && (drawing.drawingLine.length >= 2 || drawing.drawingPolygon.length >= 2)) {
-      add(
-        builder(const {}, drawStyle, '__no_label__').build(
-          lines: [
-            if (drawing.drawingLine.length >= 2)
-              geo.Feature<geo.Geometry>(
-                geometry: geo.LineString.from([for (final p in drawing.drawingLine) geo.Geographic(lon: p.longitude, lat: p.latitude)]),
-              ),
-            if (drawing.drawingPolygon.length >= 2)
-              geo.Feature<geo.Geometry>(
-                geometry: geo.LineString.from([
-                  for (final p in drawing.drawingPolygon) geo.Geographic(lon: p.longitude, lat: p.latitude),
-                  geo.Geographic(lon: drawing.drawingPolygon.first.longitude, lat: drawing.drawingPolygon.first.latitude),
-                ]),
-              ),
-          ],
-          clipRect: clip,
-        ),
-      );
-    }
-    final survey = tool is GpsTool;
-    if (survey && strokeHere) {
-      // GPS 測量: 紫の点に「集めた点数」のラベル（2D の _buildSurveyPointMarker と同じ）
-      int countOf(List<Map<String, dynamic>?> meta, int i) {
-        if (i >= meta.length) return i + 1;
-        final m = meta[i];
-        if (m == null) return 1;
-        if (m['point_count'] is int) return m['point_count'] as int;
-        if (m['collected_points'] is List) return (m['collected_points'] as List).length;
-        return 1;
-      }
-
-      add(
-        builder(const {}, const TerrainFeatureStyle(
-          lineColor: Colors.purple, lineWidth: 2, fillColor: Color(0x00000000),
-          outlineColor: Colors.purple, outlineWidth: 0, pointColor: Colors.purple, pointSize: 11,
-        ), 'name').build(
-          points: [
-            for (var i = 0; i < drawing.drawingLine.length; i++)
-              geo.Feature<geo.Point>(
-                geometry: geo.Point(geo.Geographic(lon: drawing.drawingLine[i].longitude, lat: drawing.drawingLine[i].latitude)),
-                properties: {'name': '${countOf(drawing.lineMetadata, i)}'},
-              ),
-            for (var i = 0; i < drawing.drawingPolygon.length; i++)
-              geo.Feature<geo.Point>(
-                geometry: geo.Point(geo.Geographic(lon: drawing.drawingPolygon[i].longitude, lat: drawing.drawingPolygon[i].latitude)),
-                properties: {'name': '${countOf(drawing.polygonMetadata, i)}'},
-              ),
-          ],
-          clipRect: clip,
-        ),
-      );
-    } else if (!survey) {
-      for (final p in [
-        if (strokeHere) ...drawing.drawingLine,
-        if (strokeHere) ...drawing.drawingPolygon,
-        if (drawing.pointPreview != null) drawing.pointPreview!,
-      ]) {
-        final x = WebMercator.xFromLon(p.longitude) - dem.originX;
-        final y = WebMercator.yFromLat(p.latitude) - dem.originY;
-        if (clip.contains(Offset(x, y))) points.add(TerrainPoint(x: x, y: y, color: Colors.red, sizePx: 6));
-      }
-      // 1 点目の目印（白い輪）: 線・面を描き始めた直後
-      final first = drawing.drawingLine.length == 1
-          ? drawing.drawingLine.first
-          : drawing.drawingPolygon.length == 1
-              ? drawing.drawingPolygon.first
-              : null;
-      if (first != null) {
-        final x = WebMercator.xFromLon(first.longitude) - dem.originX;
-        final y = WebMercator.yFromLat(first.latitude) - dem.originY;
-        if (clip.contains(Offset(x, y))) {
-          points
-            ..add(TerrainPoint(x: x, y: y, color: Colors.white, sizePx: 14))
-            ..add(TerrainPoint(x: x, y: y, color: Colors.red, sizePx: 8));
-        }
-      }
-    }
-    // 5. 選択中のオーバーレイ画像の枠（青）と、変換ツールの回転ハンドル（2D の buildOverlaySelectionLayers と同じ）
-    if (selectedOverlays.isNotEmpty) {
-      const frameStyle = TerrainFeatureStyle(
-        lineColor: Colors.blue, lineWidth: 2, fillColor: Color(0x00000000),
-        outlineColor: Colors.blue, outlineWidth: 2, pointColor: Colors.blue, pointSize: 10,
-      );
-      final handle = tool is OverlayTransformTool ? tool.rotationHandlePosition : null;
-      add(
-        builder(const {}, frameStyle, '__no_label__').build(
-          lines: [
-            for (final n in {...selectedOverlays})
-              geo.Feature<geo.Geometry>(
-                geometry: geo.LineString.from([
-                  for (final c in n.cornerCoordinates) geo.Geographic(lon: c.longitude, lat: c.latitude),
-                  geo.Geographic(lon: n.cornerCoordinates[0].longitude, lat: n.cornerCoordinates[0].latitude),
-                ]),
-              ),
-            if (handle != null && tool is OverlayTransformTool && tool.target != null)
-              geo.Feature<geo.Geometry>(
-                geometry: geo.LineString.from([
-                  geo.Geographic(
-                    lon: (tool.target!.cornerCoordinates[0].longitude + tool.target!.cornerCoordinates[1].longitude) / 2,
-                    lat: (tool.target!.cornerCoordinates[0].latitude + tool.target!.cornerCoordinates[1].latitude) / 2,
-                  ),
-                  geo.Geographic(lon: handle.longitude, lat: handle.latitude),
-                ]),
-              ),
-          ],
-          clipRect: clip,
-        ),
-      );
-      if (handle != null) {
-        final x = WebMercator.xFromLon(handle.longitude) - dem.originX;
-        final y = WebMercator.yFromLat(handle.latitude) - dem.originY;
-        if (clip.contains(Offset(x, y))) points.add(TerrainPoint(x: x, y: y, color: Colors.blue, sizePx: 10));
-      }
-    }
-    // 6. 外部機器ツール（TruPulse）: 基準点 → 計測点の線（赤）と基準点
-    if (deviceLines.isNotEmpty || deviceStation != null) {
-      const deviceStyle = TerrainFeatureStyle(
-        lineColor: Colors.red, lineWidth: 2, fillColor: Color(0x00000000),
-        outlineColor: Colors.red, outlineWidth: 0, pointColor: Colors.red, pointSize: 8,
-      );
-      if (deviceLines.isNotEmpty) {
-        add(builder(const {}, deviceStyle, '__no_label__').build(lines: deviceLines, clipRect: clip));
-      }
-      if (deviceStation != null) {
-        final x = WebMercator.xFromLon(deviceStation.longitude) - dem.originX;
-        final y = WebMercator.yFromLat(deviceStation.latitude) - dem.originY;
-        if (clip.contains(Offset(x, y))) points.add(TerrainPoint(x: x, y: y, color: Colors.orange, sizePx: 12));
-      }
-    }
-    return _TileScene(key: key, lines: lines, polygons: polygons, points: points, labels: labels);
-  }
-
   void _notifyCamera() {
     widget.mapBearingNotifier.value = _camera.bearing * 180 / math.pi;
     widget.cameraTickNotifier.value++;
     // 組み立て直すときの初期値・ホルダー経由の camera として覚えさせる
     widget.mapState.mapController.rememberCamera(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);
-  }
-
-  // ── TerrainProjection ───────────────────────────────
-
-  @override
-  LatLng? unproject(Offset screen) {
-    if (_size == Size.zero) return null;
-    final p = _painter.unproject(screen, _size);
-    if (p == null) return null;
-    return LatLng(WebMercator.latFromY(p.dy), WebMercator.lonFromX(p.dx));
-  }
-
-  @override
-  Offset project(LatLng latLng) {
-    final x = WebMercator.xFromLon(latLng.longitude);
-    final y = WebMercator.yFromLat(latLng.latitude);
-    return _painter.toScreen(x, y, _world.elevationAt(x, y) ?? 0, _size);
-  }
-
-  @override
-  Future<void> jumpTo(LatLng center, double zoom, {bool animate = true}) async {
-    final x = WebMercator.xFromLon(center.longitude);
-    final y = WebMercator.yFromLat(center.latitude);
-    if (!animate) {
-      _camera
-        ..centerX = x
-        ..centerY = y
-        ..zoom = zoom;
-      _refresh();
-      return;
-    }
-    _animateTo(centerX: x, centerY: y, zoom: zoom);
-    await _anim.forward(from: 0);
-  }
-
-  @override
-  Future<void> lookAt({LatLng? center, double? zoom, double? bearingDeg, double? pitchDeg, bool animate = true}) async {
-    final x = center == null ? null : WebMercator.xFromLon(center.longitude);
-    final y = center == null ? null : WebMercator.yFromLat(center.latitude);
-    final b = bearingDeg == null ? null : bearingDeg * math.pi / 180;
-    final p = pitchDeg == null ? null : (pitchDeg.clamp(0.0, _maxPitchDeg)) * math.pi / 180;
-    if (p != null && p > 0.02 && _flat) _flat = false; // 傾きを頼まれたら 3D（CLI / URL の pitch）
-    if (p != null && _flat) return lookAt(center: center, zoom: zoom, bearingDeg: bearingDeg, animate: animate);
-    if (!animate) {
-      if (x != null) _camera.centerX = x;
-      if (y != null) _camera.centerY = y;
-      if (zoom != null) _camera.zoom = zoom;
-      if (b != null) _camera.bearing = b;
-      if (p != null) _camera.pitch = p;
-      _refresh();
-      return;
-    }
-    _animateTo(centerX: x, centerY: y, zoom: zoom, bearing: b, pitch: p);
-    await _anim.forward(from: 0);
-  }
-
-  @override
-  Future<void> fitCoordinates(List<LatLng> coordinates, {EdgeInsets padding = EdgeInsets.zero}) async {
-    if (coordinates.isEmpty) return;
-    var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;
-    for (final c in coordinates) {
-      final x = WebMercator.xFromLon(c.longitude);
-      final y = WebMercator.yFromLat(c.latitude);
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    final center = LatLng(WebMercator.latFromY((minY + maxY) / 2), WebMercator.lonFromX((minX + maxX) / 2));
-    if (_size == Size.zero) return jumpTo(center, _camera.zoom);
-    // 1 点なら寄るだけ。幅は真上から見た Mercator m（傾いていると画面の地面は広いので余裕がある）
-    final spanX = math.max(maxX - minX, 20.0);
-    final spanY = math.max(maxY - minY, 20.0);
-    final w = math.max(_size.width - padding.horizontal, 50.0);
-    final h = math.max(_size.height - padding.vertical, 50.0);
-    final scale = math.min(w / spanX, h / spanY); // px / m
-    final zoom = (math.log(scale * 2 * math.pi * WebMercator.radius / 256) / math.ln2).clamp(2.0, 18.0);
-    return jumpTo(center, zoom);
-  }
-
-  // ── オーバーレイ画像 ─────────────────────────────────
-
-  /// 選んだ面が変わったら、前と今の範囲のテクスチャを作り直す（塗りはテクスチャに描くので地形に埋もれない）。
-  /// 枠線は今までどおり地形に沿わせた線ですぐ出るので、塗りが少し遅れて付いても選んだことは伝わる
-  void _syncSelectionFill() {
-    final sel = widget.geoJson.selectedPolygons;
-    if (identical(sel, _selFillDrawn)) return;
-    _selFillDrawn = sel;
-    Rect? b;
-    final boxes = _bboxes(sel);
-    for (var i = 0; i < sel.length; i++) {
-      if (boxes[i * 4].isNaN) continue;
-      final r = Rect.fromLTRB(boxes[i * 4], boxes[i * 4 + 1], boxes[i * 4 + 2], boxes[i * 4 + 3]);
-      b = b == null ? r : b.expandToInclude(r);
-    }
-    final prev = _selFillBounds;
-    _selFillBounds = b;
-    final dirty = prev == null ? b : (b == null ? prev : prev.expandToInclude(b));
-    if (dirty == null) return;
-    // オーバーレイの作り直しが控えていれば一緒に（作り直しは新しい呼び出しが古い方を止めるので）
-    _retextureTimer?.cancel();
-    final within = _overlayBounds == null ? dirty : _overlayBounds!.expandToInclude(dirty);
-    _overlayBounds = null;
-    _world.retexture(within: within.inflate(10));
-  }
-
-  /// 見えているオーバーレイ画像の集合・位置が変わったら、画像を読み、テクスチャを作り直す（400ms にまとめる）
-  void _syncOverlays() {
-    final nodes = widget.mapState.overlayImageNodes;
-    final key = [
-      for (final n in nodes)
-        '${n.filePath}|${n.overlayParams.centerLat},${n.overlayParams.centerLng},${n.overlayParams.scale},'
-            '${n.overlayParams.rotation},${n.overlayParams.imageWidth},${n.overlayParams.imageHeight}',
-    ].join(';');
-    if (key == _overlayKey) return;
-    _overlayKey = key;
-    // 前回の範囲（消えた分）と今回の範囲（現れた分）の両方を作り直す
-    var b = _overlayBounds ?? _lastOverlayBounds;
-    for (final n in nodes) {
-      for (final c in n.cornerCoordinates) {
-        final p = Offset(WebMercator.xFromLon(c.longitude), WebMercator.yFromLat(c.latitude));
-        b = b == null ? Rect.fromPoints(p, p) : b.expandToInclude(Rect.fromPoints(p, p));
-      }
-    }
-    _overlayBounds = b?.inflate(50) ?? _overlayBounds;
-    _lastOverlayBounds = b;
-    AppLogger.debug('[3D] overlays: ${nodes.length} 枚 ${[for (final n in nodes) n.filePath]}');
-    // 見えなくなったオーバーレイの画像は手放す（原寸の画像を地図を閉じるまで抱えていた）
-    final live = {for (final n in nodes) n.filePath};
-    _overlayImages.removeWhere((path, im) {
-      if (live.contains(path)) return false;
-      im.dispose();
-      return true;
-    });
-    for (final n in nodes) {
-      if (_overlayImages.containsKey(n.filePath) || _overlayLoading.contains(n.filePath)) continue;
-      _overlayLoading.add(n.filePath);
-      _loadOverlayImage(n).then((im) {
-        _overlayLoading.remove(n.filePath);
-        if (im == null || !mounted) return;
-        _overlayImages[n.filePath] = im;
-        _scheduleRetexture();
-      });
-    }
-    _scheduleRetexture();
-  }
-
-  /// オーバーレイ画像を読む。Android は TIFF の PNG キャッシュ（`imageUrl`）、web は `fs` で元ファイルを読んで
-  /// TIFF なら `package:image` で解く（PNG キャッシュはアプリのキャッシュ領域に書くので web には無い）
-  Future<ui.Image?> _loadOverlayImage(OverlayImageNode n) async {
-    try {
-      final String path;
-      if (kIsWeb) {
-        path = n.getAbsoluteFilePath() ?? n.filePath;
-      } else {
-        final url = n.imageUrl;
-        path = url.startsWith('file:///') ? Uri.parse(url).toFilePath() : url;
-      }
-      final bytes = await fs.readAsBytes(path);
-      final lower = path.toLowerCase();
-      if (lower.endsWith('.tif') || lower.endsWith('.tiff')) {
-        final decoded = img.decodeImage(bytes);
-        if (decoded == null) return null;
-        final rgba = decoded.convert(numChannels: 4).getBytes(order: img.ChannelOrder.rgba);
-        final c = Completer<ui.Image>();
-        ui.decodeImageFromPixels(rgba, decoded.width, decoded.height, ui.PixelFormat.rgba8888, c.complete);
-        return await c.future;
-      }
-      return await decodeImageFromList(bytes);
-    } catch (e) {
-      AppLogger.debug('[3D] overlay ${n.filePath} を読めない: $e');
-      return null;
-    }
-  }
-
-  /// オーバーレイ画像が変わった範囲のテクスチャを作り直す（400ms にまとめる）。フィーチャの焼き直しは [_checkBakes]
-  void _scheduleRetexture() {
-    _retextureTimer?.cancel();
-    _retextureTimer = Timer(const Duration(milliseconds: 400), () {
-      if (!mounted) return;
-      _world.retexture(within: _overlayBounds);
-      _overlayBounds = null;
-    });
-  }
-
-  @override
-  void reassemble() {
-    super.reassemble();
-    _overlayKey = ''; // ホットリロードでオーバーレイを同期し直す
-  }
-
-  /// テクスチャの上描き: オーバーレイ画像と、引いた段のフィーチャの焼き込み（[demZoom] はタイルの段、range はテクスチャの段）
-  void _decorateTexture(ui.Canvas canvas, TileRange range, int demZoom) {
-    if (_overlayImages.isNotEmpty) {
-      final frame = TextureFrame(range);
-      for (final n in widget.mapState.overlayImageNodes) {
-        final im = _overlayImages[n.filePath];
-        if (im != null) paintOverlayImage(canvas, frame, im, n.cornerCoordinates);
-      }
-    }
-    final off = range.z - demZoom;
-    // 引いた段は面・線・点を全部、寄った段は面の塗りだけ描く（塗りを地形に沿わせた板にすると、尾根で地形に
-    // 突き抜けられて下の地図が白く抜けた。松本 2026-10-02。枠線・線・点は形のまま持ち上げる）
-    _bakeFeatures(canvas, range, demZoom, fillsOnly: demZoom > kBakeMaxZoom);
-    // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）。確定はタイルに貼ったとき（[_onTextureApplied]）
-    _composedGen[TileKey(demZoom, range.x0 >> off, range.y0 >> off)] = _bakeGen;
-    paintSelectionFill(
-      canvas,
-      TextureFrame(range),
-      selected: widget.geoJson.selectedPolygons,
-      indexesIn: _featureIndexes,
-      color: layerStyleSettings.getColor(selectedColorDef).withValues(alpha: 0.4),
-    );
-  }
-
-  /// 引いた段のフィーチャをテクスチャに描く（真上からの投影。座標は範囲左上原点のピクセル）。
-  ///
-  /// 太さは画面で見える太さに合わせる。テクスチャは表示の段とほぼ同じ段で作るので、テクスチャの 1 px ≒ 画面の 1 px。
-  /// 以前は設定の半分にしていて、引くほど細く薄れて地物を見失った（松本 2026-10-02。MapLibre の頃は画面の px で
-  /// 一定の太さだったので、引いても色の塊として見えていた）
-  void _bakeFeatures(ui.Canvas canvas, TileRange range, int demZoom, {bool fillsOnly = false}) {
-    final g = widget.geoJson;
-    if (g.polygons.isEmpty && (fillsOnly || (g.polylines.isEmpty && g.markers.isEmpty))) return;
-    final groups = {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
-    final def = _defaultStyle();
-    final sw = Stopwatch()..start();
-    final n = paintFeatures(
-      canvas,
-      TextureFrame(range),
-      polygons: g.polygons,
-      polylines: g.polylines,
-      markers: g.markers,
-      indexesIn: _featureIndexes,
-      styleOf: (f) => switch (f.properties[kStyleProp]) {
-        final String k => groups[k] ?? def,
-        _ => def,
-      },
-      fillsOnly: fillsOnly,
-    );
-    if (sw.elapsedMilliseconds > 30) {
-      debugPrint('[3D] bake z$demZoom ${range.x0},${range.y0}: $n 件 ${sw.elapsedMilliseconds}ms');
-    }
-  }
-
-  /// ズームボタン（web / PC 向け。画面中心を留めて 1 段）
-  void _zoomBy(double delta) {
-    _camera.zoom = (_camera.zoom + delta).clamp(8, 22);
-    _refresh();
-    setState(() {});
   }
 
   void _onTapUp(TapUpDetails d) {

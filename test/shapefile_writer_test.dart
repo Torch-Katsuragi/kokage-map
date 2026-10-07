@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
@@ -53,6 +54,32 @@ void main() {
       [ring],
     ]);
     expect(poly.map((e) => e.$1), [ShapeType.polygon, ShapeType.polygon]);
+  });
+
+  test('面のリングは外周を時計回り・穴を反時計回りにそろえて書く', () {
+    // 外周を反時計回り、穴を時計回り（どちらも逆向き）で渡す
+    final outer = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]];
+    final hole = [[2.0, 2.0], [2.0, 4.0], [4.0, 4.0], [4.0, 2.0], [2.0, 2.0]];
+    final shp = encodeShpShx(ShapeType.polygon, [
+      [outer, hole],
+    ]).shp;
+    final d = ByteData.sublistView(shp);
+    // レコード頭 8 + 型 4 + 範囲 32 + 部分数 4 + 点数 4 + 部分の始点 2×4 = 60
+    List<double> pt(int i) => [
+          d.getFloat64(100 + 60 + i * 16, Endian.little),
+          d.getFloat64(100 + 60 + i * 16 + 8, Endian.little),
+        ];
+    double area(int from) {
+      var sum = 0.0;
+      for (var i = from; i < from + 4; i++) {
+        final a = pt(i), b = pt(i + 1);
+        sum += a[0] * b[1] - b[0] * a[1];
+      }
+      return sum;
+    }
+
+    expect(area(0), lessThan(0), reason: '外周は時計回り');
+    expect(area(5), greaterThan(0), reason: '穴は反時計回り');
   });
 
   // 読み手の CP932 変換はプラグイン頼みでテストでは動かないので ASCII で

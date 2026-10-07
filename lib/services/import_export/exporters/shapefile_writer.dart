@@ -23,7 +23,8 @@ import '../parsers/shapefile_binary_parser.dart' show ShapeType;
 /// 点は部分 1 つ・点 1 つ。
 typedef ShpShape = List<List<List<double>>>;
 
-/// [shapeType] は [ShapeType.point] / [ShapeType.polyLine] / [ShapeType.polygon]
+/// [shapeType] は [ShapeType.point] / [ShapeType.polyLine] / [ShapeType.polygon]。
+/// 面は最初のリングを外周として時計回り、残り（穴）を反時計回りに揃えて書く（Shapefile の決まり）
 ({Uint8List shp, Uint8List shx}) encodeShpShx(
   int shapeType,
   List<ShpShape> shapes,
@@ -78,8 +79,12 @@ typedef ShpShape = List<List<List<double>>>;
       o += 4;
       start += part.length;
     }
-    for (final part in shape) {
-      for (final p in part) {
+    for (var k = 0; k < shape.length; k++) {
+      final part = shape[k];
+      final reverse = shapeType == ShapeType.polygon &&
+          (_signedArea(part) > 0) == (k == 0); // 外周が反時計回り・穴が時計回りなら逆に
+      for (var n = 0; n < part.length; n++) {
+        final p = part[reverse ? part.length - 1 - n : n];
         shp.setFloat64(o, p[0], Endian.little);
         shp.setFloat64(o + 8, p[1], Endian.little);
         o += 16;
@@ -87,6 +92,15 @@ typedef ShpShape = List<List<List<double>>>;
     }
   }
   return (shp: shp.buffer.asUint8List(), shx: shx.buffer.asUint8List());
+}
+
+/// 靴ひも公式の符号つき面積。正なら反時計回り（x 東・y 北）
+double _signedArea(List<List<double>> ring) {
+  var sum = 0.0;
+  for (var i = 0; i + 1 < ring.length; i++) {
+    sum += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+  }
+  return sum / 2;
 }
 
 int _pointCount(ShpShape shape) =>

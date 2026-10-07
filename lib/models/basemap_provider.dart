@@ -76,6 +76,10 @@ class BaseMapProvider {
     String? cacheId,
   }) : cacheId = cacheId ?? id;
 
+  /// タイルの URL（[urlTemplate] の `{z}` `{x}` `{y}` を埋める）
+  String tileUrl(int z, int x, int y) =>
+      urlTemplate.replaceAll('{z}', '$z').replaceAll('{x}', '$x').replaceAll('{y}', '$y');
+
   /// 等高線（生成プロバイダ）。生成器の登録先
   static BaseMapProvider get contourOverlay => availableProviders.firstWhere((p) => p.id == 'contours');
 
@@ -196,11 +200,10 @@ class BaseMapProvider {
 
   /// IDから背景地図プロバイダーを取得
   static BaseMapProvider? getProviderById(String id) {
-    try {
-      return availableProviders.firstWhere((provider) => provider.id == id);
-    } catch (e) {
-      return null;
+    for (final p in availableProviders) {
+      if (p.id == id) return p;
     }
+    return null;
   }
 
   /// デフォルトの背景地図プロバイダー（国土地理院 標準地図）

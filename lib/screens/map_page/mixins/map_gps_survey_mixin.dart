@@ -223,7 +223,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       _notify(t.gps.surveyConfirmError(error: '$e'), NotificationLevel.error);
     }
   }
-  
+
   /// 通知センターに出す（画面が閉じていたら出さない）
   void _notify(String title, NotificationLevel level) {
     if (mounted) ref.read(notificationCenterProvider.notifier).add(title: title, level: level);
@@ -234,15 +234,4 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
     final drawState = GlobalDrawingState.instance;
     return drawState.drawingLine.length + drawState.drawingPolygon.length;
   }
-
-  // =============================================
-  // 抽象メソッド（サブクラスで実装）
-  // =============================================
-  
-  /// フィーチャデータを更新
-  Future<void> updateFeatures();
-  
-  /// マップUIを更新
-  void refreshMapUI();
 }
-

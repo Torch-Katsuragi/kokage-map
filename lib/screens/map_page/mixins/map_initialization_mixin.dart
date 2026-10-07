@@ -139,7 +139,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
       try {
         await updateFeatures();
-        triggerSetState(() {});
         fitToFeaturesAtStart();
       } catch (e) {
         AppLogger.debug('[Init] updateFeatures error: $e');
@@ -236,16 +235,39 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     }
   }
 
+  /// 裏に回ってコンパスを止めているか
+  bool _compassStopped = false;
+
+  /// 裏に回ったらコンパスを止める（向きは地図に出ている間しか使わない。止めないと裏でも 15〜60Hz で届き続ける）。
+  /// ⚠ pause は使わない（ブロードキャストの購読は止めている間の値を溜め込む）。解いて、[resumeCompass] で付け直す
+  void pauseCompass() {
+    final sub = compassSubscription;
+    if (sub == null || _compassStopped) return;
+    _compassStopped = true;
+    compassSubscription = null;
+    unawaited(sub.cancel());
+  }
+
+  /// [pauseCompass] で止めたコンパスを付け直す
+  void resumeCompass() {
+    if (!_compassStopped) return;
+    _compassStopped = false;
+    unawaited(initializeCompass());
+  }
+
   /// 指数移動平均（EMA）によるヘディング平滑化
   ///
   /// 角度は0°/360°の境界で不連続になるため、最短角度差分を用いる。
   /// [alpha] が小さいほど滑らかだが追従が遅い（0.08 = 安定重視）。
   static const double _compassAlpha = 0.08;
 
+  /// コンパスヘディングの前回スムーズ値（ローパスフィルタ用）
+  double? _lastSmoothedHeading;
+
   double _smoothHeading(double rawHeading) {
-    final prev = lastSmoothedHeading;
+    final prev = _lastSmoothedHeading;
     if (prev == null) {
-      lastSmoothedHeading = rawHeading;
+      _lastSmoothedHeading = rawHeading;
       return rawHeading;
     }
 
@@ -257,7 +279,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     double smoothed = (prev + _compassAlpha * diff) % 360;
     if (smoothed < 0) smoothed += 360;
 
-    lastSmoothedHeading = smoothed;
+    _lastSmoothedHeading = smoothed;
     return smoothed;
   }
 
@@ -295,7 +317,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
           // 同じ位置の送り直し（フォアグラウンドサービスが毎秒送る）では組み立て直さない
           if (next == currentLocation && movedToCurrentLocationOnce) return;
           final first = currentLocation == null;
-          currentLocation = next;
           locationNotifier.value = next;
           // ページを組み立て直すのは、最初に位置が取れたとき（ボタンの状態が変わる）と、現在位置の詳細パネルが開いているときだけ
           if (first || showsCurrentLocationDetail) triggerSetState(() {});
@@ -436,7 +457,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     initialViewDecided = true;
     movedToCurrentLocationOnce = true;
     AppLogger.debug('[Init] フィーチャ ${coords.length} 点が入る範囲から始める');
-    mapControllerInstance.fitCoordinates(coords, padding: const EdgeInsets.all(50));
+    mapController.fitCoordinates(coords, padding: const EdgeInsets.all(50));
   }
 
   /// 外部GNSS機器をバックグラウンドでスキャン
@@ -482,11 +503,4 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     mapBearingNotifier.dispose();
     cameraTickNotifier.dispose();
   }
-
-  // =============================================
-  // 抽象メソッド（サブクラスで実装）
-  // =============================================
-
-  /// フィーチャデータを更新
-  Future<void> updateFeatures();
 }

@@ -126,6 +126,19 @@ void main() {
       await tile.builderFor(4);
       expect(tile.builders.keys.toSet(), {16, 2, 4}, reason: '16 は数えず、1 は 4 から遠いので捨てる');
     });
+
+    test('作っている間に縁が変わったら、古い縁のビルダーは残らない（作り直した方が残る）', () async {
+      const key = TileKey(15, 1, 1);
+      final tile = TerrainTile(key: key, raw: _flatDem(key));
+      final old = tile.builderFor(2);
+      // 東の隣が届いて縁が変わる → 呼び出し側が作り直す
+      tile.updateBorder(TerrainTile(key: key.east, raw: _flatDem(key.east)), null, null);
+      final again = tile.builderFor(2);
+      final stale = await old;
+      final b = await again;
+      expect(identical(tile.builders[2], stale), isFalse, reason: '古い縁で作ったものは捨てる');
+      expect(identical(tile.builders[2], b), isTrue, reason: '残るのは今の縁で作ったもの');
+    });
   });
 
   group('TerrainFramePlanner.demZoomFor', () {

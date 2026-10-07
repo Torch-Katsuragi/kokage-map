@@ -56,7 +56,10 @@ class LiftedPolyline {
     final out = <double>[];
     final cells = <int>[];
     void addPoint(double x, double y) {
-      out.addAll([x, y, dem.elevationAt(x + dem.originX, y + dem.originY)]);
+      out
+        ..add(x)
+        ..add(y)
+        ..add(dem.elevationAtLocal(x, y));
     }
 
     for (var i = 0; i < points.length; i++) {
@@ -256,25 +259,32 @@ class LiftedPolygon {
     final cells = <int>[];
     for (final tri in earClip(ring)) {
       // 三角形の bbox に掛かるセルを走査
-      final xs = [tri[0].dx, tri[1].dx, tri[2].dx];
-      final ys = [tri[0].dy, tri[1].dy, tri[2].dy];
+      final (t0, t1, t2) = (tri[0], tri[1], tri[2]);
       // 格子の外（タイルの外）は作らない
       final maxC = (dem.width / cell).ceil() - 1;
       final maxR = (dem.height / cell).ceil() - 1;
-      final c0 = (xs.reduce(math.min) / cell).floor().clamp(0, maxC);
-      final c1 = (xs.reduce(math.max) / cell).floor().clamp(0, maxC);
-      final r0 = (ys.reduce(math.min) / cell).floor().clamp(0, maxR);
-      final r1 = (ys.reduce(math.max) / cell).floor().clamp(0, maxR);
+      final c0 = (math.min(math.min(t0.dx, t1.dx), t2.dx) / cell).floor().clamp(0, maxC);
+      final c1 = (math.max(math.max(t0.dx, t1.dx), t2.dx) / cell).floor().clamp(0, maxC);
+      final r0 = (math.min(math.min(t0.dy, t1.dy), t2.dy) / cell).floor().clamp(0, maxR);
+      final r1 = (math.max(math.max(t0.dy, t1.dy), t2.dy) / cell).floor().clamp(0, maxR);
       for (var r = r0; r <= r1; r++) {
         for (var c = c0; c <= c1; c++) {
           final rect = Rect.fromLTWH(c * cell, r * cell, cell, cell);
           final piece = clipToRect(tri, rect);
           if (piece.length < 3) continue;
           final ci = mesh.cellIndexAt(rect.center.dx, rect.center.dy);
+          void addVertex(Offset p) {
+            out
+              ..add(p.dx)
+              ..add(p.dy)
+              ..add(dem.elevationAtLocal(p.dx, p.dy));
+          }
+
+          // 三角形 ∩ 矩形は凸なので扇状に分ける
           for (var k = 1; k + 1 < piece.length; k++) {
-            for (final p in [piece[0], piece[k], piece[k + 1]]) {
-              out.addAll([p.dx, p.dy, dem.elevationAt(p.dx + dem.originX, p.dy + dem.originY)]);
-            }
+            addVertex(piece[0]);
+            addVertex(piece[k]);
+            addVertex(piece[k + 1]);
             cells.add(ci);
           }
         }
@@ -417,8 +427,8 @@ class LiftedSegments {
         final mid = Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
         final chunk = mesh.chunkOfCell(mesh.cellIndexAt(mid.dx, mid.dy));
         (grouped[chunk] ??= <double>[]).addAll([
-          a.dx, a.dy, dem.elevationAt(a.dx + dem.originX, a.dy + dem.originY),
-          b.dx, b.dy, dem.elevationAt(b.dx + dem.originX, b.dy + dem.originY),
+          a.dx, a.dy, dem.elevationAtLocal(a.dx, a.dy),
+          b.dx, b.dy, dem.elevationAtLocal(b.dx, b.dy),
         ]);
       }
     }
@@ -437,8 +447,6 @@ class LiftedSegments {
 
   final Color color;
   final double widthPx;
-
-  int get segmentCount => byChunk.values.fold(0, (a, v) => a + v.length ~/ 6);
 }
 
 /// 地形に乗せるラベル（ビルボード）

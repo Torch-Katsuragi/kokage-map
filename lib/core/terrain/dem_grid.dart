@@ -70,6 +70,9 @@ class DemGrid {
 
   double heightAtIndex(int c, int r) => heights[r * cols + c];
 
+  /// 原点基準（[originX], [originY] を引いた座標）の点の標高。貼り付け（線・面の持ち上げ）はこちら
+  double elevationAtLocal(double x, double y) => elevationAt(x + originX, y + originY);
+
   /// 双一次補間で任意点の標高を返す。格子外は端の値
   double elevationAt(double x, double y) {
     final fx = ((x - originX) / cellSize).clamp(0.0, cols - 1.0);

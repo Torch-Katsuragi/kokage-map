@@ -136,13 +136,8 @@ class TerrainFramePlanner {
   /// 画面に掛かる標高の幅。直前に描いたタイルから取る（読み込み済み全部から取ると、遠くの粗い親の
   /// 高低差で画面範囲が水増しされ、枚数が上限を超え続けて細かい段に上がれない）
   double _screenHeightRange() {
-    var lo = double.infinity, hi = -double.infinity;
-    for (final t in _lastTiles) {
-      final (a, b) = t.raw.heightRange;
-      if (a < lo) lo = a;
-      if (b > hi) hi = b;
-    }
-    return lo.isFinite ? (hi - lo).clamp(100, 2000).toDouble() : 600;
+    final r = TerrainTile.heightRangeOf(_lastTiles);
+    return r == null ? 600 : (r.$2 - r.$1).clamp(100, 2000).toDouble();
   }
 
   TerrainFramePlan plan(TerrainCamera camera, Size size, {bool gesturing = false}) {

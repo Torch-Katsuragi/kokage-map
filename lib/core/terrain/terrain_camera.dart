@@ -241,16 +241,11 @@ class TerrainCamera {
   /// 地形と比べ、初めて地形の下に潜った区間で線形補間する。DEM の外に出たら null。
   /// 真上（pitch 0）なら地形の高さに依らず 1 点に決まる。
   Offset? intersectTerrain(Offset projected, DemGrid dem) {
-    var maxH = -double.infinity;
-    var minH = double.infinity;
-    for (final h in dem.heights) {
-      if (h > maxH) maxH = h;
-      if (h < minH) minH = h;
-    }
+    final (minH, maxH) = dem.heightRange;
     return intersectHeightField(
       projected,
       (x, y) => (x >= 0 && y >= 0 && x <= dem.width && y <= dem.height)
-          ? dem.elevationAt(x + dem.originX, y + dem.originY)
+          ? dem.elevationAtLocal(x, y)
           : null,
       minHeight: minH,
       maxHeight: maxH,

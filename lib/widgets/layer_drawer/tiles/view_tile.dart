@@ -111,7 +111,7 @@ class ViewTile extends ConsumerWidget {
 
   /// チュートリアルの案内先: 練習のエリアに足した View（いちばん上の、既定でない View）
   bool _guiding(WidgetRef ref) =>
-      ref.watch(tutorialProvider) != null &&
+      ref.watch(tutorialProvider.select((s) => s != null)) &&
       !node.isDefaultView &&
       _layer.views.indexOf(node) == 0 &&
       isPracticeLayer(_layer, PracticeProject.areaLayer);

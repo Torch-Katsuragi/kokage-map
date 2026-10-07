@@ -68,7 +68,7 @@ class PhotoTile extends ConsumerWidget {
     final dimmed = !node.isVisibleRecursive();
 
     // チュートリアルの案内先: 練習フォルダの写真（最初の 1 枚。鍵は 1 つしか付けられない）
-    final guiding = ref.watch(tutorialProvider) != null;
+    final guiding = ref.watch(tutorialProvider.select((s) => s != null));
     final key = guiding && !isOverlay && _isFirstPracticePhoto(node) ? TutorialTargets.photoTile : null;
     return DrawerRow(
       key: key,

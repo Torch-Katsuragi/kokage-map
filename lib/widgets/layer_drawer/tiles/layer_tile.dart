@@ -66,9 +66,10 @@ class LayerTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isSelected = ref.watch(selectedLayerNodeProvider) == node;
+    // 選択・案内は自分に関わる変化だけ見る（ほかの行の選択や案内の段が変わっても組み直さない）
+    final isSelected = ref.watch(selectedLayerNodeProvider.select((s) => s == node));
     // チュートリアルの案内先（練習プロジェクトのエリアの目・各レイヤの行・行の長押しメニュー）
-    final guiding = ref.watch(tutorialProvider) != null;
+    final guiding = ref.watch(tutorialProvider.select((s) => s != null));
     final isArea = guiding && isPracticeLayer(node, PracticeProject.areaLayer);
     final dimmed = !node.isVisibleRecursive();
 

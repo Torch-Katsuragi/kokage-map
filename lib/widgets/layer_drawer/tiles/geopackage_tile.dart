@@ -60,11 +60,11 @@ class GeoPackageTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final expansionState = ref.watch(expandedGeoPackagesProvider);
     final absPath = node.geoPackageFile.getAbsolutePath();
-    final isExpanded = expansionState.isExpanded(absPath);
+    // 自分の開閉と案内の有無だけ見る（ほかの gpkg を畳んだり案内の段が進んだりしても、中のレイヤの行まで組み直さない）
+    final isExpanded = ref.watch(expandedGeoPackagesProvider.select((s) => s.isExpanded(absPath)));
     // チュートリアルの案内先（練習プロジェクトの GeoPackage だけ）
-    final guiding = ref.watch(tutorialProvider) != null && isPracticeGpkg(absPath);
+    final guiding = ref.watch(tutorialProvider.select((s) => s != null)) && isPracticeGpkg(absPath);
     final dimmed = !node.isVisibleRecursive();
     final layers = node.children.whereType<LayerNode>().toList();
 

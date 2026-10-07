@@ -4,6 +4,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/converters/turf_converter.dart';
+import 'package:root_maps/utils/geo_converter.dart';
 import 'package:turf/turf.dart' as turf;
 
 void main() {
@@ -20,7 +21,7 @@ void main() {
       expect(position[1], equals(35.6895)); // latitude
 
       // Position → LatLng変換（逆変換）
-      final convertedBack = TurfConverter.positionToLatlng(position);
+      final convertedBack = turf.Position.of(position).toLatLng();
       expect(convertedBack.latitude, equals(latlng.latitude));
       expect(convertedBack.longitude, equals(latlng.longitude));
 

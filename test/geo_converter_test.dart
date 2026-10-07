@@ -1,7 +1,7 @@
 // turf → geobase 変換（地図に流す GeoJSON の素）の純粋関数を検査する
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geobase/geobase.dart' as geo;
-import 'package:root_maps/utils/turf_geo_convert.dart';
+import 'package:root_maps/utils/geo_converter.dart';
 import 'package:turf/turf.dart' as turf;
 
 turf.Position p(num lng, num lat) => turf.Position(lng, lat);

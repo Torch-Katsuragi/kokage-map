@@ -18,6 +18,7 @@ import 'dart:typed_data';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/geo_converter.dart';
 
 // ============================================================
 // GPBinary ヘッダー処理（GeoPackage仕様、geobase スコープ外）
@@ -137,37 +138,16 @@ Uint8List createGpkgWkb(geo.Geometry geom, {int srsId = 4326}) {
 /// - Polygon       → `List<List<LatLng>>` (rings)
 /// - MultiPolygon  → `List<List<List<LatLng>>>` (polygons of rings)
 dynamic geobaseGeometryToLatLngs(geo.Geometry geom) {
-  if (geom is geo.Point) {
-    return [LatLng(geom.position.y, geom.position.x)];
-  }
-  if (geom is geo.MultiPoint) {
-    return geom.positions
-        .map((p) => LatLng(p.y, p.x))
-        .toList();
-  }
-  if (geom is geo.LineString) {
-    return geom.chain.positions
-        .map((p) => LatLng(p.y, p.x))
-        .toList();
-  }
-  if (geom is geo.MultiLineString) {
-    return geom.chains
-        .map((c) => c.positions.map((p) => LatLng(p.y, p.x)).toList())
-        .toList();
-  }
-  if (geom is geo.Polygon) {
-    return geom.rings
-        .map((r) => r.positions.map((p) => LatLng(p.y, p.x)).toList())
-        .toList();
-  }
+  List<LatLng> ring(Iterable<geo.Position> ps) => [for (final p in ps) p.toLatLng()];
+  if (geom is geo.Point) return [geom.position.toLatLng()];
+  if (geom is geo.MultiPoint) return ring(geom.positions);
+  if (geom is geo.LineString) return ring(geom.chain.positions);
+  if (geom is geo.MultiLineString) return [for (final c in geom.chains) ring(c.positions)];
+  if (geom is geo.Polygon) return [for (final r in geom.rings) ring(r.positions)];
   if (geom is geo.MultiPolygon) {
-    return geom.polygons
-        .map(
-          (poly) => poly.rings
-              .map((r) => r.positions.map((p) => LatLng(p.y, p.x)).toList())
-              .toList(),
-        )
-        .toList();
+    return [
+      for (final poly in geom.polygons) [for (final r in poly.rings) ring(r.positions)],
+    ];
   }
   return null;
 }
@@ -246,7 +226,7 @@ Uint8List createWkbLineString(List<LatLng> line) {
   if (line.isEmpty) return Uint8List(0);
   return createGpkgWkb(
     geo.LineString.from(
-      line.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
+      line.map((p) => p.toGeographic()),
     ),
   );
 }
@@ -256,10 +236,7 @@ Uint8List createWkbPolygon(List<List<LatLng>> rings) {
   if (rings.isEmpty || rings.first.isEmpty) return Uint8List(0);
   return createGpkgWkb(
     geo.Polygon.from(
-      rings.map(
-        (ring) =>
-            ring.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
-      ),
+      rings.map((ring) => ring.map((p) => p.toGeographic())),
     ),
   );
 }

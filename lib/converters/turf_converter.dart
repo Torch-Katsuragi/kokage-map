@@ -17,6 +17,7 @@ import 'dart:convert';
 
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/geo_converter.dart';
 import 'package:turf/turf.dart' as turf;
 
 /// turf_dartオブジェクトとこかげマップのデータ形式間の変換を行うユーティリティクラス
@@ -28,142 +29,52 @@ class TurfConverter {
   static List<double> latlngToPosition(LatLng latlng) =>
       [latlng.longitude, latlng.latitude];
 
-  static LatLng positionToLatlng(List<num> position) {
-    if (position.length < 2) {
-      throw ArgumentError('Position must have at least 2 elements (lon, lat)');
-    }
-    return LatLng(position[1].toDouble(), position[0].toDouble());
-  }
-
   static List<List<double>> latlngsToPositions(List<LatLng> latlngs) =>
       latlngs.map(latlngToPosition).toList();
 
+  static List<turf.Position> _toRing(List<LatLng> line) =>
+      [for (final p in line) p.toTurfPosition()];
+
+  static List<LatLng> _fromRing(List<turf.Position> ring) =>
+      [for (final p in ring) p.toLatLng()];
+
   // ============================================================
-  // LatLng → turf Geometry (Single)
+  // LatLng → turf Geometry
   // ============================================================
 
   static turf.Point createPoint(LatLng latlng) =>
-      turf.Point(coordinates: turf.Position.of(latlngToPosition(latlng)));
+      turf.Point(coordinates: latlng.toTurfPosition());
 
   static turf.LineString createLineString(List<LatLng> line) =>
-      turf.LineString(
-        coordinates:
-            latlngsToPositions(line)
-                .map(turf.Position.of)
-                .toList(),
-      );
+      turf.LineString(coordinates: _toRing(line));
 
   static turf.Polygon createPolygon(List<List<LatLng>> rings) =>
-      turf.Polygon(
-        coordinates:
-            rings
-                .map(
-                  (ring) =>
-                      latlngsToPositions(ring)
-                          .map(turf.Position.of)
-                          .toList(),
-                )
-                .toList(),
-      );
+      turf.Polygon(coordinates: rings.map(_toRing).toList());
 
-  // ============================================================
-  // LatLng → turf Geometry (Multi)
-  // ============================================================
+  static turf.MultiLineString createMultiLineString(List<List<LatLng>> lines) =>
+      turf.MultiLineString(coordinates: lines.map(_toRing).toList());
 
-  static turf.MultiLineString createMultiLineString(
-    List<List<LatLng>> lines,
-  ) =>
-      turf.MultiLineString(
-        coordinates:
-            lines
-                .map(
-                  (line) =>
-                      latlngsToPositions(line)
-                          .map(turf.Position.of)
-                          .toList(),
-                )
-                .toList(),
-      );
-
-  static turf.MultiPolygon createMultiPolygon(
-    List<List<List<LatLng>>> polygons,
-  ) =>
+  static turf.MultiPolygon createMultiPolygon(List<List<List<LatLng>>> polygons) =>
       turf.MultiPolygon(
-        coordinates:
-            polygons
-                .map(
-                  (rings) =>
-                      rings
-                          .map(
-                            (ring) =>
-                                latlngsToPositions(ring)
-                                    .map(turf.Position.of)
-                                    .toList(),
-                          )
-                          .toList(),
-                )
-                .toList(),
+        coordinates: [for (final rings in polygons) rings.map(_toRing).toList()],
       );
 
   // ============================================================
-  // turf Geometry → LatLng (Single)
+  // turf Geometry → LatLng
   // ============================================================
 
-  static LatLng pointToLatlng(turf.Point point) {
-    final c = point.coordinates;
-    return LatLng(c.lat.toDouble(), c.lng.toDouble());
-  }
+  static LatLng pointToLatlng(turf.Point point) => point.coordinates.toLatLng();
 
-  static List<LatLng> lineStringToLatlngs(turf.LineString ls) =>
-      ls.coordinates
-          .map((p) => LatLng(p.lat.toDouble(), p.lng.toDouble()))
-          .toList();
+  static List<LatLng> lineStringToLatlngs(turf.LineString ls) => _fromRing(ls.coordinates);
 
   static List<List<LatLng>> polygonToLatlngs(turf.Polygon poly) =>
-      poly.coordinates
-          .map(
-            (ring) =>
-                ring
-                    .map((p) => LatLng(p.lat.toDouble(), p.lng.toDouble()))
-                    .toList(),
-          )
-          .toList();
+      poly.coordinates.map(_fromRing).toList();
 
-  // ============================================================
-  // turf Geometry → LatLng (Multi)
-  // ============================================================
+  static List<List<LatLng>> multiLineStringToLatlngs(turf.MultiLineString mls) =>
+      mls.coordinates.map(_fromRing).toList();
 
-  static List<List<LatLng>> multiLineStringToLatlngs(
-    turf.MultiLineString mls,
-  ) =>
-      mls.coordinates
-          .map(
-            (line) =>
-                line
-                    .map((p) => LatLng(p.lat.toDouble(), p.lng.toDouble()))
-                    .toList(),
-          )
-          .toList();
-
-  static List<List<List<LatLng>>> multiPolygonToLatlngs(
-    turf.MultiPolygon mp,
-  ) =>
-      mp.coordinates
-          .map(
-            (rings) =>
-                rings
-                    .map(
-                      (ring) =>
-                          ring
-                              .map(
-                                (p) =>
-                                    LatLng(p.lat.toDouble(), p.lng.toDouble()),
-                              )
-                              .toList(),
-                    )
-                    .toList(),
-          )
-          .toList();
+  static List<List<List<LatLng>>> multiPolygonToLatlngs(turf.MultiPolygon mp) =>
+      [for (final rings in mp.coordinates) rings.map(_fromRing).toList()];
 
   // ============================================================
   // Row → turf Feature（DB読み込み時）
@@ -255,24 +166,6 @@ class TurfConverter {
   static turf.FeatureCollection createFeatureCollection(
     List<turf.Feature> features,
   ) => turf.FeatureCollection(features: features);
-
-  static List<turf.Feature> getFeatures(turf.FeatureCollection collection) =>
-      collection.features;
-
-  // ============================================================
-  // ジオメトリタイプ判定
-  // ============================================================
-
-  static String? getGeometryType(turf.Feature feature) {
-    final g = feature.geometry;
-    if (g is turf.Point) return 'Point';
-    if (g is turf.MultiPoint) return 'MultiPoint';
-    if (g is turf.LineString) return 'LineString';
-    if (g is turf.MultiLineString) return 'MultiLineString';
-    if (g is turf.Polygon) return 'Polygon';
-    if (g is turf.MultiPolygon) return 'MultiPolygon';
-    return null;
-  }
 
   // ============================================================
   // 計算ユーティリティ

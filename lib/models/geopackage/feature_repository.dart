@@ -666,13 +666,30 @@ class FeatureRepository {
     String geometryKey,
     geo.Geometry Function(T) build,
   ) async {
+    final List<(geo.Geometry, Map<String, dynamic>)> items;
+    try {
+      items = [for (final data in dataList) (build(data[geometryKey] as T), data)];
+    } catch (e) {
+      AppLogger.debug('[ERROR] FeatureRepository.addGeometryBatch<$T>: $e');
+      return [];
+    }
+    return addGeometries(tableName, items, reserved: {geometryKey});
+  }
+
+  /// 形（WGS84）と属性の組を一度に足し、足した行の rowid を返す。
+  /// 属性のうち主キー・形の列・[reserved] とテーブルに無い列は捨てる。失敗は空
+  Future<List<int>> addGeometries(
+    String tableName,
+    List<(geo.Geometry, Map<String, dynamic>)> items, {
+    Set<String> reserved = const {},
+  }) async {
     final reservedColumns = {
       'fid',
       'geom',
       'id',
       'rowid',
       'geometry',
-      geometryKey,
+      ...reserved,
     };
 
     try {
@@ -686,9 +703,8 @@ class FeatureRepository {
       final tableColumns = await schema.getTableColumns(tableName);
       final tableColumnSet = tableColumns.map((c) => c.toLowerCase()).toSet();
 
-      for (final data in dataList) {
-        final geometry = data[geometryKey] as T;
-        final wkb = _encodeInCrs(crs, build(geometry));
+      for (final (geometry, data) in items) {
+        final wkb = _encodeInCrs(crs, geometry);
         wkbs.add(wkb);
         final insertData = <String, dynamic>{'geom': wkb};
 
@@ -721,7 +737,7 @@ class FeatureRepository {
       await spatialIndex.indexRows(tableName, inserted);
       return inserted.keys.toList();
     } catch (e) {
-      AppLogger.debug('[ERROR] FeatureRepository.addGeometryBatch<$T>: $e');
+      AppLogger.debug('[ERROR] FeatureRepository.addGeometries: $e');
       return [];
     }
   }

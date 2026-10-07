@@ -15,6 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: GeoPackageファイル管理クラス（ファサード）
 // 既存APIを維持しつつ、内部で各サービスクラスに委譲
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -346,6 +347,10 @@ class GeoPackageFile {
   /// バッチ処理でポリゴンを高速追加（形は各要素の 'rings'）
   Future<List<int>> addPolygonsBatch(String tableName, List<Map<String, dynamic>> polygonData) =>
       _features.addGeometryBatch<List<List<LatLng>>>(tableName, polygonData, 'rings', toGeoMultiPolygon);
+
+  /// 形（WGS84）と属性の組を一度に足す（形の種類を問わない。レイヤの移植で使う）
+  Future<List<int>> addGeometries(String tableName, List<(geo.Geometry, Map<String, dynamic>)> items) =>
+      _features.addGeometries(tableName, items);
 
   /// 1 行の 1 列にそのまま値を書く（同期の衝突を相手の値に戻すとき）
   Future<bool> setColumnValue(String tableName, String pkColumn, Object pk, String column, Object? value) =>

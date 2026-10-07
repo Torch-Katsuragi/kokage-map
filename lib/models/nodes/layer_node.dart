@@ -18,7 +18,9 @@
 // turf_dartのFeatureCollectionオブジェクトをメインデータとして使用
 
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:turf/turf.dart' as turf;
@@ -26,6 +28,7 @@ import 'package:turf/turf.dart' as turf;
 import '../../core/node_types.dart';
 import '../../services/kmeta_service.dart';
 import '../geometry_type.dart';
+import '../geopackage/feature_repository.dart' show toGeoMultiLine, toGeoMultiPolygon, toGeoPoint;
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
 import 'feature_node.dart';
@@ -751,110 +754,50 @@ abstract class LayerNode extends LayerTreeNode {
   }
 
   /// フィーチャデータを移植先に書き込み
+  ///
+  /// 移植元を 1 回で読み（形は WGS84 に直してある）、1000 件ずつ書く。
+  /// 形は Multi のまま渡す（以前は最初の 1 部分しか取れず、線・面は Multi で読めるので 1 件も渡らなかった）
   Future<int> _migrateFeatureData(
     GeoPackageNode targetGeoPackage,
     String targetLayerName,
     GeometryType geometryType,
   ) async {
     try {
-      // 移植元のすべてのフィーチャを取得
-      final sourceFeatures = await geoPackageFile.getFeatures(layerName);
-
+      final sourceFeatures = await geoPackageFile.getFeaturesWithGeometry(layerName);
       if (sourceFeatures.isEmpty) {
         AppLogger.debug('[LayerNode] 移植するフィーチャがありません');
         return 0;
       }
-
       AppLogger.debug('[LayerNode] 移植対象フィーチャ数: ${sourceFeatures.length}個');
 
-      // バッチ処理でフィーチャを移植
-      final batchData = <Map<String, dynamic>>[];
-      const batchSize = 1000; // 1000個ずつバッチ処理
-      int migratedCount = 0;
-      int skippedCount = 0;
+      const batchSize = 1000;
+      final batch = <(geo.Geometry, Map<String, dynamic>)>[];
+      var migratedCount = 0;
+      var skippedCount = 0;
 
-      for (final sourceFeature in sourceFeatures) {
-        final featureId = sourceFeature['id'] as int?;
-        if (featureId == null) {
-          AppLogger.debug('[LayerNode] フィーチャIDがnull: $sourceFeature');
-          skippedCount++;
-          continue;
-        }
-
-        // 完全なフィーチャデータを取得（geometry変換済み）
-        final completeFeature = await geoPackageFile.getFeature(
-          layerName,
-          featureId,
-        );
-        if (completeFeature == null) {
-          AppLogger.debug('[LayerNode] フィーチャ取得失敗 ID=$featureId');
-          skippedCount++;
-          continue;
-        }
-
-        AppLogger.debug(
-          '[LayerNode] フィーチャ詳細 ID=$featureId: ${completeFeature.keys}',
-        );
-
-        // ジオメトリデータを取得
-        final geometryData = _extractGeometryData(
-          completeFeature,
-          geometryType,
-        );
-        if (geometryData == null) {
-          AppLogger.debug(
-            '[LayerNode] ジオメトリ抽出失敗 ID=$featureId, type=$geometryType',
-          );
-          AppLogger.debug('[LayerNode] フィーチャ内容: $completeFeature');
-          skippedCount++;
-          continue;
-        }
-
-        AppLogger.debug('[LayerNode] 抽出されたジオメトリ: $geometryData');
-
-        // 属性データを取得（idとgeomを除く）
-        final attributes = Map<String, dynamic>.from(completeFeature);
-        attributes.remove('id');
-        attributes.remove('geom');
-        attributes.remove('geometry'); // 変換済みgeometryも除外
-        attributes.remove('points'); // 変換済みpointsも除外
-        attributes.remove('lines'); // 変換済みlinesも除外
-        attributes.remove('polygons'); // 変換済みpolygonsも除外
-
-        AppLogger.debug('[LayerNode] 抽出された属性: $attributes');
-
-        // バッチデータに追加
-        final batchItem = {...geometryData, ...attributes};
-        batchData.add(batchItem);
-        AppLogger.debug('[LayerNode] バッチアイテム: $batchItem');
-
-        // バッチサイズに達したら処理
-        if (batchData.length >= batchSize) {
-          final processedCount = await _processMigrationBatch(
-            targetGeoPackage,
-            targetLayerName,
-            geometryType,
-            batchData,
-          );
-          migratedCount += processedCount;
-          batchData.clear();
-
-          if (migratedCount % 5000 == 0) {
-            AppLogger.debug('[LayerNode] 移植進捗: $migratedCount個完了');
-          }
-        }
+      Future<void> flush() async {
+        migratedCount += (await targetGeoPackage.geoPackageFile.addGeometries(targetLayerName, batch)).length;
+        batch.clear();
       }
 
-      // 残りのバッチを処理
-      if (batchData.isNotEmpty) {
-        final processedCount = await _processMigrationBatch(
-          targetGeoPackage,
-          targetLayerName,
-          geometryType,
-          batchData,
-        );
-        migratedCount += processedCount;
+      for (final row in sourceFeatures) {
+        final geometry = _toGeoGeometry(row['geometry'], geometryType);
+        if (geometry == null) {
+          AppLogger.debug('[LayerNode] ジオメトリ抽出失敗 ID=${row['id']}, type=$geometryType');
+          skippedCount++;
+          continue;
+        }
+        // 属性（主キー・形の列は書く側が捨てる）。メタデータは読むときに JSON を解いているので文字列に戻す
+        batch.add((
+          geometry,
+          {
+            for (final MapEntry(:key, :value) in row.entries)
+              if (key != 'geometry') key: value is Map ? jsonEncode(value) : value,
+          },
+        ));
+        if (batch.length >= batchSize) await flush();
       }
+      if (batch.isNotEmpty) await flush();
 
       AppLogger.debug(
         '[LayerNode] 移植完了: $migratedCount個成功, $skippedCount個スキップ',
@@ -867,123 +810,28 @@ abstract class LayerNode extends LayerTreeNode {
     }
   }
 
-  /// ジオメトリデータを抽出
-  Map<String, dynamic>? _extractGeometryData(
-    Map<String, dynamic> feature,
-    GeometryType geometryType,
-  ) {
-    try {
-      AppLogger.debug(
-        '[LayerNode] ジオメトリ抽出開始: type=$geometryType, 利用可能なキー=${feature.keys}',
-      );
-
-      // getFeatureメソッドは'geometry'キーにデータを格納する
-      final geometryData = feature['geometry'];
-      AppLogger.debug(
-        '[LayerNode] geometryデータ: $geometryData (型: ${geometryData.runtimeType})',
-      );
-
-      switch (geometryType) {
-        case GeometryType.point:
-          // ポイントの場合：[LatLng] の配列で返される
-          if (geometryData is List<LatLng> && geometryData.isNotEmpty) {
-            AppLogger.debug('[LayerNode] ポイント抽出成功: ${geometryData.first}');
-            return {'point': geometryData.first};
-          }
-          // 旧形式との互換性
-          final points = feature['points'] as List<LatLng>?;
-          if (points != null && points.isNotEmpty) {
-            AppLogger.debug('[LayerNode] ポイント抽出成功（旧形式）: ${points.first}');
-            return {'point': points.first};
-          }
-
-        case GeometryType.linestring:
-          // ラインの場合：List<LatLng> で返される
-          if (geometryData is List<LatLng> && geometryData.isNotEmpty) {
-            AppLogger.debug('[LayerNode] ライン抽出成功: ${geometryData.length}個の頂点');
-            return {'line': geometryData};
-          }
-          // 旧形式との互換性
-          final lines = feature['lines'] as List<LatLng>?;
-          if (lines != null && lines.isNotEmpty) {
-            AppLogger.debug('[LayerNode] ライン抽出成功（旧形式）: ${lines.length}個の頂点');
-            return {'line': lines};
-          }
-
-        case GeometryType.polygon:
-          // ポリゴンの場合：List<List<LatLng>> で返される
-          if (geometryData is List<List<LatLng>> && geometryData.isNotEmpty) {
-            AppLogger.debug(
-              '[LayerNode] ポリゴン抽出成功: ${geometryData.length}個のリング',
-            );
-            return {'rings': geometryData};
-          }
-          // 旧形式との互換性
-          final polygons = feature['polygons'] as List<List<LatLng>>?;
-          if (polygons != null && polygons.isNotEmpty) {
-            AppLogger.debug(
-              '[LayerNode] ポリゴン抽出成功（旧形式）: ${polygons.length}個のリング',
-            );
-            return {'rings': polygons};
-          }
-      }
-
-      AppLogger.debug('[LayerNode] ジオメトリデータの抽出に失敗');
-      return null;
-    } catch (e, stack) {
-      AppLogger.debug('[LayerNode] ジオメトリデータ抽出エラー: $e');
-      AppLogger.debug('[LayerNode] スタックトレース: $stack');
-      return null;
+  /// 読み出した形（[geobaseGeometryToLatLngs] の LatLng の入れ子）を書き込み用の形に戻す。部分は落とさない
+  static geo.Geometry? _toGeoGeometry(Object? data, GeometryType type) {
+    geo.Geographic g(LatLng p) => geo.Geographic(lon: p.longitude, lat: p.latitude);
+    switch (type) {
+      case GeometryType.point:
+        if (data is List<LatLng> && data.isNotEmpty) {
+          return data.length == 1 ? toGeoPoint(data.single) : geo.MultiPoint.from(data.map(g));
+        }
+      case GeometryType.linestring:
+        if (data is List<List<LatLng>> && data.isNotEmpty) {
+          return geo.MultiLineString.from([for (final line in data) line.map(g)]);
+        }
+        if (data is List<LatLng> && data.isNotEmpty) return toGeoMultiLine(data);
+      case GeometryType.polygon:
+        if (data is List<List<List<LatLng>>> && data.isNotEmpty) {
+          return geo.MultiPolygon.from([
+            for (final polygon in data) [for (final ring in polygon) ring.map(g)],
+          ]);
+        }
+        if (data is List<List<LatLng>> && data.isNotEmpty) return toGeoMultiPolygon(data);
     }
-  }
-
-  /// バッチデータを移植先に書き込み
-  Future<int> _processMigrationBatch(
-    GeoPackageNode targetGeoPackage,
-    String targetLayerName,
-    GeometryType geometryType,
-    List<Map<String, dynamic>> batchData,
-  ) async {
-    try {
-      AppLogger.debug(
-        '[LayerNode] バッチ処理開始: ${batchData.length}個のフィーチャ, タイプ=$geometryType',
-      );
-
-      List<int> insertedIds = [];
-
-      switch (geometryType) {
-        case GeometryType.point:
-          AppLogger.debug('[LayerNode] ポイントバッチ処理実行');
-          insertedIds = await targetGeoPackage.geoPackageFile.addPointsBatch(
-            targetLayerName,
-            batchData,
-          );
-
-        case GeometryType.linestring:
-          AppLogger.debug('[LayerNode] ラインバッチ処理実行');
-          insertedIds = await targetGeoPackage.geoPackageFile.addLinesBatch(
-            targetLayerName,
-            batchData,
-          );
-
-        case GeometryType.polygon:
-          AppLogger.debug('[LayerNode] ポリゴンバッチ処理実行');
-          insertedIds = await targetGeoPackage.geoPackageFile.addPolygonsBatch(
-            targetLayerName,
-            batchData,
-          );
-      }
-
-      AppLogger.debug('[LayerNode] バッチ処理完了: ${insertedIds.length}個挿入');
-      AppLogger.debug('[LayerNode] 挿入されたID: $insertedIds');
-
-      return insertedIds.length;
-    } catch (e, stack) {
-      AppLogger.debug('[LayerNode] バッチ処理エラー: $e');
-      AppLogger.debug('[LayerNode] バッチデータサンプル: ${batchData.take(3).toList()}');
-      AppLogger.debug('[LayerNode] スタックトレース: $stack');
-      rethrow;
-    }
+    return null;
   }
 
   /// 自分自身を親から削除

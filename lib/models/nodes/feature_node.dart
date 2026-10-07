@@ -27,6 +27,7 @@ import 'package:turf/turf.dart' as turf;
 import '../../converters/turf_converter.dart';
 import '../../core/node_types.dart';
 import '../../i18n/strings.g.dart';
+import '../geopackage/feature_repository.dart' show metadataColumn;
 import '../geopackage/geopackage_file.dart';
 import 'layer_node.dart';
 import 'layer_tree_node.dart';
@@ -186,7 +187,7 @@ abstract class FeatureNode extends LayerTreeNode {
   Map<String, dynamic>? get metadata {
     if (_isDisposed || parent.isDisposed) return null;
     if (_metadataCacheValid) return _cachedMetadata;
-    final value = turfFeature.properties?['rmaps_metadata'];
+    final value = turfFeature.properties?[metadataColumn];
     if (value == null) {
       _cachedMetadata = null;
     } else if (value is Map<String, dynamic>) {
@@ -208,7 +209,7 @@ abstract class FeatureNode extends LayerTreeNode {
   /// メタデータのsetter（親のMapを更新）
   set metadata(Map<String, dynamic>? value) {
     if (_isDisposed) return;
-    parent.updateFeatureAttribute(_rowId, 'rmaps_metadata', value);
+    parent.updateFeatureAttribute(_rowId, metadataColumn, value);
     _markDirty();
   }
 
@@ -582,8 +583,8 @@ abstract class FeatureNode extends LayerTreeNode {
     return {
       if (columns.contains('name')) 'name': name,
       if (columns.contains('description')) 'description': description,
-      if (columns.contains('rmaps_metadata') && metadata != null)
-        'rmaps_metadata': jsonEncode(metadata),
+      if (columns.contains(metadataColumn) && metadata != null)
+        metadataColumn: jsonEncode(metadata),
     };
   }
 
@@ -627,7 +628,7 @@ abstract class FeatureNode extends LayerTreeNode {
     'id': _rowId,
     'name': name,
     'description': description,
-    'rmaps_metadata': metadata,
+    metadataColumn: metadata,
   };
 
   @override

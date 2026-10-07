@@ -15,7 +15,10 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: 空間インデックス管理クラス
 // R-Tree操作、エンベロープ更新、SpatiaLiteトリガー処理を担当
+import 'dart:typed_data';
+
 import '../../utils/app_logger.dart';
+import '../../utils/wkb_utils.dart';
 import 'geopackage_connection.dart';
 import 'qgis_interop.dart';
 import 'sql_identifier.dart';
@@ -47,38 +50,50 @@ class SpatialIndexManager {
     }
   }
 
-  /// R-Tree空間インデックスを更新（フィーチャ追加/更新時に呼び出す）
-  Future<void> updateRTreeIndex(
-    String tableName,
-    int rowId,
-    double minX,
-    double minY,
-    double maxX,
-    double maxY,
-  ) async {
+  /// 書いた行の形（GeoPackage のバイナリ）から範囲を取り、R-Tree とレイヤの範囲
+  /// （gpkg_contents）に入れる。範囲はレイヤの CRS のまま（WGS84 に直さない）。
+  ///
+  /// QGIS 製の gpkg は R-Tree を保つトリガーを SpatiaLite 関数ごと落としているので
+  /// （[removeSpatiaLiteTriggers]）、追加・更新のたびにここで入れ直す
+  Future<void> indexRows(String tableName, Map<int, Uint8List> geoms) async {
+    if (geoms.isEmpty) return;
     try {
       final db = await connection.getDatabase();
       final rtreeTable = 'rtree_${tableName}_geom';
-
-      // R-Treeテーブルが存在するか確認
-      final tables = await db.rawQuery(
+      final hasRtree = (await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
         [rtreeTable],
-      );
+      )).isNotEmpty;
 
-      if (tables.isNotEmpty) {
-        // R-Treeインデックスを更新（INSERT OR REPLACEで既存エントリも更新）
-        await db.execute(
-          '''
-          INSERT OR REPLACE INTO ${quoteIdent(rtreeTable)} (id, minx, maxx, miny, maxy)
-          VALUES (?, ?, ?, ?, ?)
-          ''',
-          [rowId, minX, maxX, minY, maxY],
-        );
+      double? minX, minY, maxX, maxY;
+      final batch = db.batch();
+      for (final MapEntry(key: id, value: blob) in geoms.entries) {
+        final env = gpkgEnvelope(blob);
+        if (env == null) continue;
+        if (hasRtree) {
+          batch.execute(
+            'INSERT OR REPLACE INTO ${quoteIdent(rtreeTable)} (id, minx, maxx, miny, maxy) VALUES (?, ?, ?, ?, ?)',
+            [id, env.minX, env.maxX, env.minY, env.maxY],
+          );
+        }
+        minX = minX == null || env.minX < minX ? env.minX : minX;
+        minY = minY == null || env.minY < minY ? env.minY : minY;
+        maxX = maxX == null || env.maxX > maxX ? env.maxX : maxX;
+        maxY = maxY == null || env.maxY > maxY ? env.maxY : maxY;
       }
+      if (minX == null) return;
+      // レイヤの範囲は広げるだけ（縮めるのは GpkgIndexRepair）
+      batch.execute(
+        'UPDATE gpkg_contents SET '
+        'min_x = min(coalesce(min_x, ?1), ?1), min_y = min(coalesce(min_y, ?2), ?2), '
+        'max_x = max(coalesce(max_x, ?3), ?3), max_y = max(coalesce(max_y, ?4), ?4) '
+        'WHERE table_name = ?5',
+        [minX, minY, maxX, maxY, tableName],
+      );
+      await batch.commit(noResult: true);
     } catch (e) {
-      // R-Tree更新エラーは致命的ではないのでログのみ
-      AppLogger.debug('[WARNING] SpatialIndexManager.updateRTreeIndex: $e');
+      // 索引の更新に失敗しても書き込みは成り立つ（GpkgIndexRepair で直せる）
+      AppLogger.debug('[WARNING] SpatialIndexManager.indexRows: $e');
     }
   }
 
@@ -99,69 +114,6 @@ class SpatialIndexManager {
       }
     } catch (e) {
       AppLogger.debug('[WARNING] SpatialIndexManager.removeFromRTreeIndex: $e');
-    }
-  }
-
-  /// gpkg_contentsテーブルのエンベロープを更新
-  Future<void> updateLayerEnvelope(
-    String tableName,
-    double minX,
-    double minY,
-    double maxX,
-    double maxY,
-  ) async {
-    try {
-      final db = await connection.getDatabase();
-
-      // 現在のエンベロープを取得
-      final currentEnvelope = await db.query(
-        'gpkg_contents',
-        columns: ['min_x', 'min_y', 'max_x', 'max_y'],
-        where: 'table_name = ?',
-        whereArgs: [tableName],
-      );
-
-      double? currentMinX, currentMinY, currentMaxX, currentMaxY;
-      if (currentEnvelope.isNotEmpty) {
-        final row = currentEnvelope.first;
-        currentMinX = row['min_x'] as double?;
-        currentMinY = row['min_y'] as double?;
-        currentMaxX = row['max_x'] as double?;
-        currentMaxY = row['max_y'] as double?;
-      }
-
-      // エンベロープを拡張
-      final newMinX =
-          currentMinX != null
-              ? (currentMinX < minX ? currentMinX : minX)
-              : minX;
-      final newMinY =
-          currentMinY != null
-              ? (currentMinY < minY ? currentMinY : minY)
-              : minY;
-      final newMaxX =
-          currentMaxX != null
-              ? (currentMaxX > maxX ? currentMaxX : maxX)
-              : maxX;
-      final newMaxY =
-          currentMaxY != null
-              ? (currentMaxY > maxY ? currentMaxY : maxY)
-              : maxY;
-
-      // エンベロープを更新
-      await db.update(
-        'gpkg_contents',
-        {
-          'min_x': newMinX,
-          'min_y': newMinY,
-          'max_x': newMaxX,
-          'max_y': newMaxY,
-        },
-        where: 'table_name = ?',
-        whereArgs: [tableName],
-      );
-    } catch (e) {
-      AppLogger.debug('[SpatialIndexManager] エンベロープ更新エラー: $e');
     }
   }
 

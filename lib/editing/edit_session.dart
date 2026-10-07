@@ -29,6 +29,7 @@ import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/geopackage/feature_repository.dart' show metadataColumn;
 import '../models/nodes/feature_node.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
@@ -257,7 +258,8 @@ class FeatureEditor extends Notifier<EditState?> {
         n == 'fid' ||
         n == 'geom' ||
         n == 'geometry' ||
-        n == 'rmaps_metadata' ||
+        n == metadataColumn ||
+        n == 'rmaps_metadata' || // 旧名
         n == 'sub_table' ||
         n.startsWith('_'));
   }

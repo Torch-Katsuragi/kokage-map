@@ -36,6 +36,9 @@ void main() {
       "VALUES ('JGD2011 / Japan Plane Rectangular CS VI', 6674, 'EPSG', 6674, 'undefined')",
     );
     await db.execute("UPDATE gpkg_geometry_columns SET srs_id = 6674 WHERE table_name = 'pts'");
+    // QGIS 製と同じ形の R-Tree（アプリが自分で入れ直す）
+    await db.execute('CREATE VIRTUAL TABLE rtree_pts_geom USING rtree(id, minx, maxx, miny, maxy)');
+    await db.execute("UPDATE gpkg_contents SET min_x = NULL, min_y = NULL, max_x = NULL, max_y = NULL WHERE table_name = 'pts'");
     await db.close();
 
     gpkg = GeoPackageFile(const ['c.gpkg'], absolutePath: path);
@@ -45,15 +48,33 @@ void main() {
     await gpkg.addPointsBatch('pts', [
       {'point': origin},
     ]);
+    // 1 件目を東へ動かす（VI 系の原点から経度方向に少し）
+    final moved = await gpkg.addPointWithAttributes('pts', origin, {});
+    await gpkg.updatePoint('pts', moved!, const LatLng(36, 136.01));
     await gpkg.flushChanges();
-    final rows = await (await gpkg.getDatabase()).rawQuery('SELECT geom FROM pts');
+    final db2 = await gpkg.getDatabase();
+    final rows = await db2.rawQuery('SELECT fid, geom FROM pts ORDER BY fid');
+    final rtree = await db2.rawQuery('SELECT id, minx, miny FROM rtree_pts_geom ORDER BY id');
+    final contents = (await db2.rawQuery("SELECT min_x, max_x FROM gpkg_contents WHERE table_name = 'pts'")).single;
     await gpkg.dispose();
 
-    expect(rows, hasLength(2));
-    for (final r in rows) {
+    expect(rows, hasLength(3));
+    for (final r in rows.take(2)) {
       final g = parseGpkgGeometry(r['geom']! as dynamic)! as geo.Point;
       expect(g.position.x, closeTo(0, 0.01));
       expect(g.position.y, closeTo(0, 0.01));
     }
+    // 索引もレイヤの範囲も保存した座標（平面直角・m）と同じ値で入る。WGS84（136 度）ではない。
+    // 動かした 3 件目は更新のあとの位置
+    expect(rtree.map((r) => r['id']), [1, 2, 3]);
+    for (var i = 0; i < 3; i++) {
+      final p = (parseGpkgGeometry(rows[i]['geom']! as dynamic)! as geo.Point).position;
+      expect(rtree[i]['minx']! as num, closeTo(p.x, 0.01));
+      expect(rtree[i]['miny']! as num, closeTo(p.y, 0.01));
+    }
+    final movedPos = (parseGpkgGeometry(rows[2]['geom']! as dynamic)! as geo.Point).position;
+    expect(movedPos.x.abs() + movedPos.y.abs(), greaterThan(800)); // 0.01 度 ≒ 900 m
+    expect(contents['min_x']! as num, lessThan(1));
+    expect(contents['max_x']! as num, lessThan(1000));
   });
 }

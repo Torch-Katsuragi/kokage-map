@@ -31,6 +31,9 @@ import 'geopackage_schema.dart';
 import 'spatial_index_manager.dart';
 import 'sql_identifier.dart';
 
+/// 地物ごとのメタデータ（JSON）を入れる列。アプリは列を作らない（古いファイルにだけある）
+const metadataColumn = 'kmaps_metadata';
+
 /// compute()用パラメータ
 class _GeometryParseParams {
   final List<Map<String, dynamic>> rows;
@@ -70,10 +73,10 @@ List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
       }
     }
 
-    final metadataStr = row['kmaps_metadata'] as String?;
+    final metadataStr = row[metadataColumn] as String?;
     if (metadataStr != null && metadataStr.isNotEmpty) {
       try {
-        row['kmaps_metadata'] = jsonDecode(metadataStr) as Map<String, dynamic>;
+        row[metadataColumn] = jsonDecode(metadataStr) as Map<String, dynamic>;
       } catch (_) {}
     }
   }
@@ -216,50 +219,6 @@ class FeatureRepository {
   }
 
   // ============================================================
-  // エンベロープ計算（共通）
-  // ============================================================
-
-  ({double minX, double minY, double maxX, double maxY})? _calculateEnvelope(
-    List<LatLng> coordinates,
-  ) {
-    if (coordinates.isEmpty) return null;
-    double minX = coordinates.first.longitude;
-    double maxX = minX;
-    double minY = coordinates.first.latitude;
-    double maxY = minY;
-    for (final pt in coordinates) {
-      if (pt.longitude < minX) minX = pt.longitude;
-      if (pt.longitude > maxX) maxX = pt.longitude;
-      if (pt.latitude < minY) minY = pt.latitude;
-      if (pt.latitude > maxY) maxY = pt.latitude;
-    }
-    return (minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-  }
-
-
-  Future<void> _updateSpatialIndex(
-    String tableName,
-    int rowId,
-    ({double minX, double minY, double maxX, double maxY}) envelope,
-  ) async {
-    await spatialIndex.updateLayerEnvelope(
-      tableName,
-      envelope.minX,
-      envelope.minY,
-      envelope.maxX,
-      envelope.maxY,
-    );
-    await spatialIndex.updateRTreeIndex(
-      tableName,
-      rowId,
-      envelope.minX,
-      envelope.minY,
-      envelope.maxX,
-      envelope.maxY,
-    );
-  }
-
-  // ============================================================
   // 属性ビルダー（共通）
   // ============================================================
 
@@ -278,8 +237,8 @@ class FeatureRepository {
     if (columnNames.contains('description')) {
       attributes['description'] = description;
     }
-    if (columnNames.contains('kmaps_metadata') && metadata != null) {
-      attributes['kmaps_metadata'] = jsonEncode(metadata);
+    if (columnNames.contains(metadataColumn) && metadata != null) {
+      attributes[metadataColumn] = jsonEncode(metadata);
     }
     return attributes;
   }
@@ -376,7 +335,6 @@ class FeatureRepository {
   Future<int?> _addWithAttributes(
     String tableName,
     geo.Geometry geom,
-    List<LatLng> points,
     Map<String, dynamic> attributes,
   ) async {
     try {
@@ -384,8 +342,7 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final wkb = await _toLayerWkb(tableName, geom);
       final rowId = await _insertRow(db, tableName, {'geom': wkb, ...attributes});
-      final env = _calculateEnvelope(points);
-      if (env != null) await _updateSpatialIndex(tableName, rowId, env);
+      await spatialIndex.indexRows(tableName, {rowId: wkb});
       return rowId;
     } catch (e) {
       AppLogger.debug('[ERROR] FeatureRepository: add ${geom.geomType} failed: $e');
@@ -397,7 +354,7 @@ class FeatureRepository {
     String tableName,
     LatLng point,
     Map<String, dynamic> attributes,
-  ) => _addWithAttributes(tableName, _buildGeoPoint(point), [point], attributes);
+  ) => _addWithAttributes(tableName, _buildGeoPoint(point), attributes);
 
   Future<int?> addLineWithAttributes(
     String tableName,
@@ -406,7 +363,6 @@ class FeatureRepository {
   ) => _addWithAttributes(
     tableName,
     _buildGeoMultiLineString(line),
-    line,
     attributes,
   );
 
@@ -417,15 +373,13 @@ class FeatureRepository {
   ) => _addWithAttributes(
     tableName,
     _buildGeoMultiPolygon(polygon),
-    [for (final ring in polygon) ...ring],
     attributes,
   );
 
-  /// name・description・kmaps_metadata はレイヤに列があるものだけ書く
+  /// name・description・メタデータ（[metadataColumn]）はレイヤに列があるものだけ書く
   Future<int?> _addSimple(
     String tableName,
-    geo.Geometry geom,
-    List<LatLng> points, {
+    geo.Geometry geom, {
     required String name,
     required String description,
     required Map<String, dynamic>? metadata,
@@ -437,7 +391,7 @@ class FeatureRepository {
         description: description,
         metadata: metadata,
       );
-      return await _addWithAttributes(tableName, geom, points, attributes);
+      return await _addWithAttributes(tableName, geom, attributes);
     } catch (e) {
       AppLogger.debug('[ERROR] FeatureRepository: add ${geom.geomType} failed: $e');
       return null;
@@ -453,7 +407,6 @@ class FeatureRepository {
   }) => _addSimple(
     tableName,
     _buildGeoPoint(pt),
-    [pt],
     name: name,
     description: description,
     metadata: metadata,
@@ -468,7 +421,6 @@ class FeatureRepository {
   }) => _addSimple(
     tableName,
     _buildGeoMultiLineString(line),
-    line,
     name: name,
     description: description,
     metadata: metadata,
@@ -483,7 +435,6 @@ class FeatureRepository {
   }) => _addSimple(
     tableName,
     _buildGeoMultiPolygon(rings),
-    [for (final ring in rings) ...ring],
     name: name,
     description: description,
     metadata: metadata,
@@ -498,14 +449,17 @@ class FeatureRepository {
     required Map<String, dynamic>? metadata,
   }) async {
     await _prepareForWrite(tableName);
-    return _updateFeatureGeometry(
+    final wkb = await _toLayerWkb(tableName, geom);
+    final ok = await _updateFeatureGeometry(
       tableName,
       id,
-      await _toLayerWkb(tableName, geom),
+      wkb,
       name: name,
       description: description,
       metadata: metadata,
     );
+    if (ok) await spatialIndex.indexRows(tableName, {id: wkb});
+    return ok;
   }
 
   Future<bool> updatePoint(
@@ -938,7 +892,7 @@ class FeatureRepository {
       await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final batch = db.batch();
-      final insertedIds = <int>[];
+      final wkbs = <Uint8List>[];
       // 移す先のレイヤの CRS に合わせる（WGS84 のまま書くと別の CRS のレイヤで位置がずれる）
       final crs = await _getLayerCrs(tableName);
 
@@ -948,6 +902,7 @@ class FeatureRepository {
       for (final data in dataList) {
         final geometry = data[geometryKey] as T;
         final wkb = _encodeInCrs(crs, build(geometry));
+        wkbs.add(wkb);
         final insertData = <String, dynamic>{'geom': wkb};
 
         data.forEach((key, value) {
@@ -972,10 +927,12 @@ class FeatureRepository {
       }
 
       final results = await batch.commit(noResult: false);
-      for (final result in results) {
-        if (result is int) insertedIds.add(result);
-      }
-      return insertedIds;
+      final inserted = <int, Uint8List>{
+        for (var i = 0; i < results.length; i++)
+          if (results[i] case final int id) id: wkbs[i],
+      };
+      await spatialIndex.indexRows(tableName, inserted);
+      return inserted.keys.toList();
     } catch (e) {
       AppLogger.debug('[ERROR] FeatureRepository._addGeometryBatch<$T>: $e');
       return [];
@@ -1191,10 +1148,10 @@ class FeatureRepository {
   }
 
   void _parseMetadata(Map<String, dynamic> row) {
-    final metadataStr = row['kmaps_metadata'] as String?;
+    final metadataStr = row[metadataColumn] as String?;
     if (metadataStr != null && metadataStr.isNotEmpty) {
       try {
-        row['kmaps_metadata'] = jsonDecode(metadataStr) as Map<String, dynamic>;
+        row[metadataColumn] = jsonDecode(metadataStr) as Map<String, dynamic>;
       } catch (e) {
         AppLogger.debug('[FeatureRepository] メタデータのJSONパースエラー - $e');
       }

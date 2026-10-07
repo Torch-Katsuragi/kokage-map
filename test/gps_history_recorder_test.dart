@@ -61,6 +61,8 @@ void main() {
     for (var i = 0; i < 2; i++) {
       await send(second);
     }
+    // raw への書き込みは非同期。テストを並列で回すと 100ms では終わっていないことがある
+    await Future<void>.delayed(const Duration(milliseconds: 500));
     recorder.dispose(); // 反映せずに閉じる
 
     // 次の起動で raw に残った 2 点を反映する

@@ -90,18 +90,6 @@ abstract class LayerTreeNode {
     parent = null;
   }
 
-  /// ルートからのパスリスト（meta.json用途）
-  List<String> getPathFromRoot() {
-    final List<String> pathList = [];
-    LayerTreeNode? current = this;
-    while (current != null) {
-      pathList.insert(0, current.name);
-      current = current.parent;
-    }
-    // AppLogger.debug('getPathFromRoot result: $pathList'); // 最終結果のデバッグ出力
-    return pathList;
-  }
-
   /// [pathResolver] のルートからの相対パスセグメント
   ///
   /// リゾルバの起点（リゾルバを自分に持つノード、無ければツリーのルート）の**下**から

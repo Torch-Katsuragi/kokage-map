@@ -868,9 +868,6 @@
     "convertDesc": "${layer} のポイント (${count}個) を$typeに変換します。",
     "targetLayerLabel": "変換先のレイヤー:",
     "convert": "変換",
-    "convertToPoints": "ポイントに変換",
-    "toPointsDesc": "${type}「${name}」の頂点 (${count}個) をポイントに変換します。",
-    "targetPointLayer": "追加先のポイントレイヤー:",
     "lineType": "ライン",
     "polygonType": "ポリゴン",
     "unknownType": "不明"
@@ -1514,7 +1511,6 @@
     "labelOpacity": "濃さ",
     "enableClustering": "近い点をまとめる",
     "enableClusteringDesc": "引いた地図では近い点を 1 つにまとめて数を出す",
-    "clusterRadius": "まとめる半径",
     "disableAtZoom": "この倍率から個別に",
     "zoomN": "ズーム $n",
     "sizeMultiplier": "大きさの倍率",

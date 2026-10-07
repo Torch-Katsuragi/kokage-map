@@ -43,36 +43,6 @@ class ShapeType {
   static const int multiPointM = 28;
 }
 
-/// シェープファイルのヘッダー情報
-class ShapefileHeader {
-  final int fileCode;
-  final int fileLength;
-  final int version;
-  final int shapeType;
-  final BoundingBox bounds;
-
-  ShapefileHeader({
-    required this.fileCode,
-    required this.fileLength,
-    required this.version,
-    required this.shapeType,
-    required this.bounds,
-  });
-}
-
-/// シェープファイルのレコード
-class ShapefileRecord {
-  final int recordNumber;
-  final int shapeType;
-  final dynamic geometry; // LatLng, List<LatLng>, List<List<LatLng>> depending on type
-
-  ShapefileRecord({
-    required this.recordNumber,
-    required this.shapeType,
-    required this.geometry,
-  });
-}
-
 /// シェープファイルのバイナリ解析クラス
 class ShapefileBinaryParser {
   static final SmartCoordinateSystemManager _crsManager =
@@ -198,8 +168,6 @@ class ShapefileBinaryParser {
         throw Exception('SHPファイルが小さすぎます');
       }
 
-      // ファイル全体のシェープタイプ（参考情報）
-      // final shapeType = BinaryUtils.readInt32LittleEndian(bytes, 32);
       int offset = 100; // ヘッダー後
       int recordCount = 0;
 

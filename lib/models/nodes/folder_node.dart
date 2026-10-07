@@ -313,10 +313,5 @@ class FolderNode extends LayerTreeNode {
     children.clear();
     await super.dispose();
   }
-
-  // 2026-08-25: createIn() を削除した。
-  // どこからも呼ばれていない（フォルダ作成は LayerDrawerService.createLocalFolder
-  // が担当）うえ、同期のファイルI/O（existsSync/createSync）を持っていて
-  // web に持ち込めなかった。必要になったら `fs` 経由の非同期版として足すこと。
 }
 

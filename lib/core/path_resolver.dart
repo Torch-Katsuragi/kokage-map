@@ -35,11 +35,6 @@ abstract class PathResolver {
   
   /// このリゾルバがグローバルフォルダ用かどうか
   bool get isGlobal;
-
-  // 2026-08-25: pathExists() / ensureDirectoryExists() を削除した。
-  // どこからも呼ばれておらず、かつ同期のファイルI/O（existsSync/createSync）を
-  // 持っていたため web に持ち込めない。必要になったら `fs`（KFileSystem）経由の
-  // 非同期版として足すこと。
 }
 
 /// プロジェクトフォルダ用のパスリゾルバ
@@ -56,13 +51,6 @@ class ProjectPathResolver extends PathResolver {
     _rootPathGetter = getter;
   }
   
-  factory ProjectPathResolver({String? customRootPath}) {
-    if (customRootPath != null) {
-      return _CustomProjectPathResolver(customRootPath);
-    }
-    return _instance;
-  }
-  
   @override
   String? get rootPath => _rootPathGetter?.call();
   
@@ -76,16 +64,6 @@ class ProjectPathResolver extends PathResolver {
   
   @override
   bool get isGlobal => false;
-}
-
-/// カスタムルートパスを持つプロジェクトパスリゾルバ（テスト用）
-class _CustomProjectPathResolver extends ProjectPathResolver {
-  final String _customRootPath;
-  
-  _CustomProjectPathResolver(this._customRootPath) : super._();
-  
-  @override
-  String? get rootPath => _customRootPath;
 }
 
 /// グローバルフォルダ用のパスリゾルバ
@@ -134,16 +112,4 @@ class _CustomGlobalPathResolver extends GlobalPathResolver {
   
   @override
   String? get rootPath => _customRootPath;
-}
-
-/// パスリゾルバのファクトリ
-/// ノードの種類に応じて適切なリゾルバを提供
-class PathResolverFactory {
-  PathResolverFactory._();
-  
-  /// プロジェクト用のリゾルバを取得
-  static PathResolver get project => ProjectPathResolver.instance;
-  
-  /// グローバル用のリゾルバを取得
-  static PathResolver get global => GlobalPathResolver.instance;
 }

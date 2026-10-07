@@ -64,7 +64,6 @@ class BluetoothGnssService extends ChangeNotifier {
   double? _pdop;
   double? _vdop;
   int? _gpsQuality;
-  int? _fixMode; // GSAから取得: 1=No Fix, 2=2D, 3=3D
 
   // SBAS衛星情報
   List<int> _usedSatellites = []; // 使用中の衛星PRN番号
@@ -103,7 +102,6 @@ class BluetoothGnssService extends ChangeNotifier {
   double? get pdop => _pdop;
   double? get vdop => _vdop;
   int? get gpsQuality => _gpsQuality;
-  int? get fixMode => _fixMode;
 
   /// 補正タイプを人間可読な文字列で取得
   /// GGA Quality Indicatorに基づき、SBAS衛星の使用状況も反映
@@ -564,11 +562,6 @@ class BluetoothGnssService extends ChangeNotifier {
     try {
       final List<String> parts = sentence.split(',');
       if (parts.length >= 18) {
-        // Fix Mode: 1=No Fix, 2=2D, 3=3D
-        if (parts[2].isNotEmpty) {
-          _fixMode = int.tryParse(parts[2]);
-        }
-
         // 使用衛星のPRN番号を抽出（フィールド3-14、最大12個）
         final satellites = <int>[];
         for (int i = 3; i <= 14 && i < parts.length; i++) {

@@ -265,21 +265,3 @@ class NodePresenter {
     );
   }
 }
-
-// ========================================
-// Feature詳細情報関連
-// ========================================
-
-/// Featureの詳細情報フォーマッタ
-class FeatureDetailFormatter {
-  FeatureDetailFormatter._();
-  
-  /// 面積をフォーマット
-  static String formatArea(double squareMeters) {
-    if (squareMeters >= 10000) {
-      return '${(squareMeters / 10000).toStringAsFixed(4)} ha';
-    } else {
-      return '${squareMeters.toStringAsFixed(3)} m²';
-    }
-  }
-}

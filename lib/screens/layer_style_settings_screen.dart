@@ -219,14 +219,6 @@ final clusteringEnabledDef = SwitchDef(
   defaultValue: true,
   icon: Icons.workspaces_outlined,
 );
-final clusteringRadiusDef = IntDef(
-  key: 'layer_style_clustering_radius',
-  title: t.styleScreen.clusterRadius,
-  defaultValue: 12,
-  min: 1,
-  max: 150,
-  formatter: (v) => '$v px',
-);
 final clusteringDisableZoomDef = IntDef(
   key: 'layer_style_clustering_disable_zoom',
   title: t.styleScreen.disableAtZoom,

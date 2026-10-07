@@ -847,11 +847,6 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
   /// 日付キーを表示用にフォーマット
   /// 例: '2026_02_06' → '2026/02/06'
-  static String formatDateKeyAsDate(String dateKey) {
-    return dateKey.replaceAll('_', '/');
-  }
-
-  /// 日付キーを表示用にフォーマット（formatDateKeyAsDateのエイリアス）
   static String formatLayerNameAsDate(String layerName) {
     return layerName.replaceAll('_', '/');
   }

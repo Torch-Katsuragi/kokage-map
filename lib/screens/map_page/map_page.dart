@@ -94,9 +94,6 @@ class RootMapsHomePage extends ConsumerStatefulWidget {
   ConsumerState<RootMapsHomePage> createState() => _RootMapsHomePageState();
 }
 
-/// Tool types
-enum ToolType { pen, eraser, gps }
-
 class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     with
         TickerProviderStateMixin,

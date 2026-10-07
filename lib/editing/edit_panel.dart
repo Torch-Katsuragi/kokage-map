@@ -23,6 +23,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../i18n/strings.g.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 import '../tutorial/tutorial.dart';
 import '../widgets/feature_silhouette.dart';
 import 'edit_session.dart';
@@ -120,7 +122,10 @@ class _EditPanelState extends ConsumerState<EditPanel> {
                             FocusScope.of(context).unfocus();
                             final ok = await ref.read(featureEditorProvider.notifier).save();
                             if (!ok && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.featureEdit.saveFailed)));
+                              ref.read(notificationCenterProvider.notifier).add(
+                                    title: t.featureEdit.saveFailed,
+                                    level: NotificationLevel.error,
+                                  );
                             }
                           },
                     icon: const Icon(Icons.check, size: 18),

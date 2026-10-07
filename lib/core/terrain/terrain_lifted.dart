@@ -56,7 +56,10 @@ class LiftedPolyline {
     final out = <double>[];
     final cells = <int>[];
     void addPoint(double x, double y) {
-      out.addAll([x, y, dem.elevationAt(x + dem.originX, y + dem.originY)]);
+      out
+        ..add(x)
+        ..add(y)
+        ..add(dem.elevationAtLocal(x, y));
     }
 
     for (var i = 0; i < points.length; i++) {
@@ -270,10 +273,18 @@ class LiftedPolygon {
           final piece = clipToRect(tri, rect);
           if (piece.length < 3) continue;
           final ci = mesh.cellIndexAt(rect.center.dx, rect.center.dy);
+          void addVertex(Offset p) {
+            out
+              ..add(p.dx)
+              ..add(p.dy)
+              ..add(dem.elevationAtLocal(p.dx, p.dy));
+          }
+
+          // 三角形 ∩ 矩形は凸なので扇状に分ける
           for (var k = 1; k + 1 < piece.length; k++) {
-            for (final p in [piece[0], piece[k], piece[k + 1]]) {
-              out.addAll([p.dx, p.dy, dem.elevationAt(p.dx + dem.originX, p.dy + dem.originY)]);
-            }
+            addVertex(piece[0]);
+            addVertex(piece[k]);
+            addVertex(piece[k + 1]);
             cells.add(ci);
           }
         }
@@ -416,8 +427,8 @@ class LiftedSegments {
         final mid = Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
         final chunk = mesh.chunkOfCell(mesh.cellIndexAt(mid.dx, mid.dy));
         (grouped[chunk] ??= <double>[]).addAll([
-          a.dx, a.dy, dem.elevationAt(a.dx + dem.originX, a.dy + dem.originY),
-          b.dx, b.dy, dem.elevationAt(b.dx + dem.originX, b.dy + dem.originY),
+          a.dx, a.dy, dem.elevationAtLocal(a.dx, a.dy),
+          b.dx, b.dy, dem.elevationAtLocal(b.dx, b.dy),
         ]);
       }
     }
@@ -436,8 +447,6 @@ class LiftedSegments {
 
   final Color color;
   final double widthPx;
-
-  int get segmentCount => byChunk.values.fold(0, (a, v) => a + v.length ~/ 6);
 }
 
 /// 地形に乗せるラベル（ビルボード）

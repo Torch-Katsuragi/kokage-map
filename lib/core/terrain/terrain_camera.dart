@@ -245,7 +245,7 @@ class TerrainCamera {
     return intersectHeightField(
       projected,
       (x, y) => (x >= 0 && y >= 0 && x <= dem.width && y <= dem.height)
-          ? dem.elevationAt(x + dem.originX, y + dem.originY)
+          ? dem.elevationAtLocal(x, y)
           : null,
       minHeight: minH,
       maxHeight: maxH,

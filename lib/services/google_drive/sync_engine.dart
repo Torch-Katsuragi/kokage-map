@@ -19,6 +19,7 @@
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 
+import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
 import 'gpkg_merger.dart';
@@ -27,6 +28,7 @@ import 'sync_conflict_resolver.dart';
 import 'sync_file_operations.dart';
 import 'sync_pull_handler.dart';
 import 'sync_push_handler.dart';
+import 'sync_snapshot.dart';
 
 /// 同期結果
 class SyncResult {
@@ -171,14 +173,19 @@ class DriveFileEntry {
   });
 }
 
-/// 同期エンジン
+//// 同期エンジン
+///
+/// 何が変わったかの判定は [SyncSnapshot]、片方向の同期は [SyncPushHandler] / [SyncPullHandler]、
+/// ファイルごとの選択の反映（マージ）は [SyncConflictResolver] が受け持つ。
+/// 判定に使った材料（[FolderSyncStatusDetail.snapshot]）を渡せば、push / pull / マージは
+/// Drive をもう一度たどらない（自動同期が使う）
 class SyncEngine {
+  final GoogleDriveService _driveService;
+  final KMetaService _kmetaService;
+  final SyncFileOperations _fileOps;
   final SyncPushHandler _pushHandler;
   final SyncPullHandler _pullHandler;
   final SyncConflictResolver _conflictResolver;
-
-  /// 同期対象のファイルパターン
-  static List<String> get syncPatterns => SyncFileOperations.syncPatterns;
 
   SyncEngine({
     GoogleDriveService? driveService,
@@ -188,24 +195,14 @@ class SyncEngine {
           kmetaService ?? KMetaService.instance,
         );
 
-  SyncEngine._fromServices(
-    GoogleDriveService driveService,
-    KMetaService kmetaService,
-  )   : _pushHandler = SyncPushHandler(
-          driveService: driveService,
-          kmetaService: kmetaService,
-          fileOps: SyncFileOperations(driveService: driveService),
-        ),
-        _pullHandler = SyncPullHandler(
-          driveService: driveService,
-          kmetaService: kmetaService,
-          fileOps: SyncFileOperations(driveService: driveService),
-        ),
-        _conflictResolver = SyncConflictResolver(
-          driveService: driveService,
-          kmetaService: kmetaService,
-          fileOps: SyncFileOperations(driveService: driveService),
-        );
+  SyncEngine._fromServices(GoogleDriveService driveService, KMetaService kmetaService)
+      : this._withFileOps(driveService, kmetaService, SyncFileOperations(driveService: driveService));
+
+  SyncEngine._withFileOps(this._driveService, this._kmetaService, this._fileOps)
+      : _pushHandler = SyncPushHandler(driveService: _driveService, kmetaService: _kmetaService, fileOps: _fileOps),
+        _pullHandler = SyncPullHandler(driveService: _driveService, kmetaService: _kmetaService, fileOps: _fileOps),
+        _conflictResolver =
+            SyncConflictResolver(driveService: _driveService, kmetaService: _kmetaService, fileOps: _fileOps);
 
   /// プロジェクトをDriveにPush（アップロード）
   Future<SyncResult> push(
@@ -213,12 +210,11 @@ class SyncEngine {
     String? driveFolder,
     void Function(SyncProgress progress)? onProgress,
   }) =>
-      _pushHandler.push(projectPath,
-          driveFolder: driveFolder, onProgress: onProgress);
+      _pushHandler.push(projectPath, driveFolder: driveFolder, onProgress: onProgress);
 
-  /// フォルダ単位でPush
-  Future<SyncResult> pushFolder(String localPath) =>
-      _pushHandler.pushFolder(localPath);
+  /// フォルダ単位でPush（[snapshot] は同じフォルダの判定に使った材料）
+  Future<SyncResult> pushFolder(String localPath, {SyncSnapshot? snapshot}) =>
+      _pushHandler.pushFolder(localPath, snapshot: snapshot);
 
   /// DriveからプロジェクトをPull（ダウンロード）
   Future<SyncResult> pull(
@@ -227,14 +223,6 @@ class SyncEngine {
     void Function(SyncProgress progress)? onProgress,
   }) =>
       _pullHandler.pull(driveFolderId, localPath, onProgress: onProgress);
-
-  /// 共有URLからプロジェクトをPull
-  Future<SyncResult> pullFromUrl(
-    String shareUrl,
-    String localPath, {
-    void Function(SyncProgress progress)? onProgress,
-  }) =>
-      _pullHandler.pullFromUrl(shareUrl, localPath, onProgress: onProgress);
 
   /// Driveフォルダをローカルにクローン
   Future<bool> cloneFromDrive({
@@ -254,32 +242,60 @@ class SyncEngine {
         onProgress: onProgress,
       );
 
-  /// フォルダ単位でPull
-  Future<SyncResult> pullFolder(String localPath) =>
-      _pullHandler.pullFolder(localPath);
+  /// フォルダ単位でPull（[snapshot] は同じフォルダの判定に使った材料）
+  Future<SyncResult> pullFolder(String localPath, {SyncSnapshot? snapshot}) =>
+      _pullHandler.pullFolder(localPath, snapshot: snapshot);
 
-  /// フォルダの同期状態をチェック
-  Future<FolderSyncStatus> checkSyncStatus(String localPath) =>
-      _conflictResolver.checkSyncStatus(localPath);
+  Future<({SyncSnapshot? snapshot, FolderSyncStatus? failure})> _take(String localPath) =>
+      SyncSnapshot.take(localPath, driveService: _driveService, kmetaService: _kmetaService, fileOps: _fileOps);
 
-  /// 同期状態の詳細を取得
-  Future<FolderSyncStatusDetail> checkSyncStatusDetail(String localPath) =>
-      _conflictResolver.checkSyncStatusDetail(localPath);
+  /// 同期状態の詳細を取得（ファイルID単位でDriveとローカルを比較）
+  Future<FolderSyncStatusDetail> checkSyncStatusDetail(String localPath) async {
+    if (!_driveService.isDriveApiAvailable) {
+      return const FolderSyncStatusDetail(status: FolderSyncStatus.error);
+    }
+    try {
+      final taken = await _take(localPath);
+      final snapshot = taken.snapshot;
+      if (snapshot == null) return FolderSyncStatusDetail(status: taken.failure!);
+      return await snapshot.toStatusDetail(_fileOps);
+    } catch (e) {
+      AppLogger.error('[SyncEngine] 同期状態チェックエラー: $e');
+      return const FolderSyncStatusDetail(status: FolderSyncStatus.error);
+    }
+  }
 
-  /// マージ用のファイルエントリ一覧を取得
-  Future<List<MergeFileEntry>> getMergeEntries(String localPath) =>
-      _conflictResolver.getMergeEntries(localPath);
+  /// マージ用のファイルエントリ一覧を取得（[snapshot] を渡せばそれで判定する）
+  Future<List<MergeFileEntry>> getMergeEntries(String localPath, {SyncSnapshot? snapshot}) async {
+    try {
+      final s = snapshot ?? (await _take(localPath)).snapshot;
+      return s == null ? [] : await s.toMergeEntries();
+    } catch (e) {
+      AppLogger.error('[SyncEngine] getMergeEntries エラー: $e');
+      return [];
+    }
+  }
 
-  /// マージを実行
+  /// マージを実行（[snapshot] を渡せば、Drive のフォルダ構成はそれを使う）
   Future<SyncResult> executeMerge(
     String localPath,
-    List<MergeDecision> decisions,
-  ) =>
-      _conflictResolver.executeMerge(localPath, decisions);
+    List<MergeDecision> decisions, {
+    SyncSnapshot? snapshot,
+  }) =>
+      _conflictResolver.executeMerge(localPath, decisions, snapshot: snapshot);
 
-  /// Driveのフォルダ構造をローカルに反映（空フォルダ含む）
-  Future<int> ensureDriveFolders(String localPath) =>
-      _conflictResolver.ensureDriveFolders(localPath);
+  /// Driveのフォルダ構造をローカルに反映（空フォルダ含む）。作ったフォルダ数を返す
+  Future<int> ensureDriveFolders(String localPath) async {
+    try {
+      final driveId = (await _kmetaService.getMeta(localPath)).sync.driveId;
+      if (driveId == null) return 0;
+      final tree = await _fileOps.listDriveTree(driveId);
+      return await _fileOps.ensureLocalDirs(localPath, tree.folderPaths);
+    } catch (e) {
+      AppLogger.error('[SyncEngine] ensureDriveFolders エラー: $e');
+      return 0;
+    }
+  }
 }
 
 /// フォルダの同期状態
@@ -340,6 +356,9 @@ class FolderSyncStatusDetail {
   final List<String> remoteModifiedFiles;
   final List<FileChangeInfo> remoteMovedFiles;
 
+  /// 判定に使った材料。push / pull / マージに渡すと Drive をもう一度たどらない（判定できなかったときは null）
+  final SyncSnapshot? snapshot;
+
   const FolderSyncStatusDetail({
     required this.status,
     this.localAdded = 0,
@@ -356,6 +375,7 @@ class FolderSyncStatusDetail {
     this.remoteDeletedFiles = const [],
     this.remoteModifiedFiles = const [],
     this.remoteMovedFiles = const [],
+    this.snapshot,
   });
 
   /// 変更があるか

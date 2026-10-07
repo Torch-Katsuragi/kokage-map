@@ -304,6 +304,61 @@ void main() {
     });
   });
 
+  // 同期のたびに Drive をたどり直さない（2026-10-07）。listFiles はフォルダ 1 つにつき 1 回（根と sub/ で 2 回）
+  group('Drive への問い合わせ', () {
+    test('push は Drive を 1 回だけたどり、あるフォルダを聞き直さない', () async {
+      await shared();
+      put('mod.jpg', 20);
+      put('sub/moved.jpg', 21);
+      await tick();
+      drive.calls.clear();
+      expect((await engine.push(a, driveFolder: rootId)).success, isTrue);
+      expect(drive.calls['listFiles'], 2);
+      expect(drive.calls['getOrCreateSubFolder'], isNull);
+      expect(drive.calls['uploadFileById'], 2);
+    });
+
+    test('判定の材料を渡せば、push / pull / マージは Drive をたどり直さない', () async {
+      await shared();
+      await changeLocally();
+      drive.calls.clear();
+      var detail = await engine.checkSyncStatusDetail(a);
+      expect(detail.status, FolderSyncStatus.localChanges);
+      expect((await engine.pushFolder(a, snapshot: detail.snapshot)).success, isTrue);
+      expect((drive.calls['listFiles'], drive.calls['getFolderInfo']), (2, 1));
+
+      await tick();
+      drive.touch(drive.fileAt(rootId, 'keep.jpg')!.id, jpg(10));
+      await drive.uploadBytes(jpg(6), 'r.jpg', (await drive.getOrCreateSubFolder(rootId, 'other'))!.id!);
+      await drive.getOrCreateSubFolder(rootId, 'empty');
+      await tick();
+      drive.calls.clear();
+      detail = await engine.checkSyncStatusDetail(a);
+      expect(detail.status, FolderSyncStatus.remoteChanges);
+      expect((await engine.pullFolder(a, snapshot: detail.snapshot)).success, isTrue);
+      // 根・sub/・other/・empty/
+      expect((drive.calls['listFiles'], drive.calls['getFolderInfo']), (4, 1));
+
+      await tick();
+      put('keep.jpg', 30);
+      drive.touch(drive.fileAt(rootId, 'mod.jpg')!.id, jpg(31));
+      await tick();
+      drive.calls.clear();
+      detail = await engine.checkSyncStatusDetail(a);
+      expect(detail.status, FolderSyncStatus.conflict);
+      final entries = await engine.getMergeEntries(a, snapshot: detail.snapshot);
+      final decisions = [
+        for (final e in entries)
+          MergeDecision(entry: e, choice: e.localChange != MergeChangeType.none ? MergeChoice.local : MergeChoice.remote),
+      ];
+      final r = await engine.executeMerge(a, decisions, snapshot: detail.snapshot);
+      expect(r.success, isTrue, reason: r.errorMessage);
+      expect((drive.calls['listFiles'], drive.calls['getFolderInfo']), (4, 1));
+      expect(local('mod.jpg').readAsBytesSync(), jpg(31));
+      expect(drive.fileAt(rootId, 'keep.jpg')!.bytes, jpg(30));
+    });
+  });
+
   group('push / pull', () {
     test('push は手元に無いものを Drive から消し、改名を Drive にも写す', () async {
       await shared();

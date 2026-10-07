@@ -14,7 +14,8 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: 同期コンフリクト解決
-// 同期状態チェック、マージエントリ取得、マージ実行を担当
+// ファイルごとの選択（端末を採用・クラウドを採用・行単位で合わせる）の反映を担当
+// （何が変わったかの判定は sync_snapshot.dart）
 
 import 'package:path/path.dart' as p;
 
@@ -33,6 +34,53 @@ import 'qgs_merger.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
+import 'sync_snapshot.dart';
+
+/// 1 回のマージの途中経過（帳簿・数・衝突）
+class _MergeRun {
+  _MergeRun(this.localPath, this.driveId, this.syncedFiles, this.folderIdCache);
+
+  final String localPath;
+  final String driveId;
+
+  /// 書き換えていく帳簿
+  final Map<String, KMetaSyncFile> syncedFiles;
+
+  /// Drive のフォルダ：相対パス→ID（Drive の一覧で種を入れ、作ったフォルダも足していく）
+  final Map<String, String> folderIdCache;
+
+  int uploaded = 0;
+  int downloaded = 0;
+  int deleted = 0;
+  int moved = 0;
+  int merged = 0;
+  final conflicts = <GpkgConflict>[];
+  final failedMerges = <String>[];
+  final settingConflicts = <QgsSettingConflict>[];
+
+  /// 行単位マージで初めて要るときに作る（base の写しにも使い回す）
+  Geodiff? geodiff;
+
+  /// 同期できたと帳簿に書く
+  void record(String relativePath, String driveFileId, DateTime? remoteModifiedTime) {
+    syncedFiles[relativePath] = KMetaSyncFile(
+      driveFileId: driveFileId,
+      lastSyncedTime: DateTime.now(),
+      remoteModifiedTime: remoteModifiedTime,
+    );
+  }
+
+  SyncResult toResult() => SyncResult.success(
+        uploadedCount: uploaded,
+        downloadedCount: downloaded,
+        deletedCount: deleted,
+        movedCount: moved,
+        mergedCount: merged,
+        conflicts: conflicts,
+        failedMerges: failedMerges,
+        settingConflicts: settingConflicts,
+      );
+}
 
 /// コンフリクト解決ハンドラー
 class SyncConflictResolver {
@@ -46,743 +94,37 @@ class SyncConflictResolver {
     required this._fileOps,
   });
 
-  /// フォルダの同期状態をチェック
-  /// ファイルID単位でDriveとローカルを比較
-  Future<FolderSyncStatus> checkSyncStatus(String localPath) async {
-    final detail = await checkSyncStatusDetail(localPath);
-    return detail.status;
-  }
-
-  /// 同期状態の詳細を取得
-  Future<FolderSyncStatusDetail> checkSyncStatusDetail(String localPath) async {
-    if (!_driveService.isDriveApiAvailable) {
-      return const FolderSyncStatusDetail(status: FolderSyncStatus.error);
-    }
-
-    try {
-      final meta = await _kmetaService.getMeta(localPath);
-      final driveId = meta.sync.driveId;
-      final syncedFiles = meta.sync.files;
-
-      if (driveId == null) {
-        return const FolderSyncStatusDetail(status: FolderSyncStatus.notLinked);
-      }
-
-      final folderInfo = await _driveService.getFolderInfo(driveId);
-      if (folderInfo == null) {
-        return const FolderSyncStatusDetail(status: FolderSyncStatus.error);
-      }
-
-      final driveData = await _fileOps.listDriveFilesWithFolders(driveId);
-      final driveAllEntries = driveData.files;
-      final driveFolderMap = driveData.folderMap;
-
-      final driveIdMap = <String, DriveFileEntry>{};
-      for (final entry in driveAllEntries) {
-        final fileId = entry.file.id;
-        if (fileId != null) driveIdMap[fileId] = entry;
-      }
-
-      // 中身は SyncFileOperations.scanLocalFiles と同じなので、そちらに任せる
-      final localFiles = await _fileOps.scanLocalFiles(localPath);
-
-      int localAdded = 0;
-      int localDeleted = 0;
-      int localModified = 0;
-      int remoteAdded = 0;
-      int remoteDeleted = 0;
-      int remoteModified = 0;
-      int remoteMoved = 0;
-      final localAddedFiles = <String>[];
-      final localDeletedFiles = <String>[];
-      final localModifiedFiles = <String>[];
-      final remoteAddedFiles = <String>[];
-      final remoteDeletedFiles = <String>[];
-      final remoteModifiedFiles = <String>[];
-      final remoteMovedFiles = <FileChangeInfo>[];
-
-      // syncedFilesを driveFileId → syncedPath に反転
-      final syncedIdToPath = <String, String>{};
-      for (final entry in syncedFiles.entries) {
-        if (p.basename(entry.key) == kMetaFileName) continue;
-        syncedIdToPath[entry.value.driveFileId] = entry.key;
-      }
-
-      final movedFileIds = <String>{};
-      final movedToPathSet = <String>{};
-
-      for (final entry in syncedFiles.entries) {
-        final syncedPath = entry.key;
-        if (p.basename(syncedPath) == kMetaFileName) continue;
-
-        final syncInfo = entry.value;
-        final lastSyncedTime = syncInfo.lastSyncedTime;
-        final driveEntry = driveIdMap[syncInfo.driveFileId];
-
-        if (driveEntry == null) {
-          remoteDeleted++;
-          remoteDeletedFiles.add(syncedPath);
-        } else {
-          final drivePath = driveEntry.relativePath;
-          final driveFile = driveEntry.file;
-
-          if (syncedPath != drivePath && syncInfo.isPendingLocalMoveFrom(drivePath)) {
-            // この端末で改名・移動したもの（Drive はまだ元の場所）。push が Drive 側も動かす
-            localModified++;
-            localModifiedFiles.add(syncedPath);
-            movedFileIds.add(syncInfo.driveFileId);
-            movedToPathSet.add(drivePath);
-          } else if (syncedPath != drivePath) {
-            final alsoModified = driveFile.modifiedTime != null &&
-                syncInfo.isRemoteNewer(driveFile.modifiedTime!);
-
-            remoteMoved++;
-            remoteMovedFiles.add(FileChangeInfo(
-              fileName: syncedPath,
-              type: alsoModified
-                  ? FileChangeType.movedAndModified
-                  : FileChangeType.moved,
-              movedFrom: syncedPath,
-              movedTo: drivePath,
-            ));
-            movedFileIds.add(syncInfo.driveFileId);
-            movedToPathSet.add(drivePath);
-          } else {
-            if (lastSyncedTime == null) {
-              remoteModified++;
-              remoteModifiedFiles.add(syncedPath);
-            } else if (driveFile.modifiedTime != null &&
-                syncInfo.isRemoteNewer(driveFile.modifiedTime!)) {
-              remoteModified++;
-              remoteModifiedFiles.add(syncedPath);
-            }
-          }
-        }
-
-        if (movedFileIds.contains(syncInfo.driveFileId)) {
-          localFiles.remove(syncedPath);
-        } else if (localFiles.containsKey(syncedPath)) {
-          final localModifiedTime = localFiles[syncedPath]!;
-          if (lastSyncedTime == null) {
-            localModified++;
-            localModifiedFiles.add(syncedPath);
-          } else if (localModifiedTime.isAfter(lastSyncedTime)) {
-            localModified++;
-            localModifiedFiles.add(syncedPath);
-          }
-          localFiles.remove(syncedPath);
-        } else {
-          localDeleted++;
-          localDeletedFiles.add(syncedPath);
-        }
-      }
-
-      localAdded = localFiles.length;
-      if (localFiles.isNotEmpty) {
-        localAddedFiles.addAll(localFiles.keys);
-      }
-
-      for (final entry in driveAllEntries) {
-        if (p.basename(entry.relativePath) == kMetaFileName) continue;
-        if (movedToPathSet.contains(entry.relativePath)) continue;
-        if (movedFileIds.contains(entry.file.id)) continue;
-        // syncedIdToPathにIDがあればsyncedFilesに登録済み（パスが違っても移動として処理済み）
-        if (syncedIdToPath.containsKey(entry.file.id)) continue;
-        if (!syncedFiles.containsKey(entry.relativePath)) {
-          remoteAdded++;
-          remoteAddedFiles.add(entry.relativePath);
-        }
-      }
-
-      // Driveにあるがローカルに存在しないフォルダを検出
-      for (final relativeFolderPath in driveFolderMap.values) {
-        if (relativeFolderPath.isEmpty) continue;
-        final localFolder =
-            _fileOps.relativePathToLocalPath(localPath, relativeFolderPath);
-        if (!await fs.isDirectory(localFolder)) {
-          remoteAdded++;
-          remoteAddedFiles.add('$relativeFolderPath/');
-        }
-      }
-
-      final hasLocalChanges =
-          localAdded > 0 || localDeleted > 0 || localModified > 0;
-      final hasRemoteChanges =
-          remoteAdded > 0 || remoteDeleted > 0 || remoteModified > 0 || remoteMoved > 0;
-
-      if (syncedFiles.isEmpty && meta.sync.lastSynced == null) {
-        return FolderSyncStatusDetail(
-          status: FolderSyncStatus.remoteChanges,
-          localAdded: localAdded,
-          localDeleted: localDeleted,
-          localModified: localModified,
-          remoteAdded: remoteAdded,
-          remoteDeleted: remoteDeleted,
-          remoteModified: remoteModified,
-          remoteMoved: remoteMoved,
-          localAddedFiles: localAddedFiles,
-          localDeletedFiles: localDeletedFiles,
-          localModifiedFiles: localModifiedFiles,
-          remoteAddedFiles: remoteAddedFiles,
-          remoteDeletedFiles: remoteDeletedFiles,
-          remoteModifiedFiles: remoteModifiedFiles,
-          remoteMovedFiles: remoteMovedFiles,
-        );
-      }
-
-      final status = hasLocalChanges && hasRemoteChanges
-          ? FolderSyncStatus.conflict
-          : hasLocalChanges
-              ? FolderSyncStatus.localChanges
-              : hasRemoteChanges
-                  ? FolderSyncStatus.remoteChanges
-                  : FolderSyncStatus.synced;
-
-      return FolderSyncStatusDetail(
-        status: status,
-        localAdded: localAdded,
-        localDeleted: localDeleted,
-        localModified: localModified,
-        remoteAdded: remoteAdded,
-        remoteDeleted: remoteDeleted,
-        remoteModified: remoteModified,
-        remoteMoved: remoteMoved,
-        localAddedFiles: localAddedFiles,
-        localDeletedFiles: localDeletedFiles,
-        localModifiedFiles: localModifiedFiles,
-        remoteAddedFiles: remoteAddedFiles,
-        remoteDeletedFiles: remoteDeletedFiles,
-        remoteModifiedFiles: remoteModifiedFiles,
-        remoteMovedFiles: remoteMovedFiles,
-      );
-    } catch (e) {
-      AppLogger.error('[SyncEngine] 同期状態チェックエラー: $e');
-      return const FolderSyncStatusDetail(status: FolderSyncStatus.error);
-    }
-  }
-
-  /// マージ用のファイルエントリ一覧を取得
-  Future<List<MergeFileEntry>> getMergeEntries(String localPath) async {
-    final entries = <MergeFileEntry>[];
-
-    try {
-      final meta = await _kmetaService.getMeta(localPath);
-      final driveId = meta.sync.driveId;
-      final syncedFiles = meta.sync.files;
-
-      if (driveId == null) {
-        AppLogger.debug('[getMergeEntries] driveId が無い');
-        return entries;
-      }
-
-      final localFilesFuture = _fileOps.scanLocalFiles(localPath);
-      final folderInfo = await _driveService.getFolderInfo(driveId);
-      if (folderInfo == null) {
-        AppLogger.debug('[getMergeEntries] Driveのフォルダを取れない: $driveId');
-        return entries;
-      }
-
-      final driveAllEntries =
-          (await _fileOps.listDriveFilesWithFolders(driveId)).files;
-
-      final driveIdMap = <String, DriveFileEntry>{};
-      for (final entry in driveAllEntries) {
-        final fileId = entry.file.id;
-        if (fileId != null) driveIdMap[fileId] = entry;
-      }
-
-      final localFiles = await localFilesFuture;
-      AppLogger.debug(
-        '[getMergeEntries] local=${localFiles.keys.toList()} '
-        'drive=${driveAllEntries.map((e) => e.relativePath).toList()} '
-        'synced=${syncedFiles.keys.toList()}',
-      );
-
-      // syncedFilesを driveFileId → syncedPath に反転
-      final syncedIdToPath = <String, String>{};
-      for (final entry in syncedFiles.entries) {
-        if (p.basename(entry.key) == kMetaFileName) continue;
-        syncedIdToPath[entry.value.driveFileId] = entry.key;
-      }
-
-      final movedFileIds = <String>{};
-      final movedToPathSet = <String>{};
-
-      for (final entry in syncedFiles.entries) {
-        final syncedPath = entry.key;
-        if (p.basename(syncedPath) == kMetaFileName) continue;
-
-        final syncInfo = entry.value;
-        final lastSyncedTime = syncInfo.lastSyncedTime;
-        final driveEntry = driveIdMap[syncInfo.driveFileId];
-
-        MergeChangeType localChange = MergeChangeType.none;
-        MergeChangeType remoteChange = MergeChangeType.none;
-        DateTime? localModTime;
-        final DateTime? remoteModTime = driveEntry?.file.modifiedTime;
-        FileChangeInfo? moveInfo;
-        var localMove = false;
-
-        if (driveEntry == null) {
-          remoteChange = MergeChangeType.deleted;
-        } else {
-          final drivePath = driveEntry.relativePath;
-
-          if (syncedPath != drivePath && syncInfo.isPendingLocalMoveFrom(drivePath)) {
-            // この端末で改名・移動したもの（Drive はまだ元の場所）→ ローカルの移動
-            localMove = true;
-            localChange = MergeChangeType.moved;
-            moveInfo = FileChangeInfo(
-              fileName: syncedPath,
-              type: FileChangeType.moved,
-              movedFrom: drivePath,
-              movedTo: syncedPath,
-            );
-            movedFileIds.add(syncInfo.driveFileId);
-            movedToPathSet.add(drivePath);
-          } else if (syncedPath != drivePath) {
-            remoteChange = MergeChangeType.moved;
-            moveInfo = FileChangeInfo(
-              fileName: syncedPath,
-              type: FileChangeType.moved,
-              movedFrom: syncedPath,
-              movedTo: drivePath,
-            );
-            movedFileIds.add(syncInfo.driveFileId);
-            movedToPathSet.add(drivePath);
-          } else if (driveEntry.file.modifiedTime != null &&
-              syncInfo.isRemoteNewer(driveEntry.file.modifiedTime!)) {
-            remoteChange = MergeChangeType.modified;
-          }
-        }
-
-        if (localMove) {
-          // localChange は moved のまま
-        } else if (movedFileIds.contains(syncInfo.driveFileId)) {
-          localChange = MergeChangeType.none;
-        } else if (localFiles.containsKey(syncedPath)) {
-          localModTime = localFiles[syncedPath];
-          if (lastSyncedTime != null && localModTime!.isAfter(lastSyncedTime)) {
-            localChange = MergeChangeType.modified;
-          }
-        } else {
-          localChange = MergeChangeType.deleted;
-        }
-
-        if (localChange != MergeChangeType.none || remoteChange != MergeChangeType.none) {
-          // 両方 modified の gpkg で base が残っていれば、行単位で合わせられる
-          final mergeable = localChange == MergeChangeType.modified &&
-              remoteChange == MergeChangeType.modified &&
-              await SyncBaseStore.hasBase(localPath, syncedPath);
-          entries.add(MergeFileEntry(
-            relativePath: syncedPath,
-            localChange: localChange,
-            remoteChange: remoteChange,
-            localModifiedTime: localModTime,
-            remoteModifiedTime: remoteModTime,
-            moveInfo: moveInfo,
-            driveFileId: syncInfo.driveFileId,
-            mergeable: mergeable,
-          ));
-        }
-
-        localFiles.remove(syncedPath);
-      }
-
-      for (final entry in localFiles.entries) {
-        entries.add(MergeFileEntry(
-          relativePath: entry.key,
-          localChange: MergeChangeType.added,
-          remoteChange: MergeChangeType.none,
-          localModifiedTime: entry.value,
-          remoteModifiedTime: null,
-        ));
-      }
-
-      AppLogger.debug('[SyncEngine] getMergeEntries: Drive新規ファイル確認 (${driveAllEntries.length}件)');
-      for (final driveEntry in driveAllEntries) {
-        if (p.basename(driveEntry.relativePath) == kMetaFileName) continue;
-        if (movedToPathSet.contains(driveEntry.relativePath)) continue;
-        if (movedFileIds.contains(driveEntry.file.id)) continue;
-        if (syncedIdToPath.containsKey(driveEntry.file.id)) continue;
-        if (!syncedFiles.containsKey(driveEntry.relativePath)) {
-          AppLogger.debug('  リモート追加検出: ${driveEntry.relativePath} (id: ${driveEntry.file.id})');
-          entries.add(MergeFileEntry(
-            relativePath: driveEntry.relativePath,
-            localChange: MergeChangeType.none,
-            remoteChange: MergeChangeType.added,
-            localModifiedTime: null,
-            remoteModifiedTime: driveEntry.file.modifiedTime,
-            driveFileId: driveEntry.file.id,
-          ));
-        }
-      }
-
-      AppLogger.debug('[SyncEngine] getMergeEntries完了: ${entries.length}件のエントリ');
-      return entries;
-    } catch (e) {
-      AppLogger.error('[SyncEngine] getMergeEntries エラー: $e');
-      return entries;
-    }
-  }
-
   /// マージを実行
+  ///
+  /// [snapshot] が同じ連携先のものなら、Drive のフォルダ構成はそれを使う（たどり直さない）
   Future<SyncResult> executeMerge(
     String localPath,
-    List<MergeDecision> decisions,
-  ) async {
-    Geodiff? geodiff;
+    List<MergeDecision> decisions, {
+    SyncSnapshot? snapshot,
+  }) async {
+    _MergeRun? run;
     try {
       final meta = await _kmetaService.getMeta(localPath);
       final driveId = meta.sync.driveId;
-      final syncedFiles = Map<String, KMetaSyncFile>.from(meta.sync.files);
-
       if (driveId == null) {
         return SyncResult.failure('Drive連携されていません');
       }
 
-      await ensureDriveFolders(localPath, driveId: driveId);
+      final tree = snapshot != null && snapshot.driveId == driveId
+          ? snapshot.drive
+          : await _fileOps.listDriveTree(driveId);
+      run = _MergeRun(localPath, driveId, Map.of(meta.sync.files), tree.folderIdsByPath());
 
-      int uploadedCount = 0;
-      int downloadedCount = 0;
-      int deletedCount = 0;
-      int movedCount = 0;
-      int mergedCount = 0;
-      final conflicts = <GpkgConflict>[];
-      final failedMerges = <String>[];
-      final settingConflicts = <QgsSettingConflict>[];
-
-      final folderIdCache = <String, String>{};
+      // Driveのフォルダ構造をローカルに反映（空フォルダ含む）
+      try {
+        await _fileOps.ensureLocalDirs(localPath, tree.folderPaths);
+      } catch (e) {
+        AppLogger.error('[SyncEngine] ensureDriveFolders エラー: $e');
+      }
 
       AppLogger.debug('[SyncEngine] executeMerge開始: ${decisions.length}件の決定');
-
       for (final decision in decisions) {
-        final entry = decision.entry;
-        final choice = decision.choice;
-        final relativePath = entry.relativePath;
-        final localFilePath = _fileOps.relativePathToLocalPath(localPath, relativePath);
-
-        AppLogger.debug('[SyncEngine] 処理: $relativePath');
-        AppLogger.debug('  choice: $choice');
-        AppLogger.debug('  localChange: ${entry.localChange}');
-        AppLogger.debug('  remoteChange: ${entry.remoteChange}');
-        AppLogger.debug('  driveFileId: ${entry.driveFileId}');
-
-        if (choice == MergeChoice.merge && SyncBaseStore.isQgs(relativePath)) {
-          final merged = await _mergeQgs(
-            localPath: localPath,
-            entry: entry,
-            localFilePath: localFilePath,
-            driveId: driveId,
-            folderIdCache: folderIdCache,
-          );
-          if (merged == null) {
-            AppLogger.debug('  → 設定を合わせられなかった。衝突のまま残す');
-            failedMerges.add(relativePath);
-            continue;
-          }
-          mergedCount++;
-          settingConflicts.addAll([for (final c in merged.conflicts) c.withDir(p.dirname(localFilePath))]);
-          syncedFiles[relativePath] = KMetaSyncFile(
-            driveFileId: merged.driveFileId,
-            lastSyncedTime: DateTime.now(),
-            remoteModifiedTime: merged.remoteModifiedTime,
-          );
-          continue;
-        }
-        if (choice == MergeChoice.merge) {
-          geodiff ??= Geodiff();
-          final merged = await _mergeGpkg(
-            localPath: localPath,
-            entry: entry,
-            localFilePath: localFilePath,
-            driveId: driveId,
-            folderIdCache: folderIdCache,
-            geodiff: geodiff,
-          );
-          if (merged == null) {
-            AppLogger.debug('  → 行単位で合わせられなかった。衝突のまま残す');
-            failedMerges.add(relativePath);
-            continue;
-          }
-          mergedCount++;
-          conflicts.addAll(merged.conflicts);
-          syncedFiles[relativePath] = KMetaSyncFile(
-            driveFileId: merged.driveFileId,
-            lastSyncedTime: DateTime.now(),
-            remoteModifiedTime: merged.remoteModifiedTime,
-          );
-          continue;
-        }
-        if (choice == MergeChoice.local) {
-          switch (entry.localChange) {
-            case MergeChangeType.added:
-            case MergeChangeType.modified:
-              if (await fs.exists(localFilePath)) {
-                final relativeDir = p.dirname(relativePath);
-                String targetFolderId = driveId;
-                if (relativeDir != '.' && relativeDir.isNotEmpty) {
-                  final folderId = await _fileOps.getDriveFolderIdForRelativeDir(
-                    driveId, relativeDir, folderIdCache);
-                  if (folderId != null) {
-                    targetFolderId = folderId;
-                  }
-                }
-
-                final result =
-                    await _driveService.uploadFile(localFilePath, targetFolderId);
-                if (result != null) {
-                  uploadedCount++;
-                  syncedFiles[relativePath] = KMetaSyncFile(
-                    driveFileId: result.id!,
-                    lastSyncedTime: DateTime.now(),
-                    remoteModifiedTime: result.modifiedTime,
-                  );
-                  await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
-                }
-              }
-            case MergeChangeType.deleted:
-              if (entry.driveFileId != null) {
-                await _driveService.deleteFile(entry.driveFileId!);
-                syncedFiles.remove(relativePath);
-                deletedCount++;
-              }
-            case MergeChangeType.none:
-              AppLogger.debug('  → ローカル変更なし、リモート変更を復元: ${entry.remoteChange}');
-              switch (entry.remoteChange) {
-                case MergeChangeType.deleted:
-                  if (await fs.exists(localFilePath)) {
-                    final relativeDir = p.dirname(relativePath);
-                    String targetFolderId = driveId;
-                    if (relativeDir != '.' && relativeDir.isNotEmpty) {
-                      final folderId = await _fileOps.getDriveFolderIdForRelativeDir(
-                        driveId, relativeDir, folderIdCache);
-                      if (folderId != null) {
-                        targetFolderId = folderId;
-                      }
-                    }
-
-                    final result =
-                    await _driveService.uploadFile(localFilePath, targetFolderId);
-                    if (result != null) {
-                      uploadedCount++;
-                      syncedFiles[relativePath] = KMetaSyncFile(
-                        driveFileId: result.id!,
-                        lastSyncedTime: DateTime.now(),
-                        remoteModifiedTime: result.modifiedTime,
-                      );
-                      await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
-                    }
-                  }
-                case MergeChangeType.added:
-                  AppLogger.debug('  → リモート追加を削除（復元）');
-                  if (entry.driveFileId != null) {
-                    AppLogger.debug('    削除対象driveFileId: ${entry.driveFileId}');
-
-                    final metadata = await _driveService.getFileMetadata(entry.driveFileId!);
-                    if (metadata != null) {
-                      AppLogger.debug('    ファイル存在確認OK: ${metadata.name}, trashed=${metadata.trashed}');
-                      final deleted = await _driveService.deleteFile(entry.driveFileId!);
-                      if (deleted) {
-                        syncedFiles.remove(relativePath);
-                        deletedCount++;
-                        AppLogger.debug('    削除完了');
-                      } else {
-                        AppLogger.debug('    削除失敗');
-                      }
-                    } else {
-                      AppLogger.debug('    ファイルが見つからない（getFileMetadata=null）');
-                      syncedFiles.remove(relativePath);
-                    }
-                  } else {
-                    AppLogger.debug('    driveFileIdがnullのためスキップ');
-                  }
-                case MergeChangeType.modified:
-                  if (await fs.exists(localFilePath)) {
-                    final relativeDir = p.dirname(relativePath);
-                    String targetFolderId = driveId;
-                    if (relativeDir != '.' && relativeDir.isNotEmpty) {
-                      final folderId = await _fileOps.getDriveFolderIdForRelativeDir(
-                        driveId, relativeDir, folderIdCache);
-                      if (folderId != null) {
-                        targetFolderId = folderId;
-                      }
-                    }
-
-                    final result =
-                    await _driveService.uploadFile(localFilePath, targetFolderId);
-                    if (result != null) {
-                      uploadedCount++;
-                      syncedFiles[relativePath] = KMetaSyncFile(
-                        driveFileId: result.id!,
-                        lastSyncedTime: DateTime.now(),
-                        remoteModifiedTime: result.modifiedTime,
-                      );
-                      await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
-                    }
-                  }
-                case MergeChangeType.moved:
-                  // ローカルを採用 → Driveのファイルを元の場所（ローカルのパス）に戻す
-                  if (entry.driveFileId != null && entry.moveInfo != null) {
-                    final relDir = p.dirname(relativePath);
-                    final localParentId = await _fileOps.getDriveFolderIdForRelativeDir(
-                      driveId, relDir, folderIdCache);
-                    if (localParentId != null) {
-                      await _driveService.moveFile(
-                        entry.driveFileId!,
-                        newParentId: localParentId,
-                      );
-                      syncedFiles[relativePath] = KMetaSyncFile(
-                        driveFileId: entry.driveFileId!,
-                        lastSyncedTime: DateTime.now(),
-                      );
-                    }
-                  }
-                case MergeChangeType.none:
-                  break;
-              }
-            case MergeChangeType.moved:
-              // この端末で改名・移動した → Drive 側も同じ場所・名前へ（中身は同じファイル、履歴も残る）。
-              // `.qgs` は名前が設定から決まるので、dir の改名のあと新しい名前に付け替わっていて手元に無いことがある。
-              // そのときは Drive の古い名前のものを消す（新しい名前のものは追加として上がる）
-              if (entry.driveFileId != null && SyncBaseStore.isQgs(relativePath) && !await fs.exists(localFilePath)) {
-                if (await _driveService.deleteFile(entry.driveFileId!)) {
-                  syncedFiles.remove(relativePath);
-                  deletedCount++;
-                }
-              } else if (entry.driveFileId != null) {
-                final relDir = p.dirname(relativePath);
-                final parentId = relDir == '.' || relDir.isEmpty
-                    ? driveId
-                    : await _fileOps.getDriveFolderIdForRelativeDir(driveId, relDir, folderIdCache);
-                final from = entry.moveInfo?.movedFrom;
-                final newName = p.posix.basename(relativePath);
-                if (parentId != null &&
-                    await _driveService.moveFile(
-                      entry.driveFileId!,
-                      newParentId: parentId,
-                      newName: from != null && p.posix.basename(from) != newName ? newName : null,
-                    )) {
-                  syncedFiles[relativePath] = KMetaSyncFile(
-                    driveFileId: entry.driveFileId!,
-                    lastSyncedTime: DateTime.now(),
-                    remoteModifiedTime: entry.remoteModifiedTime,
-                  );
-                  movedCount++;
-                }
-              }
-          }
-        } else {
-          // リモートを採用
-          switch (entry.remoteChange) {
-            case MergeChangeType.added:
-            case MergeChangeType.modified:
-              if (entry.driveFileId != null) {
-                await fs.createDirectory(p.dirname(localFilePath));
-
-                // この端末のリンク情報は、落とした .qgs で上書きしない
-                final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
-                await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
-
-                final success = await _driveService.downloadFile(
-                  entry.driveFileId!,
-                  localFilePath,
-                );
-                if (success) {
-                  await SyncBaseStore.settleAfterDownload(localFilePath);
-                  await KMetaService.instance.afterReplace(localFilePath, keepLink);
-                  downloadedCount++;
-                  syncedFiles[relativePath] = KMetaSyncFile(
-                    driveFileId: entry.driveFileId!,
-                    lastSyncedTime: DateTime.now(),
-                    remoteModifiedTime: entry.remoteModifiedTime,
-                  );
-                  await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
-                }
-              }
-            case MergeChangeType.deleted:
-              if (await fs.exists(localFilePath)) {
-                await fs.delete(localFilePath);
-                syncedFiles.remove(relativePath);
-                deletedCount++;
-              }
-            case MergeChangeType.moved:
-              if (entry.moveInfo != null && entry.driveFileId != null) {
-                final oldPath = _fileOps.relativePathToLocalPath(localPath, entry.moveInfo!.movedFrom ?? relativePath);
-                final newLocalPath = _fileOps.relativePathToLocalPath(localPath, entry.moveInfo!.movedTo ?? relativePath);
-                if (await fs.exists(oldPath)) {
-                  await fs.createDirectory(p.dirname(newLocalPath));
-                  await fs.rename(oldPath, newLocalPath);
-                  syncedFiles.remove(entry.moveInfo!.movedFrom ?? relativePath);
-
-                  syncedFiles[entry.moveInfo!.movedTo ?? relativePath] = KMetaSyncFile(
-                    driveFileId: entry.driveFileId!,
-                    lastSyncedTime: DateTime.now(),
-                    remoteModifiedTime: entry.remoteModifiedTime,
-                  );
-                  movedCount++;
-                }
-              }
-            case MergeChangeType.none:
-              switch (entry.localChange) {
-                case MergeChangeType.deleted:
-                  if (entry.driveFileId != null) {
-                    await fs.createDirectory(p.dirname(localFilePath));
-
-                    // この端末のリンク情報は、落とした .qgs で上書きしない
-                    final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
-                    await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
-
-                    final success = await _driveService.downloadFile(
-                      entry.driveFileId!,
-                      localFilePath,
-                    );
-                    if (success) {
-                      await SyncBaseStore.settleAfterDownload(localFilePath);
-                      await KMetaService.instance.afterReplace(localFilePath, keepLink);
-                      downloadedCount++;
-                      syncedFiles[relativePath] = KMetaSyncFile(
-                        driveFileId: entry.driveFileId!,
-                        lastSyncedTime: DateTime.now(),
-                        remoteModifiedTime: entry.remoteModifiedTime,
-                      );
-                      await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
-                    }
-                  }
-                case MergeChangeType.added:
-                  if (await fs.exists(localFilePath)) {
-                    await fs.delete(localFilePath);
-                    syncedFiles.remove(relativePath);
-                    deletedCount++;
-                  }
-                case MergeChangeType.modified:
-                  if (entry.driveFileId != null) {
-                    // この端末のリンク情報は、落とした .qgs で上書きしない
-                    final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
-                    await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
-                    final success = await _driveService.downloadFile(
-                      entry.driveFileId!,
-                      localFilePath,
-                    );
-                    if (success) {
-                      await SyncBaseStore.settleAfterDownload(localFilePath);
-                      await KMetaService.instance.afterReplace(localFilePath, keepLink);
-                      downloadedCount++;
-                      syncedFiles[relativePath] = KMetaSyncFile(
-                        driveFileId: entry.driveFileId!,
-                        lastSyncedTime: DateTime.now(),
-                        remoteModifiedTime: entry.remoteModifiedTime,
-                      );
-                      await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff); // web では saveBase が何もしない
-                    }
-                  }
-                case MergeChangeType.moved:
-                  break;
-                case MergeChangeType.none:
-                  break;
-              }
-          }
-        }
+        await _apply(run, decision);
       }
 
       await _kmetaService.setDriveSync(
@@ -790,126 +132,261 @@ class SyncConflictResolver {
         driveId: driveId,
         driveUrl: meta.sync.driveUrl,
         isReadOnly: meta.sync.isReadOnly,
-        files: syncedFiles,
+        files: run.syncedFiles,
       );
 
-      // Driveに存在しない空フォルダをローカルから削除（深い階層から処理）
-      await _cleanupEmptyLocalFolders(localPath, driveId);
+      // Driveに存在しない空フォルダをローカルから削除。Drive のフォルダは、最初の一覧と
+      // このマージで作ったもの（どちらも folderIdCache に入っている）
+      try {
+        await _fileOps.removeEmptyLocalDirs(localPath, run.folderIdCache.keys.toSet());
+      } catch (e) {
+        AppLogger.error('[SyncEngine] 空フォルダクリーンアップエラー: $e');
+      }
 
       AppLogger.debug(
-        '[SyncEngine] Merge完了: $uploadedCount uploaded, '
-        '$downloadedCount downloaded, $deletedCount deleted, $movedCount moved',
+        '[SyncEngine] Merge完了: ${run.uploaded} uploaded, '
+        '${run.downloaded} downloaded, ${run.deleted} deleted, ${run.moved} moved',
       );
-
-      return SyncResult.success(
-        uploadedCount: uploadedCount,
-        downloadedCount: downloadedCount,
-        deletedCount: deletedCount,
-        movedCount: movedCount,
-        mergedCount: mergedCount,
-        conflicts: conflicts,
-        failedMerges: failedMerges,
-        settingConflicts: settingConflicts,
-      );
+      return run.toResult();
     } catch (e) {
       AppLogger.error('[SyncEngine] Merge エラー: $e');
       return SyncResult.failure(e.toString());
     } finally {
-      geodiff?.dispose();
+      run?.geodiff?.dispose();
     }
   }
 
-  /// 両方が変えた gpkg を行単位で合わせて Drive に上げる（docs/technical/drive-geodiff-sync.md）。
+  /// 1 件の選択を反映する
+  Future<void> _apply(_MergeRun run, MergeDecision decision) async {
+    final entry = decision.entry;
+    final relativePath = entry.relativePath;
+    final localFilePath = _fileOps.relativePathToLocalPath(run.localPath, relativePath);
+
+    AppLogger.debug('[SyncEngine] 処理: $relativePath');
+    AppLogger.debug('  choice: ${decision.choice}');
+    AppLogger.debug('  localChange: ${entry.localChange}');
+    AppLogger.debug('  remoteChange: ${entry.remoteChange}');
+    AppLogger.debug('  driveFileId: ${entry.driveFileId}');
+
+    switch (decision.choice) {
+      case MergeChoice.merge:
+        await _merge(run, entry, localFilePath);
+      case MergeChoice.local:
+        await _keepLocal(run, entry, localFilePath);
+      case MergeChoice.remote:
+        await _takeRemote(run, entry, localFilePath);
+    }
+  }
+
+  // ========== 端末を採用 ==========
+
+  Future<void> _keepLocal(_MergeRun run, MergeFileEntry entry, String localFilePath) async {
+    final relativePath = entry.relativePath;
+    final fileId = entry.driveFileId;
+    switch (entry.localChange) {
+      case MergeChangeType.added:
+      case MergeChangeType.modified:
+        await _uploadLocal(run, relativePath, localFilePath);
+      case MergeChangeType.deleted:
+        if (fileId != null) {
+          await _driveService.deleteFile(fileId);
+          run.syncedFiles.remove(relativePath);
+          run.deleted++;
+        }
+      case MergeChangeType.none:
+        AppLogger.debug('  → ローカル変更なし、リモート変更を復元: ${entry.remoteChange}');
+        switch (entry.remoteChange) {
+          case MergeChangeType.deleted:
+          case MergeChangeType.modified:
+            await _uploadLocal(run, relativePath, localFilePath);
+          case MergeChangeType.added:
+            await _trashRemoteAddition(run, entry);
+          case MergeChangeType.moved:
+            // ローカルを採用 → Driveのファイルを元の場所（ローカルのパス）に戻す
+            if (fileId != null && entry.moveInfo != null) {
+              final localParentId = await _folderId(run, p.dirname(relativePath));
+              if (localParentId != null) {
+                await _driveService.moveFile(fileId, newParentId: localParentId);
+                run.syncedFiles[relativePath] = KMetaSyncFile(driveFileId: fileId, lastSyncedTime: DateTime.now());
+              }
+            }
+          case MergeChangeType.none:
+            break;
+        }
+      case MergeChangeType.moved:
+        await _moveOnDrive(run, entry, localFilePath);
+    }
+  }
+
+  /// 手元のファイルを Drive の同じ場所に上げる（同名があればその版を更新）
+  Future<void> _uploadLocal(_MergeRun run, String relativePath, String localFilePath) async {
+    if (!await fs.exists(localFilePath)) return;
+    // フォルダを解決できなければ根に上げる（以前から）
+    final targetFolderId = await _folderId(run, p.dirname(relativePath)) ?? run.driveId;
+    final result = await _driveService.uploadFile(localFilePath, targetFolderId);
+    if (result == null) return;
+    run.uploaded++;
+    run.record(relativePath, result.id!, result.modifiedTime);
+    await SyncBaseStore.saveBase(run.localPath, relativePath, geodiff: run.geodiff); // web では saveBase が何もしない
+  }
+
+  /// Drive にだけ足されたものを消す（端末を採用＝無かったことにする）
+  Future<void> _trashRemoteAddition(_MergeRun run, MergeFileEntry entry) async {
+    AppLogger.debug('  → リモート追加を削除（復元）');
+    final fileId = entry.driveFileId;
+    if (fileId == null) {
+      AppLogger.debug('    driveFileIdがnullのためスキップ');
+      return;
+    }
+    AppLogger.debug('    削除対象driveFileId: $fileId');
+    final metadata = await _driveService.getFileMetadata(fileId);
+    if (metadata == null) {
+      AppLogger.debug('    ファイルが見つからない（getFileMetadata=null）');
+      run.syncedFiles.remove(entry.relativePath);
+      return;
+    }
+    AppLogger.debug('    ファイル存在確認OK: ${metadata.name}, trashed=${metadata.trashed}');
+    if (await _driveService.deleteFile(fileId)) {
+      run.syncedFiles.remove(entry.relativePath);
+      run.deleted++;
+      AppLogger.debug('    削除完了');
+    } else {
+      AppLogger.debug('    削除失敗');
+    }
+  }
+
+  /// この端末で改名・移動した → Drive 側も同じ場所・名前へ（中身は同じファイル、履歴も残る）。
   ///
-  /// リモートを一時ファイルに落とし、`rebase(base, remote, local)` でローカルに両方の変更を載せ、
-  /// ローカルを上げて base を写し直す。どこかで失敗したら null（呼び手は衝突のまま残す）。
-  /// ⚠ rebase 済みなのに上げられなかったときは、ローカルには相手の変更が載ったまま base は古い。
-  ///   次の同期でもう一度 merge になる。
-  /// 両方で変わった `<dir名>.qgs` のフォルダ設定を 3-way で合わせて上げる（[QgsMerger]）。
-  /// 合わせられなければ null。QGIS が読む部分は、あとで自動更新が設定から書き直す。
-  Future<({String driveFileId, DateTime? remoteModifiedTime, List<QgsSettingConflict> conflicts})?> _mergeQgs({
-    required String localPath,
-    required MergeFileEntry entry,
-    required String localFilePath,
-    required String driveId,
-    required Map<String, String> folderIdCache,
-  }) async {
+  /// `.qgs` は名前が設定から決まるので、dir の改名のあと新しい名前に付け替わっていて手元に無いことがある。
+  /// そのときは Drive の古い名前のものを消す（新しい名前のものは追加として上がる）
+  Future<void> _moveOnDrive(_MergeRun run, MergeFileEntry entry, String localFilePath) async {
     final relativePath = entry.relativePath;
     final fileId = entry.driveFileId;
-    if (fileId == null) return null;
-    final base = SyncBaseStore.basePath(localPath, relativePath);
-    if (!await fs.exists(base) || !await fs.exists(localFilePath)) return null;
-    final tmp = SyncBaseStore.tmpPath(localPath, relativePath);
-    try {
-      await fs.createDirectory(p.dirname(tmp));
-      if (!await _driveService.downloadFile(fileId, tmp)) return null;
-      // この端末の設定の書き込み・自動更新と、読んで直して書く間を取り合わない
-      final merged = await QgsFileLock.run(localFilePath, () async {
-        final r = await QgsMerger.merge(
-          base: await fs.readAsString(base),
-          mine: await fs.readAsString(localFilePath),
-          theirs: await fs.readAsString(tmp),
-        );
-        if (r != null) await QgsFileWriter.write(localFilePath, r.xml);
-        return r;
-      });
-      if (merged == null) return null;
-      if (merged.conflicts.isNotEmpty) AppLogger.debug('  設定の衝突（この端末の値を残した）: ${merged.conflicts}');
-      _kmetaService.invalidateCache(p.dirname(localFilePath));
-
-      final meta = await _driveService.getFileMetadata(fileId);
-      final remoteAt = entry.remoteModifiedTime;
-      if (meta?.modifiedTime != null && remoteAt != null && meta!.modifiedTime!.isAfter(remoteAt)) {
-        AppLogger.debug('  Drive 側が同期開始後に動いた。上げずに次回へ');
-        return null;
+    if (fileId == null) return;
+    if (SyncBaseStore.isQgs(relativePath) && !await fs.exists(localFilePath)) {
+      if (await _driveService.deleteFile(fileId)) {
+        run.syncedFiles.remove(relativePath);
+        run.deleted++;
       }
-      final relativeDir = p.dirname(relativePath);
-      String targetFolderId = driveId;
-      if (relativeDir != '.' && relativeDir.isNotEmpty) {
-        final folderId = await _fileOps.getDriveFolderIdForRelativeDir(driveId, relativeDir, folderIdCache);
-        if (folderId != null) targetFolderId = folderId;
-      }
-      final uploaded = await _driveService.uploadFileById(localFilePath, targetFolderId, existingFileId: fileId);
-      if (uploaded == null) return null;
-      await SyncBaseStore.saveBase(localPath, relativePath);
-      AppLogger.debug('  → 設定を合わせた（衝突 ${merged.conflicts.length} 件）');
-      return (driveFileId: uploaded.id ?? fileId, remoteModifiedTime: uploaded.modifiedTime, conflicts: merged.conflicts);
-    } finally {
-      try {
-        if (await fs.exists(tmp)) await fs.delete(tmp);
-      } catch (_) {}
+      return;
+    }
+    final parentId = await _folderId(run, p.dirname(relativePath));
+    final from = entry.moveInfo?.movedFrom;
+    final newName = p.posix.basename(relativePath);
+    if (parentId != null &&
+        await _driveService.moveFile(
+          fileId,
+          newParentId: parentId,
+          newName: from != null && p.posix.basename(from) != newName ? newName : null,
+        )) {
+      run.record(relativePath, fileId, entry.remoteModifiedTime);
+      run.moved++;
     }
   }
 
-  Future<({String driveFileId, DateTime? remoteModifiedTime, List<GpkgConflict> conflicts})?> _mergeGpkg({
-    required String localPath,
-    required MergeFileEntry entry,
-    required String localFilePath,
-    required String driveId,
-    required Map<String, String> folderIdCache,
-    required Geodiff geodiff,
-  }) async {
+  // ========== クラウドを採用 ==========
+
+  Future<void> _takeRemote(_MergeRun run, MergeFileEntry entry, String localFilePath) async {
     final relativePath = entry.relativePath;
-    final fileId = entry.driveFileId;
-    if (fileId == null) return null;
-    final base = SyncBaseStore.basePath(localPath, relativePath);
-    if (!await fs.exists(base) || !await fs.exists(localFilePath)) {
-      AppLogger.debug('  base かローカルが無い: base=$base');
-      return null;
+    switch (entry.remoteChange) {
+      case MergeChangeType.added:
+      case MergeChangeType.modified:
+        await _downloadRemote(run, entry, localFilePath, createDir: true);
+      case MergeChangeType.deleted:
+        await _deleteLocal(run, relativePath, localFilePath);
+      case MergeChangeType.moved:
+        final move = entry.moveInfo;
+        final fileId = entry.driveFileId;
+        if (move == null || fileId == null) return;
+        final from = move.movedFrom ?? relativePath;
+        final to = move.movedTo ?? relativePath;
+        final oldPath = _fileOps.relativePathToLocalPath(run.localPath, from);
+        final newLocalPath = _fileOps.relativePathToLocalPath(run.localPath, to);
+        if (await fs.exists(oldPath)) {
+          await fs.createDirectory(p.dirname(newLocalPath));
+          await fs.rename(oldPath, newLocalPath);
+          run.syncedFiles.remove(from);
+          run.record(to, fileId, entry.remoteModifiedTime);
+          run.moved++;
+        }
+      case MergeChangeType.none:
+        switch (entry.localChange) {
+          case MergeChangeType.deleted:
+            await _downloadRemote(run, entry, localFilePath, createDir: true);
+          case MergeChangeType.added:
+            await _deleteLocal(run, relativePath, localFilePath);
+          case MergeChangeType.modified:
+            await _downloadRemote(run, entry, localFilePath, createDir: false);
+          case MergeChangeType.moved:
+          case MergeChangeType.none:
+            break;
+        }
     }
-    final tmp = SyncBaseStore.tmpPath(localPath, relativePath);
-    try {
-      await fs.createDirectory(p.dirname(tmp));
-      if (!await _driveService.downloadFile(fileId, tmp)) {
-        AppLogger.debug('  リモートを落とせなかった');
-        return null;
+  }
+
+  /// Drive の版で手元を置き換える
+  Future<void> _downloadRemote(
+    _MergeRun run,
+    MergeFileEntry entry,
+    String localFilePath, {
+    required bool createDir,
+  }) async {
+    final fileId = entry.driveFileId;
+    if (fileId == null) return;
+    if (createDir) await fs.createDirectory(p.dirname(localFilePath));
+    if (!await _fileOps.downloadReplacing(fileId, localFilePath)) return;
+    run.downloaded++;
+    run.record(entry.relativePath, fileId, entry.remoteModifiedTime);
+    await SyncBaseStore.saveBase(run.localPath, entry.relativePath, geodiff: run.geodiff); // web では saveBase が何もしない
+  }
+
+  Future<void> _deleteLocal(_MergeRun run, String relativePath, String localFilePath) async {
+    if (!await fs.exists(localFilePath)) return;
+    await fs.delete(localFilePath);
+    run.syncedFiles.remove(relativePath);
+    run.deleted++;
+  }
+
+  // ========== 両方の変更を合わせる ==========
+
+  Future<void> _merge(_MergeRun run, MergeFileEntry entry, String localFilePath) async {
+    final relativePath = entry.relativePath;
+    if (SyncBaseStore.isQgs(relativePath)) {
+      final merged = await _mergeWithRemote(run, entry, localFilePath, (base, theirs) async {
+        // この端末の設定の書き込み・自動更新と、読んで直して書く間を取り合わない
+        final r = await QgsFileLock.run(localFilePath, () async {
+          final r = await QgsMerger.merge(
+            base: await fs.readAsString(base),
+            mine: await fs.readAsString(localFilePath),
+            theirs: await fs.readAsString(theirs),
+          );
+          if (r != null) await QgsFileWriter.write(localFilePath, r.xml);
+          return r;
+        });
+        if (r == null) return null;
+        if (r.conflicts.isNotEmpty) AppLogger.debug('  設定の衝突（この端末の値を残した）: ${r.conflicts}');
+        _kmetaService.invalidateCache(p.dirname(localFilePath));
+        return [for (final c in r.conflicts) c.withDir(p.dirname(localFilePath))];
+      });
+      if (merged == null) {
+        AppLogger.debug('  → 設定を合わせられなかった。衝突のまま残す');
+        run.failedMerges.add(relativePath);
+        return;
       }
+      AppLogger.debug('  → 設定を合わせた（衝突 ${merged.length} 件）');
+      run.merged++;
+      run.settingConflicts.addAll(merged);
+      return;
+    }
+
+    final geodiff = run.geodiff ??= Geodiff();
+    final merged = await _mergeWithRemote(run, entry, localFilePath, (base, theirs) async {
       // geodiff の SQLite が書く前に、アプリの接続を閉じる（次の getDatabase() で開き直る）
       await GeoPackageConnection.closeAllFor(localFilePath);
       // 片側だけが列を足していれば、3 つのスキーマをそろえてから（geodiff はスキーマの変更をまたげない）
-      final aligned = await GpkgSchemaAligner.align(base: base, theirs: tmp, mine: localFilePath);
+      final aligned = await GpkgSchemaAligner.align(base: base, theirs: theirs, mine: localFilePath);
       if (aligned.added.isNotEmpty) AppLogger.debug('  列をそろえた: ${aligned.added}');
-      final r = await GpkgMerger(geodiff).rebase(base: base, theirs: tmp, mine: localFilePath);
+      final r = await GpkgMerger(geodiff).rebase(base: base, theirs: theirs, mine: localFilePath);
       if (!r.success) {
         AppLogger.debug('  rebase 失敗: ${r.error}');
         return null;
@@ -917,6 +394,49 @@ class SyncConflictResolver {
       // geodiff は rtree_* / gpkg_* を触らない。QGIS が読む索引と範囲を実データに合わせる
       final repaired = await GpkgIndexRepair.rebuildFile(localFilePath);
       AppLogger.debug('  索引の焼き直し: $repaired テーブル');
+      return [for (final c in r.conflicts) c.withFile(localFilePath)];
+    });
+    if (merged == null) {
+      AppLogger.debug('  → 行単位で合わせられなかった。衝突のまま残す');
+      run.failedMerges.add(relativePath);
+      return;
+    }
+    AppLogger.debug('  → 行単位で合わせた（衝突 ${merged.length} 件）');
+    run.merged++;
+    run.conflicts.addAll(merged);
+  }
+
+  /// 両方が変えたファイルを合わせて Drive に上げる（docs/technical/drive-geodiff-sync.md）。
+  ///
+  /// リモートを一時ファイルに落とし、[combine]（base・リモート → 手元に両方の変更を載せる）で合わせ、
+  /// その間に Drive が動いていなければ手元を上げて base を写し直し、帳簿に書く。
+  /// どこかで失敗したら null（呼び手は衝突のまま残す）。
+  /// ⚠ 合わせたのに上げられなかったときは、ローカルには相手の変更が載ったまま base は古い。
+  ///   次の同期でもう一度 merge になる。
+  Future<List<T>?> _mergeWithRemote<T>(
+    _MergeRun run,
+    MergeFileEntry entry,
+    String localFilePath,
+    Future<List<T>?> Function(String base, String theirs) combine,
+  ) async {
+    final relativePath = entry.relativePath;
+    final fileId = entry.driveFileId;
+    if (fileId == null) return null;
+    final base = SyncBaseStore.basePath(run.localPath, relativePath);
+    if (!await fs.exists(base) || !await fs.exists(localFilePath)) {
+      AppLogger.debug('  base かローカルが無い: base=$base');
+      return null;
+    }
+    final tmp = SyncBaseStore.tmpPath(run.localPath, relativePath);
+    try {
+      await fs.createDirectory(p.dirname(tmp));
+      if (!await _driveService.downloadFile(fileId, tmp)) {
+        AppLogger.debug('  リモートを落とせなかった');
+        return null;
+      }
+      final conflicts = await combine(base, tmp);
+      if (conflicts == null) return null;
+
       // この間に Drive が動いていたら上げない（次の同期で載せ直す）
       final meta = await _driveService.getFileMetadata(fileId);
       final remoteAt = entry.remoteModifiedTime;
@@ -924,24 +444,15 @@ class SyncConflictResolver {
         AppLogger.debug('  Drive 側が同期開始後に動いた。上げずに次回へ');
         return null;
       }
-      final relativeDir = p.dirname(relativePath);
-      String targetFolderId = driveId;
-      if (relativeDir != '.' && relativeDir.isNotEmpty) {
-        final folderId = await _fileOps.getDriveFolderIdForRelativeDir(driveId, relativeDir, folderIdCache);
-        if (folderId != null) targetFolderId = folderId;
-      }
+      final targetFolderId = await _folderId(run, p.dirname(relativePath)) ?? run.driveId;
       final uploaded = await _driveService.uploadFileById(localFilePath, targetFolderId, existingFileId: fileId);
       if (uploaded == null) {
         AppLogger.debug('  上げられなかった');
         return null;
       }
-      await SyncBaseStore.saveBase(localPath, relativePath, geodiff: geodiff);
-      AppLogger.debug('  → 行単位で合わせた（衝突 ${r.conflicts.length} 件）');
-      return (
-        driveFileId: uploaded.id ?? fileId,
-        remoteModifiedTime: uploaded.modifiedTime,
-        conflicts: [for (final c in r.conflicts) c.withFile(localFilePath)],
-      );
+      await SyncBaseStore.saveBase(run.localPath, relativePath, geodiff: run.geodiff);
+      run.record(relativePath, uploaded.id ?? fileId, uploaded.modifiedTime);
+      return conflicts;
     } finally {
       try {
         if (await fs.exists(tmp)) await fs.delete(tmp);
@@ -949,67 +460,7 @@ class SyncConflictResolver {
     }
   }
 
-  /// Driveのフォルダ構造をローカルに反映（空フォルダ含む）
-  ///
-  /// [driveId] を省略すると フォルダ設定（`.qgs`） から取得する。
-  /// 作成したフォルダ数を返す。
-  Future<int> ensureDriveFolders(
-    String localPath, {
-    String? driveId,
-  }) async {
-    try {
-      driveId ??= (await _kmetaService.getMeta(localPath)).sync.driveId;
-      if (driveId == null) return 0;
-
-      final driveData = await _fileOps.listDriveFilesWithFolders(driveId);
-      int created = 0;
-      for (final relativeFolderPath in driveData.folderMap.values) {
-        if (relativeFolderPath.isEmpty) continue;
-        final dirPath =
-            _fileOps.relativePathToLocalPath(localPath, relativeFolderPath);
-        if (!await fs.isDirectory(dirPath)) {
-          await fs.createDirectory(dirPath);
-          created++;
-          AppLogger.debug('[SyncEngine] フォルダ作成: $relativeFolderPath');
-        }
-      }
-      return created;
-    } catch (e) {
-      AppLogger.error('[SyncEngine] ensureDriveFolders エラー: $e');
-      return 0;
-    }
-  }
-
-  /// Driveに存在しない空のローカルフォルダを削除
-  Future<void> _cleanupEmptyLocalFolders(
-    String localPath,
-    String driveId,
-  ) async {
-    try {
-      final driveData = await _fileOps.listDriveFilesWithFolders(driveId);
-      final driveFolderPaths = driveData.folderMap.values
-          .where((v) => v.isNotEmpty)
-          .toSet();
-
-      if (!await fs.isDirectory(localPath)) return;
-
-      final localDirs = await fs.listDirectoriesRecursive(localPath);
-      // 深い階層から処理して連鎖削除を可能にする
-      localDirs.sort((a, b) => b.path.length.compareTo(a.path.length));
-
-      for (final dir in localDirs) {
-        final relativePath = _fileOps.normalizeRelativePath(
-          p.relative(dir.path, from: localPath),
-        );
-        if (SyncBaseStore.isInside(relativePath)) continue;
-        if (driveFolderPaths.contains(relativePath)) continue;
-        if ((await fs.list(dir.path)).isEmpty) {
-          await fs.delete(dir.path);
-          AppLogger.debug('[SyncEngine] 空フォルダ削除: $relativePath');
-        }
-      }
-    } catch (e) {
-      AppLogger.error('[SyncEngine] 空フォルダクリーンアップエラー: $e');
-    }
-  }
+  /// Drive の相対フォルダの ID（無ければ作る）
+  Future<String?> _folderId(_MergeRun run, String relativeDir) =>
+      _fileOps.getDriveFolderIdForRelativeDir(run.driveId, relativeDir, run.folderIdCache);
 }

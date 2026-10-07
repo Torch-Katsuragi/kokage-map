@@ -27,6 +27,7 @@ import 'google_drive_service.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
+import 'sync_snapshot.dart';
 
 /// Pull（ダウンロード）処理ハンドラー
 class SyncPullHandler {
@@ -46,37 +47,34 @@ class SyncPullHandler {
   /// [driveFolderId] DriveフォルダID
   /// [localPath] ローカル保存先パス
   /// [onProgress] 進捗コールバック
+  /// [snapshot] 同じ連携先の判定に使った材料（あれば Drive をたどり直さない）
   Future<SyncResult> pull(
     String driveFolderId,
     String localPath, {
     void Function(SyncProgress progress)? onProgress,
+    SyncSnapshot? snapshot,
   }) async {
     if (!_driveService.isDriveApiAvailable) {
       return SyncResult.failure(t.drive.driveNotConnected);
     }
 
     try {
-      final localExists = await fs.isDirectory(localPath);
-      if (!localExists) {
+      if (!await fs.isDirectory(localPath)) {
         await fs.createDirectory(localPath);
       }
 
-      final folderInfo = await _driveService.getFolderInfo(driveFolderId);
+      final reuse = snapshot != null && snapshot.driveId == driveFolderId ? snapshot : null;
+      final folderInfo = reuse?.folderInfo ?? await _driveService.getFolderInfo(driveFolderId);
       if (folderInfo == null) {
         return SyncResult.failure(t.drive.driveFolderNotFound);
       }
 
-      final driveResult =
-          await _fileOps.listDriveFilesWithFolders(driveFolderId);
-      final filesToDownload = driveResult.files;
+      final tree = reuse?.drive ?? await _fileOps.listDriveTree(driveFolderId);
+      final filesToDownload = tree.files;
 
-      // Driveに存在する全サブフォルダをローカルに作成（空フォルダ含む）
-      for (final relativeFolderPath in driveResult.folderMap.values) {
-        if (relativeFolderPath.isEmpty) continue;
-        await fs.createDirectory(
-          _fileOps.relativePathToLocalPath(localPath, relativeFolderPath),
-        );
-      }
+      // Driveに存在する全サブフォルダをローカルに作成（空フォルダ含む）。
+      // ファイルの置き場所はどれもこのどれか（か根）なので、並列DL中にフォルダを作り合わない
+      await _fileOps.ensureLocalDirs(localPath, tree.folderPaths);
 
       if (filesToDownload.isEmpty) {
         await _kmetaService.setDriveSync(
@@ -102,15 +100,6 @@ class SyncPullHandler {
       );
       int processedBytes = 0;
 
-      // ファイルのあるディレクトリも念のため作成（並列DL中の競合回避）
-      final fileDirs = filesToDownload
-          .map((e) => p.dirname(
-              _fileOps.relativePathToLocalPath(localPath, e.relativePath)))
-          .toSet();
-      for (final dir in fileDirs) {
-        await fs.createDirectory(dir);
-      }
-
       onProgress?.call(SyncProgress(
         currentFile: t.drive.syncProgressStart,
         processedCount: 0,
@@ -122,22 +111,9 @@ class SyncPullHandler {
       await SyncFileOperations.runParallel(
         filesToDownload.map((driveEntry) => () async {
           final driveFile = driveEntry.file;
-          final fileName = p.posix.basename(driveEntry.relativePath);
-          final fileSize = int.tryParse(driveFile.size ?? '') ?? 0;
-          final localFilePath =
-              _fileOps.relativePathToLocalPath(localPath, driveEntry.relativePath);
+          final localFilePath = _fileOps.relativePathToLocalPath(localPath, driveEntry.relativePath);
 
-          // この端末のリンク情報は、落とした .qgs で上書きしない
-          final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
-          await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
-          final success = await _driveService.downloadFile(
-            driveFile.id!,
-            localFilePath,
-          );
-
-          if (success) {
-            await SyncBaseStore.settleAfterDownload(localFilePath);
-            await KMetaService.instance.afterReplace(localFilePath, keepLink);
+          if (await _fileOps.downloadReplacing(driveFile.id!, localFilePath)) {
             downloadedCount++;
             syncedFiles[driveEntry.relativePath] = KMetaSyncFile(
               driveFileId: driveFile.id!,
@@ -148,10 +124,10 @@ class SyncPullHandler {
           } else {
             skippedCount++;
           }
-          processedBytes += fileSize;
+          processedBytes += int.tryParse(driveFile.size ?? '') ?? 0;
           completedCount++;
           onProgress?.call(SyncProgress(
-            currentFile: fileName,
+            currentFile: p.posix.basename(driveEntry.relativePath),
             processedCount: completedCount,
             totalCount: filesToDownload.length,
             processedBytes: processedBytes,
@@ -161,45 +137,18 @@ class SyncPullHandler {
         maxConcurrency: _downloadConcurrency,
       );
 
-      // Driveにないファイルをローカルから削除（フォルダ設定（`.qgs`）は保護）
+      // Driveにないファイルをローカルから削除
       int deletedCount = 0;
-      final driveFilePaths =
-          filesToDownload.map((f) => f.relativePath).toSet();
-
-      if (await fs.isDirectory(localPath)) {
-        for (final entity in await fs.listRecursive(localPath)) {
-          final localName = p.basename(entity.path);
-          if (localName == kMetaFileName) continue;
-          if (!_fileOps.matchesSyncPattern(localName)) continue;
-          final relativePath = _fileOps.normalizeRelativePath(
-            p.relative(entity.path, from: localPath),
-          );
-          if (SyncBaseStore.isInside(relativePath)) continue;
-          if (!driveFilePaths.contains(relativePath)) {
-            await fs.delete(entity.path);
-            deletedCount++;
-            AppLogger.debug('[SyncEngine] ローカルから削除: $relativePath');
-          }
-        }
-
-        // Driveに存在しない空フォルダをローカルから削除（深い階層から処理）
-        final driveFolderPaths = driveResult.folderMap.values
-            .where((v) => v.isNotEmpty)
-            .toSet();
-        final localDirs = await fs.listDirectoriesRecursive(localPath);
-        localDirs.sort((a, b) => b.path.length.compareTo(a.path.length));
-
-        for (final dir in localDirs) {
-          final relativePath = _fileOps.normalizeRelativePath(
-            p.relative(dir.path, from: localPath),
-          );
-          if (driveFolderPaths.contains(relativePath)) continue;
-          if ((await fs.list(dir.path)).isEmpty) {
-            await fs.delete(dir.path);
-            AppLogger.debug('[SyncEngine] 空フォルダ削除: $relativePath');
-          }
-        }
+      final driveFilePaths = filesToDownload.map((f) => f.relativePath).toSet();
+      for (final entry in await _fileOps.listLocalSyncFiles(localPath)) {
+        if (driveFilePaths.contains(entry.relativePath)) continue;
+        await fs.delete(entry.path);
+        deletedCount++;
+        AppLogger.debug('[SyncEngine] ローカルから削除: ${entry.relativePath}');
       }
+
+      // Driveに存在しない空フォルダをローカルから削除（深い階層から処理）
+      await _fileOps.removeEmptyLocalDirs(localPath, tree.folderPaths.toSet());
 
       onProgress?.call(SyncProgress(
         currentFile: t.drive.syncProgressComplete,
@@ -299,7 +248,7 @@ class SyncPullHandler {
   }
 
   /// フォルダ単位でPull
-  Future<SyncResult> pullFolder(String localPath) async {
+  Future<SyncResult> pullFolder(String localPath, {SyncSnapshot? snapshot}) async {
     final meta = await _kmetaService.getMeta(localPath);
     final driveId = meta.sync.driveId;
 
@@ -307,6 +256,6 @@ class SyncPullHandler {
       return SyncResult.failure(t.drive.driveNotLinked);
     }
 
-    return pull(driveId, localPath);
+    return pull(driveId, localPath, snapshot: snapshot);
   }
 }

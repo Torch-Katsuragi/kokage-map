@@ -28,6 +28,7 @@ import 'google_drive_service.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
+import 'sync_snapshot.dart';
 
 /// Push（アップロード）処理ハンドラー
 class SyncPushHandler {
@@ -47,10 +48,12 @@ class SyncPushHandler {
   /// [projectPath] ローカルプロジェクトフォルダのパス
   /// [driveFolder] DriveフォルダのIDまたはnull（新規作成）
   /// [onProgress] 進捗コールバック
+  /// [snapshot] 同じ連携先の判定に使った材料（あれば Drive をたどり直さない）
   Future<SyncResult> push(
     String projectPath, {
     String? driveFolder,
     void Function(SyncProgress progress)? onProgress,
+    SyncSnapshot? snapshot,
   }) async {
     if (!_driveService.isDriveApiAvailable) {
       return SyncResult.failure(t.drive.driveNotConnected);
@@ -70,9 +73,10 @@ class SyncPushHandler {
       String targetFolderId;
       String targetFolderName;
 
+      final reuse = snapshot != null && snapshot.driveId == driveFolder ? snapshot : null;
       if (driveFolder != null) {
         targetFolderId = driveFolder;
-        final folderInfo = await _driveService.getFolderInfo(driveFolder);
+        final folderInfo = reuse?.folderInfo ?? await _driveService.getFolderInfo(driveFolder);
         targetFolderName = folderInfo?.name ?? 'Unknown';
       } else {
         final projectName = p.basename(projectPath);
@@ -100,18 +104,13 @@ class SyncPushHandler {
         return SyncResult.success(skippedCount: 0);
       }
 
-      final folderIdCache = <String, String>{};
-
-      // Drive上の現在のファイル配置を取得し、ID↔パスの突合で移動を検出
+      // Drive上の現在のファイル配置を取得し、ID↔パスの突合で移動を検出。
+      // あるフォルダの ID は一覧から引く（フォルダごとに Drive に聞き直さない）
+      final tree = reuse?.drive ?? await _fileOps.listDriveTree(targetFolderId);
+      final folderIdCache = tree.folderIdsByPath();
+      final driveIdToEntry = tree.byId();
       int movedCount = 0;
       final movedFileIds = <String>{};
-
-      final driveEntries =
-          await _fileOps.listDriveFilesRecursive(targetFolderId);
-      final driveIdToEntry = <String, DriveFileEntry>{};
-      for (final e in driveEntries) {
-        if (e.file.id != null) driveIdToEntry[e.file.id!] = e;
-      }
 
       for (final entry in previousSyncedFiles.entries) {
         final syncedPath = entry.key;
@@ -263,10 +262,9 @@ class SyncPushHandler {
         }
       }
 
-      final currentDriveEntries =
-          await _fileOps.listDriveFilesRecursive(targetFolderId);
-
-      for (final entry in currentDriveEntries) {
+      // Drive にだけあるものを消す。一覧は最初のものを使う（この push で増えたものは手元のパスにあり、
+      // 動かしたもの・消したものは除くので、たどり直しても結果は同じ）
+      for (final entry in tree.files) {
         if (deletedFileIds.contains(entry.file.id)) {
           continue;
         }
@@ -342,7 +340,7 @@ class SyncPushHandler {
     return synced;
   }
 
-  Future<SyncResult> pushFolder(String localPath) async {
+  Future<SyncResult> pushFolder(String localPath, {SyncSnapshot? snapshot}) async {
     final meta = await _kmetaService.getMeta(localPath);
     final driveId = meta.sync.driveId;
 
@@ -350,6 +348,6 @@ class SyncPushHandler {
       return SyncResult.failure(t.drive.driveNotLinked);
     }
 
-    return push(localPath, driveFolder: driveId);
+    return push(localPath, driveFolder: driveId, snapshot: snapshot);
   }
 }

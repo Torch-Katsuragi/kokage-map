@@ -81,6 +81,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       // 外部GNSS機器をスキャン
       await _scanGnssDevices();
 
+      if (!mounted) return;
       // 現在のGPS情報を取得
       _updateCurrentGpsInfo();
 
@@ -88,6 +89,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
         _errorMessage = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = t.gps.initError(error: e.toString());
       });
@@ -118,6 +120,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
     try {
       // Android 12以降のBluetooth権限確認・要求
       if (!await _checkBluetoothPermissions()) {
+        if (!mounted) return;
         setState(() {
           _errorMessage = t.gps.bluetoothPermRequired;
         });
@@ -129,13 +132,17 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
         '[GpsSettingsScreen] GNSS機器スキャン完了: ${_gpsManager.availableGnssDevices.length}件',
       );
     } catch (e) {
-      setState(() {
-        _errorMessage = t.gps.gnssScanError(error: e.toString());
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = t.gps.gnssScanError(error: e.toString());
+        });
+      }
     } finally {
-      setState(() {
-        _isScanning = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isScanning = false;
+        });
+      }
     }
   }
 
@@ -314,9 +321,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
                       return Card(
                         child: ListTile(
                           leading: Icon(
-                            source['type'] == GpsSourceType.internal
-                                ? Icons.gps_fixed
-                                : Icons.bluetooth,
+                            _sourceIcon(source),
                             color:
                                 source['isSelected']
                                     ? Colors.green
@@ -370,6 +375,13 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
     );
   }
 
+  void _notify(String title, NotificationLevel level) =>
+      ref.read(notificationCenterProvider.notifier).add(title: title, level: level);
+
+  /// ソースの種類のアイコン
+  static IconData _sourceIcon(Map<String, dynamic> source) =>
+      source['type'] == GpsSourceType.internal ? Icons.gps_fixed : Icons.bluetooth;
+
   /// GPSソースを切り替え
   Future<void> _switchGpsSource(Map<String, dynamic> source) async {
     try {
@@ -382,15 +394,9 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
         );
       }
 
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.gps.switchedTo(name: source['name']),
-            level: NotificationLevel.success,
-          );
+      _notify(t.gps.switchedTo(name: source['name']), NotificationLevel.success);
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.gps.switchError(error: e.toString()),
-            level: NotificationLevel.error,
-          );
+      _notify(t.gps.switchError(error: e.toString()), NotificationLevel.error);
     }
   }
 
@@ -434,16 +440,10 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
           },
         ));
       } else if (gpsInfo == null) {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.gps.positionTestTimeout,
-              level: NotificationLevel.warning,
-            );
+        _notify(t.gps.positionTestTimeout, NotificationLevel.warning);
       }
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.gps.testResult.error(error: e.toString()),
-            level: NotificationLevel.error,
-          );
+      _notify(t.gps.testResult.error(error: e.toString()), NotificationLevel.error);
     } finally {
       // テスト終了時にGPS測量を停止
       await _gpsManager.stopGpsSurvey();
@@ -538,37 +538,25 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Column(
             children: [
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _showGpsSourceDialog,
-                  icon: const Icon(Icons.swap_horiz),
-                  label: Text(t.gps.switchSource),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
+              _controlButton(Icons.swap_horiz, t.gps.switchSource, Colors.blue, _showGpsSourceDialog),
               const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _testGpsPosition,
-                  icon: const Icon(Icons.location_searching),
-                  label: Text(t.gps.positionTest),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
+              _controlButton(Icons.location_searching, t.gps.positionTest, Colors.green, _testGpsPosition),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _controlButton(IconData icon, String label, Color color, VoidCallback onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: settingsButtonStyle(color, padding: const EdgeInsets.symmetric(vertical: 12)),
+      ),
     );
   }
 
@@ -614,9 +602,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
         else
           ...sources.map(
             (source) => SettingsSelectionTile(
-              leadingIcon: source['type'] == GpsSourceType.internal
-                  ? Icons.gps_fixed
-                  : Icons.bluetooth,
+              leadingIcon: _sourceIcon(source),
               leadingIconColor: Colors.green,
               title: source['name'],
               subtitle: source['description'],

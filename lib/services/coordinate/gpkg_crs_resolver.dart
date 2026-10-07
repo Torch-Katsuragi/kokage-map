@@ -219,11 +219,6 @@ class GpkgCrsResolver {
   /// キャッシュをクリア
   void clearCache() => _cache.clear();
 
-  /// 特定テーブルのキャッシュをクリア
-  void clearCacheForTable(Database db, String tableName) {
-    _cache.remove(_cacheKey(db, tableName));
-  }
-
   // ========== 内部ヘルパー ==========
 
   /// gpkg_geometry_columns から srs_id を取得

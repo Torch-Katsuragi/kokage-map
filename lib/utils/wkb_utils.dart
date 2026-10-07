@@ -79,15 +79,6 @@ Uint8List _skipGpbHeader(Uint8List data) {
   return data;
 }
 
-/// GPBinaryヘッダーからsrsIdを抽出する
-/// GPBinaryヘッダーがない場合はnullを返す
-int? extractSrsIdFromGpkgBlob(Uint8List gpkgBlob) {
-  if (gpkgBlob.length >= 8 && gpkgBlob[0] == 0x47 && gpkgBlob[1] == 0x50) {
-    return ByteData.sublistView(gpkgBlob, 4, 8).getUint32(0, Endian.little);
-  }
-  return null;
-}
-
 
 // ============================================================
 // 公開 API: GeoPackage blob ↔ geobase Geometry

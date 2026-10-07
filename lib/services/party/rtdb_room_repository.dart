@@ -158,15 +158,6 @@ class RtdbRoomRepository {
     await _db.ref('rooms/$code/members/$uid').remove();
   }
 
-  /// メタ情報の購読（メンバーであること前提）
-  Stream<RoomMeta?> watchMeta(String code) {
-    return _db.ref('rooms/$code/meta').onValue.map((event) {
-      final val = event.snapshot.value;
-      if (val is! Map) return null;
-      return RoomMeta.fromMap(code, val);
-    });
-  }
-
   /// メンバー一覧の購読（メンバーであること前提）
   Stream<List<PartyMember>> watchMembers(String code) {
     return _db.ref('rooms/$code/members').onValue.map((event) {

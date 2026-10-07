@@ -91,9 +91,6 @@ class GeoTiffWriteScheduler {
     await flush();
   }
 
-  /// 保留中の書き込みがあるか
-  bool get hasPending => _pending.isNotEmpty;
-
   // ── 内部 ──
 
   Future<void> _executeSingle(String path) async {

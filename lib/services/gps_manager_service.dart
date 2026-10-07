@@ -135,7 +135,6 @@ class GpsManagerService extends ChangeNotifier {
   GpsRecordingOptions _recordingOptions = GpsRecordingOptions.defaultOptions;
   Timer? _recordingTimer;
   final List<Map<String, dynamic>> _gpsHistory = [];
-  DateTime? _recordingStartTime;
   GpsTrackPoint? _lastRecordedPoint;
 
   // 現在の位置情報（内蔵GPS時はStoreから取得、外部GNSS時は直接保持）
@@ -156,7 +155,6 @@ class GpsManagerService extends ChangeNotifier {
   bool _isContinuousSurvey = false;
   void Function()? _onContinuousSurveyUpdate;
   final List<Map<String, dynamic>> _continuousSurveyData = [];
-  DateTime? _continuousSurveyStartTime;
 
   // Getters
   bool get isInitialized => _isInitialized;
@@ -171,17 +169,6 @@ class GpsManagerService extends ChangeNotifier {
   /// 内蔵GPS位置情報ストアへのアクセス
   InternalGpsLocationStore get locationStore => _locationStore;
 
-  /// 外部GNSS機器が実際にBluetooth接続されているかを確認
-  bool get isExternalGnssConnected =>
-      _currentSource == GpsSourceType.external &&
-      _selectedGnssDevice != null &&
-      _externalGnssService != null &&
-      _externalGnssService!.isConnected;
-  GpsRecordingOptions get recordingOptions => _recordingOptions;
-  List<Map<String, dynamic>> get gpsHistory => List.unmodifiable(_gpsHistory);
-  DateTime? get recordingStartTime => _recordingStartTime;
-  int get historyCount => _gpsHistory.length;
-
   // 現在位置情報
   double? get latitude => _latitude;
   double? get longitude => _longitude;
@@ -190,13 +177,6 @@ class GpsManagerService extends ChangeNotifier {
   double? get speed => _speed;
   double? get bearing => _bearing;
   DateTime? get timestamp => _timestamp;
-
-  // 連続測量関連
-  bool get isContinuousSurvey => _isContinuousSurvey;
-  List<Map<String, dynamic>> get continuousSurveyData =>
-      List.unmodifiable(_continuousSurveyData);
-  int get continuousSurveyPointCount => _continuousSurveyData.length;
-  DateTime? get continuousSurveyStartTime => _continuousSurveyStartTime;
 
   /// 利用可能なGPSソースリストを取得
   List<Map<String, dynamic>> getAvailableGpsSources() {
@@ -735,7 +715,6 @@ class GpsManagerService extends ChangeNotifier {
 
     _recordingOptions = options ?? GpsRecordingOptions.defaultOptions;
     _isRecording = true;
-    _recordingStartTime = DateTime.now();
     _gpsHistory.clear();
     _lastRecordedPoint = null;
 
@@ -753,35 +732,6 @@ class GpsManagerService extends ChangeNotifier {
       '最短移動距離: ${_recordingOptions.minDistanceMeters}m',
     );
     notifyListeners();
-  }
-
-  /// GPS記録を停止
-  Map<String, dynamic>? stopRecording() {
-    if (!_isRecording) {
-      return null;
-    }
-
-    _recordingTimer?.cancel();
-    _recordingTimer = null;
-    _isRecording = false;
-
-    final recordingSummary = {
-      'startTime': _recordingStartTime?.toIso8601String(),
-      'endTime': DateTime.now().toIso8601String(),
-      'totalPoints': _gpsHistory.length,
-      'totalDistance': _calculateTotalDistance(),
-      'duration':
-          _recordingStartTime != null
-              ? DateTime.now().difference(_recordingStartTime!).inSeconds
-              : 0,
-      'sourceType': _currentSource.sourceCode,
-      'sourceName': _currentSource.displayName,
-    };
-
-    AppLogger.debug('$_logTag: GPS記録停止 - ${_gpsHistory.length}ポイント記録');
-    notifyListeners();
-
-    return recordingSummary;
   }
 
   /// 現在位置を記録
@@ -837,26 +787,6 @@ class GpsManagerService extends ChangeNotifier {
     }
 
     AppLogger.debug('$_logTag: 位置記録 - ${_gpsHistory.length}ポイント目');
-  }
-
-  /// 総移動距離を計算
-  double _calculateTotalDistance() {
-    if (_gpsHistory.length < 2) return 0.0;
-
-    double totalDistance = 0.0;
-    for (int i = 1; i < _gpsHistory.length; i++) {
-      final prev = _gpsHistory[i - 1];
-      final curr = _gpsHistory[i];
-
-      totalDistance += _calculateDistance(
-        prev['latitude'],
-        prev['longitude'],
-        curr['latitude'],
-        curr['longitude'],
-      );
-    }
-
-    return totalDistance;
   }
 
   /// 2点間の距離計算（ハバーサイン公式）
@@ -934,89 +864,12 @@ class GpsManagerService extends ChangeNotifier {
     }
   }
 
-  /// グローバル設定からソース設定を読み込み（GPS開始も行う）
-  Future<void> loadSourceFromGlobalConfig() async {
-    final preferredSource =
-        _ref?.read(preferredGpsSourceTypeProvider);
-    final savedAddress =
-        _ref?.read(selectedGnssDeviceAddressProvider);
-
-    if (preferredSource == null) {
-      return;
-    }
-
-    try {
-      if (preferredSource == 'external' && savedAddress != null) {
-        await scanExternalGnssDevices();
-
-        final targetDevice = _availableGnssDevices.firstWhere(
-          (device) => device.address == savedAddress,
-          orElse: () => throw Exception(t.gps.savedDeviceNotFound),
-        );
-
-        await switchGpsSource(GpsSourceType.external, targetDevice);
-        AppLogger.debug(
-          '$_logTag: 保存されたGPS設定を復元: 外部GNSS (${targetDevice.name})',
-        );
-      } else if (preferredSource == 'internal') {
-        await switchGpsSource(GpsSourceType.internal);
-        AppLogger.debug('$_logTag: 保存されたGPS設定を復元: 内蔵GPS');
-      }
-    } catch (e) {
-      AppLogger.debug('$_logTag: 保存されたGPS設定の復元に失敗、内蔵GPSを使用: $e');
-      await switchGpsSource(GpsSourceType.internal);
-    }
-  }
-
-  /// 記録履歴をクリア
-  void clearHistory() {
-    if (_isRecording) {
-      throw Exception(t.gps.cannotClearWhileRecording);
-    }
-
-    _gpsHistory.clear();
-    _lastRecordedPoint = null;
-    _recordingStartTime = null;
-
-    AppLogger.debug('$_logTag: GPS記録履歴をクリア');
-    notifyListeners();
-  }
-
-  /// 記録統計情報を取得
-  Map<String, dynamic> getRecordingStatistics() {
-    return {
-      'isRecording': _isRecording,
-      'startTime': _recordingStartTime?.toIso8601String(),
-      'currentTime': DateTime.now().toIso8601String(),
-      'totalPoints': _gpsHistory.length,
-      'totalDistance': _calculateTotalDistance(),
-      'duration':
-          _recordingStartTime != null
-              ? DateTime.now().difference(_recordingStartTime!).inSeconds
-              : 0,
-      'averageInterval':
-          _gpsHistory.length > 1
-              ? (DateTime.now().difference(_recordingStartTime!).inSeconds /
-                  (_gpsHistory.length - 1))
-              : 0,
-      'sourceType': _currentSource.sourceCode,
-      'sourceName': _currentSource.displayName,
-      'options': {
-        'intervalSeconds': _recordingOptions.intervalSeconds,
-        'minDistanceMeters': _recordingOptions.minDistanceMeters,
-        'requiredAccuracy': _recordingOptions.requiredAccuracy,
-        'maxRecordCount': _recordingOptions.maxRecordCount,
-      },
-    };
-  }
-
   /// 連続測量開始（位置更新ベース）
   void startContinuousSurvey({void Function()? onPositionUpdate}) {
     AppLogger.debug('$_logTag: 連続測量開始（位置更新ベース）');
     _isContinuousSurvey = true;
     _onContinuousSurveyUpdate = onPositionUpdate;
     _continuousSurveyData.clear();
-    _continuousSurveyStartTime = DateTime.now();
     notifyListeners();
   }
 
@@ -1031,7 +884,6 @@ class GpsManagerService extends ChangeNotifier {
   /// 連続測量データをクリア
   void clearContinuousSurveyData() {
     _continuousSurveyData.clear();
-    _continuousSurveyStartTime = null;
     AppLogger.debug('$_logTag: 連続測量データをクリア');
     notifyListeners();
   }

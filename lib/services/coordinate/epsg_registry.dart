@@ -41,9 +41,6 @@ class EpsgDefinition {
   /// EPSGコード番号部分を取得（例: "EPSG:6677" → "6677"）
   String get codeNumber => code.replaceFirst('EPSG:', '');
 
-  /// 数値としてのEPSGコードを取得
-  int? get codeInt => int.tryParse(codeNumber);
-
   @override
   String toString() => '$code - $name';
 
@@ -72,43 +69,21 @@ class EpsgRegistry {
   factory EpsgRegistry() => instance;
   EpsgRegistry._internal();
 
-  /// 動的に登録された定義（実行時にGPKGやepsg.ioから解決されたもの）
-  final List<EpsgDefinition> _dynamicDefinitions = [];
-
-  /// 全EPSG定義のリスト（静的 + 動的）
-  List<EpsgDefinition> get allDefinitions => [..._allDefinitions, ..._dynamicDefinitions];
+  /// 全EPSG定義のリスト
+  List<EpsgDefinition> get allDefinitions => [..._allDefinitions];
 
   /// WGS84以外のEPSG定義（座標変換用、WGS84は変換先として不要）
   List<EpsgDefinition> get transformableDefinitions =>
       _allDefinitions.where((e) => e.code != 'EPSG:4326' && e.code != 'EPSG:6668').toList();
 
-  /// EPSGコードで検索（静的 + 動的定義を探索）
+  /// EPSGコードで検索
   EpsgDefinition? getByCode(String code) {
     final normalizedCode = code.startsWith('EPSG:') ? code : 'EPSG:$code';
-    // まず静的定義を検索
-    final staticResult = _allDefinitions.cast<EpsgDefinition?>().firstWhere(
-      (e) => e?.code == normalizedCode,
-      orElse: () => null,
-    );
-    if (staticResult != null) return staticResult;
-
-    // 動的定義を検索
-    return _dynamicDefinitions.cast<EpsgDefinition?>().firstWhere(
+    return _allDefinitions.cast<EpsgDefinition?>().firstWhere(
       (e) => e?.code == normalizedCode,
       orElse: () => null,
     );
   }
-
-  /// 動的にEPSG定義を登録（GPKGやepsg.ioから取得した定義）
-  /// 既に同じコードが登録済みの場合はスキップ
-  void registerDynamic(EpsgDefinition definition) {
-    if (getByCode(definition.code) == null) {
-      _dynamicDefinitions.add(definition);
-    }
-  }
-
-  /// 動的定義をクリア
-  void clearDynamic() => _dynamicDefinitions.clear();
 
   /// クエリで検索（コード、名前、地域名で部分一致）
   List<EpsgDefinition> search(String query) {

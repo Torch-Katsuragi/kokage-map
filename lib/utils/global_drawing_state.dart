@@ -60,9 +60,6 @@ class GlobalDrawingState {
   /// 追記モードかどうか
   bool get isEditMode => _editingFeature != null;
 
-  /// 追記対象のFeatureNode
-  FeatureNode? get editingFeature => _editingFeature;
-
   /// Getters。複製（呼んだ側が持っていても後から変わらない）は中身が変わったときだけ作り直す。
   /// 以前は呼ぶたびに複製していて、描いている間は指の 1 動きで何十回も点の数ぶん複製していた（2026-10-06）。
   /// 変わったかどうかは点の数と最初・最後の点で見る（追加・取消・入れ替えのどれでもどれかが変わる）
@@ -576,23 +573,6 @@ class GlobalDrawingState {
     AppLogger.debug(
       '[GlobalDrawingState] ポリゴンフィーチャの追記開始: ${feature.name} (${_drawingPolygon.length}点)',
     );
-  }
-
-  /// 汎用的な追記開始メソッド
-  /// [feature] - 追記対象のFeatureNode
-  bool startEditingFeature(FeatureNode feature) {
-    if (feature is LineFeatureNode) {
-      startEditingLineFeature(feature);
-      return true;
-    } else if (feature is PolygonFeatureNode) {
-      startEditingPolygonFeature(feature);
-      return true;
-    } else {
-      AppLogger.debug(
-        '[GlobalDrawingState] サポートされていないフィーチャタイプです: ${feature.runtimeType}',
-      );
-      return false;
-    }
   }
 
   /// 自動保存タイマーをリセット（既存のタイマーを停止して新しくスタート）

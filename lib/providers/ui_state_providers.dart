@@ -175,19 +175,6 @@ class ExpandedGeoPackages extends _$ExpandedGeoPackages {
     state = state.copyWith(expandedPaths: expanded);
   }
 
-  /// 新規追加ノードのみ展開（ユーザーが閉じたものは除く）。変更がなければ state を更新しない
-  void expandNewOnly(Iterable<String> paths) {
-    final expanded = Set<String>.from(state.expandedPaths);
-    var changed = false;
-    for (final p in paths) {
-      if (!expanded.contains(p) && !state.userClosedPaths.contains(p)) {
-        expanded.add(p);
-        changed = true;
-      }
-    }
-    if (changed) state = state.copyWith(expandedPaths: expanded);
-  }
-
   void resetAndExpandAll(Iterable<String> paths) {
     state = GpkgExpansionState(expandedPaths: Set.from(paths));
   }

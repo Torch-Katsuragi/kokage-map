@@ -211,15 +211,6 @@ class BaseMapProvider {
   static BaseMapProvider get defaultProvider =>
       availableProviders.firstWhere((p) => p.id == 'gsi_std');
 
-  /// 国土地理院地図のプロバイダーのみを取得
-  static List<BaseMapProvider> get gsiProviders =>
-      availableProviders
-          .where(
-            (provider) =>
-                provider.type.toString().startsWith('BaseMapType.gsi'),
-          )
-          .toList();
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

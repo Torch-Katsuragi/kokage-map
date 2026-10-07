@@ -105,9 +105,6 @@ class OverlayTransformTool extends MapTool {
   /// 操作対象を取得
   OverlayImageNode? get target => _target;
 
-  /// ドラッグ中かどうか
-  bool get isDragging => _activeHandle != _HandleType.none;
-
   /// 回転ハンドルの地理座標（上辺中点から外側へオフセット）
   LatLng? get rotationHandlePosition {
     if (_target == null) return null;

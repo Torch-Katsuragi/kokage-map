@@ -607,23 +607,6 @@ class KMetaSync {
     return json;
   }
 
-  /// 同期用JSONへシリアライズ（deviceIdを除外）
-  /// Driveにアップロードする際はこちらを使用
-  Map<String, dynamic> toJsonForSync() {
-    final json = <String, dynamic>{};
-    if (driveId != null) json['driveId'] = driveId;
-    if (driveFolderName != null) json['driveFolderName'] = driveFolderName;
-    if (driveUrl != null) json['driveUrl'] = driveUrl;
-    if (isReadOnly != null) json['isReadOnly'] = isReadOnly;
-    if (lastSynced != null) json['lastSynced'] = lastSynced!.toIso8601String();
-    if (driveRevisionId != null) json['driveRevisionId'] = driveRevisionId;
-    // deviceIdは同期対象外なので含めない
-    if (files.isNotEmpty) {
-      json['files'] = files.map((k, v) => MapEntry(k, v.toJson()));
-    }
-    return json;
-  }
-
   /// 親設定とマージ（同期設定は継承しない = 各フォルダ独立）
   KMetaSync mergeWith(KMetaSync? parent) => this;
 
@@ -883,23 +866,6 @@ class KMeta {
     }
   }
 
-  /// ファイルに保存
-  Future<bool> saveToFile(String folderPath) async {
-    try {
-      final json = toJson();
-      final content = const JsonEncoder.withIndent('  ').convert(json);
-      final path = '$folderPath/$kMetaFileName';
-      // 中身が同じなら書かない（更新時刻が進むと Drive 同期が毎回アップロードする。2026-09-24）
-      if (await fs.exists(path) && await fs.readAsString(path) == content) return true;
-      await fs.writeAsString(path, content);
-      AppLogger.debug('[KMeta] Saved to $folderPath');
-      return true;
-    } catch (e) {
-      AppLogger.debug('[KMeta] Error saving to $folderPath: $e');
-      return false;
-    }
-  }
-
   /// 空かどうか
   bool get isEmpty =>
       visibility.isEmpty && styles.isEmpty && layout.isEmpty && sync.isEmpty &&
@@ -924,10 +890,6 @@ class KMeta {
 
   /// レイヤーの可視状態を取得
   bool? getLayerVisibility(String layerName) => visibility.layers[layerName];
-
-  /// GeoPackageの可視状態を取得
-  bool? getGeoPackageVisibility(String gpkgName) =>
-      visibility.geopackages[gpkgName];
 
   /// コピーを作成（一部設定を変更）
   KMeta copyWith({

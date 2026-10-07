@@ -38,9 +38,6 @@ class TurfConverter {
   static List<List<double>> latlngsToPositions(List<LatLng> latlngs) =>
       latlngs.map(latlngToPosition).toList();
 
-  static List<LatLng> positionsToLatlngs(List<List<num>> positions) =>
-      positions.map(positionToLatlng).toList();
-
   // ============================================================
   // LatLng → turf Geometry (Single)
   // ============================================================

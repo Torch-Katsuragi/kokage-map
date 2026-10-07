@@ -51,29 +51,6 @@ class QgisInterop {
   /// 生成し直すと元と違うものを書き込むことになるため。
   final Map<String, String> _removedTriggers = {};
 
-  /// 復元待ちのトリガーがあるか
-  bool get hasRemovedTriggers => _removedTriggers.isNotEmpty;
-
-  /// SpatiaLite関数に依存するSQLか
-  static bool usesSpatialiteFunctions(String sql) {
-    const functions = [
-      'ST_IsEmpty',
-      'ST_MinX',
-      'ST_MaxX',
-      'ST_MinY',
-      'ST_MaxY',
-      'ST_MinZ',
-      'ST_MaxZ',
-      'ST_MinM',
-      'ST_MaxM',
-      'ST_GeometryType',
-      'ST_SRID',
-      'IsValidGPB',
-      'gpkgMakePoint',
-    ];
-    return functions.any(sql.contains);
-  }
-
   /// 削除するトリガーの定義を控えておく。
   ///
   /// 実際の DROP は呼び出し側が行う。ここは「戻せるようにする」だけ。

@@ -80,9 +80,6 @@ class BluetoothGnssService extends ChangeNotifier {
   final List<String> _nmeaBuffer = [];
 
   // 統計情報
-  int _receivedSentenceCount = 0;
-  int _validPositionCount = 0;
-  DateTime? _lastPositionUpdate;
   DateTime? _lastNotificationTime;
 
   // Location service for mock location
@@ -91,7 +88,6 @@ class BluetoothGnssService extends ChangeNotifier {
   // Getters
   bool get isConnecting => _isConnecting;
   bool get isConnected => _isConnected;
-  bool get isMockLocationEnabled => _isMockLocationEnabled;
   BluetoothDevice? get connectedDevice => _connectedDevice;
   double? get latitude => _latitude;
   double? get longitude => _longitude;
@@ -100,9 +96,6 @@ class BluetoothGnssService extends ChangeNotifier {
   double? get speed => _speed;
   double? get bearing => _bearing;
   DateTime? get timestamp => _timestamp;
-  int get receivedSentenceCount => _receivedSentenceCount;
-  int get validPositionCount => _validPositionCount;
-  DateTime? get lastPositionUpdate => _lastPositionUpdate;
 
   // 衛星情報・DOP用のgetters
   int? get satelliteCount => _satelliteCount;
@@ -111,14 +104,6 @@ class BluetoothGnssService extends ChangeNotifier {
   double? get vdop => _vdop;
   int? get gpsQuality => _gpsQuality;
   int? get fixMode => _fixMode;
-  List<int> get usedSatellites => List.unmodifiable(_usedSatellites);
-  String? get detectedSbasSystem => _detectedSbasSystem;
-  int? get sbasPrn => _sbasPrn;
-  String? get dgpsStationId => _dgpsStationId;
-  List<int> get sbasInView => List.unmodifiable(_sbasInView);
-
-  /// 直近のNMEAセンテンスを取得
-  List<String> get recentNmeaSentences => List.unmodifiable(_nmeaBuffer);
 
   /// 補正タイプを人間可読な文字列で取得
   /// GGA Quality Indicatorに基づき、SBAS衛星の使用状況も反映
@@ -428,8 +413,6 @@ class BluetoothGnssService extends ChangeNotifier {
   /// NMEA文の処理
   void _processNmeaSentence(String sentence) {
     try {
-      _receivedSentenceCount++;
-
       // NMEAバッファに追加（サイズ制限）
       _nmeaBuffer.add(sentence);
       if (_nmeaBuffer.length > _maxNmeaBufferSize) {
@@ -500,8 +483,6 @@ class BluetoothGnssService extends ChangeNotifier {
 
         if (_latitude != null && _longitude != null) {
           _timestamp = DateTime.now();
-          _lastPositionUpdate = _timestamp;
-          _validPositionCount++;
 
           // Mock Locationに位置情報を送信
           if (_isMockLocationEnabled) {
@@ -557,8 +538,6 @@ class BluetoothGnssService extends ChangeNotifier {
 
         if (_latitude != null && _longitude != null) {
           _timestamp = DateTime.now();
-          _lastPositionUpdate = _timestamp;
-          _validPositionCount++;
 
           // Mock Locationに位置情報を送信
           if (_isMockLocationEnabled) {
@@ -762,38 +741,6 @@ class BluetoothGnssService extends ChangeNotifier {
     } catch (e) {
       AppLogger.debug('$_logTag: Mock Location送信エラー: $e');
     }
-  }
-
-  /// 接続状態の統計情報を取得
-  Map<String, dynamic> getConnectionStats() {
-    return {
-      'isConnected': _isConnected,
-      'connectedDevice': _connectedDevice?.name,
-      'deviceAddress': _connectedDevice?.address,
-      'receivedSentences': _receivedSentenceCount,
-      'validPositions': _validPositionCount,
-      'lastUpdate': _lastPositionUpdate?.toIso8601String(),
-      'currentPosition': {
-        'latitude': _latitude,
-        'longitude': _longitude,
-        'altitude': _altitude,
-        'accuracy': _accuracy,
-        'speed': _speed,
-        'bearing': _bearing,
-        'satelliteCount': _satelliteCount,
-        'hdop': _hdop,
-        'pdop': _pdop,
-        'vdop': _vdop,
-        'gpsQuality': _gpsQuality,
-        'fixMode': _fixMode,
-        'fixType': fixTypeString,
-      },
-    };
-  }
-
-  /// NMEAバッファをクリア
-  void clearNmeaBuffer() {
-    _nmeaBuffer.clear();
   }
 
   /// 現在のNMEAバッファを文字列として取得

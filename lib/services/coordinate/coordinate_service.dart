@@ -15,12 +15,11 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: 統合座標変換サービス
 // EpsgRegistryを使用した座標変換機能を提供
-// WGS84 ⇔ 他座標系の変換、住所ベースの座標系自動判定、都道府県名抽出
+// WGS84 ⇔ 他座標系の変換、都道府県名抽出
 
 import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
 
-import '../../utils/address_converter.dart';
 import '../../utils/app_logger.dart';
 import 'epsg_registry.dart';
 
@@ -116,42 +115,6 @@ class CoordinateService {
   }
 
   // ========== 座標系自動判定 ==========
-
-  /// 緯度経度から最適な座標系を取得（住所ベース）
-  /// 日本国内ならJGD2011、海外ならUTMを返す
-  Future<EpsgDefinition?> getBestCoordinateSystem(LatLng point, {String? cachedState}) async {
-    try {
-      // キャッシュされた都道府県情報がある場合
-      if (cachedState != null) {
-        final jgd2011 = registry.getJgd2011FromPrefecture(cachedState);
-        if (jgd2011 != null) {
-          AppLogger.debug('[CoordinateService] キャッシュから座標系取得: ${jgd2011.code}');
-          return jgd2011;
-        }
-      }
-
-      // 住所を取得して座標系を判定
-      final address = await AddressConverter.getAddressFromLatLng(point);
-      if (address != null) {
-        final state = address.state ?? extractPrefecture(address.displayName);
-        if (state != null) {
-          final jgd2011 = registry.getJgd2011FromPrefecture(state);
-          if (jgd2011 != null) {
-            AppLogger.debug('[CoordinateService] 住所から座標系取得: ${jgd2011.code}');
-            return jgd2011;
-          }
-        }
-      }
-
-      // フォールバック: UTM座標系
-      final utmZone = registry.getUtmZone(point);
-      AppLogger.debug('[CoordinateService] フォールバック: ${utmZone.code}');
-      return utmZone;
-    } catch (e) {
-      AppLogger.debug('[CoordinateService] 座標系判定エラー: $e');
-      return null;
-    }
-  }
 
   /// 都道府県名からJGD2011座標系を取得（同期版）
   EpsgDefinition? getJgd2011FromPrefecture(String prefecture) {

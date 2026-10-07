@@ -44,19 +44,6 @@ class LayerImportExportDialog extends StatefulWidget {
     this.exportLayer,
   });
 
-  /// インポート用ダイアログを表示
-  static Future<void> showImportDialog(
-    BuildContext context, {
-    required GeoPackageNode targetGeoPackage,
-  }) {
-    return showDialog<void>(
-      context: context,
-      builder:
-          (context) =>
-              LayerImportExportDialog(targetGeoPackage: targetGeoPackage),
-    );
-  }
-
   /// エクスポート用ダイアログを表示
   static Future<void> showExportDialog(
     BuildContext context, {

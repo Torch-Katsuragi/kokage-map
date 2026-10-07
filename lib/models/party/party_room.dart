@@ -61,9 +61,6 @@ class RoomMeta {
     required this.expiresAtMs,
   });
 
-  /// [nowMs] 時点で参加可能か（有効かつ未失効）
-  bool joinableAt(int nowMs) => active && expiresAtMs > nowMs;
-
   factory RoomMeta.fromMap(String roomCode, Map<dynamic, dynamic> map) {
     return RoomMeta(
       roomCode: roomCode,

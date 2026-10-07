@@ -65,18 +65,6 @@ class BinaryUtils {
         .getInt32(0, Endian.little);
   }
 
-  /// 32bit符号なし整数をリトルエンディアンで読み込み
-  static int readUint32LittleEndian(Uint8List bytes, int offset) {
-    return ByteData.sublistView(bytes, offset, offset + 4)
-        .getUint32(0, Endian.little);
-  }
-
-  /// 16bit符号なし整数をリトルエンディアンで読み込み
-  static int readUint16LittleEndian(Uint8List bytes, int offset) {
-    return ByteData.sublistView(bytes, offset, offset + 2)
-        .getUint16(0, Endian.little);
-  }
-
   /// 64bit浮動小数点をリトルエンディアンで読み込み
   static double readFloat64LittleEndian(Uint8List bytes, int offset) {
     return ByteData.sublistView(bytes, offset, offset + 8)
@@ -110,17 +98,6 @@ class BinaryUtils {
         asciiBytes.addAll(List.filled(byteLength - asciiBytes.length, padByte));
       }
       return asciiBytes;
-    }
-  }
-
-  /// Shift-JIS（CP932）でデコード
-  static String decodeFromShiftJis(List<int> bytes) {
-    try {
-      return charset.shiftJis.decode(bytes);
-    } catch (e) {
-      AppLogger.debug('[BinaryUtils] Shift-JISデコード失敗: $e');
-      // フォールバック: ASCII範囲のみ
-      return String.fromCharCodes(bytes.where((c) => c >= 0x20 && c < 0x7F));
     }
   }
 }

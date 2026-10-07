@@ -140,9 +140,6 @@ class PartyLocationStore {
   /// ゴーストモード中か（同期アクセス）
   bool get ghost => _ghost;
 
-  /// 接続状態
-  PartyConnectionState get connectionState => monitor.state;
-
   /// 開始
   void start() {
     if (_started) return;

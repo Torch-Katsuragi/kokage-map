@@ -243,9 +243,6 @@ class BaseMapService extends ChangeNotifier {
         DateTime.now().difference(since) < _probeInterval;
   }
 
-  /// ダウンロード中かどうか
-  bool get isDownloading => _isDownloading;
-
   /// 指定プロバイダーのMBTilesファイルパスを取得
   String? getMBTilesPath(String providerId) => _tileCacheDb?.getMBTilesPath(providerId);
 
@@ -473,9 +470,6 @@ class BaseMapService extends ChangeNotifier {
     await _saveSettings();
     notifyListeners();
   }
-
-  /// 背景地図を 1 枚だけにする（そのプロバイダの不透明度 100）
-  Future<void> setProvider(BaseMapProvider provider) => setLayers([BaseMapLayer(providerId: provider.id)]);
 
   /// レイヤの並びを丸ごと差し替える（下から上へ）。同じプロバイダが 2 枚あれば後のを落とす
   Future<void> setLayers(List<BaseMapLayer> layers) async {
@@ -862,11 +856,6 @@ class BaseMapService extends ChangeNotifier {
     }
   }
 
-  /// キャッシュされているタイル数を取得
-  int getCachedTileCount({String? providerId}) {
-    return 0;
-  }
-
   /// プロバイダー別のキャッシュ統計を取得
   Future<Map<String, int>> getCacheStatistics() async {
     if (_tileCacheDb == null) return {};
@@ -875,28 +864,6 @@ class BaseMapService extends ChangeNotifier {
       return await _tileCacheDb!.getStatistics();
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Stats error: $e');
-      return {};
-    }
-  }
-
-  /// 詳細なキャッシュ統計を取得（デバッグ用）
-  Future<Map<String, Map<String, dynamic>>> getDetailedCacheStatistics() async {
-    if (_tileCacheDb == null) return {};
-    
-    try {
-      final stats = await _tileCacheDb!.getStatistics();
-      
-      final detailedStats = <String, Map<String, dynamic>>{};
-      for (final entry in stats.entries) {
-        detailedStats[entry.key] = {
-          'count': entry.value,
-          'provider': (BaseMapProvider.getProviderByCacheId(entry.key) ?? BaseMapProvider.getProviderById(entry.key))?.name ?? entry.key,
-        };
-      }
-      
-      return detailedStats;
-    } catch (e) {
-      AppLogger.debug('[BaseMapService] ❌ Detailed stats error: $e');
       return {};
     }
   }

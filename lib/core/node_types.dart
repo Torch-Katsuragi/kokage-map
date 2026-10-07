@@ -63,27 +63,12 @@ enum NodeType {
     return null;
   }
   
-  /// 文字列からNodeTypeへの変換（例外を投げるバージョン）
-  static NodeType fromStringOrThrow(String value) {
-    final type = fromString(value);
-    if (type == null) {
-      throw ArgumentError('Unknown NodeType: $value');
-    }
-    return type;
-  }
-  
   /// このノードタイプがコンテナ（子を持てる）かどうか
   ///
   /// ⚠ view は Layer にぶら下がるが、`children` には入らない
   /// （Layer の `children` は FeatureNode 専用。理由は [[lib/models/nodes/view_node]]）。
   bool get isContainer => this == folder || this == geopackage || this == layer;
-  
-  /// このノードタイプがリーフ（子を持たない）かどうか
-  bool get isLeaf => !isContainer;
-  
-  /// このノードタイプがファイルシステムに対応するかどうか
-  bool get hasFileSystemPath => this == folder || this == geopackage || this == image;
-  
+
   /// 表示用の名前（日本語）
   String get displayName {
     switch (this) {

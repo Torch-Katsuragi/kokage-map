@@ -30,15 +30,3 @@ extension GeographicToLatLng on Geographic {
   /// Geographic → LatLng 変換
   LatLng toLatLng() => LatLng(lat, lon);
 }
-
-extension LatLngListToGeographic on List<LatLng> {
-  /// LatLngリスト → Geographicリスト 変換
-  List<Geographic> toGeographics() =>
-      map((ll) => ll.toGeographic()).toList();
-}
-
-extension GeographicListToLatLng on List<Geographic> {
-  /// Geographicリスト → LatLngリスト 変換
-  List<LatLng> toLatLngs() =>
-      map((g) => g.toLatLng()).toList();
-}

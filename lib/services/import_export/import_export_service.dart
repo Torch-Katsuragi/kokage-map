@@ -160,16 +160,6 @@ class ImportExportService {
     return _exporters.map((e) => e.format).toList();
   }
 
-  /// 指定された形式がインポート可能か判定
-  bool canImport(String extension) {
-    return _importers.any((i) => i.canHandle(extension));
-  }
-
-  /// 指定された形式がエクスポート可能か判定
-  bool canExport(FileFormat format) {
-    return _exporters.any((e) => e.format == format);
-  }
-
   // ============================================
   // 後方互換性のためのメソッド
   // ============================================

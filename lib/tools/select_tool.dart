@@ -45,7 +45,6 @@ class SelectTool extends MapTool {
 
   int _pointerCount = 0;
   List<Offset> _lassoPoints = [];
-  List<Offset> get lassoPoints => _lassoPoints;
 
   static double _calcSelectRange(IMapState mapState) {
     try {

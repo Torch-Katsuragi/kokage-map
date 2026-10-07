@@ -184,22 +184,6 @@ class WebFileSystem implements KFileSystem {
     return _rootPath;
   }
 
-  /// 覚えているフォルダを忘れる
-  Future<void> forgetLastDirectory() async {
-    final db = await _openDb();
-    if (db == null) return;
-    try {
-      final store = db
-          .transaction(_storeName.toJS, 'readwrite')
-          .objectStore(_storeName);
-      await _await<JSAny?>(store.delete(_handleKey.toJS));
-    } catch (e) {
-      AppLogger.debug('[WebFileSystem] ハンドルの削除に失敗: $e');
-    } finally {
-      db.close();
-    }
-  }
-
   Future<void> _saveHandle(web.FileSystemDirectoryHandle handle) async {
     final db = await _openDb();
     if (db == null) return;

@@ -258,8 +258,6 @@ class TruPulseService extends ExternalDeviceService {
 
   /// Measurement Mode: 0=HD, 1=VD, 2=SD, 3=INC, 4=HT, 5=AZ, 6=ML
   Future<void> setMeasurementMode(int mode) => sendCommand('MM,$mode');
-  Future<void> setDistanceUnits(int units) => sendCommand('DU,$units');
-  Future<void> setAngleUnits(int units) => sendCommand('AU,$units');
 
   Future<void> remoteFire() => sendCommand('GO');
   Future<void> stopMeasurement() => sendCommand('ST');

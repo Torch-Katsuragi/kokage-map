@@ -181,7 +181,6 @@ class TileRange {
   double get west => WebMercator.tileWest(x0, z);
   double get south => WebMercator.tileNorth(y1 + 1, z);
   double get widthMeters => width * WebMercator.tileSpan(z);
-  double get heightMeters => height * WebMercator.tileSpan(z);
 }
 
 /// 進捗通知（読み込んだ枚数 / 全枚数）

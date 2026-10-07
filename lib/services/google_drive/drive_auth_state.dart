@@ -88,9 +88,6 @@ class DriveAuthState extends ChangeNotifier {
   /// 認証済みかどうか
   bool get isAuthenticated => _status == DriveAuthStatus.authenticated;
 
-  /// 認証中かどうか
-  bool get isAuthenticating => _status == DriveAuthStatus.authenticating;
-
   /// 認証開始
   void setAuthenticating() {
     _status = DriveAuthStatus.authenticating;

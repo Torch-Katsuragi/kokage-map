@@ -47,42 +47,6 @@ class DegreeMeterConverter {
     final double latRad = lat * degToRad;
     return degToRad * R * math.cos(latRad);
   }
-
-  /// 緯度方向の距離（メートル）→度変換
-  /// [meters]: 距離（m）
-  static double metersToDegreesLat(double meters) {
-    return meters / metersPerDegreeLat();
-  }
-
-  /// 経度方向の距離（メートル）→度変換
-  /// [meters]: 距離（m）
-  /// [lat]: 緯度（degree）
-  static double metersToDegreesLng(double meters, double lat) {
-    return meters / metersPerDegreeLng(lat);
-  }
-
-  /// 緯度方向の距離（度）→メートル変換
-  /// [degrees]: 距離（度）
-  static double degreesToMetersLat(double degrees) {
-    return degrees * metersPerDegreeLat();
-  }
-
-  /// 経度方向の距離（度）→メートル変換
-  /// [degrees]: 距離（度）
-  /// [lat]: 緯度（degree）
-  static double degreesToMetersLng(double degrees, double lat) {
-    return degrees * metersPerDegreeLng(lat);
-  }
-
-  /// 緯度経度平面の面積（degree^2）をメートル単位（m^2）に変換
-  /// [area]: degree^2単位の面積
-  /// [lat]: ポリゴン中心緯度（degree）
-  /// 戻り値: 面積（m^2）
-  static double convertAreaToMeters2(double area, double lat) {
-    final double mPerDegLat = metersPerDegreeLat();
-    final double mPerDegLng = metersPerDegreeLng(lat);
-    return area * mPerDegLat * mPerDegLng;
-  }
 }
 
 /// 距離・長さ・面積・重心計算
@@ -351,32 +315,6 @@ class FeatureSearch {
     }
     return double.infinity;
   }
-
-  /// 点とfeatureリストの中で最も近いfeatureを取得
-  /// [pt]: 判定点
-  /// [features]: FeatureNodeリスト
-  /// [featureType]: 'point'|'line'|'polygon'
-  /// [range]: 許容距離（m, nullなら無制限）
-  /// 戻り値: 最近傍FeatureNodeと距離のMapEntry（なければnull）
-  static MapEntry<FeatureNode, double>? findNearestFeature(
-    LatLng pt,
-    List<FeatureNode> features,
-    String featureType, [
-    double? range,
-  ]) {
-    FeatureNode? nearest;
-    double minDist = double.infinity;
-    for (final f in features) {
-      final d = calcPointToFeatureDistance(pt, f.geometry, featureType);
-      if (d < minDist) {
-        minDist = d;
-        nearest = f;
-      }
-    }
-    if (nearest == null) return null;
-    if (range != null && minDist > range) return null;
-    return MapEntry(nearest, minDist);
-  }
 }
 
 /// ポリゴン合成処理
@@ -574,36 +512,4 @@ class LineSimplification {
       'lengthErrorPercent': '$lengthErrorPercent%',
     };
   }
-
-  /// 適応的簡略化（段階的に許容誤差を調整）
-  /// [line]: 簡略化対象のライン
-  /// [targetPointCount]: 目標点数
-  /// [maxTolerance]: 最大許容誤差（メートル）
-  /// 戻り値: 簡略化されたライン
-  static List<LatLng> simplifyLineAdaptive(
-    List<LatLng> line,
-    int targetPointCount, {
-    double maxTolerance = 100.0,
-  }) {
-    if (line.length <= targetPointCount) {
-      return List.from(line);
-    }
-
-    double tolerance = 1.0; // 初期値1メートル
-    List<LatLng> result = line;
-
-    // 目標点数になるまで許容誤差を段階的に増加
-    while (result.length > targetPointCount && tolerance <= maxTolerance) {
-      result = simplifyLineDouglasPeucker(line, tolerance);
-      tolerance *= 1.5; // 1.5倍ずつ増加
-    }
-
-    AppLogger.debug(
-      '[LineSimplification] 適応的簡略化完了: '
-      '${line.length}点 → ${result.length}点 (許容誤差: ${tolerance.toStringAsFixed(1)}m)',
-    );
-
-    return result;
-  }
 }
-

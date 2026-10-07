@@ -77,9 +77,6 @@ class InternalGpsLocationStore {
   /// delegatedモード（ForegroundService経由）かどうか
   bool get isDelegated => _isDelegated;
 
-  /// 最新の座標レコード（同期アクセス用）
-  GpsPositionRecord? get latestPosition => _latestRecord;
-
   /// 位置更新ストリーム（UI、追跡mixin等が購読）
   Stream<GpsPositionRecord> get positionStream => _positionController.stream;
 

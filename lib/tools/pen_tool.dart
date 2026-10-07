@@ -328,12 +328,6 @@ class PenTool extends MapTool {
     _pointerCount = 0;
   }
 
-  /// リソースのクリーンアップ
-  void cleanUp() {
-    _uiUpdateTimer?.cancel();
-    _uiUpdateTimer = null;
-  }
-
   /// 消しゴムの当たり判定。選択ツールと同じ半径・同じ優先順位だが、
   /// 対象は**選択中レイヤのフィーチャだけ**（ペンで描く先と同じ）。
   /// 写真・オーバーレイ・現在位置は消さない

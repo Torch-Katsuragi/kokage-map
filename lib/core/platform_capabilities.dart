@@ -71,9 +71,6 @@ class PlatformCapabilities {
   /// web は false（ブラウザのHTTPキャッシュに任せる）。
   static bool get hasTileCache => hasLocalFileSystem;
 
-  /// オフライン時に `mbtiles://` を直接読ませられるか
-  static bool get supportsOfflineMBTiles => isAndroid;
-
   /// ギャラリー取り込みで content URI からネイティブ実ファイルコピー（EXIF保持）ができるか
   static bool get supportsNativeGalleryCopy => isAndroid;
 
@@ -88,8 +85,6 @@ class PlatformCapabilities {
   static bool get supportsCompass => isMobile;
 
   static bool get supportsDriveSyncStatusCheck => isMobile;
-
-  static bool get supportsNativeLocationRender => isMobile;
 
   static bool get supportsGpsTracking => isMobile;
 
@@ -108,11 +103,6 @@ class PlatformCapabilities {
   /// 2026-08-24 実測（同一PC・同一ブラウザ）:
   /// high は初回まで60〜90秒で精度1500m、medium は0.2秒で精度369m。
   static bool get supportsHighAccuracyGps => !kIsWeb;
-
-  /// `Geolocator.getLastKnownPosition()` を呼べるか。
-  ///
-  /// ⚠ geolocator_web 4.1.3 は未実装で例外を投げる。
-  static bool get supportsLastKnownPosition => !kIsWeb;
 
   /// Bluetooth経由の外部GNSS機器 — モバイルのみ
   static bool get supportsBluetoothGnss => isMobile;

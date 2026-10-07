@@ -1036,22 +1036,6 @@ class TerrainWorld extends ChangeNotifier {
     return out.reversed.toList();
   }
 
-  /// 親の段を粗い方から順に揃える（[ancestorRanges] の順）。
-  /// [replaceQueue] なら一番粗い段でキューを入れ替える（前の景色の残りを捨てる）
-  void ensureAncestors(
-    TileRange range, {
-    required double centerX,
-    required double centerY,
-    int levels = 2,
-    bool replaceQueue = false,
-    int margin = 1,
-  }) {
-    final ranges = ancestorRanges(range, levels: levels, margin: margin);
-    for (var i = 0; i < ranges.length; i++) {
-      ensure(ranges[i], centerX: centerX, centerY: centerY, replaceQueue: replaceQueue && i == 0);
-    }
-  }
-
   /// 上限を超えたぶんを、核（[keep] とその親 [ancestorLevels] 段、余白込み）以外の古いものから捨てる
   void trim({required TileRange keep, int ancestorLevels = 3, int margin = 1, List<TileRange> alsoKeep = const []}) {
     if (_tiles.length <= maxTiles) return;

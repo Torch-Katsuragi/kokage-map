@@ -492,15 +492,6 @@ class TruPulseTool extends DeviceTool {
     AppLogger.debug('[TruPulseTool] Shift delete completed (${chain.length} points shifted)');
   }
 
-  // =========================================================
-  // Station clear
-  // =========================================================
-
-  void clearStation() {
-    _station = null;
-    _notifyUI();
-  }
-
   /// 現在のStationが属するレイヤの測量チェーンを取得
   TraverseChain? get currentChain {
     final layer = _station?.parent;

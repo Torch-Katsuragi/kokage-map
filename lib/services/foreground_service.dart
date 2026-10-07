@@ -129,15 +129,6 @@ class ForegroundServiceManager {
     } catch (_) {}
     AppLogger.debug('[ForegroundService] クリーンアップ完了');
   }
-
-  /// サービス実行状態取得（OS側に問い合わせ）
-  Future<bool> isServiceRunning() async {
-    try {
-      return await FlutterBackgroundService().isRunning();
-    } catch (_) {
-      return false;
-    }
-  }
 }
 
 /// サービスのエントリーポイント

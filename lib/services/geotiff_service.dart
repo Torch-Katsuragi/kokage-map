@@ -167,22 +167,6 @@ class GeoTiffService {
     return png;
   }
 
-  /// TIFFファイルにGeoTIFFタグ（ModelTransformationTag）が含まれるか判定
-  ///
-  /// OverlayImageNode判定のための軽量チェック。
-  static bool hasGeoTiffTags(Uint8List bytes) {
-    try {
-      final decoder = img.TiffDecoder();
-      final info = decoder.startDecode(bytes);
-      if (info == null || info.images.isEmpty) return false;
-      // frames[0] のExifDataを確認
-      final image = info.images.first;
-      return image.tags.containsKey(kModelTransformationTag);
-    } catch (_) {
-      return false;
-    }
-  }
-
   /// GeoTIFFタグからオーバーレイパラメータを逆算する
   ///
   /// ModelTransformationTag（4x4行列）を読み取り、

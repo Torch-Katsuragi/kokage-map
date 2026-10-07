@@ -59,12 +59,6 @@ class TraverseChain {
 
   const TraverseChain({required this.origin, required this.points});
 
-  /// 起点を含む全座標リスト
-  List<LatLng> get allPositions => [
-        origin.point,
-        ...points.map((p) => p.position),
-      ];
-
   /// 総路線長（メートル）
   double get totalDistance {
     const d = Distance(roundResult: false);

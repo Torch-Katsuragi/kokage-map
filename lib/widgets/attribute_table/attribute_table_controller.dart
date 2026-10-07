@@ -70,7 +70,6 @@ class AttributeTableController extends ChangeNotifier {
   AttributeTableSettings _settings = const AttributeTableSettings();
 
   // フィルタ状態
-  String _filterExpression = '';
   String _filterSql = '';
   Set<int> _filteredRowIds = {};
   bool _isFiltered = false;
@@ -94,12 +93,10 @@ class AttributeTableController extends ChangeNotifier {
   List<TrinaRow> get rows => _displayRows;
   List<String> get columnNames => _columnNames;
   List<FeatureNode> get features => _displayFeatures;
-  List<FeatureNode> get allFeatures => _features;
   bool get isLoading => _isLoading;
   AttributeTableSettings get settings => _settings;
   bool get isPointLayer => layer is PointLayerNode;
   bool get isFiltered => _isFiltered;
-  String get filterExpression => _filterExpression;
   String get filterSql => _filterSql;
   String? get filterError => _filterError;
   int get totalCount => _features.length;
@@ -354,7 +351,6 @@ class AttributeTableController extends ChangeNotifier {
       return _filterError;
     }
 
-    _filterExpression = expression;
     _filterSql = sql;
     _filteredRowIds = ids.toSet();
     _isFiltered = true;
@@ -387,7 +383,6 @@ class AttributeTableController extends ChangeNotifier {
 
   /// フィルタを解除
   Future<void> clearFilter() async {
-    _filterExpression = '';
     _filterSql = '';
     _filteredRowIds = {};
     _isFiltered = false;

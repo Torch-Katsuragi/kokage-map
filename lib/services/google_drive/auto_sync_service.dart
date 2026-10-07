@@ -72,7 +72,6 @@ class AutoSyncService {
   void Function(DriveFolderNode node, SyncResult result)? onMerged;
 
   bool get isEnabled => _enabled;
-  bool get isSyncing => _isSyncing;
 
   /// 初期化＆開始
   Future<void> start({
@@ -373,11 +372,5 @@ class AutoSyncService {
       result.addAll(_collectDriveFolders(child));
     }
     return result;
-  }
-
-  /// 手動で即時同期をトリガー（UIボタン用）
-  Future<void> triggerNow() async {
-    if (_isSyncing) return;
-    await _runAutoSync();
   }
 }

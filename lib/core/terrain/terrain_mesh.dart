@@ -436,8 +436,6 @@ class TerrainMeshBuilder {
   List<_Chunk>? _drawOrder;
   int? _orderedQuadrant;
 
-  int get chunkCount => _chunks.length;
-
   /// カメラに依らない骨組みだけの [TerrainMesh]（`bands` は空）
   ///
   /// GPU 経路（`TerrainGpuWorldRenderer`）では地形の投影はシェーダがやるので `Vertices` は要らないが、

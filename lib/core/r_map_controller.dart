@@ -50,8 +50,6 @@ class RMapController {
 
   /// 最後に覚えたカメラ（3D を組み立てるときの初期値）
   LatLng? get lastCenter => _lastCenter;
-  double get lastZoom => _lastZoom;
-  double get lastBearing => _lastBearing;
 
   void rememberCamera(LatLng center, double zoom, double bearing) {
     _lastCenter = center;

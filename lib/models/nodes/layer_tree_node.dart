@@ -72,17 +72,6 @@ abstract class LayerTreeNode {
   /// PathResolverがGlobalPathResolverの場合true
   bool get isGlobalNode => pathResolver.isGlobal;
 
-  /// このノードまたは祖先がグローバルフォルダ内にあるか
-  /// 祖先チェインにisGlobalNode=trueのノードがあればtrue
-  bool get isInsideGlobalFolder {
-    LayerTreeNode? current = this;
-    while (current != null) {
-      if (current.isGlobalNode) return true;
-      current = current.parent;
-    }
-    return false;
-  }
-
   /// 初期化フラグ（重複実行を防ぐ）
   bool _initialized = false;
 
@@ -141,11 +130,6 @@ abstract class LayerTreeNode {
       'children': children.map((child) => child.toDict()).toList(),
     };
     return dict;
-  }
-
-  /// 指定typeの子ノードリストを返す
-  List<LayerTreeNode> getChildrenByType(NodeType type) {
-    return children.where((c) => c.nodeType == type).toList();
   }
 
   /// 可視状態のLayerNodeリストを再帰的に取得（高速化用）

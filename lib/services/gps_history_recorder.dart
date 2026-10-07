@@ -127,9 +127,6 @@ class GpsHistoryRecorder extends ChangeNotifier {
     ..._pendingDetails.map((p) => LatLng(p.latitude, p.longitude)),
   ]);
 
-  /// 本日の日付キー
-  String get todayDateKey => _buildDateKey(DateTime.now());
-
   // ==============================
   // 初期化
   // ==============================

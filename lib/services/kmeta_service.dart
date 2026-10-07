@@ -301,32 +301,6 @@ class KMetaService {
     });
   }
 
-  /// デフォルトスタイルを更新
-  Future<bool> setDefaultStyle(String folderPath, KMetaLayerStyle style) async {
-    return _serial(folderPath, () async {
-      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-      final updatedStyles = KMetaStyles(
-        defaultStyle: style,
-        layers: rawMeta.styles.layers,
-      );
-      final updatedMeta = rawMeta.copyWith(styles: updatedStyles);
-      return saveMeta(folderPath, updatedMeta);
-    });
-  }
-
-  /// レイアウトの並び順を更新
-  Future<bool> setSortOrder(String folderPath, List<String> sortOrder) async {
-    return _serial(folderPath, () async {
-      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-      final updatedLayout = KMetaLayout(
-        sortOrder: sortOrder,
-        expanded: rawMeta.layout.expanded,
-      );
-      final updatedMeta = rawMeta.copyWith(layout: updatedLayout);
-      return saveMeta(folderPath, updatedMeta);
-    });
-  }
-
   /// 展開状態を更新
   Future<bool> setExpanded(String folderPath, bool expanded) async {
     return _serial(folderPath, () async {
@@ -471,18 +445,6 @@ class KMetaService {
         ),
       ),
     );
-  }
-
-  /// 設定が無ければ空の設定を書く（存在する場合は読むだけ）
-  Future<KMeta?> initializeMetaIfNeeded(String folderPath) async {
-    if (await hasMetaFile(folderPath)) {
-      return getRawMeta(folderPath);
-    }
-    const newMeta = KMeta();
-    if (await saveMeta(folderPath, newMeta)) {
-      return newMeta;
-    }
-    return null;
   }
 
   /// 画像オーバーレイ設定を保存

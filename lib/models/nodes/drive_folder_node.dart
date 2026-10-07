@@ -21,7 +21,6 @@ import 'package:path/path.dart' as p;
 import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
 import '../../services/google_drive/sync_base_store.dart';
-import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
 import 'folder_node.dart';
 import 'geopackage_node.dart';
@@ -187,33 +186,6 @@ class DriveFolderNode extends FolderNode {
       );
     }
     return nodes;
-  }
-
-  /// KMetaから同期情報を読み込み
-  Future<void> loadSyncInfo() async {
-    final folderPath = getAbsoluteFilePath();
-    if (folderPath == null) return;
-
-    final meta = await KMetaService.instance.getMeta(folderPath);
-    if (meta.sync.lastSynced != null) {
-      lastSynced = meta.sync.lastSynced;
-    }
-    if (meta.sync.driveRevisionId != null) {
-      driveRevisionId = meta.sync.driveRevisionId;
-    }
-  }
-
-  /// 同期情報をKMetaに保存
-  Future<void> saveSyncInfo() async {
-    final folderPath = getAbsoluteFilePath();
-    if (folderPath == null) return;
-
-    await KMetaService.instance.setDriveSync(
-      folderPath,
-      driveId: driveId,
-      lastSynced: lastSynced,
-      driveRevisionId: driveRevisionId,
-    );
   }
 }
 

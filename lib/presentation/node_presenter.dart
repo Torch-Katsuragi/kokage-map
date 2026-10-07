@@ -37,7 +37,6 @@ const Color cloudColor = Color(0xFF7EB0D5);
 /// - アイコン
 /// - 色
 /// - 表示名
-/// - ツールチップ
 class NodePresenter {
   NodePresenter._();
   
@@ -145,11 +144,6 @@ class NodePresenter {
   // Drive連携フォルダ関連
   // ========================================
   
-  /// Drive連携フォルダかどうか
-  static bool isDriveFolder(LayerTreeNode node) {
-    return node is DriveFolderNode || node is DriveSubFolderNode;
-  }
-  
   /// 同期状態に対応するオーバーレイアイコンを取得
   static IconData? getSyncOverlayIcon(SyncStatus status) {
     switch (status) {
@@ -246,11 +240,6 @@ class NodePresenter {
   // 表示名関連
   // ========================================
   
-  /// ノードタイプの日本語表示名を取得
-  static String getTypeName(NodeType type) {
-    return type.displayName;
-  }
-  
   /// ノードの表示名を取得（名前 + タイプ情報）
   static String getDisplayName(LayerTreeNode node) {
     // sys の name は内部の鍵（`<sys>`）。表示は i18n
@@ -261,16 +250,6 @@ class NodePresenter {
       if (path != null && path.isNotEmpty) return p.basename(path);
     }
     return node.name;
-  }
-  
-  /// ノードのツールチップテキストを取得
-  static String getTooltip(LayerTreeNode node) {
-    final typeName = getTypeName(node.nodeType);
-    if (node is SysNode) return getDisplayName(node);
-    if (node.isGlobalNode) {
-      return '${node.name} (Global $typeName)';
-    }
-    return '${node.name} ($typeName)';
   }
   
   // ========================================
@@ -285,35 +264,6 @@ class NodePresenter {
       size: size,
     );
   }
-  
-  /// ノードタイプのアイコンウィジェットを生成
-  static Icon buildIconForType(NodeType type, {double? size, bool isGlobal = false}) {
-    return Icon(
-      getIconForType(type),
-      color: isGlobal ? Colors.blue.shade700 : getColorForType(type),
-      size: size,
-    );
-  }
-  
-  // ========================================
-  // レイヤー固有の情報
-  // ========================================
-  
-  /// レイヤーのジオメトリタイプ名を取得
-  static String? getGeometryTypeName(LayerTreeNode node) {
-    if (node is PointLayerNode) return 'Point';
-    if (node is LineLayerNode) return 'Line';
-    if (node is PolygonLayerNode) return 'Polygon';
-    return null;
-  }
-  
-  /// フィーチャのジオメトリタイプ名を取得
-  static String? getFeatureGeometryTypeName(LayerTreeNode node) {
-    if (node is PointFeatureNode) return 'Point';
-    if (node is LineFeatureNode) return 'Line';
-    if (node is PolygonFeatureNode) return 'Polygon';
-    return null;
-  }
 }
 
 // ========================================
@@ -324,15 +274,6 @@ class NodePresenter {
 class FeatureDetailFormatter {
   FeatureDetailFormatter._();
   
-  /// 距離をフォーマット
-  static String formatDistance(double meters) {
-    if (meters >= 10000) {
-      return '${(meters / 1000).toStringAsFixed(3)} km';
-    } else {
-      return '${meters.toStringAsFixed(2)} m';
-    }
-  }
-  
   /// 面積をフォーマット
   static String formatArea(double squareMeters) {
     if (squareMeters >= 10000) {
@@ -341,94 +282,4 @@ class FeatureDetailFormatter {
       return '${squareMeters.toStringAsFixed(3)} m²';
     }
   }
-  
-  /// 座標をフォーマット
-  static String formatCoordinate(double value, {int decimals = 6}) {
-    return value.toStringAsFixed(decimals);
-  }
-  
-  /// FeatureNodeの詳細情報を取得
-  static List<MapEntry<String, String>> getFeatureDetails(FeatureNode node) {
-    final entries = <MapEntry<String, String>>[];
-    
-    // 基本情報
-    entries.add(MapEntry('name', node.name));
-    if (node.description != null && node.description!.isNotEmpty) {
-      entries.add(MapEntry('description', node.description!));
-    }
-    
-    // ID情報
-    entries.add(MapEntry('id', node.rowId.toString()));
-    
-    // 座標情報
-    final centroid = node.centroid;
-    entries.add(MapEntry('latitude', formatCoordinate(centroid.latitude)));
-    entries.add(MapEntry('longitude', formatCoordinate(centroid.longitude)));
-    
-    // ジオメトリ固有の情報
-    if (node is LineFeatureNode) {
-      entries.add(MapEntry('length', formatDistance(node.length)));
-      entries.add(MapEntry('vertex_count', '${node.line.length}'));
-    } else if (node is PolygonFeatureNode) {
-      entries.add(MapEntry('area', formatArea(node.area)));
-      final totalVertices = node.polygon.fold<int>(0, (sum, ring) {
-        return sum + (ring.length > 1 ? ring.length - 1 : ring.length);
-      });
-      entries.add(MapEntry('vertex_count', '$totalVertices'));
-    }
-    
-    return entries;
-  }
-  
-  /// FeatureNodeの詳細情報をMap形式で取得
-  static Map<String, String> getFeatureInfoMap(FeatureNode node) {
-    final details = <String, String>{};
-    
-    // 基本情報
-    details['name'] = node.name;
-    if (node.description != null && node.description!.isNotEmpty) {
-      details['description'] = node.description!;
-    }
-    
-    // メタデータ
-    if (node.metadata != null && node.metadata!.isNotEmpty) {
-      for (final entry in node.metadata!.entries) {
-        details['metadata.${entry.key}'] = entry.value.toString();
-      }
-    }
-    
-    // ID情報
-    details['id'] = node.rowId.toString();
-    
-    // 座標情報
-    details['latitude'] = formatCoordinate(node.centroid.latitude);
-    details['longitude'] = formatCoordinate(node.centroid.longitude);
-    
-    // ジオメトリ固有の情報
-    if (node is LineFeatureNode) {
-      details['length'] = formatDistance(node.length);
-      details['vertex_count'] = '${node.line.length}';
-    } else if (node is PolygonFeatureNode) {
-      details['area'] = formatArea(node.area);
-      final totalVertices = node.polygon.fold<int>(0, (sum, ring) {
-        return sum + (ring.length > 1 ? ring.length - 1 : ring.length);
-      });
-      details['vertex_count'] = '$totalVertices';
-    }
-    
-    return details;
-  }
-}
-
-/// 後方互換性のための拡張メソッド
-/// 既存コードからの移行を容易にする
-extension NodePresenterExtension on LayerTreeNode {
-  /// アイコンを取得（NodePresenter経由）
-  IconData get presenterIcon => NodePresenter.getIcon(this);
-  
-  /// 色を取得（NodePresenter経由）
-  Color get presenterColor => NodePresenter.getColor(this);
-  
-  /// アイコンウィジェットを生成（NodePresenter経由）
-  Icon buildPresenterIcon({double? size}) => NodePresenter.buildIcon(this, size: size);
 }

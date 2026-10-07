@@ -129,17 +129,6 @@ class SyncProgress {
   double get progress =>
       totalCount > 0 ? processedCount / totalCount : 0.0;
 
-  /// サイズ進捗の表示文字列（例: "12.3 MB / 45.6 MB"）
-  String? get sizeProgressText {
-    if (totalBytes == null || totalBytes == 0) return null;
-    return '${_formatBytes(processedBytes ?? 0)} / ${_formatBytes(totalBytes!)}';
-  }
-
-  static String _formatBytes(int bytes) {
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
   const SyncProgress({
     required this.currentFile,
     required this.processedCount,
@@ -442,13 +431,6 @@ class MergeFileEntry {
     this.driveFileId,
     this.mergeable = false,
   });
-
-  /// ローカルの方が新しいか
-  bool get isLocalNewer {
-    if (localModifiedTime == null) return false;
-    if (remoteModifiedTime == null) return true;
-    return localModifiedTime!.isAfter(remoteModifiedTime!);
-  }
 
   /// 変更があるか（どちらか一方でも変更あり）
   bool get hasChanges => localChange != MergeChangeType.none || remoteChange != MergeChangeType.none;

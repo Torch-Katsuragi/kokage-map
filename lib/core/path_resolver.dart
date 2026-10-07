@@ -146,9 +146,4 @@ class PathResolverFactory {
   
   /// グローバル用のリゾルバを取得
   static PathResolver get global => GlobalPathResolver.instance;
-  
-  /// isGlobalフラグに基づいてリゾルバを取得
-  static PathResolver forGlobal(bool isGlobal) {
-    return isGlobal ? global : project;
-  }
 }

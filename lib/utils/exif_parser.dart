@@ -166,10 +166,4 @@ class ExifParser {
     }
     return make ?? model;
   }
-
-  /// DMS（度分秒）を十進度に変換
-  static double dmsToDecimal(List<double> dms) {
-    if (dms.length < 3) return 0.0;
-    return dms[0] + (dms[1] / 60.0) + (dms[2] / 3600.0);
-  }
 }

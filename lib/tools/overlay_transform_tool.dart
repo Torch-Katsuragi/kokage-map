@@ -28,6 +28,7 @@ import '../models/nodes/overlay_image_node.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import 'map_tool.dart';
+import 'pan_tool.dart';
 
 /// ハンドルの種類
 enum _HandleType {
@@ -41,10 +42,12 @@ enum _HandleType {
 }
 
 /// オーバーレイ画像変換ツール
-class OverlayTransformTool extends MapTool {
+class OverlayTransformTool extends MapTool with PanDelegation {
+  OverlayTransformTool(this._ref);
   final Ref _ref;
 
-  OverlayTransformTool(this._ref);
+  @override
+  PanTool get panTool => _ref.read(panToolProvider);
 
   /// 操作対象のオーバーレイノード
   OverlayImageNode? _target;
@@ -123,16 +126,11 @@ class OverlayTransformTool extends MapTool {
   }
 
   @override
-  void onTap(TapUpDetails details, IMapState mapState) {
-    // タップでハンドルを選択するだけ（何もしない）
-  }
-
-  @override
   void onScaleStart(ScaleStartDetails details, IMapState mapState) {
     if (details.pointerCount >= 2) {
       // 2本指: PanToolに委譲
       _isPanDelegating = true;
-      _ref.read(panToolProvider).onScaleStart(details, mapState);
+      panTool.onScaleStart(details, mapState);
       return;
     }
 
@@ -153,7 +151,7 @@ class OverlayTransformTool extends MapTool {
   @override
   void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
     if (_isPanDelegating) {
-      _ref.read(panToolProvider).onScaleUpdate(details, mapState);
+      panTool.onScaleUpdate(details, mapState);
       return;
     }
 
@@ -180,7 +178,7 @@ class OverlayTransformTool extends MapTool {
   @override
   void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
     if (_isPanDelegating) {
-      _ref.read(panToolProvider).onScaleEnd(details, mapState);
+      panTool.onScaleEnd(details, mapState);
       _isPanDelegating = false;
       return;
     }
@@ -198,23 +196,6 @@ class OverlayTransformTool extends MapTool {
     _activeHandle = _HandleType.none;
     _dragStartScreen = null;
   }
-
-  // PC: ホイール → PanToolに委譲
-  @override
-  void onPointerSignal(PointerEvent event, IMapState mapState) {
-    _ref.read(panToolProvider).onPointerSignal(event, mapState);
-  }
-
-  // PC: 中ボタンドラッグ → PanToolに委譲
-  @override
-  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) =>
-      _ref.read(panToolProvider).onMiddleButtonDown(event, mapState);
-  @override
-  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) =>
-      _ref.read(panToolProvider).onMiddleButtonMove(event, mapState);
-  @override
-  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) =>
-      _ref.read(panToolProvider).onMiddleButtonUp(event, mapState);
 
   // --------------------------------------------------
   // ハンドルヒットテスト

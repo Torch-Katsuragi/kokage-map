@@ -26,9 +26,6 @@ import '../interfaces/map_state_interface.dart';
 /// 画面側は今のツールを [ListenableBuilder] などで聞いて、その部分だけ描き直す。
 /// ペン・GPS 測量の描きかけは [GlobalDrawingState] が持ち、そちらが通知する
 abstract class MapTool extends ChangeNotifier {
-  /// PointerEventバッファ（Listener等でonPointerMove時に記録）
-  final List<Offset> pointerBuffer = [];
-
   /// ツール名（UI表示用）
   String get name;
 
@@ -65,18 +62,10 @@ abstract class MapTool extends ChangeNotifier {
   /// 中ボタンドラッグ終了イベント
   void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {}
 
-  /// バッファに座標を追加
-  void addPointerToBuffer(Offset offset) {
-    pointerBuffer.add(offset);
-  }
+  /// 指を置いてからスケールのジェスチャと分かるまでの生の位置（指を置くたび・動くたびに呼ばれる）。
+  /// 使うのは描き始めを取りこぼしたくないペンだけなので、既定では持たない
+  void addPointerToBuffer(Offset offset) {}
 
-  /// バッファをクリア
-  void clearPointerBuffer() {
-    pointerBuffer.clear();
-  }
-
-  /// バッファ内容を取得
-  List<Offset> getPointerBuffer() {
-    return List.unmodifiable(pointerBuffer);
-  }
+  /// 指を離したら捨てる
+  void clearPointerBuffer() {}
 }

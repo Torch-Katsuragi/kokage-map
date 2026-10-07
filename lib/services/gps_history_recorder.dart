@@ -48,6 +48,10 @@ class GpsHistoryRecorder extends ChangeNotifier {
   factory GpsHistoryRecorder() => _instance;
   GpsHistoryRecorder._internal();
 
+  /// シングルトンでない新しいもの（テストで「落ちて起動し直した」を作る）
+  @visibleForTesting
+  GpsHistoryRecorder.forTesting();
+
   static const String _logTag = 'GpsHistoryRecorder';
 
   // ファイル名
@@ -709,22 +713,16 @@ class GpsHistoryRecorder extends ChangeNotifier {
       final existingLayers = await _rawBufferFile!.getLayerNames();
       if (!existingLayers.contains(rawLayerName)) return;
 
+      // 反映した点は反映のたびに raw から消すので、raw に残っているのは反映する前に落ちた分。
+      // ⚠ 以前は「raw の件数 > 今日の反映済み件数」のときだけ戻していたため、その日に反映済みの点が
+      // raw の残りより多いと（ほぼいつも）戻さず、落ちる直前の最大 20 秒が軌跡から抜けていた。
+      // 消し損ねて残った反映済みの点を二重に入れないよう、反映済みの最後の時刻より後の点だけ戻す
+      final consolidatedUntil = _lastRecordedTime;
       final rawFeatures = await _rawBufferFile!.getFeatures(rawLayerName);
-      final rawCount = rawFeatures.length;
+      if (rawFeatures.isEmpty) return;
 
-      // Raw Buffer のポイント数がConsolidation済み件数以下なら復元不要
-      if (rawCount <= _lastConsolidatedIndex) return;
-
-      AppLogger.debug(
-        '$_logTag: 未反映ポイント検出 '
-        '(raw=$rawCount, consolidated=$_lastConsolidatedIndex, '
-        'diff=${rawCount - _lastConsolidatedIndex})',
-      );
-
-      // 未反映分だけ復元
       int recovered = 0;
-      for (int i = _lastConsolidatedIndex; i < rawFeatures.length; i++) {
-        final feature = rawFeatures[i];
+      for (final feature in rawFeatures) {
         final id = feature['id'];
         if (id == null) continue;
 
@@ -743,7 +741,9 @@ class GpsHistoryRecorder extends ChangeNotifier {
         }
         if (latLng == null) continue;
 
-        _pendingDetails.add(_trackPointFromRow(detail, latLng));
+        final point = _trackPointFromRow(detail, latLng);
+        if (consolidatedUntil != null && !point.timestamp.isAfter(consolidatedUntil)) continue;
+        _pendingDetails.add(point);
         // Raw Buffer rowId も追跡
         _pendingRawIds.add(featureId);
         recovered++;

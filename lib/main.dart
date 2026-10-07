@@ -37,7 +37,6 @@ import 'providers/selection_providers.dart';
 import 'providers/service_providers.dart';
 import 'providers/ui_state_providers.dart';
 import 'screens/home_screen.dart';
-import 'screens/terrain_spike/terrain_spike_screen.dart';
 import 'services/google_drive/index.dart';
 import 'services/internal_gps_location_store.dart';
 import 'services/kmeta_service.dart';
@@ -381,10 +380,6 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
         );
       },
       home: const HomeScreen(),
-      routes: {
-        // 3D 描画スパイク（開発用）。web は URL `#/terrain-spike` で直接開ける
-        '/terrain-spike': (context) => const TerrainSpikeScreen(),
-      },
       // ⚠ `/map` は routes に**置かない**。`/map?project=...`（`LaunchRequest`）も素の `/map` も
       //   Navigator の既定の初期ルート生成が `/` に落としてホームから始まる（それが狙い。ホームが要求どおりに
       //   プロジェクトを開き、地図がカメラを合わせる）。

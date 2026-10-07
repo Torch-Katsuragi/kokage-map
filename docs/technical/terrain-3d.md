@@ -32,8 +32,7 @@ tags: [technical, design, 3d, dem, terrain]
 | `contours.dart` | DEM から等高線（marching squares） |
 | `terrain_scene.dart` | `TerrainSceneBuilder`: GeoJSON（geobase の Feature + `k-style` / `k-label`）→ 持ち上げ済みの線・面・縁・点・ラベル（seam ②の実体） |
 
-開発用の画面は `lib/screens/terrain_spike/`（設定 > アプリ情報、debug / profile のみ。web は `#/terrain-spike`、
-Android は `--route /terrain-spike` か intent extra `route`）。製品機能ではない。
+開発用の試作画面（`lib/screens/terrain_spike/`）は 2026-10-07 に削除した。経緯は git の履歴に。
 
 ### 隠面処理: 並び替えは要らない
 

@@ -128,7 +128,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
   /// Consolidated末尾を先頭に1点含めて表示ギャップを防止
   List<LatLng> get todayPoints => List.unmodifiable([
     ?_lastConsolidatedPosition,
-    ..._pendingDetails.map((p) => LatLng(p.latitude, p.longitude)),
+    ..._pendingDetails.map((p) => p.toLatLng()),
   ]);
 
   // ==============================
@@ -489,7 +489,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
       // GPKGから現在のLine座標を読み出し + 新ポイント追加（read-modify-write）
       final currentLine = await _readCurrentLine();
       final newCoords = detailsToWrite
-          .map((p) => LatLng(p.latitude, p.longitude))
+          .map((p) => p.toLatLng())
           .toList();
       currentLine.addAll(newCoords);
 

@@ -99,7 +99,6 @@ class ForegroundServiceManager {
       AppLogger.debug('[ForegroundService] GPS位置取得サービス開始');
     } catch (e) {
       AppLogger.debug('[ForegroundService] サービス開始エラー: $e');
-      AppLogger.debug('[ForegroundService] エラー詳細: ${e.toString()}');
       rethrow;
     }
   }
@@ -122,13 +121,6 @@ class ForegroundServiceManager {
     }
   }
 
-  /// アプリ終了時のクリーンアップ（強制停止）
-  Future<void> dispose() async {
-    try {
-      FlutterBackgroundService().invoke('stopService');
-    } catch (_) {}
-    AppLogger.debug('[ForegroundService] クリーンアップ完了');
-  }
 }
 
 /// サービスのエントリーポイント
@@ -202,34 +194,34 @@ void onStart(ServiceInstance service) async {
     periodicTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       try {
         final currentPosition = lastPosition;
+        final now = DateTime.now();
 
         if (currentPosition != null) {
-          // メインisolateに位置情報を送信（positionUpdateイベント）
-          final pointData = {
+          // メインisolateに位置情報を送信（positionUpdateイベント。GpsPositionRecord.fromServiceEvent が読む）。
+          // 同じ位置でも毎秒送る（長押し測量は届いた回数で平均を取る）
+          service.invoke('positionUpdate', {
             'latitude': currentPosition.latitude,
             'longitude': currentPosition.longitude,
             'altitude': currentPosition.altitude,
             'accuracy': currentPosition.accuracy,
             'speed': currentPosition.speed,
             'bearing': currentPosition.heading,
-            'timestamp': DateTime.now().toIso8601String(),
-            'sourceType': 'GPS',
-          };
-          service.invoke('positionUpdate', pointData);
+            'timestamp': now.toIso8601String(),
+          });
         }
 
         // Android通知更新（位置が変わったときか 15 秒おき。以前は毎秒書き換えていた）
         final moved = currentPosition != null &&
             (currentPosition.latitude != notifiedLat || currentPosition.longitude != notifiedLon);
-        final due = DateTime.now().difference(notifiedAt).inSeconds >= 15;
+        final due = now.difference(notifiedAt).inSeconds >= 15;
         if (service is AndroidServiceInstance && (moved || due)) {
-          notifiedAt = DateTime.now();
+          notifiedAt = now;
           notifiedLat = currentPosition?.latitude;
           notifiedLon = currentPosition?.longitude;
           if (await service.isForegroundService()) {
             try {
               String notificationContent =
-                  'GPS取得中: ${DateTime.now().toString().substring(11, 19)}';
+                  'GPS取得中: ${now.toString().substring(11, 19)}';
               if (currentPosition != null) {
                 notificationContent +=
                     '\n${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}';

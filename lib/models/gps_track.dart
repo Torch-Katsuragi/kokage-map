@@ -41,28 +41,4 @@ class GpsTrackPoint {
 
   /// LatLng形式に変換
   LatLng toLatLng() => LatLng(latitude, longitude);
-
-  /// JSON形式に変換
-  Map<String, dynamic> toJson() => {
-    'latitude': latitude,
-    'longitude': longitude,
-    'altitude': altitude,
-    'accuracy': accuracy,
-    'speed': speed,
-    'bearing': bearing,
-    'timestamp': timestamp.toIso8601String(),
-    'sourceType': sourceType,
-  };
-
-  /// JSONから復元
-  factory GpsTrackPoint.fromJson(Map<String, dynamic> json) => GpsTrackPoint(
-    latitude: (json['latitude'] as num).toDouble(),
-    longitude: (json['longitude'] as num).toDouble(),
-    altitude: (json['altitude'] as num?)?.toDouble(),
-    accuracy: (json['accuracy'] as num?)?.toDouble(),
-    speed: (json['speed'] as num?)?.toDouble(),
-    bearing: (json['bearing'] as num?)?.toDouble(),
-    timestamp: DateTime.parse(json['timestamp'] as String),
-    sourceType: json['sourceType'] as String? ?? 'GPS',
-  );
 }

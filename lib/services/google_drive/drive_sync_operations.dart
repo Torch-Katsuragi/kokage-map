@@ -99,11 +99,14 @@ class DriveSyncOperations {
       return;
     }
 
+    // 「変更を確かめています」を出している間 true。失敗したときに閉じ忘れない
+    var progressShown = false;
     try {
       node.syncStatus = SyncStatus.syncing;
       onStateChanged();
 
       if (!context.mounted) return;
+      progressShown = true;
       unawaited(
         showDialog(
           context: context,
@@ -126,6 +129,7 @@ class DriveSyncOperations {
         '[DriveSync] mode=$mode entries=${entries.length} local=$localPath',
       );
 
+      progressShown = false;
       if (context.mounted) Navigator.of(context).pop();
 
       if (!context.mounted) {
@@ -210,6 +214,7 @@ class DriveSyncOperations {
         );
       }
     } catch (e) {
+      if (progressShown && context.mounted) Navigator.of(context).pop();
       node.syncStatus = SyncStatus.error;
       _notify(t.drive.syncError(error: e.toString()), NotificationLevel.error);
     }
@@ -426,7 +431,7 @@ class DriveSyncOperations {
       AppLogger.error('[DriveSyncOps] フォルダ削除エラー: $e');
       _notify(
         t.drive.deleteFolderError(error: e.toString()),
-        NotificationLevel.info,
+        NotificationLevel.error,
       );
     }
   }

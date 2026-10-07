@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// こかげマップ: turf のジオメトリを geobase（maplibre が受け取る型）へ変換する純粋関数
+// こかげマップ: turf のジオメトリを geobase（3D の描画系が受け取る型）へ変換する純粋関数
 library;
 
 import 'package:geobase/geobase.dart' as geo;

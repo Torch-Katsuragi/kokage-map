@@ -67,11 +67,10 @@ class OverlayTransformTool extends MapTool {
   /// 2本指操作中フラグ（PanTool委譲中）
   bool _isPanDelegating = false;
 
-  /// MapLibre更新デバウンスタイマー
+  /// 地図への反映（3D の描き直し）を間引くタイマー
   Timer? _mapUpdateDebounce;
 
-  /// MapLibre更新の最小間隔（100ms）
-  /// 毎フレームの重い remove+add を間引き、ハンドルUIだけ即時更新する
+  /// 地図への反映の最小間隔（100ms）。ハンドルは即時、地図は間引いて描き直す
   static const _mapUpdateInterval = Duration(milliseconds: 100);
 
   /// 最新のmapState参照（デバウンスコールバック用）
@@ -344,16 +343,14 @@ class OverlayTransformTool extends MapTool {
 
   /// オーバーレイ変更を通知
   ///
-  /// ハンドルUIは即時更新（transformNotifier）し、
-  /// MapLibreへの反映は100msデバウンスで間引く。
-  /// これにより毎フレームの重いremove+addを回避する。
+  /// ハンドルUIは即時更新（transformNotifier）し、地図への反映は 100ms で間引く
   void _notifyOverlayChanged(IMapState mapState) {
     if (_target == null) return;
 
     // ハンドル位置は即座に更新（Flutter側の軽量描画）
     transformNotifier.value++;
 
-    // MapLibre更新は100ms間隔にデバウンス
+    // 地図への反映は 100ms 間隔に間引く
     _lastMapState = mapState;
     _mapUpdateDebounce?.cancel();
     _mapUpdateDebounce = Timer(_mapUpdateInterval, () {

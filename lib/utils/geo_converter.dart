@@ -14,7 +14,7 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 /// LatLng (latlong2) ↔ Geographic (geobase) 変換ユーティリティ
-/// maplibre移行で座標型が異なるため、境界で変換する
+/// アプリの座標型（LatLng）と描画系の座標型（geobase）の境界で変換する
 library;
 
 import 'package:geobase/geobase.dart';

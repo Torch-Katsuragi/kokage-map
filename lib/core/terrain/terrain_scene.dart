@@ -22,7 +22,7 @@ import 'web_mercator.dart';
 
 /// 解決済みのフィーチャの見た目（1 スタイルグループぶん）
 ///
-/// `MapStyleGroup`（MapLibre 向けの 16 進色）と同じ内容を Flutter の色で持つ。
+/// `MapStyleGroup`（16 進色で持つ）と同じ内容を Flutter の色で持つ。
 /// 設定の解決規則（KMeta → SharedPreferences → 既定）は持ち込まない。
 class TerrainFeatureStyle {
   const TerrainFeatureStyle({

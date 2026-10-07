@@ -15,7 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 /// MBTilesを使用したタイルキャッシュ管理
 /// プロバイダーごとに独立したMBTilesファイルを管理
-/// MapLibre の mbtiles:// プロトコルで直接オフライン読み込み可能
+/// 圏外でも [BaseMapService] がここから読む（QGIS などでもそのまま開ける形式）
 library;
 import 'dart:async';
 import 'dart:io';

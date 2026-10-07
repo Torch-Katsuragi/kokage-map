@@ -18,8 +18,6 @@ import 'dart:ui' as ui;
 import 'basemap_provider.dart';
 
 /// 背景地図レイヤの合成モード（お絵描きソフトのレイヤと同じ語彙。3D のテクスチャ合成では `ui.BlendMode` そのまま）
-///
-/// web の 2D（feature_editor の MapLibre）はラスタに合成モードが無いので不透明度だけ効く
 enum BaseMapBlend {
   normal(ui.BlendMode.srcOver),
   multiply(ui.BlendMode.multiply),

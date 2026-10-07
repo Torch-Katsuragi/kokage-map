@@ -1,12 +1,9 @@
 // BackgroundSaveManagerとGeoPackageFileの統合テスト
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
-import 'package:root_maps/providers/app_container.dart';
-import 'package:root_maps/providers/project_providers.dart';
 import 'package:root_maps/utils/background_save_manager.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:test/test.dart';
@@ -25,9 +22,6 @@ void main() {
 
       // テスト用の一時ディレクトリを作成
       tempDir = await Directory.systemTemp.createTemp('k_maps_test');
-      // プロバイダーコンテナを初期化
-      appContainer = ProviderContainer();
-      appContainer.read(projectRootDirProvider.notifier).set(tempDir.path);
 
       saveManager = BackgroundSaveManager.instance;
     });

@@ -72,7 +72,7 @@ class GeoTiffService {
     final tiffBytes = _encodeGeoTiff(image, params);
     await File(outputPath).writeAsBytes(tiffBytes, flush: true);
 
-    // MapLibre用PNGキャッシュも生成
+    // 3D の地図面が読む PNG キャッシュも作る
     await ensurePngCache(outputPath);
 
     AppLogger.debug(

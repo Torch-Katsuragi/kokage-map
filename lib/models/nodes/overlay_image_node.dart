@@ -54,12 +54,6 @@ class OverlayImageNode extends ImageNode {
   @override
   bool get hasLocation => true;
 
-  /// MapLibreソースID（ユニーク）
-  String get overlaySourceId => 'overlay-src-${filePath.hashCode.abs()}';
-
-  /// MapLibreレイヤID（ユニーク）
-  String get overlayLayerId => 'overlay-lyr-${filePath.hashCode.abs()}';
-
   /// ensurePngCacheで解決されたPNGキャッシュのパス
   String? _cachedPngPath;
 
@@ -83,7 +77,7 @@ class OverlayImageNode extends ImageNode {
     return filePath;
   }
 
-  /// 4頂点座標を計算（MapLibre ImageSource用）
+  /// 4頂点座標を計算（3D の地形テクスチャに焼くとき・当たり判定）
   /// center + scale + rotation + imageSize から
   /// topLeft, topRight, bottomRight, bottomLeft の順で返す
   List<LatLng> get cornerCoordinates {

@@ -216,7 +216,7 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// キャッシュ再構築フラグ
   bool layerCacheDirty = true;
 
-  /// 3D 地形モード中の投影。null なら MapLibre（`TerrainMapLayer` が登録 / 解除する）
+  /// 地図面の投影。null なら地図面がまだ組み上がっていない（`TerrainMapLayer` が登録 / 解除する）
   TerrainProjection? terrainProjection;
 
   /// 地図に流す GeoJSON が更新されたら増える（3D 地図面がシーンを組み直す合図）

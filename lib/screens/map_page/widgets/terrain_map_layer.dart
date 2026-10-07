@@ -67,16 +67,15 @@ import '../feature_geojson_cache.dart';
 
 part 'terrain_map_layer_drive.dart';
 
-/// 3D 地形モードの地図面（v2: タイルの世界）
+/// 地図面（v2: タイルの世界）。地図はこれだけ（MapLibre は 2026-10-04 に外した）
 ///
-/// MapLibre の地図の上に重ね、同じシーン（[FeatureGeoJsonCache] の GeoJSON と
-/// [MapStyleGroup]）を純 Dart の地形描画系で描く。設計は `docs/technical/terrain-3d.md` の「v2: タイルの世界」。
+/// シーン（[FeatureGeoJsonCache] の GeoJSON と [MapStyleGroup]）を地形の上に描く（flutter_gpu、無い環境は純 Dart）。設計は `docs/technical/terrain-3d.md` の「v2: タイルの世界」。
 ///
 /// - 世界は [TerrainWorld]（DEM タイルのストリーミング）。カメラが動くと見える範囲 + 余白のタイルを揃え、
 ///   届いたものから描く。読み込みで画面は止まらない
 /// - フィーチャはタイルごとに計算メッシュへ貼り付けてキャッシュ。パンで貼り直さない
-/// - 入るとき MapLibre のカメラを引き継いで 45° 傾け、出るときに書き戻す（真上ロック = 3D を抜けること）
-/// - 3D 中の `IMapState.offsetToLatLng` / `latLngToOffset` は [TerrainProjection] としてここを通る
+/// - 2D は真上から見ているだけ（コンパスのタップで切り替え）。カメラは `RMapController` に覚えさせる
+/// - `IMapState.offsetToLatLng` / `latLngToOffset` は [TerrainProjection] としてここを通る
 /// - 操作: 1 本指 = 回転と傾き、2 本指 = 平面移動と拡縮（松本の指定）
 class TerrainMapLayer extends ConsumerStatefulWidget {
   const TerrainMapLayer({
@@ -463,7 +462,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
           if (p.type == BaseMapType.openStreetMap) p.attribution,
       }.join(' / ');
 
-  /// 基図の設定が変わった（3D 中は MapLibre が無いので、地形のテクスチャを貼り直す）
+  /// 基図の設定が変わった（地形のテクスチャを貼り直す）
   void _onBasemapChanged() {
     final key = _textureLayersKey();
     if (key == _textureKey) return;

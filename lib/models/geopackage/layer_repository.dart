@@ -109,6 +109,8 @@ class LayerRepository {
         'm': 0,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
+      schema.invalidate(); // 同名の古い控えが残らないように
+
       // 空間インデックスを作成
       await spatialIndex.createSpatialIndex(name);
     } catch (e) {
@@ -136,8 +138,8 @@ class LayerRepository {
         whereArgs: [name],
       );
 
-      // PRIMARY KEYキャッシュをクリア
-      schema.clearPrimaryKeyCache();
+      // 控えた列・主キーを捨てる
+      schema.invalidate();
     } catch (e) {
       AppLogger.debug('[LayerRepository] removeLayer: エラー発生 - $e');
     }
@@ -169,8 +171,8 @@ class LayerRepository {
         whereArgs: [oldName],
       );
 
-      // PRIMARY KEYキャッシュをクリア
-      schema.clearPrimaryKeyCache();
+      // 控えた列・主キーを捨てる
+      schema.invalidate();
 
       AppLogger.debug('[LayerRepository] renameLayer: $oldName -> $newName');
     } catch (e) {

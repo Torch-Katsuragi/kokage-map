@@ -574,28 +574,12 @@ class GeoPackageFile {
   // ============================================================
 
   /// カラムをリネーム
-  Future<void> renameColumn(
-    String tableName,
-    String oldName,
-    String newName,
-  ) async {
-    final db = await _connection.getDatabase();
-    final sanitizedNew = _schema.sanitizeColumnName(newName);
-    if (sanitizedNew.isEmpty) {
-      throw Exception(t.services.invalidColumnName(name: newName));
-    }
-    await db.execute(
-      'ALTER TABLE ${quoteIdent(tableName)} RENAME COLUMN ${quoteIdent(oldName)} TO ${quoteIdent(sanitizedNew)}',
-    );
-    _schema.clearPrimaryKeyCache();
-  }
+  Future<void> renameColumn(String tableName, String oldName, String newName) =>
+      _schema.renameColumn(tableName, oldName, newName);
 
   /// カラムを削除
-  Future<void> dropColumn(String tableName, String columnName) async {
-    final db = await _connection.getDatabase();
-    await db.execute('ALTER TABLE ${quoteIdent(tableName)} DROP COLUMN ${quoteIdent(columnName)}');
-    _schema.clearPrimaryKeyCache();
-  }
+  Future<void> dropColumn(String tableName, String columnName) =>
+      _schema.dropColumn(tableName, columnName);
 
   /// 指定カラムの統計情報を取得
   Future<Map<String, dynamic>> getColumnStatistics(

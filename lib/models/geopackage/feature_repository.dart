@@ -105,13 +105,6 @@ class FeatureRepository {
   /// クリンナップ済みテーブルの記録（1テーブルにつき1回だけ実行）
   final Set<String> _cleanedTables = {};
 
-  /// 書き込み前にテーブルをクリンナップする
-  ///
-  /// 外部ツール（QGIS/GeoPandas等）が作成したGPKGには
-  /// SpatiaLite拡張に依存するトリガーが含まれることがあり、
-  /// sqfliteでは実行できない。書き込み前に検出・除去する。
-  ///
-  /// 将来の前処理もここに追加可能。
   /// 1 行の 1 列にそのまま値を書く（同期の衝突を相手の値に戻すとき）。
   /// 書く前に ST_ トリガーを外す（[_prepareForWrite]）。値の型は呼び手が合わせる（ジオメトリは GPKG の blob）
   Future<bool> setColumnValue(
@@ -123,89 +116,23 @@ class FeatureRepository {
   ) async {
     await _prepareForWrite(tableName);
     final db = await connection.getDatabase();
-    String q(String i) => '"${i.replaceAll('"', '""')}"';
     final n = await db.rawUpdate(
-      'UPDATE ${q(tableName)} SET ${q(column)} = ? WHERE ${q(pkColumn)} = ?',
+      'UPDATE ${quoteIdent(tableName)} SET ${quoteIdent(column)} = ? WHERE ${quoteIdent(pkColumn)} = ?',
       [value, pk],
     );
     return n > 0;
   }
 
+  /// 書き込み前にテーブルをクリンナップする
+  ///
+  /// 外部ツール（QGIS/GeoPandas等）が作成したGPKGには
+  /// SpatiaLite拡張に依存するトリガーが含まれることがあり、
+  /// sqfliteでは実行できない。書き込み前に検出・除去する。
   Future<void> _prepareForWrite(String tableName) async {
     if (_cleanedTables.contains(tableName)) return;
 
-    final db = await connection.getDatabase();
-    await _removeSpatialiteTriggers(db, tableName);
+    await spatialIndex.removeTableTriggers(tableName);
     _cleanedTables.add(tableName);
-  }
-
-  /// SpatiaLite依存のトリガーを検出・除去
-  ///
-  /// QGIS/GeoPandasが生成するRTree自動更新トリガーは
-  /// ST_IsEmpty, ST_MinX等のSpatiaLite関数を使用するが、
-  /// sqfliteにはSpatiaLite拡張がないためINSERT/UPDATE時にエラーとなる。
-  /// こかげマップは独自のSpatialIndexManagerでrtreeを管理するため、
-  /// これらのトリガーは不要。
-  Future<void> _removeSpatialiteTriggers(Database db, String tableName) async {
-    try {
-      // テーブルに関連するトリガーを全取得
-      final triggers = await db.rawQuery(
-        'SELECT name, sql FROM sqlite_master '
-        "WHERE type = 'trigger' AND tbl_name = ?",
-        [tableName],
-      );
-
-      if (triggers.isEmpty) return;
-
-      // SpatiaLite関数を使っているトリガーを検出
-      const spatialiteFunctions = [
-        'ST_IsEmpty',
-        'ST_MinX',
-        'ST_MaxX',
-        'ST_MinY',
-        'ST_MaxY',
-        'ST_MinZ',
-        'ST_MaxZ',
-        'ST_MinM',
-        'ST_MaxM',
-      ];
-
-      final triggersToRemove = <String>[];
-      for (final trigger in triggers) {
-        final sql = trigger['sql'] as String? ?? '';
-        final name = trigger['name'] as String;
-
-        // SpatiaLite関数を使っているトリガーを検出
-        final usesSpatialiteFunction = spatialiteFunctions.any(
-          sql.contains,
-        );
-
-        // rtree仮想テーブルを参照するトリガーを検出
-        // (DELETE時のrtreeクリーンアップ等、ST_関数を使わないものも含む)
-        final referencesRtree = name.startsWith('rtree_');
-
-        if (usesSpatialiteFunction || referencesRtree) {
-          // ⚠ 落とす前に定義を控える（クローズ時に復元してQGISへ返す）
-          spatialIndex.qgisInterop.rememberTrigger(name, sql);
-          triggersToRemove.add(name);
-        }
-      }
-
-      if (triggersToRemove.isEmpty) return;
-
-      // トリガーを除去
-      for (final name in triggersToRemove) {
-        await db.execute('DROP TRIGGER IF EXISTS ${quoteIdent(name)}');
-      }
-
-      AppLogger.debug(
-        '[FeatureRepository] 🧹 SpatiaLiteトリガーを除去: '
-        '$tableName (${triggersToRemove.length}個: '
-        '${triggersToRemove.join(", ")})',
-      );
-    } catch (e) {
-      AppLogger.debug('[FeatureRepository] ⚠️ トリガー除去エラー: $tableName - $e');
-    }
   }
 
   // ============================================================
@@ -218,9 +145,9 @@ class FeatureRepository {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    final db = await connection.getDatabase();
-    final columns = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
-    final columnNames = columns.map((row) => row['name'] as String).toSet();
+    final columnNames = {
+      for (final row in await schema.tableInfo(tableName)) row['name'] as String,
+    };
 
     final attributes = <String, dynamic>{};
     if (columnNames.contains('name')) attributes['name'] = name;
@@ -537,12 +464,10 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause =
-          pkColumn == 'rowid'
-              ? 'SELECT rowid, * FROM ${quoteIdent(tableName)} WHERE rowid = ?'
-              : 'SELECT * FROM ${quoteIdent(tableName)} WHERE ${quoteIdent(pkColumn)} = ?';
-
-      final rows = await db.rawQuery(selectClause, [rowId]);
+      final rows = await db.rawQuery(
+        'SELECT ${selectAllColumns(pkColumn)} FROM ${quoteIdent(tableName)} WHERE ${pkEquals(pkColumn)}',
+        [rowId],
+      );
       if (rows.isEmpty) return null;
 
       final row = Map<String, dynamic>.from(rows.first);
@@ -578,12 +503,9 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause =
-          pkColumn == 'rowid'
-              ? 'SELECT rowid, * FROM ${quoteIdent(tableName)}'
-              : 'SELECT * FROM ${quoteIdent(tableName)}';
-
-      final rows = await db.rawQuery(selectClause);
+      final rows = await db.rawQuery(
+        'SELECT ${selectAllColumns(pkColumn)} FROM ${quoteIdent(tableName)}',
+      );
       return rows.map((row) {
         final normalizedRow = Map<String, dynamic>.from(row);
         _normalizePrimaryKey(normalizedRow, pkColumn);
@@ -614,19 +536,14 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause =
-          pkColumn == 'rowid'
-              ? 'SELECT rowid, * FROM ${quoteIdent(tableName)}'
-              : 'SELECT * FROM ${quoteIdent(tableName)}';
-
-      final sql = StringBuffer(selectClause);
+      final sql = StringBuffer('SELECT ${selectAllColumns(pkColumn)} FROM ${quoteIdent(tableName)}');
       final safeWhere = sanitizeFilter(where);
       if (safeWhere != null) sql.write(' WHERE $safeWhere');
 
       // 2000 行ずつ読む。1 回で読むと 1.5 万面（24MB）が 1 通のメッセージになり、プラットフォームチャネルを塞いで
       // 同じ時間のタイルキャッシュの読み出しまで 2.5 秒待たされていた（2026-10-06、Fold で起動時）。
       // 大きいレイヤはページごとに isolate で解析を始め、次のページの読み込みと重ねる
-      final orderCol = pkColumn == 'rowid' ? 'rowid' : quoteIdent(pkColumn);
+      final orderCol = pkRef(pkColumn);
       final crs = geomType == null ? null : await _getLayerCrs(tableName);
       final needsReproject = crs != null && !crs.isWgs84 && crs.projection != null;
       if (needsReproject) {
@@ -708,10 +625,8 @@ class FeatureRepository {
 
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
-      final column = pkColumn == 'rowid' ? 'rowid' : quoteIdent(pkColumn);
-
       final rows = await db.rawQuery(
-        'SELECT $column AS id FROM ${quoteIdent(tableName)} WHERE $safeWhere',
+        'SELECT ${pkRef(pkColumn)} AS id FROM ${quoteIdent(tableName)} WHERE $safeWhere',
       );
       return {
         for (final row in rows)
@@ -745,11 +660,8 @@ class FeatureRepository {
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
       final columnList = columns?.map(quoteIdent).join(', ') ?? '*';
-      final orderByClause =
-          pkColumn == 'rowid' ? 'ORDER BY rowid' : 'ORDER BY ${quoteIdent(pkColumn)}';
-
       return await db.rawQuery(
-        'SELECT $columnList FROM ${quoteIdent(tableName)} $orderByClause',
+        'SELECT $columnList FROM ${quoteIdent(tableName)} ORDER BY ${pkRef(pkColumn)}',
       );
     } catch (e) {
       AppLogger.debug('[FeatureRepository] getAllFeatureAttributes エラー発生 - $e');
@@ -968,12 +880,9 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause =
-          pkColumn == 'rowid'
-              ? 'SELECT rowid FROM ${quoteIdent(tableName)} WHERE $whereClause'
-              : 'SELECT ${quoteIdent(pkColumn)} FROM ${quoteIdent(tableName)} WHERE $whereClause';
-
-      final rows = await db.rawQuery(selectClause);
+      final rows = await db.rawQuery(
+        'SELECT ${pkRef(pkColumn)} FROM ${quoteIdent(tableName)} WHERE $whereClause',
+      );
       return rows
           .map((row) {
             final val = row.values.first;
@@ -1009,24 +918,7 @@ class FeatureRepository {
     String whereClause,
   ) async {
     try {
-      final db = await connection.getDatabase();
-      final sourceColumns = await schema.getTableColumns(sourceTable);
-      final columnsToInsert =
-          sourceColumns
-              .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
-              .toList();
-
-      if (columnsToInsert.isEmpty) return 0;
-
-      final columnList = columnsToInsert.map(quoteIdent).join(', ');
-      await db.execute('''
-        INSERT INTO ${quoteIdent(targetTable)} ($columnList)
-        SELECT $columnList FROM ${quoteIdent(sourceTable)}
-        WHERE $whereClause
-      ''');
-
-      final countResult = await db.rawQuery('SELECT changes() as count');
-      final copiedCount = (countResult.first['count'] as int?) ?? 0;
+      final copiedCount = await _copyRows(sourceTable, targetTable, where: whereClause) ?? 0;
       AppLogger.debug(
         '[FeatureRepository] duplicateFilteredFeatures: '
         '$sourceTable -> $targetTable ($copiedCount件, WHERE: $whereClause)',
@@ -1043,26 +935,11 @@ class FeatureRepository {
     String targetTable,
   ) async {
     try {
-      final db = await connection.getDatabase();
-      final sourceColumns = await schema.getTableColumns(sourceTable);
-      final columnsToInsert =
-          sourceColumns
-              .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
-              .toList();
-
-      if (columnsToInsert.isEmpty) {
+      final copiedCount = await _copyRows(sourceTable, targetTable);
+      if (copiedCount == null) {
         AppLogger.debug('[FeatureRepository] コピー可能なカラムがありません');
         return 0;
       }
-
-      final columnList = columnsToInsert.map(quoteIdent).join(', ');
-      await db.execute('''
-        INSERT INTO ${quoteIdent(targetTable)} ($columnList)
-        SELECT $columnList FROM ${quoteIdent(sourceTable)}
-      ''');
-
-      final countResult = await db.rawQuery('SELECT changes() as count');
-      final copiedCount = (countResult.first['count'] as int?) ?? 0;
       AppLogger.debug(
         '[FeatureRepository] フィーチャコピー完了: $sourceTable -> $targetTable ($copiedCount件)',
       );
@@ -1071,6 +948,26 @@ class FeatureRepository {
       AppLogger.debug('[FeatureRepository] copyFeaturesBetweenLayers エラー: $e');
       return 0;
     }
+  }
+
+  /// [sourceTable] の行（[where] があれば当てはまる行）を [targetTable] へ写し、写した数を返す。
+  /// 主キー（id / fid）は写さず振り直させる。写せる列が無ければ null
+  Future<int?> _copyRows(String sourceTable, String targetTable, {String? where}) async {
+    final columnsToInsert = [
+      for (final c in await schema.getTableColumns(sourceTable))
+        if (c.toLowerCase() != 'id' && c.toLowerCase() != 'fid') c,
+    ];
+    if (columnsToInsert.isEmpty) return null;
+
+    final db = await connection.getDatabase();
+    final columnList = columnsToInsert.map(quoteIdent).join(', ');
+    await db.execute(
+      'INSERT INTO ${quoteIdent(targetTable)} ($columnList) '
+      'SELECT $columnList FROM ${quoteIdent(sourceTable)}'
+      '${where == null ? '' : ' WHERE $where'}',
+    );
+    final countResult = await db.rawQuery('SELECT changes() as count');
+    return (countResult.first['count'] as int?) ?? 0;
   }
 
   // ============================================================

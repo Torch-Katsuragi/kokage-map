@@ -22,15 +22,15 @@ import 'sql_identifier.dart';
 
 /// GeoPackage スキーマを管理するクラス
 /// 責務: PRIMARY KEY検出、カラム追加・取得、テーブル構造操作
+///
+/// `PRAGMA table_info` と主キー名は [GeoPackageConnection.schemaCache] に控える
+/// （同じファイルを開いている接続で共有）。列・テーブルを変えたら [invalidate] する。
 class GeoPackageSchema {
   /// DB接続への参照
   final GeoPackageConnection connection;
 
-  /// PRIMARY KEYカラム名のキャッシュ（テーブル名 → PRIMARY KEYカラム名）
-  final Map<String, String> _primaryKeyCache = {};
-
-  /// サポートする属性カラム名リスト（属性テーブルで表示するカラム）
-  final List<String> supportedAttributes = [
+  /// 属性テーブルで表示するカラム（getAll でないときの [getColumnNames] の対象）
+  static const List<String> supportedAttributes = [
     'id', // 内部的にPRIMARY KEYを正規化したもの
     'geom',
   ];
@@ -38,21 +38,40 @@ class GeoPackageSchema {
   /// コンストラクタ
   GeoPackageSchema(this.connection);
 
+  GpkgSchemaCache get _cache => connection.schemaCache;
+
+  /// `PRAGMA table_info` の行（控えがあればそれ）。テーブルが無ければ空（空は控えない）
+  Future<List<Map<String, Object?>>> tableInfo(String tableName) async {
+    final cached = _cache.tableInfo[tableName];
+    if (cached != null) return cached;
+    final db = await connection.getDatabase();
+    final rows = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
+    if (rows.isNotEmpty) _cache.tableInfo[tableName] = rows;
+    return rows;
+  }
+
+  /// テーブルの列名（並びは table_info のまま）
+  Future<List<String>> _columnNames(String tableName) async =>
+      [for (final row in await tableInfo(tableName)) row['name'] as String];
+
+  /// 列・テーブルを変えたあとに呼ぶ（控えた table_info と主キー名を捨てる）
+  void invalidate() => _cache.clear();
+
   /// PRIMARY KEYカラム名を動的に取得（キャッシュ機能付き）
   ///
   /// Root Maps標準形式（新規作成）: fid INTEGER PRIMARY KEY AUTOINCREMENT（QGIS互換）
   /// 旧Root Maps形式: id INTEGER PRIMARY KEY AUTOINCREMENT（後方互換性のため対応）
   /// PRIMARY KEYがない外部ファイル: fid を自動追加、または rowid フォールバック
   Future<String> getPrimaryKeyColumn(String tableName) async {
-    // キャッシュをチェック
-    if (_primaryKeyCache.containsKey(tableName)) {
-      return _primaryKeyCache[tableName]!;
-    }
+    final cached = _cache.primaryKey[tableName];
+    if (cached != null) return cached;
+    final pk = await _detectPrimaryKey(tableName);
+    _cache.primaryKey[tableName] = pk;
+    return pk;
+  }
 
-    final db = await connection.getDatabase();
-
-    // PRAGMA table_infoでカラム情報を取得
-    final columns = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
+  Future<String> _detectPrimaryKey(String tableName) async {
+    final columns = await tableInfo(tableName);
 
     // PRIMARY KEYカラムを検索（pk列が1のもの）
     String? primaryKeyColumn;
@@ -77,7 +96,6 @@ class GeoPackageSchema {
           );
         }
       }
-      _primaryKeyCache[tableName] = primaryKeyColumn;
       return primaryKeyColumn;
     }
 
@@ -87,16 +105,15 @@ class GeoPackageSchema {
     );
     AppLogger.debug('[GeoPackageSchema] ⚠️ データが破損している可能性があります。');
 
+    final hasFidColumn = columns.any((col) => col['name'] == 'fid');
+    final hasIdColumn = columns.any((col) => col['name'] == 'id');
     try {
+      final db = await connection.getDatabase();
       // テーブルのレコード数をチェック
       final countResult = await db.rawQuery(
         'SELECT COUNT(*) as count FROM ${quoteIdent(tableName)};',
       );
       final rowCount = countResult.first['count'] as int? ?? 0;
-
-      // fid または id カラムが既に存在するかチェック
-      final hasFidColumn = columns.any((col) => col['name'] == 'fid');
-      final hasIdColumn = columns.any((col) => col['name'] == 'id');
 
       // QGIS互換性のため、fid カラムを優先的に使用・追加
       if (!hasFidColumn && !hasIdColumn) {
@@ -112,24 +129,22 @@ class GeoPackageSchema {
 
         // fidカラムを追加（QGIS標準）
         await db.execute('ALTER TABLE ${quoteIdent(tableName)} ADD COLUMN fid INTEGER;');
+        _cache.tableInfo.remove(tableName); // 列が増えた
 
         // rowidから値をコピー
         await db.execute('UPDATE ${quoteIdent(tableName)} SET fid = rowid;');
 
         AppLogger.debug('[GeoPackageSchema] ✓ fidカラムを追加し、rowidから値をコピーしました。');
-        _primaryKeyCache[tableName] = 'fid';
         return 'fid';
       } else if (hasFidColumn) {
         AppLogger.debug(
           '[GeoPackageSchema] ℹ️ fidカラムは存在しますが、PRIMARY KEYとして定義されていません。',
         );
-        _primaryKeyCache[tableName] = 'fid';
         return 'fid';
       } else {
         AppLogger.debug(
           '[GeoPackageSchema] ℹ️ idカラムは存在しますが、PRIMARY KEYとして定義されていません。',
         );
-        _primaryKeyCache[tableName] = 'id';
         return 'id';
       }
     } catch (e, stackTrace) {
@@ -137,30 +152,18 @@ class GeoPackageSchema {
       AppLogger.debug('[GeoPackageSchema] スタックトレース: $stackTrace');
 
       // フォールバック: fid > id > rowid の優先順位
-      final hasFidColumn = columns.any((col) => col['name'] == 'fid');
-      final hasIdColumn = columns.any((col) => col['name'] == 'id');
-
-      if (hasFidColumn) {
-        _primaryKeyCache[tableName] = 'fid';
-        return 'fid';
-      } else if (hasIdColumn) {
-        _primaryKeyCache[tableName] = 'id';
-        return 'id';
-      } else {
-        AppLogger.debug(
-          '[GeoPackageSchema] ⚠️ 緊急フォールバック: rowidを使用します。このファイルは読み込み専用としてのみ使用してください。',
-        );
-        _primaryKeyCache[tableName] = 'rowid';
-        return 'rowid';
-      }
+      if (hasFidColumn) return 'fid';
+      if (hasIdColumn) return 'id';
+      AppLogger.debug(
+        '[GeoPackageSchema] ⚠️ 緊急フォールバック: rowidを使用します。このファイルは読み込み専用としてのみ使用してください。',
+      );
+      return 'rowid';
     }
   }
 
-  /// WHERE句を生成（PRIMARY KEYカラムに応じてクォート処理）
-  Future<String> buildWhereClause(String tableName) async {
-    final pkColumn = await getPrimaryKeyColumn(tableName);
-    return pkColumn == 'rowid' ? 'rowid = ?' : '${quoteIdent(pkColumn)} = ?';
-  }
+  /// 主キーで 1 行を選ぶ WHERE 句（値は `?`）
+  Future<String> buildWhereClause(String tableName) async =>
+      pkEquals(await getPrimaryKeyColumn(tableName));
 
   /// 指定テーブルのカラム名一覧を返す
   /// [skipPrimaryKey] trueの場合、PRIMARY KEYカラムを除外（属性テーブル表示用）
@@ -170,12 +173,9 @@ class GeoPackageSchema {
     bool skipPrimaryKey = false,
   }) async {
     try {
-      final db = await connection.getDatabase();
-      final result = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
-      final columns = result.map((row) => row['name'] as String).toList();
-
       // geom は属性データではないため常に除外
-      var filteredColumns = columns.where((c) => c != 'geom').toList();
+      var filteredColumns =
+          (await _columnNames(tableName)).where((c) => c != 'geom').toList();
 
       // PRIMARY KEYをスキップ（属性テーブル表示用）
       if (skipPrimaryKey) {
@@ -184,9 +184,7 @@ class GeoPackageSchema {
       }
 
       if (getAll) return filteredColumns;
-      return filteredColumns
-          .where(supportedAttributes.contains)
-          .toList();
+      return filteredColumns.where(supportedAttributes.contains).toList();
     } catch (e) {
       AppLogger.debug('[GeoPackageSchema] getColumnNames: エラー発生 - $e');
       return [];
@@ -196,9 +194,7 @@ class GeoPackageSchema {
   /// テーブルのカラム名リストを取得
   Future<List<String>> getTableColumns(String tableName) async {
     try {
-      final db = await connection.getDatabase();
-      final result = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
-      return result.map((row) => row['name'] as String).toList();
+      return await _columnNames(tableName);
     } catch (e) {
       AppLogger.debug('[GeoPackageSchema] getTableColumns エラー: $e');
       return [];
@@ -212,8 +208,6 @@ class GeoPackageSchema {
     String columnType,
   ) async {
     try {
-      final db = await connection.getDatabase();
-
       // カラム名の安全性チェック（QGIS準拠）
       final sanitizedName = sanitizeColumnName(columnName);
       if (sanitizedName.isEmpty) {
@@ -221,13 +215,12 @@ class GeoPackageSchema {
       }
 
       // 既存カラムのチェック
-      final result = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
-      final columns = result.map((row) => row['name'] as String).toList();
-
-      if (!columns.contains(sanitizedName)) {
+      if (!(await _columnNames(tableName)).contains(sanitizedName)) {
+        final db = await connection.getDatabase();
         await db.execute(
           'ALTER TABLE ${quoteIdent(tableName)} ADD COLUMN ${quoteIdent(sanitizedName)} $columnType;',
         );
+        invalidate();
       }
     } catch (e) {
       AppLogger.debug('[GeoPackageSchema] addAttributeColumn エラー発生 - $e');
@@ -241,9 +234,8 @@ class GeoPackageSchema {
     Map<String, String> attributeSchema,
   ) async {
     try {
-      for (final entry in attributeSchema.entries) {
-        final columnName = entry.key;
-        final columnType = entry.value;
+      for (final MapEntry(key: columnName, value: columnType)
+          in attributeSchema.entries) {
         await addAttributeColumn(tableName, columnName, columnType);
       }
     } catch (e) {
@@ -252,35 +244,44 @@ class GeoPackageSchema {
     }
   }
 
+  /// カラム名を変える（新しい名前は [sanitizeColumnName] を通す）
+  Future<void> renameColumn(String tableName, String oldName, String newName) async {
+    final sanitizedNew = sanitizeColumnName(newName);
+    if (sanitizedNew.isEmpty) {
+      throw Exception(t.services.invalidColumnName(name: newName));
+    }
+    final db = await connection.getDatabase();
+    await db.execute(
+      'ALTER TABLE ${quoteIdent(tableName)} RENAME COLUMN ${quoteIdent(oldName)} TO ${quoteIdent(sanitizedNew)}',
+    );
+    invalidate();
+  }
+
+  /// カラムを消す
+  Future<void> dropColumn(String tableName, String columnName) async {
+    final db = await connection.getDatabase();
+    await db.execute('ALTER TABLE ${quoteIdent(tableName)} DROP COLUMN ${quoteIdent(columnName)}');
+    invalidate();
+  }
+
   /// レイヤの全属性カラム情報を取得（詳細）
   Future<List<Map<String, dynamic>>> getAttributeColumnInfo(
     String tableName, {
     bool includeBuiltIn = false,
   }) async {
     try {
-      final db = await connection.getDatabase();
-      final result = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
-
-      final columnInfo = <Map<String, dynamic>>[];
-      final builtInColumns = {'id', 'geom'};
-
-      for (final row in result) {
-        final columnName = row['name'] as String;
-
-        if (!includeBuiltIn && builtInColumns.contains(columnName)) {
-          continue;
-        }
-
-        columnInfo.add({
-          'name': columnName,
-          'type': row['type'] as String,
-          'notNull': (row['notnull'] as int) == 1,
-          'defaultValue': row['dflt_value'],
-          'primaryKey': (row['pk'] as int) == 1,
-        });
-      }
-
-      return columnInfo;
+      const builtInColumns = {'id', 'geom'};
+      return [
+        for (final row in await tableInfo(tableName))
+          if (includeBuiltIn || !builtInColumns.contains(row['name']))
+            {
+              'name': row['name'] as String,
+              'type': row['type'] as String,
+              'notNull': (row['notnull'] as int) == 1,
+              'defaultValue': row['dflt_value'],
+              'primaryKey': (row['pk'] as int) == 1,
+            },
+      ];
     } catch (e) {
       AppLogger.debug('[GeoPackageSchema] getAttributeColumnInfo エラー発生 - $e');
       return [];
@@ -298,10 +299,5 @@ class GeoPackageSchema {
         .replaceAll('\n', ' ')
         .replaceAll('\r', ' ')
         .trim();
-  }
-
-  /// PRIMARY KEYキャッシュをクリア
-  void clearPrimaryKeyCache() {
-    _primaryKeyCache.clear();
   }
 }

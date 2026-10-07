@@ -64,6 +64,28 @@ class GeoPackageConnection {
 
   static String _registryKey(String path) => p.canonicalize(path);
 
+  /// 同じファイルを開いている接続で共有するスキーマの控え（正規化した絶対パス → 控え）。
+  ///
+  /// sqflite の singleInstance で同じパスの接続は 1 つの DB を共有しているので、控えもパスごとに 1 つにする
+  /// （接続ごとに持つと、別の [GeoPackageFile] が足した列が見えない）。
+  /// 開き直したとき・閉じたときに捨てる（閉じている間に geodiff や Drive がファイルを書き換えるため）。
+  static final Map<String, GpkgSchemaCache> _schemaCaches = {};
+
+  /// パスが決まらない接続用（開けないので中身は空のまま）
+  final GpkgSchemaCache _detachedCache = GpkgSchemaCache();
+
+  /// このファイルのスキーマの控え
+  GpkgSchemaCache get schemaCache {
+    final path = _resolveAbsolutePath();
+    if (path == null) return _detachedCache;
+    return _schemaCaches[_registryKey(path)] ??= GpkgSchemaCache();
+  }
+
+  void _dropSchemaCache() {
+    final path = _resolveAbsolutePath();
+    if (path != null) _schemaCaches.remove(_registryKey(path));
+  }
+
   /// 書き込みが残っている接続をすぐ書き戻す（web のみ。タブを隠した・閉じかけたとき。見回りの待ちを飛ばす）
   static Future<void> flushPendingCheckIns() async {
     if (fs.hasRealPaths) return;
@@ -346,6 +368,7 @@ class GeoPackageConnection {
       await _validateGeoPackageStructure();
 
       _isInitialized = true;
+      _dropSchemaCache(); // 閉じている間に外で書き換えられたかもしれない
       _registeredKey = _registryKey(absPath);
       (_openConnections[_registeredKey!] ??= <GeoPackageConnection>{}).add(this);
 
@@ -565,6 +588,7 @@ class GeoPackageConnection {
 
   /// データベースのクローズ処理
   Future<void> dispose() async {
+    _dropSchemaCache();
     final key = _registeredKey;
     if (key != null) {
       final set = _openConnections[key];
@@ -619,5 +643,22 @@ class GeoPackageConnection {
       AppLogger.debug('スタックトレース: $stack');
       return false;
     }
+  }
+}
+
+/// テーブルの構造の控え（`PRAGMA table_info` と主キー名）。
+///
+/// 属性の保存やフィーチャの追加のたびに同じ PRAGMA を引いていたので控える。
+/// ⚠ 列やテーブルを変えたら必ず [clear] する（`GeoPackageSchema.invalidate`）。
+class GpkgSchemaCache {
+  /// テーブル名 → `PRAGMA table_info` の行
+  final Map<String, List<Map<String, Object?>>> tableInfo = {};
+
+  /// テーブル名 → 主キーの列名（無ければ fid / id / rowid）
+  final Map<String, String> primaryKey = {};
+
+  void clear() {
+    tableInfo.clear();
+    primaryKey.clear();
   }
 }

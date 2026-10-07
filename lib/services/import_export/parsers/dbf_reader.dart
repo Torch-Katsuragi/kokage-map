@@ -21,26 +21,13 @@ import 'dart:typed_data';
 import 'package:charset_converter/charset_converter.dart';
 import 'package:root_maps/utils/app_logger.dart';
 
+/// DBF のフィールド記述子
+typedef _DbfField = ({String name, String type, int length});
+
 /// DBFファイルを読み込んで属性データを取得するクラス
 class DbfReader {
-  /// バイト列を指定エンコーディングでデコード（非同期版）
-  static Future<String> _decodeBytes(List<int> bytes, String encoding) async {
-    if (bytes.isEmpty) return '';
-    
-    final charset = _normalizeCharset(encoding);
-    
-    try {
-      final result = await CharsetConverter.decode(
-        charset,
-        Uint8List.fromList(bytes),
-      );
-      return result;
-    } catch (e) {
-      AppLogger.debug('[DbfReader] CharsetConverter.decode失敗 ($charset): $e');
-      // フォールバック: ASCII範囲のみ
-      return String.fromCharCodes(bytes.where((c) => c >= 0x20 && c < 0x7F));
-    }
-  }
+  /// ASCII の範囲では ASCII と同じになる文字コード（[_normalizeCharset] の後の名前）
+  static const _asciiCompatible = {'Shift_JIS', 'UTF-8', 'EUC-JP'};
 
   /// エンコーディング名をプラットフォームで認識される形式に正規化
   static String _normalizeCharset(String encoding) {
@@ -82,10 +69,11 @@ class DbfReader {
       }
 
       // ヘッダー解析
+      final header = ByteData.sublistView(bytes, 0, 12);
       final version = bytes[0];
-      final recordCount = ByteData.sublistView(bytes, 4, 8).getUint32(0, Endian.little);
-      final headerLength = ByteData.sublistView(bytes, 8, 10).getUint16(0, Endian.little);
-      final recordLength = ByteData.sublistView(bytes, 10, 12).getUint16(0, Endian.little);
+      final recordCount = header.getUint32(4, Endian.little);
+      final headerLength = header.getUint16(8, Endian.little);
+      final recordLength = header.getUint16(10, Endian.little);
 
       AppLogger.debug('[DbfReader] DBFヘッダー情報:');
       AppLogger.debug('  バージョン: 0x${version.toRadixString(16)}');
@@ -93,51 +81,30 @@ class DbfReader {
       AppLogger.debug('  ヘッダー長: $headerLength bytes');
       AppLogger.debug('  レコード長: $recordLength bytes');
 
-      // フィールド記述子を読み込み
-      final fields = <Map<String, dynamic>>[];
-      int offset = 32;
+      final decoder = _Decoder(encoding);
 
+      // フィールド記述子を読み込み
+      final fields = <_DbfField>[];
+      int offset = 32;
       while (offset < headerLength - 1 && bytes[offset] != 0x0D) {
         if (offset + 32 > bytes.length) break;
 
         // フィールド名（11バイト、null-terminated）
         final nameBytes = bytes.sublist(offset, offset + 11);
         final nameEndIndex = nameBytes.indexOf(0);
-        final fieldNameBytes = nameBytes.sublist(
-          0,
-          nameEndIndex >= 0 ? nameEndIndex : 11,
+        final decodedName = await decoder.decode(
+          nameBytes.sublist(0, nameEndIndex >= 0 ? nameEndIndex : 11),
         );
-
-        final decodedName = await _decodeBytes(fieldNameBytes, encoding);
-        final fieldName = decodedName
-            .replaceAll('\x00', '')
-            .replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '')
-            .trim();
-
-        // フィールドタイプ（1バイト）
-        final fieldType = String.fromCharCode(bytes[offset + 11]);
-
-        // フィールド長（1バイト）
-        final fieldLength = bytes[offset + 16];
-
-        // 小数点以下桁数（1バイト）
-        final decimalCount = bytes[offset + 17];
-
-        fields.add({
-          'name': fieldName,
-          'type': fieldType,
-          'length': fieldLength,
-          'decimal': decimalCount,
-        });
-
+        fields.add((
+          name: decodedName.replaceAll('\x00', '').replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim(),
+          type: String.fromCharCode(bytes[offset + 11]),
+          length: bytes[offset + 16],
+        ));
         offset += 32;
       }
 
       // レコードデータを読み込み
-      final data = <String, List<dynamic>>{};
-      for (final field in fields) {
-        data[field['name'] as String] = [];
-      }
+      final data = <String, List<dynamic>>{for (final field in fields) field.name: []};
 
       offset = headerLength;
       for (int recordIndex = 0; recordIndex < recordCount; recordIndex++) {
@@ -154,45 +121,10 @@ class DbfReader {
 
         // 各フィールドの値を読み込み
         for (final field in fields) {
-          final fieldName = field['name'] as String;
-          final fieldType = field['type'] as String;
-          final fieldLength = field['length'] as int;
-
-          if (offset + fieldLength > bytes.length) break;
-
-          final valueBytes = bytes.sublist(offset, offset + fieldLength);
-          final valueString = (await _decodeBytes(valueBytes, encoding)).trim();
-
-          // タイプに応じて値を変換
-          dynamic value;
-          switch (fieldType) {
-            case 'N': // 数値
-            case 'F': // 浮動小数点
-              value = double.tryParse(valueString);
-            case 'L': // 論理値
-              value = valueString == 'T' ||
-                  valueString == 't' ||
-                  valueString == 'Y' ||
-                  valueString == 'y';
-            case 'D': // 日付（YYYYMMDD）
-              if (valueString.length == 8) {
-                try {
-                  final year = int.parse(valueString.substring(0, 4));
-                  final month = int.parse(valueString.substring(4, 6));
-                  final day = int.parse(valueString.substring(6, 8));
-                  value = DateTime(year, month, day).toIso8601String();
-                } catch (e) {
-                  value = valueString;
-                }
-              } else {
-                value = valueString;
-              }
-            default: // 'C' (文字列) など
-              value = valueString;
-          }
-
-          data[fieldName]!.add(value);
-          offset += fieldLength;
+          if (offset + field.length > bytes.length) break;
+          final valueString = (await decoder.decode(Uint8List.sublistView(bytes, offset, offset + field.length))).trim();
+          data[field.name]!.add(_parseValue(field.type, valueString));
+          offset += field.length;
         }
       }
 
@@ -202,6 +134,29 @@ class DbfReader {
       AppLogger.debug('[DbfReader] DBF読み込みエラー: $e');
       AppLogger.debug('[DbfReader] スタックトレース: $stack');
       return null;
+    }
+  }
+
+  /// タイプに応じて値を変換
+  static Object? _parseValue(String fieldType, String valueString) {
+    switch (fieldType) {
+      case 'N': // 数値
+      case 'F': // 浮動小数点
+        return double.tryParse(valueString);
+      case 'L': // 論理値
+        return valueString == 'T' || valueString == 't' || valueString == 'Y' || valueString == 'y';
+      case 'D': // 日付（YYYYMMDD）
+        if (valueString.length != 8) return valueString;
+        try {
+          final year = int.parse(valueString.substring(0, 4));
+          final month = int.parse(valueString.substring(4, 6));
+          final day = int.parse(valueString.substring(6, 8));
+          return DateTime(year, month, day).toIso8601String();
+        } catch (e) {
+          return valueString;
+        }
+      default: // 'C' (文字列) など
+        return valueString;
     }
   }
 
@@ -229,3 +184,32 @@ class DbfReader {
   }
 }
 
+/// バイト列 → 文字列。
+///
+/// 文字コードの変換はプラットフォームチャネル越しなので 1 回ずつが重い（1.5 万行 × 列の数だけ
+/// 往復していた）。ASCII だけの値はその場で、同じバイト列は 2 度目から覚えた結果で返す。
+class _Decoder {
+  _Decoder(String encoding) : _charset = DbfReader._normalizeCharset(encoding);
+
+  final String _charset;
+  final Map<String, String> _cache = {};
+
+  Future<String> decode(Uint8List bytes) async {
+    if (bytes.isEmpty) return '';
+    if (DbfReader._asciiCompatible.contains(_charset) && bytes.every((b) => b < 0x80)) {
+      return String.fromCharCodes(bytes);
+    }
+    final key = String.fromCharCodes(bytes);
+    return _cache[key] ??= await _decodeOnPlatform(bytes);
+  }
+
+  Future<String> _decodeOnPlatform(Uint8List bytes) async {
+    try {
+      return await CharsetConverter.decode(_charset, Uint8List.fromList(bytes));
+    } catch (e) {
+      AppLogger.debug('[DbfReader] CharsetConverter.decode失敗 ($_charset): $e');
+      // フォールバック: ASCII範囲のみ
+      return String.fromCharCodes(bytes.where((c) => c >= 0x20 && c < 0x7F));
+    }
+  }
+}

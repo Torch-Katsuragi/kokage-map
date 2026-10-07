@@ -22,7 +22,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
 import 'package:root_maps/utils/app_logger.dart';
 
-import '../../../utils/binary_utils.dart';
 import '../../coordinate/epsg_registry.dart';
 import '../../coordinate/projections.dart';
 
@@ -43,300 +42,262 @@ class ShapeType {
   static const int multiPointM = 28;
 }
 
+/// SHP のレコード 1 件（形を読めたもの）
+class ShpRecord {
+  const ShpRecord(this.index, this.shapeType, this.geometry);
+
+  /// ファイル内の 0 始まりの順番（形が無い・読めないレコードも数える。DBF の行と同じ順番）
+  final int index;
+
+  /// [ShapeType] の値
+  final int shapeType;
+
+  /// 点は [LatLng]、線は `List<LatLng>`、面はリングの `List<List<LatLng>>`（WGS84）
+  final Object geometry;
+}
+
 /// シェープファイルのバイナリ解析クラス
 class ShapefileBinaryParser {
-  // デバッグ出力制御用フラグ
-  static bool _hasLoggedFirstPointConversion = false;
-  static bool _hasLoggedFirstPolylineConversion = false;
-  static bool _hasLoggedFirstPolygonConversion = false;
-
-  /// デバッグフラグをリセット（新規インポート時に呼び出す）
-  static void resetDebugFlags() {
-    _hasLoggedFirstPointConversion = false;
-    _hasLoggedFirstPolylineConversion = false;
-    _hasLoggedFirstPolygonConversion = false;
-  }
-
-  /// シェープファイルの基本情報を読み込み
-  static Future<Map<String, dynamic>?> readInfo(String shpFilePath) async {
+  /// SHP ファイルの中身。無い・読めなければ null
+  static Future<Uint8List?> readBytes(String shpFilePath) async {
     try {
-      AppLogger.debug('[ShpParser] シェープファイル基本情報読み込み: $shpFilePath');
-
+      AppLogger.debug('[ShpParser] シェープファイル読み込み: $shpFilePath');
       final shpFile = File(shpFilePath);
       if (!shpFile.existsSync()) return null;
-
-      final fileSize = shpFile.lengthSync();
-      final bytes = await shpFile.readAsBytes();
-      
-      if (bytes.length < 100) {
-        AppLogger.debug('[ShpParser] SHPファイルが小さすぎます: ${bytes.length}bytes');
-        return null;
-      }
-
-      // ヘッダーからシェープタイプを読み取り
-      final shapeType = BinaryUtils.readInt32LittleEndian(bytes, 32);
-      final geometryType = _shapeTypeToGeometryString(shapeType);
-      final estimatedCount = _estimateFeatureCount(shapeType, fileSize);
-
-      AppLogger.debug('[ShpParser] ジオメトリタイプ: $geometryType');
-      AppLogger.debug('[ShpParser] 推定フィーチャ数: $estimatedCount');
-
-      return {
-        'geometryType': geometryType,
-        'shapeType': shapeType,
-        'featureCount': estimatedCount,
-        'fileSize': fileSize,
-        'bounds': {
-          'minX': BinaryUtils.readFloat64LittleEndian(bytes, 36),
-          'minY': BinaryUtils.readFloat64LittleEndian(bytes, 44),
-          'maxX': BinaryUtils.readFloat64LittleEndian(bytes, 52),
-          'maxY': BinaryUtils.readFloat64LittleEndian(bytes, 60),
-        },
-      };
+      return await shpFile.readAsBytes();
     } catch (e) {
-      AppLogger.debug('[ShpParser] 基本情報読み込みエラー: $e');
+      AppLogger.debug('[ShpParser] 読み込みエラー: $e');
       return null;
     }
   }
 
-  /// シェープタイプからジオメトリタイプ文字列に変換
-  static String _shapeTypeToGeometryString(int shapeType) {
-    switch (shapeType) {
-      case ShapeType.point:
-      case ShapeType.pointZ:
-      case ShapeType.pointM:
-      case ShapeType.multiPoint:
-      case ShapeType.multiPointZ:
-      case ShapeType.multiPointM:
-        return 'Point';
-      case ShapeType.polyLine:
-      case ShapeType.polyLineZ:
-      case ShapeType.polyLineM:
-        return 'LineString';
-      case ShapeType.polygon:
-      case ShapeType.polygonZ:
-      case ShapeType.polygonM:
-        return 'Polygon';
-      default:
-        return 'Point';
+  /// [bytes]（SHP ファイルの中身）のヘッダから基本情報を読む。短すぎれば null
+  static Map<String, dynamic>? infoFromBytes(Uint8List bytes) {
+    if (bytes.length < 100) {
+      AppLogger.debug('[ShpParser] SHPファイルが小さすぎます: ${bytes.length}bytes');
+      return null;
     }
+    final data = ByteData.sublistView(bytes);
+
+    // ヘッダーからシェープタイプを読み取り
+    final shapeType = data.getInt32(32, Endian.little);
+    final geometryType = _shapeTypeToGeometryString(shapeType);
+    final estimatedCount = _estimateFeatureCount(shapeType, bytes.length);
+
+    AppLogger.debug('[ShpParser] ジオメトリタイプ: $geometryType');
+    AppLogger.debug('[ShpParser] 推定フィーチャ数: $estimatedCount');
+
+    return {
+      'geometryType': geometryType,
+      'shapeType': shapeType,
+      'featureCount': estimatedCount,
+      'fileSize': bytes.length,
+      'bounds': {
+        'minX': data.getFloat64(36, Endian.little),
+        'minY': data.getFloat64(44, Endian.little),
+        'maxX': data.getFloat64(52, Endian.little),
+        'maxY': data.getFloat64(60, Endian.little),
+      },
+    };
   }
 
+  /// シェープタイプからジオメトリタイプ文字列に変換（点の仲間と未知のものは Point）
+  static String _shapeTypeToGeometryString(int shapeType) => switch (shapeType) {
+    ShapeType.polyLine || ShapeType.polyLineZ || ShapeType.polyLineM => 'LineString',
+    ShapeType.polygon || ShapeType.polygonZ || ShapeType.polygonM => 'Polygon',
+    _ => 'Point',
+  };
+
   /// ファイルサイズからフィーチャ数を推定
-  static int _estimateFeatureCount(int shapeType, int fileSize) {
-    switch (shapeType) {
-      case ShapeType.point:
-      case ShapeType.pointM:
-        return (fileSize / 50).round().clamp(1, 100000);
-      case ShapeType.pointZ:
-        return (fileSize / 60).round().clamp(1, 80000);
-      case ShapeType.polyLine:
-      case ShapeType.polyLineM:
-        return (fileSize / 200).round().clamp(1, 10000);
-      case ShapeType.polyLineZ:
-        return (fileSize / 250).round().clamp(1, 8000);
-      case ShapeType.polygon:
-      case ShapeType.polygonM:
-        return (fileSize / 500).round().clamp(1, 5000);
-      case ShapeType.polygonZ:
-        return (fileSize / 600).round().clamp(1, 4000);
-      default:
-        return (fileSize / 100).round().clamp(1, 10000);
-    }
-  }
+  static int _estimateFeatureCount(int shapeType, int fileSize) => switch (shapeType) {
+    ShapeType.point || ShapeType.pointM => (fileSize / 50).round().clamp(1, 100000),
+    ShapeType.pointZ => (fileSize / 60).round().clamp(1, 80000),
+    ShapeType.polyLine || ShapeType.polyLineM => (fileSize / 200).round().clamp(1, 10000),
+    ShapeType.polyLineZ => (fileSize / 250).round().clamp(1, 8000),
+    ShapeType.polygon || ShapeType.polygonM => (fileSize / 500).round().clamp(1, 5000),
+    ShapeType.polygonZ => (fileSize / 600).round().clamp(1, 4000),
+    _ => (fileSize / 100).round().clamp(1, 10000),
+  };
 
   /// シェープファイルの全レコードを解析
   /// [shpFilePath] SHPファイルパス
   /// [sourceCoordinateSystem] 元の座標系（座標変換用）
-  /// [onRecord] レコードごとのコールバック。recordIndex はファイル内の 0 始まりの順番
-  /// （形が無い・読めないレコードも数える。DBF の行と同じ順番）
+  /// [onRecord] レコードごとのコールバック。recordIndex は [ShpRecord.index]
   static Future<int> parseRecords(
     String shpFilePath, {
     EpsgDefinition? sourceCoordinateSystem,
     required Future<void> Function(int recordIndex, int shapeType, dynamic geometry) onRecord,
   }) async {
-    try {
-      AppLogger.debug('[ShpParser] レコード解析開始: $shpFilePath');
-      resetDebugFlags();
+    AppLogger.debug('[ShpParser] レコード解析開始: $shpFilePath');
+    final bytes = await File(shpFilePath).readAsBytes();
+    var count = 0;
+    for (final r in records(bytes, sourceCoordinateSystem: sourceCoordinateSystem)) {
+      await onRecord(r.index, r.shapeType, r.geometry);
+      count++;
+    }
+    return count;
+  }
 
-      final shpFile = File(shpFilePath);
-      final bytes = await shpFile.readAsBytes();
+  /// [bytes]（SHP ファイルの中身）のレコードを先頭から順に読む。形を読めたものだけを返す。
+  ///
+  /// 座標は [sourceCoordinateSystem] から WGS84 に直す（null なら WGS84 とみなし、範囲外は捨てる）。
+  /// レコードごとに待たずに読めるよう同期で返す（大きなファイルで効く）
+  static Iterable<ShpRecord> records(
+    Uint8List bytes, {
+    EpsgDefinition? sourceCoordinateSystem,
+  }) sync* {
+    if (bytes.length < 100) {
+      throw Exception('SHPファイルが小さすぎます');
+    }
+    final reader = _RecordReader(bytes, _ToWgs84(sourceCoordinateSystem));
 
-      if (bytes.length < 100) {
-        throw Exception('SHPファイルが小さすぎます');
-      }
+    int offset = 100; // ヘッダー後
+    int recordCount = 0;
+    int recordIndex = -1;
 
-      int offset = 100; // ヘッダー後
-      int recordCount = 0;
-      int recordIndex = -1;
+    while (offset < bytes.length - 8) {
+      ShpRecord? record;
+      try {
+        // レコードヘッダー
+        final contentLength = reader.data.getInt32(offset + 4, Endian.big);
+        offset += 8;
 
-      while (offset < bytes.length - 8) {
-        try {
-          // レコードヘッダー
-          final contentLength = BinaryUtils.readInt32BigEndian(bytes, offset + 4);
-          offset += 8;
-
-          if (contentLength <= 0 || offset + (contentLength * 2) > bytes.length) {
-            break;
-          }
-          recordIndex++;
-
-          // レコードシェープタイプ
-          final recordShapeType = BinaryUtils.readInt32LittleEndian(bytes, offset);
-          offset += 4;
-
-          // ジオメトリを解析
-          dynamic geometry;
-          int geometryBytes = 0;
-
-          switch (recordShapeType) {
-            case ShapeType.point:
-              geometry = await _parsePoint(bytes, offset, sourceCoordinateSystem);
-              geometryBytes = 16;
-            case ShapeType.polyLine:
-              final result = await _parsePolyLine(bytes, offset, contentLength, sourceCoordinateSystem);
-              geometry = result['geometry'];
-              geometryBytes = result['bytesRead'] as int;
-            case ShapeType.polygon:
-              final result = await _parsePolygon(bytes, offset, contentLength, sourceCoordinateSystem);
-              geometry = result['geometry'];
-              geometryBytes = result['bytesRead'] as int;
-            default:
-              geometryBytes = (contentLength * 2) - 4;
-          }
-
-          if (geometry != null) {
-            await onRecord(recordIndex, recordShapeType, geometry);
-            recordCount++;
-          }
-
-          offset += geometryBytes;
-
-          // 進捗ログ
-          if (recordCount < 10 ||
-              (recordCount < 1000 && recordCount % 100 == 0) ||
-              (recordCount >= 1000 && recordCount % 500 == 0)) {
-            AppLogger.debug('[ShpParser] 解析中: $recordCount件');
-          }
-        } catch (e) {
-          AppLogger.debug('[ShpParser] レコード解析エラー (offset: $offset): $e');
+        if (contentLength <= 0 || offset + (contentLength * 2) > bytes.length) {
           break;
         }
+        recordIndex++;
+
+        // レコードシェープタイプ
+        final recordShapeType = reader.data.getInt32(offset, Endian.little);
+        offset += 4;
+
+        // ジオメトリを解析
+        final (Object? geometry, int geometryBytes) = switch (recordShapeType) {
+          ShapeType.point => (reader.point(offset), 16),
+          ShapeType.polyLine => reader.polyLine(offset),
+          ShapeType.polygon => reader.polygon(offset),
+          _ => (null, (contentLength * 2) - 4),
+        };
+        if (geometry != null) {
+          record = ShpRecord(recordIndex, recordShapeType, geometry);
+          recordCount++;
+        }
+        offset += geometryBytes;
+
+        // 進捗ログ
+        if (recordCount < 10 ||
+            (recordCount < 1000 && recordCount % 100 == 0) ||
+            (recordCount >= 1000 && recordCount % 500 == 0)) {
+          AppLogger.debug('[ShpParser] 解析中: $recordCount件');
+        }
+      } catch (e) {
+        AppLogger.debug('[ShpParser] レコード解析エラー (offset: $offset): $e');
+        break;
       }
+      if (record != null) yield record;
+    }
 
-      AppLogger.debug('[ShpParser] 解析完了: $recordCount件');
-      return recordCount;
+    AppLogger.debug('[ShpParser] 解析完了: $recordCount件');
+  }
+}
+
+/// 元の座標系 → WGS84。投影は最初に 1 回だけ用意する
+class _ToWgs84 {
+  _ToWgs84(EpsgDefinition? source)
+    : _hasSource = source != null,
+      _projection = source == null ? null : Projections.parse(source.proj4String);
+
+  final bool _hasSource;
+  final Projection? _projection;
+
+  /// 変換できない・WGS84 の範囲外なら null
+  LatLng? call(double x, double y) {
+    if (!_hasSource) {
+      // 座標変換なし、WGS84範囲チェック
+      if (x >= -180 && x <= 180 && y >= -90 && y <= 90) return LatLng(y, x);
+      return null;
+    }
+    final projection = _projection;
+    if (projection == null) return null;
+    try {
+      final transformed = projection.transform(Projections.wgs84, Point(x: x, y: y));
+      final latLng = LatLng(transformed.y, transformed.x);
+      // 変換後の座標がWGS84の妥当な範囲内かチェック
+      if (latLng.latitude >= -90 &&
+          latLng.latitude <= 90 &&
+          latLng.longitude >= -180 &&
+          latLng.longitude <= 180) {
+        return latLng;
+      }
     } catch (e) {
-      AppLogger.debug('[ShpParser] レコード解析エラー: $e');
-      rethrow;
+      // 変換失敗
     }
+    return null;
   }
+}
 
-  /// Pointジオメトリを解析
-  static Future<LatLng?> _parsePoint(
-    Uint8List bytes,
-    int offset,
-    EpsgDefinition? sourceCoordinateSystem,
-  ) async {
+/// レコードの中身を読む。返すバイト数はシェープタイプの後ろから読んだぶん
+class _RecordReader {
+  _RecordReader(this.bytes, this.toWgs84) : data = ByteData.sublistView(bytes);
+
+  final Uint8List bytes;
+  final ByteData data;
+  final _ToWgs84 toWgs84;
+
+  double _f64(int offset) => data.getFloat64(offset, Endian.little);
+  int _i32(int offset) => data.getInt32(offset, Endian.little);
+
+  LatLng? point(int offset) {
     if (offset + 16 > bytes.length) return null;
-
-    final x = BinaryUtils.readFloat64LittleEndian(bytes, offset);
-    final y = BinaryUtils.readFloat64LittleEndian(bytes, offset + 8);
-
+    final x = _f64(offset);
+    final y = _f64(offset + 8);
     if (!x.isFinite || !y.isFinite) return null;
-
-    return _transformCoordinate(x, y, sourceCoordinateSystem, 'Point');
+    return toWgs84(x, y);
   }
 
-  /// PolyLineジオメトリを解析
-  static Future<Map<String, dynamic>> _parsePolyLine(
-    Uint8List bytes,
-    int offset,
-    int contentLength,
-    EpsgDefinition? sourceCoordinateSystem,
-  ) async {
-    final startOffset = offset;
-    
-    // Bounding Box スキップ
-    offset += 32;
+  /// 部分の区切りは見ず、全部の点を 1 本の線にする。変換できない点は飛ばす
+  (List<LatLng>?, int) polyLine(int start) {
+    var offset = start + 32; // Bounding Box スキップ
+    final numParts = _i32(offset);
+    final numPoints = _i32(offset + 4);
+    offset += 8 + numParts * 4; // Partsをスキップ
 
-    final numParts = BinaryUtils.readInt32LittleEndian(bytes, offset);
-    final numPoints = BinaryUtils.readInt32LittleEndian(bytes, offset + 4);
-    offset += 8;
-
-    if (!_hasLoggedFirstPolylineConversion) {
-      AppLogger.debug('[ShpParser] PolyLine: $numParts parts, $numPoints points');
-    }
-
-    // Partsをスキップ
-    offset += numParts * 4;
-
-    // Pointsを読み込み
     final coordinates = <LatLng>[];
     for (int i = 0; i < numPoints && offset + 16 <= bytes.length; i++) {
-      final x = BinaryUtils.readFloat64LittleEndian(bytes, offset);
-      final y = BinaryUtils.readFloat64LittleEndian(bytes, offset + 8);
+      final x = _f64(offset);
+      final y = _f64(offset + 8);
       offset += 16;
-
       if (x.isFinite && y.isFinite) {
-        final point = await _transformCoordinate(x, y, sourceCoordinateSystem, 'PolyLine');
-        if (point != null) {
-          coordinates.add(point);
-        }
+        final point = toWgs84(x, y);
+        if (point != null) coordinates.add(point);
       }
     }
-
-    _hasLoggedFirstPolylineConversion = true;
-
-    return {
-      'geometry': coordinates.isNotEmpty ? coordinates : null,
-      'bytesRead': offset - startOffset,
-    };
+    return (coordinates.isNotEmpty ? coordinates : null, offset - start);
   }
 
-  /// Polygonジオメトリを解析
-  static Future<Map<String, dynamic>> _parsePolygon(
-    Uint8List bytes,
-    int offset,
-    int contentLength,
-    EpsgDefinition? sourceCoordinateSystem,
-  ) async {
-    final startOffset = offset;
-    
-    // Bounding Box スキップ
-    offset += 32;
-
-    final numParts = BinaryUtils.readInt32LittleEndian(bytes, offset);
-    final numPoints = BinaryUtils.readInt32LittleEndian(bytes, offset + 4);
+  /// 3 点未満のリングは捨てる。変換できない点があれば面ごと捨てる
+  (List<List<LatLng>>?, int) polygon(int start) {
+    var offset = start + 32; // Bounding Box スキップ
+    final numParts = _i32(offset);
+    final numPoints = _i32(offset + 4);
     offset += 8;
 
-    if (!_hasLoggedFirstPolygonConversion) {
-      AppLogger.debug('[ShpParser] Polygon: $numParts rings, $numPoints points');
-    }
-
-    // Parts配列を読み込み
     final parts = <int>[];
     for (int i = 0; i < numParts; i++) {
-      parts.add(BinaryUtils.readInt32LittleEndian(bytes, offset));
+      parts.add(_i32(offset));
       offset += 4;
     }
 
-    // 全ポイントを読み込み
     final allPoints = <LatLng>[];
     for (int i = 0; i < numPoints && offset + 16 <= bytes.length; i++) {
-      final x = BinaryUtils.readFloat64LittleEndian(bytes, offset);
-      final y = BinaryUtils.readFloat64LittleEndian(bytes, offset + 8);
+      final x = _f64(offset);
+      final y = _f64(offset + 8);
       offset += 16;
-
       if (x.isFinite && y.isFinite) {
-        final point = await _transformCoordinate(x, y, sourceCoordinateSystem, 'Polygon');
-        if (point != null) {
-          allPoints.add(point);
-        } else {
-          // 座標変換に失敗した場合、このポリゴンは無効
-          _hasLoggedFirstPolygonConversion = true;
-          return {'geometry': null, 'bytesRead': offset - startOffset};
-        }
+        final point = toWgs84(x, y);
+        // 座標変換に失敗した場合、このポリゴンは無効
+        if (point == null) return (null, offset - start);
+        allPoints.add(point);
       }
     }
 
@@ -345,63 +306,11 @@ class ShapefileBinaryParser {
     for (int i = 0; i < parts.length; i++) {
       final startIndex = parts[i];
       final endIndex = i + 1 < parts.length ? parts[i + 1] : allPoints.length;
-
       if (startIndex < allPoints.length && endIndex <= allPoints.length) {
         final ring = allPoints.sublist(startIndex, endIndex);
-        if (ring.length >= 3) {
-          rings.add(ring);
-        }
+        if (ring.length >= 3) rings.add(ring);
       }
     }
-
-    _hasLoggedFirstPolygonConversion = true;
-
-    return {
-      'geometry': rings.isNotEmpty ? rings : null,
-      'bytesRead': offset - startOffset,
-    };
-  }
-
-  /// 座標変換（元座標系→WGS84）
-  static Future<LatLng?> _transformCoordinate(
-    double x,
-    double y,
-    EpsgDefinition? sourceCoordinateSystem,
-    String geometryType,
-  ) async {
-    if (sourceCoordinateSystem != null) {
-      try {
-        final sourceProjection = Projections.parse(sourceCoordinateSystem.proj4String);
-
-        if (sourceProjection != null) {
-          final point = Point(x: x, y: y);
-          final transformedPoint = sourceProjection.transform(Projections.wgs84, point);
-          final latLng = LatLng(transformedPoint.y, transformedPoint.x);
-
-          // 変換後の座標がWGS84の妥当な範囲内かチェック
-          if (latLng.latitude >= -90 && latLng.latitude <= 90 &&
-              latLng.longitude >= -180 && latLng.longitude <= 180) {
-            // 最初の1回だけ詳細ログ
-            if ((geometryType == 'Point' && !_hasLoggedFirstPointConversion) ||
-                (geometryType == 'PolyLine' && !_hasLoggedFirstPolylineConversion) ||
-                (geometryType == 'Polygon' && !_hasLoggedFirstPolygonConversion)) {
-              AppLogger.debug('[ShpParser] 座標変換: ($x, $y) -> (${latLng.latitude}, ${latLng.longitude})');
-              if (geometryType == 'Point') _hasLoggedFirstPointConversion = true;
-            }
-            return latLng;
-          }
-        }
-      } catch (e) {
-        // 変換失敗
-      }
-      return null;
-    } else {
-      // 座標変換なし、WGS84範囲チェック
-      if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
-        return LatLng(y, x);
-      }
-      return null;
-    }
+    return (rings.isNotEmpty ? rings : null, offset - start);
   }
 }
-

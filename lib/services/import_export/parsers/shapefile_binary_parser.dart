@@ -148,7 +148,8 @@ class ShapefileBinaryParser {
   /// シェープファイルの全レコードを解析
   /// [shpFilePath] SHPファイルパス
   /// [sourceCoordinateSystem] 元の座標系（座標変換用）
-  /// [onRecord] レコードごとのコールバック
+  /// [onRecord] レコードごとのコールバック。recordIndex はファイル内の 0 始まりの順番
+  /// （形が無い・読めないレコードも数える。DBF の行と同じ順番）
   static Future<int> parseRecords(
     String shpFilePath, {
     EpsgDefinition? sourceCoordinateSystem,
@@ -167,17 +168,18 @@ class ShapefileBinaryParser {
 
       int offset = 100; // ヘッダー後
       int recordCount = 0;
+      int recordIndex = -1;
 
       while (offset < bytes.length - 8) {
         try {
           // レコードヘッダー
-          final recordNumber = BinaryUtils.readInt32BigEndian(bytes, offset);
           final contentLength = BinaryUtils.readInt32BigEndian(bytes, offset + 4);
           offset += 8;
 
           if (contentLength <= 0 || offset + (contentLength * 2) > bytes.length) {
             break;
           }
+          recordIndex++;
 
           // レコードシェープタイプ
           final recordShapeType = BinaryUtils.readInt32LittleEndian(bytes, offset);
@@ -204,7 +206,7 @@ class ShapefileBinaryParser {
           }
 
           if (geometry != null) {
-            await onRecord(recordNumber, recordShapeType, geometry);
+            await onRecord(recordIndex, recordShapeType, geometry);
             recordCount++;
           }
 

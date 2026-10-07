@@ -129,7 +129,7 @@ class ShapefileImporter extends BaseImporter {
         filePath,
         sourceCoordinateSystem: sourceCoordinateSystem,
         onRecord: (recordIndex, shapeType, geometry) async {
-          final attributes = DbfReader.getAttributesForRecord(dbfData, featureCount);
+          final attributes = DbfReader.getAttributesForRecord(dbfData, recordIndex);
           
           Map<String, dynamic>? featureData;
 

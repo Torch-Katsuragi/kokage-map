@@ -29,30 +29,14 @@ class LeftBottomFab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isActive = ref.watch(isFabActiveProvider);
     final currentTool = ref.watch(currentToolProvider);
-    
+
     // ペン: 消しゴム／選択: 複数選択。ほかのツールでは意味を持たない
-    Widget centerIcon;
-    switch (currentTool.runtimeType) {
-      case PenTool _:
-        centerIcon = Icon(
-          Icons.auto_fix_normal,
-          color: isActive ? Colors.white : Colors.grey,
-          size: 32,
-        );
-      case SelectTool _:
-        centerIcon = Icon(
-          Icons.library_add_check_outlined,
-          color: isActive ? Colors.white : Colors.grey,
-          size: 32,
-        );
-      default:
-        centerIcon = Icon(
-          Icons.circle,
-          color: isActive ? Colors.white : Colors.grey,
-          size: 32,
-        );
-    }
-    
+    final iconData = switch (currentTool) {
+      PenTool() => Icons.auto_fix_normal,
+      SelectTool() => Icons.library_add_check_outlined,
+      _ => Icons.circle,
+    };
+
     return GestureDetector(
       onTap: () {
         ref.read(isFabActiveProvider.notifier).set(!isActive);
@@ -76,7 +60,11 @@ class LeftBottomFab extends ConsumerWidget {
             width: 2,
           ),
         ),
-        child: centerIcon,
+        child: Icon(
+          iconData,
+          color: isActive ? Colors.white : Colors.grey,
+          size: 32,
+        ),
       ),
     );
   }

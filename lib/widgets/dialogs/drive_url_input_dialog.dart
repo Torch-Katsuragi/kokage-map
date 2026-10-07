@@ -127,11 +127,11 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
 
   /// クリップボードから貼り付け
   Future<void> _pasteFromClipboard() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (data?.text != null) {
-      _urlController.text = data!.text!;
-      await _validateUrl();
-    }
+    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (text == null || !mounted) return;
+    _validateDebounce?.cancel();
+    _urlController.text = text;
+    await _validateUrl();
   }
 
   /// URLを検証してフォルダ情報を取得
@@ -144,30 +144,26 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     );
   }
 
+  /// 見つけたフォルダを忘れ、[error] を出す（null なら何も出さない）
+  void _clearFolder([String? error]) {
+    if (!mounted) return;
+    setState(() {
+      _errorMessage = error;
+      _folderName = null;
+      _folderId = null;
+      _isReadOnly = null;
+      _isLoading = false;
+    });
+  }
+
   Future<void> _validateUrl() async {
     final seq = ++_validateSeq;
     final url = _urlController.text.trim();
-    if (url.isEmpty) {
-      setState(() {
-        _errorMessage = null;
-        _folderName = null;
-        _folderId = null;
-        _isReadOnly = null;
-      });
-      return;
-    }
+    if (url.isEmpty) return _clearFolder();
 
     // URLからフォルダIDを抽出
     final folderId = GoogleDriveService.extractFolderIdFromUrl(url);
-    if (folderId == null) {
-      setState(() {
-        _errorMessage = t.drive.invalidUrl;
-        _folderName = null;
-        _folderId = null;
-        _isReadOnly = null;
-      });
-      return;
-    }
+    if (folderId == null) return _clearFolder(t.drive.invalidUrl);
 
     setState(() {
       _isLoading = true;
@@ -177,38 +173,24 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     try {
       // フォルダ情報を取得
       final folderInfo = await _driveService.getFolderInfo(folderId);
-      if (seq != _validateSeq) return; // 追い越された応答は捨てる
-      if (folderInfo == null) {
-        setState(() {
-          _errorMessage = t.drive.accessDenied;
-          _folderName = null;
-          _folderId = null;
-          _isReadOnly = null;
-        });
-        return;
-      }
+      // 追い越された応答・閉じたあとの応答は捨てる
+      if (seq != _validateSeq || !mounted) return;
+      if (folderInfo == null) return _clearFolder(t.drive.accessDenied);
 
       // 権限を確認（編集可能かどうか）
-      final capabilities = folderInfo.capabilities;
-      final canEdit = capabilities?.canEdit ?? false;
+      final canEdit = folderInfo.capabilities?.canEdit ?? false;
 
       setState(() {
         _folderId = folderId;
         _folderName = folderInfo.name ?? 'Unknown';
         _isReadOnly = !canEdit;
         _errorMessage = null;
+        _isLoading = false;
       });
     } catch (e) {
       if (seq != _validateSeq) return;
       AppLogger.error('[DriveUrlInputDialog] フォルダ情報取得エラー: $e');
-      setState(() {
-        _errorMessage = t.drive.fetchError(error: e.toString());
-        _folderName = null;
-        _folderId = null;
-        _isReadOnly = null;
-      });
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      _clearFolder(t.drive.fetchError(error: e.toString()));
     }
   }
 
@@ -329,35 +311,13 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
             ),
 
           // エラーメッセージ
-          if (_errorMessage != null)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.red, fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          if (_errorMessage != null) _buildErrorBox(_errorMessage!),
 
           // フォルダ情報
           if (_folderName != null && !_isLoading)
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
+              decoration: _boxDecoration(Colors.green),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -401,7 +361,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _isReadOnly == true ? t.drive.readOnly : t.drive.editable,
+                        _accessLabel,
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
@@ -438,10 +398,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
         if (_folderName != null)
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
+            decoration: _boxDecoration(Colors.green),
             child: Row(
               children: [
                 const Icon(Icons.check_circle, color: Colors.green, size: 20),
@@ -455,7 +412,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       Text(
-                        _isReadOnly == true ? t.drive.readOnly : t.drive.editable,
+                        _accessLabel,
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
@@ -468,29 +425,38 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
             ),
           ),
         
-        if (_errorMessage != null)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Colors.red, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        if (_errorMessage != null) _buildErrorBox(_errorMessage!),
       ],
     );
   }
+
+  /// 結果欄の薄い色の角丸背景
+  static BoxDecoration _boxDecoration(Color color) => BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      );
+
+  /// 赤い枠のエラー表示（URL タブ・QR タブ共通）
+  Widget _buildErrorBox(String message) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: _boxDecoration(Colors.red),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.red, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  /// 読み取り専用か編集可か
+  String get _accessLabel =>
+      _isReadOnly == true ? t.drive.readOnly : t.drive.editable;
 
   /// QRコード検出時の処理
   void _onQrDetected(BarcodeCapture capture) {
@@ -502,6 +468,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
       
       // Google Drive URLかチェック
       if (value.contains('drive.google.com')) {
+        _validateDebounce?.cancel();
         _urlController.text = value;
         _validateUrl();
         

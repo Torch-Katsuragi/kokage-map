@@ -35,6 +35,7 @@ import '../../providers/notification_providers.dart';
 import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
 import '../../widgets/dialogs/drive_sign_in_prompt.dart';
+import '../../widgets/layer_drawer/common_dialogs.dart';
 import '../../widgets/layer_drawer/sync_merge_dialog.dart';
 import '../qgis/qgs_read_back.dart';
 import 'conflict_restorer.dart';
@@ -59,6 +60,11 @@ class DriveSyncOperations {
     required this.onStateChanged,
     this.onMapRefresh,
   });
+
+  /// 通知センターに出す
+  void _notify(String title, NotificationLevel level) => ref
+      .read(notificationCenterProvider.notifier)
+      .add(title: title, level: level);
 
   /// 同期状態を更新（UIのみ、ダイアログなし）
   Future<void> refreshSyncStatus(DriveFolderNode node) async {
@@ -93,29 +99,37 @@ class DriveSyncOperations {
       return;
     }
 
+    // 「変更を確かめています」を出している間 true。失敗したときに閉じ忘れない
+    var progressShown = false;
     try {
       node.syncStatus = SyncStatus.syncing;
       onStateChanged();
 
       if (!context.mounted) return;
-      unawaited(showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          content: Row(
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(width: 16),
-              Text(t.drive.checkingChanges),
-            ],
+      progressShown = true;
+      unawaited(
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            content: Row(
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(width: 16),
+                Text(t.drive.checkingChanges),
+              ],
+            ),
           ),
         ),
-      ));
+      );
 
       final syncEngine = SyncEngine();
       final entries = await syncEngine.getMergeEntries(localPath);
-      AppLogger.debug('[DriveSync] mode=$mode entries=${entries.length} local=$localPath');
+      AppLogger.debug(
+        '[DriveSync] mode=$mode entries=${entries.length} local=$localPath',
+      );
 
+      progressShown = false;
       if (context.mounted) Navigator.of(context).pop();
 
       if (!context.mounted) {
@@ -132,12 +146,12 @@ class DriveSyncOperations {
           await refreshAfterSync(node);
           onStateChanged();
         }
-        ref.read(notificationCenterProvider.notifier).add(
-              title: foldersCreated > 0
-                  ? t.drive.foldersCreated(count: foldersCreated.toString())
-                  : t.drive.noChanges,
-              level: NotificationLevel.success,
-            );
+        _notify(
+          foldersCreated > 0
+              ? t.drive.foldersCreated(count: foldersCreated.toString())
+              : t.drive.noChanges,
+          NotificationLevel.success,
+        );
         return;
       }
 
@@ -162,40 +176,47 @@ class DriveSyncOperations {
 
       if (result.success) {
         // 行単位で合わせられなかったファイルは衝突のまま（端末かクラウドを選び直してもらう）
-        node.syncStatus = result.failedMerges.isEmpty ? SyncStatus.synced : SyncStatus.conflict;
+        node.syncStatus = result.failedMerges.isEmpty
+            ? SyncStatus.synced
+            : SyncStatus.conflict;
 
-        if (result.downloadedCount > 0 || result.deletedCount > 0 || result.movedCount > 0 || result.mergedCount > 0) {
+        if (result.downloadedCount > 0 ||
+            result.deletedCount > 0 ||
+            result.movedCount > 0 ||
+            result.mergedCount > 0) {
           await refreshAfterSync(node);
           onMapRefresh?.call();
           onStateChanged();
         }
 
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.drive.syncComplete(
-                  uploaded: result.uploadedCount.toString(),
-                  downloaded: result.downloadedCount.toString(),
-                  deleted: result.deletedCount.toString(),
-                  moved: result.movedCount.toString(),
-                ),
-              level: NotificationLevel.success,
-            );
-        notifyMerge(ref, result, afterRestore: () async {
-          await refreshAfterSync(node);
-          onMapRefresh?.call();
-        });
+        _notify(
+          t.drive.syncComplete(
+            uploaded: result.uploadedCount.toString(),
+            downloaded: result.downloadedCount.toString(),
+            deleted: result.deletedCount.toString(),
+            moved: result.movedCount.toString(),
+          ),
+          NotificationLevel.success,
+        );
+        notifyMerge(
+          ref,
+          result,
+          afterRestore: () async {
+            await refreshAfterSync(node);
+            onMapRefresh?.call();
+          },
+        );
       } else {
         node.syncStatus = SyncStatus.error;
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.drive.syncError(error: result.errorMessage ?? ''),
-              level: NotificationLevel.error,
-            );
+        _notify(
+          t.drive.syncError(error: result.errorMessage ?? ''),
+          NotificationLevel.error,
+        );
       }
     } catch (e) {
+      if (progressShown && context.mounted) Navigator.of(context).pop();
       node.syncStatus = SyncStatus.error;
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.drive.syncError(error: e.toString()),
-            level: NotificationLevel.error,
-          );
+      _notify(t.drive.syncError(error: e.toString()), NotificationLevel.error);
     }
 
     onStateChanged();
@@ -203,38 +224,61 @@ class DriveSyncOperations {
 
   /// 行単位マージの結果を通知する（手動の同期と自動同期で共通）
   /// [afterRestore] は「クラウドの値に戻す」を押して書き戻したあとに呼ぶ（地図の読み直しなど）
-  static void notifyMerge(WidgetRef ref, SyncResult result, {Future<void> Function()? afterRestore}) {
+  static void notifyMerge(
+    WidgetRef ref,
+    SyncResult result, {
+    Future<void> Function()? afterRestore,
+  }) {
     if (result.failedMerges.isNotEmpty) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.drive.mergeFailed(count: result.failedMerges.length.toString()),
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: t.drive.mergeFailed(
+              count: result.failedMerges.length.toString(),
+            ),
             detail: result.failedMerges.join('\n'),
             level: NotificationLevel.warning,
           );
     }
     if (result.mergedCount > 0) {
-      ref.read(notificationCenterProvider.notifier).add(
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
             title: t.drive.mergedFiles(count: result.mergedCount.toString()),
             level: NotificationLevel.success,
           );
     }
     if (result.settingConflicts.isNotEmpty) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.drive.settingConflicts(count: result.settingConflicts.length.toString()),
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: t.drive.settingConflicts(
+              count: result.settingConflicts.length.toString(),
+            ),
             detail: result.settingConflicts
-                .map((c) => '${c.dirPath == null ? '' : '${p.basename(c.dirPath!)}: '}${c.path}')
+                .map(
+                  (c) =>
+                      '${c.dirPath == null ? '' : '${p.basename(c.dirPath!)}: '}${c.path}',
+                )
                 .join('\n'),
             level: NotificationLevel.warning,
             actionLabel: t.drive.restoreTheirs,
             onAction: () async {
               try {
-                final n = await ConflictRestorer.restoreSettings(result.settingConflicts);
+                final n = await ConflictRestorer.restoreSettings(
+                  result.settingConflicts,
+                );
                 await afterRestore?.call();
-                ref.read(notificationCenterProvider.notifier).add(
+                ref
+                    .read(notificationCenterProvider.notifier)
+                    .add(
                       title: t.drive.restoredTheirs(count: n.toString()),
                       level: NotificationLevel.success,
                     );
               } catch (e) {
-                ref.read(notificationCenterProvider.notifier).add(
+                ref
+                    .read(notificationCenterProvider.notifier)
+                    .add(
                       title: t.drive.restoreTheirsFailed(error: '$e'),
                       level: NotificationLevel.error,
                     );
@@ -243,33 +287,55 @@ class DriveSyncOperations {
           );
     }
     if (result.conflicts.isNotEmpty) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.drive.mergeConflicts(count: result.conflicts.length.toString()),
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: t.drive.mergeConflicts(
+              count: result.conflicts.length.toString(),
+            ),
             detail: result.conflicts
-                .map((c) => c.theirsDeleted
-                    ? t.drive.mergeConflictDeletedLine(table: c.table, fid: c.fid, mine: '${c.mine}')
-                    : c.mineDeleted
-                    ? t.drive.mergeConflictMineDeletedLine(table: c.table, fid: c.fid, theirs: '${c.theirs}')
-                    : t.drive.mergeConflictLine(
-                        table: c.table,
-                        fid: c.fid,
-                        theirs: '${c.theirs}',
-                        mine: '${c.mine}',
-                      ))
+                .map(
+                  (c) => c.theirsDeleted
+                      ? t.drive.mergeConflictDeletedLine(
+                          table: c.table,
+                          fid: c.fid,
+                          mine: '${c.mine}',
+                        )
+                      : c.mineDeleted
+                      ? t.drive.mergeConflictMineDeletedLine(
+                          table: c.table,
+                          fid: c.fid,
+                          theirs: '${c.theirs}',
+                        )
+                      : t.drive.mergeConflictLine(
+                          table: c.table,
+                          fid: c.fid,
+                          theirs: '${c.theirs}',
+                          mine: '${c.mine}',
+                        ),
+                )
                 .join('\n'),
             level: NotificationLevel.warning,
-            actionLabel: result.conflicts.any((c) => c.restorable) ? t.drive.restoreTheirs : null,
+            actionLabel: result.conflicts.any((c) => c.restorable)
+                ? t.drive.restoreTheirs
+                : null,
             onAction: result.conflicts.any((c) => c.restorable)
                 ? () async {
                     try {
-                      final n = await ConflictRestorer.restoreTheirs(result.conflicts);
+                      final n = await ConflictRestorer.restoreTheirs(
+                        result.conflicts,
+                      );
                       await afterRestore?.call();
-                      ref.read(notificationCenterProvider.notifier).add(
+                      ref
+                          .read(notificationCenterProvider.notifier)
+                          .add(
                             title: t.drive.restoredTheirs(count: n.toString()),
                             level: NotificationLevel.success,
                           );
                     } catch (e) {
-                      ref.read(notificationCenterProvider.notifier).add(
+                      ref
+                          .read(notificationCenterProvider.notifier)
+                          .add(
                             title: t.drive.restoreTheirsFailed(error: '$e'),
                             level: NotificationLevel.error,
                           );
@@ -285,28 +351,14 @@ class DriveSyncOperations {
     BuildContext context,
     DriveFolderNode node,
   ) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(t.drive.unlinkDrive),
-        content: Text(
-          t.drive.unlinkConfirm(name: node.name),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(t.common.cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(t.drive.unlink),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: t.drive.unlinkDrive,
+      content: Text(t.drive.unlinkConfirm(name: node.name)),
+      confirmLabel: t.drive.unlink,
+      confirmColor: Colors.red,
     );
-
-    if (confirm != true) return;
+    if (!confirmed) return;
 
     final folderPath = node.getAbsoluteFilePath();
     if (folderPath == null) return;
@@ -317,31 +369,26 @@ class DriveSyncOperations {
     if (parentNode != null) {
       final index = parentNode.children.indexOf(node);
       if (index >= 0) {
-        LayerTreeNode replacement;
-        if (parentNode is GlobalFolderNode) {
-          replacement = GlobalSubFolderNode(
-            node.name,
-            basePath: parentNode.globalPath,
-            visible: node.visible,
-            parent: parentNode,
-            children: [],
-          );
-        } else if (parentNode is GlobalSubFolderNode) {
-          replacement = GlobalSubFolderNode(
-            node.name,
-            basePath: parentNode.basePath,
-            visible: node.visible,
-            parent: parentNode,
-            children: [],
-          );
-        } else {
-          replacement = FolderNode(
-            node.name,
-            visible: node.visible,
-            parent: parentNode,
-            children: [],
-          );
-        }
+        // Global の下なら Global のサブフォルダとして置き直す
+        final globalBase = switch (parentNode) {
+          GlobalFolderNode() => parentNode.globalPath,
+          GlobalSubFolderNode() => parentNode.basePath,
+          _ => null,
+        };
+        final LayerTreeNode replacement = globalBase != null
+            ? GlobalSubFolderNode(
+                node.name,
+                basePath: globalBase,
+                visible: node.visible,
+                parent: parentNode,
+                children: [],
+              )
+            : FolderNode(
+                node.name,
+                visible: node.visible,
+                parent: parentNode,
+                children: [],
+              );
         parentNode.children[index] = replacement;
         node.parent = null;
       }
@@ -349,10 +396,7 @@ class DriveSyncOperations {
 
     onStateChanged();
 
-    ref.read(notificationCenterProvider.notifier).add(
-          title: t.drive.unlinkSuccess,
-          level: NotificationLevel.info,
-        );
+    _notify(t.drive.unlinkSuccess, NotificationLevel.info);
   }
 
   /// Drive連携フォルダをローカルから完全削除
@@ -360,28 +404,14 @@ class DriveSyncOperations {
     BuildContext context,
     DriveFolderNode node,
   ) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(t.drive.deleteFolder),
-        content: Text(
-          t.drive.deleteFolderConfirm(name: node.name),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(t.common.cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(t.common.delete),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: t.drive.deleteFolder,
+      content: Text(t.drive.deleteFolderConfirm(name: node.name)),
+      confirmLabel: t.common.delete,
+      confirmColor: Colors.red,
     );
-
-    if (confirm != true) return;
+    if (!confirmed) return;
 
     final folderPath = node.getAbsoluteFilePath();
     if (folderPath == null) return;
@@ -393,16 +423,16 @@ class DriveSyncOperations {
       node.parent?.removeChild(node);
       onStateChanged();
 
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.drive.deleteFolderSuccess(name: node.name),
-            level: NotificationLevel.info,
-          );
+      _notify(
+        t.drive.deleteFolderSuccess(name: node.name),
+        NotificationLevel.info,
+      );
     } catch (e) {
       AppLogger.error('[DriveSyncOps] フォルダ削除エラー: $e');
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.drive.deleteFolderError(error: e.toString()),
-            level: NotificationLevel.info,
-          );
+      _notify(
+        t.drive.deleteFolderError(error: e.toString()),
+        NotificationLevel.error,
+      );
     }
   }
 
@@ -440,10 +470,7 @@ class DriveSyncOperations {
       return DriveSignInDialog.show(context);
     }
 
-    ref.read(notificationCenterProvider.notifier).add(
-          title: t.drive.signingIn,
-          level: NotificationLevel.info,
-        );
+    _notify(t.drive.signingIn, NotificationLevel.info);
 
     if (await driveService.signIn()) return true;
 
@@ -481,7 +508,9 @@ class DriveSyncOperations {
     try {
       final r = await const QgsReadBack().run(node);
       if (r != null) {
-        AppLogger.debug('[DriveSync] 同期で届いた ${r.fileName} を読み戻した（View ${r.importedViewCount} 個）');
+        AppLogger.debug(
+          '[DriveSync] 同期で届いた ${r.fileName} を読み戻した（View ${r.importedViewCount} 個）',
+        );
         await updateChildrenRecursive(node);
       }
     } on Object catch (e) {

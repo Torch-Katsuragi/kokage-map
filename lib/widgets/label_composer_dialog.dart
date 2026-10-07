@@ -102,8 +102,10 @@ class _LabelComposerDialogState extends State<_LabelComposerDialog> {
     super.dispose();
   }
 
-  /// 値が入っている率の高い順（同率は元の順）
-  List<String> get _sortedColumns {
+  /// 値が入っている率の高い順（同率は元の順）。列も率も開いている間は変わらないので一度だけ並べる
+  late final List<String> _sortedColumns = _sortColumns();
+
+  List<String> _sortColumns() {
     final cols = [...widget.columns];
     if (widget.fillRates.isEmpty) return cols;
     final index = {for (var i = 0; i < cols.length; i++) cols[i]: i};
@@ -144,17 +146,9 @@ class _LabelComposerDialogState extends State<_LabelComposerDialog> {
   }
 
   Future<void> _editText(int index) async {
-    final ctrl = TextEditingController(text: (_tokens[index] as TextToken).text);
     final v = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(t.labelComposer.fixedText),
-        content: TextField(controller: ctrl, autofocus: true),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(t.common.cancel)),
-          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: Text(t.common.ok)),
-        ],
-      ),
+      builder: (_) => _FixedTextDialog(initial: (_tokens[index] as TextToken).text),
     );
     if (v == null || !mounted) return;
     final next = [..._tokens];
@@ -163,6 +157,8 @@ class _LabelComposerDialogState extends State<_LabelComposerDialog> {
   }
 
   /// 式の欄が変わった: 読めれば部品に分解し直す、読めなければ赤く
+  void _removeAt(int i) => _setTokens([..._tokens]..removeAt(i));
+
   void _onExprChanged(String text) {
     setState(() {
       if (text.trim().isEmpty) {
@@ -212,22 +208,7 @@ class _LabelComposerDialogState extends State<_LabelComposerDialog> {
                 style: Theme.of(context).textTheme.labelLarge,
               ),
               const SizedBox(height: 4),
-              Wrap(
-                spacing: 6,
-                runSpacing: -6,
-                children: [
-                  for (final c in _sortedColumns)
-                    FilterChip(
-                      label: Text(
-                        widget.fillRates.containsKey(c)
-                            ? tr.columnWithRate(name: c, percent: (widget.fillRates[c]! * 100).round())
-                            : c,
-                      ),
-                      selected: _hasColumn(c),
-                      onSelected: (on) => _toggleColumn(c, on),
-                    ),
-                ],
-              ),
+              _buildColumnChips(),
               const SizedBox(height: 12),
               Text(tr.order, style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 4),
@@ -237,72 +218,9 @@ class _LabelComposerDialogState extends State<_LabelComposerDialog> {
                   child: Text(tr.empty, style: const TextStyle(color: Colors.grey)),
                 )
               else
-                ReorderableListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  buildDefaultDragHandles: false,
-                  itemCount: _tokens.length,
-                  onReorderItem: (from, to) {
-                    final next = [..._tokens];
-                    next.insert(to, next.removeAt(from));
-                    _setTokens(next);
-                  },
-                  itemBuilder: (context, i) {
-                    final tok = _tokens[i];
-                    final (title, subtitle, color) = switch (tok) {
-                      FieldToken(:final column) => (column, tr.fieldToken, Colors.blue.shade50),
-                      TextToken(:final text) => ("'$text'", tr.textToken, Colors.grey.shade100),
-                      RawToken(:final expression) => (expression, tr.rawToken, Colors.amber.shade50),
-                    };
-                    return Card(
-                      key: ValueKey('tok-$i-${tok.hashCode}'),
-                      color: color,
-                      margin: const EdgeInsets.symmetric(vertical: 2),
-                      child: ListTile(
-                        dense: true,
-                        leading: ReorderableDragStartListener(
-                          index: i,
-                          child: const Icon(Icons.drag_handle),
-                        ),
-                        title: Text(
-                          title,
-                          style: TextStyle(fontWeight: tok is FieldToken ? FontWeight.w600 : FontWeight.normal),
-                        ),
-                        subtitle: Text(subtitle),
-                        onTap: tok is TextToken ? () => _editText(i) : null,
-                        trailing: IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: () {
-                            final next = [..._tokens];
-                            next.removeAt(i);
-                            _setTokens(next);
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                _buildTokenList(),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _textCtrl,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        labelText: tr.fixedText,
-                        hintText: tr.fixedTextHint,
-                      ),
-                      onSubmitted: (_) => _addText(),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    tooltip: tr.addText,
-                    onPressed: _addText,
-                  ),
-                ],
-              ),
+              _buildAddTextRow(),
               const SizedBox(height: 12),
               Text(tr.expression, style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 4),
@@ -344,4 +262,126 @@ class _LabelComposerDialogState extends State<_LabelComposerDialog> {
       ],
     );
   }
+
+  /// 列のチップ（押すと部品に足す・外す）
+  Widget _buildColumnChips() {
+    final tr = t.labelComposer;
+    return Wrap(
+      spacing: 6,
+      runSpacing: -6,
+      children: [
+        for (final c in _sortedColumns)
+          FilterChip(
+            label: Text(
+              widget.fillRates.containsKey(c)
+                  ? tr.columnWithRate(name: c, percent: (widget.fillRates[c]! * 100).round())
+                  : c,
+            ),
+            selected: _hasColumn(c),
+            onSelected: (on) => _toggleColumn(c, on),
+          ),
+      ],
+    );
+  }
+
+  /// 並べた部品（ドラッグで入れ替え）
+  Widget _buildTokenList() => ReorderableListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        buildDefaultDragHandles: false,
+        itemCount: _tokens.length,
+        onReorderItem: (from, to) {
+          final next = [..._tokens];
+          next.insert(to, next.removeAt(from));
+          _setTokens(next);
+        },
+        itemBuilder: (context, i) => _buildTokenCard(i),
+      );
+
+  Widget _buildTokenCard(int i) {
+    final tr = t.labelComposer;
+    final tok = _tokens[i];
+    final (title, subtitle, color) = switch (tok) {
+      FieldToken(:final column) => (column, tr.fieldToken, Colors.blue.shade50),
+      TextToken(:final text) => ("'$text'", tr.textToken, Colors.grey.shade100),
+      RawToken(:final expression) => (expression, tr.rawToken, Colors.amber.shade50),
+    };
+    return Card(
+      key: ValueKey('tok-$i-${tok.hashCode}'),
+      color: color,
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      child: ListTile(
+        dense: true,
+        leading: ReorderableDragStartListener(
+          index: i,
+          child: const Icon(Icons.drag_handle),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(fontWeight: tok is FieldToken ? FontWeight.w600 : FontWeight.normal),
+        ),
+        subtitle: Text(subtitle),
+        onTap: tok is TextToken ? () => _editText(i) : null,
+        trailing: IconButton(
+          icon: const Icon(Icons.close, size: 18),
+          onPressed: () => _removeAt(i),
+        ),
+      ),
+    );
+  }
+
+  /// 固定の文字を足す欄
+  Widget _buildAddTextRow() {
+    final tr = t.labelComposer;
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _textCtrl,
+            decoration: InputDecoration(
+              isDense: true,
+              labelText: tr.fixedText,
+              hintText: tr.fixedTextHint,
+            ),
+            onSubmitted: (_) => _addText(),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add),
+          tooltip: tr.addText,
+          onPressed: _addText,
+        ),
+      ],
+    );
+  }
+}
+
+/// 固定の文字を直すダイアログ（入力欄のコントローラを閉じたあと捨てる）
+class _FixedTextDialog extends StatefulWidget {
+  const _FixedTextDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_FixedTextDialog> createState() => _FixedTextDialogState();
+}
+
+class _FixedTextDialogState extends State<_FixedTextDialog> {
+  late final _ctrl = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(t.labelComposer.fixedText),
+        content: TextField(controller: _ctrl, autofocus: true),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(t.common.cancel)),
+          TextButton(onPressed: () => Navigator.pop(context, _ctrl.text), child: Text(t.common.ok)),
+        ],
+      );
 }

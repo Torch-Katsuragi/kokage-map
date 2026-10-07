@@ -14,13 +14,13 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: 長押し削除ボタンウィジェット
-// 3秒の長押しでアクションを実行。ゲージアニメーション付き。
+// 長押し（既定 1 秒）でアクションを実行。ゲージアニメーション付き。
 
 import 'package:flutter/material.dart';
 
 /// 長押し削除ボタン
 ///
-/// 操作ミス防止のため、3秒間の長押しを要求する。
+/// 操作ミス防止のため、[duration]（既定 1 秒）の長押しを要求する。
 /// 長押し中は赤いオーバーレイゲージが左から右にアニメーションで溜まる。
 /// 途中で離すとキャンセルされる。
 class LongPressDeleteButton extends StatefulWidget {
@@ -52,10 +52,7 @@ class _LongPressDeleteButtonState extends State<LongPressDeleteButton>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: widget.duration,
-    );
+    _controller = AnimationController(vsync: this, duration: widget.duration);
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         // ゲージ完了 → 削除実行
@@ -65,6 +62,12 @@ class _LongPressDeleteButtonState extends State<LongPressDeleteButton>
         if (mounted) setState(() {});
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(LongPressDeleteButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.duration = widget.duration;
   }
 
   @override
@@ -93,16 +96,32 @@ class _LongPressDeleteButtonState extends State<LongPressDeleteButton>
       onTapCancel: _onPointerUp,
       child: AnimatedBuilder(
         animation: _controller,
-        builder: (context, child) {
+        // ボタン内容はゲージの進行で変わらないので毎フレーム組み直さない
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.delete_outline, size: 16, color: Colors.red.shade700),
+              const SizedBox(width: 6),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  color: Colors.red.shade700,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        builder: (context, content) {
           return Container(
             width: double.infinity,
             height: 36,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: _isPressed
-                    ? Colors.red.shade400
-                    : Colors.red.shade200,
+                color: _isPressed ? Colors.red.shade400 : Colors.red.shade200,
                 width: 1,
               ),
               color: Colors.red.shade50,
@@ -124,28 +143,7 @@ class _LongPressDeleteButtonState extends State<LongPressDeleteButton>
                         ),
                       ),
                     ),
-                  // ボタン内容
-                  Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.delete_outline,
-                          size: 16,
-                          color: Colors.red.shade700,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          widget.label,
-                          style: TextStyle(
-                            color: Colors.red.shade700,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  content!,
                 ],
               ),
             ),

@@ -34,7 +34,9 @@ class ChangelogService {
 
   /// 言語別キャッシュ
   final Map<String, String> _contentCache = {};
-  final Map<String, String> _hashCache = {};
+
+  /// ja.md のハッシュ（読めたときだけ）
+  String? _masterHash;
 
   /// 現在のロケールに基づいてチェンジログを読み込む
   ///
@@ -49,9 +51,11 @@ class ChangelogService {
     if (_contentCache.containsKey(locale)) return _contentCache[locale]!;
 
     try {
-      final content = await rootBundle.loadString('assets/changelog/$locale.md');
+      final content = await rootBundle.loadString(
+        'assets/changelog/$locale.md',
+      );
       _contentCache[locale] = content;
-      _hashCache[locale] = _computeHash(content);
+      if (locale == 'ja') _masterHash = _computeHash(content);
       return content;
     } catch (_) {
       // フォールバック: ja.md
@@ -89,13 +93,12 @@ class ChangelogService {
   /// マスターハッシュ: ja.mdのハッシュを基準とする（言語切替で未読が入れ替わらないように）
   Future<String> _getMasterHash() async {
     await _loadForLocale('ja');
-    return _hashCache['ja'] ?? '';
+    return _masterHash ?? '';
   }
 
   /// SHA-256ハッシュを計算
-  String _computeHash(String content) {
-    return sha256.convert(utf8.encode(content)).toString();
-  }
+  static String _computeHash(String content) =>
+      sha256.convert(utf8.encode(content)).toString();
 
   // =============================================
   // 図解（Typst でビルド時に書き出した SVG。tool/changelog/build.py）
@@ -109,10 +112,14 @@ class ChangelogService {
   Future<Figure?> figureFor(String heading) async {
     final slug = figureSlug(heading);
     if (slug == null) return null;
-    final index = '$_figureDir$slug.${LocaleSettings.currentLocale.languageCode}.json';
-    _assets ??= (await AssetManifest.loadFromAssetBundle(rootBundle)).listAssets().toSet();
+    final index =
+        '$_figureDir$slug.${LocaleSettings.currentLocale.languageCode}.json';
+    _assets ??= (await AssetManifest.loadFromAssetBundle(
+      rootBundle,
+    )).listAssets().toSet();
     if (!_assets!.contains(index)) return null;
-    final json = jsonDecode(await rootBundle.loadString(index)) as Map<String, dynamic>;
+    final json =
+        jsonDecode(await rootBundle.loadString(index)) as Map<String, dynamic>;
     return Figure(
       title: json['title'] as String? ?? '',
       chunks: [
@@ -131,8 +138,10 @@ class ChangelogService {
   static String? figureSlug(String heading) {
     final h = heading.trim();
     if (h == '次のリリース' || h.toLowerCase() == 'next release') return 'next';
-    return RegExp(r'^v\d+\.\d+\.\d+').firstMatch(h)?.group(0);
+    return _versionRe.firstMatch(h)?.group(0);
   }
+
+  static final _versionRe = RegExp(r'^v\d+\.\d+\.\d+');
 }
 
 /// 1 つの版の図解。[title] は版の頭の大きな一言（畳んだときの見出しに使う）

@@ -71,7 +71,10 @@ String? normalizeLabelExpression(String? stored) {
     return buildLabelTemplate(tokens);
   }
   // 引用符も演算子も無い裸の名前は列名（`name` → `"name"`。空白や記号入りでも同じ）
-  if (!s.contains('"') && !s.contains("'") && !s.contains('(') && !s.contains('||')) {
+  if (!s.contains('"') &&
+      !s.contains("'") &&
+      !s.contains('(') &&
+      !s.contains('||')) {
     return quoteField(s);
   }
   return s;
@@ -112,19 +115,28 @@ List<LabelToken> parseLabelTemplate(String? stored) {
 /// 部品列 → 式（保存形式）。列 1 つなら `"列"`、それ以外は NULL に強い `concat(...)`
 String buildLabelTemplate(List<LabelToken> tokens) {
   if (tokens.isEmpty) return '';
-  if (tokens.length == 1) {
-    return switch (tokens.first) {
-      FieldToken(:final column) => quoteField(column),
-      TextToken(:final text) => quoteString(text),
-      RawToken(:final expression) => expression,
-    };
-  }
-  final parts = tokens.map((t) => switch (t) {
-        FieldToken(:final column) => quoteField(column),
-        TextToken(:final text) => quoteString(text),
-        RawToken(:final expression) => expression,
-      });
-  return 'concat(${parts.join(', ')})';
+  if (tokens.length == 1) return _tokenExpression(tokens.first);
+  return 'concat(${tokens.map(_tokenExpression).join(', ')})';
+}
+
+String _tokenExpression(LabelToken t) => switch (t) {
+  FieldToken(:final column) => quoteField(column),
+  TextToken(:final text) => quoteString(text),
+  RawToken(:final expression) => expression,
+};
+
+/// 保存文字列 → 読み替えて読んだ式。地図はフィーチャごとに [renderLabelTemplate] を呼ぶので、
+/// 同じ文字列を毎回読み直さないよう覚えておく（空・読めない式は null で覚える）
+final Map<String, LabelExpr?> _parsedCache = {};
+const _parsedCacheLimit = 64;
+
+LabelExpr? _parseStored(String stored) {
+  if (_parsedCache.containsKey(stored)) return _parsedCache[stored];
+  if (_parsedCache.length >= _parsedCacheLimit) _parsedCache.clear();
+  final expr = normalizeLabelExpression(stored);
+  return _parsedCache[stored] = expr == null
+      ? null
+      : tryParseLabelExpression(expr);
 }
 
 /// ラベルに属性を流し込む。
@@ -132,9 +144,8 @@ String buildLabelTemplate(List<LabelToken> tokens) {
 /// 列の値が 1 つも入らなければ null（固定文字だけのラベルを全フィーチャに出さないため）。
 /// 読めない式も null（地図には出さないが、設定は消さない）
 String? renderLabelTemplate(String? stored, Map<String, Object?>? props) {
-  final expr = normalizeLabelExpression(stored);
-  if (expr == null) return null;
-  final e = tryParseLabelExpression(expr);
+  if (stored == null) return null;
+  final e = _parseStored(stored);
   if (e == null) return null;
   final r = evalLabelExpression(e, props);
   if (r.value == null || !r.usedField) return null;

@@ -21,6 +21,9 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../models/geopackage/geopackage_file.dart';
 
+/// 保留中の 1 セル
+typedef _CellKey = ({String table, int rowId, String column});
+
 /// バックグラウンド保存を一元管理するシングルトンクラス
 class BackgroundSaveManager {
   static final BackgroundSaveManager _instance =
@@ -31,8 +34,8 @@ class BackgroundSaveManager {
   BackgroundSaveManager._internal();
 
   /// 保存対象のGeoPackageFileとその変更キュー
-  /// Key: GeoPackageFileインスタンス, Value: 変更キュー
-  final Map<GeoPackageFile, Map<String, dynamic>> _pendingChanges = {};
+  /// Key: GeoPackageFileインスタンス, Value: 変更キュー（(テーブル, 行ID, 列) → 値）
+  final Map<GeoPackageFile, Map<_CellKey, dynamic>> _pendingChanges = {};
 
   /// バックグラウンド保存用のタイマー
   Timer? _saveTimer;
@@ -47,15 +50,9 @@ class BackgroundSaveManager {
     int rowId,
     String attributeName,
     dynamic value,
-  ) {
-    final key = '$tableName:$rowId:$attributeName';
-
-    // GeoPackageFileごとの変更キューを取得または作成
-    _pendingChanges.putIfAbsent(geoPackageFile, () => {});
-    _pendingChanges[geoPackageFile]![key] = value;
-
-    _scheduleSave();
-  }
+  ) => queueAttributeUpdates(geoPackageFile, tableName, rowId, {
+    attributeName: value,
+  });
 
   /// 複数の属性値を一括で遅延更新キューに追加
   void queueAttributeUpdates(
@@ -64,34 +61,31 @@ class BackgroundSaveManager {
     int rowId,
     Map<String, dynamic> attributes,
   ) {
-    AppLogger.debug('[DEBUG] BackgroundSaveManager: キューに追加 - テーブル:$tableName, 行ID:$rowId, 属性数:${attributes.length}');
-    
-    // GeoPackageFileごとの変更キューを取得または作成
-    _pendingChanges.putIfAbsent(geoPackageFile, () => {});
-
+    final queue = _pendingChanges.putIfAbsent(geoPackageFile, () => {});
     for (final entry in attributes.entries) {
-      final key = '$tableName:$rowId:${entry.key}';
-      _pendingChanges[geoPackageFile]![key] = entry.value;
-      AppLogger.debug('[DEBUG] BackgroundSaveManager: キューエントリ追加 - $key = ${entry.value}');
+      queue[(table: tableName, rowId: rowId, column: entry.key)] = entry.value;
     }
-    
-    AppLogger.debug('[DEBUG] BackgroundSaveManager: 現在のキューサイズ: ${_pendingChanges[geoPackageFile]?.length ?? 0}');
+    AppLogger.debug(
+      '[DEBUG] BackgroundSaveManager: キューに追加 - テーブル:$tableName, 行ID:$rowId, 属性数:${attributes.length}, キュー:${queue.length}',
+    );
     _scheduleSave();
   }
 
-  /// 遅延保存のスケジュール
+  /// 遅延保存のスケジュール（後から来た変更で 1 秒ずつ延びる）
   void _scheduleSave() {
-    AppLogger.debug('[DEBUG] BackgroundSaveManager: 保存タイマーをスケジュール ($_saveDelayMs ms後)');
-    
-    // 既存のタイマーをキャンセル
     _saveTimer?.cancel();
+    _saveTimer = Timer(
+      const Duration(milliseconds: _saveDelayMs),
+      _saveChangesToDB,
+    );
+  }
 
-    // 新しいタイマーを設定
-    _saveTimer = Timer(const Duration(milliseconds: _saveDelayMs), () {
-      AppLogger.debug('[DEBUG] BackgroundSaveManager: タイマー満了 - 保存処理開始');
-      // 非同期関数を呼び出し（戻り値は無視）
-      _saveChangesToDB();
-    });
+  /// 保存に失敗した変更をキューに戻す（その間に積まれた新しい値は上書きしない）
+  void _requeue(GeoPackageFile geoPackageFile, Map<_CellKey, dynamic> changes) {
+    final queue = _pendingChanges.putIfAbsent(geoPackageFile, () => {});
+    for (final e in changes.entries) {
+      queue.putIfAbsent(e.key, () => e.value);
+    }
   }
 
   /// 変更をDBに保存
@@ -107,28 +101,19 @@ class BackgroundSaveManager {
       '[DEBUG] BackgroundSaveManager: Saving $totalChanges pending changes across ${_pendingChanges.length} GeoPackage files',
     );
 
-    // 変更を一時的に保存
-    final changesToSave = Map<GeoPackageFile, Map<String, dynamic>>.from(
-      _pendingChanges.map(
-        (gpkg, changes) => MapEntry(gpkg, Map<String, dynamic>.from(changes)),
-      ),
-    );
+    // キューごと取り出す（保存中に積まれた変更は新しい内側の Map に入る）
+    final changesToSave = Map.of(_pendingChanges);
     _pendingChanges.clear();
 
-    // GeoPackageFileごとに変更を保存
-    for (final entry in changesToSave.entries) {
-      final geoPackageFile = entry.key;
-      final changes = entry.value;
-
+    for (final MapEntry(key: geoPackageFile, value: changes)
+        in changesToSave.entries) {
       try {
         await _saveChangesForGeoPackage(geoPackageFile, changes);
       } catch (e) {
         AppLogger.debug(
           '[ERROR] BackgroundSaveManager: Failed to save changes for GeoPackage: $e',
         );
-        // 失敗した場合は変更キューに戻す
-        _pendingChanges.putIfAbsent(geoPackageFile, () => {});
-        _pendingChanges[geoPackageFile]!.addAll(changes);
+        _requeue(geoPackageFile, changes);
       }
     }
 
@@ -138,82 +123,47 @@ class BackgroundSaveManager {
   /// 特定のGeoPackageFileの変更を保存
   Future<void> _saveChangesForGeoPackage(
     GeoPackageFile geoPackageFile,
-    Map<String, dynamic> changes,
+    Map<_CellKey, dynamic> changes,
   ) async {
     if (changes.isEmpty) return;
+    AppLogger.debug(
+      '[DEBUG] BackgroundSaveManager: Saving ${changes.length} changes for GeoPackage',
+    );
 
-    try {
-      AppLogger.debug(
-        '[DEBUG] BackgroundSaveManager: Saving ${changes.length} changes for GeoPackage',
+    // テーブル・行ごとにまとめて 1 回で更新
+    final rows = <(String, int), Map<String, dynamic>>{};
+    for (final MapEntry(key: k, value: v) in changes.entries) {
+      rows.putIfAbsent((k.table, k.rowId), () => {})[k.column] = v;
+    }
+
+    for (final MapEntry(key: (tableName, rowId), value: attributes)
+        in rows.entries) {
+      final success = await geoPackageFile.updateFeatureAttributes(
+        tableName,
+        rowId,
+        attributes,
       );
-
-      // テーブル別にグループ化して効率的に保存
-      final Map<String, Map<int, Map<String, dynamic>>> groupedChanges = {};
-
-      for (final entry in changes.entries) {
-        final keyParts = entry.key.split(':');
-        if (keyParts.length != 3) continue;
-
-        final tableName = keyParts[0];
-        final rowId = int.tryParse(keyParts[1]);
-        final columnName = keyParts[2];
-
-        if (rowId == null) continue;
-
-        groupedChanges.putIfAbsent(tableName, () => {});
-        groupedChanges[tableName]!.putIfAbsent(rowId, () => {});
-        groupedChanges[tableName]![rowId]![columnName] = entry.value;
+      if (!success) {
+        AppLogger.debug(
+          '[ERROR] BackgroundSaveManager: Failed to save attributes for $tableName:$rowId',
+        );
+        throw Exception('Failed to save attributes for $tableName:$rowId');
       }
-
-      // テーブル別・行別に一括更新
-      for (final tableEntry in groupedChanges.entries) {
-        final tableName = tableEntry.key;
-        for (final rowEntry in tableEntry.value.entries) {
-          final rowId = rowEntry.key;
-          final attributes = rowEntry.value;
-
-          final success = await geoPackageFile.updateFeatureAttributes(
-            tableName,
-            rowId,
-            attributes,
-          );
-
-          if (!success) {
-            AppLogger.debug(
-              '[ERROR] BackgroundSaveManager: Failed to save attributes for $tableName:$rowId',
-            );
-            throw Exception('Failed to save attributes for $tableName:$rowId');
-          }
-        }
-      }
-
-      AppLogger.debug(
-        '[DEBUG] BackgroundSaveManager: Successfully saved changes for GeoPackage',
-      );
-    } catch (e) {
-      AppLogger.debug(
-        '[ERROR] BackgroundSaveManager: _saveChangesForGeoPackage failed: $e',
-      );
-      rethrow;
     }
   }
 
-  /// 指定されたGeoPackageFileの即座に全ての変更をDBに保存
+  /// 指定されたGeoPackageFileの即座に全ての変更をDBに保存。
+  /// 他のファイルの保留分はタイマーに任せる（ここでタイマーを止めると取り残される）
   Future<void> flushChanges(GeoPackageFile geoPackageFile) async {
-    _saveTimer?.cancel();
-
-    final changes = _pendingChanges[geoPackageFile];
-    if (changes != null && changes.isNotEmpty) {
-      final changesToSave = Map<String, dynamic>.from(changes);
-      _pendingChanges[geoPackageFile]!.clear();
-
-      try {
-        await _saveChangesForGeoPackage(geoPackageFile, changesToSave);
-      } catch (e) {
-        AppLogger.debug('[ERROR] BackgroundSaveManager: Failed to flush changes: $e');
-        // 失敗した場合は変更キューに戻す
-        _pendingChanges[geoPackageFile]!.addAll(changesToSave);
-      }
+    final changes = _pendingChanges.remove(geoPackageFile);
+    if (changes == null || changes.isEmpty) return;
+    try {
+      await _saveChangesForGeoPackage(geoPackageFile, changes);
+    } catch (e) {
+      AppLogger.debug(
+        '[ERROR] BackgroundSaveManager: Failed to flush changes: $e',
+      );
+      _requeue(geoPackageFile, changes);
     }
   }
 
@@ -240,22 +190,10 @@ class BackgroundSaveManager {
 
   /// アプリ終了時のクリーンアップ
   Future<void> dispose() async {
-    // タイマーをキャンセル
     _saveTimer?.cancel();
     _saveTimer = null;
-
-    // 保留中の変更を保存
-    if (_pendingChanges.isNotEmpty) {
-      try {
-        await _saveChangesToDB();
-      } catch (e) {
-        AppLogger.debug('[ERROR] BackgroundSaveManager.dispose: $e');
-      }
-    }
-
-    // キューをクリア
-    _pendingChanges.clear();
+    await _saveChangesToDB(); // ファイルごとの失敗は中で拾う
+    _pendingChanges.clear(); // 保存できなかった分は捨てる
     AppLogger.debug('[DEBUG] BackgroundSaveManager: Disposed');
   }
 }
-

@@ -48,8 +48,10 @@ class _ToolNameFlashState extends ConsumerState<ToolNameFlash>
     TweenSequenceItem(tween: Tween(begin: 1, end: 0), weight: 45),
   ]).animate(_controller);
 
-  late final Animation<double> _scale = Tween<double>(begin: 0.92, end: 1)
-      .animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+  late final Animation<double> _scale = Tween<double>(
+    begin: 0.92,
+    end: 1,
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
   String _label = '';
 
@@ -60,15 +62,15 @@ class _ToolNameFlashState extends ConsumerState<ToolNameFlash>
   }
 
   /// 内部名（`MapTool.name`）から表示名へ。知らないツールは内部名をそのまま出す
-  static String labelOf(MapTool tool) => switch (tool.name) {
-        'Pan' => t.map.toolbar.pan,
-        'Pen' => t.map.toolbar.pen,
-        'Select' => t.map.toolbar.select,
-        'GPS' => t.map.toolbar.gpsTool,
-        'Overlay Transform' => t.map.toolbar.overlayTransform,
-        'Compass' => t.trupulse.toolName,
-        _ => tool.name,
-      };
+  static String _labelOf(MapTool tool) => switch (tool.name) {
+    'Pan' => t.map.toolbar.pan,
+    'Pen' => t.map.toolbar.pen,
+    'Select' => t.map.toolbar.select,
+    'GPS' => t.map.toolbar.gpsTool,
+    'Overlay Transform' => t.map.toolbar.overlayTransform,
+    'Compass' => t.trupulse.toolName,
+    _ => tool.name,
+  };
 
   void _flash(String label) {
     setState(() => _label = label);
@@ -79,7 +81,7 @@ class _ToolNameFlashState extends ConsumerState<ToolNameFlash>
   Widget build(BuildContext context) {
     ref.listen<MapTool>(currentToolProvider, (prev, next) {
       if (prev == null || prev == next) return;
-      _flash(labelOf(next));
+      _flash(_labelOf(next));
     });
     // ツール以外のモード切替（眺め・北上真上・3D/2D・ドライブ）も同じ演出で
     ref.listen<(String, int)>(mapFlashProvider, (prev, next) {

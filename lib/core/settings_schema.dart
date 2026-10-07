@@ -33,11 +33,7 @@ sealed class SettingDef {
   final String title;
   final String? description;
 
-  const SettingDef({
-    required this.key,
-    required this.title,
-    this.description,
-  });
+  const SettingDef({required this.key, required this.title, this.description});
 }
 
 /// double値スライダー設定
@@ -120,7 +116,12 @@ class IntDef extends SettingDef {
 /// 画面側が自由に描く項目（ストアには値を持たない）。
 /// [builder] の第 3 引数は「値を変えた」の通知（保存と再描画）
 class CustomDef extends SettingDef {
-  final Widget Function(BuildContext context, SettingsStore store, VoidCallback onChanged) builder;
+  final Widget Function(
+    BuildContext context,
+    SettingsStore store,
+    VoidCallback onChanged,
+  )
+  builder;
 
   const CustomDef({
     required super.key,
@@ -205,14 +206,14 @@ class SettingsStore extends ChangeNotifier {
     if (_overlay?.containsKey(def.key) == true) {
       return (_overlay![def.key] as num).toDouble();
     }
-    return _prefs?.getDouble(def.key) ?? def.defaultValue;
+    return _globalDouble(def);
   }
 
   bool getBool(SwitchDef def) {
     if (_overlay?.containsKey(def.key) == true) {
       return _overlay![def.key] as bool;
     }
-    return _prefs?.getBool(def.key) ?? def.defaultValue;
+    return _globalBool(def);
   }
 
   Color getColor(ColorDef def) {
@@ -221,102 +222,82 @@ class SettingsStore extends ChangeNotifier {
       if (v is Color) return v;
       if (v is int) return Color(v);
     }
-    final stored = _prefs?.getInt(def.key);
-    return stored != null ? Color(stored) : def.defaultColor;
+    return _globalColor(def);
   }
 
   int getInt(IntDef def) {
     if (_overlay?.containsKey(def.key) == true) {
       return _overlay![def.key] as int;
     }
-    return _prefs?.getInt(def.key) ?? def.defaultValue;
+    return _globalInt(def);
   }
 
   String getString(StringDef def) {
     if (_overlay?.containsKey(def.key) == true) {
       return _overlay![def.key] as String;
     }
-    return _prefs?.getString(def.key) ?? def.defaultValue;
+    return _globalString(def);
   }
 
   // ---------- KMetaフォールバック付き値取得（map_page.dart用）----------
 
-  double resolveDouble(DoubleDef def, KMetaLayerStyle? kmeta) {
-    if (kmeta != null && def.kmetaGetter != null) {
-      final v = def.kmetaGetter!(kmeta);
-      if (v != null) return v;
-    }
-    return _prefs?.getDouble(def.key) ?? def.defaultValue;
-  }
+  double resolveDouble(DoubleDef def, KMetaLayerStyle? kmeta) =>
+      _fromKmeta(def.kmetaGetter, kmeta) ?? _globalDouble(def);
 
-  bool resolveBool(SwitchDef def, KMetaLayerStyle? kmeta) {
-    if (kmeta != null && def.kmetaGetter != null) {
-      final v = def.kmetaGetter!(kmeta);
-      if (v != null) return v;
-    }
-    return _prefs?.getBool(def.key) ?? def.defaultValue;
-  }
+  bool resolveBool(SwitchDef def, KMetaLayerStyle? kmeta) =>
+      _fromKmeta(def.kmetaGetter, kmeta) ?? _globalBool(def);
 
-  Color resolveColor(ColorDef def, KMetaLayerStyle? kmeta) {
-    if (kmeta != null && def.kmetaGetter != null) {
-      final v = def.kmetaGetter!(kmeta);
-      if (v != null) return v;
-    }
-    final stored = _prefs?.getInt(def.key);
-    return stored != null ? Color(stored) : def.defaultColor;
-  }
+  Color resolveColor(ColorDef def, KMetaLayerStyle? kmeta) =>
+      _fromKmeta(def.kmetaGetter, kmeta) ?? _globalColor(def);
 
-  String resolveString(StringDef def, KMetaLayerStyle? kmeta) {
-    if (kmeta != null && def.kmetaGetter != null) {
-      final v = def.kmetaGetter!(kmeta);
-      if (v != null) return v;
-    }
-    return _prefs?.getString(def.key) ?? def.defaultValue;
+  String resolveString(StringDef def, KMetaLayerStyle? kmeta) =>
+      _fromKmeta(def.kmetaGetter, kmeta) ?? _globalString(def);
+
+  static T? _fromKmeta<T>(
+    T? Function(KMetaLayerStyle)? getter,
+    KMetaLayerStyle? kmeta,
+  ) => kmeta == null || getter == null ? null : getter(kmeta);
+
+  // ---------- グローバル値（prefs > default）----------
+
+  double _globalDouble(DoubleDef d) =>
+      _prefs?.getDouble(d.key) ?? d.defaultValue;
+  bool _globalBool(SwitchDef s) => _prefs?.getBool(s.key) ?? s.defaultValue;
+  int _globalInt(IntDef i) => _prefs?.getInt(i.key) ?? i.defaultValue;
+  String _globalString(StringDef s) =>
+      _prefs?.getString(s.key) ?? s.defaultValue;
+  Color _globalColor(ColorDef c) {
+    final stored = _prefs?.getInt(c.key);
+    return stored != null ? Color(stored) : c.defaultColor;
   }
 
   // ---------- 値設定 ----------
 
-  Future<void> setDouble(DoubleDef def, double value) async {
-    if (_overlay != null) {
-      _overlay![def.key] = value;
-    } else {
-      await _prefs?.setDouble(def.key, value);
-    }
-    notifyListeners();
-  }
+  Future<void> setDouble(DoubleDef def, double value) =>
+      _set(def.key, value, () => _prefs?.setDouble(def.key, value));
 
-  Future<void> setBool(SwitchDef def, bool value) async {
-    if (_overlay != null) {
-      _overlay![def.key] = value;
-    } else {
-      await _prefs?.setBool(def.key, value);
-    }
-    notifyListeners();
-  }
+  Future<void> setBool(SwitchDef def, bool value) =>
+      _set(def.key, value, () => _prefs?.setBool(def.key, value));
 
-  Future<void> setColor(ColorDef def, Color value) async {
-    if (_overlay != null) {
-      _overlay![def.key] = value;
-    } else {
-      await _prefs?.setInt(def.key, value.toARGB32());
-    }
-    notifyListeners();
-  }
+  Future<void> setColor(ColorDef def, Color value) =>
+      _set(def.key, value, () => _prefs?.setInt(def.key, value.toARGB32()));
 
-  Future<void> setInt(IntDef def, int value) async {
-    if (_overlay != null) {
-      _overlay![def.key] = value;
-    } else {
-      await _prefs?.setInt(def.key, value);
-    }
-    notifyListeners();
-  }
+  Future<void> setInt(IntDef def, int value) =>
+      _set(def.key, value, () => _prefs?.setInt(def.key, value));
 
-  Future<void> setString(StringDef def, String value) async {
+  Future<void> setString(StringDef def, String value) =>
+      _set(def.key, value, () => _prefs?.setString(def.key, value));
+
+  /// overlay があればそこへ、無ければ prefs へ書いて通知
+  Future<void> _set(
+    String key,
+    Object value,
+    Future<bool>? Function() persist,
+  ) async {
     if (_overlay != null) {
-      _overlay![def.key] = value;
+      _overlay![key] = value;
     } else {
-      await _prefs?.setString(def.key, value);
+      await persist();
     }
     notifyListeners();
   }
@@ -376,12 +357,11 @@ class SettingsStore extends ChangeNotifier {
 
   /// グローバル値を取得（prefsまたはdefault）
   dynamic _getGlobalValue(SettingDef def) => switch (def) {
-    final DoubleDef d => _prefs?.getDouble(d.key) ?? d.defaultValue,
-    final SwitchDef s => _prefs?.getBool(s.key) ?? s.defaultValue,
-    final ColorDef c =>
-        _prefs?.getInt(c.key) != null ? Color(_prefs!.getInt(c.key)!) : c.defaultColor,
-    final IntDef i => _prefs?.getInt(i.key) ?? i.defaultValue,
-    final StringDef s => _prefs?.getString(s.key) ?? s.defaultValue,
+    final DoubleDef d => _globalDouble(d),
+    final SwitchDef s => _globalBool(s),
+    final ColorDef c => _globalColor(c),
+    final IntDef i => _globalInt(i),
+    final StringDef s => _globalString(s),
     CustomDef _ => null,
   };
 

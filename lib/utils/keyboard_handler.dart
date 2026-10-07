@@ -30,9 +30,42 @@ import '../providers/ui_state_providers.dart';
 /// キーボードイベントハンドラー
 /// グローバルなキーボードショートカットを管理
 class KeyboardHandler {
+  /// 修飾キー（CapsLock, Shift, Ctrl, Alt等）と IME 関連キー。
+  /// IME切り替え時にこれらのキーが押されると、フォーカス判定が不安定になるため無視する
+  static final _ignoredKeys = <LogicalKeyboardKey>{
+    LogicalKeyboardKey.capsLock,
+    LogicalKeyboardKey.shiftLeft,
+    LogicalKeyboardKey.shiftRight,
+    LogicalKeyboardKey.controlLeft,
+    LogicalKeyboardKey.controlRight,
+    LogicalKeyboardKey.altLeft,
+    LogicalKeyboardKey.altRight,
+    LogicalKeyboardKey.metaLeft,
+    LogicalKeyboardKey.metaRight,
+    LogicalKeyboardKey.numLock,
+    LogicalKeyboardKey.scrollLock,
+    // IME関連キー
+    LogicalKeyboardKey.convert,
+    LogicalKeyboardKey.nonConvert,
+    LogicalKeyboardKey.kanaMode,
+    LogicalKeyboardKey.hiragana,
+    LogicalKeyboardKey.katakana,
+    LogicalKeyboardKey.hiraganaKatakana,
+    LogicalKeyboardKey.zenkakuHankaku,
+    LogicalKeyboardKey.hankaku,
+    LogicalKeyboardKey.zenkaku,
+  };
+
+  /// IME からの合成イベント（無効な物理キーID・極端に大きいUSB HID使用コード。
+  /// 0x1600000000 等）。Windows日本語入力との互換性のため無視する
+  static bool _isImeSynthetic(KeyEvent event) {
+    final physicalKeyId = event.physicalKey.usbHidUsage;
+    return physicalKeyId > 0x100000000 || physicalKeyId == 0;
+  }
+
   /// テキスト入力フィールドにフォーカスがあるかチェック
   /// ダイアログ内のTextField、属性テーブル編集など
-  static bool _isTextInputFocused(BuildContext context, WidgetRef ref) {
+  static bool _isTextInputFocused(WidgetRef ref) {
     if (ref.read(isAttributeTableEditingProvider)) {
       return true;
     }
@@ -45,7 +78,8 @@ class KeyboardHandler {
 
     // デバッグ名にEditableTextが含まれているかチェック（IME切り替え時にも安定）
     final debugLabel = focusNode.debugLabel ?? '';
-    if (debugLabel.contains('EditableText') || debugLabel.contains('TextField')) {
+    if (debugLabel.contains('EditableText') ||
+        debugLabel.contains('TextField')) {
       return true;
     }
 
@@ -54,18 +88,20 @@ class KeyboardHandler {
     final focusContext = focusNode.context;
     if (focusContext != null) {
       // EditableTextStateを探す（TextField内部で使用される）
-      final editableText =
-          focusContext.findAncestorStateOfType<EditableTextState>();
+      final editableText = focusContext
+          .findAncestorStateOfType<EditableTextState>();
       if (editableText != null) {
         return true;
       }
-      
+
       // 親ウィジェットツリーにTextFieldやTextFormFieldがあるか確認
       // （CapsLock押下時のフォールバック）
       bool hasTextField = false;
       focusContext.visitAncestorElements((element) {
         final widget = element.widget;
-        if (widget is TextField || widget is TextFormField || widget is EditableText) {
+        if (widget is TextField ||
+            widget is TextFormField ||
+            widget is EditableText) {
           hasTextField = true;
           return false; // 探索終了
         }
@@ -81,11 +117,7 @@ class KeyboardHandler {
 
   /// Deleteキー押下時の処理
   /// 選択されたフィーチャを削除
-  static Future<void> handleDeleteKey(
-    BuildContext context,
-    dynamic mapState,
-    WidgetRef ref,
-  ) async {
+  static Future<void> _handleDeleteKey(WidgetRef ref) async {
     AppLogger.debug('[KeyboardHandler] Deleteキーが押されました');
 
     final selectedFeatures = ref.read(selectedFeaturesProvider);
@@ -98,85 +130,42 @@ class KeyboardHandler {
     AppLogger.debug('[KeyboardHandler] 削除対象: $featureCount個のフィーチャ');
 
     try {
-      await ref.read(selectedFeaturesProvider.notifier).disposeSelectedFeatures();
+      await ref
+          .read(selectedFeaturesProvider.notifier)
+          .disposeSelectedFeatures();
 
       AppLogger.debug('[KeyboardHandler] フィーチャ削除完了: $featureCount個');
 
-      ref.read(notificationCenterProvider.notifier).add(
-        title: '$featureCount個のフィーチャを削除しました',
-        level: NotificationLevel.success,
-      );
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: '$featureCount個のフィーチャを削除しました',
+            level: NotificationLevel.success,
+          );
     } catch (e) {
       AppLogger.debug('[KeyboardHandler] フィーチャ削除エラー: $e');
 
-      ref.read(notificationCenterProvider.notifier).add(
-        title: t.editor.deleteFeatureError(error: e.toString()),
-        level: NotificationLevel.error,
-      );
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: t.editor.deleteFeatureError(error: e.toString()),
+            level: NotificationLevel.error,
+          );
     }
   }
 
   /// キーイベントを処理
   /// 戻り値: trueの場合、イベントが処理された（伝播を停止）
-  static Future<bool> handleKeyEvent(
-    KeyEvent event,
-    BuildContext context,
-    dynamic mapState,
-    WidgetRef ref,
-  ) async {
+  static Future<bool> handleKeyEvent(KeyEvent event, WidgetRef ref) async {
     // キーが押された時のみ処理（リリースイベントは無視）
-    if (event is! KeyDownEvent) {
-      return false;
-    }
-
-    // 修飾キー（CapsLock, Shift, Ctrl, Alt等）は無視
-    // IME切り替え時にこれらのキーが押されると、フォーカス判定が不安定になるため
-    final modifierKeys = {
-      LogicalKeyboardKey.capsLock,
-      LogicalKeyboardKey.shiftLeft,
-      LogicalKeyboardKey.shiftRight,
-      LogicalKeyboardKey.controlLeft,
-      LogicalKeyboardKey.controlRight,
-      LogicalKeyboardKey.altLeft,
-      LogicalKeyboardKey.altRight,
-      LogicalKeyboardKey.metaLeft,
-      LogicalKeyboardKey.metaRight,
-      LogicalKeyboardKey.numLock,
-      LogicalKeyboardKey.scrollLock,
-      // IME関連キー
-      LogicalKeyboardKey.convert,
-      LogicalKeyboardKey.nonConvert,
-      LogicalKeyboardKey.kanaMode,
-      LogicalKeyboardKey.hiragana,
-      LogicalKeyboardKey.katakana,
-      LogicalKeyboardKey.hiraganaKatakana,
-      LogicalKeyboardKey.zenkakuHankaku,
-      LogicalKeyboardKey.hankaku,
-      LogicalKeyboardKey.zenkaku,
-    };
-    if (modifierKeys.contains(event.logicalKey)) {
-      return false;
-    }
-
-    // IME関連の無効なキーイベントを安全にフィルタリング
-    // Windows日本語入力との互換性のため、以下のケースを無視:
-    // 1. 無効な物理キーID（IMEからの合成イベント）
-    // 2. 極端に大きいUSB HID使用コード
-    try {
-      final physicalKeyId = event.physicalKey.usbHidUsage;
-      if (physicalKeyId > 0x100000000 || physicalKeyId == 0) {
-        // 無効なキーIDは静かに無視
-        return false;
-      }
-    } catch (e) {
-      // 物理キー情報の取得に失敗した場合も無視
-      return false;
-    }
+    if (event is! KeyDownEvent) return false;
+    if (_ignoredKeys.contains(event.logicalKey)) return false;
+    if (_isImeSynthetic(event)) return false;
 
     // テキスト入力中は全てのショートカットを無視
     // CapsLock押下直後もEditableTextのフォーカスは維持されているはずなので、
     // この判定を先に行う
-    if (_isTextInputFocused(context, ref)) {
+    if (_isTextInputFocused(ref)) {
       return false; // イベントを伝播させる（TextFieldで処理される）
     }
 
@@ -185,7 +174,7 @@ class KeyboardHandler {
     // Deleteキーまたはバックスペースキー
     if (event.logicalKey == LogicalKeyboardKey.delete ||
         event.logicalKey == LogicalKeyboardKey.backspace) {
-      await handleDeleteKey(context, mapState, ref);
+      await _handleDeleteKey(ref);
       return true; // イベントを処理済みとしてマーク
     }
 
@@ -203,7 +192,7 @@ class KeyboardHandler {
 
 /// キーボードショートカットを有効にするウィジェット
 /// マップページ全体をラップして使用
-/// 
+///
 /// HardwareKeyboardのハンドラーを直接使用して、
 /// IME関連のキーイベント不整合問題を回避
 class KeyboardShortcutWrapper extends ConsumerStatefulWidget {
@@ -221,36 +210,29 @@ class KeyboardShortcutWrapper extends ConsumerStatefulWidget {
       _KeyboardShortcutWrapperState();
 }
 
-class _KeyboardShortcutWrapperState extends ConsumerState<KeyboardShortcutWrapper> {
+class _KeyboardShortcutWrapperState
+    extends ConsumerState<KeyboardShortcutWrapper> {
   bool _handleKeyEvent(KeyEvent event) {
     // IME関連の無効なキーイベントを早期にフィルタリング
-    // Windows日本語入力で発生する不正なキーイベントを除外
-    try {
-      final physicalKeyId = event.physicalKey.usbHidUsage;
-      // 無効な物理キーID（0x1600000000等のIME合成イベント）
-      if (physicalKeyId > 0x100000000 || physicalKeyId == 0) {
-        AppLogger.debug('[Root Maps] IME関連キーボードイベントを無視');
-        return false; // イベントを伝播
-      }
-    } catch (e) {
-      // 物理キー情報の取得に失敗した場合も無視
-      return false;
+    if (KeyboardHandler._isImeSynthetic(event)) {
+      AppLogger.debug('[Root Maps] IME関連キーボードイベントを無視');
+      return false; // イベントを伝播
     }
 
-    // contextが利用可能な場合のみ処理
+    // refが利用可能な場合のみ処理
     if (!mounted) return false;
 
     // 非同期で処理（UIをブロックしない）
-    KeyboardHandler.handleKeyEvent(event, context, widget.mapState, ref).then((
-      handled,
-    ) {
-      if (handled) {
-        AppLogger.debug('[KeyboardShortcutWrapper] キーイベント処理済み');
-      }
-    }).catchError((e) {
-      // エラーを静かに無視（IME関連の問題）
-      AppLogger.debug('[KeyboardShortcutWrapper] キーイベント処理エラー: $e');
-    });
+    KeyboardHandler.handleKeyEvent(event, ref)
+        .then((handled) {
+          if (handled) {
+            AppLogger.debug('[KeyboardShortcutWrapper] キーイベント処理済み');
+          }
+        })
+        .catchError((e) {
+          // エラーを静かに無視（IME関連の問題）
+          AppLogger.debug('[KeyboardShortcutWrapper] キーイベント処理エラー: $e');
+        });
 
     // イベントを常に伝播させる（他のウィジェットがキーを受け取れるように）
     return false;

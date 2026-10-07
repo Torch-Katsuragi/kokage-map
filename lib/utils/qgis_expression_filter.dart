@@ -46,6 +46,9 @@ class QgisExpressionFilter {
     ';',
   ];
 
+  static final _ilike = RegExp(r'\bILIKE\b', caseSensitive: false);
+  static final _fieldRef = RegExp('"([^"]+)"');
+
   /// QGIS式をSQLite WHERE句に変換する。
   /// 無効な式の場合は [FilterResult.error] を返す。
   static FilterResult toSqlWhere(String expression) {
@@ -57,17 +60,24 @@ class QgisExpressionFilter {
     final upper = trimmed.toUpperCase();
     for (final pattern in _dangerousPatterns) {
       if (upper.contains(pattern)) {
-        return FilterResult.error(t.qgisFilter.forbiddenKeyword(pattern: pattern));
+        return FilterResult.error(
+          t.qgisFilter.forbiddenKeyword(pattern: pattern),
+        );
       }
     }
 
     // ILIKE → SQLiteのLIKE（SQLiteのLIKEはASCII範囲でcase-insensitive）
-    final sql = trimmed.replaceAllMapped(
-      RegExp(r'\bILIKE\b', caseSensitive: false),
-      (_) => 'LIKE',
-    );
+    final sql = trimmed.replaceAll(_ilike, 'LIKE');
 
-    // 括弧の対応チェック
+    final bracketError = _checkBrackets(sql);
+    if (bracketError != null) return FilterResult.error(bracketError);
+
+    AppLogger.debug('[QgisExpressionFilter] 変換結果: $sql');
+    return FilterResult.ok(sql);
+  }
+
+  /// 括弧と引用符の対応。崩れていればエラーの文言
+  static String? _checkBrackets(String sql) {
     var depth = 0;
     var inSingleQuote = false;
     var inDoubleQuote = false;
@@ -80,20 +90,12 @@ class QgisExpressionFilter {
       } else if (!inSingleQuote && !inDoubleQuote) {
         if (c == '(') depth++;
         if (c == ')') depth--;
-        if (depth < 0) {
-          return FilterResult.error(t.qgisFilter.unmatchedParens);
-        }
+        if (depth < 0) return t.qgisFilter.unmatchedParens;
       }
     }
-    if (depth != 0) {
-      return FilterResult.error(t.qgisFilter.unclosedParens);
-    }
-    if (inSingleQuote || inDoubleQuote) {
-      return FilterResult.error(t.qgisFilter.unclosedQuotes);
-    }
-
-    AppLogger.debug('[QgisExpressionFilter] 変換結果: $sql');
-    return FilterResult.ok(sql);
+    if (depth != 0) return t.qgisFilter.unclosedParens;
+    if (inSingleQuote || inDoubleQuote) return t.qgisFilter.unclosedQuotes;
+    return null;
   }
 
   /// テーブルのカラム名で式をバリデーション（フィールド参照の存在チェック）
@@ -101,8 +103,7 @@ class QgisExpressionFilter {
     String expression,
     Set<String> validColumns,
   ) {
-    final fieldPattern = RegExp('"([^"]+)"');
-    for (final match in fieldPattern.allMatches(expression)) {
+    for (final match in _fieldRef.allMatches(expression)) {
       final fieldName = match.group(1)!;
       if (!validColumns.contains(fieldName)) {
         return t.gps.columnNotExists(name: fieldName);

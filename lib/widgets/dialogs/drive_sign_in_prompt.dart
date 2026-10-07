@@ -57,10 +57,21 @@ class _DriveSignInPromptState extends State<DriveSignInPrompt> {
     super.dispose();
   }
 
+  /// [DriveSignInPrompt.onSignedIn] を呼んだか。
+  /// 認証状態の通知と signIn() の戻りの両方から来るので、1 回に絞る
+  /// （ダイアログで2回 pop すると下の画面まで閉じる）
+  bool _notified = false;
+
+  void _notifySignedIn() {
+    if (_notified || !mounted) return;
+    _notified = true;
+    widget.onSignedIn?.call();
+  }
+
   void _onAuthChanged() {
     if (!mounted) return;
     setState(() {});
-    if (_driveService.authState.isAuthenticated) widget.onSignedIn?.call();
+    if (_driveService.authState.isAuthenticated) _notifySignedIn();
   }
 
   Future<void> _initialize() async {
@@ -75,9 +86,7 @@ class _DriveSignInPromptState extends State<DriveSignInPrompt> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-    if (mounted && _driveService.authState.isAuthenticated) {
-      widget.onSignedIn?.call();
-    }
+    if (_driveService.authState.isAuthenticated) _notifySignedIn();
   }
 
   Future<void> _signIn() async {
@@ -87,8 +96,12 @@ class _DriveSignInPromptState extends State<DriveSignInPrompt> {
     });
     try {
       final success = await _driveService.signIn();
-      if (!success) _errorMessage = _driveService.authState.errorMessage ?? t.drive.signInFailed;
-      if (success) widget.onSignedIn?.call();
+      if (success) {
+        _notifySignedIn();
+      } else {
+        _errorMessage =
+            _driveService.authState.errorMessage ?? t.drive.signInFailed;
+      }
     } catch (e) {
       _errorMessage = t.drive.signInError(error: e.toString());
       AppLogger.error('[DriveSignInPrompt] サインインエラー: $e');

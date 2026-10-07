@@ -79,37 +79,21 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
         continue;
       }
       // モードに応じて初期値を設定
-      if (widget.mode == SyncMode.upload) {
-        // アップロードモード: ローカル変更があればローカル、なければリモート
-        _choices[entry.relativePath] = 
-            entry.localChange != MergeChangeType.none 
-                ? MergeChoice.local 
-                : MergeChoice.remote;
-      } else {
-        // ダウンロードモード: リモート変更があればリモート、なければローカル
-        _choices[entry.relativePath] = 
-            entry.remoteChange != MergeChangeType.none 
-                ? MergeChoice.remote 
-                : MergeChoice.local;
-      }
+      // アップロード: ローカル変更があればローカル、なければリモート
+      // ダウンロード: リモート変更があればリモート、なければローカル
+      _choices[entry.relativePath] = widget.mode == SyncMode.upload
+          ? (entry.localChange != MergeChangeType.none ? MergeChoice.local : MergeChoice.remote)
+          : (entry.remoteChange != MergeChangeType.none ? MergeChoice.remote : MergeChoice.local);
     }
   }
 
-  String get _title {
-    if (widget.mode == SyncMode.upload) {
-      return t.layerDrawer.folder.uploadTitle(name: widget.folderName);
-    } else {
-      return t.layerDrawer.folder.downloadTitle(name: widget.folderName);
-    }
-  }
+  String get _title => widget.mode == SyncMode.upload
+      ? t.layerDrawer.folder.uploadTitle(name: widget.folderName)
+      : t.layerDrawer.folder.downloadTitle(name: widget.folderName);
 
-  String get _description {
-    if (widget.mode == SyncMode.upload) {
-      return t.layerDrawer.folder.uploadDesc;
-    } else {
-      return t.layerDrawer.folder.downloadDesc;
-    }
-  }
+  String get _description => widget.mode == SyncMode.upload
+      ? t.layerDrawer.folder.uploadDesc
+      : t.layerDrawer.folder.downloadDesc;
 
   @override
   Widget build(BuildContext context) {
@@ -138,26 +122,8 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
                       children: [
-                        Expanded(
-                          child: Text(
-                            t.layerDrawer.folder.localLabel,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            t.layerDrawer.folder.cloudLabel,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                        ),
+                        _buildColumnHeader(t.layerDrawer.folder.localLabel),
+                        _buildColumnHeader(t.layerDrawer.folder.cloudLabel),
                       ],
                     ),
                   ),
@@ -190,6 +156,28 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
     );
   }
 
+  /// 「端末」「クラウド」の列見出し
+  Widget _buildColumnHeader(String label) => Expanded(
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      );
+
+  /// 片側を押したとき。両方変わっていればその側に決め、片方だけなら端末とクラウドを入れ替える
+  void _onSideTap(MergeFileEntry entry, MergeChoice side, {required bool isConflict}) {
+    setState(() {
+      final current = _choices[entry.relativePath] ?? MergeChoice.local;
+      _choices[entry.relativePath] = isConflict
+          ? side
+          : (current == MergeChoice.local ? MergeChoice.remote : MergeChoice.local);
+    });
+  }
+
   Widget _buildFileRow(MergeFileEntry entry) {
     final choice = _choices[entry.relativePath] ?? MergeChoice.local;
     final isLocalSelected = choice == MergeChoice.local;
@@ -210,16 +198,7 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
                     entry.relativePath,
                     entry.localChange,
                     isChecked: isLocalSelected,
-                    onTap: () {
-                      setState(() {
-                        if (isConflict) {
-                          _choices[entry.relativePath] = MergeChoice.local;
-                        } else {
-                          _choices[entry.relativePath] = 
-                              isLocalSelected ? MergeChoice.remote : MergeChoice.local;
-                        }
-                      });
-                    },
+                    onTap: () => _onSideTap(entry, MergeChoice.local, isConflict: isConflict),
                   )
                 : const SizedBox.shrink(),
           ),
@@ -230,16 +209,7 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
                     entry.relativePath,
                     entry.remoteChange,
                     isChecked: isRemoteSelected,
-                    onTap: () {
-                      setState(() {
-                        if (isConflict) {
-                          _choices[entry.relativePath] = MergeChoice.remote;
-                        } else {
-                          _choices[entry.relativePath] = 
-                              !isLocalSelected ? MergeChoice.local : MergeChoice.remote;
-                        }
-                      });
-                    },
+                    onTap: () => _onSideTap(entry, MergeChoice.remote, isConflict: isConflict),
                   )
                 : const SizedBox.shrink(),
           ),
@@ -291,13 +261,11 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
     required bool isChecked,
     required VoidCallback onTap,
   }) {
-    // サブフォルダも含めて表示
-    final fileName = relativePath;
     final icon = _getChangeIcon(changeType);
     final baseColor = _getChangeColor(changeType);
     // チェックされていない場合はグレーアウト
     final color = isChecked ? baseColor : baseColor.withValues(alpha: 0.4);
-    final textColor = isChecked 
+    final textColor = isChecked
         ? Theme.of(context).colorScheme.onSurface
         : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4);
 
@@ -311,13 +279,13 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
             _buildSelectionIndicator(isChecked, baseColor),
             Flexible(
               child: Text(
-                fileName,
+                relativePath, // サブフォルダも含めて表示
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
                   color: textColor,
-                  decoration: changeType == MergeChangeType.deleted 
-                      ? TextDecoration.lineThrough 
+                  decoration: changeType == MergeChangeType.deleted
+                      ? TextDecoration.lineThrough
                       : null,
                 ),
                 softWrap: true,
@@ -350,49 +318,29 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
     );
   }
 
-  IconData _getChangeIcon(MergeChangeType changeType) {
-    switch (changeType) {
-      case MergeChangeType.added:
-        return Icons.add;
-      case MergeChangeType.modified:
-        return Icons.circle;
-      case MergeChangeType.deleted:
-        return Icons.remove;
-      case MergeChangeType.moved:
-        return Icons.arrow_forward;
-      case MergeChangeType.none:
-        return Icons.circle;
-    }
-  }
+  IconData _getChangeIcon(MergeChangeType changeType) => switch (changeType) {
+        MergeChangeType.added => Icons.add,
+        MergeChangeType.modified || MergeChangeType.none => Icons.circle,
+        MergeChangeType.deleted => Icons.remove,
+        MergeChangeType.moved => Icons.arrow_forward,
+      };
 
-  Color _getChangeColor(MergeChangeType changeType) {
-    switch (changeType) {
-      case MergeChangeType.added:
-        return Colors.green;
-      case MergeChangeType.modified:
-        return Colors.orange;
-      case MergeChangeType.deleted:
-        return Colors.red;
-      case MergeChangeType.moved:
-        return Colors.blue;
-      case MergeChangeType.none:
-        return Colors.grey;
-    }
-  }
+  Color _getChangeColor(MergeChangeType changeType) => switch (changeType) {
+        MergeChangeType.added => Colors.green,
+        MergeChangeType.modified => Colors.orange,
+        MergeChangeType.deleted => Colors.red,
+        MergeChangeType.moved => Colors.blue,
+        MergeChangeType.none => Colors.grey,
+      };
 
   void _onSync() {
-    final decisions = <MergeDecision>[];
-    for (final entry in widget.entries) {
-      final choice = _choices[entry.relativePath];
-      if (choice == null) continue;
-
-      final hasLocalChange = entry.localChange != MergeChangeType.none;
-      final hasRemoteChange = entry.remoteChange != MergeChangeType.none;
-
-      if (hasLocalChange || hasRemoteChange) {
-        decisions.add(MergeDecision(entry: entry, choice: choice));
-      }
-    }
+    final decisions = [
+      for (final entry in widget.entries)
+        if (_choices[entry.relativePath] case final choice?)
+          if (entry.localChange != MergeChangeType.none ||
+              entry.remoteChange != MergeChangeType.none)
+            MergeDecision(entry: entry, choice: choice),
+    ];
     Navigator.of(context).pop(decisions);
   }
 }

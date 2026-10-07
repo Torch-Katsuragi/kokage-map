@@ -41,17 +41,28 @@ class LayerDrawerService {
   ///
   /// ⚠ `dart:io` を直に使わないこと。web では `Directory` に触れた時点で
   /// `Unsupported operation: _Namespace` が飛ぶ（コンパイルは通る）。
-  static Future<FolderNode> createLocalFolder(FolderNode parent, String name) async {
+  static Future<FolderNode> createLocalFolder(
+    FolderNode parent,
+    String name,
+  ) async {
     final dir = parent.getAbsoluteFilePath();
     final path = p.join(dir ?? '', name);
-    if (await fs.exists(path)) {
-      throw StateError(t.services.folderAlreadyExists);
-    }
+    await _ensureAbsent(path, t.services.folderAlreadyExists);
     await fs.createDirectory(path);
 
     final child = switch (parent) {
-      final GlobalFolderNode p => GlobalSubFolderNode(name, basePath: p.globalPath, visible: true, parent: parent),
-      final GlobalSubFolderNode p => GlobalSubFolderNode(name, basePath: p.basePath, visible: true, parent: parent),
+      final GlobalFolderNode p => GlobalSubFolderNode(
+        name,
+        basePath: p.globalPath,
+        visible: true,
+        parent: parent,
+      ),
+      final GlobalSubFolderNode p => GlobalSubFolderNode(
+        name,
+        basePath: p.basePath,
+        visible: true,
+        parent: parent,
+      ),
       _ => FolderNode(name, visible: true, parent: parent),
     };
     parent.addChild(child);
@@ -70,9 +81,7 @@ class LayerDrawerService {
     if (parentDir == null) return null;
 
     final localPath = p.join(parentDir, folderName);
-    if (await fs.exists(localPath)) {
-      throw StateError(t.services.folderAlreadyExists);
-    }
+    await _ensureAbsent(localPath, t.services.folderAlreadyExists);
 
     final success = await SyncEngine().cloneFromDrive(
       driveId: folderId,
@@ -99,14 +108,14 @@ class LayerDrawerService {
   // ---------- GeoPackage ----------
 
   /// 空の GeoPackage を作成して親ノードに追加。作成失敗時は null
-  static Future<GeoPackageNode?> createGeoPackage(FolderNode parent, String name) async {
+  static Future<GeoPackageNode?> createGeoPackage(
+    FolderNode parent,
+    String name,
+  ) async {
     final dir = parent.getAbsoluteFilePath();
     final fileName = name.endsWith('.gpkg') ? name : '$name.gpkg';
     final path = p.join(dir ?? '', fileName);
-
-    if (await fs.exists(path)) {
-      throw StateError(t.services.gpkgAlreadyExists);
-    }
+    await _ensureAbsent(path, t.services.gpkgAlreadyExists);
 
     final gpkgFile = GeoPackageFile([fileName], absolutePath: path);
     final node = GeoPackageNode(gpkgFile, visible: true, parent: parent);
@@ -126,12 +135,18 @@ class LayerDrawerService {
     required String projectRootDir,
   }) async {
     final oldPath = node.getAbsoluteFilePath();
-    final newFileName = await node.rename(newName, projectRootDir: projectRootDir);
+    final newFileName = await node.rename(
+      newName,
+      projectRootDir: projectRootDir,
+    );
     if (oldPath != null) {
-      final newPath = p.join(p.dirname(oldPath), newFileName);
-      await notifySyncedPathChange(node, oldPath, newPath);
+      await notifySyncedPathChange(
+        node,
+        oldPath,
+        p.join(p.dirname(oldPath), newFileName),
+      );
     }
-    if (node.parent != null) await node.parent!.updateChildren();
+    await node.parent?.updateChildren();
     return newFileName;
   }
 
@@ -143,12 +158,20 @@ class LayerDrawerService {
     await node.rename(newName);
     final ext = p.extension(oldPath);
     final newFileName = newName.endsWith(ext) ? newName : '$newName$ext';
-    final newPath = p.join(p.dirname(oldPath), newFileName);
-    await notifySyncedPathChange(node, oldPath, newPath);
-    if (node.parent != null) await node.parent!.updateChildren();
+    await notifySyncedPathChange(
+      node,
+      oldPath,
+      p.join(p.dirname(oldPath), newFileName),
+    );
+    await node.parent?.updateChildren();
   }
 
   // ---------- ヘルパー ----------
+
+  /// 既にあれば [message] の [StateError]
+  static Future<void> _ensureAbsent(String path, String message) async {
+    if (await fs.exists(path)) throw StateError(message);
+  }
 
   /// DriveFolderNodeの祖先を探す
   static DriveFolderNode? findDriveRoot(LayerTreeNode? node) {

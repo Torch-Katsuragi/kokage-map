@@ -83,7 +83,7 @@ class _OverlayConvertDialog extends StatefulWidget {
 }
 
 class _OverlayConvertDialogState extends State<_OverlayConvertDialog> {
-  late TextEditingController _nameController;
+  late final TextEditingController _nameController;
   OverlayConvertMode _mode = OverlayConvertMode.none;
   double _threshold = 0.5;
 
@@ -140,41 +140,35 @@ class _OverlayConvertDialogState extends State<_OverlayConvertDialog> {
               onChanged: (v) => setState(() => _mode = v!),
               child: Column(
                 children: [
-                  // なし
-                  RadioListTile<OverlayConvertMode>(
-                    value: OverlayConvertMode.none,
-                    title: Text(t.overlayConvert.modeNone),
-                    subtitle: Text(t.overlayConvert.modeNoneDesc),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-
-                  // 輝度→透明度
-                  RadioListTile<OverlayConvertMode>(
-                    value: OverlayConvertMode.brightnessToAlpha,
-                    title: Text(t.overlayConvert.modeBrightness),
-                    subtitle: Text(t.overlayConvert.modeBrightnessDesc),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-
-                  // 輝度で透明/不透明に分離
-                  RadioListTile<OverlayConvertMode>(
-                    value: OverlayConvertMode.alphaBinarize,
-                    title: Text(t.overlayConvert.modeAlphaBinarize),
-                    subtitle: Text(t.overlayConvert.modeAlphaBinarizeDesc),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-
-                  // 白黒2値化＋白部分透明化
-                  RadioListTile<OverlayConvertMode>(
-                    value: OverlayConvertMode.bwTransparent,
-                    title: Text(t.overlayConvert.modeBwTransparent),
-                    subtitle: Text(t.overlayConvert.modeBwTransparentDesc),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
+                  for (final (mode, title, desc) in [
+                    (
+                      OverlayConvertMode.none,
+                      t.overlayConvert.modeNone,
+                      t.overlayConvert.modeNoneDesc,
+                    ),
+                    (
+                      OverlayConvertMode.brightnessToAlpha,
+                      t.overlayConvert.modeBrightness,
+                      t.overlayConvert.modeBrightnessDesc,
+                    ),
+                    (
+                      OverlayConvertMode.alphaBinarize,
+                      t.overlayConvert.modeAlphaBinarize,
+                      t.overlayConvert.modeAlphaBinarizeDesc,
+                    ),
+                    (
+                      OverlayConvertMode.bwTransparent,
+                      t.overlayConvert.modeBwTransparent,
+                      t.overlayConvert.modeBwTransparentDesc,
+                    ),
+                  ])
+                    RadioListTile<OverlayConvertMode>(
+                      value: mode,
+                      title: Text(title),
+                      subtitle: Text(desc),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
                 ],
               ),
             ),
@@ -217,11 +211,13 @@ class _OverlayConvertDialogState extends State<_OverlayConvertDialog> {
           onPressed: () {
             final name = _nameController.text.trim();
             if (name.isEmpty) return;
-            Navigator.of(context).pop(OverlayConvertResult(
-              outputName: name,
-              mode: _mode,
-              threshold: _threshold,
-            ));
+            Navigator.of(context).pop(
+              OverlayConvertResult(
+                outputName: name,
+                mode: _mode,
+                threshold: _threshold,
+              ),
+            );
           },
           child: Text(t.overlayConvert.convert),
         ),

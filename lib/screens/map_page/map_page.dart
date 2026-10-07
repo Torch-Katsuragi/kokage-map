@@ -456,7 +456,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     return AppBar(
       title: Text(p.basename(ref.watch(projectRootDirProvider) ?? t.common.appName)),
       actions: buildMapAppBarActions(
-        context: context,
         showAttributeTable: showAttributeTable,
         drawerOpen: drawerOpen,
         onAttributeTableToggle: () {

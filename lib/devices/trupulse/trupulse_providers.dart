@@ -24,7 +24,12 @@ part 'trupulse_providers.g.dart';
 
 /// TruPulseServiceのシングルトンインスタンス
 @Riverpod(keepAlive: true)
-TruPulseService trupulseService(Ref ref) => TruPulseService();
+TruPulseService trupulseService(Ref ref) {
+  final service = TruPulseService();
+  // コンテナ破棄時（テスト・ホットリスタート）に接続とストリームを閉じる
+  ref.onDispose(service.dispose);
+  return service;
+}
 
 /// TruPulseToolのシングルトンインスタンス
 @Riverpod(keepAlive: true)

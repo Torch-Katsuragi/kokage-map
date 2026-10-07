@@ -74,9 +74,11 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
   final _targetHeightCtrl = TextEditingController(text: '0.0');
   final _nameCtrl = TextEditingController();
 
-  /// OFFなら必ず0 -- テキストフィールドの値は無視する
-  double get _declination =>
-      _useDeclination ? (double.tryParse(_declinationCtrl.text) ?? 0) : 0;
+  /// [on] のときだけ [ctrl] の数値。OFFなら必ず0 -- テキストフィールドの値は無視する
+  static double _valueIf(bool on, TextEditingController ctrl) =>
+      on ? (double.tryParse(ctrl.text) ?? 0) : 0;
+
+  double get _declination => _valueIf(_useDeclination, _declinationCtrl);
 
   @override
   void initState() {
@@ -146,8 +148,10 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                   }).toList(),
                   onChanged: (v) {
                     if (v != null) {
-                      setState(() => _selectedChain = v);
-                      _updateDeclinationFromChain(v);
+                      setState(() {
+                        _selectedChain = v;
+                        _updateDeclinationFromChain(v);
+                      });
                     }
                   },
                 ),
@@ -185,15 +189,10 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
               const SizedBox(height: 16),
 
               // 閉合オプション
-              SwitchListTile(
-                title: Text(t.surveyConversion.closeTraverse),
-                subtitle: Text(
-                  t.surveyConversion.closeTraverseDesc,
-                  style: const TextStyle(fontSize: 11),
-                ),
+              _OptionSwitch(
+                title: t.surveyConversion.closeTraverse,
+                description: t.surveyConversion.closeTraverseDesc,
                 value: _closePath,
-                dense: true,
-                contentPadding: EdgeInsets.zero,
                 onChanged: (v) => setState(() {
                   _closePath = v;
                   _method = v ? AdjustmentMethod.bowditch : AdjustmentMethod.none;
@@ -221,15 +220,10 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
               const SizedBox(height: 12),
 
               // 磁気偏角トグル
-              SwitchListTile(
-                title: Text(t.surveyConversion.declinationCorrection),
-                subtitle: Text(
-                  t.surveyConversion.declinationDesc,
-                  style: const TextStyle(fontSize: 11),
-                ),
+              _OptionSwitch(
+                title: t.surveyConversion.declinationCorrection,
+                description: t.surveyConversion.declinationDesc,
                 value: _useDeclination,
-                dense: true,
-                contentPadding: EdgeInsets.zero,
                 onChanged: (v) => setState(() => _useDeclination = v),
               ),
               if (_useDeclination) ...[
@@ -261,43 +255,18 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
               const SizedBox(height: 12),
 
               // 器械高・目標高トグル
-              SwitchListTile(
-                title: Text(t.surveyConversion.heightCorrection),
-                subtitle: Text(
-                  t.surveyConversion.heightCorrectionDesc,
-                  style: const TextStyle(fontSize: 11),
-                ),
+              _OptionSwitch(
+                title: t.surveyConversion.heightCorrection,
+                description: t.surveyConversion.heightCorrectionDesc,
                 value: _useHeightCorrection,
-                dense: true,
-                contentPadding: EdgeInsets.zero,
                 onChanged: (v) => setState(() => _useHeightCorrection = v),
               ),
               if (_useHeightCorrection)
                 Row(
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _instrumentHeightCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          labelText: t.surveyConversion.instrumentHeight,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
-                    ),
+                    _heightField(_instrumentHeightCtrl, t.surveyConversion.instrumentHeight),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _targetHeightCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          labelText: t.surveyConversion.targetHeight,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
-                    ),
+                    _heightField(_targetHeightCtrl, t.surveyConversion.targetHeight),
                   ],
                 ),
             ],
@@ -310,34 +279,44 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
           child: Text(t.common.cancel),
         ),
         ElevatedButton.icon(
-          onPressed: () {
-            final name = _nameCtrl.text.trim();
-            Navigator.pop(
-              context,
-              SurveyConversionResult(
-                targetLayer: _selectedLayer,
-                chain: _selectedChain,
-                options: TraverseAdjustmentOptions(
-                  method: _closePath ? _method : AdjustmentMethod.none,
-                  declination: _useDeclination
-                      ? (double.tryParse(_declinationCtrl.text) ?? 0)
-                      : 0,
-                  instrumentHeight: _useHeightCorrection
-                      ? (double.tryParse(_instrumentHeightCtrl.text) ?? 0)
-                      : 0,
-                  targetHeight: _useHeightCorrection
-                      ? (double.tryParse(_targetHeightCtrl.text) ?? 0)
-                      : 0,
-                ),
-                featureName: name.isNotEmpty ? name : null,
-                closePath: _closePath,
-              ),
-            );
-          },
+          onPressed: _convert,
           icon: Icon(_selectedLayer is PolygonLayerNode ? Icons.pentagon_outlined : Icons.show_chart),
           label: Text(t.surveyConversion.convertTo(type: typeLabel)),
         ),
       ],
+    );
+  }
+
+  /// 器械高・目標高の入力欄
+  Widget _heightField(TextEditingController ctrl, String label) => Expanded(
+        child: TextField(
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+      );
+
+  /// 選んだ内容を返して閉じる
+  void _convert() {
+    final name = _nameCtrl.text.trim();
+    Navigator.pop(
+      context,
+      SurveyConversionResult(
+        targetLayer: _selectedLayer,
+        chain: _selectedChain,
+        options: TraverseAdjustmentOptions(
+          method: _closePath ? _method : AdjustmentMethod.none,
+          declination: _declination,
+          instrumentHeight: _valueIf(_useHeightCorrection, _instrumentHeightCtrl),
+          targetHeight: _valueIf(_useHeightCorrection, _targetHeightCtrl),
+        ),
+        featureName: name.isNotEmpty ? name : null,
+        closePath: _closePath,
+      ),
     );
   }
 
@@ -367,6 +346,33 @@ class _SectionHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+    );
+  }
+}
+
+/// 補正オプションの ON/OFF（説明つき・詰めた行）
+class _OptionSwitch extends StatelessWidget {
+  final String title;
+  final String description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _OptionSwitch({
+    required this.title,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      title: Text(title),
+      subtitle: Text(description, style: const TextStyle(fontSize: 11)),
+      value: value,
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      onChanged: onChanged,
     );
   }
 }

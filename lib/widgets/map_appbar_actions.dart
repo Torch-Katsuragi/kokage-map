@@ -22,7 +22,6 @@ import 'notification/notification_bell.dart';
 
 /// 地図画面AppBarの右側アクションボタン群を生成する関数
 List<Widget> buildMapAppBarActions({
-  required BuildContext context,
   required bool showAttributeTable,
   required bool drawerOpen,
   required VoidCallback onAttributeTableToggle,

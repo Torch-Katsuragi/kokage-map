@@ -24,6 +24,7 @@ import '../../i18n/strings.g.dart';
 enum AddFolderType {
   /// 通常のローカルフォルダ
   local,
+
   /// Google Drive連携フォルダ
   drive,
 }
@@ -33,10 +34,7 @@ class AddFolderTypeResult {
   final AddFolderType type;
   final String? folderName; // 通常フォルダの場合のみ
 
-  const AddFolderTypeResult({
-    required this.type,
-    this.folderName,
-  });
+  const AddFolderTypeResult({required this.type, this.folderName});
 }
 
 /// フォルダ種類選択ダイアログ
@@ -87,10 +85,7 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
             if (_showDriveOption) ...[
               Text(
                 t.addFolder.folderType,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 8),
               _buildTypeOption(
@@ -134,7 +129,11 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                    const Icon(
+                      Icons.info_outline,
+                      color: Colors.blue,
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -154,9 +153,17 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(t.common.cancel),
         ),
-        TextButton(
-          onPressed: _canSubmit() ? _onSubmit : null,
-          child: Text(_selectedType == AddFolderType.local ? t.addFolder.create : t.addFolder.next),
+        // 名前を打つたびに押せる/押せないを切り替える（ダイアログ全体は組み直さない）
+        ListenableBuilder(
+          listenable: _nameController,
+          builder: (context, _) => TextButton(
+            onPressed: _canSubmit() ? _onSubmit : null,
+            child: Text(
+              _selectedType == AddFolderType.local
+                  ? t.addFolder.create
+                  : t.addFolder.next,
+            ),
+          ),
         ),
       ],
     );
@@ -171,6 +178,7 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
     required String subtitle,
   }) {
     final isSelected = _selectedType == type;
+    final primary = Theme.of(context).primaryColor;
     return InkWell(
       onTap: () => setState(() => _selectedType = type),
       borderRadius: BorderRadius.circular(8),
@@ -178,11 +186,11 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           border: Border.all(
-            color: isSelected ? Theme.of(context).primaryColor : Colors.grey.shade300,
+            color: isSelected ? primary : Colors.grey.shade300,
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(8),
-          color: isSelected ? Theme.of(context).primaryColor.withValues(alpha: 0.05) : null,
+          color: isSelected ? primary.withValues(alpha: 0.05) : null,
         ),
         child: Row(
           children: [
@@ -195,24 +203,19 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
                   Text(
                     title,
                     style: TextStyle(
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                     ),
                   ),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ],
               ),
             ),
-            if (isSelected)
-              Icon(
-                Icons.check_circle,
-                color: Theme.of(context).primaryColor,
-              ),
+            if (isSelected) Icon(Icons.check_circle, color: primary),
           ],
         ),
       ),
@@ -230,7 +233,7 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
   /// 送信処理
   void _onSubmit() {
     if (!_canSubmit()) return;
-    
+
     Navigator.pop(
       context,
       AddFolderTypeResult(

@@ -32,11 +32,3 @@ class SelectedGnssDeviceAddress extends _$SelectedGnssDeviceAddress {
 
   void set(String? value) => state = value;
 }
-
-@Riverpod(keepAlive: true)
-class SelectedGnssDeviceName extends _$SelectedGnssDeviceName {
-  @override
-  String? build() => null;
-
-  void set(String? value) => state = value;
-}

@@ -571,6 +571,14 @@ class GoogleDriveService {
     }
   }
 
+  /// Drive の検索式に入れる文字列リテラル（`'` と `\` を逃がす）。
+  ///
+  /// ⚠ 以前は名前をそのまま `'...'` で囲んでいた。名前に `'` があると検索式が壊れて例外になり、
+  /// 同名のファイルの検索が「見つからない」に化けて Drive にもう 1 つ作ったり、
+  /// サブフォルダを解決できずにその中のファイルを上げられなかったりしていた
+  @visibleForTesting
+  static String queryLiteral(String value) => "'${value.replaceAll(r'\', r'\\').replaceAll("'", r"\'")}'";
+
   /// [q] に当たるもの（共有ドライブも含めて探す）。最初の 1 ページだけ（名前で 1 件を探すとき用）
   static Future<List<drive.File>> _list(drive.DriveApi api, String q, {String? fields}) async {
     final result = await api.files.list(
@@ -652,7 +660,7 @@ class GoogleDriveService {
       _call('サブフォルダ作成エラー', null, (api) async {
         final existing = (await _list(
           api,
-          "name = '$folderName' and '$parentId' in parents and mimeType = '$_folderMime' and trashed = false",
+          "name = ${queryLiteral(folderName)} and '$parentId' in parents and mimeType = '$_folderMime' and trashed = false",
           fields: 'files(id, name)',
         ))
             .firstOrNull;
@@ -812,7 +820,7 @@ class GoogleDriveService {
   Future<drive.File?> _findFileByName(String name, String parentId) => _call(
         '同名ファイルの検索エラー',
         null,
-        (api) async => (await _list(api, "name = '$name' and '$parentId' in parents and trashed = false")).firstOrNull,
+        (api) async => (await _list(api, "name = ${queryLiteral(name)} and '$parentId' in parents and trashed = false")).firstOrNull,
       );
 
   // ========== 共有URL操作 ==========

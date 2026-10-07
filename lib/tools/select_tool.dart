@@ -17,7 +17,6 @@
 // オブジェクト選択ツール（全レイヤー横断・優先度サイクル選択）
 import 'dart:math' as math;
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -32,11 +31,16 @@ import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../utils/feature_calc_utils.dart';
 import 'map_tool.dart';
+import 'pan_tool.dart';
 
 /// オブジェクト選択ツール
-class SelectTool extends MapTool {
-  final Ref _ref;
+class SelectTool extends MapTool with PanDelegation {
   SelectTool(this._ref);
+  final Ref _ref;
+
+  @override
+  PanTool get panTool => _ref.read(panToolProvider);
+
   @override
   String get name => 'Select';
 
@@ -46,31 +50,14 @@ class SelectTool extends MapTool {
   int _pointerCount = 0;
   List<Offset> _lassoPoints = [];
 
-  static double _calcSelectRange(IMapState mapState) {
+  /// タップ位置の選択半径 [m]（ズームに応じて画面上でほぼ一定になる）
+  static double selectRangeFor(IMapState mapState) {
     try {
-      final mapController = mapState.mapController;
-      final zoom = mapController.camera.zoom;
-      const double base = 20.0;
-      final range = base * math.pow(2, 16 - zoom);
-      return range;
+      return 20.0 * math.pow(2, 16 - mapState.mapController.camera.zoom);
     } catch (e) {
       return 30.0;
     }
   }
-
-  /// タップ位置の選択半径 [m]（ズームに応じて画面上でほぼ一定になる）
-  static double selectRangeFor(IMapState mapState) => _calcSelectRange(mapState);
-
-  /// 全可視レイヤー+ImageNodeからタップ範囲内の候補を優先度順にリストアップ
-  /// 優先度: 0=Point+Image, 1=Line, 2=Polygon（同グループ内は距離順）
-  ///
-  /// 消しゴム（PenTool）も同じ当たり判定を使う
-  static List<LayerTreeNode> candidatesAt(
-    LatLng tapLatLng,
-    IMapState mapState,
-    double selectRange,
-  ) =>
-      _buildCandidates(tapLatLng, mapState, selectRange);
 
   /// 写真の印の当たり半径 [px]（印 13px ＋ 指の余白）
   static const _photoMarkerHitPx = 24.0;
@@ -97,12 +84,12 @@ class SelectTool extends MapTool {
     return p.longitude >= b.$2 - dLon && p.longitude <= b.$4 + dLon && p.latitude >= b.$3 - dLat && p.latitude <= b.$5 + dLat;
   }
 
-  static List<LayerTreeNode> _buildCandidates(
-    LatLng tapLatLng,
-    IMapState mapState,
-    double selectRange, {
-    Offset? tapOffset,
-  }) {
+  /// 全可視レイヤー+ImageNodeからタップ範囲内の候補を優先度順にリストアップ
+  /// 優先度: -1=現在位置・写真の印（[tapOffset] があるときだけ画面座標で見る）, 0=Point+Image, 1=Line, 2=Polygon（同グループ内は距離順）
+  ///
+  /// 消しゴム（PenTool）も同じ当たり判定を使う
+  static List<LayerTreeNode> candidatesAt(LatLng tapLatLng, IMapState mapState, {Offset? tapOffset}) {
+    final selectRange = selectRangeFor(mapState);
     final candidates = <({int priority, double distance, LayerTreeNode node})>[];
 
     // 現在位置マーカー（擬似フィーチャ）。画面上で一番上に描かれているので、
@@ -212,13 +199,7 @@ class SelectTool extends MapTool {
       return;
     }
 
-    final selectRange = _calcSelectRange(mapState);
-    final candidates = _buildCandidates(
-      tapLatLng,
-      mapState,
-      selectRange,
-      tapOffset: details.localPosition,
-    );
+    final candidates = candidatesAt(tapLatLng, mapState, tapOffset: details.localPosition);
 
     // 左下ボタンが有効なら複数選択モード: レイヤをまたいで足し引きする
     if (_ref.read(isFabActiveProvider)) {
@@ -262,15 +243,14 @@ class SelectTool extends MapTool {
   /// 1本指: 投げ縄選択, 2本指: パン
   @override
   void onScaleStart(ScaleStartDetails details, IMapState mapState) {
-    if (_ref.read(panToolProvider).isMiddleButtonDragging) return;
+    if (panTool.isMiddleButtonDragging) return;
     _pointerCount = details.pointerCount;
     if (_pointerCount == 2) {
-      _ref.read(panToolProvider).onScaleStart(details, mapState);
+      panTool.onScaleStart(details, mapState);
       return;
     }
     if (_pointerCount == 1) {
       _lassoPoints = [details.localFocalPoint];
-      mapState.setState(() {});
     }
   }
 
@@ -278,24 +258,23 @@ class SelectTool extends MapTool {
   /// 1本指: 投げ縄選択, 2本指: パン
   @override
   void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
-    if (_ref.read(panToolProvider).isMiddleButtonDragging) return;
+    if (panTool.isMiddleButtonDragging) return;
     if (_pointerCount == 2) {
-      _ref.read(panToolProvider).onScaleUpdate(details, mapState);
+      panTool.onScaleUpdate(details, mapState);
       return;
     }
     if (_pointerCount == 1) {
       _lassoPoints.add(details.localFocalPoint);
-      mapState.setState(() {});
     }
   }
 
   /// スケール終了イベント
   /// 1本指: 投げ縄選択, 2本指: パン
   @override
-  void onScaleEnd(ScaleEndDetails details, IMapState mapState) async {
-    if (_ref.read(panToolProvider).isMiddleButtonDragging) return;
+  void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
+    if (panTool.isMiddleButtonDragging) return;
     if (_pointerCount == 2) {
-      _ref.read(panToolProvider).onScaleEnd(details, mapState);
+      panTool.onScaleEnd(details, mapState);
       _pointerCount = 0;
       return;
     }
@@ -376,31 +355,7 @@ class SelectTool extends MapTool {
         }
       }
       _lassoPoints.clear();
-      mapState.setState(() {});
     }
     _pointerCount = 0;
-  }
-
-  /// マウスホイールスクロールイベント（ズーム機能）
-  @override
-  void onPointerSignal(PointerEvent event, IMapState mapState) {
-    if (event is PointerScrollEvent) {
-      _ref.read(panToolProvider).handleMouseWheelZoom(event, mapState);
-    }
-  }
-
-  @override
-  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {
-    _ref.read(panToolProvider).onMiddleButtonDown(event, mapState);
-  }
-
-  @override
-  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {
-    _ref.read(panToolProvider).onMiddleButtonMove(event, mapState);
-  }
-
-  @override
-  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {
-    _ref.read(panToolProvider).onMiddleButtonUp(event, mapState);
   }
 }

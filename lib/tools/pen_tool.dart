@@ -15,13 +15,9 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // lib/tools/pen_tool.dart
 // ペンツール（レイヤ描画）
-import 'dart:async';
-
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:root_maps/utils/app_logger.dart';
 
 import '../i18n/strings.g.dart';
 import '../interfaces/map_state_interface.dart';
@@ -38,11 +34,14 @@ import 'map_tool.dart';
 import 'pan_tool.dart';
 import 'select_tool.dart';
 /// ペンツール（レイヤ描画）
-class PenTool extends MapTool {
-  final Ref _ref;
+///
+/// 描きかけは [GlobalDrawingState] に持たせる（変わると向こうが通知する）
+class PenTool extends MapTool with PanDelegation {
   PenTool(this._ref);
+  final Ref _ref;
 
-  /// てのひらツールのグローバルインスタンス（2本指パン・回転用）
+  /// てのひらツールのグローバルインスタンス（2本指パン・回転・ホイール・中ボタン用）
+  @override
   PanTool get panTool => _ref.read(panToolProvider);
 
   /// グローバル描画状態への参照
@@ -54,101 +53,75 @@ class PenTool extends MapTool {
   @override
   IconData get icon => Icons.edit;
 
-  /// UI更新デバウンス用タイマー
-  Timer? _uiUpdateTimer;
-
   bool _isDrawing = false;
   int _pointerCount = 0;
 
-  /// プレビュー用の点座標（外部参照用getter）
-  /// グローバル描画状態から取得
-  LatLng? get pointPreview => drawingState.pointPreview;
+  /// 指を置いてから 1 本指のドラッグと分かるまでの軌跡（描き始めを取りこぼさないため）
+  final List<Offset> _pointerBuffer = [];
 
-  /// 線の描画点列（グローバル描画状態から取得）
-  List<LatLng> get drawingLine => drawingState.drawingLine;
+  @override
+  void addPointerToBuffer(Offset offset) => _pointerBuffer.add(offset);
 
-  /// ポリゴンの描画点列（グローバル描画状態から取得）
-  List<LatLng> get drawingPolygon => drawingState.drawingPolygon;
+  @override
+  void clearPointerBuffer() => _pointerBuffer.clear();
+
+  void _warn(String title) =>
+      _ref.read(notificationCenterProvider.notifier).add(title: title, level: NotificationLevel.warning);
+
+  /// 描き込み先: 選択中のレイヤが見えていればそれ。見えていなければ null（[warn] なら知らせる）
+  LayerNode? _targetLayer({bool warn = false}) {
+    final selected = _ref.read(selectedLayerNodeProvider);
+    if (selected == null) return null;
+    if (!selected.isVisibleRecursive()) {
+      if (warn) _warn(t.editor.layerInvisible);
+      return null;
+    }
+    return selected;
+  }
+
+  /// 線のレイヤなら true、面なら false、点は null（[GlobalDrawingState] の `isLine`）
+  static bool? _isLine(LayerNode layer) => switch (layer) {
+        LineLayerNode() => true,
+        PolygonLayerNode() => false,
+        _ => null,
+      };
+
+  /// 地物を作り終えたら地図に出す
+  static void _showWhenCreated(Future<Object?> created, IMapState mapState, [VoidCallback? then]) {
+    created.then((_) {
+      mapState.refreshFeatures();
+      then?.call();
+    });
+  }
 
   /// タップイベント
   @override
   void onTap(TapUpDetails details, IMapState mapState) {
-    AppLogger.debug('[DEBUG] PenTool.onTap: タップイベント開始');
-
     // フロートボタン押下時は消しゴム動作: タップで候補の出し入れ
     if (_ref.read(isFabActiveProvider)) {
       if (_ref.read(selectedLayerNodeProvider) == null) {
-        _ref.read(notificationCenterProvider.notifier).add(
-          title: t.editor.noLayerSelected,
-          level: NotificationLevel.warning,
-        );
+        _warn(t.editor.noLayerSelected);
         return;
       }
-      final latlng = mapState.offsetToLatLng(details.localPosition);
-      final hit = _eraserTarget(latlng, mapState);
-      if (hit != null) {
-        _ref.read(selectedFeaturesProvider.notifier).toggle(hit);
-        _ref.read(featureRefreshTriggerProvider.notifier).trigger();
-      }
+      final hit = _eraserTarget(mapState.offsetToLatLng(details.localPosition), mapState);
+      if (hit != null) _ref.read(selectedFeaturesProvider.notifier).toggle(hit);
       return;
     }
 
-    // 通常は描画
-    final selected = _ref.read(selectedLayerNodeProvider);
-    if (selected == null) {
-      AppLogger.debug('[DEBUG] PenTool.onTap: 選択されたレイヤーがありません');
-      return;
-    }
-
-    if (!selected.isVisibleRecursive()) {
-      AppLogger.debug('[DEBUG] PenTool.onTap: レイヤーが不可視のため処理中止');
-      _ref.read(notificationCenterProvider.notifier).add(
-        title: t.editor.layerInvisible,
-        level: NotificationLevel.warning,
-      );
-      return;
-    }
-
+    // 通常は描画: 点はその場で作り、線・面は描きかけに足す
+    final selected = _targetLayer(warn: true);
+    if (selected == null) return;
     final latlng = mapState.offsetToLatLng(details.localPosition);
-    AppLogger.debug('[DEBUG] PenTool.onTap: 座標取得完了 $latlng');
-
     if (selected is PointLayerNode) {
-      AppLogger.debug('[DEBUG] PenTool.onTap: ポイントレイヤー処理');
-      PointFeatureNode.createIn(selected, latlng, '', '').then((_) {
-        // フィーチャー作成完了後にUI更新
-        mapState.refreshFeatures();
-        _ref.read(tutorialProvider.notifier).report(PointPlaced(selected));
-      });
-      mapState.setState(() {});
-    } else if (selected is LineLayerNode) {
-      AppLogger.debug('[DEBUG] PenTool.onTap: ラインレイヤー処理');
-
-      drawingState.addLinePoint(latlng, null);
-      mapState.setState(() {});
-    } else if (selected is PolygonLayerNode) {
-      AppLogger.debug(
-        '[DEBUG] PenTool.onTap: ポリゴンレイヤー処理開始 - 現在の点数: ${drawingPolygon.length}',
+      _showWhenCreated(
+        PointFeatureNode.createIn(selected, latlng, '', ''),
+        mapState,
+        () => _ref.read(tutorialProvider.notifier).report(PointPlaced(selected)),
       );
-
-      // タップ時のポリゴン描画
-      try {
-        drawingState.addPolygonPoint(latlng, null);
-
-        // デバウンス機能：50ms後にUI更新を実行
-        _uiUpdateTimer?.cancel();
-        _uiUpdateTimer = Timer(const Duration(milliseconds: 50), () {
-          mapState.setState(() {});
-        });
-
-        AppLogger.debug(
-          '[DEBUG] PenTool.onTap: ポリゴン点追加完了 - 新しい点数: ${drawingPolygon.length}',
-        );
-      } catch (e) {
-        AppLogger.debug('[ERROR] PenTool.onTap: ポリゴン点追加エラー: $e');
-      }
+      return;
     }
-
-    AppLogger.debug('[DEBUG] PenTool.onTap: タップイベント完了');
+    final isLine = _isLine(selected);
+    if (isLine != null) drawingState.addPoint(latlng, null, isLine: isLine);
   }
 
   /// スケール開始イベント
@@ -157,8 +130,6 @@ class PenTool extends MapTool {
   void onScaleStart(ScaleStartDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
     if (panTool.isMiddleButtonDragging) return;
-
-    final selected = _ref.read(selectedLayerNodeProvider);
 
     if (_pointerCount == 2) {
       //2本指を離すとき高確率で残った方の指でdetails.pointerCount=1としてonscalestartが呼ばれるので、その場合は一回スキップ(0にするとupdateとendで何もしなくなる)
@@ -174,53 +145,27 @@ class PenTool extends MapTool {
     }
 
     // 1本指の場合のみレイヤー選択チェック
-    if (selected == null || !selected.isVisibleRecursive()) {
-      if (selected != null && !selected.isVisibleRecursive()) {
-        _ref.read(notificationCenterProvider.notifier).add(
-          title: t.editor.layerInvisible,
-          level: NotificationLevel.warning,
-        );
+    final selected = _targetLayer(warn: true);
+    if (selected == null || _pointerCount != 1 || _ref.read(isFabActiveProvider)) return;
+
+    final isLine = _isLine(selected);
+    // 指を置いてからの軌跡があれば、描きかけをそれで置き換える
+    if (_pointerBuffer.isNotEmpty) {
+      if (isLine != null) {
+        drawingState.clear(isLine: isLine);
+        for (final offset in _pointerBuffer) {
+          drawingState.addPoint(mapState.offsetToLatLng(offset), null, isLine: isLine);
+        }
       }
-      return;
+      _pointerBuffer.clear();
     }
-    if (_pointerCount == 1) {
-      if (_ref.read(isFabActiveProvider)) {
-        return;
-      }
-      // Pointerバッファがあれば最初に反映
-      if (pointerBuffer.isNotEmpty) {
-        if (selected is LineLayerNode) {
-          drawingState.clearLine();
-          for (final offset in pointerBuffer) {
-            final latlng = mapState.offsetToLatLng(offset);
-            drawingState.addLinePoint(latlng, null);
-          }
-        } else if (selected is PolygonLayerNode) {
-          drawingState.clearPolygon();
-          for (final offset in pointerBuffer) {
-            final latlng = mapState.offsetToLatLng(offset);
-            drawingState.addPolygonPoint(latlng, null);
-          }
-        }
-        clearPointerBuffer();
-      }
-      final latlng = mapState.offsetToLatLng(details.localFocalPoint);
-      if (selected is PointLayerNode) {
-        drawingState.setPointPreview(latlng);
-        mapState.setState(() {});
-      } else if (selected is LineLayerNode) {
-        if (drawingLine.isEmpty) {
-          drawingState.addLinePoint(latlng, null);
-          mapState.setState(() {});
-        }
-        _isDrawing = true;
-      } else if (selected is PolygonLayerNode) {
-        if (drawingPolygon.isEmpty) {
-          drawingState.addPolygonPoint(latlng, null);
-          mapState.setState(() {});
-        }
-        _isDrawing = true;
-      }
+    final latlng = mapState.offsetToLatLng(details.localFocalPoint);
+    if (selected is PointLayerNode) {
+      drawingState.setPointPreview(latlng);
+    } else if (isLine != null) {
+      final empty = isLine ? !drawingState.isLineDrawing : !drawingState.isPolygonDrawing;
+      if (empty) drawingState.addPoint(latlng, null, isLine: isLine);
+      _isDrawing = true;
     }
   }
 
@@ -231,8 +176,6 @@ class PenTool extends MapTool {
     // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
     if (panTool.isMiddleButtonDragging) return;
 
-    final selected = _ref.read(selectedLayerNodeProvider);
-
     // 2本指の場合は、選択レイヤーに関係なくパン操作を許可
     if (_pointerCount == 2) {
       panTool.onScaleUpdate(details, mapState);
@@ -241,88 +184,62 @@ class PenTool extends MapTool {
     }
 
     // 1本指の場合のみレイヤー選択チェック
-    if (selected == null || !selected.isVisibleRecursive()) return;
-    if (_pointerCount == 1) {
-      // フロートボタン押下時は消しゴム動作: ドラッグ軌跡に触れたものを候補に足す。
-      // ⚠ ここでは消さない。候補は選択として光らせ、右下の「削除」で確定する
-      //   （線をタップで描くときと同じ、集めてから確定の流れ）
-      if (_ref.read(isFabActiveProvider)) {
-        final latlng = mapState.offsetToLatLng(details.localFocalPoint);
-        final hit = _eraserTarget(latlng, mapState);
-        if (hit != null && !_ref.read(selectedFeaturesProvider).contains(hit)) {
-          _ref.read(selectedFeaturesProvider.notifier).add(hit);
-          _ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        }
-        return;
+    final selected = _targetLayer();
+    if (selected == null || _pointerCount != 1) return;
+    final latlng = mapState.offsetToLatLng(details.localFocalPoint);
+
+    // フロートボタン押下時は消しゴム動作: ドラッグ軌跡に触れたものを候補に足す。
+    // ⚠ ここでは消さない。候補は選択として光らせ、右下の「削除」で確定する
+    //   （線をタップで描くときと同じ、集めてから確定の流れ）
+    if (_ref.read(isFabActiveProvider)) {
+      final hit = _eraserTarget(latlng, mapState);
+      if (hit != null && !_ref.read(selectedFeaturesProvider).contains(hit)) {
+        _ref.read(selectedFeaturesProvider.notifier).add(hit);
       }
-      final latlng = mapState.offsetToLatLng(details.localFocalPoint);
-      if (selected is PointLayerNode) {
-        drawingState.setPointPreview(latlng);
-        mapState.setState(() {});
-      } else if (selected is LineLayerNode && _isDrawing) {
-        drawingState.addLinePoint(latlng, null);
-        mapState.setState(() {});
-      } else if (selected is PolygonLayerNode && _isDrawing) {
-        drawingState.addPolygonPoint(latlng, null);
-        mapState.setState(() {});
-      }
+      return;
     }
+
+    if (selected is PointLayerNode) {
+      drawingState.setPointPreview(latlng);
+      return;
+    }
+    final isLine = _isLine(selected);
+    if (isLine != null && _isDrawing) drawingState.addPoint(latlng, null, isLine: isLine);
   }
 
   /// スケール終了イベント
-  /// 1本指: ペン描画, 2本指: パンツール処理
+  /// 1本指: 描いた点・線・面をその場で作る, 2本指: パンツール処理
   @override
   void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
     if (panTool.isMiddleButtonDragging) return;
 
-    final selected = _ref.read(selectedLayerNodeProvider);
-
     // 2本指の場合は、選択レイヤーに関係なくパン操作を許可
     if (_pointerCount == 2) {
       panTool.onScaleEnd(details, mapState);
-      // _pointerCount = 0;
       return;
     }
 
     // 1本指の場合のみレイヤー選択チェック
-    if (selected == null || !selected.isVisibleRecursive()) return;
+    final selected = _targetLayer();
+    if (selected == null) return;
     if (_pointerCount == 1) {
-      if (selected is PointLayerNode && pointPreview != null) {
-        PointFeatureNode.createIn(
-          selected,
-          pointPreview!,
-          'FreeHandPoint',
-          '',
-        ).then((_) {
-          mapState.refreshFeatures();
-        });
+      final preview = drawingState.pointPreview;
+      final line = drawingState.drawingLine;
+      final polygon = drawingState.drawingPolygon;
+      if (selected is PointLayerNode && preview != null) {
+        _showWhenCreated(PointFeatureNode.createIn(selected, preview, 'FreeHandPoint', ''), mapState);
         drawingState.setPointPreview(null);
-        mapState.setState(() {});
-      } else if (selected is LineLayerNode && drawingLine.length >= 2) {
-        LineFeatureNode.createIn(
-          selected,
-          List<LatLng>.from(drawingLine),
-          'FreeHandLine',
-          '',
-        ).then((_) {
-          mapState.refreshFeatures();
-        });
-        drawingState.clearLine();
-        mapState.setState(() {});
-      } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
-        final closed = mapState.closeRing(drawingPolygon);
-        PolygonFeatureNode.createIn(
-          selected,
-          List<List<LatLng>>.from([closed]),
-          'FreeHandPolygon',
-          '',
-        ).then((_) {
-          mapState.refreshFeatures();
-        });
-        drawingState.clearPolygon();
+      } else if (selected is LineLayerNode && line.length >= 2) {
+        _showWhenCreated(LineFeatureNode.createIn(selected, List<LatLng>.from(line), 'FreeHandLine', ''), mapState);
+        drawingState.clear(isLine: true);
+      } else if (selected is PolygonLayerNode && polygon.length >= 3) {
+        _showWhenCreated(
+          PolygonFeatureNode.createIn(selected, [mapState.closeRing(polygon)], 'FreeHandPolygon', ''),
+          mapState,
+        );
+        drawingState.clear(isLine: false);
         _isDrawing = false;
-        mapState.setState(() {});
       }
     }
     _pointerCount = 0;
@@ -334,38 +251,9 @@ class PenTool extends MapTool {
   FeatureNode? _eraserTarget(LatLng latlng, IMapState mapState) {
     final layer = _ref.read(selectedLayerNodeProvider);
     if (layer == null) return null;
-    final candidates = SelectTool.candidatesAt(
-      latlng,
-      mapState,
-      SelectTool.selectRangeFor(mapState),
-    );
-    return candidates
+    return SelectTool.candidatesAt(latlng, mapState)
         .whereType<FeatureNode>()
         .where((f) => f.parent == layer)
         .firstOrNull;
-  }
-
-  /// マウスホイールスクロールイベント（ズーム機能）
-  /// PanToolの統一処理を呼び出し
-  @override
-  void onPointerSignal(PointerEvent event, IMapState mapState) {
-    if (event is PointerScrollEvent) {
-      panTool.handleMouseWheelZoom(event, mapState);
-    }
-  }
-
-  @override
-  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {
-    panTool.onMiddleButtonDown(event, mapState);
-  }
-
-  @override
-  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {
-    panTool.onMiddleButtonMove(event, mapState);
-  }
-
-  @override
-  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {
-    panTool.onMiddleButtonUp(event, mapState);
   }
 }

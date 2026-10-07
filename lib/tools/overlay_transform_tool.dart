@@ -28,6 +28,7 @@ import '../models/nodes/overlay_image_node.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import 'map_tool.dart';
+import 'pan_tool.dart';
 
 /// ハンドルの種類
 enum _HandleType {
@@ -41,13 +42,12 @@ enum _HandleType {
 }
 
 /// オーバーレイ画像変換ツール
-class OverlayTransformTool extends MapTool {
+class OverlayTransformTool extends MapTool with PanDelegation {
+  OverlayTransformTool(this._ref);
   final Ref _ref;
 
-  OverlayTransformTool(this._ref);
-
-  /// 変形更新通知（ハンドルマーカーの局所rebuild用）
-  final ValueNotifier<int> transformNotifier = ValueNotifier<int>(0);
+  @override
+  PanTool get panTool => _ref.read(panToolProvider);
 
   /// 操作対象のオーバーレイノード
   OverlayImageNode? _target;
@@ -126,16 +126,11 @@ class OverlayTransformTool extends MapTool {
   }
 
   @override
-  void onTap(TapUpDetails details, IMapState mapState) {
-    // タップでハンドルを選択するだけ（何もしない）
-  }
-
-  @override
   void onScaleStart(ScaleStartDetails details, IMapState mapState) {
     if (details.pointerCount >= 2) {
       // 2本指: PanToolに委譲
       _isPanDelegating = true;
-      _ref.read(panToolProvider).onScaleStart(details, mapState);
+      panTool.onScaleStart(details, mapState);
       return;
     }
 
@@ -156,7 +151,7 @@ class OverlayTransformTool extends MapTool {
   @override
   void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
     if (_isPanDelegating) {
-      _ref.read(panToolProvider).onScaleUpdate(details, mapState);
+      panTool.onScaleUpdate(details, mapState);
       return;
     }
 
@@ -183,7 +178,7 @@ class OverlayTransformTool extends MapTool {
   @override
   void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
     if (_isPanDelegating) {
-      _ref.read(panToolProvider).onScaleEnd(details, mapState);
+      panTool.onScaleEnd(details, mapState);
       _isPanDelegating = false;
       return;
     }
@@ -201,23 +196,6 @@ class OverlayTransformTool extends MapTool {
     _activeHandle = _HandleType.none;
     _dragStartScreen = null;
   }
-
-  // PC: ホイール → PanToolに委譲
-  @override
-  void onPointerSignal(PointerEvent event, IMapState mapState) {
-    _ref.read(panToolProvider).onPointerSignal(event, mapState);
-  }
-
-  // PC: 中ボタンドラッグ → PanToolに委譲
-  @override
-  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) =>
-      _ref.read(panToolProvider).onMiddleButtonDown(event, mapState);
-  @override
-  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) =>
-      _ref.read(panToolProvider).onMiddleButtonMove(event, mapState);
-  @override
-  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) =>
-      _ref.read(panToolProvider).onMiddleButtonUp(event, mapState);
 
   // --------------------------------------------------
   // ハンドルヒットテスト
@@ -338,16 +316,9 @@ class OverlayTransformTool extends MapTool {
     _notifyOverlayChanged(mapState);
   }
 
-  /// オーバーレイ変更を通知
-  ///
-  /// ハンドルUIは即時更新（transformNotifier）し、地図への反映は 100ms で間引く
+  /// オーバーレイ変更を地図へ反映する（枠とハンドルは地図面が描くので、反映は 100ms で間引く）
   void _notifyOverlayChanged(IMapState mapState) {
     if (_target == null) return;
-
-    // ハンドル位置は即座に更新（Flutter側の軽量描画）
-    transformNotifier.value++;
-
-    // 地図への反映は 100ms 間隔に間引く
     _lastMapState = mapState;
     _mapUpdateDebounce?.cancel();
     _mapUpdateDebounce = Timer(_mapUpdateInterval, () {

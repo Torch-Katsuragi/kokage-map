@@ -59,16 +59,13 @@
 
 - [ ] 「この端末」（sys）の実機確認の残り: global 配下の Drive 連携 dir（表示は Pixel / Fold、可視性の保存は 2026-10-06 に Fold で確認済み）
 - [ ] `sys/view`（端末の写真など読み取り専用の仮想レイヤ）。写真の権限（Play の申告）と大量写真の性能の設計が先
-- [ ] リファクタリングの候補: `cascade_invocations`（好みの問題で保留）、
-      `settings_screen.dart`、
-      設定画面の「地形の試作」（`terrain_spike_screen.dart` 1157 行）を残すか
+- [ ] リファクタリングの候補: `cascade_invocations`（好みの問題で保留）
 - [ ] 平面直角座標系のレイヤへ書くとき、CRS の定義が gpkg に無く登録済みの proj4（軸の指定なし）で変換する経路では
       x に北方向の値が入る（`GeometryReprojector` の `needsAxisSwap`）。GeoPackage の決まりは x = 東。
       QGIS 製の gpkg（WKT に AXIS がある）では打ち消し合っている見込み。実ファイルを QGIS で開いて確かめてから直す
 - [ ] 投影座標のレイヤ（平面直角・UTM）へ面を書くと座標が壊れる。`GeometryReprojector` の MultiPolygon / MultiPoint が
       変換後の値を `geo.Geographic` に入れ直し、経度の正規化・緯度のクランプで潰れる（面は MultiPolygon で書くので常に当たる）。
       `Projected` のまま返せば直る。挙動を変えないリファクタ（2026-10-07）の範囲外なので未修正
-- [ ] 既存 MapTool（PenTool / SelectTool / GpsTool）の ChangeNotifier 化の統一
 - [ ] Flutter の警告「KGP を当てるプラグイン（desktop_drop / firebase_* / location）は将来ビルドできなくなる」→ プラグイン側の更新を待つ。
       `android.builtInKotlin=true` にできたら root の橋渡しは外す
 - [ ] 県点群の DTM（1 m 級）を焼いてプロジェクトの dir に入れる（アプリには入れない。配布先は GitHub Releases に決定済み）。

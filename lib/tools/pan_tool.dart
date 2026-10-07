@@ -241,3 +241,21 @@ class PanTool extends MapTool {
 
   static double _sinh(double x) => (exp(x) - exp(-x)) / 2;
 }
+
+/// ホイールの拡縮と中ボタンのドラッグ（移動）をてのひらツールに任せる。
+/// 1 本指を自分で使うツール（ペン・選択・GPS・オーバーレイ変形）が混ぜる
+mixin PanDelegation on MapTool {
+  PanTool get panTool;
+
+  @override
+  void onPointerSignal(PointerEvent event, IMapState mapState) => panTool.onPointerSignal(event, mapState);
+
+  @override
+  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) => panTool.onMiddleButtonDown(event, mapState);
+
+  @override
+  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) => panTool.onMiddleButtonMove(event, mapState);
+
+  @override
+  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) => panTool.onMiddleButtonUp(event, mapState);
+}

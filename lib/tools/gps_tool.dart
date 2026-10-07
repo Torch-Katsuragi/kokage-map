@@ -15,9 +15,6 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // lib/tools/gps_tool.dart
 // GPS関連機能を扱うツール（GPS測量機能対応）
-import 'dart:async';
-
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -47,9 +44,9 @@ import 'pan_tool.dart';
 /// - GPS位置データの詳細記録（精度、時刻、データソース）
 /// - パンツールへのプロキシパターン実装
 /// - リアルタイムプレビュー表示
-class GpsTool extends MapTool {
-  final Ref _ref;
+class GpsTool extends MapTool with PanDelegation {
   GpsTool(this._ref);
+  final Ref _ref;
 
   @override
   String get name => 'GPS';
@@ -57,7 +54,8 @@ class GpsTool extends MapTool {
   @override
   IconData get icon => Icons.gps_fixed;
 
-  PanTool get _panTool => _ref.read(panToolProvider);
+  @override
+  PanTool get panTool => _ref.read(panToolProvider);
 
   GlobalDrawingState get drawingState => GlobalDrawingState.instance;
 
@@ -65,76 +63,31 @@ class GpsTool extends MapTool {
   final GpsManagerService _gpsManager = GpsManagerService();
 
   /// 長押しGPS測量用データ
-  Timer? _longPressTimer;
-  Timer? _gpsCollectionTimer;
   bool _isLongPressing = false;
   final List<Map<String, dynamic>> _longPressGpsData = [];
   DateTime? _longPressStartTime;
 
-  /// GPS測量機能のgetters（GlobalDrawingStateから取得）
-  List<LatLng> get surveyLine => drawingState.drawingLine;
-  List<LatLng> get surveyPolygon => drawingState.drawingPolygon;
+  /// 長押し中に集めた点の数（増えると通知する）
   int get longPressGpsCount => _longPressGpsData.length;
 
-  /// ツール有効化時の初期化処理
-  /// パンツールの初期化を呼び出し、GPS関連の初期化も行う
   @override
-  void onActivate() {
-    _panTool.onActivate();
-    _initializeGpsFeatures();
-  }
+  void onActivate() => _initializeGpsFeatures();
 
-  /// ツール無効化時の終了処理
-  /// パンツールの終了処理を呼び出し、GPS関連のクリーンアップも行う
   @override
-  void onDeactivate() {
-    _panTool.onDeactivate();
-    _cleanupGpsFeatures();
-  }
+  void onDeactivate() => _cleanupGpsFeatures();
 
-  /// タップイベント - パンツールに丸投げ
+  // 地図の操作はてのひらツールと同じ（タップは選択）
   @override
-  void onTap(TapUpDetails details, IMapState mapState) {
-    _panTool.onTap(details, mapState);
-  }
+  void onTap(TapUpDetails details, IMapState mapState) => panTool.onTap(details, mapState);
 
-  /// スケール開始イベント - パンツールに丸投げ
   @override
-  void onScaleStart(ScaleStartDetails details, IMapState mapState) {
-    _panTool.onScaleStart(details, mapState);
-  }
+  void onScaleStart(ScaleStartDetails details, IMapState mapState) => panTool.onScaleStart(details, mapState);
 
-  /// スケール更新イベント - パンツールに丸投げ
   @override
-  void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
-    _panTool.onScaleUpdate(details, mapState);
-  }
+  void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) => panTool.onScaleUpdate(details, mapState);
 
-  /// スケール終了イベント - パンツールに丸投げ
   @override
-  void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
-    _panTool.onScaleEnd(details, mapState);
-  }
-
-  /// バッファへの座標追加 - パンツールのバッファと同期
-  @override
-  void addPointerToBuffer(Offset offset) {
-    super.addPointerToBuffer(offset);
-    _panTool.addPointerToBuffer(offset);
-  }
-
-  /// バッファクリア - パンツールのバッファと同期
-  @override
-  void clearPointerBuffer() {
-    super.clearPointerBuffer();
-    _panTool.clearPointerBuffer();
-  }
-
-  /// バッファ内容取得 - パンツールのバッファを返す
-  @override
-  List<Offset> getPointerBuffer() {
-    return _panTool.getPointerBuffer();
-  }
+  void onScaleEnd(ScaleEndDetails details, IMapState mapState) => panTool.onScaleEnd(details, mapState);
 
   // --- GPS測量機能実装 ---
 
@@ -151,10 +104,6 @@ class GpsTool extends MapTool {
     drawingState.clearAll();
 
     // 長押し関連もクリア
-    _gpsCollectionTimer?.cancel();
-    _gpsCollectionTimer = null;
-    _longPressTimer?.cancel();
-    _longPressTimer = null;
     _isLongPressing = false;
     _longPressGpsData.clear();
     _longPressStartTime = null;
@@ -230,13 +179,8 @@ class GpsTool extends MapTool {
           'nmea': _longPressGpsData.last['nmea'],
           'sample_count': averagedResult['sampleCount'],
         });
-      } else if (selected is LineLayerNode) {
-        // GlobalDrawingStateにGPS測量データとして追加
-        drawingState.addLinePoint(position, optimizedGpsData);
-      } else if (selected is PolygonLayerNode) {
-        // GlobalDrawingStateにGPS測量データとして追加
-        drawingState.addPolygonPoint(position, optimizedGpsData);
       }
+      _addToDrawing(selected, position, optimizedGpsData);
 
       // クリーンアップ
       _longPressGpsData.clear();
@@ -319,13 +263,8 @@ class GpsTool extends MapTool {
           'nmea': gpsInfo['nmea'],
           'sample_count': 1, // 単発測量なので1
         });
-      } else if (selected is LineLayerNode) {
-        // GlobalDrawingStateにGPS測量データとして追加
-        drawingState.addLinePoint(position, optimizedGpsData);
-      } else if (selected is PolygonLayerNode) {
-        // GlobalDrawingStateにGPS測量データとして追加
-        drawingState.addPolygonPoint(position, optimizedGpsData);
       }
+      _addToDrawing(selected, position, optimizedGpsData);
 
       AppLogger.debug(
         '[GpsTool] GPS位置を記録: Lat ${latitude.toStringAsFixed(6)}, '
@@ -378,11 +317,20 @@ class GpsTool extends MapTool {
     });
     _ref.read(featureRefreshTriggerProvider.notifier).trigger();
 
-    // Point測量完了後はGPS測量を止め、データ収集タイマーも確実に止める
+    // Point測量完了後はGPS測量を止める
     await _gpsManager.stopGpsSurvey();
-    _gpsCollectionTimer?.cancel();
-    _gpsCollectionTimer = null;
     return true;
+  }
+
+  /// 線・面のレイヤなら、測った点を描きかけに GPS 測量データとして足す
+  void _addToDrawing(LayerNode? layer, LatLng position, Map<String, dynamic> surveyData) {
+    switch (layer) {
+      case LineLayerNode():
+        drawingState.addPoint(position, surveyData, isLine: true);
+      case PolygonLayerNode():
+        drawingState.addPoint(position, surveyData, isLine: false);
+      default:
+    }
   }
 
   /// GPS平均化計算
@@ -467,13 +415,11 @@ class GpsTool extends MapTool {
 
   /// 次のポイント番号を取得
   int _getNextPointNumber() {
-    final selected = _ref.read(selectedLayerNodeProvider);
-    if (selected is LineLayerNode) {
-      return surveyLine.length + 1;
-    } else if (selected is PolygonLayerNode) {
-      return surveyPolygon.length + 1;
-    }
-    return 1; // PointLayerNode
+    return switch (_ref.read(selectedLayerNodeProvider)) {
+      LineLayerNode() => drawingState.drawingLine.length + 1,
+      PolygonLayerNode() => drawingState.drawingPolygon.length + 1,
+      _ => 1, // PointLayerNode
+    };
   }
 
   /// GPS測量をキャンセル（GPS停止付き）
@@ -491,29 +437,6 @@ class GpsTool extends MapTool {
     _longPressGpsData.addAll(continuousData);
 
     AppLogger.debug('[GpsTool] 連続測量位置更新 - 現在${_longPressGpsData.length}ポイント');
-  }
-
-  /// マウスホイールスクロールイベント（ズーム機能）
-  /// PanToolの統一処理を呼び出し
-  @override
-  void onPointerSignal(PointerEvent event, IMapState mapState) {
-    if (event is PointerScrollEvent) {
-      _panTool.handleMouseWheelZoom(event, mapState);
-    }
-  }
-
-  @override
-  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {
-    _panTool.onMiddleButtonDown(event, mapState);
-  }
-
-  @override
-  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {
-    _panTool.onMiddleButtonMove(event, mapState);
-  }
-
-  @override
-  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {
-    _panTool.onMiddleButtonUp(event, mapState);
+    notifyListeners(); // 長押し中の点数の表示
   }
 }

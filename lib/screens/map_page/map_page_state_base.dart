@@ -152,14 +152,8 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   // GPS測量関連
   // =============================================
 
-  /// 長押し中フラグ
+  /// 長押し中フラグ（点数は GpsTool が持って通知する）
   bool isLongPressing = false;
-
-  /// 長押しGPSカウント
-  int longPressGpsCount = 0;
-
-  /// 長押しカウント更新タイマー
-  Timer? longPressCountUpdateTimer;
 
   // =============================================
   // 属性テーブル関連

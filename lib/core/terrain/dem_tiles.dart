@@ -105,13 +105,11 @@ class DemTileSource {
   /// 既定の並び: 細かい方から試し、無ければ次へ（DEM1A → DEM5A → DEM10B → AWS）
   static const defaultCascade = [gsiDem1a, gsiDem5a, gsiDem10b, aws];
 
-  String url(int z, int x, int y) => urlTemplate
-      .replaceAll('{z}', '$z')
-      .replaceAll('{x}', '$x')
-      .replaceAll('{y}', '$y');
-
   /// 無効値は NaN
-  double decode(int r, int g, int b) => switch (encoding) {
+  double decode(int r, int g, int b) => decodeWith(encoding, r, g, b);
+
+  /// [encoding] の RGB → 標高（m）。無効値は NaN（isolate の組み立てからも呼ぶ）
+  static double decodeWith(DemEncoding encoding, int r, int g, int b) => switch (encoding) {
         DemEncoding.terrarium => r * 256 + g + b / 256 - 32768,
         DemEncoding.mapboxRgb => -10000 + (r * 65536 + g * 256 + b) * 0.1,
         DemEncoding.gsiPng => _decodeGsi((r << 16) | (g << 8) | b),
@@ -348,11 +346,6 @@ Float32List _assembleHeights(_AssembleArgs a) {
   final cols = a.width * ts;
   final rows = a.height * ts;
   final heights = Float32List(cols * rows);
-  double decode(int r, int g, int b) => switch (a.encoding) {
-        DemEncoding.terrarium => r * 256 + g + b / 256 - 32768,
-        DemEncoding.mapboxRgb => -10000 + (r * 65536 + g * 256 + b) * 0.1,
-        DemEncoding.gsiPng => DemTileSource._decodeGsi((r << 16) | (g << 8) | b),
-      };
   var k = 0;
   for (var ty = 0; ty < a.height; ty++) {
     for (var tx = 0; tx < a.width; tx++) {
@@ -370,7 +363,7 @@ Float32List _assembleHeights(_AssembleArgs a) {
         final src = iy * ts * 3;
         for (var ix = 0; ix < ts; ix++) {
           final p = src + ix * 3;
-          heights[rowOff + ix] = decode(rgb[p], rgb[p + 1], rgb[p + 2]);
+          heights[rowOff + ix] = DemTileSource.decodeWith(a.encoding, rgb[p], rgb[p + 1], rgb[p + 2]);
         }
       }
     }

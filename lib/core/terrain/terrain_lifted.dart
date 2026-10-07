@@ -256,15 +256,14 @@ class LiftedPolygon {
     final cells = <int>[];
     for (final tri in earClip(ring)) {
       // 三角形の bbox に掛かるセルを走査
-      final xs = [tri[0].dx, tri[1].dx, tri[2].dx];
-      final ys = [tri[0].dy, tri[1].dy, tri[2].dy];
+      final (t0, t1, t2) = (tri[0], tri[1], tri[2]);
       // 格子の外（タイルの外）は作らない
       final maxC = (dem.width / cell).ceil() - 1;
       final maxR = (dem.height / cell).ceil() - 1;
-      final c0 = (xs.reduce(math.min) / cell).floor().clamp(0, maxC);
-      final c1 = (xs.reduce(math.max) / cell).floor().clamp(0, maxC);
-      final r0 = (ys.reduce(math.min) / cell).floor().clamp(0, maxR);
-      final r1 = (ys.reduce(math.max) / cell).floor().clamp(0, maxR);
+      final c0 = (math.min(math.min(t0.dx, t1.dx), t2.dx) / cell).floor().clamp(0, maxC);
+      final c1 = (math.max(math.max(t0.dx, t1.dx), t2.dx) / cell).floor().clamp(0, maxC);
+      final r0 = (math.min(math.min(t0.dy, t1.dy), t2.dy) / cell).floor().clamp(0, maxR);
+      final r1 = (math.max(math.max(t0.dy, t1.dy), t2.dy) / cell).floor().clamp(0, maxR);
       for (var r = r0; r <= r1; r++) {
         for (var c = c0; c <= c1; c++) {
           final rect = Rect.fromLTWH(c * cell, r * cell, cell, cell);

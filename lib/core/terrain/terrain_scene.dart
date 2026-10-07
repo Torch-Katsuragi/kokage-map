@@ -179,7 +179,7 @@ class TerrainSceneBuilder {
 
     for (final f in lines) {
       final style = _styleOf(f);
-      for (final chain in _chainsOf(f.geometry)) {
+      for (final chain in chainsOf(f.geometry)) {
         final pts = _toLocal(chain);
         if (pts.length < 2 || !bboxHits(pts)) continue;
         final pieces = clipRect == null ? [pts] : clipPolylineToRect(pts, clipRect);
@@ -191,7 +191,7 @@ class TerrainSceneBuilder {
     }
     for (final f in polygons) {
       final style = _styleOf(f);
-      for (final rings in _ringsOf(f.geometry)) {
+      for (final rings in ringsOf(f.geometry)) {
         if (rings.isEmpty) continue;
         final exterior = _toLocal(rings.first);
         if (exterior.length < 3 || !bboxHits(exterior)) continue;
@@ -264,18 +264,14 @@ class TerrainSceneBuilder {
   List<Offset> _toLocal(geo.PositionSeries series) => [for (final p in series.positions) _toLocalPosition(p)];
 
   /// 線の頂点列（LineString / MultiLineString）
-  static Iterable<geo.PositionSeries> chainsOf(geo.Geometry? g) => _chainsOf(g);
-
-  /// 面のリング（Polygon / MultiPolygon。各要素の先頭が外周）
-  static Iterable<List<geo.PositionSeries>> ringsOf(geo.Geometry? g) => _ringsOf(g);
-
-  static Iterable<geo.PositionSeries> _chainsOf(geo.Geometry? g) => switch (g) {
+  static Iterable<geo.PositionSeries> chainsOf(geo.Geometry? g) => switch (g) {
         geo.LineString() => [g.chain],
         geo.MultiLineString() => g.chains,
         _ => const [],
       };
 
-  static Iterable<List<geo.PositionSeries>> _ringsOf(geo.Geometry? g) => switch (g) {
+  /// 面のリング（Polygon / MultiPolygon。各要素の先頭が外周）
+  static Iterable<List<geo.PositionSeries>> ringsOf(geo.Geometry? g) => switch (g) {
         geo.Polygon() => [g.rings],
         geo.MultiPolygon() => g.ringArrays,
         _ => const [],

@@ -31,7 +31,6 @@ import 'importers/base_importer.dart';
 import 'importers/geojson_importer.dart';
 import 'importers/shapefile_importer.dart';
 
-export 'coordinate_system_manager.dart';
 export 'exporters/base_exporter.dart';
 export 'exporters/csv_exporter.dart';
 export 'exporters/geojson_exporter.dart';

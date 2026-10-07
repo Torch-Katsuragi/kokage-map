@@ -60,8 +60,11 @@
 - [ ] 「この端末」（sys）の実機確認の残り: global 配下の Drive 連携 dir（表示は Pixel / Fold、可視性の保存は 2026-10-06 に Fold で確認済み）
 - [ ] `sys/view`（端末の写真など読み取り専用の仮想レイヤ）。写真の権限（Play の申告）と大量写真の性能の設計が先
 - [ ] リファクタリングの候補: `cascade_invocations`（好みの問題で保留）、
-      `settings_screen.dart`、`SmartCoordinateSystemManager` の WKT 推定を `WktParser` へ、
+      `settings_screen.dart`、
       設定画面の「地形の試作」（`terrain_spike_screen.dart` 1157 行）を残すか
+- [ ] 投影座標のレイヤ（平面直角・UTM）へ面を書くと座標が壊れる。`GeometryReprojector` の MultiPolygon / MultiPoint が
+      変換後の値を `geo.Geographic` に入れ直し、経度の正規化・緯度のクランプで潰れる（面は MultiPolygon で書くので常に当たる）。
+      `Projected` のまま返せば直る。挙動を変えないリファクタ（2026-10-07）の範囲外なので未修正
 - [ ] Shapefile 書き出しの面のリング向き（外周は時計回りが仕様）を揃えていない。QGIS は読めるので実害は未確認
 - [ ] バッチ挿入（`_addGeometryBatch`）は rtree・レイヤ範囲を更新しない（1 件ずつの追加は更新する）
 - [ ] 地物ノードは属性 `rmaps_metadata`、リポジトリは `kmaps_metadata` を見ていて名前が食い違っている

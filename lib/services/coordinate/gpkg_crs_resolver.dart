@@ -24,6 +24,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../utils/app_logger.dart';
 import 'epsg_registry.dart';
+import 'projections.dart';
 
 /// GPKG内のCRS情報を保持するデータクラス
 class GpkgCrsInfo {
@@ -143,7 +144,7 @@ class GpkgCrsResolver {
       if (definition != null &&
           definition.isNotEmpty &&
           definition != 'undefined') {
-        final projection = _parseDefinition(definition);
+        final projection = Projections.parse(definition);
         if (projection != null) {
           AppLogger.debug('[GpkgCrsResolver] WKTパース成功: $epsgCode ($tableName)');
           final info = GpkgCrsInfo(
@@ -163,7 +164,7 @@ class GpkgCrsResolver {
       // ② EpsgRegistryから解決
       final registryDef = _registry.getByCode(epsgCode);
       if (registryDef != null) {
-        final projection = _tryParseProj4(registryDef.proj4String);
+        final projection = Projections.parse(registryDef.proj4String);
         if (projection != null) {
           AppLogger.debug('[GpkgCrsResolver] EpsgRegistry解決: $epsgCode ($tableName)');
           final info = GpkgCrsInfo(
@@ -184,7 +185,7 @@ class GpkgCrsResolver {
       final codeNumber = epsgCode.replaceFirst('EPSG:', '');
       final httpResult = await _fetchFromEpsgIo(codeNumber);
       if (httpResult != null) {
-        final projection = _tryParseProj4(httpResult);
+        final projection = Projections.parse(httpResult);
         if (projection != null) {
           AppLogger.debug('[GpkgCrsResolver] epsg.io解決: $epsgCode ($tableName)');
 
@@ -259,32 +260,6 @@ class GpkgCrsResolver {
       return rows.isNotEmpty ? rows.first : null;
     } catch (e) {
       AppLogger.debug('[GpkgCrsResolver] SRS定義取得エラー: $e');
-      return null;
-    }
-  }
-
-  /// WKTまたはproj4文字列をパースしてProjectionを取得
-  Projection? _parseDefinition(String definition) {
-    // proj4文字列の場合
-    if (definition.trim().startsWith('+proj')) {
-      return _tryParseProj4(definition);
-    }
-
-    // WKT文字列の場合
-    try {
-      return Projection.parse(definition);
-    } catch (e) {
-      AppLogger.debug('[GpkgCrsResolver] WKTパース失敗: $e');
-      return null;
-    }
-  }
-
-  /// proj4文字列をパース
-  Projection? _tryParseProj4(String proj4String) {
-    try {
-      return Projection.parse(proj4String);
-    } catch (e) {
-      AppLogger.debug('[GpkgCrsResolver] proj4パース失敗: $e');
       return null;
     }
   }

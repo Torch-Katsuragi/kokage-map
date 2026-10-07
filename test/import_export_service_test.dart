@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geobase/geobase.dart' as geo;
+import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/services/coordinate/index.dart';
@@ -188,11 +190,13 @@ void main() {
       expect(coordinateSystem.name, contains('JGD2000'));
 
       try {
-        final result = CoordinateService.instance
-            .transformToLatLng(x, y, coordinateSystem);
-        if (result == null) {
-          fail('座標変換がnullを返しました');
-        }
+        final p = (GeometryReprojector.reprojectToWgs84(
+          const geo.Point(geo.Projected(x: x, y: y)),
+          Projections.parse(coordinateSystem.proj4String)!,
+          needsAxisSwap: true,
+        ) as geo.Point)
+            .position;
+        final result = LatLng(p.y, p.x);
 
         // ignore: avoid_print
         print(

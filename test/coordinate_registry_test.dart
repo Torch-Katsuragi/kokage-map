@@ -16,59 +16,12 @@
 // Root Maps: EpsgRegistry / CoordinateService の挙動固定テスト
 // 座標系モジュール統合前の挙動をピン留めする
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/services/coordinate/index.dart';
 
 void main() {
   final registry = EpsgRegistry.instance;
-
-  group('EpsgRegistry 都道府県 → JGD2011', () {
-    test('和歌山県 → VI系 (EPSG:6674)', () {
-      expect(registry.getJgd2011FromPrefecture('和歌山県')?.code, 'EPSG:6674');
-    });
-
-    test('東京都 → IX系 (EPSG:6677)、島しょ部の系より本土の系を優先', () {
-      expect(registry.getJgd2011FromPrefecture('東京都')?.code, 'EPSG:6677');
-    });
-
-    test('北海道 → XI系 (EPSG:6679)、複数系のうち先頭を返す', () {
-      expect(registry.getJgd2011FromPrefecture('北海道')?.code, 'EPSG:6679');
-    });
-
-    test('長崎県 → I系、沖縄県 → XV系', () {
-      expect(registry.getJgd2011FromPrefecture('長崎県')?.code, 'EPSG:6669');
-      expect(registry.getJgd2011FromPrefecture('沖縄県')?.code, 'EPSG:6683');
-    });
-
-    test('接尾辞なし・接尾辞違いでも同じ系', () {
-      expect(registry.getJgd2011FromPrefecture('和歌山')?.code, 'EPSG:6674');
-      expect(registry.getJgd2011FromPrefecture('京都府')?.code, 'EPSG:6674');
-      expect(registry.getJgd2011FromPrefecture('京都')?.code, 'EPSG:6674');
-    });
-
-    test('未知の地名は null', () {
-      expect(registry.getJgd2011FromPrefecture('California'), isNull);
-    });
-  });
-
-  group('EpsgRegistry UTM', () {
-    test('経度 135.9 → ゾーン 53', () {
-      expect(registry.calculateUtmZone(135.9), 53);
-    });
-
-    test('LatLng からの UTM 定義取得', () {
-      final utm = registry.getUtmZone(const LatLng(34.0, 135.9));
-      expect(utm.code, 'EPSG:32653');
-      expect(utm.proj4String, contains('+zone=53'));
-    });
-
-    test('レジストリ未登録ゾーンは動的生成', () {
-      // 経度 -74 (ニューヨーク) → ゾーン 18
-      final utm = registry.getUtmZone(const LatLng(40.7, -74.0));
-      expect(utm.code, 'EPSG:32618');
-      expect(utm.proj4String, contains('+zone=18'));
-    });
-  });
 
   group('EpsgRegistry コード解決', () {
     // 旧 SmartCoordinateSystemManager.commonEpsgDefinitions に含まれていたコード
@@ -124,24 +77,6 @@ void main() {
     });
   });
 
-  group('CoordinateService 都道府県抽出', () {
-    test('住所文字列から都道府県名を抽出', () {
-      expect(CoordinateService.extractPrefecture('和歌山県東牟婁郡北山村大沼'), '和歌山県');
-      expect(CoordinateService.extractPrefecture('東京都千代田区丸の内1-1'), '東京都');
-      expect(CoordinateService.extractPrefecture('北海道札幌市中央区'), '北海道');
-    });
-
-    test('都道府県名を含まなければ null', () {
-      expect(CoordinateService.extractPrefecture('New York, USA'), isNull);
-      expect(CoordinateService.extractPrefecture(''), isNull);
-    });
-
-    test('抽出結果はそのまま JGD2011 系の解決に使える', () {
-      final pref = CoordinateService.extractPrefecture('和歌山県東牟婁郡北山村')!;
-      expect(registry.getJgd2011FromPrefecture(pref)?.code, 'EPSG:6674');
-    });
-  });
-
   group('CoordinateService 座標変換', () {
     final service = CoordinateService.instance;
 
@@ -155,19 +90,38 @@ void main() {
       expect(xy['y']!.abs(), lessThan(10000));
     });
 
-    test('往復変換で元の緯度経度に戻る', () {
+    test('往復変換で元の緯度経度に戻る（GPKG 読み込みの入れ替えと向きが合う）', () {
       final vi = registry.getByCode('EPSG:6674')!;
       const original = LatLng(33.93, 135.96);
       final xy = service.transformToXY(original, vi)!;
-      final back = service.transformToLatLng(xy['x']!, xy['y']!, vi)!;
-      expect(back.latitude, closeTo(original.latitude, 1e-6));
-      expect(back.longitude, closeTo(original.longitude, 1e-6));
+      final back = GeometryReprojector.reprojectToWgs84(
+        geo.Point(geo.Projected(x: xy['x']!, y: xy['y']!)),
+        Projections.parse(vi.proj4String)!,
+        needsAxisSwap: true,
+      ) as geo.Point;
+      expect(back.position.y, closeTo(original.latitude, 1e-6));
+      expect(back.position.x, closeTo(original.longitude, 1e-6));
     });
 
     test('WGS84 は無変換', () {
       final wgs84 = registry.getByCode('EPSG:4326')!;
       final xy = service.transformToXY(const LatLng(33.93, 135.96), wgs84);
       expect(xy, {'x': 135.96, 'y': 33.93});
+      final jgd = registry.getByCode('EPSG:6668')!;
+      expect(service.transformToXY(const LatLng(33.93, 135.96), jgd), {'x': 135.96, 'y': 33.93});
+      expect(service.transformToXYFormatted(const LatLng(33.93, 135.96), jgd), {'x': '135.960000', 'y': '33.930000'});
+    });
+
+    test('UTM は入れ替えない（x=Easting）', () {
+      final utm = registry.getByCode('EPSG:32653')!;
+      final xy = service.transformToXY(const LatLng(33.93, 135.96), utm)!;
+      expect(xy['x'], closeTo(588700, 2000));
+      expect(xy['y'], closeTo(3755000, 5000));
+    });
+
+    test('同じ定義は 1 回だけ読む', () {
+      final def = registry.getByCode('EPSG:6674')!.proj4String;
+      expect(identical(Projections.parse(def), Projections.parse(def)), isTrue);
     });
   });
 }

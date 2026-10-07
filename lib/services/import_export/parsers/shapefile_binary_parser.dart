@@ -24,7 +24,7 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../../../utils/binary_utils.dart';
 import '../../coordinate/epsg_registry.dart';
-import '../coordinate_system_manager.dart';
+import '../../coordinate/projections.dart';
 
 /// シェープファイルのタイプ定数
 class ShapeType {
@@ -75,9 +75,6 @@ class ShapefileRecord {
 
 /// シェープファイルのバイナリ解析クラス
 class ShapefileBinaryParser {
-  static final SmartCoordinateSystemManager _crsManager =
-      SmartCoordinateSystemManager();
-
   // デバッグ出力制御用フラグ
   static bool _hasLoggedFirstPointConversion = false;
   static bool _hasLoggedFirstPolylineConversion = false;
@@ -404,14 +401,11 @@ class ShapefileBinaryParser {
   ) async {
     if (sourceCoordinateSystem != null) {
       try {
-        final sourceProjection = _crsManager.getProjection(
-          sourceCoordinateSystem.proj4String,
-        );
-        final wgs84Projection = _crsManager.getProjection('EPSG:4326');
+        final sourceProjection = Projections.parse(sourceCoordinateSystem.proj4String);
 
-        if (sourceProjection != null && wgs84Projection != null) {
+        if (sourceProjection != null) {
           final point = Point(x: x, y: y);
-          final transformedPoint = sourceProjection.transform(wgs84Projection, point);
+          final transformedPoint = sourceProjection.transform(Projections.wgs84, point);
           final latLng = LatLng(transformedPoint.y, transformedPoint.x);
 
           // 変換後の座標がWGS84の妥当な範囲内かチェック

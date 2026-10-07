@@ -91,19 +91,9 @@ class FeatureRepository {
 
   FeatureRepository(this.connection, this.schema, this.spatialIndex);
 
-  /// CRS解決結果キャッシュ（テーブル名→CRS情報）
-  final Map<String, GpkgCrsInfo> _crsCache = {};
-
-  /// レイヤのCRS情報を取得（キャッシュ付き）
-  Future<GpkgCrsInfo> _getLayerCrs(String tableName) async {
-    if (_crsCache.containsKey(tableName)) {
-      return _crsCache[tableName]!;
-    }
-    final db = await connection.getDatabase();
-    final crs = await GpkgCrsResolver.instance.resolveLayerCrs(db, tableName);
-    _crsCache[tableName] = crs;
-    return crs;
-  }
+  /// レイヤのCRS情報（GpkgCrsResolver が DB とテーブルごとに覚えている）
+  Future<GpkgCrsInfo> _getLayerCrs(String tableName) async =>
+      GpkgCrsResolver.instance.resolveLayerCrs(await connection.getDatabase(), tableName);
 
   // ============================================================
   // 書き込み前クリンナップ

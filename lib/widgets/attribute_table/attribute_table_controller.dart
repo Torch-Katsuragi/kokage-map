@@ -77,6 +77,10 @@ class AttributeTableController extends ChangeNotifier {
   bool _isFiltered = false;
   String? _filterError;
   List<FeatureNode> _displayFeatures = [];
+
+  /// 表に出す地物の一覧（フィルタの適用・解除）が替わるたびに進む。表はこれを見て作り直す
+  /// （TrinaGrid は行を作るときにしか読まないので、作り直さないと件数だけ変わって行が残っていた）
+  int displayRevision = 0;
   List<TrinaRow> _displayRows = [];
 
   // ページング
@@ -336,6 +340,7 @@ class AttributeTableController extends ChangeNotifier {
 
   /// フィルタ結果を表示用リストに適用
   void _applyFilterToDisplay() {
+    displayRevision++;
     _displayFeatures = [
       for (final f in _features)
         if (_filteredRowIds.contains(f.rowId)) f,
@@ -356,6 +361,7 @@ class AttributeTableController extends ChangeNotifier {
     _filterError = null;
     _displayFeatures = _features;
     _displayRows = _createRowsForRange(0, _pageSize);
+    displayRevision++;
     notifyListeners();
   }
 

@@ -124,6 +124,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   void _attachController() {
     _controller = AttributeTableController(widget.layer, ref);
     _controller.addListener(_onControllerChanged);
+    _gridDisplayRevision = _controller.displayRevision;
     _loadedRevision = widget.layer.featuresRevision;
     _controller.initialize();
   }
@@ -136,8 +137,16 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     super.dispose();
   }
 
+  int _gridDisplayRevision = 0;
+
   void _onControllerChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      if (_controller.displayRevision != _gridDisplayRevision) {
+        _gridDisplayRevision = _controller.displayRevision;
+        _plutoGridKey = UniqueKey(); // 絞った一覧の 1 ページ目から作り直す
+      }
+    });
   }
 
   void _rebuildGrid() {

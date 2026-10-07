@@ -66,6 +66,7 @@ import '../../layer_style_settings_screen.dart';
 import '../feature_geojson_cache.dart';
 import 'terrain_texture_paint.dart';
 
+part 'terrain_map_layer_camera.dart';
 part 'terrain_map_layer_controls.dart';
 part 'terrain_map_layer_drive.dart';
 part 'terrain_map_layer_gestures.dart';
@@ -223,8 +224,7 @@ class _StaticProgress {
 }
 
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
-    with SingleTickerProviderStateMixin, _TerrainDrive, _TerrainGestures
-    implements TerrainProjection {
+    with SingleTickerProviderStateMixin, _TerrainDrive, _TerrainGestures, _TerrainCameraControl {
   /// 入ったときの傾き。起動時は真上（松本 2026-09-11 決定。2D と同じ絵で始まり、傾けたい人が傾ける）
   static const _defaultPitchDeg = 0.0;
 
@@ -304,9 +304,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   @override
   late final TerrainWorld _world;
   late final TerrainFramePlanner _planner;
+  @override
   late final TerrainWorldPainter _painter;
 
   /// 地形・面・線を描く GPU 経路（flutter_gpu）。用意できるまで／web では null（純 Dart 経路）
+  @override
   TerrainGpuWorldRenderer? _gpu;
   @override
   TerrainFramePlan? _lastPlan;
@@ -452,24 +454,16 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   }
   int _worldRevisionSeen = -1;
 
-  // カメラのアニメ（コンパスタップ・ペンの真上ロック）
-  late final AnimationController _anim;
-  ({double bearing, double pitch, double centerX, double centerY, double zoom})? _animFrom;
-  ({double bearing, double pitch, double centerX, double centerY, double zoom})? _animTo;
-
   /// 2D モード（真上固定。1 本指 = 移動、2 本指 = 移動・拡縮・回転。3D 導入前のパンと同じ）。
   /// 中身は 3D を真上から見ているだけ。3D モードは 1 本指 = 回転・傾き、2 本指 = 移動・拡縮。
   /// 起動は 2D（真上）。切替はコンパスのタップ（松本 2026-09-13）
   @override
   bool _flat = true;
 
-  /// 3D に戻したときの傾き（2D に入る前のもの。無ければ [_default3dPitchDeg]）
-  double? _pitchBefore2d;
-  static const _default3dPitchDeg = 50.0;
-
   /// ペン選択中: 真上に寄せて 1 本指をツール（描画）に渡す。離れたら元の傾きに戻す（2D モードなら真上のまま）
   @override
   bool _penLock = false;
+  @override
   double? _pitchBeforePen;
 
   // オーバーレイ画像（GeoTIFF など）: 地形のテクスチャに焼く
@@ -602,106 +596,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
   }
 
-  // ── カメラのアニメ ──────────────────────────────────
-
-  /// 指定した項目だけ 350ms で滑らかに動かす（方位は近い方へ回る）
-  void _animateTo({double? bearing, double? pitch, double? centerX, double? centerY, double? zoom}) {
-    var b = bearing ?? _camera.bearing;
-    // 近い方へ回る
-    var d = b - _camera.bearing;
-    while (d > math.pi) {
-      d -= 2 * math.pi;
-    }
-    while (d < -math.pi) {
-      d += 2 * math.pi;
-    }
-    b = _camera.bearing + d;
-    _animFrom = (bearing: _camera.bearing, pitch: _camera.pitch, centerX: _camera.centerX, centerY: _camera.centerY, zoom: _camera.zoom);
-    _animTo = (bearing: b, pitch: pitch ?? _camera.pitch, centerX: centerX ?? _camera.centerX, centerY: centerY ?? _camera.centerY, zoom: zoom ?? _camera.zoom);
-  }
-
-  /// [_animateTo] で決めた先へ動かす（待てる）
-
-  void _onAnimTick() {
-    final a = _animFrom;
-    final z = _animTo;
-    if (a == null || z == null) return;
-    final t = Curves.easeInOutCubic.transform(_anim.value);
-    double lerp(double x, double y) => x + (y - x) * t;
-    _camera
-      ..bearing = lerp(a.bearing, z.bearing)
-      ..pitch = lerp(a.pitch, z.pitch)
-      ..centerX = lerp(a.centerX, z.centerX)
-      ..centerY = lerp(a.centerY, z.centerY)
-      ..zoom = lerp(a.zoom, z.zoom);
-    _gesturing = _anim.isAnimating;
-    _refresh();
-  }
-
-  /// コンパスのタップ: 2D ⇄ 3D。2D は真上に固定（眺めモードも解く）。3D は 2D に入る前の傾きに戻す
-  void _toggleMode() {
-    if (ref.read(currentToolProvider).name == 'Edit') return; // 編集中は 2D のまま
-    if (_flat) {
-      _flat = false;
-      final p = _pitchBefore2d ?? _default3dPitchDeg * math.pi / 180;
-      if (_penLock) {
-        _pitchBeforePen = p; // ペンを離したときにこの傾きへ
-      } else {
-        _animateTo(pitch: p);
-        _anim.forward(from: 0);
-      }
-    } else {
-      _flat = true;
-      _pitchBefore2d = _camera.pitch > 0.02 ? _camera.pitch : null;
-      _camera.perspective = false;
-      _pitchBeforePen = 0;
-      _animateTo(pitch: 0);
-      _anim.forward(from: 0);
-    }
-    ref.read(mapFlashProvider.notifier).show(_flat ? t.map.flash.mode2d : t.map.flash.mode3d);
-    ref.read(tutorialProvider.notifier).report(const MapModeToggled());
-    setState(() {});
-  }
-
-  /// 2D・北が上に（知らせもフラッシュも出さない。チュートリアルの章の始め）
-  void _resetToFlatNorth() {
-    if (!_flat) {
-      _flat = true;
-      _pitchBefore2d = _camera.pitch > 0.02 ? _camera.pitch : null;
-      _camera.perspective = false;
-      _pitchBeforePen = 0;
-    }
-    if (_camera.pitch == 0 && _camera.bearing == 0) {
-      setState(() {});
-      return;
-    }
-    _animateTo(pitch: 0, bearing: 0);
-    _anim.forward(from: 0);
-    setState(() {});
-  }
-
-  /// コンパスのダブルタップ: 北を上に（モードはそのまま）
-  void _resetNorth() {
-    _animateTo(bearing: 0);
-    _anim.forward(from: 0);
-    ref.read(mapFlashProvider.notifier).show(t.map.flash.northUp);
-  }
-
-  /// 眺めモード（透視投影）の切替。コンパスの長押し（3D のときだけ）。GPU 経路のみ（純 Dart は正射影の線形性に頼る）
-  void _togglePerspective() {
-    if (_gpu == null || _flat) return;
-    setState(() => _camera.perspective = !_camera.perspective);
-    ref.read(mapFlashProvider.notifier).show(_camera.perspective ? t.map.flash.perspectiveOn : t.map.flash.perspectiveOff);
-    _refresh();
-  }
-
   /// 1 本指を取るツール（真上ロックの対象）
   static bool _toolTakesDrag(String toolName) =>
       toolName == 'Pen' || toolName == 'Overlay Transform' || toolName == 'Edit';
 
-  /// ツールが変わった: 1 本指を取るツールなら真上に寄せて 1 本指を渡す。離れたら傾きを戻す
+  /// 購読している外部機器ツール
   DeviceTool? _listenedDevice;
 
+  /// ツールが変わった: 1 本指を取るツールなら真上に寄せて 1 本指を渡す。離れたら傾きを戻す
   void _onToolChanged(String toolName) {
     // 外部機器ツールは計測のたびに notify するので、その間だけ購読する
     final tool = ref.read(currentToolProvider);
@@ -721,12 +623,10 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _penLock = true;
       _pitchBeforePen = _camera.pitch;
       _animateTo(pitch: 0);
-      _anim.forward(from: 0);
     } else if (!pen && _penLock) {
       _penLock = false;
       _toolDrag = false;
       _animateTo(pitch: _flat ? 0 : (_pitchBeforePen ?? _defaultPitchDeg * math.pi / 180));
-      _anim.forward(from: 0);
     }
   }
 
@@ -1673,84 +1573,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     widget.mapState.mapController.rememberCamera(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);
   }
 
-  // ── TerrainProjection ───────────────────────────────
-
-  @override
-  LatLng? unproject(Offset screen) {
-    if (_size == Size.zero) return null;
-    final p = _painter.unproject(screen, _size);
-    if (p == null) return null;
-    return LatLng(WebMercator.latFromY(p.dy), WebMercator.lonFromX(p.dx));
-  }
-
-  @override
-  Offset project(LatLng latLng) {
-    final x = WebMercator.xFromLon(latLng.longitude);
-    final y = WebMercator.yFromLat(latLng.latitude);
-    return _painter.toScreen(x, y, _world.elevationAt(x, y) ?? 0, _size);
-  }
-
-  @override
-  Future<void> jumpTo(LatLng center, double zoom, {bool animate = true}) async {
-    final x = WebMercator.xFromLon(center.longitude);
-    final y = WebMercator.yFromLat(center.latitude);
-    if (!animate) {
-      _camera
-        ..centerX = x
-        ..centerY = y
-        ..zoom = zoom;
-      _refresh();
-      return;
-    }
-    _animateTo(centerX: x, centerY: y, zoom: zoom);
-    await _anim.forward(from: 0);
-  }
-
-  @override
-  Future<void> lookAt({LatLng? center, double? zoom, double? bearingDeg, double? pitchDeg, bool animate = true}) async {
-    final x = center == null ? null : WebMercator.xFromLon(center.longitude);
-    final y = center == null ? null : WebMercator.yFromLat(center.latitude);
-    final b = bearingDeg == null ? null : bearingDeg * math.pi / 180;
-    final p = pitchDeg == null ? null : (pitchDeg.clamp(0.0, _maxPitchDeg)) * math.pi / 180;
-    if (p != null && p > 0.02 && _flat) _flat = false; // 傾きを頼まれたら 3D（CLI / URL の pitch）
-    if (p != null && _flat) return lookAt(center: center, zoom: zoom, bearingDeg: bearingDeg, animate: animate);
-    if (!animate) {
-      if (x != null) _camera.centerX = x;
-      if (y != null) _camera.centerY = y;
-      if (zoom != null) _camera.zoom = zoom;
-      if (b != null) _camera.bearing = b;
-      if (p != null) _camera.pitch = p;
-      _refresh();
-      return;
-    }
-    _animateTo(centerX: x, centerY: y, zoom: zoom, bearing: b, pitch: p);
-    await _anim.forward(from: 0);
-  }
-
-  @override
-  Future<void> fitCoordinates(List<LatLng> coordinates, {EdgeInsets padding = EdgeInsets.zero}) async {
-    if (coordinates.isEmpty) return;
-    var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;
-    for (final c in coordinates) {
-      final x = WebMercator.xFromLon(c.longitude);
-      final y = WebMercator.yFromLat(c.latitude);
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    final center = LatLng(WebMercator.latFromY((minY + maxY) / 2), WebMercator.lonFromX((minX + maxX) / 2));
-    if (_size == Size.zero) return jumpTo(center, _camera.zoom);
-    // 1 点なら寄るだけ。幅は真上から見た Mercator m（傾いていると画面の地面は広いので余裕がある）
-    final spanX = math.max(maxX - minX, 20.0);
-    final spanY = math.max(maxY - minY, 20.0);
-    final w = math.max(_size.width - padding.horizontal, 50.0);
-    final h = math.max(_size.height - padding.vertical, 50.0);
-    final scale = math.min(w / spanX, h / spanY); // px / m
-    final zoom = (math.log(scale * 2 * math.pi * WebMercator.radius / 256) / math.ln2).clamp(2.0, 18.0);
-    return jumpTo(center, zoom);
-  }
-
   // ── オーバーレイ画像 ─────────────────────────────────
 
   /// 選んだ面が変わったら、前と今の範囲のテクスチャを作り直す（塗りはテクスチャに描くので地形に埋もれない）。
@@ -1913,13 +1735,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     if (sw.elapsedMilliseconds > 30) {
       debugPrint('[3D] bake z$demZoom ${range.x0},${range.y0}: $n 件 ${sw.elapsedMilliseconds}ms');
     }
-  }
-
-  /// ズームボタン（web / PC 向け。画面中心を留めて 1 段）
-  void _zoomBy(double delta) {
-    _camera.zoom = (_camera.zoom + delta).clamp(8, 22);
-    _refresh();
-    setState(() {});
   }
 
   void _onTapUp(TapUpDetails d) {

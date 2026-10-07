@@ -58,6 +58,29 @@ class TileKey {
   double get span => WebMercator.tileSpan(z);
   ui.Rect get bounds => ui.Rect.fromLTWH(west, south, span, span);
 
+  /// このタイル 1 枚の範囲
+  TileRange get range => TileRange(z: z, x0: x, y0: y, x1: x, y1: y);
+
+  /// 中心から (px, py)（Mercator）までの距離の 2 乗。読み込みの優先順に使う
+  double distanceSqTo(double px, double py) {
+    final half = span / 2;
+    final dx = west + half - px;
+    final dy = south + half - py;
+    return dx * dx + dy * dy;
+  }
+
+  /// (px, py)（Mercator）を含むか（西・南の縁は含み、東・北の縁は含まない。[bounds] の Rect を作らずに）
+  bool containsPoint(double px, double py) {
+    final w = west, s = south, d = span;
+    return px >= w && px < w + d && py >= s && py < s + d;
+  }
+
+  /// [r] と重なるか（縁が接するだけなら重ならない）
+  bool overlaps(ui.Rect r) {
+    final w = west, s = south, d = span;
+    return w < r.right && w + d > r.left && s < r.bottom && s + d > r.top;
+  }
+
   @override
   bool operator ==(Object other) => other is TileKey && other.z == z && other.x == x && other.y == y;
 
@@ -113,6 +136,15 @@ class TerrainTile {
   Object? previousTextureKey;
   int textureWidth = 1;
   int textureHeight = 1;
+
+  /// 新しいテクスチャを貼る（前の画像は捨てる）。[pendingOffset] はまだ粗いときの差し替え先の段数
+  void applyTexture(ui.Image tex, {int? pendingOffset}) {
+    _texture?.dispose();
+    texture = tex;
+    textureWidth = tex.width;
+    textureHeight = tex.height;
+    pendingTextureOffset = pendingOffset;
+  }
 
   /// `ui.Image` を捨てる（GPU 側に複製がある間だけ。[textureKey] は変えないので GPU 側のキャッシュはそのまま効く）
   void releaseImage() {
@@ -235,7 +267,7 @@ class TerrainTile {
       if (identical(_building[step], null)) return b;
       _building.remove(step);
       builders[step] = b;
-      // 持つのは 2 段まで（1 段 数 MB）。新しい段から一番遠いものを捨てる
+      // 持つのは 2 段まで（1 段 数 MB）。新しい段から一番遠いものを捨てる（step 16 は穴埋めなので数えない）
       while (builders.keys.where((k) => k != 16).length > 2) {
         final far = builders.keys.where((k) => k != step && k != 16).reduce((a, c) => (a - step).abs() >= (c - step).abs() ? a : c);
         builders.remove(far);
@@ -246,6 +278,17 @@ class TerrainTile {
 
   void dispose() {
     releaseImage();
+  }
+
+  /// [tiles] の標高の範囲（タイルごとの最小・最大を畳む）。無ければ null
+  static (double, double)? heightRangeOf(Iterable<TerrainTile> tiles) {
+    var lo = double.infinity, hi = -double.infinity;
+    for (final t in tiles) {
+      final (a, b) = t.raw.heightRange;
+      if (a < lo) lo = a;
+      if (b > hi) hi = b;
+    }
+    return lo.isFinite ? (lo, hi) : null;
   }
 }
 
@@ -417,69 +460,50 @@ class TerrainWorld extends ChangeNotifier {
   /// （傾けているとき、高い所は視点側に、低い所は奥にずれる）。
   ui.Rect groundBounds(TerrainCamera camera, ui.Size size, {double heightRange = 1500}) {
     final z0 = elevationAt(camera.centerX, camera.centerY) ?? 0;
-    final pc = camera.project(0, 0, z0);
-    var minX = 0.0, minY = 0.0, maxX = 0.0, maxY = 0.0;
+    final zLo = z0 - heightRange / 2;
+    final zHi = z0 + heightRange / 2;
+    final ext = _Extent();
     if (camera.perspective && camera.viewport != ui.Size.zero) {
-      // 透視: 4 隅の視線が高さ z0 ± の平面に当たる点。地平線の上を向く隅は靄の先（視点距離 × 4）で打ち切る
+      // 透視: 4 隅の視線が高さ z0 ± の平面に当たる点。地平線の上を向く隅は靄の先（視点距離 × 4）で打ち切る。
+      // 範囲はカメラ中心（原点）から広げる
+      ext.add(0, 0);
       final maxDist = camera.eyeDistance * TerrainCamera.fogEndFactor;
-      for (final corner in [
+      for (final corner in _screenCorners(size)) {
+        ext.addOffset(camera.groundPointPerspective(corner, z0, zLo, maxDistance: maxDist));
+        ext.addOffset(camera.groundPointPerspective(corner, z0, zHi, maxDistance: maxDist));
+      }
+    } else {
+      // 正射影: 4 隅の投影座標を高さ z0 ± で世界に戻す
+      final pc = camera.project(0, 0, z0);
+      for (final corner in _screenCorners(size)) {
+        final projected = ui.Offset(
+          pc.dx + (corner.dx - size.width / 2) / camera.scale,
+          pc.dy + (corner.dy - size.height / 2) / camera.scale,
+        );
+        ext.addOffset(camera.unprojectAtHeight(projected, zLo));
+        ext.addOffset(camera.unprojectAtHeight(projected, zHi));
+      }
+    }
+    return ext.toRect(camera.centerX, camera.centerY);
+  }
+
+  /// 画面の 4 隅（左上・右上・左下・右下）
+  static List<ui.Offset> _screenCorners(ui.Size size) => [
         ui.Offset.zero,
         ui.Offset(size.width, 0),
         ui.Offset(0, size.height),
         ui.Offset(size.width, size.height),
-      ]) {
-        for (final z in [z0 - heightRange / 2, z0 + heightRange / 2]) {
-          final p = camera.groundPointPerspective(corner, z0, z, maxDistance: maxDist);
-          minX = math.min(minX, p.dx);
-          maxX = math.max(maxX, p.dx);
-          minY = math.min(minY, p.dy);
-          maxY = math.max(maxY, p.dy);
-        }
-      }
-      return ui.Rect.fromLTRB(camera.centerX + minX, camera.centerY + minY, camera.centerX + maxX, camera.centerY + maxY);
-    }
-    minX = double.infinity;
-    minY = double.infinity;
-    maxX = -double.infinity;
-    maxY = -double.infinity;
-    for (final corner in [
-      ui.Offset.zero,
-      ui.Offset(size.width, 0),
-      ui.Offset(0, size.height),
-      ui.Offset(size.width, size.height),
-    ]) {
-      final projected = ui.Offset(
-        pc.dx + (corner.dx - size.width / 2) / camera.scale,
-        pc.dy + (corner.dy - size.height / 2) / camera.scale,
-      );
-      for (final z in [z0 - heightRange / 2, z0 + heightRange / 2]) {
-        final p = camera.unprojectAtHeight(projected, z);
-        minX = math.min(minX, p.dx);
-        maxX = math.max(maxX, p.dx);
-        minY = math.min(minY, p.dy);
-        maxY = math.max(maxY, p.dy);
-      }
-    }
-    return ui.Rect.fromLTRB(
-      camera.centerX + minX,
-      camera.centerY + minY,
-      camera.centerX + maxX,
-      camera.centerY + maxY,
-    );
-  }
+      ];
 
   /// Mercator の矩形 → ズーム z のタイル範囲（余白 [margin] 枚）
   static TileRange tileRangeFor(ui.Rect bounds, int z, {int margin = 0}) {
     final n = 1 << z;
-    final span = WebMercator.tileSpan(z);
-    int tx(double x) => ((x + WebMercator.halfCircumference) / span).floor();
-    int ty(double y) => ((WebMercator.halfCircumference - y) / span).floor();
     return TileRange(
       z: z,
-      x0: (tx(bounds.left) - margin).clamp(0, n - 1),
-      x1: (tx(bounds.right) + margin).clamp(0, n - 1),
-      y0: (ty(bounds.bottom) - margin).clamp(0, n - 1), // bottom = 北端（Rect の top/bottom は y 昇順）
-      y1: (ty(bounds.top) + margin).clamp(0, n - 1),
+      x0: (WebMercator.tileXAt(bounds.left, z) - margin).clamp(0, n - 1),
+      x1: (WebMercator.tileXAt(bounds.right, z) + margin).clamp(0, n - 1),
+      y0: (WebMercator.tileYAt(bounds.bottom, z) - margin).clamp(0, n - 1), // bottom = 北端（Rect の top/bottom は y 昇順）
+      y1: (WebMercator.tileYAt(bounds.top, z) + margin).clamp(0, n - 1),
     );
   }
 
@@ -507,21 +531,25 @@ class TerrainWorld extends ChangeNotifier {
         }
       }
     }
-    double dist(TileKey k) {
-      final cx = k.west + k.span / 2;
-      final cy = k.south + k.span / 2;
-      return (cx - centerX) * (cx - centerX) + (cy - centerY) * (cy - centerY);
-    }
-    wanted.sort((a, b) => dist(a).compareTo(dist(b)));
+    _sortByDistance(wanted, centerX, centerY);
     _lastCenterX = centerX;
     _lastCenterY = centerY;
     if (replaceQueue) {
       _queue = wanted;
-    } else {
+    } else if (wanted.isNotEmpty) {
       final seen = _queue.toSet();
       _queue.addAll(wanted.where((k) => !seen.contains(k)));
     }
     _pump();
+  }
+
+  /// [keys] を (cx, cy) に近い順に並べ替える（距離は 1 枚 1 回だけ計る）
+  static void _sortByDistance(List<TileKey> keys, double cx, double cy) {
+    if (keys.length < 2) return;
+    final byDist = [for (final k in keys) (k, k.distanceSqTo(cx, cy))]..sort((a, b) => a.$2.compareTo(b.$2));
+    for (var i = 0; i < byDist.length; i++) {
+      keys[i] = byDist[i].$1;
+    }
   }
 
   void _pump() {
@@ -552,12 +580,7 @@ class TerrainWorld extends ChangeNotifier {
   void _pumpUpgrades() {
     if (_inFlight.isNotEmpty || _queue.isNotEmpty) return; // 見えるものを揃えるのが先
     _upgradeQueue.removeWhere((k) => _tiles[k]?.pendingTextureOffset == null);
-    double dist(TileKey k) {
-      final cx = k.west + k.span / 2 - _lastCenterX;
-      final cy = k.south + k.span / 2 - _lastCenterY;
-      return cx * cx + cy * cy;
-    }
-    _upgradeQueue.sort((a, b) => dist(a).compareTo(dist(b)));
+    _sortByDistance(_upgradeQueue, _lastCenterX, _lastCenterY);
     while (_upgrading.length < 2 && _upgradeQueue.isNotEmpty) {
       final key = _upgradeQueue.removeAt(0);
       if (_upgrading.contains(key)) continue;
@@ -574,11 +597,9 @@ class TerrainWorld extends ChangeNotifier {
     final off = tile?.pendingTextureOffset;
     if (tile == null || off == null) return;
     final gen = _retextureGen;
-    final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
     ui.Image tex;
     try {
-      tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
-          .composeLayers(range.zoomIn(off), _textureLayers(), decorate: _decorateFor(key.z));
+      tex = await _composeTexture(key, off);
     } catch (e) {
       debugPrint('[3D] tile $key のテクスチャ差し替えに失敗: $e');
       return;
@@ -587,15 +608,7 @@ class TerrainWorld extends ChangeNotifier {
       tex.dispose();
       return;
     }
-    tile.texture?.dispose();
-    tile
-      ..texture = tex
-      ..textureWidth = tex.width
-      ..textureHeight = tex.height
-      ..pendingTextureOffset = null;
-    onTextureApplied?.call(key);
-    revision++;
-    notifyListeners();
+    _applyTexture(tile, tex, null);
   }
 
   /// テクスチャを何段上で作るか。まず 1 段上（地図 4 枚）で出し、2 段上以上は後で差し替える（[pendingTextureOffset]）
@@ -604,8 +617,20 @@ class TerrainWorld extends ChangeNotifier {
     return off > 1 ? (1, off) : (off, null);
   }
 
+  /// [key] のテクスチャを [offset] 段上の地図（層を重ね、上描きつき）で作る
+  Future<ui.Image> _composeTexture(TileKey key, int offset) =>
+      RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
+          .composeLayers(key.range.zoomIn(offset), _textureLayers(), decorate: _decorateFor(key.z));
+
+  /// 読み込み済みのタイルにテクスチャを貼って知らせる（差し替え・作り直し）
+  void _applyTexture(TerrainTile tile, ui.Image tex, int? pendingOffset) {
+    tile.applyTexture(tex, pendingOffset: pendingOffset);
+    onTextureApplied?.call(tile.key);
+    revision++;
+    notifyListeners();
+  }
+
   Future<TerrainTile?> _defaultLoad(TileKey key) async {
-    final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
     final sw = Stopwatch()..start();
     var dem = await _loadDem(key);
     var sourceZoom = key.z;
@@ -618,65 +643,31 @@ class TerrainWorld extends ChangeNotifier {
     }
     final demMs = sw.elapsedMilliseconds;
     final (first, later) = _textureOffsets(key.z);
-    final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
-        .composeLayers(range.zoomIn(first), _textureLayers(), decorate: _decorateFor(key.z));
+    final tex = await _composeTexture(key, first);
     if (sw.elapsedMilliseconds > 800) debugPrint('[3D] tile $key load ${sw.elapsedMilliseconds}ms (dem $demMs)');
-    return TerrainTile(key: key, raw: dem, sourceZoom: sourceZoom)
-      ..texture = tex
-      ..textureWidth = tex.width
-      ..textureHeight = tex.height
-      ..pendingTextureOffset = later;
+    return TerrainTile(key: key, raw: dem, sourceZoom: sourceZoom)..applyTexture(tex, pendingOffset: later);
   }
 
-  /// [key] の DEM を、ソースを細かい方から順に試して取る（その段を持たないソースは飛ばす）
-  /// [key] の DEM を、ソースを細かい方から順に重ねて作る。
+  /// [key] の DEM を、ソースを細かい方から順に重ねて作る（その段を持たないソースは飛ばす）。
   /// 細かいソースの無効な点（整備範囲外・水面）は次のソースの値で埋める（同じタイル座標なので点ごとに重ねられる）。
-  /// 全部重ねても残った無効値は [fillInvalidHeights] で埋める
+  /// 全部重ねても残った無効値は [_fillHoles] で埋める
   Future<DemGrid?> _loadDem(TileKey key, {bool fillFromAncestor = true}) async {
-    final range = TileRange(z: key.z, x0: key.x, y0: key.y, x1: key.x, y1: key.y);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    bool usable(DemTileSource s) {
-      if (key.z < s.minZoom || key.z > s.maxZoom) return false;
-      final missedAt = _missing['${s.id}/${key.z}/${key.x}/${key.y}'];
-      return missedAt == null || nowMs - missedAt >= _missingTtlMs;
-    }
-
-    Future<DemGrid?> fetch(DemTileSource s) =>
-        DemTileLoader(source: s, fetcher: (z, x, y) => demFetcher(s, z, x, y)).tryLoad(range, fillInvalid: false);
     final sw = Stopwatch()..start();
-    // 主力（地理院 1A / 5A / 10B）は細かい方から**順に**取り、穴が無くなったらそこで止める。
-    // 以前は同時に取っていた（往復の合計を避けるため）が、DEM1A 1 枚 100 KB に対して 5A / 10B も毎回取るとバイト数が倍になり、
-    // 遅い回線（2026-09-13 の freespot: 約 100 KB/s）では待ちがそのまま倍になった。速い回線でも穴があるタイルだけ +1 往復（0.15 秒）
-    final primary = [for (final s in demSources) if (!s.lastResort && usable(s)) s];
-    final grids = <DemGrid?>[];
-    var fetched = 0;
-    for (final s in primary) {
-      grids.add(await fetch(s));
-      fetched++;
-      final probe = _mergeGrids(key, primary.sublist(0, grids.length), grids, nowMs, remember: false);
-      if (probe != null && _countNaN(probe.heights) == 0) break;
-    }
-    while (grids.length < primary.length) {
-      grids.add(null); // 取らなかった（無かったのではない）
-    }
-    var merged = _mergeGrids(key, primary, grids, nowMs, remember: false);
-    // 「無かった」の記憶は実際に取りに行ったものだけ（別のソースが取れた = 通信は生きている、のとき）
-    if (merged != null) {
-      for (var i = 0; i < fetched; i++) {
-        if (grids[i] == null) _missing['${primary[i].id}/${key.z}/${key.x}/${key.y}'] = nowMs;
-      }
-    }
+    final primary = [for (final s in demSources) if (!s.lastResort && _usable(s, key, nowMs)) s];
+    final (merged0, grids) = await _fetchPrimary(key, primary, nowMs);
+    var merged = merged0;
     // 最後の砦（AWS。遠くて 1 秒掛かる）は主力が 1 枚も取れなかった（日本の外）ときだけ。
     // 海や整備範囲の縁の穴は [fillInvalidHeights] で埋める（以前は穴があるたびに AWS を取りに行き、沿岸のタイルが 1 枚 +1 秒だった）
     if (merged == null) {
-      final fallback = [for (final s in demSources) if (s.lastResort && usable(s)) s];
+      final fallback = [for (final s in demSources) if (s.lastResort && _usable(s, key, nowMs)) s];
       for (final s in fallback) {
-        final dem = await fetch(s);
+        final dem = await _fetchDem(s, key);
         if (dem != null) {
           merged = dem;
           // 主力が無かったのは通信のせいではない（最後の砦は取れた）ので覚える
           for (final p in primary) {
-            _missing['${p.id}/${key.z}/${key.x}/${key.y}'] = nowMs;
+            _missing[_missingKey(p, key)] = nowMs;
           }
           break;
         }
@@ -685,40 +676,74 @@ class TerrainWorld extends ChangeNotifier {
     if (sw.elapsedMilliseconds > 800) {
       debugPrint('[3D] dem $key ${sw.elapsedMilliseconds}ms (${[for (var i = 0; i < primary.length; i++) '${primary[i].id}${grids[i] == null ? '×' : ''}'].join(' ')})');
     }
+    if (merged != null) await _fillHoles(key, merged, nowMs, fillFromAncestor: fillFromAncestor);
+    return merged;
+  }
+
+  /// 期限内に「無かった」と覚えていない、[key] の段を持つソースか
+  bool _usable(DemTileSource s, TileKey key, int nowMs) {
+    if (key.z < s.minZoom || key.z > s.maxZoom) return false;
+    final missedAt = _missing[_missingKey(s, key)];
+    return missedAt == null || nowMs - missedAt >= _missingTtlMs;
+  }
+
+  static String _missingKey(DemTileSource s, TileKey key) => '${s.id}/${key.z}/${key.x}/${key.y}';
+
+  Future<DemGrid?> _fetchDem(DemTileSource s, TileKey key) =>
+      DemTileLoader(source: s, fetcher: (z, x, y) => demFetcher(s, z, x, y)).tryLoad(key.range, fillInvalid: false);
+
+  /// 主力（地理院 1A / 5A / 10B）は細かい方から**順に**取り、穴が無くなったらそこで止める。重ねた格子と、
+  /// ソースごとの取れた格子（取らなかった・無かったものは null）を返す。
+  /// 以前は同時に取っていた（往復の合計を避けるため）が、DEM1A 1 枚 100 KB に対して 5A / 10B も毎回取るとバイト数が倍になり、
+  /// 遅い回線（2026-09-13 の freespot: 約 100 KB/s）では待ちがそのまま倍になった。速い回線でも穴があるタイルだけ +1 往復（0.15 秒）
+  Future<(DemGrid?, List<DemGrid?>)> _fetchPrimary(TileKey key, List<DemTileSource> primary, int nowMs) async {
+    final grids = <DemGrid?>[];
+    var fetched = 0;
+    for (final s in primary) {
+      grids.add(await _fetchDem(s, key));
+      fetched++;
+      final probe = _mergeGrids(grids);
+      if (probe != null && _countNaN(probe.heights) == 0) break;
+    }
+    while (grids.length < primary.length) {
+      grids.add(null); // 取らなかった（無かったのではない）
+    }
+    final merged = _mergeGrids(grids);
+    // 「無かった」の記憶は実際に取りに行ったものだけ（別のソースが取れた = 通信は生きている、のとき）。
+    // タイルキャッシュは 404 を覚えないので、覚えないと毎回ネットに聞いて 1 枚数秒掛かる。
+    // ⚠ 取れなかった理由は 404 か通信失敗か分からないので、同じタイルで別のソースが取れたときだけ覚える
     if (merged != null) {
-      final nan = _countNaN(merged.heights);
-      if (nan > 0) {
-        // 主力を重ねても残った穴（整備範囲の縁・水面）。行の前の値で埋めると台地や縞になり、
-        // 隣のタイルとの縁で数百 m の段差（断層）が出る（2026-09-12 に `[3D] seam` で 329m を観測）。
-        // まず親の近似（高さ空間で補間）で埋める
-        final filled = fillFromAncestor ? await _fillFromAncestor(key, merged) : 0;
-        var left = _countNaN(merged.heights);
-        // 川や湖は地理院の 3 ソース全部が無効なので親を辿っても埋まらない（2026-09-13 に北山川で台地を観測）。
-        // 残った穴は最後の砦（AWS。水面にも値がある）を点ごとに重ねる。z ≤ 15 だけ（それより細かい段は親の近似がこれを受け継ぐ）
-        var resort = 0;
-        if (left > 0) {
-          for (final s in demSources) {
-            if (!s.lastResort || !usable(s)) continue;
-            final dem = await fetch(s);
-            if (dem == null || dem.heights.length != merged.heights.length) continue;
-            final a = merged.heights;
-            final b = dem.heights;
-            for (var j = 0; j < a.length; j++) {
-              if (a[j].isNaN && !b[j].isNaN) {
-                a[j] = b[j];
-                resort++;
-              }
-            }
-            break;
-          }
-          left = _countNaN(merged.heights);
-        }
-        // それでも残れば周りから補間（台地にはならない）
-        if (left > 0) fillInvalidHeights(merged.heights, cols: merged.cols);
-        if (kDebugMode) debugPrint('[3D] dem $key: 無効 $nan 点（親の近似で $filled、最後の砦で $resort、残り $left は補間）');
+      for (var i = 0; i < fetched; i++) {
+        if (grids[i] == null) _missing[_missingKey(primary[i], key)] = nowMs;
       }
     }
-    return merged;
+    return (merged, grids);
+  }
+
+  /// 主力を重ねても残った穴（整備範囲の縁・水面）を埋める。行の前の値で埋めると台地や縞になり、
+  /// 隣のタイルとの縁で数百 m の段差（断層）が出る（2026-09-12 に `[3D] seam` で 329m を観測）。
+  /// 親の近似（高さ空間で補間）→ 最後の砦 → 周りからの補間 の順
+  Future<void> _fillHoles(TileKey key, DemGrid merged, int nowMs, {required bool fillFromAncestor}) async {
+    final nan = _countNaN(merged.heights);
+    if (nan == 0) return;
+    final filled = fillFromAncestor ? await _fillFromAncestor(key, merged) : 0;
+    var left = _countNaN(merged.heights);
+    // 川や湖は地理院の 3 ソース全部が無効なので親を辿っても埋まらない（2026-09-13 に北山川で台地を観測）。
+    // 残った穴は最後の砦（AWS。水面にも値がある）を点ごとに重ねる。z ≤ 15 だけ（それより細かい段は親の近似がこれを受け継ぐ）
+    var resort = 0;
+    if (left > 0) {
+      for (final s in demSources) {
+        if (!s.lastResort || !_usable(s, key, nowMs)) continue;
+        final dem = await _fetchDem(s, key);
+        if (dem == null || dem.heights.length != merged.heights.length) continue;
+        resort = _fillNaNFrom(merged.heights, dem.heights);
+        break;
+      }
+      left = _countNaN(merged.heights);
+    }
+    // それでも残れば周りから補間（台地にはならない）
+    if (left > 0) fillInvalidHeights(merged.heights, cols: merged.cols);
+    if (kDebugMode) debugPrint('[3D] dem $key: 無効 $nan 点（親の近似で $filled、最後の砦で $resort、残り $left は補間）');
   }
 
   /// [grid] の無効な点を、親から補間した近似で埋める。埋めた点の数を返す
@@ -726,8 +751,12 @@ class TerrainWorld extends ChangeNotifier {
     final approx = await _approximateFromAncestor(key);
     if (approx == null) return 0;
     final src = approx.$1.heights;
-    final dst = grid.heights;
-    if (src.length != dst.length) return 0;
+    if (src.length != grid.heights.length) return 0;
+    return _fillNaNFrom(grid.heights, src);
+  }
+
+  /// [dst] の NaN を [src] の同じ位置の値（NaN でなければ）で埋める。埋めた点の数を返す
+  static int _fillNaNFrom(Float32List dst, Float32List src) {
     var n = 0;
     for (var i = 0; i < dst.length; i++) {
       if (dst[i].isNaN && !src[i].isNaN) {
@@ -738,13 +767,10 @@ class TerrainWorld extends ChangeNotifier {
     return n;
   }
 
-  /// 同時に取った格子を細かい順に重ねる（細かいソースの無効な点を次のソースの値で埋める）。
-  /// 無かったソースは覚えておく（タイルキャッシュは 404 を覚えないので、毎回ネットに聞くと 1 枚数秒掛かる）。
-  /// ⚠ 取れなかった理由は 404 か通信失敗か分からないので、同じタイルで別のソースが取れたとき（= 通信は生きている）だけ覚える
-  DemGrid? _mergeGrids(TileKey key, List<DemTileSource> sources, List<DemGrid?> grids, int nowMs, {bool remember = true}) {
+  /// 取った格子を細かい順に重ねる（細かいソースの無効な点を次のソースの値で埋める）。1 枚も無ければ null
+  DemGrid? _mergeGrids(List<DemGrid?> grids) {
     DemGrid? merged;
-    for (var i = 0; i < sources.length; i++) {
-      final dem = grids[i];
+    for (final dem in grids) {
       if (dem == null) continue;
       if (merged == null) {
         // 最初の格子は複製して重ねる（順に取って途中で確かめるので、元を汚さない）
@@ -762,11 +788,6 @@ class TerrainWorld extends ChangeNotifier {
       final b = dem.heights;
       for (var j = 0; j < a.length; j++) {
         if (a[j].isNaN) a[j] = b[j];
-      }
-    }
-    if (merged != null && remember) {
-      for (var i = 0; i < sources.length; i++) {
-        if (grids[i] == null) _missing['${sources[i].id}/${key.z}/${key.x}/${key.y}'] = nowMs;
       }
     }
     if (_missing.length > 4096) _missing.clear();
@@ -826,34 +847,21 @@ class TerrainWorld extends ChangeNotifier {
     final gen = ++_retextureGen;
     final targets = [
       for (final t in _tiles.values)
-        if ((within == null || _intersects(t.key, within)) && (where == null || where(t.key))) t,
+        if ((within == null || t.key.overlaps(within)) && (where == null || where(t.key))) t,
     ];
     for (final tile in targets) {
       if (gen != _retextureGen || !_tiles.containsKey(tile.key)) return;
-      final range = TileRange(z: tile.key.z, x0: tile.key.x, y0: tile.key.y, x1: tile.key.x, y1: tile.key.y);
       // 貼り直しも段階で（まず 1 段上、細かい分は空いたときに差し替え）
       final (first, later) = _textureOffsets(tile.key.z);
-      final tex = await RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
-          .composeLayers(range.zoomIn(first), _textureLayers(), decorate: _decorateFor(tile.key.z));
+      final tex = await _composeTexture(tile.key, first);
       if (gen != _retextureGen || !_tiles.containsKey(tile.key)) {
         tex.dispose();
         return;
       }
-      tile.texture?.dispose();
-      tile
-        ..texture = tex
-        ..textureWidth = tex.width
-        ..textureHeight = tex.height
-        ..pendingTextureOffset = later;
-      onTextureApplied?.call(tile.key);
-      revision++;
-      notifyListeners();
+      _applyTexture(tile, tex, later);
       if (later != null) _scheduleUpgrade(tile.key);
     }
   }
-
-  static bool _intersects(TileKey k, ui.Rect r) =>
-      k.west < r.right && k.west + k.span > r.left && k.south < r.bottom && k.south + k.span > r.top;
 
   /// 読み込みに失敗した時刻。しばらく再試行しない（圏外で毎フレーム失敗し続けないように）
   final Map<TileKey, int> _failedAt = {};
@@ -924,48 +932,42 @@ class TerrainWorld extends ChangeNotifier {
   /// （タイル地図エンジンの「親子で保持」と同じ）。同じ親は 1 回だけ、最初に出会った位置で描く
   /// （親の領域は子の領域の和なので、奥 → 手前の順序を壊さない）。
   List<TerrainTile> coverSet(TileRange range, TerrainCamera camera, {int maxAncestorLevels = 8}) {
+    final order = _ScanOrder.of(camera);
     final out = <TerrainTile>[];
-    final emitted = <TileKey>{};
-    void emit(TerrainTile t) {
-      if (emitted.add(t.key)) out.add(t);
+    // 重なりうるのは親だけ（理想の段は 1 枚ずつ、子・孫はそれぞれ理想の 1 枚の内側）。出した親を覚えて 2 度出さない
+    Set<TileKey>? emittedAncestors;
+    void use(TerrainTile t) {
+      t.lastUsed = ++_clock;
+      out.add(t);
     }
 
-    for (final key in _idealOrder(range, camera)) {
+    void useChild(TileKey c) {
+      final t = _tiles[c];
+      if (t != null) {
+        use(t);
+        return;
+      }
+      // 子が無ければ孫（2 段）
+      order.scanChildren(c, (g) {
+        final gt = _tiles[g];
+        if (gt != null) use(gt);
+      });
+    }
+
+    order.scanRange(range, (key) {
       final exact = _tiles[key];
       if (exact != null) {
-        exact.lastUsed = ++_clock;
-        emit(exact);
-        continue;
+        use(exact);
+        return;
       }
-      var k = key;
-      TerrainTile? ancestor;
-      for (var i = 0; i < maxAncestorLevels && k.z > 0; i++) {
-        k = k.parent;
-        ancestor = _tiles[k];
-        if (ancestor != null) break;
-      }
+      final ancestor = _ancestorOf(key, maxAncestorLevels);
       if (ancestor != null) {
         ancestor.lastUsed = ++_clock;
-        emit(ancestor);
-        continue;
+        if ((emittedAncestors ??= <TileKey>{}).add(ancestor.key)) out.add(ancestor);
+        return;
       }
-      // 子（1 段）→ 無ければ孫（2 段）で埋める
-      for (final c in _childrenInOrder(key, camera)) {
-        final t = _tiles[c];
-        if (t != null) {
-          t.lastUsed = ++_clock;
-          emit(t);
-          continue;
-        }
-        for (final g in _childrenInOrder(c, camera)) {
-          final gt = _tiles[g];
-          if (gt != null) {
-            gt.lastUsed = ++_clock;
-            emit(gt);
-          }
-        }
-      }
-    }
+      order.scanChildren(key, useChild);
+    });
     return out;
   }
 
@@ -979,45 +981,37 @@ class TerrainWorld extends ChangeNotifier {
         final key = TileKey(range.z, x, y);
         if (_tiles.containsKey(key)) {
           exact++;
-          continue;
-        }
-        var k = key;
-        var found = false;
-        for (var i = 0; i < maxAncestorLevels && k.z > 0; i++) {
-          k = k.parent;
-          if (_tiles.containsKey(k)) {
-            found = true;
-            break;
-          }
-        }
-        if (found) {
+        } else if (_ancestorOf(key, maxAncestorLevels) != null) {
           byAncestor++;
-          continue;
+        } else if (_coveredByDescendants(key, 2)) {
+          byChild++;
         }
-        bool coveredBy(TileKey k, int depth) {
-          if (_tiles.containsKey(k)) return true;
-          if (depth == 0) return false;
-          return k.children.every((c) => coveredBy(c, depth - 1));
-        }
-        if (coveredBy(key, 2)) byChild++;
       }
     }
     return CoverageReport(ideal: range.count, exact: exact, byAncestor: byAncestor, byChild: byChild);
   }
 
-  /// 理想のタイル番号を奥 → 手前の順に
-  List<TileKey> _idealOrder(TileRange range, TerrainCamera camera) {
-    final eastFar = math.sin(camera.bearing) > 0;
-    final northFar = math.cos(camera.bearing) > 0;
-    final ys = [for (var y = range.y0; y <= range.y1; y++) y];
-    final xs = [for (var x = range.x0; x <= range.x1; x++) x];
-    if (!northFar) ys.setAll(0, ys.reversed.toList());
-    if (!eastFar) xs.setAll(0, xs.reversed.toList());
-    return [for (final y in ys) for (final x in xs) TileKey(range.z, x, y)];
+  /// 読み込み済みの一番近い親（[maxLevels] 段まで）
+  TerrainTile? _ancestorOf(TileKey key, int maxLevels) {
+    var k = key;
+    for (var i = 0; i < maxLevels && k.z > 0; i++) {
+      k = k.parent;
+      final t = _tiles[k];
+      if (t != null) return t;
+    }
+    return null;
   }
 
-  List<TileKey> _childrenInOrder(TileKey key, TerrainCamera camera) =>
-      _idealOrder(TileRange(z: key.z + 1, x0: key.x * 2, y0: key.y * 2, x1: key.x * 2 + 1, y1: key.y * 2 + 1), camera);
+  /// [k] 自身か、[depth] 段下までの子孫で隙間なく覆われているか（子 4 枚そろって 1 枚）
+  bool _coveredByDescendants(TileKey k, int depth) {
+    if (_tiles.containsKey(k)) return true;
+    if (depth == 0) return false;
+    final z = k.z + 1, x = k.x * 2, y = k.y * 2;
+    return _coveredByDescendants(TileKey(z, x, y), depth - 1) &&
+        _coveredByDescendants(TileKey(z, x + 1, y), depth - 1) &&
+        _coveredByDescendants(TileKey(z, x, y + 1), depth - 1) &&
+        _coveredByDescendants(TileKey(z, x + 1, y + 1), depth - 1);
+  }
 
   /// 親の段（[levels] 段ぶん）を**粗い方から**読む。ピラミッドは上から埋めるのが定石で、
   /// 一番粗い親 1〜2 枚が届けば画面全体が（粗くても）埋まる。
@@ -1054,22 +1048,11 @@ class TerrainWorld extends ChangeNotifier {
 
   /// 読み込み済みのタイルを描画順（奥 → 手前）で返す（理想の段だけ）
   List<TerrainTile> drawOrder(TileRange range, TerrainCamera camera) {
-    final sinB = math.sin(camera.bearing);
-    final cosB = math.cos(camera.bearing);
-    final eastFar = sinB > 0;
-    final northFar = cosB > 0;
     final out = <TerrainTile>[];
-    // タイル y は南向きに増える。北が遠いなら y の小さい方から
-    final ys = [for (var y = range.y0; y <= range.y1; y++) y];
-    final xs = [for (var x = range.x0; x <= range.x1; x++) x];
-    if (!northFar) ys.setAll(0, ys.reversed.toList());
-    if (!eastFar) xs.setAll(0, xs.reversed.toList());
-    for (final y in ys) {
-      for (final x in xs) {
-        final t = _tiles[TileKey(range.z, x, y)];
-        if (t != null) out.add(t);
-      }
-    }
+    _ScanOrder.of(camera).scanRange(range, (key) {
+      final t = _tiles[key];
+      if (t != null) out.add(t);
+    });
     return out;
   }
 
@@ -1086,15 +1069,11 @@ class TerrainWorld extends ChangeNotifier {
       _lastHit = null;
     }
     final last = _lastHit;
-    if (last != null && last.key.z == _finestZ) {
-      final b = last.key.bounds;
-      if (x >= b.left && x < b.right && y >= b.top && y < b.bottom) return last.raw.elevationAt(x, y);
-    }
+    if (last != null && last.key.z == _finestZ && last.key.containsPoint(x, y)) return last.raw.elevationAt(x, y);
     TerrainTile? best;
     for (final t in _tiles.values) {
       if (best != null && t.key.z <= best.key.z) continue;
-      final b = t.key.bounds;
-      if (x >= b.left && x < b.right && y >= b.top && y < b.bottom) best = t;
+      if (t.key.containsPoint(x, y)) best = t;
     }
     _lastHit = best;
     return best?.raw.elevationAt(x, y);
@@ -1108,15 +1087,7 @@ class TerrainWorld extends ChangeNotifier {
   ///
   /// ⚠ 以前は毎回 全タイルの全点を走査していて（50 枚で 340 万点）、タイル到着ごとの描き直しが
   /// 連鎖するとイベントループを数十秒独占した（Pixel 9 で実測）
-  (double, double)? get heightRange {
-    var minH = double.infinity, maxH = -double.infinity;
-    for (final t in _tiles.values) {
-      final (lo, hi) = t.raw.heightRange;
-      if (lo < minH) minH = lo;
-      if (hi > maxH) maxH = hi;
-    }
-    return minH.isFinite ? (minH, maxH) : null;
-  }
+  (double, double)? get heightRange => TerrainTile.heightRangeOf(_tiles.values);
 
   void clear() {
     for (final t in _tiles.values) {
@@ -1134,4 +1105,49 @@ class TerrainWorld extends ChangeNotifier {
     _imageCache.clear();
     super.dispose();
   }
+}
+
+/// タイルを奥 → 手前に並べる走査（タイル y は南向きに増える。北が遠いなら y の小さい方から、東が遠いなら x の大きい方は後）
+class _ScanOrder {
+  const _ScanOrder(this.northFar, this.eastFar);
+
+  factory _ScanOrder.of(TerrainCamera camera) => _ScanOrder(math.cos(camera.bearing) > 0, math.sin(camera.bearing) > 0);
+
+  final bool northFar;
+  final bool eastFar;
+
+  void scanRange(TileRange r, void Function(TileKey key) visit) => _scan(r.z, r.x0, r.y0, r.x1, r.y1, visit);
+
+  /// 子 4 枚（1 段細かい）を同じ向きで
+  void scanChildren(TileKey k, void Function(TileKey key) visit) =>
+      _scan(k.z + 1, k.x * 2, k.y * 2, k.x * 2 + 1, k.y * 2 + 1, visit);
+
+  void _scan(int z, int x0, int y0, int x1, int y1, void Function(TileKey key) visit) {
+    for (var i = 0; i <= y1 - y0; i++) {
+      final y = northFar ? y0 + i : y1 - i;
+      for (var j = 0; j <= x1 - x0; j++) {
+        visit(TileKey(z, eastFar ? x0 + j : x1 - j, y));
+      }
+    }
+  }
+}
+
+/// 点の集まりの外接矩形を積み上げる
+class _Extent {
+  double minX = double.infinity;
+  double minY = double.infinity;
+  double maxX = -double.infinity;
+  double maxY = -double.infinity;
+
+  void add(double x, double y) {
+    minX = math.min(minX, x);
+    maxX = math.max(maxX, x);
+    minY = math.min(minY, y);
+    maxY = math.max(maxY, y);
+  }
+
+  void addOffset(ui.Offset p) => add(p.dx, p.dy);
+
+  /// (ox, oy) だけずらした矩形
+  ui.Rect toRect(double ox, double oy) => ui.Rect.fromLTRB(ox + minX, oy + minY, ox + maxX, oy + maxY);
 }

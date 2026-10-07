@@ -59,4 +59,10 @@ class WebMercator {
 
   /// タイル (tx, ty) の北端の Mercator y
   static double tileNorth(int ty, int z) => halfCircumference - ty * tileSpan(z);
+
+  /// Mercator x → それを含むタイル x（世界の外でも切らない）
+  static int tileXAt(double x, int z) => ((x + halfCircumference) / tileSpan(z)).floor();
+
+  /// Mercator y → それを含むタイル y（北が 0。世界の外でも切らない）
+  static int tileYAt(double y, int z) => ((halfCircumference - y) / tileSpan(z)).floor();
 }

@@ -14,17 +14,45 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: 同期ファイル操作ヘルパー
-// ファイル収集、パス正規化、Driveフォルダ解決、並列実行を担当
+// 手元と Drive のファイルの列挙、パスの変換、Drive フォルダの解決、ダウンロード、並列実行を担当
 
-import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
-import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
+import '../kmeta_service.dart';
 import 'google_drive_service.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
+
+/// Drive のフォルダ配下を丸ごと見たもの
+class DriveTree {
+  const DriveTree({required this.files, required this.folderMap});
+
+  /// 同期対象のファイル（相対パス付き）
+  final List<DriveFileEntry> files;
+
+  /// フォルダ ID → 相対パス（根は空文字）
+  final Map<String, String> folderMap;
+
+  /// 根を除くフォルダの相対パス
+  Iterable<String> get folderPaths => folderMap.values.where((v) => v.isNotEmpty);
+
+  /// 相対パス → フォルダ ID（[SyncFileOperations.getDriveFolderIdForRelativeDir] のキャッシュの種）
+  Map<String, String> folderIdsByPath() => {
+        for (final e in folderMap.entries)
+          if (e.value.isNotEmpty) e.value: e.key,
+      };
+
+  /// ファイル ID → エントリ
+  Map<String, DriveFileEntry> byId() => {
+        for (final e in files)
+          if (e.file.id != null) e.file.id!: e,
+      };
+}
+
+/// 手元の同期対象ファイル 1 件（[SyncFileOperations.listLocalSyncFiles]）
+typedef LocalSyncEntry = ({String path, String relativePath});
 
 /// 同期用ファイル操作ヘルパー
 class SyncFileOperations {
@@ -42,36 +70,11 @@ class SyncFileOperations {
     '*.tif',
   ];
 
+  static const String _folderMime = 'application/vnd.google-apps.folder';
+
   SyncFileOperations({required this.driveService});
 
-  /// 同期対象ファイルを収集
-  Future<List<LocalSyncFile>> collectSyncFiles(String projectPath) async {
-    final files = <LocalSyncFile>[];
-
-    for (final entry in await fs.listRecursive(projectPath)) {
-      final fileName = p.basename(entry.path);
-      final relativePath = normalizeRelativePath(
-        p.relative(entry.path, from: projectPath),
-      );
-
-      if (SyncBaseStore.isInside(relativePath)) continue; // 3-way マージの base は同期しない
-      if (!matchesSyncPattern(fileName)) continue;
-      if (fileName == '.ksync-state.json') continue;
-
-      // サイズはここで1回だけ聞いて持ち回る（web は都度問い合わせが高い）
-      final size = await fs.length(entry.path) ?? 0;
-      files.add(
-        LocalSyncFile(
-          path: entry.path,
-          relativePath: relativePath,
-          size: size,
-        ),
-      );
-      AppLogger.debug('[SyncEngine] 同期対象: $relativePath');
-    }
-
-    return files;
-  }
+  // ========== パス ==========
 
   /// 相対パスを正規化（Drive側は / 区切り）
   String normalizeRelativePath(String path) {
@@ -82,130 +85,6 @@ class SyncFileOperations {
   String relativePathToLocalPath(String basePath, String relativePath) {
     final segments = p.posix.split(relativePath);
     return p.joinAll([basePath, ...segments]);
-  }
-
-  /// Driveの相対フォルダパスに対応するフォルダIDを取得/作成
-  Future<String?> getDriveFolderIdForRelativeDir(
-    String rootFolderId,
-    String relativeDir,
-    Map<String, String> cache,
-  ) async {
-    if (relativeDir.isEmpty || relativeDir == '.') {
-      return rootFolderId;
-    }
-
-    final normalized = normalizeRelativePath(relativeDir);
-    if (cache.containsKey(normalized)) {
-      return cache[normalized];
-    }
-
-    String currentId = rootFolderId;
-    final segments = p.posix.split(normalized);
-    String currentPath = '';
-
-    for (final segment in segments) {
-      currentPath = currentPath.isEmpty ? segment : '$currentPath/$segment';
-      if (cache.containsKey(currentPath)) {
-        currentId = cache[currentPath]!;
-        continue;
-      }
-
-      final created = await driveService.getOrCreateSubFolder(
-        currentId,
-        segment,
-      );
-      if (created == null || created.id == null) {
-        return null;
-      }
-      currentId = created.id!;
-      cache[currentPath] = currentId;
-    }
-
-    return currentId;
-  }
-
-  /// Driveフォルダ配下のファイル一覧とフォルダマップを一括取得
-  /// 1フォルダにつきAPI 1回（listFiles）でフォルダ/ファイル両方を取得
-  Future<({List<DriveFileEntry> files, Map<String, String> folderMap})>
-      listDriveFilesWithFolders(
-    String rootFolderId, {
-    String currentPath = '',
-    Map<String, String>? folderMap,
-  }) async {
-    final entries = <DriveFileEntry>[];
-    final map = folderMap ?? <String, String>{};
-
-    if (currentPath.isEmpty) {
-      map[rootFolderId] = '';
-    }
-
-    final allItems = await driveService.listFiles(rootFolderId);
-
-    final folders = <drive.File>[];
-    for (final item in allItems) {
-      if (item.mimeType == 'application/vnd.google-apps.folder') {
-        folders.add(item);
-      } else {
-        final name = item.name ?? '';
-        if (name.isEmpty) continue;
-        if (!matchesSyncPattern(name)) continue;
-        final relativePath = currentPath.isEmpty ? name : '$currentPath/$name';
-        entries.add(DriveFileEntry(
-          file: item,
-          relativePath: normalizeRelativePath(relativePath),
-        ));
-      }
-    }
-
-    final futures =
-        <Future<({List<DriveFileEntry> files, Map<String, String> folderMap})>>[];
-    for (final folder in folders) {
-      final folderName = folder.name ?? '';
-      if (folderName.isEmpty) continue;
-      final nextPath =
-          currentPath.isEmpty ? folderName : '$currentPath/$folderName';
-      map[folder.id!] = nextPath;
-      futures.add(listDriveFilesWithFolders(
-        folder.id!,
-        currentPath: nextPath,
-        folderMap: map,
-      ));
-    }
-    final results = await Future.wait(futures);
-    for (final sub in results) {
-      entries.addAll(sub.files);
-    }
-
-    return (files: entries, folderMap: map);
-  }
-
-  /// ローカルフォルダ内のファイルを再帰スキャンし、相対パス→更新日時のマップを返す
-  Future<Map<String, DateTime>> scanLocalFiles(String localPath) async {
-    final localFiles = <String, DateTime>{};
-    if (!await fs.isDirectory(localPath)) return localFiles;
-
-    for (final entry in await fs.listRecursive(localPath)) {
-      final fileName = p.basename(entry.path);
-      if (fileName == kMetaFileName) continue;
-      if (!matchesSyncPattern(fileName)) continue;
-
-      final modified = await fs.lastModified(entry.path);
-      if (modified == null) continue;
-      final relativePath = normalizeRelativePath(
-        p.relative(entry.path, from: localPath),
-      );
-      if (SyncBaseStore.isInside(relativePath)) continue; // 3-way マージの base は同期しない
-      localFiles[relativePath] = modified;
-    }
-    return localFiles;
-  }
-
-  /// Driveフォルダ配下のファイルを再帰的に取得
-  Future<List<DriveFileEntry>> listDriveFilesRecursive(
-    String folderId,
-  ) async {
-    final result = await listDriveFilesWithFolders(folderId);
-    return result.files;
   }
 
   /// ファイル名が同期パターンにマッチするか
@@ -220,6 +99,157 @@ class SyncFileOperations {
     }
     return false;
   }
+
+  // ========== 手元 ==========
+
+  /// 手元の同期対象ファイルを列挙する（3-way マージの base を置く `.sync` の中は見ない）
+  Future<List<LocalSyncEntry>> listLocalSyncFiles(String localPath) async {
+    final out = <LocalSyncEntry>[];
+    final queue = <String>[localPath];
+    while (queue.isNotEmpty) {
+      final dir = queue.removeLast();
+      for (final entry in await fs.list(dir)) {
+        final relativePath = normalizeRelativePath(p.relative(entry.path, from: localPath));
+        // 3-way マージの base は同期しない（中も辿らない）
+        if (SyncBaseStore.isInside(relativePath)) continue;
+        if (entry.isDirectory) {
+          queue.add(entry.path);
+        } else if (matchesSyncPattern(p.basename(entry.path))) {
+          out.add((path: entry.path, relativePath: relativePath));
+        }
+      }
+    }
+    return out;
+  }
+
+  /// 手元の同期対象ファイルの、相対パス→更新日時
+  Future<Map<String, DateTime>> scanLocalFiles(String localPath) async {
+    final localFiles = <String, DateTime>{};
+    for (final entry in await listLocalSyncFiles(localPath)) {
+      final modified = await fs.lastModified(entry.path);
+      if (modified == null) continue;
+      localFiles[entry.relativePath] = modified;
+    }
+    return localFiles;
+  }
+
+  /// Drive にあるフォルダ（[folderPaths]）のうち、手元に無いものを作る。作った数を返す
+  Future<int> ensureLocalDirs(String localPath, Iterable<String> folderPaths) async {
+    var created = 0;
+    for (final relativeFolderPath in folderPaths) {
+      final dirPath = relativePathToLocalPath(localPath, relativeFolderPath);
+      if (await fs.isDirectory(dirPath)) continue;
+      await fs.createDirectory(dirPath);
+      created++;
+      AppLogger.debug('[SyncEngine] フォルダ作成: $relativeFolderPath');
+    }
+    return created;
+  }
+
+  /// Drive に無い（[keep] に無い）空のフォルダを手元から消す。深い階層から消すので連鎖して消える。
+  /// `.sync`（3-way マージの base）は触らない
+  Future<void> removeEmptyLocalDirs(String localPath, Set<String> keep) async {
+    if (!await fs.isDirectory(localPath)) return;
+    final localDirs = await fs.listDirectoriesRecursive(localPath);
+    localDirs.sort((a, b) => b.path.length.compareTo(a.path.length));
+    for (final dir in localDirs) {
+      final relativePath = normalizeRelativePath(p.relative(dir.path, from: localPath));
+      if (SyncBaseStore.isInside(relativePath)) continue;
+      if (keep.contains(relativePath)) continue;
+      if ((await fs.list(dir.path)).isEmpty) {
+        await fs.delete(dir.path);
+        AppLogger.debug('[SyncEngine] 空フォルダ削除: $relativePath');
+      }
+    }
+  }
+
+  /// Drive のファイルを落として手元の [localFilePath] を置き換える。
+  ///
+  /// この端末のリンク情報は、落とした `.qgs` で上書きしない。gpkg は開いている接続を閉じてから置き換え、
+  /// 置き換えたあと一度開いて閉じる（[SyncBaseStore.settleAfterDownload]）。落とせなければ false
+  Future<bool> downloadReplacing(String fileId, String localFilePath) async {
+    final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
+    await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
+    if (!await driveService.downloadFile(fileId, localFilePath)) return false;
+    await SyncBaseStore.settleAfterDownload(localFilePath);
+    await KMetaService.instance.afterReplace(localFilePath, keepLink);
+    return true;
+  }
+
+  // ========== Drive ==========
+
+  /// Driveの相対フォルダパスに対応するフォルダIDを取得/作成
+  ///
+  /// [cache] は相対パス→ID。[DriveTree.folderIdsByPath] で種を入れておけば、あるフォルダは Drive に聞かない
+  Future<String?> getDriveFolderIdForRelativeDir(
+    String rootFolderId,
+    String relativeDir,
+    Map<String, String> cache,
+  ) async {
+    if (relativeDir.isEmpty || relativeDir == '.') {
+      return rootFolderId;
+    }
+
+    final normalized = normalizeRelativePath(relativeDir);
+    final cached = cache[normalized];
+    if (cached != null) return cached;
+
+    String currentId = rootFolderId;
+    String currentPath = '';
+
+    for (final segment in p.posix.split(normalized)) {
+      currentPath = currentPath.isEmpty ? segment : '$currentPath/$segment';
+      final known = cache[currentPath];
+      if (known != null) {
+        currentId = known;
+        continue;
+      }
+
+      final created = await driveService.getOrCreateSubFolder(currentId, segment);
+      if (created == null || created.id == null) {
+        return null;
+      }
+      currentId = created.id!;
+      cache[currentPath] = currentId;
+    }
+
+    return currentId;
+  }
+
+  /// Driveフォルダ配下のファイル一覧とフォルダマップを一括取得
+  /// 1フォルダにつき一覧 1 回（listFiles）でフォルダ/ファイル両方を取得し、サブフォルダは並列にたどる
+  Future<DriveTree> listDriveTree(String rootFolderId) async {
+    final folderMap = <String, String>{rootFolderId: ''};
+    final files = await _listDriveFolder(rootFolderId, '', folderMap);
+    return DriveTree(files: files, folderMap: folderMap);
+  }
+
+  /// [folderId] 配下のファイル（直下のもの → サブフォルダの順）。見つけたフォルダは [folderMap] に足す
+  Future<List<DriveFileEntry>> _listDriveFolder(
+    String folderId,
+    String currentPath,
+    Map<String, String> folderMap,
+  ) async {
+    final entries = <DriveFileEntry>[];
+    final subFolders = <Future<List<DriveFileEntry>>>[];
+    for (final item in await driveService.listFiles(folderId)) {
+      final name = item.name ?? '';
+      if (name.isEmpty) continue;
+      final path = currentPath.isEmpty ? name : '$currentPath/$name';
+      if (item.mimeType == _folderMime) {
+        folderMap[item.id!] = path;
+        subFolders.add(_listDriveFolder(item.id!, path, folderMap));
+      } else if (matchesSyncPattern(name)) {
+        entries.add(DriveFileEntry(file: item, relativePath: normalizeRelativePath(path)));
+      }
+    }
+    for (final sub in await Future.wait(subFolders)) {
+      entries.addAll(sub);
+    }
+    return entries;
+  }
+
+  // ========== 並列実行 ==========
 
   /// 並列数を制限して非同期タスクを実行
   static Future<List<T>> runParallel<T>(
@@ -244,3 +274,4 @@ class SyncFileOperations {
     return results;
   }
 }
+

@@ -145,15 +145,6 @@ void main() {
       expect(r.error, isNotNull);
       expect(await rows(mine), before);
     });
-
-    test('hasChanges: 変更なし=0、あり=1', () async {
-      final base = await makeGpkg('${tmp.path}/base.gpkg');
-      final same = '${tmp.path}/same.gpkg';
-      g.makeCopySqlite(base, same);
-      expect(await GpkgMerger(g).hasChanges(base: base, modified: same), 0);
-      await sql(same, 'UPDATE trees SET dbh=1 WHERE fid=1');
-      expect(await GpkgMerger(g).hasChanges(base: base, modified: same), 1);
-    });
   });
 
   group('SyncBaseStore', () {

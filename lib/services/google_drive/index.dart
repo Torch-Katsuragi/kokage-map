@@ -25,3 +25,4 @@ export 'sync_engine.dart';
 export 'sync_file_operations.dart';
 export 'sync_pull_handler.dart';
 export 'sync_push_handler.dart';
+export 'sync_snapshot.dart';

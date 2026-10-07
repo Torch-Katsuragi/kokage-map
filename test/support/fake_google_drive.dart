@@ -121,9 +121,13 @@ class FakeGoogleDrive implements GoogleDriveService {
     return f == null || f.trashed ? null : f.toFile();
   }
 
+  /// テスト用: このフォルダの一覧を取ろうとすると失敗する（電波が切れた等）
+  final Set<String> failListFor = {};
+
   @override
   Future<List<drive.File>> listFiles(String parentId) async {
     _count('listFiles');
+    if (failListFor.contains(parentId)) throw Exception('一覧を取れない: $parentId');
     return childrenOf(parentId).map((i) => i.toFile()).toList();
   }
 
@@ -134,14 +138,6 @@ class FakeGoogleDrive implements GoogleDriveService {
     if (existing != null && existing.isFolder) return existing.toFile();
     final id = _newId();
     items[id] = FakeDriveItem(id: id, name: folderName, parentId: parentId, isFolder: true);
-    return items[id]!.toFile();
-  }
-
-  @override
-  Future<drive.File?> createProjectFolder(String name, {String? parentId}) async {
-    _count('createProjectFolder');
-    final id = _newId();
-    items[id] = FakeDriveItem(id: id, name: name, parentId: parentId, isFolder: true);
     return items[id]!.toFile();
   }
 
@@ -167,11 +163,7 @@ class FakeGoogleDrive implements GoogleDriveService {
   }
 
   @override
-  Future<drive.File?> uploadFile(
-    String localPath,
-    String parentId, {
-    void Function(double progress)? onProgress,
-  }) async {
+  Future<drive.File?> uploadFile(String localPath, String parentId) async {
     _count('uploadFile');
     return uploadBytes(await File(localPath).readAsBytes(), p.basename(localPath), parentId);
   }
@@ -196,11 +188,7 @@ class FakeGoogleDrive implements GoogleDriveService {
   }
 
   @override
-  Future<bool> downloadFile(
-    String fileId,
-    String localPath, {
-    void Function(double progress)? onProgress,
-  }) async {
+  Future<bool> downloadFile(String fileId, String localPath) async {
     _count('downloadFile');
     final f = items[fileId];
     if (f == null || f.isFolder || f.trashed) return false;

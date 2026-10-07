@@ -113,20 +113,6 @@ class GpkgMerger {
     }
   }
 
-  /// base からの変更があるか（-1 は判定不能）
-  Future<int> hasChanges({required String base, required String modified}) async {
-    final cs = '$modified.changes.diff';
-    try {
-      final rc = _geodiff.createChangeset(base, modified, cs);
-      if (rc != GeodiffResult.success) return -1;
-      return _geodiff.hasChanges(cs);
-    } finally {
-      try {
-        if (await fs.exists(cs)) await fs.delete(cs);
-      } catch (_) {}
-    }
-  }
-
   /// 相手（base → theirs）が直した行のうち、こちら（base → mine）が消した行。
   ///
   /// geodiff の listChanges JSON: {"geodiff":[{"table":"t","type":"update","changes":[{"column":0,"old":1},

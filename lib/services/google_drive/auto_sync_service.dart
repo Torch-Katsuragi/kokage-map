@@ -30,6 +30,7 @@ import '../../models/nodes/layer_tree_node.dart';
 import '../../utils/app_logger.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';
+import 'sync_snapshot.dart';
 
 /// 自動同期の設定キー
 const String kAutoSyncEnabledKey = 'auto_sync_enabled';
@@ -218,7 +219,7 @@ class AutoSyncService {
           }
           node.syncStatus = SyncStatus.syncing;
           onSyncStatusChanged?.call();
-          final result = await engine.pushFolder(localPath);
+          final result = await engine.pushFolder(localPath, snapshot: detail.snapshot);
           node.syncStatus = result.success
               ? SyncStatus.synced
               : SyncStatus.error;
@@ -235,7 +236,7 @@ class AutoSyncService {
         case FolderSyncStatus.remoteChanges:
           node.syncStatus = SyncStatus.syncing;
           onSyncStatusChanged?.call();
-          final result = await engine.pullFolder(localPath);
+          final result = await engine.pullFolder(localPath, snapshot: detail.snapshot);
           node.syncStatus = result.success
               ? SyncStatus.synced
               : SyncStatus.error;
@@ -252,7 +253,7 @@ class AutoSyncService {
 
         case FolderSyncStatus.conflict:
           // ファイル単位でconflictを判定し、非conflictは自動マージ
-          await _handleConflict(engine, node, localPath);
+          await _handleConflict(engine, node, localPath, detail.snapshot);
 
         case FolderSyncStatus.notLinked:
         case FolderSyncStatus.error:
@@ -286,8 +287,10 @@ class AutoSyncService {
     SyncEngine engine,
     DriveFolderNode node,
     String localPath,
+    SyncSnapshot? snapshot,
   ) async {
-    final entries = await engine.getMergeEntries(localPath);
+    // 判定に使った材料をそのまま使う（Drive をたどり直さない）
+    final entries = await engine.getMergeEntries(localPath, snapshot: snapshot);
     if (entries.isEmpty) {
       node.syncStatus = SyncStatus.synced;
       return;
@@ -333,7 +336,7 @@ class AutoSyncService {
     if (autoDecisions.isNotEmpty) {
       node.syncStatus = SyncStatus.syncing;
       onSyncStatusChanged?.call();
-      final result = await engine.executeMerge(localPath, autoDecisions);
+      final result = await engine.executeMerge(localPath, autoDecisions, snapshot: snapshot);
       if (result.success) {
         AppLogger.debug(
           '[AutoSync] ${node.name}: auto-merged ${autoDecisions.length} file(s) '

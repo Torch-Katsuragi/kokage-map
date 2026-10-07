@@ -354,10 +354,6 @@ abstract class LayerNode extends LayerTreeNode {
     _kmetaStyleLoaded = false;
   }
 
-  /// キャッシュ済みのKMetaスタイルを同期的に取得（描画用）
-  /// キャッシュされていない場合はnullを返す
-  KMetaLayerStyle? get cachedKmetaStyle => _cachedKmetaStyle;
-
   /// KMetaスタイルがキャッシュ済みかどうか
   bool get isKmetaStyleLoaded => _kmetaStyleLoaded;
 
@@ -488,10 +484,40 @@ abstract class LayerNode extends LayerTreeNode {
     _cachedColumnNamesWithoutPK = null;
   }
 
-  /// データベースからFeatureNodeを非同期で読み込み（プライベートメソッド）
-  /// サブクラスでoverrideして具体的な実装を提供する
+  /// 行から地物のノードを作る（形の種類ごと）
+  FeatureNode _featureFromRow(Map<String, dynamic> row);
+
+  /// 1クエリで全フィーチャをジオメトリパース済みで取得。
+  /// 表示中Viewのフィルタがあれば WHERE で絞る（[activeViewFilter]）
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    return <FeatureNode>[];
+    final rows = await geoPackageFile.getFeaturesWithGeometry(
+      layerName,
+      where: activeViewFilter,
+    );
+    return [
+      for (final row in rows)
+        if (row['geometry'] != null) _featureFromRow(row),
+    ];
+  }
+
+  /// [parent] の GeoPackage に新しいレイヤを作ってノードを返す。
+  /// 重複名がある場合は自動的にナンバリング（例: "道路_2", "道路_3"）する
+  static Future<T?> _createIn<T extends LayerNode>(
+    LayerTreeNode parent,
+    String name,
+    GeometryType type,
+    T Function(GeoPackageFile file, String name, GeoPackageNode parent) create,
+  ) async {
+    if (parent is! GeoPackageNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final uniqueName = LayerNameUtils.generateUniqueLayerName(
+      name,
+      await gpkgFile.getLayerNames(),
+    );
+    await gpkgFile.addLayer(uniqueName, type);
+    final node = create(gpkgFile, uniqueName, parent);
+    parent.addChild(node);
+    return node;
   }
 
   /// FeatureNodeを安全に追加するメソッド
@@ -514,73 +540,6 @@ abstract class LayerNode extends LayerTreeNode {
     super.removeChild(feature);
     // _featureMapからも削除
     _removeFeatureFromMap(feature.rowId);
-  }
-
-  /// rowIdに該当するFeatureNodeを検索
-  FeatureNode? findFeatureByRowId(int rowId) {
-    for (final feature in features) {
-      if (feature.rowId == rowId) {
-        return feature;
-      }
-    }
-    return null;
-  }
-
-  /// childrenから属性値辞書を取得し、属性テーブルの2次元配列を返す
-  /// [columns] 取得するカラム名のリスト（nullの場合は全カラム取得）
-  /// 戻り値: `List<List<dynamic>>` - [ヘッダー行, データ行1, データ行2, ...]
-  Future<List<List<dynamic>>> getAttributeTableData({
-    List<String>? columns,
-    bool getAll = false,
-  }) async {
-    // カラム名を取得
-    final columnNames =
-        columns ?? await getAttributeColumnNames(getAll: getAll);
-
-    // ヘッダー行
-    final table = <List<dynamic>>[columnNames];
-
-    // 各FeatureNodeから属性値を取得してデータ行を作成
-    for (final feature in features) {
-      final row = <dynamic>[];
-
-      for (final columnName in columnNames) {
-        // FeatureNodeのcachedAttributesから値を取得
-        final value = await feature.getAttributeValue(columnName);
-        row.add(value);
-      }
-
-      table.add(row);
-    }
-
-    return table;
-  }
-
-  /// 属性テーブルデータを辞書形式で取得（UI表示用）
-  /// 戻り値: `Map<String, List<dynamic>>` - カラム名をキーとした列データのマップ
-  Future<Map<String, List<dynamic>>> getAttributeTableMap({
-    List<String>? columns,
-    bool getAll = false,
-  }) async {
-    // カラム名を取得
-    final columnNames =
-        columns ?? await getAttributeColumnNames(getAll: getAll);
-
-    // 各カラムの値リストを初期化
-    final tableMap = <String, List<dynamic>>{};
-    for (final columnName in columnNames) {
-      tableMap[columnName] = <dynamic>[];
-    }
-
-    // 各FeatureNodeから属性値を取得
-    for (final feature in features) {
-      for (final columnName in columnNames) {
-        final value = await feature.getAttributeValue(columnName);
-        tableMap[columnName]!.add(value);
-      }
-    }
-
-    return tableMap;
   }
 
   /// コンストラクタ
@@ -1132,47 +1091,15 @@ class PointLayerNode extends LayerNode {
   PointLayerNode(super.file, super.name, {super.visible, super.parent});
 
   @override
-  Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    // 1クエリで全フィーチャをジオメトリパース済みで取得。
-    // 表示中Viewのフィルタがあれば WHERE で絞る（[activeViewFilter]）。
-    final rows = await geoPackageFile.getFeaturesWithGeometry(
-      layerName,
-      where: activeViewFilter,
-    );
-    final features = <FeatureNode>[];
+  FeatureNode _featureFromRow(Map<String, dynamic> row) => PointFeatureNode(row, this);
 
-    for (final row in rows) {
-      if (row['geometry'] == null) continue;
-      final featureNode = PointFeatureNode(row, this);
-      features.add(featureNode);
-    }
-
-    return features;
-  }
-
-  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
-
-  /// 指定したGeoPackageNodeの下に新しいPointレイヤを作成し、PointLayerNodeインスタンスを返す
-  /// 重複名がある場合は自動的にナンバリング（例: "道路_2", "道路_3"）する
-  static Future<PointLayerNode?> createIn(
-    LayerTreeNode parent,
-    String name,
-  ) async {
-    if (parent is! GeoPackageNode) return null;
-    final gpkgFile = parent.geoPackageFile;
-    final existingLayers = await gpkgFile.getLayerNames();
-
-    // 重複しない名前を生成
-    final uniqueName = LayerNameUtils.generateUniqueLayerName(
-      name,
-      existingLayers,
-    );
-
-    await gpkgFile.addLayer(uniqueName, GeometryType.point);
-    final node = PointLayerNode(gpkgFile, uniqueName, parent: parent);
-    parent.addChild(node);
-    return node;
-  }
+  static Future<PointLayerNode?> createIn(LayerTreeNode parent, String name) =>
+      LayerNode._createIn(
+        parent,
+        name,
+        GeometryType.point,
+        (file, name, parent) => PointLayerNode(file, name, parent: parent),
+      );
 }
 
 /// ラインレイヤノード
@@ -1180,45 +1107,15 @@ class LineLayerNode extends LayerNode {
   LineLayerNode(super.file, super.name, {super.visible, super.parent});
 
   @override
-  Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    final rows = await geoPackageFile.getFeaturesWithGeometry(
-      layerName,
-      where: activeViewFilter,
-    );
-    final features = <FeatureNode>[];
+  FeatureNode _featureFromRow(Map<String, dynamic> row) => LineFeatureNode(row, this);
 
-    for (final row in rows) {
-      if (row['geometry'] == null) continue;
-      final featureNode = LineFeatureNode(row, this);
-      features.add(featureNode);
-    }
-
-    return features;
-  }
-
-  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
-
-  /// 指定したGeoPackageNodeの下に新しいLineレイヤを作成し、LineLayerNodeインスタンスを返す
-  /// 重複名がある場合は自動的にナンバリング（例: "道路_2", "道路_3"）する
-  static Future<LineLayerNode?> createIn(
-    LayerTreeNode parent,
-    String name,
-  ) async {
-    if (parent is! GeoPackageNode) return null;
-    final gpkgFile = parent.geoPackageFile;
-    final existingLayers = await gpkgFile.getLayerNames();
-
-    // 重複しない名前を生成
-    final uniqueName = LayerNameUtils.generateUniqueLayerName(
-      name,
-      existingLayers,
-    );
-
-    await gpkgFile.addLayer(uniqueName, GeometryType.linestring);
-    final node = LineLayerNode(gpkgFile, uniqueName, parent: parent);
-    parent.addChild(node);
-    return node;
-  }
+  static Future<LineLayerNode?> createIn(LayerTreeNode parent, String name) =>
+      LayerNode._createIn(
+        parent,
+        name,
+        GeometryType.linestring,
+        (file, name, parent) => LineLayerNode(file, name, parent: parent),
+      );
 }
 
 /// ポリゴンレイヤノード
@@ -1226,43 +1123,13 @@ class PolygonLayerNode extends LayerNode {
   PolygonLayerNode(super.file, super.name, {super.visible, super.parent});
 
   @override
-  Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    final rows = await geoPackageFile.getFeaturesWithGeometry(
-      layerName,
-      where: activeViewFilter,
-    );
-    final features = <FeatureNode>[];
+  FeatureNode _featureFromRow(Map<String, dynamic> row) => PolygonFeatureNode(row, this);
 
-    for (final row in rows) {
-      if (row['geometry'] == null) continue;
-      final featureNode = PolygonFeatureNode(row, this);
-      features.add(featureNode);
-    }
-
-    return features;
-  }
-
-  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
-
-  /// 指定したGeoPackageNodeの下に新しいPolygonレイヤを作成し、PolygonLayerNodeインスタンスを返す
-  /// 重複名がある場合は自動的にナンバリング（例: "道路_2", "道路_3"）する
-  static Future<PolygonLayerNode?> createIn(
-    LayerTreeNode parent,
-    String name,
-  ) async {
-    if (parent is! GeoPackageNode) return null;
-    final gpkgFile = parent.geoPackageFile;
-    final existingLayers = await gpkgFile.getLayerNames();
-
-    // 重複しない名前を生成
-    final uniqueName = LayerNameUtils.generateUniqueLayerName(
-      name,
-      existingLayers,
-    );
-
-    await gpkgFile.addLayer(uniqueName, GeometryType.polygon);
-    final node = PolygonLayerNode(gpkgFile, uniqueName, parent: parent);
-    parent.addChild(node);
-    return node;
-  }
+  static Future<PolygonLayerNode?> createIn(LayerTreeNode parent, String name) =>
+      LayerNode._createIn(
+        parent,
+        name,
+        GeometryType.polygon,
+        (file, name, parent) => PolygonLayerNode(file, name, parent: parent),
+      );
 }

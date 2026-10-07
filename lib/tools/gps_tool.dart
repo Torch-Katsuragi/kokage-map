@@ -223,86 +223,13 @@ class GpsTool extends MapTool {
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = _ref.read(selectedLayerNodeProvider);
       if (selected is PointLayerNode) {
-        // GPS測量時は即座にPointフィーチャを作成（メタデータなし、個別カラムに保存）
-        final pointFeature = await PointFeatureNode.createIn(
-          selected,
-          position,
-          '', // nameは空
-          '', // descriptionも空
-        );
-
-        if (pointFeature != null) {
-          // GPS属性を個別カラムとして設定（拡張版）
-          final attributes = <String, dynamic>{};
-
-          // 平均化された結果から属性を設定
-          if (averagedResult['altitude'] != null) {
-            attributes['altitude'] = averagedResult['altitude'];
-          }
-          if (averagedResult['accuracy'] != null) {
-            attributes['accuracy'] = averagedResult['accuracy'];
-          }
-
-          // 最初のGPSデータから追加属性を取得
-          if (_longPressGpsData.isNotEmpty) {
-            final firstData = _longPressGpsData.first;
-            if (firstData['speed'] != null) {
-              attributes['speed'] = firstData['speed'];
-            }
-            if (firstData['bearing'] != null) {
-              attributes['bearing'] = firstData['bearing'];
-            }
-            if (firstData['sourceType'] != null) {
-              attributes['source_type'] = firstData['sourceType'];
-            }
-            // 拡張属性（外部GNSS用）
-            if (firstData['hdop'] != null) {
-              attributes['hdop'] = firstData['hdop'];
-            }
-            if (firstData['satelliteCount'] != null) {
-              attributes['satellite_count'] = firstData['satelliteCount'];
-            }
-            if (firstData['fixType'] != null) {
-              attributes['fix_type'] = firstData['fixType'];
-            }
-            if (firstData['correctionSource'] != null) {
-              attributes['correction_source'] = firstData['correctionSource'];
-            }
-          }
-
-          // 全NMEAデータを収集して保存（最後のデータから取得）
-          if (_longPressGpsData.isNotEmpty) {
-            final lastData = _longPressGpsData.last;
-            if (lastData['nmea'] != null) {
-              attributes['nmea'] = lastData['nmea'];
-            }
-          }
-
-          attributes['timestamp'] = DateTime.now().toIso8601String();
-          attributes['sample_count'] = averagedResult['sampleCount'];
-
-          // 属性値を設定（カラムが存在しない場合は自動作成される）
-          if (attributes.isNotEmpty) {
-            await pointFeature.setAttributeValues(attributes);
-          }
-
-          _ref.read(featureRefreshTriggerProvider.notifier).trigger();
-
-          // Point測量完了後はGPS測量を停止（リソース効率化）
-          await _gpsManager.stopGpsSurvey();
-
-          // データ収集タイマーも確実に停止（念のため）
-          _gpsCollectionTimer?.cancel();
-          _gpsCollectionTimer = null;
-
-          AppLogger.debug(
-            '[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み・タイマー確認済み）',
-          );
-          return true; // 成功
-        } else {
-          AppLogger.debug('[ERROR] GPS測量ポイントフィーチャの作成に失敗しました');
-          return false; // 失敗
-        }
+        return await _recordPoint(selected, position, {
+          'altitude': averagedResult['altitude'],
+          'accuracy': averagedResult['accuracy'],
+          ..._gpsAttributes(_longPressGpsData.first),
+          'nmea': _longPressGpsData.last['nmea'],
+          'sample_count': averagedResult['sampleCount'],
+        });
       } else if (selected is LineLayerNode) {
         // GlobalDrawingStateにGPS測量データとして追加
         drawingState.addLinePoint(position, optimizedGpsData);
@@ -385,76 +312,13 @@ class GpsTool extends MapTool {
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = _ref.read(selectedLayerNodeProvider);
       if (selected is PointLayerNode) {
-        // GPS測量時は即座にPointフィーチャを作成（メタデータなし、個別カラムに保存）
-        final pointFeature = await PointFeatureNode.createIn(
-          selected,
-          position,
-          '', // nameは空
-          '', // descriptionも空
-        );
-
-        if (pointFeature != null) {
-          // GPS属性を個別カラムとして設定（拡張版）
-          final attributes = <String, dynamic>{};
-
-          // 単発測量の場合はgpsInfoから直接取得
-          if (gpsInfo['altitude'] != null) {
-            attributes['altitude'] = gpsInfo['altitude'];
-          }
-          if (gpsInfo['accuracy'] != null) {
-            attributes['accuracy'] = gpsInfo['accuracy'];
-          }
-          if (gpsInfo['speed'] != null) {
-            attributes['speed'] = gpsInfo['speed'];
-          }
-          if (gpsInfo['bearing'] != null) {
-            attributes['bearing'] = gpsInfo['bearing'];
-          }
-          if (gpsInfo['sourceType'] != null) {
-            attributes['source_type'] = gpsInfo['sourceType'];
-          }
-          // 拡張属性（外部GNSS用）
-          if (gpsInfo['hdop'] != null) {
-            attributes['hdop'] = gpsInfo['hdop'];
-          }
-          if (gpsInfo['satelliteCount'] != null) {
-            attributes['satellite_count'] = gpsInfo['satelliteCount'];
-          }
-          if (gpsInfo['fixType'] != null) {
-            attributes['fix_type'] = gpsInfo['fixType'];
-          }
-          if (gpsInfo['correctionSource'] != null) {
-            attributes['correction_source'] = gpsInfo['correctionSource'];
-          }
-          if (gpsInfo['nmea'] != null) {
-            attributes['nmea'] = gpsInfo['nmea'];
-          }
-
-          attributes['timestamp'] = DateTime.now().toIso8601String();
-          attributes['sample_count'] = 1; // 単発測量なので1
-
-          // 属性値を設定（カラムが存在しない場合は自動作成される）
-          if (attributes.isNotEmpty) {
-            await pointFeature.setAttributeValues(attributes);
-          }
-
-          _ref.read(featureRefreshTriggerProvider.notifier).trigger();
-
-          // Point測量完了後はGPS測量を停止（リソース効率化）
-          await _gpsManager.stopGpsSurvey();
-
-          // データ収集タイマーも確実に停止（念のため）
-          _gpsCollectionTimer?.cancel();
-          _gpsCollectionTimer = null;
-
-          AppLogger.debug(
-            '[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み・タイマー確認済み）',
-          );
-          return true; // 成功
-        } else {
-          AppLogger.debug('[ERROR] GPS測量ポイントフィーチャの作成に失敗しました');
-          return false; // 失敗
-        }
+        return await _recordPoint(selected, position, {
+          'altitude': gpsInfo['altitude'],
+          'accuracy': gpsInfo['accuracy'],
+          ..._gpsAttributes(gpsInfo),
+          'nmea': gpsInfo['nmea'],
+          'sample_count': 1, // 単発測量なので1
+        });
       } else if (selected is LineLayerNode) {
         // GlobalDrawingStateにGPS測量データとして追加
         drawingState.addLinePoint(position, optimizedGpsData);
@@ -474,6 +338,51 @@ class GpsTool extends MapTool {
       AppLogger.debug('[GpsTool] GPS位置記録エラー: $e');
       return false;
     }
+  }
+
+  /// GPS の値のうち点の属性に写すもの（GPS 側の名前 → 列名）
+  static const _gpsAttributeColumns = {
+    'speed': 'speed',
+    'bearing': 'bearing',
+    'sourceType': 'source_type',
+    // 拡張属性（外部GNSS用）
+    'hdop': 'hdop',
+    'satelliteCount': 'satellite_count',
+    'fixType': 'fix_type',
+    'correctionSource': 'correction_source',
+  };
+
+  Map<String, dynamic> _gpsAttributes(Map<String, dynamic> gps) => {
+    for (final MapEntry(:key, :value) in _gpsAttributeColumns.entries)
+      value: gps[key],
+  };
+
+  /// GPS 測量の点を作り、属性を個別カラムに書いて GPS 測量を止める。
+  /// 値が null の属性は書かない
+  Future<bool> _recordPoint(
+    PointLayerNode layer,
+    LatLng position,
+    Map<String, dynamic> attributes,
+  ) async {
+    final pointFeature =
+        await PointFeatureNode.createIn(layer, position, '', '');
+    if (pointFeature == null) {
+      AppLogger.debug('[ERROR] GPS測量ポイントフィーチャの作成に失敗しました');
+      return false;
+    }
+    // カラムが存在しない場合は自動作成される
+    await pointFeature.setAttributeValues({
+      for (final MapEntry(:key, :value) in attributes.entries)
+        key: ?value,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+    _ref.read(featureRefreshTriggerProvider.notifier).trigger();
+
+    // Point測量完了後はGPS測量を止め、データ収集タイマーも確実に止める
+    await _gpsManager.stopGpsSurvey();
+    _gpsCollectionTimer?.cancel();
+    _gpsCollectionTimer = null;
+    return true;
   }
 
   /// GPS平均化計算

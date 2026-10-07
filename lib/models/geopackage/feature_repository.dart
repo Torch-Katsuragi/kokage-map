@@ -105,9 +105,6 @@ class FeatureRepository {
     return crs;
   }
 
-  /// CRSキャッシュをクリア
-  void clearCrsCache() => _crsCache.clear();
-
   // ============================================================
   // 書き込み前クリンナップ
   // ============================================================
@@ -239,11 +236,6 @@ class FeatureRepository {
     return (minX: minX, minY: minY, maxX: maxX, maxY: maxY);
   }
 
-  ({double minX, double minY, double maxX, double maxY})?
-  _calculatePolygonEnvelope(List<List<LatLng>> rings) {
-    final allPoints = rings.expand((ring) => ring).toList();
-    return _calculateEnvelope(allPoints);
-  }
 
   Future<void> _updateSpatialIndex(
     String tableName,
@@ -361,143 +353,82 @@ class FeatureRepository {
   ]);
 
   // ============================================================
-  // フィーチャ追加（WithAttributes版）
+  // フィーチャ追加・更新
   // ============================================================
+
+  /// WGS84 の形をレイヤの CRS に移して GeoPackage の WKB にする
+  Future<Uint8List> _toLayerWkb(String tableName, geo.Geometry geom) async =>
+      _encodeInCrs(await _getLayerCrs(tableName), geom);
+
+  Uint8List _encodeInCrs(GpkgCrsInfo crs, geo.Geometry geom) {
+    final target = (!crs.isWgs84 && crs.projection != null)
+        ? GeometryReprojector.reprojectFromWgs84(
+            geom,
+            crs.projection!,
+            needsAxisSwap: crs.needsAxisSwap,
+          )
+        : geom;
+    final wkb = createGpkgWkb(target, srsId: crs.srsId);
+    _validateAndLogWkb(wkb, '${crs.epsgCode} ${geom.geomType}');
+    return wkb;
+  }
+
+  Future<int?> _addWithAttributes(
+    String tableName,
+    geo.Geometry geom,
+    List<LatLng> points,
+    Map<String, dynamic> attributes,
+  ) async {
+    try {
+      await _prepareForWrite(tableName);
+      final db = await connection.getDatabase();
+      final wkb = await _toLayerWkb(tableName, geom);
+      final rowId = await _insertRow(db, tableName, {'geom': wkb, ...attributes});
+      final env = _calculateEnvelope(points);
+      if (env != null) await _updateSpatialIndex(tableName, rowId, env);
+      return rowId;
+    } catch (e) {
+      AppLogger.debug('[ERROR] FeatureRepository: add ${geom.geomType} failed: $e');
+      return null;
+    }
+  }
 
   Future<int?> addPointWithAttributes(
     String tableName,
     LatLng point,
     Map<String, dynamic> attributes,
-  ) async {
-    try {
-      await _prepareForWrite(tableName);
-      final db = await connection.getDatabase();
-      final crs = await _getLayerCrs(tableName);
-      final geom = _buildGeoPoint(point);
-
-      // 非WGS84の場合はWGS84→ソースCRSに逆変換
-      final targetGeom =
-          (!crs.isWgs84 && crs.projection != null)
-              ? GeometryReprojector.reprojectFromWgs84(
-                geom,
-                crs.projection!,
-                needsAxisSwap: crs.needsAxisSwap,
-              )
-              : geom;
-
-      if (!crs.isWgs84 && targetGeom is geo.Point) {
-        AppLogger.debug(
-          '[FeatureRepository] CRS逆変換: '
-          'WGS84(${point.longitude}, ${point.latitude}) → '
-          '${crs.epsgCode}(${targetGeom.position.x}, ${targetGeom.position.y})',
-        );
-      }
-
-      final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
-      _validateAndLogWkb(
-        wkb,
-        'addPointWithAttributes - ${point.latitude}, ${point.longitude}',
-      );
-
-      final data = <String, dynamic>{'geom': wkb, ...attributes};
-      final rowId = await _insertRow(db, tableName, data);
-
-      final env = _calculateEnvelope([point]);
-      if (env != null) await _updateSpatialIndex(tableName, rowId, env);
-
-      return rowId;
-    } catch (e) {
-      AppLogger.debug(
-        '[ERROR] FeatureRepository: addPointWithAttributes failed: $e',
-      );
-      return null;
-    }
-  }
+  ) => _addWithAttributes(tableName, _buildGeoPoint(point), [point], attributes);
 
   Future<int?> addLineWithAttributes(
     String tableName,
     List<LatLng> line,
     Map<String, dynamic> attributes,
-  ) async {
-    try {
-      await _prepareForWrite(tableName);
-      final db = await connection.getDatabase();
-      final crs = await _getLayerCrs(tableName);
-      final geom = _buildGeoMultiLineString(line);
-
-      final targetGeom =
-          (!crs.isWgs84 && crs.projection != null)
-              ? GeometryReprojector.reprojectFromWgs84(
-                geom,
-                crs.projection!,
-                needsAxisSwap: crs.needsAxisSwap,
-              )
-              : geom;
-
-      final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
-
-      final data = <String, dynamic>{'geom': wkb, ...attributes};
-      final rowId = await _insertRow(db, tableName, data);
-
-      final env = _calculateEnvelope(line);
-      if (env != null) await _updateSpatialIndex(tableName, rowId, env);
-
-      return rowId;
-    } catch (e) {
-      AppLogger.debug(
-        '[ERROR] FeatureRepository: addLineWithAttributes failed: $e',
-      );
-      return null;
-    }
-  }
+  ) => _addWithAttributes(
+    tableName,
+    _buildGeoMultiLineString(line),
+    line,
+    attributes,
+  );
 
   Future<int?> addPolygonWithAttributes(
     String tableName,
     List<List<LatLng>> polygon,
     Map<String, dynamic> attributes,
-  ) async {
-    try {
-      await _prepareForWrite(tableName);
-      final db = await connection.getDatabase();
-      final crs = await _getLayerCrs(tableName);
-      final geom = _buildGeoMultiPolygon(polygon);
+  ) => _addWithAttributes(
+    tableName,
+    _buildGeoMultiPolygon(polygon),
+    [for (final ring in polygon) ...ring],
+    attributes,
+  );
 
-      final targetGeom =
-          (!crs.isWgs84 && crs.projection != null)
-              ? GeometryReprojector.reprojectFromWgs84(
-                geom,
-                crs.projection!,
-                needsAxisSwap: crs.needsAxisSwap,
-              )
-              : geom;
-
-      final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
-
-      final data = <String, dynamic>{'geom': wkb, ...attributes};
-      final rowId = await _insertRow(db, tableName, data);
-
-      final env = _calculatePolygonEnvelope(polygon);
-      if (env != null) await _updateSpatialIndex(tableName, rowId, env);
-
-      return rowId;
-    } catch (e) {
-      AppLogger.debug(
-        '[ERROR] FeatureRepository: addPolygonWithAttributes failed: $e',
-      );
-      return null;
-    }
-  }
-
-  // ============================================================
-  // フィーチャ追加（簡易版）
-  // ============================================================
-
-  Future<int?> addPoint(
+  /// name・description・kmaps_metadata はレイヤに列があるものだけ書く
+  Future<int?> _addSimple(
     String tableName,
-    LatLng pt, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
+    geo.Geometry geom,
+    List<LatLng> points, {
+    required String name,
+    required String description,
+    required Map<String, dynamic>? metadata,
   }) async {
     try {
       final attributes = await _buildSafeAttributes(
@@ -506,12 +437,27 @@ class FeatureRepository {
         description: description,
         metadata: metadata,
       );
-      return await addPointWithAttributes(tableName, pt, attributes);
+      return await _addWithAttributes(tableName, geom, points, attributes);
     } catch (e) {
-      AppLogger.debug('[ERROR] FeatureRepository: addPoint failed: $e');
+      AppLogger.debug('[ERROR] FeatureRepository: add ${geom.geomType} failed: $e');
       return null;
     }
   }
+
+  Future<int?> addPoint(
+    String tableName,
+    LatLng pt, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) => _addSimple(
+    tableName,
+    _buildGeoPoint(pt),
+    [pt],
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   Future<int?> addLine(
     String tableName,
@@ -519,14 +465,14 @@ class FeatureRepository {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) async {
-    final attributes = <String, dynamic>{
-      'name': name,
-      'description': description,
-    };
-    if (metadata != null) attributes['kmaps_metadata'] = jsonEncode(metadata);
-    return addLineWithAttributes(tableName, line, attributes);
-  }
+  }) => _addSimple(
+    tableName,
+    _buildGeoMultiLineString(line),
+    line,
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   Future<int?> addPolygon(
     String tableName,
@@ -534,18 +480,33 @@ class FeatureRepository {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) async {
-    final attributes = <String, dynamic>{
-      'name': name,
-      'description': description,
-    };
-    if (metadata != null) attributes['kmaps_metadata'] = jsonEncode(metadata);
-    return addPolygonWithAttributes(tableName, rings, attributes);
-  }
+  }) => _addSimple(
+    tableName,
+    _buildGeoMultiPolygon(rings),
+    [for (final ring in rings) ...ring],
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
-  // ============================================================
-  // フィーチャ更新
-  // ============================================================
+  Future<bool> _update(
+    String tableName,
+    int id,
+    geo.Geometry geom, {
+    required String name,
+    required String description,
+    required Map<String, dynamic>? metadata,
+  }) async {
+    await _prepareForWrite(tableName);
+    return _updateFeatureGeometry(
+      tableName,
+      id,
+      await _toLayerWkb(tableName, geom),
+      name: name,
+      description: description,
+      metadata: metadata,
+    );
+  }
 
   Future<bool> updatePoint(
     String tableName,
@@ -554,31 +515,14 @@ class FeatureRepository {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) async {
-    await _prepareForWrite(tableName);
-    final crs = await _getLayerCrs(tableName);
-    final geom = _buildGeoPoint(pt);
-
-    final targetGeom =
-        (!crs.isWgs84 && crs.projection != null)
-            ? GeometryReprojector.reprojectFromWgs84(
-              geom,
-              crs.projection!,
-              needsAxisSwap: crs.needsAxisSwap,
-            )
-            : geom;
-
-    final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
-    _validateAndLogWkb(wkb, 'updatePoint - ${pt.latitude}, ${pt.longitude}');
-    return _updateFeatureGeometry(
-      tableName,
-      id,
-      wkb,
-      name: name,
-      description: description,
-      metadata: metadata,
-    );
-  }
+  }) => _update(
+    tableName,
+    id,
+    _buildGeoPoint(pt),
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   Future<bool> updateLine(
     String tableName,
@@ -587,30 +531,14 @@ class FeatureRepository {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) async {
-    await _prepareForWrite(tableName);
-    final crs = await _getLayerCrs(tableName);
-    final geom = _buildGeoMultiLineString(line);
-
-    final targetGeom =
-        (!crs.isWgs84 && crs.projection != null)
-            ? GeometryReprojector.reprojectFromWgs84(
-              geom,
-              crs.projection!,
-              needsAxisSwap: crs.needsAxisSwap,
-            )
-            : geom;
-
-    final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
-    return _updateFeatureGeometry(
-      tableName,
-      id,
-      wkb,
-      name: name,
-      description: description,
-      metadata: metadata,
-    );
-  }
+  }) => _update(
+    tableName,
+    id,
+    _buildGeoMultiLineString(line),
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   Future<bool> updatePolygon(
     String tableName,
@@ -619,30 +547,14 @@ class FeatureRepository {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) async {
-    await _prepareForWrite(tableName);
-    final crs = await _getLayerCrs(tableName);
-    final geom = _buildGeoMultiPolygon(rings);
-
-    final targetGeom =
-        (!crs.isWgs84 && crs.projection != null)
-            ? GeometryReprojector.reprojectFromWgs84(
-              geom,
-              crs.projection!,
-              needsAxisSwap: crs.needsAxisSwap,
-            )
-            : geom;
-
-    final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
-    return _updateFeatureGeometry(
-      tableName,
-      id,
-      wkb,
-      name: name,
-      description: description,
-      metadata: metadata,
-    );
-  }
+  }) => _update(
+    tableName,
+    id,
+    _buildGeoMultiPolygon(rings),
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   // ============================================================
   // 共通 Feature 操作
@@ -1011,7 +923,7 @@ class FeatureRepository {
     String tableName,
     List<Map<String, dynamic>> dataList,
     String geometryKey,
-    Uint8List Function(T) createWkb,
+    geo.Geometry Function(T) build,
   ) async {
     final reservedColumns = {
       'fid',
@@ -1027,13 +939,15 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final batch = db.batch();
       final insertedIds = <int>[];
+      // 移す先のレイヤの CRS に合わせる（WGS84 のまま書くと別の CRS のレイヤで位置がずれる）
+      final crs = await _getLayerCrs(tableName);
 
       final tableColumns = await schema.getTableColumns(tableName);
       final tableColumnSet = tableColumns.map((c) => c.toLowerCase()).toSet();
 
       for (final data in dataList) {
         final geometry = data[geometryKey] as T;
-        final wkb = createWkb(geometry);
+        final wkb = _encodeInCrs(crs, build(geometry));
         final insertData = <String, dynamic>{'geom': wkb};
 
         data.forEach((key, value) {
@@ -1075,7 +989,7 @@ class FeatureRepository {
     tableName,
     pointData,
     'point',
-    (point) => createGpkgWkb(_buildGeoPoint(point)),
+    _buildGeoPoint,
   );
 
   Future<List<int>> addLinesBatch(
@@ -1085,7 +999,7 @@ class FeatureRepository {
     tableName,
     lineData,
     'line',
-    (line) => createGpkgWkb(_buildGeoMultiLineString(line)),
+    _buildGeoMultiLineString,
   );
 
   Future<List<int>> addPolygonsBatch(
@@ -1095,7 +1009,7 @@ class FeatureRepository {
     tableName,
     polygonData,
     'rings',
-    (rings) => createGpkgWkb(_buildGeoMultiPolygon(rings)),
+    _buildGeoMultiPolygon,
   );
 
   /// WHERE句でフィルタしたフィーチャのrowIdリストを取得

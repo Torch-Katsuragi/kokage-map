@@ -387,12 +387,6 @@ abstract class FeatureNode extends LayerTreeNode {
     _markDirty();
   }
 
-  /// 全属性値を取得
-  Future<Map<String, dynamic>> getAllAttributes() async {
-    if (_isDisposed) return {};
-    return Map<String, dynamic>.from(turfFeature.properties ?? {});
-  }
-
   /// 即座に全ての変更をDBに保存
   Future<void> flushChanges() async {
     await geoPackageFile.flushChanges();
@@ -575,6 +569,67 @@ abstract class FeatureNode extends LayerTreeNode {
     throw UnimplementedError('updateGeometry must be implemented by subclass');
   }
 
+  /// 新しい地物の属性。レイヤに列があるものだけ入れる
+  static Future<Map<String, dynamic>> _newAttributes(
+    LayerNode parent,
+    String name,
+    String? description,
+    Map<String, dynamic>? metadata,
+  ) async {
+    final columns = (await parent.geoPackageFile
+            .getColumnNames(parent.layerName, getAll: true))
+        .toSet();
+    return {
+      if (columns.contains('name')) 'name': name,
+      if (columns.contains('description')) 'description': description,
+      if (columns.contains('rmaps_metadata') && metadata != null)
+        'rmaps_metadata': jsonEncode(metadata),
+    };
+  }
+
+  /// 作った地物を親に入れる（_featureMap にも登録しないと updateFeatureAttribute が効かない）
+  static T _adopt<T extends FeatureNode>(T node) {
+    node.parent
+      ..addChild(node)
+      ..addFeatureToMap(node._rowId, node.turfFeature);
+    AppLogger.debug('[DEBUG] $T: DB保存完了 - ${node.name} (rowId: ${node._rowId})');
+    return node;
+  }
+
+  /// DB に形を書けたら親の地物一覧も差し替える。
+  /// [properties] を渡さなければ今の属性のまま
+  Future<bool> _commitGeometry(
+    Future<bool> write,
+    turf.GeometryObject geometry, {
+    Map<String, dynamic>? properties,
+  }) async {
+    if (!await write) {
+      AppLogger.debug('[ERROR] $runtimeType: 形の更新失敗 - $name');
+      return false;
+    }
+    parent.addFeatureToMap(
+      _rowId,
+      turf.Feature(
+        geometry: geometry,
+        properties: properties ?? turfFeature.properties,
+      ),
+    );
+    _markDirty();
+    return true;
+  }
+
+  Map<String, dynamic> _propertiesWith(
+    String name,
+    String? description,
+    Map<String, dynamic>? metadata,
+  ) => {
+    ...turfFeature.properties ?? {},
+    'id': _rowId,
+    'name': name,
+    'description': description,
+    'rmaps_metadata': metadata,
+  };
+
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -638,56 +693,38 @@ class PointFeatureNode extends FeatureNode {
     Map<String, dynamic>? metadata,
   }) async {
     if (parent is! PointLayerNode) return null;
-    final gpkgFile = parent.geoPackageFile;
-    final layerName = parent.layerName;
-
-    // 属性辞書を作成（カラムの存在確認が必要なため、空の辞書から始める）
-    final properties = <String, dynamic>{};
-    
-    // カラムの存在確認
-    final columnNames = await gpkgFile.getColumnNames(layerName, getAll: true);
-    final columnSet = columnNames.toSet();
-    
-    // 存在するカラムのみ値を設定
-    if (columnSet.contains('name')) {
-      properties['name'] = name;
-    }
-    if (columnSet.contains('description')) {
-      properties['description'] = description;
-    }
-    if (columnSet.contains('rmaps_metadata') && metadata != null) {
-      properties['rmaps_metadata'] = jsonEncode(metadata);
-    }
-
-    // DBへの保存を実行してrowIdを取得
-    final actualRowId = await gpkgFile.addPointWithAttributes(
-      layerName,
-      point,
-      properties,
-    );
-
-    if (actualRowId == null) {
+    final properties =
+        await FeatureNode._newAttributes(parent, name, description, metadata);
+    final rowId = await parent.geoPackageFile
+        .addPointWithAttributes(parent.layerName, point, properties);
+    if (rowId == null) {
       AppLogger.debug('[ERROR] PointFeatureNode: DB保存に失敗しました - $name');
       return null;
     }
-
-    // rowIdを含むFeatureオブジェクトを作成
-    properties['id'] = actualRowId;
-    final turfFeature = turf.Feature(
-      geometry: TurfConverter.createPoint(point),
-      properties: properties,
+    return FeatureNode._adopt(
+      PointFeatureNode.fromTurfFeature(
+        turf.Feature(
+          geometry: TurfConverter.createPoint(point),
+          properties: {...properties, 'id': rowId},
+        ),
+        parent,
+      ),
     );
-
-    // FeatureNodeを作成して親に追加
-    final node = PointFeatureNode.fromTurfFeature(turfFeature, parent);
-    parent.addChild(node);
-
-    // _featureMapにも登録（updateFeatureAttributeが動作するために必要）
-    parent.addFeatureToMap(actualRowId, turfFeature);
-
-    AppLogger.debug('[DEBUG] PointFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
-    return node;
   }
+
+  Future<bool> _write(
+    LatLng shape,
+    String name,
+    String? description,
+    Map<String, dynamic>? metadata,
+  ) => geoPackageFile.updatePoint(
+    layerName,
+    rowId,
+    shape,
+    name: name,
+    description: description ?? '',
+    metadata: metadata,
+  );
 
   /// 点フィーチャのジオメトリと属性を更新
   @override
@@ -696,68 +733,20 @@ class PointFeatureNode extends FeatureNode {
     String? description,
     Map<String, dynamic>? metadata,
     dynamic newGeometry,
-  }) async {
-    // 新しいジオメトリが渡された場合はそれを使用、なければ現在のpointを使用
-    final geometryToUpdate = newGeometry as LatLng? ?? point;
-
-    final success = await geoPackageFile.updatePoint(
-      layerName,
-      rowId,
-      geometryToUpdate,
-      name: name,
-      description: description ?? '',
-      metadata: metadata,
+  }) {
+    final shape = newGeometry as LatLng? ?? point;
+    return _commitGeometry(
+      _write(shape, name, description, metadata),
+      TurfConverter.createPoint(shape),
+      properties: _propertiesWith(name, description, metadata),
     );
-
-    if (success) {
-      // 親のMap内のFeatureを更新
-      final updatedFeature = turf.Feature(
-        geometry: TurfConverter.createPoint(geometryToUpdate),
-        properties: {
-          ...turfFeature.properties ?? {},
-          'id': _rowId,
-          'name': name,
-          'description': description,
-          'rmaps_metadata': metadata,
-        },
-      );
-      parent.addFeatureToMap(_rowId, updatedFeature);
-      _markDirty();
-
-      AppLogger.debug('[DEBUG] PointFeatureNode: ジオメトリ更新成功 - $name');
-    } else {
-      AppLogger.debug('[ERROR] PointFeatureNode: ジオメトリ更新失敗 - $name');
-    }
-
-    return success;
   }
 
   /// 点フィーチャのジオメトリのみを更新（位置変更）
-  Future<bool> updateLocation(LatLng newLocation) async {
-    final success = await geoPackageFile.updatePoint(
-      layerName,
-      rowId,
-      newLocation,
-      name: name,
-      description: description ?? '',
-      metadata: metadata,
-    );
-
-    if (success) {
-      // 親のMap内のFeatureのジオメトリを更新
-      final updatedFeature = turf.Feature(
-        geometry: TurfConverter.createPoint(newLocation),
-        properties: turfFeature.properties,
-      );
-      parent.addFeatureToMap(_rowId, updatedFeature);
-      _markDirty();
-      AppLogger.debug('[DEBUG] PointFeatureNode: 位置更新成功 - $name to $newLocation');
-    } else {
-      AppLogger.debug('[ERROR] PointFeatureNode: 位置更新失敗 - $name');
-    }
-
-    return success;
-  }
+  Future<bool> updateLocation(LatLng shape) => _commitGeometry(
+    _write(shape, name, description, metadata),
+    TurfConverter.createPoint(shape),
+  );
 }
 
 /// LineFeatureNode: 線フィーチャ用
@@ -866,56 +855,38 @@ class LineFeatureNode extends FeatureNode {
     Map<String, dynamic>? metadata,
   }) async {
     if (parent is! LineLayerNode) return null;
-    final gpkgFile = parent.geoPackageFile;
-    final layerName = parent.layerName;
-
-    // 属性辞書を作成（カラムの存在確認が必要なため、空の辞書から始める）
-    final properties = <String, dynamic>{};
-    
-    // カラムの存在確認
-    final columnNames = await gpkgFile.getColumnNames(layerName, getAll: true);
-    final columnSet = columnNames.toSet();
-    
-    // 存在するカラムのみ値を設定
-    if (columnSet.contains('name')) {
-      properties['name'] = name;
-    }
-    if (columnSet.contains('description')) {
-      properties['description'] = description;
-    }
-    if (columnSet.contains('rmaps_metadata') && metadata != null) {
-      properties['rmaps_metadata'] = jsonEncode(metadata);
-    }
-
-    // DBへの保存を実行してrowIdを取得
-    final actualRowId = await gpkgFile.addLineWithAttributes(
-      layerName,
-      line,
-      properties,
-    );
-
-    if (actualRowId == null) {
+    final properties =
+        await FeatureNode._newAttributes(parent, name, description, metadata);
+    final rowId = await parent.geoPackageFile
+        .addLineWithAttributes(parent.layerName, line, properties);
+    if (rowId == null) {
       AppLogger.debug('[ERROR] LineFeatureNode: DB保存に失敗しました - $name');
       return null;
     }
-
-    // rowIdを含むFeatureオブジェクトを作成
-    properties['id'] = actualRowId;
-    final turfFeature = turf.Feature(
-      geometry: TurfConverter.createLineString(line),
-      properties: properties,
+    return FeatureNode._adopt(
+      LineFeatureNode.fromTurfFeature(
+        turf.Feature(
+          geometry: TurfConverter.createLineString(line),
+          properties: {...properties, 'id': rowId},
+        ),
+        parent,
+      ),
     );
-
-    // FeatureNodeを作成して親に追加
-    final node = LineFeatureNode.fromTurfFeature(turfFeature, parent);
-    parent.addChild(node);
-
-    // _featureMapにも登録（updateFeatureAttributeが動作するために必要）
-    parent.addFeatureToMap(actualRowId, turfFeature);
-
-    AppLogger.debug('[DEBUG] LineFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
-    return node;
   }
+
+  Future<bool> _write(
+    List<LatLng> shape,
+    String name,
+    String? description,
+    Map<String, dynamic>? metadata,
+  ) => geoPackageFile.updateLine(
+    layerName,
+    rowId,
+    shape,
+    name: name,
+    description: description ?? '',
+    metadata: metadata,
+  );
 
   /// 線フィーチャのジオメトリと属性を更新
   @override
@@ -924,70 +895,20 @@ class LineFeatureNode extends FeatureNode {
     String? description,
     Map<String, dynamic>? metadata,
     dynamic newGeometry,
-  }) async {
-    // 新しいジオメトリが渡された場合はそれを使用、なければ現在のlineを使用
-    final geometryToUpdate = newGeometry as List<LatLng>? ?? line;
-
-    final success = await geoPackageFile.updateLine(
-      layerName,
-      rowId,
-      geometryToUpdate,
-      name: name,
-      description: description ?? '',
-      metadata: metadata,
+  }) {
+    final shape = newGeometry as List<LatLng>? ?? line;
+    return _commitGeometry(
+      _write(shape, name, description, metadata),
+      TurfConverter.createLineString(shape),
+      properties: _propertiesWith(name, description, metadata),
     );
-
-    if (success) {
-      // 親のMap内のFeatureを更新
-      final updatedFeature = turf.Feature(
-        geometry: TurfConverter.createLineString(geometryToUpdate),
-        properties: {
-          ...turfFeature.properties ?? {},
-          'id': _rowId,
-          'name': name,
-          'description': description,
-          'rmaps_metadata': metadata,
-        },
-      );
-      parent.addFeatureToMap(_rowId, updatedFeature);
-      _markDirty();
-
-      AppLogger.debug('[DEBUG] LineFeatureNode: ジオメトリ更新成功 - $name');
-    } else {
-      AppLogger.debug('[ERROR] LineFeatureNode: ジオメトリ更新失敗 - $name');
-    }
-
-    return success;
   }
 
   /// 線フィーチャのジオメトリのみを更新（頂点変更）
-  Future<bool> updateLine(List<LatLng> newLine) async {
-    final success = await geoPackageFile.updateLine(
-      layerName,
-      rowId,
-      newLine,
-      name: name,
-      description: description ?? '',
-      metadata: metadata,
-    );
-
-    if (success) {
-      // 親のMap内のFeatureのジオメトリを更新
-      final updatedFeature = turf.Feature(
-        geometry: TurfConverter.createLineString(newLine),
-        properties: turfFeature.properties,
-      );
-      parent.addFeatureToMap(_rowId, updatedFeature);
-      _markDirty();
-      AppLogger.debug(
-        '[DEBUG] LineFeatureNode: 線更新成功 - $name (${newLine.length} vertices)',
-      );
-    } else {
-      AppLogger.debug('[ERROR] LineFeatureNode: 線更新失敗 - $name');
-    }
-
-    return success;
-  }
+  Future<bool> updateLine(List<LatLng> shape) => _commitGeometry(
+    _write(shape, name, description, metadata),
+    TurfConverter.createLineString(shape),
+  );
 }
 
 /// PolygonFeatureNode: 面フィーチャ用
@@ -1102,7 +1023,7 @@ class PolygonFeatureNode extends FeatureNode {
   }
 
   /// 指定したPolygonLayerNodeの下に新しい面フィーチャを作成し、PolygonFeatureNodeインスタンスを返す
-  /// DBへの保存を同期で実行し、実際のrowIdを取得してからFeatureNodeを作成
+  /// 面は保存した行を読み直して作る（既定値の入った列も持たせる）
   static Future<PolygonFeatureNode?> createIn(
     LayerNode parent,
     List<List<LatLng>> polygon,
@@ -1111,57 +1032,40 @@ class PolygonFeatureNode extends FeatureNode {
     Map<String, dynamic>? metadata,
   }) async {
     if (parent is! PolygonLayerNode) return null;
-    final gpkgFile = parent.geoPackageFile;
-    final layerName = parent.layerName;
     if (polygon.isEmpty) return null;
-
-    // 属性値を辞書として準備（カラムの存在確認が必要なため、空の辞書から始める）
-    final attributes = <String, dynamic>{};
-    
-    // カラムの存在確認
-    final columnNames = await gpkgFile.getColumnNames(layerName, getAll: true);
-    final columnSet = columnNames.toSet();
-    
-    // 存在するカラムのみ値を設定
-    if (columnSet.contains('name')) {
-      attributes['name'] = name;
-    }
-    if (columnSet.contains('description')) {
-      attributes['description'] = description;
-    }
-    if (columnSet.contains('rmaps_metadata') && metadata != null) {
-      attributes['rmaps_metadata'] = jsonEncode(metadata);
-    }
-
-    // 新しい辞書ベースAPIを使用してDBへの保存を実行
-    final actualRowId = await gpkgFile.addPolygonWithAttributes(
-      layerName,
+    final gpkgFile = parent.geoPackageFile;
+    final attributes =
+        await FeatureNode._newAttributes(parent, name, description, metadata);
+    final rowId = await gpkgFile.addPolygonWithAttributes(
+      parent.layerName,
       polygon,
       attributes,
     );
-
-    if (actualRowId == null) {
+    if (rowId == null) {
       AppLogger.debug('[ERROR] PolygonFeatureNode: DB保存に失敗しました - $name');
       return null;
     }
-
-    // DBから実際のrowデータを取得
-    final row = await gpkgFile.getFeature(layerName, actualRowId);
+    final row = await gpkgFile.getFeature(parent.layerName, rowId);
     if (row == null) {
       AppLogger.debug('[ERROR] PolygonFeatureNode: 作成後のrow取得に失敗しました - $name');
       return null;
     }
-
-    // rowデータを使用してFeatureNodeを作成
-    final node = PolygonFeatureNode(row, parent);
-    parent.addChild(node);
-
-    // _featureMapにも登録（updateFeatureAttributeが動作するために必要）
-    parent.addFeatureToMap(actualRowId, node.turfFeature);
-
-    AppLogger.debug('[DEBUG] PolygonFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
-    return node;
+    return FeatureNode._adopt(PolygonFeatureNode(row, parent));
   }
+
+  Future<bool> _write(
+    List<List<LatLng>> shape,
+    String name,
+    String? description,
+    Map<String, dynamic>? metadata,
+  ) => geoPackageFile.updatePolygon(
+    layerName,
+    rowId,
+    shape,
+    name: name,
+    description: description ?? '',
+    metadata: metadata,
+  );
 
   /// 面フィーチャのジオメトリと属性を更新
   @override
@@ -1170,69 +1074,18 @@ class PolygonFeatureNode extends FeatureNode {
     String? description,
     Map<String, dynamic>? metadata,
     dynamic newGeometry,
-  }) async {
-    // 新しいジオメトリが渡された場合はそれを使用、なければ現在のpolygonを使用
-    final geometryToUpdate = newGeometry as List<List<LatLng>>? ?? polygon;
-
-    final success = await geoPackageFile.updatePolygon(
-      layerName,
-      rowId,
-      geometryToUpdate,
-      name: name,
-      description: description ?? '',
-      metadata: metadata,
+  }) {
+    final shape = newGeometry as List<List<LatLng>>? ?? polygon;
+    return _commitGeometry(
+      _write(shape, name, description, metadata),
+      TurfConverter.createPolygon(shape),
+      properties: _propertiesWith(name, description, metadata),
     );
-
-    if (success) {
-      // 親のMap内のFeatureを更新
-      final updatedFeature = turf.Feature(
-        geometry: TurfConverter.createPolygon(geometryToUpdate),
-        properties: {
-          ...turfFeature.properties ?? {},
-          'id': _rowId,
-          'name': name,
-          'description': description,
-          'rmaps_metadata': metadata,
-        },
-      );
-      parent.addFeatureToMap(_rowId, updatedFeature);
-      _markDirty();
-
-      AppLogger.debug('[DEBUG] PolygonFeatureNode: ジオメトリ更新成功 - $name');
-    } else {
-      AppLogger.debug('[ERROR] PolygonFeatureNode: ジオメトリ更新失敗 - $name');
-    }
-
-    return success;
   }
 
   /// 面フィーチャのジオメトリのみを更新（ポリゴン変更）
-  Future<bool> updatePolygon(List<List<LatLng>> newPolygon) async {
-    final success = await geoPackageFile.updatePolygon(
-      layerName,
-      rowId,
-      newPolygon,
-      name: name,
-      description: description ?? '',
-      metadata: metadata,
-    );
-
-    if (success) {
-      // 親のMap内のFeatureのジオメトリを更新
-      final updatedFeature = turf.Feature(
-        geometry: TurfConverter.createPolygon(newPolygon),
-        properties: turfFeature.properties,
-      );
-      parent.addFeatureToMap(_rowId, updatedFeature);
-      _markDirty();
-      AppLogger.debug(
-        '[DEBUG] PolygonFeatureNode: ポリゴン更新成功 - $name (${newPolygon.length} rings)',
-      );
-    } else {
-      AppLogger.debug('[ERROR] PolygonFeatureNode: ポリゴン更新失敗 - $name');
-    }
-
-    return success;
-  }
+  Future<bool> updatePolygon(List<List<LatLng>> shape) => _commitGeometry(
+    _write(shape, name, description, metadata),
+    TurfConverter.createPolygon(shape),
+  );
 }
-

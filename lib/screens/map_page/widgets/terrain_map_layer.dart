@@ -1471,8 +1471,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       progress.phase = 1;
       if (over()) return;
     }
-    // 面（引いた段ではラベル無し）
+    // 面（引いた段ではラベル無し）。塗りはテクスチャに描いてある（[_decorateTexture]）。ここは枠線とラベル
     final polygonIdx = progress.polygonIdx!;
+    final outlines = progress.phase == 1
+        ? builder({for (final e in groups.entries) e.key: e.value.withoutFill()}, defaultStyle.withoutFill(),
+            FeatureGeoJsonInput.labelPropKey)
+        : null;
     while (progress.phase == 1) {
       if (progress.polygon >= polygonIdx.length) {
         progress.phase = 2;
@@ -1481,10 +1485,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       final end = math.min(progress.polygon + progress.chunk, polygonIdx.length);
       final t0 = sw.elapsedMicroseconds;
       add(
-        // 塗りはテクスチャに描いてある（[_decorateTexture]）。ここは枠線とラベル
-        builder({for (final e in groups.entries) e.key: e.value.withoutFill()}, defaultStyle.withoutFill(),
-                FeatureGeoJsonInput.labelPropKey)
-            .build(polygons: [for (var i = progress.polygon; i < end; i++) g.polygons[polygonIdx[i]]], clipRect: clip),
+        outlines!.build(polygons: [for (var i = progress.polygon; i < end; i++) g.polygons[polygonIdx[i]]], clipRect: clip),
         withLabels: !dense,
       );
       progress.tune(end - progress.polygon, sw.elapsedMicroseconds - t0);
@@ -1493,6 +1494,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     }
     // 線
     final lineIdx = progress.lineIdx!;
+    final lines = progress.phase == 2 ? builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey) : null;
     while (progress.phase == 2) {
       if (progress.line >= lineIdx.length) {
         progress.phase = 3;
@@ -1500,10 +1502,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       }
       final end = math.min(progress.line + progress.chunk, lineIdx.length);
       final t0 = sw.elapsedMicroseconds;
-      add(
-        builder(groups, defaultStyle, FeatureGeoJsonInput.labelPropKey)
-            .build(lines: [for (var i = progress.line; i < end; i++) g.polylines[lineIdx[i]]], clipRect: clip),
-      );
+      add(lines!.build(lines: [for (var i = progress.line; i < end; i++) g.polylines[lineIdx[i]]], clipRect: clip));
       progress.tune(end - progress.line, sw.elapsedMicroseconds - t0);
       progress.line = end;
       if (over()) return;

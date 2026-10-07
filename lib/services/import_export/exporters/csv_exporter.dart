@@ -44,6 +44,7 @@ class CSVExporter extends BaseExporter {
       );
       final geometryType = await layer.geoPackageNode.geoPackageFile
           .getGeometryType(layer.layerName);
+      final crs = await layerCrs(layer);
 
       if (features.isEmpty) {
         return ImportExportResult.error('No features found in layer: ${layer.layerName}');
@@ -71,7 +72,7 @@ class CSVExporter extends BaseExporter {
         row.add(geometryType?.value ?? 'unknown');
 
         // 座標データを取得
-        final parts = geometryType == null ? null : featureParts(feature, geometryType);
+        final parts = geometryType == null ? null : featureParts(feature, geometryType, crs);
         if (geometryType == GeometryType.point && parts != null) {
           final points = parts.first;
           if (points.isNotEmpty) {

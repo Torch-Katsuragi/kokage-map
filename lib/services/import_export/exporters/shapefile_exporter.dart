@@ -24,6 +24,7 @@ import 'package:root_maps/utils/app_logger.dart';
 import '../../../models/geometry_type.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../coordinate/epsg_registry.dart';
+import '../../coordinate/gpkg_crs_resolver.dart';
 import '../../coordinate/projections.dart';
 import '../import_export_models.dart';
 import '../parsers/shapefile_binary_parser.dart' show ShapeType;
@@ -60,6 +61,7 @@ class ShapefileExporter extends BaseExporter {
       );
       final geometryType = await layer.geoPackageNode.geoPackageFile
           .getGeometryType(layer.layerName);
+      final crs = await layerCrs(layer);
 
       if (features.isEmpty) {
         return ImportExportResult.error('No features found in layer: ${layer.layerName}');
@@ -88,7 +90,7 @@ class ShapefileExporter extends BaseExporter {
       final shapes = <ShpShape>[];
       final attributes = <Map<String, dynamic>>[];
       for (final feature in features) {
-        final shape = _toShape(feature, geometryType, targetProjection);
+        final shape = _toShape(feature, geometryType, crs, targetProjection);
         if (shape == null) continue;
         shapes.add(shape);
         attributes.add({
@@ -147,9 +149,10 @@ class ShapefileExporter extends BaseExporter {
   ShpShape? _toShape(
     Map<String, dynamic> feature,
     GeometryType type,
+    GpkgCrsInfo crs,
     Projection? target,
   ) {
-    final parts = featureParts(feature, type);
+    final parts = featureParts(feature, type, crs);
     if (parts == null) return null;
     return [
       for (final part in parts)

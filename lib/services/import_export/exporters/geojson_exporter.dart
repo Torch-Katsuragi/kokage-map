@@ -24,6 +24,7 @@ import 'package:turf/turf.dart' as turf;
 import '../../../converters/turf_converter.dart';
 import '../../../models/geometry_type.dart';
 import '../../../models/nodes/layer_node.dart';
+import '../../coordinate/gpkg_crs_resolver.dart';
 import '../import_export_models.dart';
 import 'base_exporter.dart';
 import 'feature_parts.dart';
@@ -47,6 +48,7 @@ class GeoJSONExporter extends BaseExporter {
       );
       final geometryType = await layer.geoPackageNode.geoPackageFile
           .getGeometryType(layer.layerName);
+      final crs = await layerCrs(layer);
 
       if (features.isEmpty) {
         return ImportExportResult.error('No features found in layer: ${layer.layerName}');
@@ -56,7 +58,7 @@ class GeoJSONExporter extends BaseExporter {
       final turfFeatures = <turf.Feature>[];
 
       for (final feature in features) {
-        final turfFeature = _createTurfFeature(feature, geometryType);
+        final turfFeature = _createTurfFeature(feature, geometryType, crs);
         if (turfFeature != null) {
           turfFeatures.add(turfFeature);
         }
@@ -95,11 +97,12 @@ class GeoJSONExporter extends BaseExporter {
   turf.Feature? _createTurfFeature(
     Map<String, dynamic> feature,
     GeometryType? geometryType,
+    GpkgCrsInfo crs,
   ) {
     try {
       turf.GeometryObject? geometry;
 
-      final parts = geometryType == null ? null : featureParts(feature, geometryType);
+      final parts = geometryType == null ? null : featureParts(feature, geometryType, crs);
       switch (geometryType) {
         case GeometryType.point:
           if (parts != null) {

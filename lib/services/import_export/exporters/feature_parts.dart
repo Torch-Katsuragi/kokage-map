@@ -19,13 +19,23 @@ import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
 
 import '../../../models/geometry_type.dart';
+import '../../../models/nodes/layer_node.dart';
 import '../../../utils/wkb_utils.dart';
+import '../../coordinate/geometry_reprojector.dart';
+import '../../coordinate/gpkg_crs_resolver.dart';
 
-/// 地物（GeoPackage の行）の `geom` 列から形を取り出す。
+/// [layer] の形の CRS（[featureParts] に渡す）
+Future<GpkgCrsInfo> layerCrs(LayerNode layer) async => GpkgCrsResolver.instance.resolveLayerCrs(
+  await layer.geoPackageNode.geoPackageFile.getDatabase(),
+  layer.layerName,
+);
+
+/// 地物（GeoPackage の行）の `geom` 列から形を取り出す。[crs] はレイヤの CRS で、
+/// WGS84 でなければ WGS84 に直す（地図に読み込むときと同じ）。
 ///
 /// 部分の並びで返す: 点は部分 1 つ・点 1 つ、線は 1 本、面はリング（先頭が外周）。
 /// 多重の形は最初の 1 つだけを返す。形が無い・読めないときは null
-List<List<LatLng>>? featureParts(Map<String, dynamic> feature, GeometryType type) {
+List<List<LatLng>>? featureParts(Map<String, dynamic> feature, GeometryType type, GpkgCrsInfo crs) {
   final geom = feature['geom'];
   final bytes = switch (geom) {
     Uint8List() => geom,
@@ -33,8 +43,11 @@ List<List<LatLng>>? featureParts(Map<String, dynamic> feature, GeometryType type
     _ => null,
   };
   if (bytes == null) return null;
-  final geometry = parseGpkgGeometry(bytes);
+  var geometry = parseGpkgGeometry(bytes);
   if (geometry == null) return null;
+  if (!crs.isWgs84 && crs.projection != null) {
+    geometry = GeometryReprojector.reprojectToWgs84(geometry, crs.projection!, needsAxisSwap: crs.needsAxisSwap);
+  }
   final parsed = geobaseGeometryToLatLngs(geometry);
 
   switch (type) {

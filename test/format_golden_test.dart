@@ -207,6 +207,36 @@ void main() {
       }
       await gpkg.geoPackageFile.dispose();
     });
+
+    test('平面直角座標系のレイヤも、地図と同じ位置で書き出す', () async {
+      // 36N, 136.01E の点 1 つ（x = 901.5 m 東, y = 0.05 m 北）。gpkg_axis_order_test と同じもの
+      File('test/fixtures/qgis_6674_point.gpkg').copySync(p.join(proj, 'q.gpkg'));
+      final root = await loadTree();
+      final gpkg = root.children.whereType<GeoPackageNode>().single;
+      final layer = gpkg.children.whereType<LayerNode>().single;
+
+      Future<List<double>> shpPoint(ExportOptions options) async {
+        final out = p.join(tmp.path, 'q_${options.targetCrs?.codeNumber ?? 'wgs'}.shp');
+        expect((await ImportExportService().exportLayer(layer, out, options: options)).success, isTrue);
+        final bytes = File(out).readAsBytesSync();
+        final d = ByteData.sublistView(bytes);
+        return [d.getFloat64(112, Endian.little), d.getFloat64(120, Endian.little)];
+      }
+
+      final wgs = await shpPoint(const ExportOptions());
+      expect(wgs[0], closeTo(136.01, 1e-7));
+      expect(wgs[1], closeTo(36.0, 1e-7));
+      final plane = await shpPoint(ExportOptions(targetCrs: EpsgRegistry.instance.getByCode('EPSG:6674')));
+      expect(plane[0], closeTo(901.5, 0.1));
+      expect(plane[1], closeTo(0.05, 0.1));
+
+      final geojson = p.join(tmp.path, 'q.geojson');
+      await ImportExportService().exportLayer(layer, geojson);
+      final coords = (jsonDecode(File(geojson).readAsStringSync())['features'] as List).single['geometry']['coordinates'] as List;
+      expect(coords[0] as num, closeTo(136.01, 1e-7));
+      expect(coords[1] as num, closeTo(36.0, 1e-7));
+      await gpkg.geoPackageFile.dispose();
+    });
   });
 
   group('取り込み', () {

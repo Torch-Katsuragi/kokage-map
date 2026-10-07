@@ -15,7 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 /// GPS座標レコード（タイムスタンプ付き）
 ///
-/// 内蔵GPSの位置情報を型安全に表現するモデル。
+/// 内蔵GPS・外部GNSSの位置を型で表すモデル。
 /// ForegroundServiceイベントやGeolocator Positionからの変換をサポート。
 library;
 
@@ -44,9 +44,6 @@ class GpsPositionRecord {
   /// GPS fix時刻
   final DateTime timestamp;
 
-  /// Store受信時刻
-  final DateTime receivedAt;
-
   const GpsPositionRecord({
     required this.latitude,
     required this.longitude,
@@ -55,7 +52,6 @@ class GpsPositionRecord {
     this.speed,
     this.bearing,
     required this.timestamp,
-    required this.receivedAt,
   });
 
   /// Geolocator Positionからの変換
@@ -68,7 +64,6 @@ class GpsPositionRecord {
       speed: position.speed,
       bearing: position.heading,
       timestamp: position.timestamp,
-      receivedAt: DateTime.now(),
     );
   }
 
@@ -84,22 +79,7 @@ class GpsPositionRecord {
       timestamp: event['timestamp'] is String
           ? DateTime.parse(event['timestamp'] as String)
           : (event['timestamp'] as DateTime?) ?? DateTime.now(),
-      receivedAt: DateTime.now(),
     );
-  }
-
-  /// Map変換（既存API互換用）
-  Map<String, dynamic> toMap() {
-    return {
-      'latitude': latitude,
-      'longitude': longitude,
-      'altitude': altitude,
-      'accuracy': accuracy,
-      'speed': speed,
-      'bearing': bearing,
-      'timestamp': timestamp.toIso8601String(),
-      'sourceType': 'GPS',
-    };
   }
 
   @override
@@ -108,31 +88,4 @@ class GpsPositionRecord {
       'lon: ${longitude.toStringAsFixed(6)}, '
       'acc: ${accuracy?.toStringAsFixed(1)}m, '
       'ts: $timestamp)';
-}
-
-/// GPS座標リクエストのレスポンス
-///
-/// [requestPosition] の戻り値として使用。
-/// 前回リクエスト以降のGPS更新有無を判定可能。
-class GpsPositionResponse {
-  /// 最新の座標レコード（nullの場合はまだ取得できていない）
-  final GpsPositionRecord? position;
-
-  /// 前回のリクエスト以降にGPS更新があったか
-  final bool hasNewUpdate;
-
-  /// 最後にGPS更新があった時刻
-  final DateTime? lastUpdateTime;
-
-  const GpsPositionResponse({
-    this.position,
-    required this.hasNewUpdate,
-    this.lastUpdateTime,
-  });
-
-  @override
-  String toString() =>
-      'GpsPositionResponse(hasNew: $hasNewUpdate, '
-      'lastUpdate: $lastUpdateTime, '
-      'pos: $position)';
 }

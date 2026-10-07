@@ -18,7 +18,7 @@
 /// 「常に1ストリーム」の原則でGPS位置を管理。
 /// モードはプラットフォームで静的に決定:
 ///   Android → delegated (ForegroundService経由、常時稼働)
-///   Windows → direct (自前Geolocator)
+///   web → direct (自前Geolocator)
 ///
 /// 全ての利用者（地図マーカー、GPS情報バー、追跡mixin等）は
 /// このStoreの [positionStream] から座標を取得する。
@@ -44,11 +44,8 @@ class InternalGpsLocationStore {
 
   static const String _logTag = 'InternalGpsLocationStore';
 
-  // 最新の座標レコード
-  GpsPositionRecord? _latestRecord;
-
-  // 前回リクエスト時刻（requestPosition用）
-  DateTime? _lastRequestTime;
+  // 位置を一度でも流したか（暫定位置の先出しで座標を巻き戻さないため）
+  bool _hasReceived = false;
 
   // 動作状態
   bool _isActive = false;
@@ -87,7 +84,7 @@ class InternalGpsLocationStore {
   /// 開始（プラットフォームに応じてモード自動選択）
   ///
   /// Android → ForegroundService起動 + delegatedモード
-  /// Windows → directモード（自前Geolocator）
+  /// web → directモード（自前Geolocator）
   Future<void> start() async {
     if (_isActive) {
       AppLogger.debug('$_logTag: 既に動作中です');
@@ -221,7 +218,7 @@ class InternalGpsLocationStore {
       );
 
       // ⚠ ストリームが先に届いていたら上書きしない（座標を巻き戻さない）
-      if (_latestRecord != null) return;
+      if (_hasReceived) return;
       // 取得を待っている間に stop() された
       if (!_isActive) return;
 
@@ -294,30 +291,7 @@ class InternalGpsLocationStore {
 
   /// 位置更新の受信（どちらのモードでも同じ処理）
   void _onPositionReceived(GpsPositionRecord record) {
-    _latestRecord = record;
+    _hasReceived = true;
     _positionController.add(record);
-  }
-
-  /// 座標をリクエスト（更新有無フラグ付き）
-  ///
-  /// 前回の [requestPosition] 呼び出し以降にGPS更新があったかを
-  /// [GpsPositionResponse.hasNewUpdate] で判定可能。
-  /// 呼び出すたびに内部タイムスタンプが更新される。
-  GpsPositionResponse requestPosition() {
-    final record = _latestRecord;
-    final lastReq = _lastRequestTime;
-
-    // 前回リクエスト以降に新しい座標があるか判定
-    final hasNew = record != null &&
-        (lastReq == null || record.receivedAt.isAfter(lastReq));
-
-    // リクエスト時刻を更新
-    _lastRequestTime = DateTime.now();
-
-    return GpsPositionResponse(
-      position: record,
-      hasNewUpdate: hasNew,
-      lastUpdateTime: record?.receivedAt,
-    );
   }
 }

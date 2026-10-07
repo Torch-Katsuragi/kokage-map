@@ -32,9 +32,6 @@ abstract class ExternalDeviceService extends ChangeNotifier {
   /// 接続処理中かどうか
   bool get isConnecting;
 
-  /// 機器固有のステータス情報（UIパネル表示用）
-  Map<String, dynamic> get statusInfo;
-
   /// ペアリング済みの互換デバイスを列挙
   Future<List<BluetoothDevice>> scanDevices();
 

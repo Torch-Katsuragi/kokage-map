@@ -381,13 +381,13 @@ class FeatureDetailPanel extends ConsumerWidget {
     CurrentLocationNode node,
   ) {
     final info = node.gpsInfo;
-    final active = info != null && info['isActive'] == true;
-    final lat = info?['latitude'] as double?;
-    final lon = info?['longitude'] as double?;
-    final accuracy = info?['accuracy'] as double?;
-    final satellites = info?['satelliteCount'] as int?;
-    final hdop = info?['hdop'] as double?;
-    final sourceName = info?['sourceName'] as String? ?? t.gps.unknownDevice;
+    final active = info?.isActive ?? false;
+    final lat = info?.latitude;
+    final lon = info?.longitude;
+    final accuracy = info?.accuracy;
+    final satellites = info?.satelliteCount;
+    final hdop = info?.hdop;
+    final sourceName = info?.sourceName ?? t.gps.unknownDevice;
 
     Widget row(String label, String value) => Padding(
           padding: const EdgeInsets.only(bottom: 4.0),

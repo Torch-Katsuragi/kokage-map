@@ -146,7 +146,7 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   final GpsHistoryRecorder gpsHistoryRecorder = GpsHistoryRecorder();
 
   /// 現在のGPS情報
-  Map<String, dynamic>? currentGpsInfo;
+  GpsInfo? currentGpsInfo;
 
   // =============================================
   // GPS測量関連

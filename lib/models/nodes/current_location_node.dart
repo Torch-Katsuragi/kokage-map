@@ -26,6 +26,7 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/node_types.dart';
+import '../gps_info.dart';
 import 'layer_tree_node.dart';
 
 class CurrentLocationNode extends LayerTreeNode {
@@ -37,11 +38,11 @@ class CurrentLocationNode extends LayerTreeNode {
 
   /// 地図側の最新値を毎回読む（ノードに値を写す手間を省く）
   final LatLng? Function() locationOf;
-  final Map<String, dynamic>? Function() gpsInfoOf;
+  final GpsInfo? Function() gpsInfoOf;
   final ValueListenable<double?> headingNotifier;
 
   LatLng? get location => locationOf();
-  Map<String, dynamic>? get gpsInfo => gpsInfoOf();
+  GpsInfo? get gpsInfo => gpsInfoOf();
 
   // dispose は基底のまま（parent が無いので何も起きない＝消せない）。
   // 範囲選択・複数選択から除外しているので、まとめて削除に紛れることもない

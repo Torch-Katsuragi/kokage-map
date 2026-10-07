@@ -29,6 +29,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../utils/app_logger.dart';
 import '../base/device_service.dart';
+import '../base/serial_line_buffer.dart';
 import 'trupulse_measurement.dart';
 
 class TruPulseService extends ExternalDeviceService {
@@ -41,7 +42,7 @@ class TruPulseService extends ExternalDeviceService {
   bool _isConnecting = false;
   bool _isConnected = false;
   StreamSubscription<Uint8List>? _dataSubscription;
-  String _partialData = '';
+  final SerialLineBuffer _lines = SerialLineBuffer();
 
   // 計測ストリーム
   final _measurementController =
@@ -71,14 +72,6 @@ class TruPulseService extends ExternalDeviceService {
   int get measurementCount => _measurementCount;
   Stream<TruPulseMeasurement> get measurementStream =>
       _measurementController.stream;
-
-  @override
-  Map<String, dynamic> get statusInfo => {
-        'deviceName': _connectedDevice?.name,
-        'isConnected': _isConnected,
-        'measurementCount': _measurementCount,
-        'lastMeasurement': _lastMeasurement?.toString(),
-      };
 
   @override
   Future<List<BluetoothDevice>> scanDevices() async {
@@ -137,7 +130,7 @@ class TruPulseService extends ExternalDeviceService {
       _isConnected = false;
       _isConnecting = false;
       _connectedDevice = null;
-      _partialData = '';
+      _lines.clear();
       AppLogger.debug('$_tag: 切断完了');
       notifyListeners();
     } catch (e) {
@@ -193,14 +186,7 @@ class TruPulseService extends ExternalDeviceService {
 
   void _onDataReceived(Uint8List data) {
     try {
-      _partialData += utf8.decode(data);
-      final lines = _partialData.split('\n');
-      _partialData = lines.last;
-
-      for (int i = 0; i < lines.length - 1; i++) {
-        final line = lines[i].trim();
-        if (line.isNotEmpty) _parseLine(line);
-      }
+      _lines.add(data).forEach(_parseLine);
     } catch (e) {
       AppLogger.debug('$_tag: データ処理エラー: $e');
     }

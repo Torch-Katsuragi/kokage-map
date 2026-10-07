@@ -51,7 +51,6 @@ GpsPositionRecord _rec(double lat, double lng, {double? speed}) =>
       longitude: lng,
       speed: speed,
       timestamp: DateTime(2026, 6, 23, 12),
-      receivedAt: DateTime(2026, 6, 23, 12),
     );
 
 void main() {

@@ -13,32 +13,25 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// lib/models/gps_track.dart
-// GPS追跡の位置情報ポイント
-import 'package:latlong2/latlong.dart';
+/// Bluetooth SPP で届くバイト列を行に切る（外部 GNSS・TruPulse 共通）
+library;
 
-/// GPS追跡の1つの位置情報ポイント
-class GpsTrackPoint {
-  final double latitude;
-  final double longitude;
-  final double? altitude;
-  final double? accuracy;
-  final double? speed;
-  final double? bearing;
-  final DateTime timestamp;
-  final String sourceType; // 'GPS' または 'GNSS'
+import 'dart:convert';
 
-  GpsTrackPoint({
-    required this.latitude,
-    required this.longitude,
-    this.altitude,
-    this.accuracy,
-    this.speed,
-    this.bearing,
-    required this.timestamp,
-    required this.sourceType,
-  });
+class SerialLineBuffer {
+  String _partial = '';
 
-  /// LatLng形式に変換
-  LatLng toLatLng() => LatLng(latitude, longitude);
+  /// [data] を足して、揃った行を返す（前後の空白を除き、空行は除く）。
+  /// 行の途中で切れたぶんは次に回す。UTF-8 として読めないかたまりは例外（何も足さない）
+  List<String> add(List<int> data) {
+    _partial += utf8.decode(data);
+    final lines = _partial.split('\n');
+    _partial = lines.removeLast();
+    return [
+      for (final line in lines)
+        if (line.trim() case final trimmed when trimmed.isNotEmpty) trimmed,
+    ];
+  }
+
+  void clear() => _partial = '';
 }

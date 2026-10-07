@@ -68,7 +68,8 @@ class GpsTool extends MapTool with PanDelegation {
   DateTime? _longPressStartTime;
 
   /// 長押し中に集めた点の数（増えると通知する）
-  int get longPressGpsCount => _longPressGpsData.length;
+  int get longPressGpsCount =>
+      _isLongPressing ? _gpsManager.continuousSurveyCount : _longPressGpsData.length;
 
   @override
   void onActivate() => _initializeGpsFeatures();
@@ -204,7 +205,7 @@ class GpsTool extends MapTool with PanDelegation {
 
     try {
       // GPS測量専用開始（位置取得まで待機）
-      final gpsInfo = await _gpsManager.startGpsSurveyWithWait();
+      final gpsInfo = (await _gpsManager.startGpsSurveyWithWait())?.toMap();
       AppLogger.debug('[GpsTool] 単発測量 gpsInfo: $gpsInfo');
 
       if (gpsInfo == null || gpsInfo['isActive'] != true) {
@@ -430,13 +431,8 @@ class GpsTool extends MapTool with PanDelegation {
   }
 
   /// 連続測量位置更新コールバック
+  /// 点は GPS Manager Service が持つ（止めたときに受け取る。点が届くたびに一覧を写さない）
   void _onContinuousSurveyUpdate() {
-    // GPS Manager Service から収集されたデータを取得してローカルデータと同期
-    final continuousData = _gpsManager.getContinuousSurveyData();
-    _longPressGpsData.clear();
-    _longPressGpsData.addAll(continuousData);
-
-    AppLogger.debug('[GpsTool] 連続測量位置更新 - 現在${_longPressGpsData.length}ポイント');
     notifyListeners(); // 長押し中の点数の表示
   }
 }

@@ -282,7 +282,8 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       createFooter: (stateManager) {
         return TrinaLazyPagination(
           initialPage: 1,
-          initialFetch: false,
+          // ⚠ 最初の取得をしないと総ページ数が 0 のままで、先頭のページから先へ進めない（2026-10-07 に Fold で確認）
+          initialFetch: true,
           fetchWithSorting: false,
           fetchWithFiltering: false,
           fetch: _controller.fetchPage,

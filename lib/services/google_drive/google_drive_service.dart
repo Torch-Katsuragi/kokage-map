@@ -191,26 +191,32 @@ class GoogleDriveService {
     }
 
     try {
-      final api = drive.DriveApi(_BearerClient(token));
-      // 誰のトークンかはトークン自体に入っていないので、Driveに聞く
-      final about = await api.about.get($fields: 'user');
-      final user = about.user;
-      _driveApi = api;
-      authState.setAuthenticated(
-        DriveUser(
-          id: user?.permissionId ?? '',
-          email: user?.emailAddress ?? hint,
-          displayName: user?.displayName,
-          photoUrl: user?.photoLink,
-        ),
-      );
-      await _rememberEmail(user?.emailAddress ?? hint);
-      AppLogger.debug('[GoogleDriveService] 復元できた: ${user?.emailAddress}');
+      final email = await _adopt(drive.DriveApi(_BearerClient(token)), fallbackEmail: hint);
+      AppLogger.debug('[GoogleDriveService] 復元できた: $email');
       return true;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] 復元したトークンが使えない: $e');
       return false;
     }
+  }
+
+  /// [api] を使う API として採用し、サインイン済みにする。Drive が返したメールアドレスを返す。
+  ///
+  /// 誰のトークンかはトークン自体に入っていないので、Driveに聞く（使えないトークンならここで投げる）
+  Future<String?> _adopt(drive.DriveApi api, {String fallbackEmail = ''}) async {
+    final user = (await api.about.get($fields: 'user')).user;
+    _driveApi = api;
+    final email = user?.emailAddress ?? fallbackEmail;
+    authState.setAuthenticated(
+      DriveUser(
+        id: user?.permissionId ?? '',
+        email: email,
+        displayName: user?.displayName,
+        photoUrl: user?.photoLink,
+      ),
+    );
+    await _rememberEmail(email);
+    return user?.emailAddress;
   }
 
   Future<void> _rememberEmail(String email) async {
@@ -241,20 +247,8 @@ class GoogleDriveService {
         authState.setUnauthenticated();
         return false;
       }
-      final api = drive.DriveApi(authorization.authClient(scopes: _scopes));
-      // 誰のトークンかはトークン自体に入っていないので、Driveに聞く
-      final user = (await api.about.get($fields: 'user')).user;
-      _driveApi = api;
-      authState.setAuthenticated(
-        DriveUser(
-          id: user?.permissionId ?? '',
-          email: user?.emailAddress ?? '',
-          displayName: user?.displayName,
-          photoUrl: user?.photoLink,
-        ),
-      );
-      await _rememberEmail(user?.emailAddress ?? '');
-      AppLogger.debug('[GoogleDriveService] 無音復元できた: ${user?.emailAddress}');
+      final email = await _adopt(drive.DriveApi(authorization.authClient(scopes: _scopes)));
+      AppLogger.debug('[GoogleDriveService] 無音復元できた: $email');
       return true;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] 無音復元に失敗（画面は出さない）: $e');
@@ -384,20 +378,26 @@ class GoogleDriveService {
 
       // ここはボタン直下なので選択画面が出てよい
       return await _authenticateInteractively();
-    } on GoogleSignInException catch (e) {
+    } catch (e) {
+      return _signInFailed(e, 'サインイン');
+    }
+  }
+
+  /// サインイン（[what]）の失敗を状態に写して false を返す。本当のキャンセルならエラーにしない
+  bool _signInFailed(Object e, String what) {
+    if (e is GoogleSignInException) {
       if (isUserCancellation(e)) {
-        AppLogger.debug('[GoogleDriveService] サインインキャンセル: code=${e.code.name} description=${e.description}');
+        AppLogger.debug('[GoogleDriveService] $whatキャンセル: code=${e.code.name} description=${e.description}');
         authState.setUnauthenticated();
         return false;
       }
-      AppLogger.debug('[GoogleDriveService] サインインエラー: code=${e.code.name} description=${e.description}');
+      AppLogger.debug('[GoogleDriveService] $whatエラー: code=${e.code.name} description=${e.description}');
       authState.setError(t.services.signInFailed(error: formatSignInError(e)));
       return false;
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] サインインエラー: $e');
-      authState.setError(t.services.signInFailed(error: e.toString()));
-      return false;
     }
+    AppLogger.debug('[GoogleDriveService] $whatエラー: $e');
+    authState.setError(t.services.signInFailed(error: e.toString()));
+    return false;
   }
 
   /// アカウントを選ばせ、Drive のスコープ同意まで済ませる（native）
@@ -463,19 +463,8 @@ class GoogleDriveService {
 
       // authenticate() でアカウント選択UIが表示される
       return await _authenticateInteractively();
-    } on GoogleSignInException catch (e) {
-      if (isUserCancellation(e)) {
-        AppLogger.debug('[GoogleDriveService] アカウント切替キャンセル: code=${e.code.name} description=${e.description}');
-        authState.setUnauthenticated();
-        return false;
-      }
-      AppLogger.debug('[GoogleDriveService] アカウント切替エラー: code=${e.code.name} description=${e.description}');
-      authState.setError(t.services.signInFailed(error: formatSignInError(e)));
-      return false;
     } catch (e) {
-      AppLogger.debug('[GoogleDriveService] アカウント切替エラー: $e');
-      authState.setError(t.services.signInFailed(error: e.toString()));
-      return false;
+      return _signInFailed(e, 'アカウント切替');
     }
   }
 
@@ -561,418 +550,246 @@ class GoogleDriveService {
   /// Drive APIを取得（認証済みの場合のみ）
   drive.DriveApi? get driveApi => _driveApi;
 
+  // ========== Drive API の共通部分 ==========
+
+  static const String _folderMime = 'application/vnd.google-apps.folder';
+
+  /// 上げたときに返してもらう項目。
+  /// 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
+  static const String _uploadedFields = 'id, name, modifiedTime, size, parents';
+
+  /// API を掴んでいれば [body] を呼ぶ。掴んでいなければ、または失敗したら [fallback]（失敗は [what] を添えてログに残す）
+  Future<T> _call<T>(String what, T fallback, Future<T> Function(drive.DriveApi api) body) async {
+    final api = _driveApi;
+    if (api == null) return fallback;
+    try {
+      return await body(api);
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] $what: $e');
+      return fallback;
+    }
+  }
+
+  /// [q] に当たるもの（共有ドライブも含めて探す）
+  static Future<List<drive.File>> _list(drive.DriveApi api, String q, {String? fields}) async {
+    final result = await api.files.list(
+      q: q,
+      $fields: fields,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    );
+    return result.files ?? [];
+  }
+
+  /// 中身を上げる。[existingFileId] があればその版を更新し、無ければ [parentId] に作る
+  static Future<drive.File> _put(
+    drive.DriveApi api,
+    Uint8List bytes, {
+    required String fileName,
+    required String parentId,
+    String? existingFileId,
+  }) {
+    final media = drive.Media(Stream<List<int>>.value(bytes), bytes.length);
+    if (existingFileId != null) {
+      return api.files.update(
+        drive.File(),
+        existingFileId,
+        uploadMedia: media,
+        supportsAllDrives: true,
+        $fields: _uploadedFields,
+      );
+    }
+    return api.files.create(
+      drive.File(name: fileName, parents: [parentId]),
+      uploadMedia: media,
+      supportsAllDrives: true,
+      $fields: _uploadedFields,
+    );
+  }
+
   // ========== フォルダ操作 ==========
 
   /// こかげマップのルートフォルダを取得または作成
-  Future<drive.File?> getOrCreateRootMapsFolder() async {
-    if (_driveApi == null) return null;
+  Future<drive.File?> getOrCreateRootMapsFolder() => _call('フォルダ取得/作成エラー', null, (api) async {
+        // 既存のフォルダを検索
+        final result = await api.files.list(
+          q: "name = '$kMapsFolderName' and mimeType = '$_folderMime' and trashed = false",
+        );
+        final existing = result.files?.firstOrNull;
+        if (existing != null) return existing;
 
-    try {
-      // 既存のフォルダを検索
-      const query =
-          "name = '$kMapsFolderName' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-      final result = await _driveApi!.files.list(q: query);
-
-      if (result.files != null && result.files!.isNotEmpty) {
-        return result.files!.first;
-      }
-
-      // フォルダを新規作成
-      final folder = drive.File()
-        ..name = kMapsFolderName
-        ..mimeType = 'application/vnd.google-apps.folder';
-
-      final created = await _driveApi!.files.create(folder);
-      AppLogger.debug('[GoogleDriveService] ルートフォルダ作成: ${created.id}');
-      return created;
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] フォルダ取得/作成エラー: $e');
-      return null;
-    }
-  }
-
-  /// 指定フォルダ内のサブフォルダを取得
-  Future<List<drive.File>> listFolders(String parentId) async {
-    if (_driveApi == null) return [];
-
-    try {
-      final query =
-          "'$parentId' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-      final result = await _driveApi!.files.list(
-        q: query,
-        $fields: 'files(id, name, modifiedTime)',
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true,
-      );
-      return result.files ?? [];
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] フォルダ一覧取得エラー: $e');
-      return [];
-    }
-  }
+        final created = await api.files.create(drive.File(name: kMapsFolderName, mimeType: _folderMime));
+        AppLogger.debug('[GoogleDriveService] ルートフォルダ作成: ${created.id}');
+        return created;
+      });
 
   /// 指定フォルダ内にサブフォルダを取得または作成
-  Future<drive.File?> getOrCreateSubFolder(
-    String parentId,
-    String folderName,
-  ) async {
-    if (_driveApi == null) return null;
+  Future<drive.File?> getOrCreateSubFolder(String parentId, String folderName) =>
+      _call('サブフォルダ作成エラー', null, (api) async {
+        final existing = (await _list(
+          api,
+          "name = '$folderName' and '$parentId' in parents and mimeType = '$_folderMime' and trashed = false",
+          fields: 'files(id, name)',
+        ))
+            .firstOrNull;
+        if (existing != null) return existing;
 
-    try {
-      final query =
-          "name = '$folderName' and '$parentId' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-      final result = await _driveApi!.files.list(
-        q: query,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true,
-        $fields: 'files(id, name)',
-      );
-      final existing = result.files?.isNotEmpty == true ? result.files!.first : null;
-      if (existing != null) return existing;
-
-      final folder = drive.File()
-        ..name = folderName
-        ..mimeType = 'application/vnd.google-apps.folder'
-        ..parents = [parentId];
-
-      final created = await _driveApi!.files.create(
-        folder,
-        supportsAllDrives: true,
-      );
-      AppLogger.debug('[GoogleDriveService] サブフォルダ作成: $folderName');
-      return created;
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] サブフォルダ作成エラー: $e');
-      return null;
-    }
-  }
+        final created = await api.files.create(
+          drive.File(name: folderName, mimeType: _folderMime, parents: [parentId]),
+          supportsAllDrives: true,
+        );
+        AppLogger.debug('[GoogleDriveService] サブフォルダ作成: $folderName');
+        return created;
+      });
 
   /// 新しいプロジェクトフォルダを作成
-  Future<drive.File?> createProjectFolder(
-    String name, {
-    String? parentId,
-  }) async {
-    if (_driveApi == null) return null;
+  Future<drive.File?> createProjectFolder(String name, {String? parentId}) =>
+      _call('フォルダ作成エラー', null, (api) async {
+        // 親フォルダが指定されていない場合はルートフォルダに作成
+        final parent = parentId ?? (await getOrCreateRootMapsFolder())?.id;
+        if (parent == null) return null;
 
-    try {
-      // 親フォルダが指定されていない場合はルートフォルダに作成
-      final parent = parentId ?? (await getOrCreateRootMapsFolder())?.id;
-      if (parent == null) return null;
-
-      final folder = drive.File()
-        ..name = name
-        ..mimeType = 'application/vnd.google-apps.folder'
-        ..parents = [parent];
-
-      final created = await _driveApi!.files.create(folder);
-      AppLogger.debug('[GoogleDriveService] プロジェクトフォルダ作成: ${created.id}');
-      return created;
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] フォルダ作成エラー: $e');
-      return null;
-    }
-  }
+        final created = await api.files.create(drive.File(name: name, mimeType: _folderMime, parents: [parent]));
+        AppLogger.debug('[GoogleDriveService] プロジェクトフォルダ作成: ${created.id}');
+        return created;
+      });
 
   // ========== ファイル操作 ==========
 
-  /// ファイルをアップロード
+  /// ファイルをアップロード（同じフォルダに同名のファイルがあればその版を更新）
   /// [localPath] ローカルファイルのパス（web では仮想パス）
   /// [parentId] 親フォルダID
-  /// [onProgress] 進捗コールバック（0.0〜1.0）
   ///
   /// > [!NOTE] 中身は丸ごとメモリに載せる
   /// > `dart:io` の `openRead()` はストリームで流せるが、web には無い。
   /// > `fs` は「全部読む」しか持たないので、ここで揃えた。
   /// > 現場のgpkgは数十MB程度なので許容できる。
-  Future<drive.File?> uploadFile(
-    String localPath,
-    String parentId, {
-    void Function(double progress)? onProgress,
-  }) async {
+  Future<drive.File?> uploadFile(String localPath, String parentId) async {
     if (_driveApi == null) return null;
     final bytes = await fs.readAsBytes(localPath);
     return uploadBytes(bytes, p.basename(localPath), parentId);
   }
 
-  /// メモリ上の内容をそのままアップロードする。
+  /// メモリ上の内容をそのままアップロードする（同名のファイルがあればその版を更新）。
   ///
   /// 一時ファイルを作らずに済ませたいとき用（フォルダ設定（`.qgs`） の加工など）。
   /// web には一時ディレクトリが無いので、こちらしか使えない。
-  Future<drive.File?> uploadBytes(
-    Uint8List bytes,
-    String fileName,
-    String parentId,
-  ) async {
-    if (_driveApi == null) return null;
+  Future<drive.File?> uploadBytes(Uint8List bytes, String fileName, String parentId) =>
+      _call('アップロードエラー', null, (api) async {
+        final existing = await _findFileByName(fileName, parentId);
+        final result = await _put(api, bytes, fileName: fileName, parentId: parentId, existingFileId: existing?.id);
+        AppLogger.debug('[GoogleDriveService] ${existing != null ? 'ファイル更新' : 'ファイルアップロード'}: $fileName');
+        return result;
+      });
 
-    try {
-      // 既存ファイルを検索（同名ファイルがあれば更新）
-      final existingFile = await _findFileByName(fileName, parentId);
-
-      final media = drive.Media(
-        Stream<List<int>>.value(bytes),
-        bytes.length,
-      );
-
-      drive.File result;
-
-      if (existingFile != null) {
-        // 既存ファイルを更新
-        result = await _driveApi!.files.update(
-          drive.File(),
-          existingFile.id!,
-          uploadMedia: media,
-          supportsAllDrives: true,
-          // 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
-          $fields: 'id, name, modifiedTime, size, parents',
-        );
-        AppLogger.debug('[GoogleDriveService] ファイル更新: $fileName');
-      } else {
-        // 新規アップロード
-        final driveFile = drive.File()
-          ..name = fileName
-          ..parents = [parentId];
-
-        result = await _driveApi!.files.create(
-          driveFile,
-          uploadMedia: media,
-          supportsAllDrives: true,
-          // 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
-          $fields: 'id, name, modifiedTime, size, parents',
-        );
-        AppLogger.debug('[GoogleDriveService] ファイルアップロード: $fileName');
-      }
-
-      return result;
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] アップロードエラー: $e');
-      return null;
-    }
-  }
-
-  /// 既知のDriveファイルIDを指定してアップロード（_findFileByName不要）
+  /// 既知のDriveファイルIDを指定してアップロード（同名の検索をしない）
   /// [existingFileId] が指定されていれば files.update、なければ files.create
-  Future<drive.File?> uploadFileById(
-    String localPath,
-    String parentId, {
-    String? existingFileId,
-  }) async {
-    if (_driveApi == null) return null;
-
-    try {
-      final fileName = p.basename(localPath);
-      final bytes = await fs.readAsBytes(localPath);
-      final media = drive.Media(
-        Stream<List<int>>.value(bytes),
-        bytes.length,
-      );
-
-      if (existingFileId != null) {
-        final result = await _driveApi!.files.update(
-          drive.File(),
-          existingFileId,
-          uploadMedia: media,
-          supportsAllDrives: true,
-          // 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
-          $fields: 'id, name, modifiedTime, size, parents',
+  Future<drive.File?> uploadFileById(String localPath, String parentId, {String? existingFileId}) =>
+      _call('アップロードエラー(byId)', null, (api) async {
+        final fileName = p.basename(localPath);
+        final bytes = await fs.readAsBytes(localPath);
+        final result =
+            await _put(api, bytes, fileName: fileName, parentId: parentId, existingFileId: existingFileId);
+        AppLogger.debug(
+          '[GoogleDriveService] ${existingFileId != null ? 'ファイル更新(byId)' : 'ファイル新規作成(byId)'}: $fileName',
         );
-        AppLogger.debug('[GoogleDriveService] ファイル更新(byId): $fileName');
         return result;
-      } else {
-        final driveFile = drive.File()
-          ..name = fileName
-          ..parents = [parentId];
-        final result = await _driveApi!.files.create(
-          driveFile,
-          uploadMedia: media,
-          supportsAllDrives: true,
-          // 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
-          $fields: 'id, name, modifiedTime, size, parents',
-        );
-        AppLogger.debug('[GoogleDriveService] ファイル新規作成(byId): $fileName');
-        return result;
-      }
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] アップロードエラー(byId): $e');
-      return null;
-    }
-  }
+      });
 
-  /// ファイルを削除
-  /// [fileId] DriveファイルID
   /// ファイルをゴミ箱に移動（削除）
   /// 完全削除ではなくゴミ箱移動を使用（操作ミス対策 + 共有ドライブ対応）
-  Future<bool> deleteFile(String fileId) async {
-    if (_driveApi == null) return false;
+  Future<bool> deleteFile(String fileId) => _call('ゴミ箱移動エラー', false, (api) async {
+        try {
+          await api.files.update(drive.File(trashed: true), fileId, supportsAllDrives: true);
+          AppLogger.debug('[GoogleDriveService] ファイルをゴミ箱に移動: $fileId');
+          return true;
+        } on drive.DetailedApiRequestError catch (e) {
+          // 404は既にゴミ箱 or 削除済み
+          if (e.status == 404) {
+            AppLogger.debug('[GoogleDriveService] ファイル既に削除済み（404）: $fileId');
+            return true;
+          }
+          rethrow;
+        }
+      });
 
-    try {
-      await _driveApi!.files.update(
-        drive.File(trashed: true),
-        fileId,
-        supportsAllDrives: true,
-      );
-      AppLogger.debug('[GoogleDriveService] ファイルをゴミ箱に移動: $fileId');
-      return true;
-    } on drive.DetailedApiRequestError catch (e) {
-      // 404は既にゴミ箱 or 削除済み
-      if (e.status == 404) {
-        AppLogger.debug('[GoogleDriveService] ファイル既に削除済み（404）: $fileId');
-        return true;
-      }
-      AppLogger.debug('[GoogleDriveService] ゴミ箱移動エラー: status=${e.status}, message=${e.message}');
-      return false;
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] ゴミ箱移動エラー: $e');
-      return false;
-    }
-  }
-
-  /// ファイルを移動（親フォルダを変更）
-  /// バージョン履歴を維持したまま移動
-  /// [fileId] DriveファイルID
-  /// [newParentId] 移動先フォルダID
-  /// [oldParentId] 移動元フォルダID（省略可、省略時は現在の親から推測）
-  ///
+  /// ファイルを移動（親フォルダを変更）。バージョン履歴を維持したまま移動
+  /// [oldParentId] 移動元フォルダID（省略時は Drive に聞く）
   /// [newName] を渡すと名前も変える（この端末で改名したとき）
   Future<bool> moveFile(
     String fileId, {
     required String newParentId,
     String? oldParentId,
     String? newName,
-  }) async {
-    if (_driveApi == null) return false;
+  }) =>
+      _call('ファイル移動エラー', false, (api) async {
+        final removeParent = oldParentId ?? (await getFileMetadata(fileId))?.parents.firstOrNull;
+        // 同じ dir の中の改名なら親は触らない
+        final sameParent = removeParent == newParentId;
+        await api.files.update(
+          drive.File(name: newName),
+          fileId,
+          addParents: sameParent ? null : newParentId,
+          removeParents: sameParent ? null : removeParent,
+          supportsAllDrives: true,
+        );
+        AppLogger.debug('[GoogleDriveService] ファイル移動: $fileId → $newParentId');
+        return true;
+      });
 
-    try {
-      // 移動元が指定されていない場合は現在の親を取得
-      String? removeParent = oldParentId;
-      if (removeParent == null) {
-        final metadata = await getFileMetadata(fileId);
-        if (metadata != null && metadata.parents.isNotEmpty) {
-          removeParent = metadata.parents.first;
+  /// ファイルメタデータを取得。エラー・完全削除（404）なら null
+  Future<DriveFileMetadata?> getFileMetadata(String fileId) =>
+      _call('ファイルメタデータ取得エラー', null, (api) async {
+        final file = await api.files.get(
+          fileId,
+          $fields: 'id,name,trashed,modifiedTime,parents',
+          supportsAllDrives: true,
+        ) as drive.File;
+        return DriveFileMetadata(
+          id: file.id ?? fileId,
+          name: file.name,
+          trashed: file.trashed ?? false,
+          modifiedTime: file.modifiedTime,
+          parents: file.parents ?? [],
+        );
+      });
+
+  /// ファイルを [localPath] にダウンロード
+  Future<bool> downloadFile(String fileId, String localPath) => _call('ダウンロードエラー', false, (api) async {
+        final response = await api.files.get(
+          fileId,
+          downloadOptions: drive.DownloadOptions.fullMedia,
+          supportsAllDrives: true,
+        );
+        if (response is! drive.Media) {
+          AppLogger.debug('[GoogleDriveService] ダウンロード応答が不正');
+          return false;
         }
-      }
+        // ⚠ 追記していく `openWrite()` は web に無いので、全部集めてから一度に書く
+        final chunks = BytesBuilder(copy: false);
+        await response.stream.forEach(chunks.add);
+        await fs.writeAsBytes(localPath, chunks.takeBytes());
+        AppLogger.debug('[GoogleDriveService] ダウンロード完了: $localPath');
+        return true;
+      });
 
-      // 同じ dir の中の改名なら親は触らない
-      final sameParent = removeParent == newParentId;
-      await _driveApi!.files.update(
-        drive.File(name: newName),
-        fileId,
-        addParents: sameParent ? null : newParentId,
-        removeParents: sameParent ? null : removeParent,
-        supportsAllDrives: true,
+  /// フォルダ直下のファイルとフォルダの一覧（共有フォルダにも届くよう共有ドライブも含める）
+  Future<List<drive.File>> listFiles(String parentId) => _call(
+        'ファイル一覧取得エラー',
+        <drive.File>[],
+        (api) => _list(
+          api,
+          "'$parentId' in parents and trashed = false",
+          fields: 'files(id, name, mimeType, modifiedTime, size, parents)',
+        ),
       );
-      
-      AppLogger.debug(
-        '[GoogleDriveService] ファイル移動: $fileId → $newParentId',
-      );
-      return true;
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] ファイル移動エラー: $e');
-      return false;
-    }
-  }
-
-  /// ファイルメタデータを取得
-  /// [fileId] DriveファイルID
-  /// 戻り値: {trashed, modifiedTime, name, parents} または null（エラー/完全削除時）
-  Future<DriveFileMetadata?> getFileMetadata(String fileId) async {
-    if (_driveApi == null) return null;
-
-    try {
-      final file = await _driveApi!.files.get(
-        fileId,
-        $fields: 'id,name,trashed,modifiedTime,parents',
-        supportsAllDrives: true,
-      ) as drive.File;
-
-      return DriveFileMetadata(
-        id: file.id ?? fileId,
-        name: file.name,
-        trashed: file.trashed ?? false,
-        modifiedTime: file.modifiedTime,
-        parents: file.parents ?? [],
-      );
-    } catch (e) {
-      // 404 = 完全削除済み
-      AppLogger.debug('[GoogleDriveService] ファイルメタデータ取得エラー: $e');
-      return null;
-    }
-  }
-
-  /// ファイルをダウンロード
-  /// [fileId] DriveファイルID
-  /// [localPath] 保存先パス
-  /// [onProgress] 進捗コールバック（0.0〜1.0）
-  Future<bool> downloadFile(
-    String fileId,
-    String localPath, {
-    void Function(double progress)? onProgress,
-  }) async {
-    if (_driveApi == null) return false;
-
-    try {
-      final response = await _driveApi!.files.get(
-        fileId,
-        downloadOptions: drive.DownloadOptions.fullMedia,
-        supportsAllDrives: true,
-      );
-
-      if (response is! drive.Media) {
-        AppLogger.debug('[GoogleDriveService] ダウンロード応答が不正');
-        return false;
-      }
-
-      // ⚠ 追記していく `openWrite()` は web に無いので、全部集めてから一度に書く
-      final chunks = <int>[];
-      await for (final chunk in response.stream) {
-        chunks.addAll(chunk);
-      }
-      await fs.writeAsBytes(localPath, Uint8List.fromList(chunks));
-      AppLogger.debug('[GoogleDriveService] ダウンロード完了: $localPath');
-      return true;
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] ダウンロードエラー: $e');
-      return false;
-    }
-  }
-
-  /// フォルダ内のファイル一覧を取得
-  /// 共有フォルダにもアクセスするため supportsAllDrives=true を設定
-  Future<List<drive.File>> listFiles(String parentId) async {
-    if (_driveApi == null) return [];
-
-    try {
-      final query = "'$parentId' in parents and trashed = false";
-      final result = await _driveApi!.files.list(
-        q: query,
-        $fields: 'files(id, name, mimeType, modifiedTime, size, parents)',
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true,
-      );
-      return result.files ?? [];
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] ファイル一覧取得エラー: $e');
-      return [];
-    }
-  }
 
   /// ファイル名でファイルを検索
-  Future<drive.File?> _findFileByName(String name, String parentId) async {
-    if (_driveApi == null) return null;
-
-    try {
-      final query =
-          "name = '$name' and '$parentId' in parents and trashed = false";
-      final result = await _driveApi!.files.list(
-        q: query,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true,
+  Future<drive.File?> _findFileByName(String name, String parentId) => _call(
+        '同名ファイルの検索エラー',
+        null,
+        (api) async => (await _list(api, "name = '$name' and '$parentId' in parents and trashed = false")).firstOrNull,
       );
-      return result.files?.firstOrNull;
-    } catch (e) {
-      return null;
-    }
-  }
 
   // ========== 共有URL操作 ==========
 

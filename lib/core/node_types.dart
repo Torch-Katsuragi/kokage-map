@@ -63,12 +63,6 @@ enum NodeType {
     return null;
   }
   
-  /// このノードタイプがコンテナ（子を持てる）かどうか
-  ///
-  /// ⚠ view は Layer にぶら下がるが、`children` には入らない
-  /// （Layer の `children` は FeatureNode 専用。理由は [[lib/models/nodes/view_node]]）。
-  bool get isContainer => this == folder || this == geopackage || this == layer;
-
   /// 表示用の名前（日本語）
   String get displayName {
     switch (this) {

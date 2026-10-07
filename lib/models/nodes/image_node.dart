@@ -109,9 +109,6 @@ class ImageNode extends LayerTreeNode {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
-  // 2026-08-25: fileExists ゲッターを削除した。未使用のうえ同期I/O
-  // （existsSync）だったため web に持ち込めない。要るなら `fs.exists()` を直接呼ぶ。
-
   /// 指定したフォルダ内の画像ファイルをスキャンし、ImageNodeリストを返す
   /// GeoTIFFタグ（ModelTransformationTag）を持つ.tifファイルはOverlayImageNodeとして生成
   ///

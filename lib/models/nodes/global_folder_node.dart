@@ -231,10 +231,6 @@ class GlobalFolderNode extends FolderNode {
     }
     return nodes;
   }
-
-  // 2026-08-25: createIn() を削除した。どこからも呼ばれておらず、
-  // 同期I/O（existsSync/createSync）だったため web に持ち込めない。
-  // 必要になったら `fs` 経由の非同期版として足すこと。
 }
 
 /// グローバルフォルダ内のサブフォルダノード
@@ -403,10 +399,6 @@ class GlobalSubFolderNode extends FolderNode {
     }
     return nodes;
   }
-
-  // 2026-08-25: createIn() を削除した。どこからも呼ばれておらず、
-  // 同期I/O（existsSync/createSync）だったため web に持ち込めない。
-  // 必要になったら `fs` 経由の非同期版として足すこと。
 }
 
 /// グローバルフォルダ用のGeoPackageノード

@@ -868,9 +868,6 @@
     "convertDesc": "Convert $count points from \"$layer\" to $type.",
     "targetLayerLabel": "Target layer:",
     "convert": "Convert",
-    "convertToPoints": "Convert to Points",
-    "toPointsDesc": "Convert $count vertices of $type \"$name\" to points.",
-    "targetPointLayer": "Target point layer:",
     "lineType": "Line",
     "polygonType": "Polygon",
     "unknownType": "Unknown"
@@ -1514,7 +1511,6 @@
     "labelOpacity": "Opacity",
     "enableClustering": "Cluster nearby points",
     "enableClusteringDesc": "When zoomed out, nearby points are merged into one with a count",
-    "clusterRadius": "Cluster radius",
     "disableAtZoom": "Show individually from zoom",
     "zoomN": "Zoom $n",
     "sizeMultiplier": "Size multiplier",

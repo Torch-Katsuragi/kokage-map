@@ -17,10 +17,9 @@ import 'dart:ui' show Color;
 
 /// フィーチャの GeoJSON に載せるプロパティ名（MapSourceManager から移した。2026-09-11 MapLibre 撤去）
 ///
-/// [kStyleProp] はスタイルグループのキー（View のキー）、[kLabelProp] は解決済みのラベル文字列。
-/// 3D 描画系（`TerrainSceneBuilder`）はこれを見て見た目とラベルを決める
+/// [kStyleProp] はスタイルグループのキー（View のキー）。
+/// 3D 描画系（`TerrainSceneBuilder`）はこれを見て見た目を決める
 const kStyleProp = 'k-style';
-const kLabelProp = 'k-label';
 
 /// スタイルグループ 1 つぶんの、解決済みの見た目。
 ///

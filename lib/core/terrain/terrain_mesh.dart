@@ -117,8 +117,6 @@ class TerrainMeshTiming {
   /// 並び順をやり直したか（象限が変わったとき）
   final bool resorted;
 
-  Duration get total => project + sort + assemble;
-
   @override
   String toString() =>
       'proj=${project.inMilliseconds} sort=${sort.inMilliseconds} '
@@ -189,9 +187,6 @@ class TerrainMesh {
   final int step;
 
   final TerrainMeshTiming timing;
-
-  /// 組み立てに掛かった時間（計測用）
-  Duration get buildTime => timing.total;
 
   /// 単発で組む（テスト・簡易用）。連続で組むなら [TerrainMeshBuilder] を持つ
   static TerrainMesh build(

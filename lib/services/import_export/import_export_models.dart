@@ -170,9 +170,6 @@ class ExportOptions {
     this.includeRowNumber = false,
   });
 
-  /// デフォルトオプション（WGS84、変換なし）
-  static const defaultOptions = ExportOptions();
-
   /// WGS84かどうか判定
   bool get isWgs84 => targetCrs == null || targetCrs!.code == 'EPSG:4326';
 }

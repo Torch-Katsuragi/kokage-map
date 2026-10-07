@@ -49,8 +49,7 @@ class TruPulseService extends ExternalDeviceService {
   TruPulseMeasurement? _lastMeasurement;
   int _measurementCount = 0;
 
-  // 汎用レスポンスストリーム（計測以外のシリアル応答）
-  final _responseController = StreamController<String>.broadcast();
+  // 計測以外のシリアル応答を待つ問い合わせ
   Completer<String>? _pendingQuery;
 
   // 通信ログ（リングバッファ）
@@ -72,7 +71,6 @@ class TruPulseService extends ExternalDeviceService {
   int get measurementCount => _measurementCount;
   Stream<TruPulseMeasurement> get measurementStream =>
       _measurementController.stream;
-  Stream<String> get responseStream => _responseController.stream;
 
   @override
   Map<String, dynamic> get statusInfo => {
@@ -243,9 +241,8 @@ class TruPulseService extends ExternalDeviceService {
       } catch (_) {}
     }
 
-    // 計測以外のレスポンス → responseStream + pendingQuery
+    // 計測以外のレスポンス → pendingQuery
     AppLogger.debug('$_tag: response: $line');
-    _responseController.add(line);
     if (_pendingQuery != null && !_pendingQuery!.isCompleted) {
       _pendingQuery!.complete(line);
       _pendingQuery = null;
@@ -277,7 +274,6 @@ class TruPulseService extends ExternalDeviceService {
   void dispose() {
     disconnect();
     _measurementController.close();
-    _responseController.close();
     _logNotifier.close();
     super.dispose();
   }

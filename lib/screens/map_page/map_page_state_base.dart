@@ -50,9 +50,6 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   // 地図基本状態
   // =============================================
 
-  /// 地図の初期中心座標（東京駅）
-  final LatLng defaultCenter = const LatLng(35.681236, 139.767125);
-
   /// 背景地図サービスの初期化が済んだか（済むまで地図面を組まない）
   bool baseMapReady = false;
 

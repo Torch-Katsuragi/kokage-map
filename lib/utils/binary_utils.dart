@@ -21,16 +21,6 @@ import 'package:root_maps/utils/app_logger.dart';
 
 /// バイナリ変換ユーティリティクラス
 class BinaryUtils {
-  /// 32bit整数をビッグエンディアンで書き込み
-  static List<int> writeInt32BigEndian(int value) {
-    return [
-      (value >> 24) & 0xFF,
-      (value >> 16) & 0xFF,
-      (value >> 8) & 0xFF,
-      value & 0xFF,
-    ];
-  }
-
   /// 32bit整数をリトルエンディアンで書き込み
   static List<int> writeInt32LittleEndian(int value) {
     return [
@@ -44,13 +34,6 @@ class BinaryUtils {
   /// 16bit整数をリトルエンディアンで書き込み
   static List<int> writeInt16LittleEndian(int value) {
     return [value & 0xFF, (value >> 8) & 0xFF];
-  }
-
-  /// 64bit浮動小数点をリトルエンディアンで書き込み
-  static List<int> writeFloat64(double value) {
-    final buffer = ByteData(8);
-    buffer.setFloat64(0, value, Endian.little);
-    return buffer.buffer.asUint8List().toList();
   }
 
   /// 32bit整数をビッグエンディアンで読み込み

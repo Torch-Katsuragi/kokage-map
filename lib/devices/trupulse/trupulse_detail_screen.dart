@@ -54,6 +54,7 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
   @override
   void dispose() {
     _logSub?.cancel();
+    _cmdController.dispose();
     super.dispose();
   }
 
@@ -447,7 +448,9 @@ class _TerminalViewState extends State<_TerminalView> {
   @override
   void didUpdateWidget(_TerminalView old) {
     super.didUpdateWidget(old);
-    if (widget.entries.length != old.entries.length) {
+    // 500 件で頭から捨てるので、件数が同じでも末尾が替われば新しい行が来ている
+    if (widget.entries.length != old.entries.length ||
+        !identical(widget.entries.lastOrNull, old.entries.lastOrNull)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
           _scrollController.jumpTo(

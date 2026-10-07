@@ -178,21 +178,15 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
   /// マップUI更新処理
   /// フィーチャの追加・更新・削除後にマップ表示を更新
   /// 【重要】childrenはクリアせず、メモリ上のインスタンスから読み込む（DBアクセスなし）
+  ///
+  /// ⚠ 先に一覧を空にして組み直さない。以前はそうしていて、空の組み直しで全フィーチャが
+  ///   「消えた」扱いになり、続く組み直しが最初の組み立て扱い（全部変わった）になって、
+  ///   描いた地物を確定するたびに 3D の焼き込み済みテクスチャを全部作り直していた
   @override
   void refreshMapUI() {
     AppLogger.debug('[MAP] マップUI更新開始（インスタンスベース）');
 
-    // 1. フィーチャデータのキャッシュをクリア
-    pointFeatures.clear();
-    lineFeatures.clear();
-    polygonFeatures.clear();
-    photoNodes.clear();
-    overlayImageNodes.clear();
-    invalidateLayerCache();
-
-    // 2. 【重要】LayerNodeのchildrenはクリアしない（メモリ上のインスタンスを維持）
-
-    // 3. フィーチャデータを再読み込み（最後に GeoJSON を組み直す）
+    // フィーチャデータを再読み込み（最後に GeoJSON を組み直す）
     updateFeatures().then((_) {
       if (mounted) {
         AppLogger.debug('[MAP] マップUI更新完了');

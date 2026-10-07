@@ -64,8 +64,10 @@ import '../../../utils/app_logger.dart';
 import '../../../utils/global_drawing_state.dart';
 import '../../layer_style_settings_screen.dart';
 import '../feature_geojson_cache.dart';
+import 'terrain_texture_paint.dart';
 
 part 'terrain_map_layer_drive.dart';
+part 'terrain_map_layer_gestures.dart';
 
 /// 地図面（v2: タイルの世界）。地図はこれだけ（MapLibre は 2026-10-04 に外した）
 ///
@@ -314,7 +316,7 @@ class _StaticProgress {
 }
 
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
-    with SingleTickerProviderStateMixin, _TerrainDrive
+    with SingleTickerProviderStateMixin, _TerrainDrive, _TerrainGestures
     implements TerrainProjection {
   /// 入ったときの傾き。起動時は真上（松本 2026-09-11 決定。2D と同じ絵で始まり、傾けたい人が傾ける）
   static const _defaultPitchDeg = 0.0;
@@ -403,6 +405,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   TerrainFramePlan? _lastPlan;
 
   final _repaint = ValueNotifier<int>(0);
+  @override
   Size _size = Size.zero;
   String _attribution = '';
 
@@ -550,6 +553,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// 2D モード（真上固定。1 本指 = 移動、2 本指 = 移動・拡縮・回転。3D 導入前のパンと同じ）。
   /// 中身は 3D を真上から見ているだけ。3D モードは 1 本指 = 回転・傾き、2 本指 = 移動・拡縮。
   /// 起動は 2D（真上）。切替はコンパスのタップ（松本 2026-09-13）
+  @override
   bool _flat = true;
 
   /// 3D に戻したときの傾き（2D に入る前のもの。無ければ [_default3dPitchDeg]）
@@ -557,11 +561,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   static const _default3dPitchDeg = 50.0;
 
   /// ペン選択中: 真上に寄せて 1 本指をツール（描画）に渡す。離れたら元の傾きに戻す（2D モードなら真上のまま）
+  @override
   bool _penLock = false;
   double? _pitchBeforePen;
-
-  /// 今の 1 本指ドラッグをツールに渡している最中
-  bool _toolDrag = false;
 
   // オーバーレイ画像（GeoTIFF など）: 地形のテクスチャに焼く
   final Map<String, ui.Image> _overlayImages = {};
@@ -576,12 +578,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// 選んだ面の塗り（テクスチャに描く）: いま描いてある選択と、その範囲（Mercator）
   List<geo.Feature<geo.Geometry>> _selFillDrawn = const [];
   Rect? _selFillBounds;
-
-  // ジェスチャ
-  double _scaleStart = 1;
-  double _bearingStart = 0;
-  double _pitchStart = 0;
-  Offset _focalStart = Offset.zero;
 
   @override
   void initState() {
@@ -1849,161 +1845,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     return jumpTo(center, zoom);
   }
 
-  // ── ジェスチャ ──────────────────────────────────────
-
-  void _onScaleStart(ScaleStartDetails d) {
-    if (_penLock && d.pointerCount == 1) {
-      // 真上ロック中の 1 本指は描画（2D と同じ経路。座標は TerrainProjection を通る）
-      _toolDrag = true;
-      ref.read(currentToolProvider).onScaleStart(d, widget.mapState);
-      return;
-    }
-    _toolDrag = false;
-    _scaleStart = _camera.scale;
-    _bearingStart = _camera.bearing;
-    _pitchStart = _camera.pitch;
-    _focalStart = d.focalPoint;
-  }
-
-  /// 3D: 1 本指 = 回転（左右で方位、上下で傾き）、2 本指 = 平面移動と拡縮と回転（松本の指定・2026-09-08、回転は 2026-09-13）。
-  /// 2D: 1 本指 = 移動、2 本指 = 移動・拡縮・回転（3D 導入前と同じ。松本 2026-09-13）
-  void _onScaleUpdate(ScaleUpdateDetails d) {
-    if (_toolDrag) {
-      if (d.pointerCount == 1) ref.read(currentToolProvider).onScaleUpdate(d, widget.mapState);
-      return;
-    }
-    if (d.pointerCount >= 2) {
-      if (_camera.perspective && _size != Size.zero) {
-        // 透視: 指の下の地面（中心の高さの平面）を指に付いて来させる。拡縮も焦点の下を留める
-        final from = _groundUnder(d.localFocalPoint - d.focalPointDelta);
-        _camera.scale = (_scaleStart * d.scale).clamp(TerrainCamera.scaleForZoom(8), TerrainCamera.scaleForZoom(22));
-        final to = _groundUnder(d.localFocalPoint);
-        _camera.centerX += from.dx - to.dx;
-        _camera.centerY += from.dy - to.dy;
-      } else {
-        final before = _camera.scale;
-        _camera.scale = (_scaleStart * d.scale).clamp(TerrainCamera.scaleForZoom(8), TerrainCamera.scaleForZoom(22));
-        if (before != _camera.scale && _size != Size.zero) {
-          final off = d.localFocalPoint - Offset(_size.width / 2, _size.height / 2);
-          final k = 1 - before / _camera.scale;
-          final move = _camera.unprojectPan(off * k);
-          _camera.centerX += move.dx;
-          _camera.centerY += move.dy;
-        }
-        final move = _camera.unprojectPan(d.focalPointDelta);
-        _camera.centerX -= move.dx;
-        _camera.centerY -= move.dy;
-      }
-      if (d.rotation.abs() > 1e-6 && _size != Size.zero) {
-        // 2 本指の回転（2D / 3D 共通）: 指の下の地面を留めたまま方位を回す（画面の時計回り = 地図も時計回り）
-        final off = d.localFocalPoint - Offset(_size.width / 2, _size.height / 2);
-        final under = _camera.perspective ? _groundUnder(d.localFocalPoint) : _camera.unprojectPan(off);
-        _camera.bearing = _bearingStart - d.rotation;
-        final after = _camera.perspective ? _groundUnder(d.localFocalPoint) : _camera.unprojectPan(off);
-        _camera.centerX += under.dx - after.dx;
-        _camera.centerY += under.dy - after.dy;
-        _gesturing = true;
-      }
-    } else if (_flat || (_mouse && !HardwareKeyboard.instance.isControlPressed)) {
-      // マウスの左ドラッグは移動（回転は右ドラッグか Ctrl + 左）
-      if (_camera.perspective && _size != Size.zero) {
-        final from = _groundUnder(d.localFocalPoint - d.focalPointDelta);
-        final to = _groundUnder(d.localFocalPoint);
-        _camera.centerX += from.dx - to.dx;
-        _camera.centerY += from.dy - to.dy;
-      } else {
-        final move = _camera.unprojectPan(d.focalPointDelta);
-        _camera.centerX -= move.dx;
-        _camera.centerY -= move.dy;
-      }
-    } else {
-      final delta = d.focalPoint - _focalStart;
-      _camera.bearing = _bearingStart + delta.dx * 0.006;
-      _camera.pitch = (_pitchStart - delta.dy * 0.004).clamp(0.0, _maxPitchDeg * math.pi / 180);
-      _gesturing = true;
-    }
-    _refresh();
-  }
-
-  void _onScaleEnd(ScaleEndDetails d) {
-    if (_toolDrag) {
-      _toolDrag = false;
-      ref.read(currentToolProvider).onScaleEnd(d, widget.mapState);
-      return;
-    }
-    _gesturing = false;
-    _refresh();
-  }
-
-  /// ペンロック中の生のポインタ（2D のジェスチャ層と同じく、描画の滑らかさのためにバッファへ）
-  /// 今のポインタがマウスか（web / PC）。マウスなら 左ドラッグ = 移動、右ドラッグ or Ctrl + 左 = 回転・傾き、ホイール = 拡縮
-  /// （MapLibre の慣例。2 本指が無いので）
-  bool _mouse = false;
-  Offset? _rightDragLast;
-
-  void _onPointer(PointerEvent e) {
-    if (e is PointerDownEvent) {
-      _mouse = e.kind == PointerDeviceKind.mouse;
-      // 右ボタンのドラッグは ScaleGestureRecognizer が拾わないので生のポインタで回す
-      _rightDragLast = _mouse && (e.buttons & kSecondaryButton) != 0 ? e.localPosition : null;
-    } else if (e is PointerMoveEvent && _rightDragLast != null) {
-      final delta = e.localPosition - _rightDragLast!;
-      _rightDragLast = e.localPosition;
-      _rotateBy(delta);
-    } else if (e is PointerUpEvent || e is PointerCancelEvent) {
-      if (_rightDragLast != null) {
-        _rightDragLast = null;
-        _gesturing = false;
-        _refresh();
-      }
-    }
-    if (!_penLock) return;
-    final tool = ref.read(currentToolProvider);
-    if (e is PointerDownEvent || e is PointerMoveEvent) {
-      tool.addPointerToBuffer(e.localPosition);
-    } else if (e is PointerUpEvent) {
-      tool.clearPointerBuffer();
-    }
-  }
-
-  /// 透視のとき、画面座標 [screen] の視線が「カメラ中心の高さの平面」に当たる点（カメラ中心基準）。
-  /// 地平線の上や遠すぎる点は靄の先で打ち切るので、空をつまんで動かしても飛ばない
-  Offset _groundUnder(Offset screen) {
-    final ch = _world.elevationAt(_camera.centerX, _camera.centerY) ?? 0;
-    return _camera.groundPointPerspective(screen, ch, ch, maxDistance: _camera.eyeDistance * TerrainCamera.fogEndFactor);
-  }
-
-  /// 画面上の移動量 [delta] を方位・傾きに（1 本指・右ドラッグ・Ctrl + 左ドラッグで共通）。2D では方位だけ
-  void _rotateBy(Offset delta) {
-    _camera.bearing += delta.dx * 0.006;
-    if (!_flat) _camera.pitch = (_camera.pitch - delta.dy * 0.004).clamp(0.0, _maxPitchDeg * math.pi / 180);
-    _gesturing = true;
-    _refresh();
-  }
-
-  /// ホイール = 拡縮（カーソルの下を留める）
-  void _onPointerSignal(PointerSignalEvent e) {
-    if (e is! PointerScrollEvent || _size == Size.zero) return;
-    final before = _camera.scale;
-    final dz = -e.scrollDelta.dy / 400; // 1 ノッチ ≒ 0.25 段
-    if (_camera.perspective) {
-      final from = _groundUnder(e.localPosition);
-      _camera.zoom = (_camera.zoom + dz).clamp(8, 22);
-      final to = _groundUnder(e.localPosition);
-      _camera.centerX += from.dx - to.dx;
-      _camera.centerY += from.dy - to.dy;
-      _refresh();
-      return;
-    }
-    _camera.zoom = (_camera.zoom + dz).clamp(8, 22);
-    final off = e.localPosition - Offset(_size.width / 2, _size.height / 2);
-    final k = 1 - before / _camera.scale;
-    final move = _camera.unprojectPan(off * k);
-    _camera.centerX += move.dx;
-    _camera.centerY += move.dy;
-    _refresh();
-  }
-
   // ── オーバーレイ画像 ─────────────────────────────────
 
   /// 選んだ面が変わったら、前と今の範囲のテクスチャを作り直す（塗りはテクスチャに描くので地形に埋もれない）。
@@ -2028,40 +1869,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final within = _overlayBounds == null ? dirty : _overlayBounds!.expandToInclude(dirty);
     _overlayBounds = null;
     _world.retexture(within: within.inflate(10));
-  }
-
-  /// 選んだ面の塗りをテクスチャに描く（どの段でも）
-  void _bakeSelectionFill(ui.Canvas canvas, TileRange range) {
-    final sel = widget.geoJson.selectedPolygons;
-    if (sel.isEmpty) return;
-    const ts = WebMercator.tileSize;
-    final west = range.west;
-    final north = WebMercator.tileNorth(range.y0, range.z);
-    final span = WebMercator.tileSpan(range.z);
-    final pxPerM = range.width * ts / range.widthMeters;
-    final merc = Rect.fromLTRB(west, north - range.height * span, west + range.widthMeters, north);
-    final fill = Paint()
-      ..style = PaintingStyle.fill
-      ..color = layerStyleSettings.getColor(selectedColorDef).withValues(alpha: 0.4);
-    for (final i in _featureIndexes(sel, merc)) {
-      final path = ui.Path()..fillType = ui.PathFillType.evenOdd;
-      for (final rings in TerrainSceneBuilder.ringsOf(sel[i].geometry)) {
-        for (final ring in rings) {
-          var first = true;
-          for (final p in ring.positions) {
-            final o = Offset((WebMercator.xFromLon(p.x) - west) * pxPerM, (north - WebMercator.yFromLat(p.y)) * pxPerM);
-            if (first) {
-              path.moveTo(o.dx, o.dy);
-              first = false;
-            } else {
-              path.lineTo(o.dx, o.dy);
-            }
-          }
-          path.close();
-        }
-      }
-      canvas.drawPath(path, fill);
-    }
   }
 
   /// 見えているオーバーレイ画像の集合・位置が変わったら、画像を読み、テクスチャを作り直す（400ms にまとめる）
@@ -2151,14 +1958,26 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   /// テクスチャの上描き: オーバーレイ画像と、引いた段のフィーチャの焼き込み（[demZoom] はタイルの段、range はテクスチャの段）
   void _decorateTexture(ui.Canvas canvas, TileRange range, int demZoom) {
-    _drawOverlayImages(canvas, range);
+    if (_overlayImages.isNotEmpty) {
+      final frame = TextureFrame(range);
+      for (final n in widget.mapState.overlayImageNodes) {
+        final im = _overlayImages[n.filePath];
+        if (im != null) paintOverlayImage(canvas, frame, im, n.cornerCoordinates);
+      }
+    }
     final off = range.z - demZoom;
     // 引いた段は面・線・点を全部、寄った段は面の塗りだけ描く（塗りを地形に沿わせた板にすると、尾根で地形に
     // 突き抜けられて下の地図が白く抜けた。松本 2026-10-02。枠線・線・点は形のまま持ち上げる）
     _bakeFeatures(canvas, range, demZoom, fillsOnly: demZoom > kBakeMaxZoom);
     // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）。確定はタイルに貼ったとき（[_onTextureApplied]）
     _composedGen[TileKey(demZoom, range.x0 >> off, range.y0 >> off)] = _bakeGen;
-    _bakeSelectionFill(canvas, range);
+    paintSelectionFill(
+      canvas,
+      TextureFrame(range),
+      selected: widget.geoJson.selectedPolygons,
+      indexesIn: _featureIndexes,
+      color: layerStyleSettings.getColor(selectedColorDef).withValues(alpha: 0.4),
+    );
   }
 
   /// 引いた段のフィーチャをテクスチャに描く（真上からの投影。座標は範囲左上原点のピクセル）。
@@ -2169,128 +1988,24 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   void _bakeFeatures(ui.Canvas canvas, TileRange range, int demZoom, {bool fillsOnly = false}) {
     final g = widget.geoJson;
     if (g.polygons.isEmpty && (fillsOnly || (g.polylines.isEmpty && g.markers.isEmpty))) return;
-    const ts = WebMercator.tileSize;
-    final west = range.west;
-    final north = WebMercator.tileNorth(range.y0, range.z);
-    final span = WebMercator.tileSpan(range.z);
-    final pxPerM = range.width * ts / range.widthMeters;
-    final merc = Rect.fromLTRB(west, north - range.height * span, west + range.widthMeters, north);
-    Offset px(geo.Position p) => Offset(
-          (WebMercator.xFromLon(p.x) - west) * pxPerM,
-          (north - WebMercator.yFromLat(p.y)) * pxPerM,
-        );
     final groups = {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
     final def = _defaultStyle();
-    TerrainFeatureStyle styleOf(geo.Feature f) {
-      final k = f.properties[kStyleProp];
-      return k is String ? (groups[k] ?? def) : def;
-    }
-
-    final fill = Paint()..style = PaintingStyle.fill;
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round;
     final sw = Stopwatch()..start();
-    var n = 0;
-    for (final i in _featureIndexes(g.polygons, merc)) {
-      final f = g.polygons[i];
-      final st = styleOf(f);
-      final path = ui.Path()..fillType = ui.PathFillType.evenOdd;
-      for (final rings in TerrainSceneBuilder.ringsOf(f.geometry)) {
-        for (final ring in rings) {
-          var first = true;
-          for (final p in ring.positions) {
-            final o = px(p);
-            if (first) {
-              path.moveTo(o.dx, o.dy);
-              first = false;
-            } else {
-              path.lineTo(o.dx, o.dy);
-            }
-          }
-          path.close();
-        }
-      }
-      if (st.fillColor.a > 0) canvas.drawPath(path, fill..color = st.fillColor);
-      if (fillsOnly) {
-        n++;
-        continue;
-      }
-      if (st.outlineColor.a > 0 && st.outlineWidth > 0) {
-        canvas.drawPath(path, stroke..color = st.outlineColor..strokeWidth = math.max(1.0, st.outlineWidth));
-      }
-      n++;
-    }
-    for (final i in fillsOnly ? const <int>[] : _featureIndexes(g.polylines, merc)) {
-      final f = g.polylines[i];
-      final st = styleOf(f);
-      final path = ui.Path();
-      for (final chain in TerrainSceneBuilder.chainsOf(f.geometry)) {
-        var first = true;
-        for (final p in chain.positions) {
-          final o = px(p);
-          if (first) {
-            path.moveTo(o.dx, o.dy);
-            first = false;
-          } else {
-            path.lineTo(o.dx, o.dy);
-          }
-        }
-      }
-      canvas.drawPath(path, stroke..color = st.lineColor..strokeWidth = math.max(1.5, st.lineWidth));
-      n++;
-    }
-    for (final f in fillsOnly ? const <geo.Feature<geo.Point>>[] : g.markers) {
-      final pos = f.geometry?.position;
-      if (pos == null) continue;
-      final x = WebMercator.xFromLon(pos.x);
-      final y = WebMercator.yFromLat(pos.y);
-      if (x < merc.left || x > merc.right || y < merc.top || y > merc.bottom) continue;
-      final st = styleOf(f);
-      canvas.drawCircle(px(pos), math.max(2.0, st.pointSize), fill..color = st.pointColor);
-      n++;
-    }
+    final n = paintFeatures(
+      canvas,
+      TextureFrame(range),
+      polygons: g.polygons,
+      polylines: g.polylines,
+      markers: g.markers,
+      indexesIn: _featureIndexes,
+      styleOf: (f) => switch (f.properties[kStyleProp]) {
+        final String k => groups[k] ?? def,
+        _ => def,
+      },
+      fillsOnly: fillsOnly,
+    );
     if (sw.elapsedMilliseconds > 30) {
       debugPrint('[3D] bake z$demZoom ${range.x0},${range.y0}: $n 件 ${sw.elapsedMilliseconds}ms');
-    }
-  }
-
-  /// テクスチャの上にオーバーレイ画像を描く（四隅の Mercator 座標 → テクスチャのピクセルへのアフィン変換）
-  void _drawOverlayImages(ui.Canvas canvas, TileRange range) {
-    if (_overlayImages.isEmpty) return;
-    const ts = WebMercator.tileSize;
-    final west = range.west;
-    final north = WebMercator.tileNorth(range.y0, range.z);
-    final pxPerM = range.width * ts / range.widthMeters;
-    final texRect = Rect.fromLTWH(0, 0, range.width * ts * 1.0, range.height * ts * 1.0);
-    for (final n in widget.mapState.overlayImageNodes) {
-      final im = _overlayImages[n.filePath];
-      if (im == null) continue;
-      final c = n.cornerCoordinates; // TL, TR, BR, BL
-      Offset px(LatLng p) => Offset(
-            (WebMercator.xFromLon(p.longitude) - west) * pxPerM,
-            (north - WebMercator.yFromLat(p.latitude)) * pxPerM,
-          );
-      final tl = px(c[0]);
-      final tr = px(c[1]);
-      final bl = px(c[3]);
-      final br = px(c[2]);
-      final bbox = Rect.fromPoints(tl, br).expandToInclude(Rect.fromPoints(tr, bl));
-      if (!bbox.overlaps(texRect)) continue;
-      final w = im.width.toDouble();
-      final h = im.height.toDouble();
-      // 画像ピクセル (u, v) → tl + u/w (tr − tl) + v/h (bl − tl)
-      final m = Float64List.fromList([
-        (tr.dx - tl.dx) / w, (tr.dy - tl.dy) / w, 0, 0,
-        (bl.dx - tl.dx) / h, (bl.dy - tl.dy) / h, 0, 0,
-        0, 0, 1, 0,
-        tl.dx, tl.dy, 0, 1,
-      ]);
-      canvas.save();
-      canvas.transform(m);
-      canvas.drawImage(im, Offset.zero, ui.Paint()..filterQuality = ui.FilterQuality.medium);
-      canvas.restore();
     }
   }
 

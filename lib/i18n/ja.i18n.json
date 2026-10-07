@@ -386,10 +386,6 @@
       "description": "使用するGPSソースを選択してください。",
       "rescan": "再スキャン"
     },
-    "recording": {
-      "title": "記録中",
-      "cannotSwitchDesc": "記録中はGPSソースを切り替えられません。"
-    },
     "position": {
       "title": "位置",
       "latitude": "緯度",
@@ -439,12 +435,8 @@
       "qualityN": "Quality $n"
     },
     "internalDescription": "デバイス内蔵のGPS受信機",
-    "cannotChangeWhileRecording": "記録中はGPSソースを変更できません。記録を停止してから変更してください。",
     "externalDeviceRequired": "外部GNSS機器の指定が必要です",
-    "alreadyRecording": "既に記録中です",
-    "noGpsPosition": "GPS位置情報が取得できていません。GPSソースを確認してください。",
     "savedDeviceNotFound": "保存されたGNSS機器が見つかりません",
-    "cannotClearWhileRecording": "記録中は履歴をクリアできません",
     "locationServiceDisabled": "位置情報サービスが無効です",
     "locationPermissionDenied": "位置情報許可が拒否されました",
     "locationPermissionPermanentlyDenied": "位置情報許可が永続的に拒否されています",

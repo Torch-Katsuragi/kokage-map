@@ -386,10 +386,6 @@
       "description": "Select the GPS source to use.",
       "rescan": "Rescan"
     },
-    "recording": {
-      "title": "Recording in Progress",
-      "cannotSwitchDesc": "Cannot switch GPS source while recording is in progress."
-    },
     "position": {
       "title": "Position",
       "latitude": "Latitude",
@@ -439,12 +435,8 @@
       "qualityN": "Quality $n"
     },
     "internalDescription": "Built-in GPS receiver",
-    "cannotChangeWhileRecording": "Cannot change GPS source while recording. Please stop recording first.",
     "externalDeviceRequired": "External GNSS device must be specified",
-    "alreadyRecording": "Already recording",
-    "noGpsPosition": "GPS position not available. Please check GPS source.",
     "savedDeviceNotFound": "Saved GNSS device not found",
-    "cannotClearWhileRecording": "Cannot clear history while recording",
     "locationServiceDisabled": "Location service is disabled",
     "locationPermissionDenied": "Location permission denied",
     "locationPermissionPermanentlyDenied": "Location permission permanently denied",

@@ -28,7 +28,6 @@
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
@@ -38,7 +37,6 @@ import 'package:root_maps/utils/app_logger.dart';
 import '../i18n/strings.g.dart';
 import '../models/bluetooth_gnss_service.dart';
 import '../models/gps_position_record.dart';
-import '../models/gps_track.dart';
 import '../providers/gps_providers.dart';
 import 'internal_gps_location_store.dart';
 
@@ -55,45 +53,6 @@ enum GpsSourceType {
     GpsSourceType.internal => t.gps.internalGpsName,
     GpsSourceType.external => t.gps.externalGnssName,
   };
-}
-
-/// GPS記録オプション設定
-class GpsRecordingOptions {
-  /// 位置情報取得インターバル（秒）
-  final int intervalSeconds;
-
-  /// 最短記録移動距離（メートル）
-  final double minDistanceMeters;
-
-  /// 位置精度要求値（メートル）- この値以下の精度でないと記録しない
-  final double? requiredAccuracy;
-
-  /// 最大記録ポイント数（0の場合は無制限）
-  final int maxRecordCount;
-
-  const GpsRecordingOptions({
-    this.intervalSeconds = 1,
-    this.minDistanceMeters = 1.0,
-    this.requiredAccuracy,
-    this.maxRecordCount = 0,
-  });
-
-  /// デフォルト設定
-  static const GpsRecordingOptions defaultOptions = GpsRecordingOptions();
-
-  /// 高精度記録設定
-  static const GpsRecordingOptions highAccuracy = GpsRecordingOptions(
-    intervalSeconds: 1,
-    minDistanceMeters: 0.5,
-    requiredAccuracy: 5.0,
-  );
-
-  /// 省電力記録設定
-  static const GpsRecordingOptions powerSaver = GpsRecordingOptions(
-    intervalSeconds: 10,
-    minDistanceMeters: 5.0,
-    requiredAccuracy: 20.0,
-  );
 }
 
 /// GPS管理サービス（シングルトン）
@@ -130,13 +89,6 @@ class GpsManagerService extends ChangeNotifier {
   List<BluetoothDevice> _availableGnssDevices = [];
   BluetoothDevice? _selectedGnssDevice;
 
-  // 記録機能関連
-  bool _isRecording = false;
-  GpsRecordingOptions _recordingOptions = GpsRecordingOptions.defaultOptions;
-  Timer? _recordingTimer;
-  final List<Map<String, dynamic>> _gpsHistory = [];
-  GpsTrackPoint? _lastRecordedPoint;
-
   // 現在の位置情報（内蔵GPS時はStoreから取得、外部GNSS時は直接保持）
   double? _latitude;
   double? _longitude;
@@ -164,7 +116,6 @@ class GpsManagerService extends ChangeNotifier {
   List<BluetoothDevice> get availableGnssDevices =>
       List.unmodifiable(_availableGnssDevices);
   BluetoothDevice? get selectedGnssDevice => _selectedGnssDevice;
-  bool get isRecording => _isRecording;
 
   /// 内蔵GPS位置情報ストアへのアクセス
   InternalGpsLocationStore get locationStore => _locationStore;
@@ -390,10 +341,6 @@ class GpsManagerService extends ChangeNotifier {
     GpsSourceType sourceType, [
     BluetoothDevice? device,
   ]) async {
-    if (_isRecording) {
-      throw Exception(t.gps.cannotChangeWhileRecording);
-    }
-
     try {
       AppLogger.debug('$_logTag: GPSソースを${sourceType.displayName}に切り替え中...');
 
@@ -703,112 +650,6 @@ class GpsManagerService extends ChangeNotifier {
     };
   }
 
-  /// GPS記録を開始
-  Future<void> startRecording([GpsRecordingOptions? options]) async {
-    if (_isRecording) {
-      throw Exception(t.gps.alreadyRecording);
-    }
-
-    if (_latitude == null || _longitude == null) {
-      throw Exception(t.gps.noGpsPosition);
-    }
-
-    _recordingOptions = options ?? GpsRecordingOptions.defaultOptions;
-    _isRecording = true;
-    _gpsHistory.clear();
-    _lastRecordedPoint = null;
-
-    // 最初のポイントを即座に記録
-    await _recordCurrentPosition();
-
-    // 定期記録タイマー開始
-    _recordingTimer = Timer.periodic(
-      Duration(seconds: _recordingOptions.intervalSeconds),
-      (_) => _recordCurrentPosition(),
-    );
-
-    AppLogger.debug(
-      '$_logTag: GPS記録開始 - インターバル: ${_recordingOptions.intervalSeconds}秒, '
-      '最短移動距離: ${_recordingOptions.minDistanceMeters}m',
-    );
-    notifyListeners();
-  }
-
-  /// 現在位置を記録
-  Future<void> _recordCurrentPosition() async {
-    if (!_isRecording || _latitude == null || _longitude == null) {
-      return;
-    }
-
-    // 精度チェック
-    if (_recordingOptions.requiredAccuracy != null &&
-        _accuracy != null &&
-        _accuracy! > _recordingOptions.requiredAccuracy!) {
-      AppLogger.debug('$_logTag: 精度不足のため記録スキップ - 現在精度: ${_accuracy}m');
-      return;
-    }
-
-    // 最短移動距離チェック
-    if (_lastRecordedPoint != null) {
-      final distance = _calculateDistance(
-        _lastRecordedPoint!.latitude,
-        _lastRecordedPoint!.longitude,
-        _latitude!,
-        _longitude!,
-      );
-
-      if (distance < _recordingOptions.minDistanceMeters) {
-        return; // 移動距離が不足
-      }
-    }
-
-    // ポイントを記録
-    final point = GpsTrackPoint(
-      latitude: _latitude!,
-      longitude: _longitude!,
-      altitude: _altitude,
-      accuracy: _accuracy,
-      speed: _speed,
-      bearing: _bearing,
-      timestamp: _timestamp ?? DateTime.now(),
-      sourceType: _currentSource.sourceCode,
-    );
-
-    final pointData = point.toJson();
-    pointData['sourceDisplayName'] = _currentSource.displayName;
-
-    _gpsHistory.add(pointData);
-    _lastRecordedPoint = point;
-
-    // 最大記録数チェック
-    if (_recordingOptions.maxRecordCount > 0 &&
-        _gpsHistory.length > _recordingOptions.maxRecordCount) {
-      _gpsHistory.removeAt(0); // 古いデータを削除
-    }
-
-    AppLogger.debug('$_logTag: 位置記録 - ${_gpsHistory.length}ポイント目');
-  }
-
-  /// 2点間の距離計算（ハバーサイン公式）
-  double _calculateDistance(
-    double lat1,
-    double lon1,
-    double lat2,
-    double lon2,
-  ) {
-    const double R = 6371000; // 地球の半径（メートル）
-    final dLat = (lat2 - lat1) * (math.pi / 180);
-    final dLon = (lon2 - lon1) * (math.pi / 180);
-    final a =
-        math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1 * (math.pi / 180)) *
-            math.cos(lat2 * (math.pi / 180)) *
-            math.sin(dLon / 2) *
-            math.sin(dLon / 2);
-    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    return R * c;
-  }
-
   /// グローバル設定にソース設定を保存
   Future<void> _saveSourceToGlobalConfig() async {
     final sourceType =
@@ -897,10 +738,6 @@ class GpsManagerService extends ChangeNotifier {
   void dispose() {
     AppLogger.debug('$_logTag: GPS管理サービスを停止中...');
 
-    // タイマーをキャンセル
-    _recordingTimer?.cancel();
-    _recordingTimer = null;
-
     // Store監視を停止
     _storeSubscription?.cancel();
     _storeSubscription = null;
@@ -915,15 +752,11 @@ class GpsManagerService extends ChangeNotifier {
     // 状態フラグをリセット
     _isGpsActive = false;
     _isSurveyMode = false;
-    _isRecording = false;
 
     // 連続測量もクリーンアップ
     _isContinuousSurvey = false;
     _onContinuousSurveyUpdate = null;
     _continuousSurveyData.clear();
-
-    // 履歴データをクリア
-    _gpsHistory.clear();
 
     AppLogger.debug('$_logTag: GPS管理サービス停止完了');
     super.dispose();

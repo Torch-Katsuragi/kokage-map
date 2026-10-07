@@ -373,12 +373,6 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
   /// GPSソースを切り替え
   Future<void> _switchGpsSource(Map<String, dynamic> source) async {
     try {
-      // GPS記録中の場合は警告
-      if (_gpsManager.isRecording) {
-        final confirm = await _showRecordingWarningDialog();
-        if (!confirm) return;
-      }
-
       if (source['type'] == GpsSourceType.internal) {
         await _gpsManager.switchReferenceGps(GpsSourceType.internal);
       } else {
@@ -398,28 +392,6 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
             level: NotificationLevel.error,
           );
     }
-  }
-
-  /// GPS記録中の警告ダイアログ
-  Future<bool> _showRecordingWarningDialog() async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: Text(t.gps.recording.title),
-              content: Text(
-                t.gps.recording.cannotSwitchDesc,
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: Text(t.common.cancel),
-                ),
-              ],
-            );
-          },
-        ) ??
-        false;
   }
 
   /// GPS位置取得テスト

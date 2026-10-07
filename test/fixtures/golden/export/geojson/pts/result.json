@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "error": null,
+  "metadata": {
+    "outputPath": "pts.geojson",
+    "featureCount": 0,
+    "geometryType": "MULTIPOINT",
+    "format": "GeoJSON",
+    "fileSize": 84
+  }
+}

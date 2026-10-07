@@ -1,0 +1,98 @@
+{
+  "qgis_3_44_written.qgs/___56902204_7d58_4032_ab25_8588e0e0aa73": {
+    "pointSize": 7.559055118110237,
+    "pointColor": "#FF1E90FF",
+    "labelEnabled": false
+  },
+  "qgis_3_44_written.qgs/___574d01b1_4fc4_44f8_8645_634a0a308fca": {
+    "pointSize": 3.7795275590551185,
+    "pointColor": "#FFE31A1C",
+    "labelEnabled": false
+  },
+  "qgis_3_44_written.qgs/root__623bf01e_5b0e_477e_a4da_fbb4ecc524ef": {
+    "labelEnabled": false
+  },
+  "qgis_3_44_written.qgs/v_pts": {
+    "pointSize": 5.0078740157480315,
+    "pointColor": "#FF112233",
+    "labelEnabled": true,
+    "labelProperty": "\"name\"",
+    "labelFontSize": 12.0,
+    "labelColor": "#FF445566",
+    "labelHaloColor": "#FFFFFFEE"
+  },
+  "qgis_3_44_written.qgs/v_pts2": {
+    "labelEnabled": false
+  },
+  "qgis_3_44_written.qgs/v_roads": {
+    "lineWidth": 2.9858267716535436,
+    "lineColor": "#FFFF0000",
+    "labelEnabled": false
+  },
+  "qgis_3_44_written.qgs/v_stands": {
+    "polygonBorderWidth": 1.5118110236220474,
+    "polygonBorderColor": "#FF000080",
+    "polygonFillColor": "#FF00FF00",
+    "polygonFillOpacity": 0.4,
+    "polygonBorderOpacity": 0.9019607843137255,
+    "labelEnabled": false
+  },
+  "qgis_3_44_written.qgs/raster_1": null,
+  "qgis_4_2_saved.qgs/forest_compartments_gpkg_forest_compartments____fe11f88f8fb8": {
+    "polygonBorderWidth": 0.9826771653543308,
+    "polygonBorderColor": "#FF232323",
+    "polygonFillColor": "#FF8D5A99",
+    "polygonFillOpacity": 1.0,
+    "polygonBorderOpacity": 1.0,
+    "labelEnabled": false
+  },
+  "qgis_4_2_saved.qgs/forest_roads_gpkg_forest_roads____c153b039d508": {
+    "lineWidth": 0.9826771653543308,
+    "lineColor": "#FFFF9E17",
+    "labelEnabled": false
+  },
+  "qgis_4_2_saved.qgs/raster_37a2b2888379": null,
+  "qgis_4_2_saved.qgs/survey_points_gpkg_survey_points____17ee55305316": {
+    "pointSize": 3.7795275590551185,
+    "pointColor": "#FFE77148",
+    "labelEnabled": false
+  },
+  "qgis_4_2_saved.qgs/v_pts": {
+    "pointSize": 5.0078740157480315,
+    "pointColor": "#FF112233",
+    "labelEnabled": true,
+    "labelProperty": "\"name\"",
+    "labelFontSize": 12.0,
+    "labelColor": "#FF445566",
+    "labelHaloColor": "#FFFFFFEE"
+  },
+  "qgis_4_2_saved.qgs/v_pts2": {
+    "labelEnabled": false
+  },
+  "qgis_4_2_saved.qgs/v_roads": {
+    "lineWidth": 2.9858267716535436,
+    "lineColor": "#FFFF0000",
+    "labelEnabled": false
+  },
+  "qgis_4_2_saved.qgs/v_stands": {
+    "polygonBorderWidth": 1.5118110236220474,
+    "polygonBorderColor": "#FF000080",
+    "polygonFillColor": "#FF00FF00",
+    "polygonFillOpacity": 0.4,
+    "polygonBorderOpacity": 0.9019607843137255,
+    "labelEnabled": false
+  },
+  "qgis_4_2_saved.qgs/raster_1": null,
+  "ds:./a.gpkg|layername=t|subset=a | b = 1": [
+    "./a.gpkg",
+    "t",
+    "a | b = 1"
+  ],
+  "ds:x.gpkg|LayerName = y |layerid=0": [
+    "x.gpkg",
+    "y",
+    null
+  ],
+  "ds:": null,
+  "ds:|layername=z": null
+}

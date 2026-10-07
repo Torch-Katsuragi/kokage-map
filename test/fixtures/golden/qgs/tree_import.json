@@ -1,0 +1,115 @@
+{
+  "viewsByLayer": {
+    "sub/b.gpkg/pts": [
+      "既定"
+    ],
+    "sub/b.gpkg/lns": [
+      "既定"
+    ],
+    "sub/b.gpkg/pls": [
+      "既定"
+    ],
+    "src.gpkg/pts": [
+      "既定",
+      "絞り込み"
+    ],
+    "src.gpkg/lns": [
+      "既定"
+    ],
+    "src.gpkg/pls": [
+      "既定"
+    ]
+  },
+  "discarded": [
+    "pts（プロジェクトフォルダの外を参照している）"
+  ],
+  "views": {
+    "src.gpkg/pts": {
+      "visible": true,
+      "views": [
+        [
+          "既定",
+          null,
+          true,
+          null
+        ],
+        [
+          "絞り込み",
+          "\"n\" > 2",
+          true,
+          {
+            "labelEnabled": false
+          }
+        ]
+      ]
+    },
+    "src.gpkg/lns": {
+      "visible": true,
+      "views": [
+        [
+          "既定",
+          null,
+          true,
+          null
+        ]
+      ]
+    },
+    "src.gpkg/pls": {
+      "visible": true,
+      "views": [
+        [
+          "既定",
+          null,
+          true,
+          null
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "version": 2,
+    "visibility": {
+      "layers": {
+        "src.gpkg/lns": true,
+        "src.gpkg/pls": true
+      },
+      "views": {
+        "src.gpkg/pts/既定": true,
+        "src.gpkg/pts/絞り込み": true
+      }
+    },
+    "styles": {
+      "layers": {
+        "src.gpkg/pts": {
+          "pointSize": 5.990551181102362,
+          "pointColor": "#FFFF0000",
+          "labelEnabled": true,
+          "labelProperty": "\"name\"",
+          "labelFontSize": 13.333333333333334,
+          "labelColor": "#FF000000",
+          "labelHaloColor": "#FFFFFFFF"
+        },
+        "src.gpkg/lns": {
+          "labelEnabled": false
+        },
+        "src.gpkg/pls": {
+          "labelEnabled": false
+        }
+      }
+    },
+    "views": {
+      "src.gpkg/pts": [
+        {
+          "name": "既定"
+        },
+        {
+          "name": "絞り込み",
+          "filter": "\"n\" > 2",
+          "style": {
+            "labelEnabled": false
+          }
+        }
+      ]
+    }
+  }
+}

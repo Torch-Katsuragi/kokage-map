@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "error": null,
+  "layers": [
+    "existing_1"
+  ],
+  "metadata": {
+    "sourceFile": "single.json",
+    "featureCount": 1,
+    "skippedCount": 0,
+    "layerCount": 1,
+    "geometryTypes": [
+      "MULTIPOINT"
+    ]
+  },
+  "tables": {
+    "existing_1": {
+      "columns": [
+        "fid INTEGER",
+        "geom BLOB",
+        "a TEXT"
+      ],
+      "rows": [
+        {
+          "fid": 1,
+          "geom": "47500003e61000000000000000e060400000000000e060400000000000804040000000000080404001010000000000000000e060400000000000804040",
+          "a": "b"
+        }
+      ]
+    }
+  }
+}

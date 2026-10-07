@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>pts</name>
+    <Placemark>
+      <name>杉</name>
+      <description>樹高 &quot;高い&quot;, 太い</description>
+    </Placemark>
+    <Placemark>
+      <name>hinoki</name>
+    </Placemark>
+    <Placemark>
+      <name>Feature 3</name>
+      <description>line
+break</description>
+    </Placemark>
+  </Document>
+</kml>

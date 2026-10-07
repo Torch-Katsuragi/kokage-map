@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "error": null,
+  "metadata": {
+    "outputPath": "lns.kml",
+    "featureCount": 2,
+    "geometryType": "MULTILINESTRING",
+    "format": "KML",
+    "fileSize": 257
+  }
+}

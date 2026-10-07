@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "error": null,
+  "metadata": {
+    "outputPath": "pls.shp",
+    "featureCount": 2,
+    "geometryType": "MULTIPOLYGON",
+    "format": "Shapefile",
+    "crs": "EPSG:6674"
+  }
+}

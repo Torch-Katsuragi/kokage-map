@@ -1,0 +1,43 @@
+{
+  "success": true,
+  "error": null,
+  "layers": [
+    "stands"
+  ],
+  "metadata": {
+    "sourceFile": "stands.shp",
+    "fileName": "stands",
+    "featureCount": 1,
+    "geometryType": "MULTIPOLYGON",
+    "shapeInfo": {
+      "geometryType": "Polygon",
+      "shapeType": 5,
+      "featureCount": 1,
+      "fileSize": 304,
+      "bounds": {
+        "minX": 0.0,
+        "minY": 0.0,
+        "maxX": 100.0,
+        "maxY": 100.0
+      }
+    }
+  },
+  "tables": {
+    "stands": {
+      "columns": [
+        "fid INTEGER",
+        "geom BLOB",
+        "KOHAN TEXT",
+        "AREA REAL"
+      ],
+      "rows": [
+        {
+          "fid": 1,
+          "geom": "47500003e610000000000000000061404f9a321609006140c8fcf4ffffff4140b339da881d00424001060000000100000001030000000200000005000000000000000000614000000000000042400000000000006140b339da881d0042404f9a3216090061406336cf881d0042408cd32b1609006140c8fcf4ffffff41400000000000006140000000000000424004000000813c3cd101006140563a2be805004240c80379a203006140279055d00b004240e4813cd10100614077e256d00b004240813c3cd101006140563a2be805004240",
+          "KOHAN": null,
+          "AREA": 0.99
+        }
+      ]
+    }
+  }
+}

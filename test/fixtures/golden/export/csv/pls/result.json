@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "error": null,
+  "metadata": {
+    "outputPath": "pls.csv",
+    "featureCount": 2,
+    "geometryType": "MULTIPOLYGON",
+    "format": "CSV",
+    "fileSize": 103
+  }
+}

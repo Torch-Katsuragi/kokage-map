@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "error": null,
+  "metadata": {
+    "outputPath": "pts.csv",
+    "featureCount": 3,
+    "geometryType": "MULTIPOINT",
+    "format": "CSV",
+    "fileSize": 151
+  }
+}

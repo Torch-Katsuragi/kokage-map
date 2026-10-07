@@ -1,0 +1,41 @@
+{
+  "success": true,
+  "error": null,
+  "layers": [
+    "roads"
+  ],
+  "metadata": {
+    "sourceFile": "roads.shp",
+    "fileName": "roads",
+    "featureCount": 1,
+    "geometryType": "MULTILINESTRING",
+    "shapeInfo": {
+      "geometryType": "LineString",
+      "shapeType": 3,
+      "featureCount": 1,
+      "fileSize": 224,
+      "bounds": {
+        "minX": 135.9,
+        "minY": 33.9,
+        "maxX": 135.93,
+        "maxY": 33.93
+      }
+    }
+  },
+  "tables": {
+    "roads": {
+      "columns": [
+        "fid INTEGER",
+        "geom BLOB",
+        "NAME TEXT"
+      ],
+      "rows": [
+        {
+          "fid": 1,
+          "geom": "47500003e6100000cdccccccccfc6040f6285c8fc2fd60403333333333f34040d7a3703d0af74040010500000001000000010200000004000000cdccccccccfc60403333333333f3404085eb51b81efd604014ae47e17af440403d0ad7a370fd6040f6285c8fc2f54040f6285c8fc2fd6040d7a3703d0af74040",
+          "NAME": "r1"
+        }
+      ]
+    }
+  }
+}

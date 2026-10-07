@@ -1,0 +1,24 @@
+{
+  "344": {
+    "stamp": [
+      2,
+      "kokage-map test",
+      "2026-10-07T12:00:00",
+      "dev",
+      "p344"
+    ],
+    "mine": true,
+    "meta": "{\"version\":2}"
+  },
+  "42": {
+    "stamp": [
+      2,
+      "kokage-map test",
+      "2026-10-07T12:00:00",
+      null,
+      "p42"
+    ],
+    "mine": true,
+    "meta": "{\"version\":2,\"views\":{}}"
+  }
+}

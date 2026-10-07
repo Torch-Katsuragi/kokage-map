@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "error": null,
+  "metadata": {
+    "outputPath": "pls.kml",
+    "featureCount": 2,
+    "geometryType": "MULTIPOLYGON",
+    "format": "KML",
+    "fileSize": 258
+  }
+}

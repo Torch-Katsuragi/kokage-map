@@ -1,0 +1,22 @@
+{
+  "feature.geojson": {
+    "success": false,
+    "error": "FeatureCollection形式のGeoJSONのみサポートしています"
+  },
+  "empty.geojson": {
+    "success": false,
+    "error": "No features found"
+  },
+  "missing.geojson": {
+    "success": false,
+    "error": "GeoJSONファイルが見つかりません: <src>\\missing.geojson"
+  },
+  "missing.shp": {
+    "success": false,
+    "error": "SHPファイルが見つかりません: <src>\\missing.shp"
+  },
+  "x.kml": {
+    "success": false,
+    "error": "Import failed: Unsupported operation: Unsupported file format: .kml"
+  }
+}

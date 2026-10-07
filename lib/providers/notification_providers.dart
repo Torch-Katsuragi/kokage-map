@@ -20,6 +20,9 @@ part 'notification_providers.g.dart';
 
 const _maxNotifications = 100;
 
+/// 通知の id の連番
+var _seq = 0;
+
 /// アプリ内通知の中央管理
 @Riverpod(keepAlive: true)
 class NotificationCenter extends _$NotificationCenter {
@@ -35,7 +38,8 @@ class NotificationCenter extends _$NotificationCenter {
     Future<void> Function()? onAction,
   }) {
     final notification = AppNotification(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      // 時刻だけだと同じ瞬間に 2 件足したとき（web は 1ms 刻み）に重なるので連番を添える
+      id: '${DateTime.now().microsecondsSinceEpoch}-${_seq++}',
       title: title,
       detail: detail,
       level: level,

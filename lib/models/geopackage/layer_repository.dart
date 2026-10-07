@@ -178,29 +178,4 @@ class LayerRepository {
       rethrow;
     }
   }
-
-  /// レイヤが存在するかチェック
-  Future<bool> layerExists(String name) async {
-    try {
-      final layers = await getLayerNames();
-      return layers.contains(name);
-    } catch (e) {
-      AppLogger.debug('[LayerRepository] layerExists: エラー発生 - $e');
-      return false;
-    }
-  }
-
-  /// レイヤのフィーチャ数を取得
-  Future<int> getFeatureCount(String tableName) async {
-    try {
-      final db = await connection.getDatabase();
-      final result = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM ${quoteIdent(tableName)}',
-      );
-      return (result.first['count'] as int?) ?? 0;
-    } catch (e) {
-      AppLogger.debug('[LayerRepository] getFeatureCount: エラー発生 - $e');
-      return 0;
-    }
-  }
 }

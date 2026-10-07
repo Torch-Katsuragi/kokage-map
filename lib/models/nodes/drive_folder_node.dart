@@ -102,9 +102,6 @@ class DriveFolderNode extends FolderNode {
   @override
   NodeType get nodeType => NodeType.folder;
 
-  /// Drive連携フォルダかどうか
-  bool get isDriveLinked => true;
-
   /// グローバルフォルダ内の場合はグローバルパスから解決
   @override
   String? getAbsoluteFilePath() =>
@@ -201,9 +198,6 @@ class DriveSubFolderNode extends FolderNode {
     super.parent,
     super.children,
   });
-
-  /// Drive連携フォルダかどうか
-  bool get isDriveLinked => true;
 
   /// 読み取り専用か
   bool get isReadOnly => rootDriveNode.isReadOnly;

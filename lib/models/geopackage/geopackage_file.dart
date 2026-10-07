@@ -15,8 +15,6 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: GeoPackageファイル管理クラス（ファサード）
 // 既存APIを維持しつつ、内部で各サービスクラスに委譲
-import 'dart:typed_data';
-
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
@@ -65,9 +63,6 @@ class GeoPackageFile {
   late final LayerRepository _layers;
 
   bool _servicesInitialized = false;
-
-  /// サポートする属性カラム名リスト（属性テーブルで表示するカラム）
-  List<String> get supportedAttributes => _schema.supportedAttributes;
 
   /// コンストラクタ
   GeoPackageFile(this.pathList, {this.absolutePath, this.projectRootDir}) {
@@ -551,13 +546,6 @@ class GeoPackageFile {
     String sourceTable,
     String targetTable,
   ) => _features.copyFeaturesBetweenLayers(sourceTable, targetTable);
-
-  /// フィーチャを完全な属性テーブルとして追加
-  Future<int?> addFeatureWithAttributes(
-    String tableName,
-    Uint8List geometry,
-    Map<String, dynamic> attributes,
-  ) => _features.addFeatureWithAttributes(tableName, geometry, attributes);
 
   // ============================================================
   // フィールド計算機

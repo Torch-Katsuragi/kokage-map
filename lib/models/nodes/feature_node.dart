@@ -47,10 +47,6 @@ abstract class FeatureNode extends LayerTreeNode {
   /// DB上のrowId（主キー）- データは持たず、IDのみ保持
   final int _rowId;
 
-  /// 変更の追跡フラグ（将来的なバッチ保存最適化用に予約）
-  // ignore: unused_field
-  bool _isDirty = false;
-  
   /// dispose済みフラグ（null参照対策）
   bool _isDisposed = false;
 
@@ -92,46 +88,6 @@ abstract class FeatureNode extends LayerTreeNode {
     if (_isDisposed || parent.isDisposed) return const LatLng(0, 0);
     return _cachedCentroid ??=
         TurfConverter.calculateCentroid(turfFeature) ?? const LatLng(0, 0);
-  }
-
-  /// 座標データをposition型で取得（turf_dart形式）
-  List<double> get position {
-    if (_isDisposed || parent.isDisposed) return [0, 0];
-    final geometry = turfFeature.geometry;
-    if (geometry is turf.Point) {
-      return TurfConverter.latlngToPosition(
-        TurfConverter.pointToLatlng(geometry),
-      );
-    }
-    // Point以外の場合は重心のpositionを返す
-    return TurfConverter.latlngToPosition(centroid);
-  }
-
-  /// 複数座標データをpositionリストで取得
-  List<List<double>> get positions {
-    if (_isDisposed || parent.isDisposed) return [];
-    final g = turfFeature.geometry;
-    if (g is turf.MultiLineString) {
-      final lines = TurfConverter.multiLineStringToLatlngs(g);
-      return lines.isNotEmpty
-          ? TurfConverter.latlngsToPositions(lines.first)
-          : [];
-    } else if (g is turf.LineString) {
-      return TurfConverter.latlngsToPositions(
-        TurfConverter.lineStringToLatlngs(g),
-      );
-    } else if (g is turf.MultiPolygon) {
-      final polys = TurfConverter.multiPolygonToLatlngs(g);
-      if (polys.isNotEmpty && polys.first.isNotEmpty) {
-        return TurfConverter.latlngsToPositions(polys.first.first);
-      }
-    } else if (g is turf.Polygon) {
-      final rings = TurfConverter.polygonToLatlngs(g);
-      if (rings.isNotEmpty) {
-        return TurfConverter.latlngsToPositions(rings.first);
-      }
-    }
-    return [];
   }
 
   /// ジオメトリデータ（レガシー互換用、turf_dartから変換して返す）
@@ -222,7 +178,6 @@ abstract class FeatureNode extends LayerTreeNode {
   /// 変更フラグをセット
   void _markDirty() {
     AppLogger.debug('[DEBUG] FeatureNode: _markDirty呼び出し - レイヤー:$layerName, 行ID:$rowId');
-    _isDirty = true;
     _invalidateCache();
     
     if (_isDisposed) return;
@@ -392,20 +347,6 @@ abstract class FeatureNode extends LayerTreeNode {
   Future<void> flushChanges() async {
     await geoPackageFile.flushChanges();
   }
-
-  /// 詳細情報（項目名と値のペア、順序付き）
-  List<MapEntry<String, String>> get detailEntries => [
-    MapEntry('name', name),
-    if (description != null && description!.isNotEmpty)
-      MapEntry('description', description!),
-    if (metadata != null && metadata!.isNotEmpty)
-      ...metadata!.entries.map(
-        (e) => MapEntry('metadata.${e.key}', e.value.toString()),
-      ),
-    MapEntry('id', rowId.toString()),
-    MapEntry('latitude', centroid.latitude.toStringAsFixed(6)),
-    MapEntry('longitude', centroid.longitude.toStringAsFixed(6)),
-  ];
 
   /// 詳細情報をMap形式で返す（表示用）
   Map<String, String> get infoMap {
@@ -663,20 +604,6 @@ class PointFeatureNode extends FeatureNode {
     return const LatLng(0, 0);
   }
 
-  /// 点座標をposition形式で取得
-  @override
-  List<double> get position {
-    return TurfConverter.latlngToPosition(point);
-  }
-
-  /// 点座標リスト（レガシー互換用）
-  List<LatLng> get points => [point];
-
-  @override
-  List<MapEntry<String, String>> get detailEntries {
-    return [...super.detailEntries];
-  }
-  
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
   
   @override
@@ -781,33 +708,11 @@ class LineFeatureNode extends FeatureNode {
     return [];
   }
 
-  /// 線の座標をpositionリストで取得
-  @override
-  List<List<double>> get positions {
-    return TurfConverter.latlngsToPositions(line);
-  }
-
   /// 線の長さを計算（turf_dartで計算、キャッシュあり）
   double get length {
     if (_isDisposed || parent.isDisposed) return 0.0;
     return _cachedLength ??=
         TurfConverter.calculateLength(turfFeature) ?? 0.0;
-  }
-
-  @override
-  List<MapEntry<String, String>> get detailEntries {
-    final len = length;
-    String lengthStr;
-    if (len >= 10000) {
-      lengthStr = '${(len / 1000).toStringAsFixed(2)} km';
-    } else {
-      lengthStr = '${len.toStringAsFixed(2)} m';
-    }
-    return [
-      ...super.detailEntries,
-      MapEntry('length', lengthStr),
-      MapEntry('vertex_count', '${line.length}'),
-    ];
   }
 
   @override
@@ -943,43 +848,11 @@ class PolygonFeatureNode extends FeatureNode {
     return [];
   }
 
-  /// ポリゴンの座標をpositionリストで取得（外環のみ）
-  @override
-  List<List<double>> get positions {
-    final rings = polygon;
-    if (rings.isNotEmpty) {
-      return TurfConverter.latlngsToPositions(rings.first);
-    }
-    return [];
-  }
-
   /// ポリゴンの面積を計算（turf_dartで計算、キャッシュあり）
   double get area {
     if (_isDisposed || parent.isDisposed) return 0.0;
     return _cachedArea ??=
         TurfConverter.calculateArea(turfFeature) ?? 0.0;
-  }
-
-  @override
-  List<MapEntry<String, String>> get detailEntries {
-    final areaM2 = area; // turf_dartで計算された面積（平方メートル）
-    String areaStr;
-    if (areaM2 >= 10000) {
-      areaStr = '${(areaM2 / 10000).toStringAsFixed(3)} ha';
-    } else {
-      areaStr = '${areaM2.toStringAsFixed(3)} m²';
-    }
-    // 全リングの頂点数の合計を計算（閉じたリングの最後の点を除く）
-    final totalVertices = polygon.fold<int>(0, (sum, ring) {
-      if (ring.isEmpty) return sum;
-      // 閉じたリングの場合は最後の点を除く（最初と最後が同じため）
-      return sum + (ring.length > 1 ? ring.length - 1 : ring.length);
-    });
-    return [
-      ...super.detailEntries,
-      MapEntry('area', areaStr),
-      MapEntry('vertex_count', '$totalVertices'),
-    ];
   }
 
   @override

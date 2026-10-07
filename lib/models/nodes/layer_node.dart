@@ -23,7 +23,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:turf/turf.dart' as turf;
 
-import '../../converters/turf_converter.dart';
 import '../../core/node_types.dart';
 import '../../services/kmeta_service.dart';
 import '../geometry_type.dart';
@@ -71,10 +70,6 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// turf_dartのFeatureをrowIdで管理するMap（真のデータソース）
   final Map<int, turf.Feature> _featureMap = {};
-
-  /// 変更の追跡フラグ（将来的なバッチ保存最適化用に予約）
-  // ignore: unused_field
-  bool _isDirty = false;
 
   /// dispose済みフラグ（null参照対策）
   bool _isDisposed = false;
@@ -360,15 +355,6 @@ abstract class LayerNode extends LayerTreeNode {
   /// 読み込み済みならその値、未ロードなら null（描画の同期経路用）
   KMetaLayerStyle? get kmetaStyleIfLoaded => _cachedKmetaStyle;
 
-  /// turf_dartのFeatureCollectionオブジェクトを取得
-  /// _featureMapから動的に生成（常に最新の状態を反映）
-  turf.FeatureCollection get turfFeatureCollection {
-    if (_isDisposed) {
-      throw StateError('LayerNode is disposed');
-    }
-    return TurfConverter.createFeatureCollection(_featureMap.values.toList());
-  }
-
   /// rowIdでFeatureを取得（null安全）
   turf.Feature? getFeatureById(int rowId) {
     if (_isDisposed) return null;
@@ -382,7 +368,6 @@ abstract class LayerNode extends LayerTreeNode {
       return;
     }
     _featureMap[rowId] = feature;
-    _markDirty();
   }
 
   /// Featureを削除（内部用、null参照対策含む）
@@ -392,7 +377,6 @@ abstract class LayerNode extends LayerTreeNode {
       return;
     }
     _featureMap.remove(rowId);
-    _markDirty();
   }
 
   /// Featureの属性を更新（内部用、null参照対策含む）
@@ -408,7 +392,6 @@ abstract class LayerNode extends LayerTreeNode {
 
     feature.properties ??= {};
     feature.properties![key] = value;
-    _markDirty();
     return true;
   }
 
@@ -421,11 +404,6 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// 地物の数（地図に読み込んだ分）。[features] のように一覧を複製しない（レイヤ一覧の行が組み立てのたびに数える）
   int get featureCount => _featureMap.length;
-
-  /// position型の座標データを取得（全フィーチャの重心座標リスト）
-  List<List<double>> get positions {
-    return features.map((feature) => feature.position).toList();
-  }
 
   /// 全フィーチャの実座標を収集（バウンディングボックス計算等に使用）
   List<LatLng> getAllCoordinates() {
@@ -442,13 +420,6 @@ abstract class LayerNode extends LayerTreeNode {
       }
     }
     return coords;
-  }
-
-  /// 変更フラグをセット
-  void _markDirty() {
-    if (_isDisposed) return;
-    _isDirty = true;
-    // FeatureCollectionは動的生成なのでキャッシュクリア不要
   }
 
   /// 属性テーブルのカラム名キャッシュ
@@ -518,17 +489,6 @@ abstract class LayerNode extends LayerTreeNode {
     final node = create(gpkgFile, uniqueName, parent);
     parent.addChild(node);
     return node;
-  }
-
-  /// FeatureNodeを安全に追加するメソッド
-  void addFeature(FeatureNode feature) {
-    if (_isDisposed) {
-      AppLogger.debug('[WARNING] LayerNode is disposed, cannot add feature');
-      return;
-    }
-    super.addChild(feature);
-    // _featureMapにも追加（FeatureNodeが持つturfFeatureを登録）
-    addFeatureToMap(feature.rowId, feature.turfFeature);
   }
 
   /// FeatureNodeを安全に削除するメソッド
@@ -667,8 +627,7 @@ abstract class LayerNode extends LayerTreeNode {
 
       // 子ノードの変更があったためキャッシュをクリア
       clearColumnNamesCache();
-      _markDirty();
-      _featuresRevision++;
+        _featuresRevision++;
       // フィーチャが入れ替わったので、どれがどの View のものかも取り直す
       await refreshStyleGroups();
       _updateChildrenCompleter!.complete();

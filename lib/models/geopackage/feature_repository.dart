@@ -1073,23 +1073,6 @@ class FeatureRepository {
     }
   }
 
-  Future<int?> addFeatureWithAttributes(
-    String tableName,
-    Uint8List geometry,
-    Map<String, dynamic> attributes,
-  ) async {
-    try {
-      final db = await connection.getDatabase();
-      final data = <String, dynamic>{'geom': geometry, ...attributes};
-      return await _insertRow(db, tableName, data);
-    } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] addFeatureWithAttributes エラー発生 - $e',
-      );
-      return null;
-    }
-  }
-
   // ============================================================
   // プライベートヘルパー
   // ============================================================

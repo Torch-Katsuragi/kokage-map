@@ -43,6 +43,49 @@ import '../widgets/settings_widgets.dart';
 // 設定定義
 // ============================================================
 
+// 値の見せ方
+String _px(double v) => '${v.toInt()} px';
+String _percent(double v) => '${(v * 100).toInt()}%';
+String _times(double v) => '${v.toStringAsFixed(1)}x';
+
+/// 不透明度（0〜100%、10% 刻み）
+DoubleDef _opacityDef({
+  required String key,
+  required String title,
+  required double defaultValue,
+  required double? Function(KMetaLayerStyle) kmetaGetter,
+}) =>
+    DoubleDef(
+      key: key,
+      title: title,
+      defaultValue: defaultValue,
+      min: 0.0,
+      max: 1.0,
+      divisions: 10,
+      formatter: _percent,
+      kmetaGetter: kmetaGetter,
+    );
+
+/// 頂点に点を描くか（線・面）
+SwitchDef _vertexPointsEnabledDef(String key, String description) => SwitchDef(
+      key: key,
+      title: t.styleScreen.drawVertexPoints,
+      description: description,
+      defaultValue: false,
+      icon: Icons.scatter_plot_outlined,
+    );
+
+/// 頂点の点の大きさ（線の太さに対する倍率。線・面）
+DoubleDef _vertexPointSizeFactorDef(String key) => DoubleDef(
+      key: key,
+      title: t.styleScreen.vertexPointSizeFactor,
+      defaultValue: 2.0,
+      min: 0.5,
+      max: 6.0,
+      divisions: 55,
+      formatter: _times,
+    );
+
 // --- Point ---
 final pointSizeDef = DoubleDef(
   key: 'layer_style_point_size',
@@ -51,7 +94,7 @@ final pointSizeDef = DoubleDef(
   min: 1,
   max: 30,
   divisions: 26,
-  formatter: (v) => '${v.toInt()} px',
+  formatter: _px,
   kmetaGetter: (k) => k.pointSize,
 );
 final pointColorDef = ColorDef(
@@ -69,7 +112,7 @@ final lineWidthDef = DoubleDef(
   min: 1,
   max: 10,
   divisions: 9,
-  formatter: (v) => '${v.toInt()} px',
+  formatter: _px,
   kmetaGetter: (k) => k.lineWidth,
 );
 final lineColorDef = ColorDef(
@@ -78,22 +121,11 @@ final lineColorDef = ColorDef(
   defaultArgb: 0xFF4CAF50,
   kmetaGetter: (k) => k.lineColor,
 );
-final lineVertexPointsEnabledDef = SwitchDef(
-  key: 'layer_style_line_vertex_points_enabled',
-  title: t.styleScreen.drawVertexPoints,
-  description: t.styleScreen.drawVertexPointsLineDesc,
-  defaultValue: false,
-  icon: Icons.scatter_plot_outlined,
+final lineVertexPointsEnabledDef = _vertexPointsEnabledDef(
+  'layer_style_line_vertex_points_enabled',
+  t.styleScreen.drawVertexPointsLineDesc,
 );
-final lineVertexPointSizeFactorDef = DoubleDef(
-  key: 'layer_style_line_vertex_point_size_factor',
-  title: t.styleScreen.vertexPointSizeFactor,
-  defaultValue: 2.0,
-  min: 0.5,
-  max: 6.0,
-  divisions: 55,
-  formatter: (v) => '${v.toStringAsFixed(1)}x',
-);
+final lineVertexPointSizeFactorDef = _vertexPointSizeFactorDef('layer_style_line_vertex_point_size_factor');
 
 // --- Polygon ---
 final polygonBorderWidthDef = DoubleDef(
@@ -118,42 +150,23 @@ final polygonFillColorDef = ColorDef(
   defaultArgb: 0xFF000000,
   kmetaGetter: (k) => k.polygonFillColor,
 );
-final polygonFillOpacityDef = DoubleDef(
+final polygonFillOpacityDef = _opacityDef(
   key: 'layer_style_polygon_fill_opacity',
   title: t.styleScreen.fillOpacity,
   defaultValue: 0.1,
-  min: 0.0,
-  max: 1.0,
-  divisions: 10,
-  formatter: (v) => '${(v * 100).toInt()}%',
   kmetaGetter: (k) => k.polygonFillOpacity,
 );
-final polygonBorderOpacityDef = DoubleDef(
+final polygonBorderOpacityDef = _opacityDef(
   key: 'layer_style_polygon_border_opacity',
   title: t.styleScreen.borderOpacity,
   defaultValue: 1.0,
-  min: 0.0,
-  max: 1.0,
-  divisions: 10,
-  formatter: (v) => '${(v * 100).toInt()}%',
   kmetaGetter: (k) => k.polygonBorderOpacity,
 );
-final polygonVertexPointsEnabledDef = SwitchDef(
-  key: 'layer_style_polygon_vertex_points_enabled',
-  title: t.styleScreen.drawVertexPoints,
-  description: t.styleScreen.drawVertexPointsPolygonDesc,
-  defaultValue: false,
-  icon: Icons.scatter_plot_outlined,
+final polygonVertexPointsEnabledDef = _vertexPointsEnabledDef(
+  'layer_style_polygon_vertex_points_enabled',
+  t.styleScreen.drawVertexPointsPolygonDesc,
 );
-final polygonVertexPointSizeFactorDef = DoubleDef(
-  key: 'layer_style_polygon_vertex_point_size_factor',
-  title: t.styleScreen.vertexPointSizeFactor,
-  defaultValue: 2.0,
-  min: 0.5,
-  max: 6.0,
-  divisions: 55,
-  formatter: (v) => '${v.toStringAsFixed(1)}x',
-);
+final polygonVertexPointSizeFactorDef = _vertexPointSizeFactorDef('layer_style_polygon_vertex_point_size_factor');
 
 // --- Label ---
 final labelEnabledDef = SwitchDef(
@@ -185,7 +198,7 @@ final labelFontSizeDef = DoubleDef(
   min: 8,
   max: 24,
   divisions: 16,
-  formatter: (v) => '${v.toInt()} px',
+  formatter: _px,
   kmetaGetter: (k) => k.labelFontSize,
 );
 final labelColorDef = ColorDef(
@@ -200,14 +213,10 @@ final labelHaloColorDef = ColorDef(
   defaultArgb: 0xFFFFFFFF,
   kmetaGetter: (k) => k.labelHaloColor,
 );
-final labelOpacityDef = DoubleDef(
+final labelOpacityDef = _opacityDef(
   key: 'layer_style_label_opacity',
   title: t.styleScreen.labelOpacity,
   defaultValue: 1.0,
-  min: 0.0,
-  max: 1.0,
-  divisions: 10,
-  formatter: (v) => '${(v * 100).toInt()}%',
   kmetaGetter: (k) => k.labelOpacity,
 );
 
@@ -249,7 +258,7 @@ final selectedMultiplierDef = DoubleDef(
   min: 1.0,
   max: 3.0,
   divisions: 20,
-  formatter: (v) => '${v.toStringAsFixed(1)}x',
+  formatter: _times,
 );
 
 // ============================================================
@@ -605,30 +614,17 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
 
   /// リセット処理（View なら「レイヤに従う」に戻す）
   Future<void> _resetSettings() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(widget.isViewMode ? t.styleScreen.followLayer : t.settingsWidget.resetSettings),
-        content: Text(
-          widget.isViewMode
-              ? t.styleScreen.followLayerConfirm
-              : _isGlobalMode
-                  ? t.settingsWidget.resetAllConfirm
-                  : t.settingsWidget.resetLayerConfirm,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(t.common.cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(t.common.reset),
-          ),
-        ],
-      ),
+    final confirm = await showSettingsConfirmDialog(
+      context,
+      title: widget.isViewMode ? t.styleScreen.followLayer : t.settingsWidget.resetSettings,
+      message: widget.isViewMode
+          ? t.styleScreen.followLayerConfirm
+          : _isGlobalMode
+              ? t.settingsWidget.resetAllConfirm
+              : t.settingsWidget.resetLayerConfirm,
+      confirmLabel: t.common.reset,
     );
-    if (confirm != true) return;
+    if (!confirm) return;
 
     if (widget.isViewMode) {
       widget.targetView!.style = null;
@@ -835,5 +831,14 @@ class _StylePreviewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _StylePreviewPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _StylePreviewPainter old) =>
+      old.pointColor != pointColor ||
+      old.pointSize != pointSize ||
+      old.lineColor != lineColor ||
+      old.lineWidth != lineWidth ||
+      old.polygonBorderColor != polygonBorderColor ||
+      old.polygonBorderWidth != polygonBorderWidth ||
+      old.polygonFillColor != polygonFillColor ||
+      old.polygonFillOpacity != polygonFillOpacity ||
+      old.polygonBorderOpacity != polygonBorderOpacity;
 }

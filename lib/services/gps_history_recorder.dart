@@ -220,11 +220,22 @@ class GpsHistoryRecorder extends ChangeNotifier {
   // 記録の開始/停止
   // ==============================
 
+  /// 書きかけの raw バッファへの書き込み
+  final Set<Future<void>> _writing = {};
+
+  /// 届いた位置の書き込みが終わるまで待つ（テスト用。落ちる直前の状態を作る）
+  @visibleForTesting
+  Future<void> flushPendingWrites() => Future.wait(_writing.toList());
+
   /// positionStream の購読開始 + consolidationタイマー起動
   void startRecording(Stream<GpsPositionRecord> positionStream) {
     _subscription?.cancel();
     _subscription = positionStream.listen(
-      _onPositionReceived,
+      (record) {
+        final write = _onPositionReceived(record);
+        _writing.add(write);
+        write.whenComplete(() => _writing.remove(write));
+      },
       onError: (error) {
         AppLogger.debug('$_logTag: ストリームエラー: $error');
       },

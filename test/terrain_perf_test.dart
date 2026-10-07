@@ -22,8 +22,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/core/terrain/dem_grid.dart';
 import 'package:root_maps/core/terrain/dem_tiles.dart';
 import 'package:root_maps/core/terrain/terrain_camera.dart';
+import 'package:root_maps/core/terrain/terrain_lifted.dart';
 import 'package:root_maps/core/terrain/terrain_mesh.dart';
-import 'package:root_maps/core/terrain/terrain_painter.dart';
 import 'package:root_maps/core/terrain/terrain_world.dart';
 import 'package:root_maps/core/terrain/web_mercator.dart';
 

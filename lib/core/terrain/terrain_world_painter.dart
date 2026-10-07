@@ -21,8 +21,8 @@ import 'package:flutter/material.dart';
 
 import 'gpu/terrain_gpu.dart';
 import 'terrain_camera.dart';
+import 'terrain_lifted.dart';
 import 'terrain_mesh.dart';
-import 'terrain_painter.dart';
 import 'terrain_scene.dart';
 
 /// 描画順に並んだ 1 タイルぶんの描き物（座標はタイルの DEM 原点基準）

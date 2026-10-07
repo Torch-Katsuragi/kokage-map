@@ -16,8 +16,8 @@
 import 'package:flutter/material.dart';
 import 'package:geobase/geobase.dart' as geo;
 
+import 'terrain_lifted.dart';
 import 'terrain_mesh.dart';
-import 'terrain_painter.dart';
 import 'web_mercator.dart';
 
 /// 解決済みのフィーチャの見た目（1 スタイルグループぶん）

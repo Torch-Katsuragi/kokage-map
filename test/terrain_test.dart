@@ -22,8 +22,8 @@ import 'package:geobase/geobase.dart' as geo;
 import 'package:root_maps/core/terrain/contours.dart';
 import 'package:root_maps/core/terrain/dem_grid.dart';
 import 'package:root_maps/core/terrain/terrain_camera.dart';
+import 'package:root_maps/core/terrain/terrain_lifted.dart';
 import 'package:root_maps/core/terrain/terrain_mesh.dart';
-import 'package:root_maps/core/terrain/terrain_painter.dart';
 import 'package:root_maps/core/terrain/terrain_scene.dart';
 import 'package:root_maps/core/terrain/web_mercator.dart';
 
@@ -236,47 +236,6 @@ void main() {
     });
   });
 
-  group('TerrainPainter.pick', () {
-    test('ラベル・線・面の順で当たる', () {
-      final dem = DemGrid(
-        cols: 2, rows: 2, originX: 0, originY: 0, cellSize: 100,
-        heights: Float32List.fromList([0, 0, 0, 0]),
-      );
-      final cam = TerrainCamera(centerX: 50, centerY: 50, scale: 2); // 真上・2px/m
-      final mesh = TerrainMesh.build(dem, cam, textureWidth: 4, textureHeight: 4, chunkSize: 1);
-      const size = Size(400, 400);
-      final painter = TerrainPainter(
-        mesh: mesh,
-        camera: cam,
-        texture: null,
-        lines: [
-          LiftedPolyline.lift([const Offset(10, 50), const Offset(90, 50)], mesh,
-              color: const Color(0xFFFF0000), widthPx: 2),
-        ],
-        polygons: [
-          LiftedPolygon.lift(
-            [const Offset(20, 20), const Offset(80, 20), const Offset(80, 80), const Offset(20, 80)],
-            mesh, color: const Color(0x8000FF00),
-          ),
-        ],
-        labels: [
-          TerrainLabel(
-            x: 70, y: 70,
-            painter: TextPainter(text: const TextSpan(text: 'a'), textDirection: TextDirection.ltr)..layout(),
-          ),
-        ],
-      );
-      // 画面中心 (200,200) = 世界 (50,50)。線 y=50 は画面 y=200 を通る
-      expect(painter.pick(const Offset(200, 200), size)?.kind, 'line');
-      // 世界 (70,70) → 画面 (240, 160)（北が上）
-      expect(painter.pick(const Offset(240, 160), size)?.kind, 'label');
-      // 面の内側だが線・ラベルから遠い点: 世界 (30,30) → 画面 (160, 240)
-      expect(painter.pick(const Offset(160, 240), size)?.kind, 'polygon');
-      // 何もない: 世界 (5,95) → 画面 (110, 110)
-      expect(painter.pick(const Offset(110, 110), size), isNull);
-    });
-  });
-
   group('ContourExtractor', () {
     test('斜面の等高線は真っ直ぐで、DEM を引き直すと高さが一致する', () {
       // 東に向かって 1m/セル で上がる斜面（10m 格子）
@@ -312,33 +271,6 @@ void main() {
           }
         }
       }
-    });
-  });
-
-  group('TerrainPainter.isOccluded', () {
-    test('尾根の裏の点は隠れ、手前の点は見える', () {
-      // 南北に走る尾根: x = 50 で高さ 100、他は 0（20 格子・10m）
-      const n = 21;
-      final heights = Float32List(n * n);
-      for (var r = 0; r < n; r++) {
-        for (var c = 0; c < n; c++) {
-          heights[r * n + c] = (c >= 4 && c <= 6) ? 100 : 0;
-        }
-      }
-      final dem = DemGrid(cols: n, rows: n, originX: 0, originY: 0, cellSize: 10, heights: heights);
-      // 東（bearing 90°）を画面上に、45° 傾けて見る = 視点は西側の上空
-      final cam = TerrainCamera(centerX: 100, centerY: 100, scale: 1, bearing: math.pi / 2, pitch: math.pi / 4);
-      final mesh = TerrainMesh.build(dem, cam, textureWidth: 4, textureHeight: 4, chunkSize: 8);
-      final painter = TerrainPainter(mesh: mesh, camera: cam, texture: null, lines: const [], labels: const []);
-      // 尾根の東（奥）側の地面: 隠れる
-      expect(painter.isOccluded(80, 100, 0), isTrue);
-      // 尾根の西（手前）側の地面: 見える
-      expect(painter.isOccluded(20, 100, 0), isFalse);
-      // 奥でも高ければ見える
-      expect(painter.isOccluded(80, 100, 150), isFalse);
-      // 真上からは何も隠れない
-      cam.pitch = 0;
-      expect(painter.isOccluded(80, 100, 0), isFalse);
     });
   });
 

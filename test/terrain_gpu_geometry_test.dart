@@ -7,8 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/core/terrain/dem_grid.dart';
 import 'package:root_maps/core/terrain/gpu/gpu_geometry.dart';
 import 'package:root_maps/core/terrain/terrain_camera.dart';
+import 'package:root_maps/core/terrain/terrain_lifted.dart';
 import 'package:root_maps/core/terrain/terrain_mesh.dart';
-import 'package:root_maps/core/terrain/terrain_painter.dart';
 import 'package:root_maps/core/terrain/terrain_scene.dart';
 
 void main() {

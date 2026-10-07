@@ -16,7 +16,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import '../terrain_painter.dart';
+import '../terrain_lifted.dart';
 import '../terrain_scene.dart';
 
 /// [buildMipChain] の引数（isolate へ送る）

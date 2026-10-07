@@ -47,7 +47,7 @@ abstract class MapSurfaceController {
 
 - **pitch は既に `KMapCamera` にあり、アプリのどこからも 0 以外を設定していない**（契約テストも pitch≒0 固定）。
   3D 化で最も影響の少ない自由度
-- 3D 側の `toLngLat` は **視線と DEM の交点**（`TerrainPainter.isOccluded` と同じ視線なぞり）。
+- 3D 側の `toLngLat` は **視線と DEM の交点**（`TerrainWorldPainter.isOccluded` と同じ視線なぞり）。
   平面に落とすと傾けたとき選択がずれる
 - `zoom` の定義を揃える: 3D の `scale`（px / Mercator m）から `zoom = log2(scale · 2πR / 256)`。
   `SelectTool._calcSelectRange`（`20 · 2^(16−zoom)` m）と `PanTool` のフォーカルアンカリングがこれに依存する

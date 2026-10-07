@@ -19,8 +19,6 @@
 library;
 
 export 'gpu_geometry.dart';
-export 'terrain_gpu_renderer_stub.dart' if (dart.library.ffi) 'terrain_gpu_renderer.dart';
-export 'terrain_gpu_stats.dart';
 export 'terrain_gpu_world_stub.dart'
     if (dart.library.ffi) 'terrain_gpu_world.dart'
     if (dart.library.js_interop) 'terrain_gpu_world_web.dart';

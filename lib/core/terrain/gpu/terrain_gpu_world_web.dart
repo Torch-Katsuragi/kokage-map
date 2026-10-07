@@ -25,8 +25,8 @@ import 'package:web/web.dart' as web;
 
 import '../terrain_appearance.dart';
 import '../terrain_camera.dart';
+import '../terrain_lifted.dart';
 import '../terrain_mesh.dart';
-import '../terrain_painter.dart';
 import '../terrain_scene.dart';
 import '../terrain_world_painter.dart' show TerrainTileDrawable;
 import 'gpu_geometry.dart';

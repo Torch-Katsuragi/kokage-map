@@ -23,8 +23,8 @@ import 'package:vector_math/vector_math.dart' as vm;
 
 import '../terrain_appearance.dart';
 import '../terrain_camera.dart';
+import '../terrain_lifted.dart';
 import '../terrain_mesh.dart';
-import '../terrain_painter.dart';
 import '../terrain_scene.dart';
 import '../terrain_worker.dart';
 import '../terrain_world_painter.dart' show TerrainTileDrawable;

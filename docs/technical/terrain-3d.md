@@ -28,7 +28,7 @@ tags: [technical, design, 3d, dem, terrain]
 | `dem_tiles.dart` | Terrarium / Terrain-RGB タイル → `DemGrid`、背景タイルを 1 枚に合成（`RasterTileComposer`） |
 | `terrain_camera.dart` | 正射影カメラ（center / scale / bearing / pitch / zScale）。投影は線形なので pan と zoom は Canvas の変換で済む |
 | `terrain_mesh.dart` | `TerrainMeshBuilder`: チャンク（32×32 セル）ごとの共有頂点、象限走査の並び順、LOD（間引き） |
-| `terrain_painter.dart` | `TerrainPainter`: 地形（テクスチャ × 陰影色）→ 面 → 線分の束 → 線 → ラベル。`pick` でヒットテスト |
+| `terrain_lifted.dart` | DEM に沿って持ち上げた線・面・線分の束（`LiftedPolyline` / `LiftedPolygon` / `LiftedSegments`）、面の束 `PolygonBatch`、ラベルとヒットの型。描画は `terrain_world_painter.dart` |
 | `contours.dart` | DEM から等高線（marching squares） |
 | `terrain_scene.dart` | `TerrainSceneBuilder`: GeoJSON（geobase の Feature + `k-style` / `k-label`）→ 持ち上げ済みの線・面・縁・点・ラベル（seam ②の実体） |
 
@@ -51,7 +51,7 @@ tags: [technical, design, 3d, dem, terrain]
 | 象限が変わった | チャンクの描画順と帯番号を引き直す（インデックスは象限ごとに遅延生成・キャッシュ） |
 | ジェスチャ中 | LOD: `step = ceil(sqrt(cells / 40000))` で格子を間引く。終わったら全解像度 |
 
-`TerrainPainter` は 1 インスタンスを使い回し、中身を差し替えて `repaint` で通知する。
+`TerrainWorldPainter` は 1 インスタンスを使い回し、中身を差し替えて `repaint` で通知する。
 毎フレーム `setState` で画面全体を組み直すと、地図面以外のウィジェットの再構築が UI スレッドを食う（debug で 10ms 超）。
 
 ### ベクタ
@@ -64,7 +64,7 @@ tags: [technical, design, 3d, dem, terrain]
 - 点（`TerrainPoint`）: ビルボードの丸。地形に隠れていれば描かない
 - ラベル: ビルボード。地形に隠れない方針で最後に画面座標で描く。重なりは先勝ちで間引き、間引かれた分は点だけ残す
 
-### ヒットテスト（`TerrainPainter.pick`）
+### ヒットテスト（`TerrainWorldPainter.pick`）
 
 ラベル > 線 > 面 の順。線は線分までの距離、面は投影した三角形の内外。
 線と面は **地形に隠れていれば当てない**（`isOccluded`: 点から視点側へ視線の地上投影をセル幅ずつなぞり、
@@ -284,12 +284,12 @@ Godot 乗り換えは不採用（地図面以外が全部 Flutter、web が重�
 
 ## flutter_gpu スパイク（2026-09-10）
 
-Vault `3D化の詰め_2026-09-07` 12 節の「Godot より先に flutter_gpu を試す」の実装。製品機能ではない（`lib/screens/terrain_spike/` の GPU チップ）。
+Vault `3D化の詰め_2026-09-07` 12 節の「Godot より先に flutter_gpu を試す」の実装。試作の `TerrainGpuRenderer` は 2026-10-07 に試作画面ごと削除し、今は `TerrainGpuWorldRenderer`（`terrain_gpu_world.dart`）だけ。
 
 | ファイル | 役割 |
 |---|---|
-| `lib/core/terrain/gpu/terrain_gpu_renderer.dart` | `TerrainGpuRenderer`: DEM を頂点バッファ（position + uv + shade、24B/頂点、32bit インデックス）に一度だけ上げ、面の束（position + rgba、28B/頂点）も一度だけ。毎フレームは mvp 1 本（正射影 or 透視）をユニフォームに書いて 2 draw。深度バッファ付き（面は深度を書かず、NDC で 0.0005 手前に寄せて z-fight 回避）。`GpuImageSurface` に描いて `ui.Image` を Canvas に `drawImageRect` |
-| `terrain_gpu_renderer_stub.dart` / `terrain_gpu.dart` | web 用の空実装と条件 export（`package:flutter_gpu` は dart:ffi 依存） |
+| （削除済み）`TerrainGpuRenderer`: DEM を頂点バッファ（position + uv + shade、24B/頂点、32bit インデックス）に一度だけ上げ、面の束（position + rgba、28B/頂点）も一度だけ。毎フレームは mvp 1 本（正射影 or 透視）をユニフォームに書いて 2 draw。深度バッファ付き（面は深度を書かず、NDC で 0.0005 手前に寄せて z-fight 回避）。`GpuImageSurface` に描いて `ui.Image` を Canvas に `drawImageRect` |
+| `terrain_gpu.dart` | 条件 export（`package:flutter_gpu` は dart:ffi 依存、web は WebGL2 版） |
 | `shaders/*.vert|frag`, `terrain.shaderbundle.json`, `hook/build.dart` | シェーダ束。`flutter_gpu_shaders` の build hook が `build/shaderbundles/terrain.shaderbundle` を作り、pubspec の assets で載せる（web ビルドでも hook は走る） |
 | `android/app/src/main/AndroidManifest.xml` | `io.flutter.embedding.android.EnableFlutterGPU=true`（無いと `gpuContext` が例外） |
 

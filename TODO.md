@@ -65,7 +65,6 @@
 - [ ] Shapefile 書き出しの面のリング向き（外周は時計回りが仕様）を揃えていない。QGIS は読めるので実害は未確認
 - [ ] バッチ挿入（`_addGeometryBatch`）は rtree・レイヤ範囲を更新しない（1 件ずつの追加は更新する）
 - [ ] 地物ノードは属性 `rmaps_metadata`、リポジトリは `kmaps_metadata` を見ていて名前が食い違っている
-- [ ] 既存 MapTool（PenTool / SelectTool / GpsTool）の ChangeNotifier 化の統一
 - [ ] Flutter の警告「KGP を当てるプラグイン（desktop_drop / firebase_* / location）は将来ビルドできなくなる」→ プラグイン側の更新を待つ。
       `android.builtInKotlin=true` にできたら root の橋渡しは外す
 - [ ] 県点群の DTM（1 m 級）を焼いてプロジェクトの dir に入れる（アプリには入れない。配布先は GitHub Releases に決定済み）。

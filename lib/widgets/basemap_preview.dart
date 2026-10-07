@@ -19,7 +19,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../core/terrain/dem_tiles.dart' show RasterTileComposer, TextureLayer, TileRange;
+import '../core/terrain/dem_tiles.dart'
+    show RasterTileComposer, TextureLayer, TileRange;
 import '../core/terrain/web_mercator.dart';
 import '../services/basemap_service.dart';
 
@@ -28,7 +29,13 @@ import '../services/basemap_service.dart';
 ///
 /// タイルは地図の中心（無ければ東京）の [zoom]。設定が変わるたびに少し待ってから作り直す（スライダーの連打を吸う）
 class BaseMapPreview extends StatefulWidget {
-  const BaseMapPreview({super.key, required this.service, required this.center, required this.zoom, this.size = 144});
+  const BaseMapPreview({
+    super.key,
+    required this.service,
+    required this.center,
+    required this.zoom,
+    this.size = 144,
+  });
 
   final BaseMapService service;
   final LatLng center;
@@ -53,6 +60,20 @@ class _BaseMapPreviewState extends State<BaseMapPreview> {
   }
 
   @override
+  void didUpdateWidget(BaseMapPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 親が別のサービスを渡したら聞き先を付け替える（古い方に listener を残さない）
+    if (!identical(oldWidget.service, widget.service)) {
+      oldWidget.service.removeListener(_schedule);
+      widget.service.addListener(_schedule);
+      _schedule();
+    } else if (oldWidget.zoom != widget.zoom ||
+        oldWidget.center != widget.center) {
+      _schedule();
+    }
+  }
+
+  @override
   void dispose() {
     widget.service.removeListener(_schedule);
     _debounce?.cancel();
@@ -63,7 +84,10 @@ class _BaseMapPreviewState extends State<BaseMapPreview> {
 
   void _schedule({bool immediate = false}) {
     _debounce?.cancel();
-    _debounce = Timer(immediate ? Duration.zero : const Duration(milliseconds: 300), _compose);
+    _debounce = Timer(
+      immediate ? Duration.zero : const Duration(milliseconds: 300),
+      _compose,
+    );
   }
 
   Future<void> _compose() async {
@@ -71,15 +95,23 @@ class _BaseMapPreviewState extends State<BaseMapPreview> {
     if (mounted) setState(() => _busy = true);
     final svc = widget.service;
     final z = widget.zoom;
-    final x = WebMercator.tileXFraction(widget.center.longitude, z).floor().clamp(0, (1 << z) - 1);
-    final y = WebMercator.tileYFraction(widget.center.latitude, z).floor().clamp(0, (1 << z) - 1);
+    final x = WebMercator.tileXFraction(
+      widget.center.longitude,
+      z,
+    ).floor().clamp(0, (1 << z) - 1);
+    final y = WebMercator.tileYFraction(
+      widget.center.latitude,
+      z,
+    ).floor().clamp(0, (1 << z) - 1);
     final layers = <TextureLayer>[
-      for (final (p, l) in svc.activeLayers) ((z, x, y) => svc.getTile(p, z, x, y), l.opacity / 100, l.blend.mode),
+      for (final (p, l) in svc.activeLayers)
+        ((z, x, y) => svc.getTile(p, z, x, y), l.opacity / 100, l.blend.mode),
     ];
     ui.Image? image;
     try {
-      image = await RasterTileComposer(fetcher: (_, _, _) async => null)
-          .composeLayers(TileRange(z: z, x0: x, y0: y, x1: x, y1: y), layers);
+      image = await RasterTileComposer(
+        fetcher: (_, _, _) async => null,
+      ).composeLayers(TileRange(z: z, x0: x, y0: y, x1: x, y1: y), layers);
     } catch (_) {
       image = null;
     }
@@ -111,9 +143,20 @@ class _BaseMapPreviewState extends State<BaseMapPreview> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (img != null) RawImage(image: img, fit: BoxFit.cover, filterQuality: FilterQuality.medium),
+              if (img != null)
+                RawImage(
+                  image: img,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.medium,
+                ),
               if (_busy)
-                const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
             ],
           ),
         ),

@@ -22,11 +22,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../i18n/strings.g.dart';
 import '../../../models/app_notification.dart';
-import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/layer_tree_node.dart';
-import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/import_export/import_export_service.dart';
@@ -83,15 +81,7 @@ class GeoPackageTile extends ConsumerWidget {
       onToggleExpanded: () {
         if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).toggle(absPath);
       },
-      eye: VisibilityEye(
-        visible: node.visible,
-        effective: node.parent?.isVisibleRecursive() ?? true,
-        onToggle: () {
-          node.visible = !node.visible;
-          node.persistVisibility();
-          ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        },
-      ),
+      eye: nodeVisibilityEye(ref, node),
       menu: () => [
         RowMenuItem('add_layer', t.layerDrawer.layer.addLayer, icon: Icons.add),
         RowMenuItem('rename', t.layerDrawer.geopackage.changeName, icon: Icons.edit),
@@ -166,10 +156,8 @@ class GeoPackageTile extends ConsumerWidget {
         final absPath = node.geoPackageFile.getAbsolutePath();
         if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).addExpanded(absPath);
 
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        Future.delayed(const Duration(milliseconds: 500), () {
-          ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        });
+        ref.refreshMap();
+        Future.delayed(const Duration(milliseconds: 500), ref.refreshMap);
       }
     } catch (_) {}
   }
@@ -183,19 +171,9 @@ class GeoPackageTile extends ConsumerWidget {
       confirmLabel: t.layerDrawer.geopackage.deleteGpkg,
       successMessage: t.layerDrawer.geopackage.deleted(name: node.name),
       execute: () async {
-        for (final layer in node.children.whereType<LayerNode>()) {
-          if (ref.read(selectedLayerNodeProvider) == layer) {
-            ref.read(selectedLayerNodeProvider.notifier).select(null);
-          }
-          ref.read(selectedFeaturesProvider.notifier).set(
-            ref.read(selectedFeaturesProvider).where((f) {
-              if (f is FeatureNode) return f.parent != layer;
-              return true;
-            }).toList(),
-          );
-        }
+        node.children.whereType<LayerNode>().forEach(ref.deselectLayer);
         await node.dispose();
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.refreshMap();
       },
     );
   }
@@ -208,33 +186,23 @@ Future<void> migrateLayerTo(
   LayerNode sourceLayer,
   GeoPackageNode targetGpkg,
 ) async {
-  final confirm = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(t.layerDrawer.geopackage.migrateTitle),
-      content: Text(
-        t.layerDrawer.geopackage.migrateConfirm(source: sourceLayer.name, target: targetGpkg.name),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.common.cancel)),
-        TextButton(onPressed: () => Navigator.pop(context, true), child: Text(t.common.confirm)),
-      ],
-    ),
+  final confirm = await showConfirmDialog(
+    context,
+    title: t.layerDrawer.geopackage.migrateTitle,
+    content: Text(t.layerDrawer.geopackage.migrateConfirm(source: sourceLayer.name, target: targetGpkg.name)),
+    confirmLabel: t.common.confirm,
   );
-  if (confirm != true) return;
+  if (!confirm) return;
 
   final migrated = await sourceLayer.migrateToGeoPackage(targetGpkg, moveLayer: true);
   if (migrated != null) {
-    ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    ref.refreshMap();
     ref.read(selectedLayerNodeProvider.notifier).select(migrated);
-    ref.read(notificationCenterProvider.notifier).add(
-          title: t.layerDrawer.geopackage.migrateSuccess(source: sourceLayer.name, target: targetGpkg.name),
-          level: NotificationLevel.success,
-        );
+    ref.notify(
+      t.layerDrawer.geopackage.migrateSuccess(source: sourceLayer.name, target: targetGpkg.name),
+      level: NotificationLevel.success,
+    );
   } else {
-    ref.read(notificationCenterProvider.notifier).add(
-          title: t.layerDrawer.geopackage.migrateFailed,
-          level: NotificationLevel.error,
-        );
+    ref.notify(t.layerDrawer.geopackage.migrateFailed, level: NotificationLevel.error);
   }
 }

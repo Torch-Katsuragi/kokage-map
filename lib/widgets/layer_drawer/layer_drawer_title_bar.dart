@@ -207,40 +207,31 @@ class LayerDrawerTitleBar extends StatelessWidget {
         if (!isReadOnly)
           PopupMenuItem(
             value: 'upload',
-            child: Row(children: [
-              const Icon(Icons.cloud_upload, color: Colors.orange),
-              const SizedBox(width: 12),
-              Text(t.layerDrawer.folder.upload),
-            ]),
+            child: _menuRow(Icons.cloud_upload, Colors.orange, t.layerDrawer.folder.upload),
           ),
         PopupMenuItem(
           value: 'download',
-          child: Row(children: [
-            const Icon(Icons.cloud_download, color: Colors.green),
-            const SizedBox(width: 12),
-            Text(t.layerDrawer.folder.download),
-          ]),
+          child: _menuRow(Icons.cloud_download, Colors.green, t.layerDrawer.folder.download),
         ),
         PopupMenuItem(
           value: 'refresh',
-          child: Row(children: [
-            const Icon(Icons.refresh, color: Colors.blue),
-            const SizedBox(width: 12),
-            Text(t.layerDrawer.folder.refreshStatus),
-          ]),
+          child: _menuRow(Icons.refresh, Colors.blue, t.layerDrawer.folder.refreshStatus),
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'unlink',
-          child: Row(children: [
-            const Icon(Icons.link_off, color: Colors.red),
-            const SizedBox(width: 12),
-            Text(t.layerDrawer.folder.unlinkDrive),
-          ]),
+          child: _menuRow(Icons.link_off, Colors.red, t.layerDrawer.folder.unlinkDrive),
         ),
       ],
     );
   }
+
+  /// メニューの 1 項目（色付きのアイコンと名前）
+  static Widget _menuRow(IconData icon, Color color, String label) => Row(children: [
+        Icon(icon, color: color),
+        const SizedBox(width: 12),
+        Text(label),
+      ]);
 
   Widget _buildAddButton() {
     return PopupMenuButton<AddAction>(
@@ -257,28 +248,16 @@ class LayerDrawerTitleBar extends StatelessWidget {
       itemBuilder: (_) => [
         PopupMenuItem(
           value: AddAction.folder,
-          child: Row(children: [
-            const Icon(Icons.folder, color: Colors.amber),
-            const SizedBox(width: 12),
-            Text(t.layerDrawer.titleBar.addFolder),
-          ]),
+          child: _menuRow(Icons.folder, Colors.amber, t.layerDrawer.titleBar.addFolder),
         ),
         PopupMenuItem(
           value: AddAction.geoPackage,
-          child: Row(children: [
-            const Icon(Icons.storage, color: Color(0xFF90A4AE)),
-            const SizedBox(width: 12),
-            Text(t.layerDrawer.titleBar.addGeoPackage),
-          ]),
+          child: _menuRow(Icons.storage, const Color(0xFF90A4AE), t.layerDrawer.titleBar.addGeoPackage),
         ),
         PopupMenuItem(
           key: TutorialTargets.photoMenuItem,
           value: AddAction.photo,
-          child: Row(children: [
-            const Icon(Icons.photo_library, color: Colors.blue),
-            const SizedBox(width: 12),
-            Text(t.layerDrawer.titleBar.addPhotos),
-          ]),
+          child: _menuRow(Icons.photo_library, Colors.blue, t.layerDrawer.titleBar.addPhotos),
         ),
       ],
     );

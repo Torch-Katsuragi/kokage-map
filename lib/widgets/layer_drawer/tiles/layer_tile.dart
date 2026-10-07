@@ -20,14 +20,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../i18n/strings.g.dart';
-import '../../../models/app_notification.dart';
 import '../../../models/geometry_type.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/view_node.dart';
-import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../screens/layer_style_settings_screen.dart';
@@ -83,15 +81,10 @@ class LayerTile extends ConsumerWidget {
       trailingInfo: '${node.featureCount}',
       eye: KeyedSubtree(
         key: isArea ? TutorialTargets.areaEye : null,
-        child: VisibilityEye(
-          visible: node.visible,
-          effective: node.parent?.isVisibleRecursive() ?? true,
-          onToggle: () {
-            node.visible = !node.visible;
-            node.persistVisibility();
-            ref.read(featureRefreshTriggerProvider.notifier).trigger();
-            ref.read(tutorialProvider.notifier).report(LayerVisibilityToggled(node));
-          },
+        child: nodeVisibilityEye(
+          ref,
+          node,
+          onToggled: () => ref.read(tutorialProvider.notifier).report(LayerVisibilityToggled(node)),
         ),
       ),
       onTap: () => ref.read(selectedLayerNodeProvider.notifier).select(node),
@@ -189,7 +182,7 @@ class LayerTile extends ConsumerWidget {
     // QGIS も新しいレイヤは上に足す）
     node.views.insert(0, ViewNode(name: name, parent: node));
     await node.persistViews();
-    ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    ref.refreshMap();
     ref.read(tutorialProvider.notifier).report(ViewAdded(node));
   }
 
@@ -208,29 +201,23 @@ class LayerTile extends ConsumerWidget {
     try {
       await node.geoPackageFile.renameLayer(node.layerName, newName);
       await node.geoPackageNode.updateChildren();
-      ref.read(featureRefreshTriggerProvider.notifier).trigger();
+      ref.refreshMap();
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.renameFailed(error: '$e'),
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.renameFailed(error: '$e'));
     }
   }
 
   Future<void> _openStyleSettings(BuildContext context, WidgetRef ref) async {
     final folderPath = node.folderNode?.getAbsoluteFilePath();
     if (folderPath == null) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.couldNotDetermineFolder,
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.couldNotDetermineFolder);
       return;
     }
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => LayerStyleSettingsScreen(targetLayer: node, folderPath: folderPath)),
     );
-    ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    ref.refreshMap();
   }
 
   Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
@@ -241,17 +228,9 @@ class LayerTile extends ConsumerWidget {
       content: Text(t.layerDrawer.layer.deleteLayerConfirm(name: node.name)),
       confirmLabel: t.layerDrawer.layer.delete,
       execute: () async {
-        if (ref.read(selectedLayerNodeProvider) == node) {
-          ref.read(selectedLayerNodeProvider.notifier).select(null);
-        }
-        ref.read(selectedFeaturesProvider.notifier).set(
-          ref.read(selectedFeaturesProvider).where((f) {
-            if (f is FeatureNode) return f.parent != node;
-            return true;
-          }).toList(),
-        );
+        ref.deselectLayer(node);
         await node.dispose();
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.refreshMap();
       },
     );
   }
@@ -265,19 +244,13 @@ class LayerTile extends ConsumerWidget {
   ) async {
     final features = sourceLayer.features;
     if (features.isEmpty) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.noPointsToConvert,
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.noPointsToConvert);
       return;
     }
 
     final targetLayers = GeometryConversionService.findTargetLayersForPoints(currentDir);
     if (targetLayers.isEmpty) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.noTargetLayersFound,
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.noTargetLayersFound);
       return;
     }
 
@@ -326,22 +299,13 @@ class LayerTile extends ConsumerWidget {
       );
       if (created != null) {
         await targetLayer.updateChildren();
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.convertedToType(type: typeLabel, count: '${features.length}'),
-              level: NotificationLevel.info,
-            );
+        ref.refreshMap();
+        ref.notify(t.layerDrawer.layer.convertedToType(type: typeLabel, count: '${features.length}'));
       } else {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.featureCreateFailed,
-              level: NotificationLevel.info,
-            );
+        ref.notify(t.layerDrawer.layer.featureCreateFailed);
       }
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.conversionError(error: '$e'),
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.conversionError(error: '$e'));
     }
   }
 
@@ -375,26 +339,17 @@ class LayerTile extends ConsumerWidget {
       );
       if (created != null) {
         await result.targetLayer.updateChildren();
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.refreshMap();
         final typeLabel = result.targetLayer is LineLayerNode ? 'Line' : 'Polygon';
         final closureInfo = result.closePath
             ? t.layerDrawer.layer.closureRatio(ratio: '${created.turfFeature.properties?['survey_closure_ratio'] ?? '?'}')
             : '';
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.surveyConvertedToType(type: typeLabel, count: '${result.chain.length}', closureInfo: closureInfo),
-              level: NotificationLevel.info,
-            );
+        ref.notify(t.layerDrawer.layer.surveyConvertedToType(type: typeLabel, count: '${result.chain.length}', closureInfo: closureInfo));
       } else {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.featureCreateFailed,
-              level: NotificationLevel.info,
-            );
+        ref.notify(t.layerDrawer.layer.featureCreateFailed);
       }
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.surveyConversionError(error: '$e'),
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.surveyConversionError(error: '$e'));
     }
   }
 
@@ -406,35 +361,22 @@ class LayerTile extends ConsumerWidget {
     final features = layerNode.children.cast<FeatureNode>();
     final mergeableCount = PolygonMerge.countMergeablePolygons(features);
     if (mergeableCount < 2) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.mergeNeedTwo,
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.mergeNeedTwo);
       return;
     }
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(t.layerDrawer.layer.mergeTitle),
-        content: Text(
-          t.layerDrawer.layer.mergeConfirm(name: layerNode.name, count: '$mergeableCount'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.common.cancel)),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(t.layerDrawer.layer.merge)),
-        ],
-      ),
+    final confirm = await showConfirmDialog(
+      context,
+      title: t.layerDrawer.layer.mergeTitle,
+      content: Text(t.layerDrawer.layer.mergeConfirm(name: layerNode.name, count: '$mergeableCount')),
+      confirmLabel: t.layerDrawer.layer.merge,
     );
-    if (confirm != true) return;
+    if (!confirm) return;
 
     try {
       final merged = PolygonMerge.mergePolygonFeatures(features);
       if (merged.isEmpty) {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.mergeFailed,
-              level: NotificationLevel.info,
-            );
+        ref.notify(t.layerDrawer.layer.mergeFailed);
         return;
       }
 
@@ -442,10 +384,7 @@ class LayerTile extends ConsumerWidget {
       final newLayerName = '${layerNode.name}_merged';
       final newLayer = await PolygonLayerNode.createIn(parentGpkg, newLayerName);
       if (newLayer == null) {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.newLayerFailed,
-              level: NotificationLevel.info,
-            );
+        ref.notify(t.layerDrawer.layer.newLayerFailed);
         return;
       }
 
@@ -461,32 +400,20 @@ class LayerTile extends ConsumerWidget {
         },
       );
       if (mergedFeature != null) {
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.mergeSuccess(name: newLayerName),
-              level: NotificationLevel.info,
-            );
+        ref.refreshMap();
+        ref.notify(t.layerDrawer.layer.mergeSuccess(name: newLayerName));
       } else {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.saveMergedFailed,
-              level: NotificationLevel.info,
-            );
+        ref.notify(t.layerDrawer.layer.saveMergedFailed);
       }
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.mergeError(error: '$e'),
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.mergeError(error: '$e'));
     }
   }
 
   Future<void> _absorbMatchingLayers(BuildContext context, WidgetRef ref) async {
     final parentGpkg = node.parent;
     if (parentGpkg is! GeoPackageNode) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.notInGeoPackage,
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.notInGeoPackage);
       return;
     }
 
@@ -494,10 +421,7 @@ class LayerTile extends ConsumerWidget {
       final targetColumns = await parentGpkg.geoPackageFile.getTableColumns(node.name);
       if (!context.mounted) return;
       if (targetColumns.isEmpty) {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.columnInfoFailed,
-              level: NotificationLevel.info,
-            );
+        ref.notify(t.layerDrawer.layer.columnInfoFailed);
         return;
       }
 
@@ -506,10 +430,7 @@ class LayerTile extends ConsumerWidget {
           .where((l) => l != node && l.runtimeType == node.runtimeType)
           .toList();
       if (siblings.isEmpty) {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.noSameTypeLayers,
-              level: NotificationLevel.info,
-            );
+        ref.notify(t.layerDrawer.layer.noSameTypeLayers);
         return;
       }
 
@@ -527,18 +448,14 @@ class LayerTile extends ConsumerWidget {
       }
       if (!context.mounted) return;
       if (matching.isEmpty) {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.layer.noMatchingColumns,
-              level: NotificationLevel.info,
-            );
+        ref.notify(t.layerDrawer.layer.noMatchingColumns);
         return;
       }
 
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(t.layerDrawer.layer.absorbTitle),
-          content: Column(
+      final confirm = await showConfirmDialog(
+        context,
+        title: t.layerDrawer.layer.absorbTitle,
+        content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -548,13 +465,9 @@ class LayerTile extends ConsumerWidget {
               Text(t.layerDrawer.layer.absorbWarning, style: const TextStyle(color: Colors.red)),
             ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.common.cancel)),
-            TextButton(onPressed: () => Navigator.pop(context, true), child: Text(t.common.confirm)),
-          ],
-        ),
+        confirmLabel: t.common.confirm,
       );
-      if (confirm != true) return;
+      if (!confirm) return;
 
       int count = 0;
       for (final src in matching) {
@@ -566,17 +479,11 @@ class LayerTile extends ConsumerWidget {
       }
 
       await node.updateChildren();
-      ref.read(featureRefreshTriggerProvider.notifier).trigger();
+      ref.refreshMap();
 
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.absorbedFeatures(count: '$count'),
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.absorbedFeatures(count: '$count'));
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.layer.absorbError(error: '$e'),
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.layer.absorbError(error: '$e'));
     }
   }
 }
@@ -598,7 +505,7 @@ Future<void> showAddLayerDialog(BuildContext context, WidgetRef ref, GeoPackageN
       null => null,
     };
     if (created != null) {
-      ref.read(featureRefreshTriggerProvider.notifier).trigger();
+      ref.refreshMap();
     }
   } catch (_) {}
 }

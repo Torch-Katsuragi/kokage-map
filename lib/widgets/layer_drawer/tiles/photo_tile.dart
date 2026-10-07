@@ -81,15 +81,7 @@ class PhotoTile extends ConsumerWidget {
           : node.hasLocation
               ? null
               : Text(t.layerDrawer.photo.noLocation, style: const TextStyle(fontSize: 13, color: Colors.grey)),
-      eye: VisibilityEye(
-        visible: node.visible,
-        effective: node.parent?.isVisibleRecursive() ?? true,
-        onToggle: () {
-          node.visible = !node.visible;
-          node.persistVisibility();
-          ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        },
-      ),
+      eye: nodeVisibilityEye(ref, node),
       onTap: () {
         ref.read(selectedFeaturesProvider.notifier).set([node]);
         ref.read(tutorialProvider.notifier).report(const PhotoSelected());
@@ -131,7 +123,7 @@ class PhotoTile extends ConsumerWidget {
       execute: () async {
         ref.read(selectedFeaturesProvider.notifier).remove(node);
         await node.dispose();
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.refreshMap();
       },
     );
   }
@@ -221,7 +213,7 @@ class PhotoTile extends ConsumerWidget {
         await node.parent!.updateChildren();
       }
       if (context.mounted) {
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.refreshMap();
       }
     }
   }
@@ -256,7 +248,7 @@ class PhotoTile extends ConsumerWidget {
         await node.parent!.updateChildren();
       }
       if (context.mounted) {
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.refreshMap();
       }
     }
   }

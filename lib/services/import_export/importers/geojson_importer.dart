@@ -178,7 +178,9 @@ class GeoJSONImporter extends BaseImporter {
             case turf.Point():
               featureData['point'] = TurfConverter.pointToLatlng(geometry);
             case turf.MultiPoint(:final coordinates):
-              if (coordinates.isNotEmpty) featureData['point'] = _latLngs([coordinates.first]).first;
+              // 空なら読み飛ばす（点の無いデータをバッチに混ぜると、そのまとまりごと書き込みが落ちていた）
+              if (coordinates.isEmpty) return null;
+              featureData['point'] = _latLngs([coordinates.first]).first;
             default:
               return null;
           }

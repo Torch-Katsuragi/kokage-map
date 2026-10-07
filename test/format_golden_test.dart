@@ -545,6 +545,29 @@ void main() {
       _expectGoldenText('import/errors.json', _prettyJson(errors));
       await target.geoPackageFile.dispose();
     });
+
+    test('GeoJSON: 空の MultiPoint は読み飛ばし、同じまとまりのほかの点は落とさない', () async {
+      final target = await targetGpkg();
+      final src = await Directory(p.join(tmp.path, 'src')).create();
+      final path = p.join(src.path, 'pts.geojson');
+      File(path).writeAsStringSync(jsonEncode({
+        'type': 'FeatureCollection',
+        'features': [
+          for (final (name, geometry) in [
+            ('a', {'type': 'Point', 'coordinates': [135.0, 33.0]}),
+            ('empty', {'type': 'MultiPoint', 'coordinates': <Object>[]}),
+            ('b', {'type': 'Point', 'coordinates': [135.1, 33.1]}),
+          ])
+            {'type': 'Feature', 'properties': {'name': name}, 'geometry': geometry},
+        ],
+      }));
+      final r = await ImportExportService().importFile(path, target);
+      expect(r.success, isTrue);
+      final layer = (await target.geoPackageFile.getLayerNames()).firstWhere((n) => n.startsWith('pts'));
+      final rows = await target.geoPackageFile.getFeaturesWithGeometry(layer);
+      expect(rows.map((r) => r['name']), ['a', 'b']);
+      await target.geoPackageFile.dispose();
+    });
   });
 
   group('.qgs', () {

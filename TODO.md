@@ -85,7 +85,6 @@
   - [ ] 取り込みの入口がドロワーへのドラッグ＆ドロップだけ（Android には無く、web は dart:io で読めない）
   - [ ] 書き出しダイアログの「ポイントクラウドに変換」はどの形式も読んでいない
   - [ ] GeoJSON・KML・CSV の書き出しは id・name・description しか出さない
-  - [ ] GeoJSON の取り込みで空の MultiPoint が 1 件あると、その 1000 件のまとまりが落ちる
   - [ ] DBF の削除済みの行で属性がずれる
 - そのほか
   - [ ] メタデータ列（`metadataColumn` = kmaps_metadata）はアプリが作らないので、線・面の GPS 測量の記録（drawing_points）は捨てられている

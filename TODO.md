@@ -59,8 +59,12 @@
 
 - [ ] 「この端末」（sys）の実機確認の残り: global 配下の Drive 連携 dir（表示は Pixel / Fold、可視性の保存は 2026-10-06 に Fold で確認済み）
 - [ ] `sys/view`（端末の写真など読み取り専用の仮想レイヤ）。写真の権限（Play の申告）と大量写真の性能の設計が先
-- [ ] リファクタリングの候補: `cascade_invocations`（好みの問題で保留）、`shapefile_exporter.dart`（914 行）、
-      `settings_screen.dart`、`SmartCoordinateSystemManager` の WKT 推定を `WktParser` へ
+- [ ] リファクタリングの候補: `cascade_invocations`（好みの問題で保留）、
+      `settings_screen.dart`、`SmartCoordinateSystemManager` の WKT 推定を `WktParser` へ、
+      設定画面の「地形の試作」（`terrain_spike_screen.dart` 1157 行）を残すか
+- [ ] Shapefile 書き出しの面のリング向き（外周は時計回りが仕様）を揃えていない。QGIS は読めるので実害は未確認
+- [ ] バッチ挿入（`_addGeometryBatch`）は rtree・レイヤ範囲を更新しない（1 件ずつの追加は更新する）
+- [ ] 地物ノードは属性 `rmaps_metadata`、リポジトリは `kmaps_metadata` を見ていて名前が食い違っている
 - [ ] 既存 MapTool（PenTool / SelectTool / GpsTool）の ChangeNotifier 化の統一
 - [ ] Flutter の警告「KGP を当てるプラグイン（desktop_drop / firebase_* / location）は将来ビルドできなくなる」→ プラグイン側の更新を待つ。
       `android.builtInKotlin=true` にできたら root の橋渡しは外す

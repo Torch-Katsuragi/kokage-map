@@ -771,15 +771,18 @@ class GoogleDriveService {
       });
 
   /// フォルダ直下のファイルとフォルダの一覧（共有フォルダにも届くよう共有ドライブも含める）
-  Future<List<drive.File>> listFiles(String parentId) => _call(
-        'ファイル一覧取得エラー',
-        <drive.File>[],
-        (api) => listAllPages(
-          api,
-          "'$parentId' in parents and trashed = false",
-          fields: 'files(id, name, mimeType, modifiedTime, size, parents)',
-        ),
-      );
+  ///
+  /// ⚠ 取れなければ投げる（空の一覧を返さない）。以前は失敗を空として返しており、
+  /// 同期が取れなかったフォルダの中身を「Drive から消えた」と見て手元を消すおそれがあった
+  Future<List<drive.File>> listFiles(String parentId) async {
+    final api = _driveApi;
+    if (api == null) throw StateError('Drive にサインインしていない');
+    return listAllPages(
+      api,
+      "'$parentId' in parents and trashed = false",
+      fields: 'files(id, name, mimeType, modifiedTime, size, parents)',
+    );
+  }
 
   /// ファイル名でファイルを検索
   Future<drive.File?> _findFileByName(String name, String parentId) => _call(

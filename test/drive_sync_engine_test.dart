@@ -359,6 +359,36 @@ void main() {
     });
   });
 
+  // Drive の一覧が途中で取れなかったとき（電波が切れた等）に、取れなかった分を「Drive から消えた」と
+  // 見て手元を消さない（2026-10-07）。以前は一覧の失敗を空の一覧として扱っていた
+  group('Drive の一覧が取れないとき', () {
+    test('同期状態は error、pull は失敗して手元を消さない、マージの一覧は空', () async {
+      await shared();
+      final sub = drive.findByName(rootId, 'sub')!;
+      drive.failListFor.add(sub.id);
+
+      expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.error);
+      expect(await engine.getMergeEntries(a), isEmpty);
+      final r = await engine.pull(rootId, a);
+      expect(r.success, isFalse);
+      expect(local('sub/moved.jpg').existsSync(), isTrue);
+
+      final m = await engine.executeMerge(a, const []);
+      expect(m.success, isFalse);
+      expect(Directory(p.join(a, 'sub')).existsSync(), isTrue);
+    });
+
+    test('push も失敗し、Drive のものを消さない', () async {
+      await shared();
+      put('mod.jpg', 20);
+      await tick();
+      drive.failListFor.add(drive.findByName(rootId, 'sub')!.id);
+      final r = await engine.push(a, driveFolder: rootId);
+      expect(r.success, isFalse);
+      expect(drivePhotos(), ['del.jpg', 'keep.jpg', 'mod.jpg', 'sub/moved.jpg']);
+    });
+  });
+
   group('push / pull', () {
     test('push は手元に無いものを Drive から消し、改名を Drive にも写す', () async {
       await shared();

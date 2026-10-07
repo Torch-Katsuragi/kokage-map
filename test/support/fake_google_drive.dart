@@ -121,9 +121,13 @@ class FakeGoogleDrive implements GoogleDriveService {
     return f == null || f.trashed ? null : f.toFile();
   }
 
+  /// テスト用: このフォルダの一覧を取ろうとすると失敗する（電波が切れた等）
+  final Set<String> failListFor = {};
+
   @override
   Future<List<drive.File>> listFiles(String parentId) async {
     _count('listFiles');
+    if (failListFor.contains(parentId)) throw Exception('一覧を取れない: $parentId');
     return childrenOf(parentId).map((i) => i.toFile()).toList();
   }
 

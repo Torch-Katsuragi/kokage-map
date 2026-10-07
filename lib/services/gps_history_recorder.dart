@@ -278,12 +278,8 @@ class GpsHistoryRecorder extends ChangeNotifier {
     }
 
     // 空間的重複フィルタ（直前と完全一致なら記録しない）
-    if (_lastRecordedPosition != null) {
-      if (_lastRecordedPosition!.latitude == record.latitude &&
-          _lastRecordedPosition!.longitude == record.longitude) {
-        return;
-      }
-    }
+    final position = LatLng(record.latitude, record.longitude);
+    if (position == _lastRecordedPosition) return;
 
     try {
       await _checkAndRotateDay();
@@ -300,7 +296,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
       // Raw BufferにPoint INSERT（O(1)、高速）
       final rawId = await _rawBufferFile!.addPointWithAttributes(
         rawLayerName,
-        LatLng(record.latitude, record.longitude),
+        position,
         {
           'timestamp': record.timestamp.toIso8601String(),
           'altitude': record.altitude,
@@ -312,7 +308,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
       );
 
       _lastRecordedTime = record.timestamp;
-      _lastRecordedPosition = LatLng(record.latitude, record.longitude);
+      _lastRecordedPosition = position;
 
       // Raw Buffer rowId を追跡（Consolidation後の削除用）
       if (rawId != null) _pendingRawIds.add(rawId);
@@ -610,32 +606,38 @@ class GpsHistoryRecorder extends ChangeNotifier {
         return [];
       }
 
-      final geom = detail['geometry'];
-      final result = <LatLng>[];
-      if (geom is List<LatLng>) {
-        result.addAll(geom);
-      } else if (geom is List) {
-        for (final item in geom) {
-          if (item is LatLng) {
-            result.add(item);
-          } else if (item is List<LatLng>) {
-            // MultiLineString: List<List<LatLng>> → フラット化
-            result.addAll(item);
-          } else if (item is List) {
-            // ネストされたListの場合も再帰的にLatLngを拾う
-            for (final pt in item) {
-              if (pt is LatLng) result.add(pt);
-            }
-          }
-        }
-      }
-      return result;
+      return _lineCoords(detail['geometry']);
     } catch (e) {
       AppLogger.debug('$_logTag: Line読み出しエラー: $e');
       _todayTrackFeatureId = null;
       return [];
     }
   }
+
+  /// Line（MultiLineString のこともある）のジオメトリを 1 本の座標列に
+  static List<LatLng> _lineCoords(Object? geom) => switch (geom) {
+    List<LatLng>() => [...geom],
+    List() => [
+      for (final item in geom)
+        if (item is LatLng)
+          item
+        else if (item is List)
+          ...item.whereType<LatLng>(),
+    ],
+    _ => const [],
+  };
+
+  /// raw バッファ・details テーブルの 1 行を点に（時刻が読めなければ今）
+  static GpsTrackPoint _trackPointFromRow(Map<String, dynamic> row, LatLng position) => GpsTrackPoint(
+    latitude: position.latitude,
+    longitude: position.longitude,
+    altitude: (row['altitude'] as num?)?.toDouble(),
+    accuracy: (row['accuracy'] as num?)?.toDouble(),
+    speed: (row['speed'] as num?)?.toDouble(),
+    bearing: (row['bearing'] as num?)?.toDouble(),
+    timestamp: DateTime.tryParse(row['timestamp']?.toString() ?? '') ?? DateTime.now(),
+    sourceType: row['source_type']?.toString() ?? 'GPS',
+  );
 
   // ==============================
   // 起動時復元
@@ -672,21 +674,8 @@ class GpsHistoryRecorder extends ChangeNotifier {
           _tracksLayerName,
           featureId,
         );
-        if (detail != null && detail['geometry'] != null) {
-          final geom = detail['geometry'];
-          if (geom is List<LatLng> && geom.isNotEmpty) {
-            _lastRecordedPosition = geom.last;
-          } else if (geom is List && geom.isNotEmpty) {
-            // MultiLineString: List<List<LatLng>> → 最後のラインの末尾
-            final lastItem = geom.last;
-            if (lastItem is LatLng) {
-              _lastRecordedPosition = lastItem;
-            } else if (lastItem is List<LatLng> && lastItem.isNotEmpty) {
-              _lastRecordedPosition = lastItem.last;
-            } else if (lastItem is List && lastItem.isNotEmpty && lastItem.last is LatLng) {
-              _lastRecordedPosition = lastItem.last as LatLng;
-            }
-          }
+        if (detail != null) {
+          _lastRecordedPosition = _lineCoords(detail['geometry']).lastOrNull ?? _lastRecordedPosition;
         }
       }
 
@@ -754,19 +743,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
         }
         if (latLng == null) continue;
 
-        _pendingDetails.add(GpsTrackPoint(
-          latitude: latLng.latitude,
-          longitude: latLng.longitude,
-          altitude: (detail['altitude'] as num?)?.toDouble(),
-          accuracy: (detail['accuracy'] as num?)?.toDouble(),
-          speed: (detail['speed'] as num?)?.toDouble(),
-          bearing: (detail['bearing'] as num?)?.toDouble(),
-          timestamp: detail['timestamp'] != null
-              ? DateTime.tryParse(detail['timestamp'].toString()) ??
-                  DateTime.now()
-              : DateTime.now(),
-          sourceType: detail['source_type']?.toString() ?? 'GPS',
-        ));
+        _pendingDetails.add(_trackPointFromRow(detail, latLng));
         // Raw Buffer rowId も追跡
         _pendingRawIds.add(featureId);
         recovered++;
@@ -863,19 +840,13 @@ class GpsHistoryRecorder extends ChangeNotifier {
         whereArgs: [dateKey],
         orderBy: 'point_index ASC',
       );
-      return rows.map((row) => GpsTrackPoint(
-        latitude: (row['latitude'] as num).toDouble(),
-        longitude: (row['longitude'] as num).toDouble(),
-        altitude: (row['altitude'] as num?)?.toDouble(),
-        accuracy: (row['accuracy'] as num?)?.toDouble(),
-        speed: (row['speed'] as num?)?.toDouble(),
-        bearing: (row['bearing'] as num?)?.toDouble(),
-        timestamp: row['timestamp'] != null
-            ? DateTime.tryParse(row['timestamp'].toString()) ??
-                DateTime.now()
-            : DateTime.now(),
-        sourceType: row['source_type']?.toString() ?? 'GPS',
-      )).toList();
+      return [
+        for (final row in rows)
+          _trackPointFromRow(
+            row,
+            LatLng((row['latitude'] as num).toDouble(), (row['longitude'] as num).toDouble()),
+          ),
+      ];
     } catch (e) {
       AppLogger.debug('$_logTag: detailsテーブルクエリエラー: $e');
       return [];

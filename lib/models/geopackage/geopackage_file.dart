@@ -16,7 +16,6 @@
 // Root Maps: GeoPackageファイル管理クラス（ファサード）
 // 既存APIを維持しつつ、内部で各サービスクラスに委譲
 import 'package:latlong2/latlong.dart';
-import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../../core/fs/k_file_system.dart';
@@ -53,45 +52,24 @@ class GeoPackageFile {
   final String? projectRootDir;
 
   // ============================================================
-  // 内部サービス（遅延初期化）
+  // 内部サービス
   // ============================================================
 
-  late final GeoPackageConnection _connection;
-  late final GeoPackageSchema _schema;
-  late final SpatialIndexManager _spatial;
-  late final FeatureRepository _features;
-  late final LayerRepository _layers;
-
-  bool _servicesInitialized = false;
+  late final GeoPackageConnection _connection = GeoPackageConnection(
+    pathList,
+    absolutePath: absolutePath,
+    projectRootDir: projectRootDir,
+  );
+  late final GeoPackageSchema _schema = GeoPackageSchema(_connection);
+  late final SpatialIndexManager _spatial = SpatialIndexManager(_connection);
+  late final FeatureRepository _features = FeatureRepository(_connection, _schema, _spatial);
+  late final LayerRepository _layers = LayerRepository(_connection, _schema, _spatial);
 
   /// コンストラクタ
-  GeoPackageFile(this.pathList, {this.absolutePath, this.projectRootDir}) {
-    _initializeServices();
-  }
-
-  /// 内部サービスの初期化
-  void _initializeServices() {
-    if (_servicesInitialized) return;
-
-    _connection = GeoPackageConnection(
-      pathList,
-      absolutePath: absolutePath,
-      projectRootDir: projectRootDir,
-    );
-    _schema = GeoPackageSchema(_connection);
-    _spatial = SpatialIndexManager(_connection);
-    _features = FeatureRepository(_connection, _schema, _spatial);
-    _layers = LayerRepository(_connection, _schema, _spatial);
-
-    _servicesInitialized = true;
-  }
+  GeoPackageFile(this.pathList, {this.absolutePath, this.projectRootDir});
 
   /// 絶対パスを取得（グローバルフォルダ対応）
-  String? getAbsolutePath() {
-    if (absolutePath != null) return absolutePath;
-    if (projectRootDir == null) return null;
-    return p.joinAll([projectRootDir!, ...pathList]);
-  }
+  String? getAbsolutePath() => _connection.absPath;
 
   // ============================================================
   // DB接続管理（GeoPackageConnectionに委譲）
@@ -115,10 +93,6 @@ class GeoPackageFile {
     }
     return result;
   }
-
-  /// 1 行の 1 列にそのまま値を書く（同期の衝突を相手の値に戻すとき）
-  Future<bool> setColumnValue(String tableName, String pkColumn, Object pk, String column, Object? value) =>
-      _features.setColumnValue(tableName, pkColumn, pk, column, value);
 
   /// データベースのクローズ処理
   Future<void> dispose() async {
@@ -295,30 +269,38 @@ class GeoPackageFile {
       _layers.renameLayer(oldName, newName);
 
   // ============================================================
-  // Point Feature操作（FeatureRepositoryに委譲）
+  // フィーチャの追加・更新（形を作って FeatureRepository へ）
   // ============================================================
 
   /// 辞書ベースの点フィーチャ追加
-  Future<int?> addPointWithAttributes(
-    String tableName,
-    LatLng point,
-    Map<String, dynamic> attributes,
-  ) => _features.addPointWithAttributes(tableName, point, attributes);
+  Future<int?> addPointWithAttributes(String tableName, LatLng point, Map<String, dynamic> attributes) =>
+      _features.addGeometry(tableName, toGeoPoint(point), attributes);
 
-  /// 点フィーチャを追加
+  /// 辞書ベースの線フィーチャ追加
+  Future<int?> addLineWithAttributes(String tableName, List<LatLng> line, Map<String, dynamic> attributes) =>
+      _features.addGeometry(tableName, toGeoMultiLine(line), attributes);
+
+  /// 辞書ベースの面フィーチャ追加
+  Future<int?> addPolygonWithAttributes(String tableName, List<List<LatLng>> polygon, Map<String, dynamic> attributes) =>
+      _features.addGeometry(tableName, toGeoMultiPolygon(polygon), attributes);
+
+  /// 点フィーチャを追加（name・description・メタデータはレイヤに列があるものだけ書く）
   Future<int?> addPoint(
     String tableName,
     LatLng pt, {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) => _features.addPoint(
-    tableName,
-    pt,
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
+  }) => _features.addGeometryWithBasics(tableName, toGeoPoint(pt), name: name, description: description, metadata: metadata);
+
+  /// 線フィーチャを追加（name・description・メタデータはレイヤに列があるものだけ書く）
+  Future<int?> addLine(
+    String tableName,
+    List<LatLng> line, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) => _features.addGeometryWithBasics(tableName, toGeoMultiLine(line), name: name, description: description, metadata: metadata);
 
   /// 点フィーチャを更新
   Future<bool> updatePoint(
@@ -328,40 +310,7 @@ class GeoPackageFile {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) => _features.updatePoint(
-    tableName,
-    id,
-    pt,
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  // ============================================================
-  // Line Feature操作（FeatureRepositoryに委譲）
-  // ============================================================
-
-  /// 辞書ベースの線フィーチャ追加
-  Future<int?> addLineWithAttributes(
-    String tableName,
-    List<LatLng> line,
-    Map<String, dynamic> attributes,
-  ) => _features.addLineWithAttributes(tableName, line, attributes);
-
-  /// 線フィーチャを追加
-  Future<int?> addLine(
-    String tableName,
-    List<LatLng> line, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _features.addLine(
-    tableName,
-    line,
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
+  }) => _features.updateGeometry(tableName, id, toGeoPoint(pt), name: name, description: description, metadata: metadata);
 
   /// 線フィーチャを更新
   Future<bool> updateLine(
@@ -371,40 +320,7 @@ class GeoPackageFile {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) => _features.updateLine(
-    tableName,
-    id,
-    line,
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  // ============================================================
-  // Polygon Feature操作（FeatureRepositoryに委譲）
-  // ============================================================
-
-  /// 辞書ベースの面フィーチャ追加
-  Future<int?> addPolygonWithAttributes(
-    String tableName,
-    List<List<LatLng>> polygon,
-    Map<String, dynamic> attributes,
-  ) => _features.addPolygonWithAttributes(tableName, polygon, attributes);
-
-  /// ポリゴンフィーチャを追加
-  Future<int?> addPolygon(
-    String tableName,
-    List<List<LatLng>> rings, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _features.addPolygon(
-    tableName,
-    rings,
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
+  }) => _features.updateGeometry(tableName, id, toGeoMultiLine(line), name: name, description: description, metadata: metadata);
 
   /// ポリゴンフィーチャを更新
   Future<bool> updatePolygon(
@@ -414,138 +330,86 @@ class GeoPackageFile {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) => _features.updatePolygon(
-    tableName,
-    id,
-    rings,
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
+  }) => _features.updateGeometry(tableName, id, toGeoMultiPolygon(rings), name: name, description: description, metadata: metadata);
 
-  // ============================================================
-  // 共通Feature操作（FeatureRepositoryに委譲）
-  // ============================================================
+  /// バッチ処理でポイントを高速追加（形は各要素の 'point'）
+  Future<List<int>> addPointsBatch(String tableName, List<Map<String, dynamic>> pointData) =>
+      _features.addGeometryBatch<LatLng>(tableName, pointData, 'point', toGeoPoint);
+
+  /// バッチ処理でラインを高速追加（形は各要素の 'line'）
+  Future<List<int>> addLinesBatch(String tableName, List<Map<String, dynamic>> lineData) =>
+      _features.addGeometryBatch<List<LatLng>>(tableName, lineData, 'line', toGeoMultiLine);
+
+  /// バッチ処理でポリゴンを高速追加（形は各要素の 'rings'）
+  Future<List<int>> addPolygonsBatch(String tableName, List<Map<String, dynamic>> polygonData) =>
+      _features.addGeometryBatch<List<List<LatLng>>>(tableName, polygonData, 'rings', toGeoMultiPolygon);
+
+  /// 1 行の 1 列にそのまま値を書く（同期の衝突を相手の値に戻すとき）
+  Future<bool> setColumnValue(String tableName, String pkColumn, Object pk, String column, Object? value) =>
+      _features.setColumnValue(tableName, pkColumn, pk, column, value);
 
   /// 指定IDのフィーチャを削除
-  Future<bool> removeFeature(String tableName, int id) =>
-      _features.removeFeature(tableName, id);
+  Future<bool> removeFeature(String tableName, int id) => _features.removeFeature(tableName, id);
 
-  /// 単一フィーチャを取得
-  Future<Map<String, dynamic>?> getFeature(String tableName, int rowId) async {
-    final geomType = await _layers.getGeometryType(tableName);
-    return _features.getFeature(tableName, rowId, geomType);
-  }
+  // ============================================================
+  // フィーチャの読み出し（FeatureRepositoryに委譲）
+  // ============================================================
 
-  /// 指定レイヤの全フィーチャを取得
-  Future<List<Map<String, dynamic>>> getFeatures(String tableName) =>
-      _features.getFeatures(tableName);
+  /// 単一フィーチャを取得（形は WGS84 に直して 'geometry' に入れる）
+  Future<Map<String, dynamic>?> getFeature(String tableName, int rowId) async =>
+      _features.getFeature(tableName, rowId, await _layers.getGeometryType(tableName));
+
+  /// 指定レイヤの全フィーチャを取得（形は解析しない）
+  Future<List<Map<String, dynamic>>> getFeatures(String tableName) => _features.getFeatures(tableName);
 
   /// 全フィーチャをジオメトリパース済みで一括取得（高速版）
   /// [where] は SQL の WHERE 句（View のフィルタ）。null なら絞り込み無し。
-  Future<List<Map<String, dynamic>>> getFeaturesWithGeometry(
-    String tableName, {
-    String? where,
-  }) async {
-    final geomType = await _layers.getGeometryType(tableName);
-    return _features.getFeaturesWithGeometry(tableName, geomType, where: where);
-  }
+  Future<List<Map<String, dynamic>>> getFeaturesWithGeometry(String tableName, {String? where}) async =>
+      _features.getFeaturesWithGeometry(tableName, await _layers.getGeometryType(tableName), where: where);
 
   /// [where] に当てはまるフィーチャの主キーだけを返す（View の所属判定用）
   Future<Set<int>> getFeatureIds(String tableName, {String? where}) =>
       _features.getFeatureIds(tableName, where: where);
 
   /// 指定レイヤーの全フィーチャの属性データを一括取得
-  Future<List<Map<String, dynamic>>> getAllFeatureAttributes(
-    String tableName, {
-    List<String>? columns,
-  }) => _features.getAllFeatureAttributes(tableName, columns: columns);
-
-  // ============================================================
-  // 属性操作（FeatureRepositoryに委譲）
-  // ============================================================
-
-  /// 指定テーブル・rowId・カラム名から値を取得
-  Future<dynamic> getFeatureAttribute(
-    String tableName,
-    int rowId,
-    String attributeName,
-  ) => _features.getFeatureAttribute(tableName, rowId, attributeName);
-
-  /// 指定テーブル・rowIdの全属性値を取得
-  Future<Map<String, dynamic>?> getFeatureAttributes(
-    String tableName,
-    int rowId,
-  ) => _features.getFeatureAttributes(tableName, rowId);
-
-  /// 指定テーブル・rowId・カラム名の属性値を更新
-  Future<bool> updateFeatureAttribute(
-    String tableName,
-    int rowId,
-    String attributeName,
-    dynamic newValue,
-  ) => _features.updateFeatureAttribute(
-    tableName,
-    rowId,
-    attributeName,
-    newValue,
-  );
-
-  /// 複数の属性値を一括更新
-  Future<bool> updateFeatureAttributes(
-    String tableName,
-    int rowId,
-    Map<String, dynamic> attributes,
-  ) => _features.updateFeatureAttributes(tableName, rowId, attributes);
-
-  // ============================================================
-  // バッチ操作（FeatureRepositoryに委譲）
-  // ============================================================
-
-  /// バッチ処理でポイントを高速追加
-  Future<List<int>> addPointsBatch(
-    String tableName,
-    List<Map<String, dynamic>> pointData,
-  ) => _features.addPointsBatch(tableName, pointData);
-
-  /// バッチ処理でラインを高速追加
-  Future<List<int>> addLinesBatch(
-    String tableName,
-    List<Map<String, dynamic>> lineData,
-  ) => _features.addLinesBatch(tableName, lineData);
-
-  /// バッチ処理でポリゴンを高速追加
-  Future<List<int>> addPolygonsBatch(
-    String tableName,
-    List<Map<String, dynamic>> polygonData,
-  ) => _features.addPolygonsBatch(tableName, polygonData);
+  Future<List<Map<String, dynamic>>> getAllFeatureAttributes(String tableName, {List<String>? columns}) =>
+      _features.getAllFeatureAttributes(tableName, columns: columns);
 
   /// WHERE句でフィルタしたフィーチャのrowIdリストを取得
-  Future<List<int>> getFilteredFeatureIds(
-    String tableName,
-    String whereClause,
-  ) => _features.getFilteredFeatureIds(tableName, whereClause);
+  Future<List<int>> getFilteredFeatureIds(String tableName, String whereClause) =>
+      _features.getFilteredFeatureIds(tableName, whereClause);
 
   /// WHERE句にマッチするフィーチャ数を取得
   Future<int> countFilteredFeatures(String tableName, String whereClause) =>
       _features.countFilteredFeatures(tableName, whereClause);
 
+  // ============================================================
+  // 属性（FeatureRepositoryに委譲）
+  // ============================================================
+
+  /// 指定テーブル・rowId・カラム名から値を取得
+  Future<dynamic> getFeatureAttribute(String tableName, int rowId, String attributeName) =>
+      _features.getFeatureAttribute(tableName, rowId, attributeName);
+
+  /// 指定テーブル・rowIdの全属性値を取得
+  Future<Map<String, dynamic>?> getFeatureAttributes(String tableName, int rowId) =>
+      _features.getFeatureAttributes(tableName, rowId);
+
+  /// 指定テーブル・rowId・カラム名の属性値を更新
+  Future<bool> updateFeatureAttribute(String tableName, int rowId, String attributeName, dynamic newValue) =>
+      _features.updateFeatureAttribute(tableName, rowId, attributeName, newValue);
+
+  /// 複数の属性値を一括更新（無い列・書けない型は飛ばす）
+  Future<bool> updateFeatureAttributes(String tableName, int rowId, Map<String, dynamic> attributes) =>
+      _features.updateFeatureAttributes(tableName, rowId, attributes);
+
   /// WHERE句でフィルタしたフィーチャを別レイヤに複製
-  Future<int> duplicateFilteredFeatures(
-    String sourceTable,
-    String targetTable,
-    String whereClause,
-  ) => _features.duplicateFilteredFeatures(
-    sourceTable,
-    targetTable,
-    whereClause,
-  );
+  Future<int> duplicateFilteredFeatures(String sourceTable, String targetTable, String whereClause) =>
+      _features.duplicateFilteredFeatures(sourceTable, targetTable, whereClause);
 
   /// レイヤー間でフィーチャをコピー
-  Future<int> copyFeaturesBetweenLayers(
-    String sourceTable,
-    String targetTable,
-  ) => _features.copyFeaturesBetweenLayers(sourceTable, targetTable);
+  Future<int> copyFeaturesBetweenLayers(String sourceTable, String targetTable) =>
+      _features.copyFeaturesBetweenLayers(sourceTable, targetTable);
 
   // ============================================================
   // フィールド計算機

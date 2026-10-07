@@ -34,6 +34,22 @@ import 'sql_identifier.dart';
 /// 地物ごとのメタデータ（JSON）を入れる列。アプリは列を作らない（古いファイルにだけある）
 const metadataColumn = 'kmaps_metadata';
 
+/// 点（WGS84）を geobase の形に
+geo.Point toGeoPoint(LatLng pt) =>
+    geo.Point(geo.Geographic(lon: pt.longitude, lat: pt.latitude));
+
+/// 線（WGS84）を geobase の MultiLineString に（GeoPackage には Multi で書く）
+geo.MultiLineString toGeoMultiLine(List<LatLng> line) => geo.MultiLineString.from([
+      line.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
+    ]);
+
+/// 面（外環＋穴、WGS84）を geobase の MultiPolygon に
+geo.MultiPolygon toGeoMultiPolygon(List<List<LatLng>> rings) => geo.MultiPolygon.from([
+      rings.map(
+        (ring) => ring.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
+      ),
+    ]);
+
 /// compute()用パラメータ
 class _GeometryParseParams {
   final List<Map<String, dynamic>> rows;
@@ -209,26 +225,6 @@ class FeatureRepository {
   }
 
   // ============================================================
-  // geobase Geometry 構築ヘルパー
-  // ============================================================
-
-  geo.Point _buildGeoPoint(LatLng pt) =>
-      geo.Point(geo.Geographic(lon: pt.longitude, lat: pt.latitude));
-
-  geo.MultiLineString _buildGeoMultiLineString(List<LatLng> line) =>
-      geo.MultiLineString.from([
-        line.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
-      ]);
-
-  geo.MultiPolygon _buildGeoMultiPolygon(List<List<LatLng>> rings) => geo
-      .MultiPolygon.from([
-    rings.map(
-      (ring) =>
-          ring.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
-    ),
-  ]);
-
-  // ============================================================
   // フィーチャ追加・更新
   // ============================================================
 
@@ -249,7 +245,8 @@ class FeatureRepository {
     return wkb;
   }
 
-  Future<int?> _addWithAttributes(
+  /// 形（WGS84）と属性で 1 行足し、rowid を返す。失敗は null
+  Future<int?> addGeometry(
     String tableName,
     geo.Geometry geom,
     Map<String, dynamic> attributes,
@@ -267,34 +264,9 @@ class FeatureRepository {
     }
   }
 
-  Future<int?> addPointWithAttributes(
-    String tableName,
-    LatLng point,
-    Map<String, dynamic> attributes,
-  ) => _addWithAttributes(tableName, _buildGeoPoint(point), attributes);
-
-  Future<int?> addLineWithAttributes(
-    String tableName,
-    List<LatLng> line,
-    Map<String, dynamic> attributes,
-  ) => _addWithAttributes(
-    tableName,
-    _buildGeoMultiLineString(line),
-    attributes,
-  );
-
-  Future<int?> addPolygonWithAttributes(
-    String tableName,
-    List<List<LatLng>> polygon,
-    Map<String, dynamic> attributes,
-  ) => _addWithAttributes(
-    tableName,
-    _buildGeoMultiPolygon(polygon),
-    attributes,
-  );
-
+  /// 形と name・description・メタデータで 1 行足す。
   /// name・description・メタデータ（[metadataColumn]）はレイヤに列があるものだけ書く
-  Future<int?> _addSimple(
+  Future<int?> addGeometryWithBasics(
     String tableName,
     geo.Geometry geom, {
     required String name,
@@ -308,56 +280,15 @@ class FeatureRepository {
         description: description,
         metadata: metadata,
       );
-      return await _addWithAttributes(tableName, geom, attributes);
+      return await addGeometry(tableName, geom, attributes);
     } catch (e) {
       AppLogger.debug('[ERROR] FeatureRepository: add ${geom.geomType} failed: $e');
       return null;
     }
   }
 
-  Future<int?> addPoint(
-    String tableName,
-    LatLng pt, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _addSimple(
-    tableName,
-    _buildGeoPoint(pt),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  Future<int?> addLine(
-    String tableName,
-    List<LatLng> line, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _addSimple(
-    tableName,
-    _buildGeoMultiLineString(line),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  Future<int?> addPolygon(
-    String tableName,
-    List<List<LatLng>> rings, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _addSimple(
-    tableName,
-    _buildGeoMultiPolygon(rings),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  Future<bool> _update(
+  /// 行 [id] の形と name・description・メタデータを書き換える（列があるものだけ）
+  Future<bool> updateGeometry(
     String tableName,
     int id,
     geo.Geometry geom, {
@@ -378,54 +309,6 @@ class FeatureRepository {
     if (ok) await spatialIndex.indexRows(tableName, {id: wkb});
     return ok;
   }
-
-  Future<bool> updatePoint(
-    String tableName,
-    int id,
-    LatLng pt, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _update(
-    tableName,
-    id,
-    _buildGeoPoint(pt),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  Future<bool> updateLine(
-    String tableName,
-    int id,
-    List<LatLng> line, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _update(
-    tableName,
-    id,
-    _buildGeoMultiLineString(line),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  Future<bool> updatePolygon(
-    String tableName,
-    int id,
-    List<List<LatLng>> rings, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _update(
-    tableName,
-    id,
-    _buildGeoMultiPolygon(rings),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
 
   // ============================================================
   // 共通 Feature 操作
@@ -775,7 +658,9 @@ class FeatureRepository {
   // バッチ操作
   // ============================================================
 
-  Future<List<int>> _addGeometryBatch<T>(
+  /// [dataList] の各要素の [geometryKey] にある形を [build] で作り、残りを属性として一度に足す。
+  /// 足した行の rowid を返す。テーブルに無い列は捨てる
+  Future<List<int>> addGeometryBatch<T>(
     String tableName,
     List<Map<String, dynamic>> dataList,
     String geometryKey,
@@ -836,40 +721,10 @@ class FeatureRepository {
       await spatialIndex.indexRows(tableName, inserted);
       return inserted.keys.toList();
     } catch (e) {
-      AppLogger.debug('[ERROR] FeatureRepository._addGeometryBatch<$T>: $e');
+      AppLogger.debug('[ERROR] FeatureRepository.addGeometryBatch<$T>: $e');
       return [];
     }
   }
-
-  Future<List<int>> addPointsBatch(
-    String tableName,
-    List<Map<String, dynamic>> pointData,
-  ) => _addGeometryBatch<LatLng>(
-    tableName,
-    pointData,
-    'point',
-    _buildGeoPoint,
-  );
-
-  Future<List<int>> addLinesBatch(
-    String tableName,
-    List<Map<String, dynamic>> lineData,
-  ) => _addGeometryBatch<List<LatLng>>(
-    tableName,
-    lineData,
-    'line',
-    _buildGeoMultiLineString,
-  );
-
-  Future<List<int>> addPolygonsBatch(
-    String tableName,
-    List<Map<String, dynamic>> polygonData,
-  ) => _addGeometryBatch<List<List<LatLng>>>(
-    tableName,
-    polygonData,
-    'rings',
-    _buildGeoMultiPolygon,
-  );
 
   /// WHERE句でフィルタしたフィーチャのrowIdリストを取得
   Future<List<int>> getFilteredFeatureIds(

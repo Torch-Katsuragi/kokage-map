@@ -76,13 +76,13 @@ class GeoPackageConnection {
 
   /// このファイルのスキーマの控え
   GpkgSchemaCache get schemaCache {
-    final path = _resolveAbsolutePath();
+    final path = absPath;
     if (path == null) return _detachedCache;
     return _schemaCaches[_registryKey(path)] ??= GpkgSchemaCache();
   }
 
   void _dropSchemaCache() {
-    final path = _resolveAbsolutePath();
+    final path = absPath;
     if (path != null) _schemaCaches.remove(_registryKey(path));
   }
 
@@ -286,7 +286,7 @@ class GeoPackageConnection {
   Future<void> checkIn() async {
     if (fs.hasRealPaths) return;
     if (!_isInitialized || _database == null) return;
-    final absPath = _resolveAbsolutePath();
+    final absPath = this.absPath;
     if (absPath == null) return;
     try {
       final bytes = await databaseFactory.readDatabaseBytes(_databaseKey(absPath));
@@ -312,8 +312,8 @@ class GeoPackageConnection {
     return 'gpkg_$digest.db';
   }
 
-  /// このGeoPackageの絶対パス（未設定なら null）
-  String? _resolveAbsolutePath() {
+  /// このGeoPackageの絶対パス（[absolutePath] が無ければ [projectRootDir] と [pathList] から。どちらも無ければ null）
+  String? get absPath {
     if (absolutePath != null) return absolutePath;
     if (projectRootDir == null) return null;
     return p.joinAll([projectRootDir!, ...pathList]);
@@ -322,7 +322,7 @@ class GeoPackageConnection {
   /// データベース初期化の実体
   Future<void> _initializeDatabaseImpl() async {
     // 絶対パスが指定されている場合はそれを使用（グローバルフォルダ用）
-    final absPath = _resolveAbsolutePath();
+    final absPath = this.absPath;
     if (absPath == null) {
       AppLogger.debug('[GeoPackageConnection] 初期化失敗: projectRootDirが未設定');
       return;
@@ -615,18 +615,12 @@ class GeoPackageConnection {
       // まずデータベース接続を閉じる
       await dispose();
 
-      // 絶対パスが指定されている場合はそれを使用（グローバルフォルダ用）
-      final String absPath;
-      if (absolutePath != null) {
-        absPath = absolutePath!;
-      } else {
-        if (projectRootDir == null) {
-          AppLogger.debug(
-            '[GeoPackageConnection] deleteFile: projectRootDirが未設定',
-          );
-          return false;
-        }
-        absPath = p.joinAll([projectRootDir!, ...pathList]);
+      final absPath = this.absPath;
+      if (absPath == null) {
+        AppLogger.debug(
+          '[GeoPackageConnection] deleteFile: projectRootDirが未設定',
+        );
+        return false;
       }
       if (!await fs.exists(absPath)) {
         AppLogger.debug(

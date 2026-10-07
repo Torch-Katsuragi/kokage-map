@@ -35,6 +35,14 @@ bool _isBacksightCorrected(PointFeatureNode? stn) {
   return v == true || v == 'true';
 }
 
+/// 「名前 (緯度, 経度)」。未設定なら設定を促す文言
+String _stationText(PointFeatureNode? stn) {
+  if (stn == null) return t.trupulse.panel.tapToSetStation;
+  final name = stn.name.isNotEmpty ? stn.name : t.trupulse.panel.point;
+  return '$name (${stn.point.latitude.toStringAsFixed(5)}, '
+      '${stn.point.longitude.toStringAsFixed(5)})';
+}
+
 class TruPulseStatusPanel extends StatelessWidget {
   final TruPulseTool tool;
 
@@ -54,7 +62,7 @@ class TruPulseStatusPanel extends StatelessWidget {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => TruPulseDetailScreen(service: tool.service),
+            builder: (_) => TruPulseDetailScreen(service: service),
           ),
         ),
         child: Card(
@@ -87,14 +95,7 @@ class TruPulseStatusPanel extends StatelessWidget {
                 const Divider(height: 8),
 
                 // Station info
-                _InfoRow(
-                  label: 'STN',
-                  value: stn != null
-                      ? '${stn.name.isNotEmpty ? stn.name : t.trupulse.panel.point} '
-                          '(${stn.point.latitude.toStringAsFixed(5)}, '
-                          '${stn.point.longitude.toStringAsFixed(5)})'
-                      : t.trupulse.panel.tapToSetStation,
-                ),
+                _InfoRow(label: 'STN', value: _stationText(stn)),
                 if (_isBacksightCorrected(stn))
                   const Padding(
                     padding: EdgeInsets.only(top: 2),
@@ -164,13 +165,15 @@ class _TraversePrecisionBar extends StatelessWidget {
         const SizedBox(height: 2),
         Row(
           children: [
-            _MeasChip(t.trupulse.pathLength, '${totalDist.toStringAsFixed(1)}m'),
-            _MeasChip(t.trupulse.closureError, '${closureErr.toStringAsFixed(2)}m'),
             _MeasChip(
-              t.trupulse.closureRatio,
-              ratioText,
-              highlight: isWarning,
+              t.trupulse.pathLength,
+              '${totalDist.toStringAsFixed(1)}m',
             ),
+            _MeasChip(
+              t.trupulse.closureError,
+              '${closureErr.toStringAsFixed(2)}m',
+            ),
+            _MeasChip(t.trupulse.closureRatio, ratioText, highlight: isWarning),
           ],
         ),
       ],
@@ -225,7 +228,10 @@ class _MeasChip extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 9, color: Colors.grey),
+            ),
             Text(
               value,
               style: TextStyle(

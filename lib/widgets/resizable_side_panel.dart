@@ -86,9 +86,21 @@ class _ResizableSidePanelState extends State<ResizableSidePanel> {
     }
   }
 
+  /// 幅は呼び出し側が [ResizableSidePanel.onWidthChanged] で受けて配置に使う。
+  /// ここでは指の累積を持つだけで、自分の描画には使わないので setState しない
+  void _onDragUpdate(DragUpdateDetails details) {
+    final next = _panelWidth - details.delta.dx;
+    _panelWidth = next > widget.maxWidth ? widget.maxWidth : next;
+    if (next < widget.minWidth) {
+      // minWidth 未満 → 閉じる（幅は記憶したまま）
+      widget.onOpenChanged?.call(false);
+    } else if (next <= widget.maxWidth) {
+      widget.onWidthChanged?.call(next);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-
     return Material(
       elevation: 0,
       color: Colors.transparent,
@@ -97,19 +109,7 @@ class _ResizableSidePanelState extends State<ResizableSidePanel> {
           // 左端ドラッグハンドル
           GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onHorizontalDragUpdate: (details) {
-              setState(() {
-                _panelWidth -= details.delta.dx;
-                if (_panelWidth < widget.minWidth) {
-                  // minWidth 未満 → 閉じる（幅は記憶したまま）
-                  widget.onOpenChanged?.call(false);
-                } else if (_panelWidth > widget.maxWidth) {
-                  _panelWidth = widget.maxWidth;
-                } else {
-                  widget.onWidthChanged?.call(_panelWidth);
-                }
-              });
-            },
+            onHorizontalDragUpdate: _onDragUpdate,
             child: MouseRegion(
               cursor: SystemMouseCursors.resizeColumn,
               child: Container(
@@ -125,7 +125,8 @@ class _ResizableSidePanelState extends State<ResizableSidePanel> {
           Expanded(
             // Material で塗る（Container だと中の ListTile の押した色や波紋が隠れ、debug では毎フレーム assertion が出る）
             child: Material(
-              color: widget.backgroundColor ??
+              color:
+                  widget.backgroundColor ??
                   Theme.of(context).colorScheme.surface,
               child: widget.child,
             ),

@@ -74,10 +74,20 @@ class ResizableBottomPanel extends StatefulWidget {
   State<ResizableBottomPanel> createState() => _ResizableBottomPanelState();
 }
 
-class _ResizableBottomPanelState extends State<ResizableBottomPanel> with SingleTickerProviderStateMixin {
+class _ResizableBottomPanelState extends State<ResizableBottomPanel>
+    with SingleTickerProviderStateMixin {
   late double _panelHeight;
-  late final AnimationController _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 260))
-    ..addListener(() => setState(() => _panelHeight = _tween.transform(Curves.easeOutCubic.transform(_anim.value))));
+  late final AnimationController _anim =
+      AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 260),
+      )..addListener(
+        () => setState(
+          () => _panelHeight = _tween.transform(
+            Curves.easeOutCubic.transform(_anim.value),
+          ),
+        ),
+      );
   Tween<double> _tween = Tween(begin: 0, end: 0);
 
   @override
@@ -97,7 +107,10 @@ class _ResizableBottomPanelState extends State<ResizableBottomPanel> with Single
     super.didUpdateWidget(oldWidget);
     final to = widget.targetHeight;
     if (to != null && to != oldWidget.targetHeight) {
-      _tween = Tween(begin: _panelHeight, end: to.clamp(widget.minHeight, widget.maxHeight));
+      _tween = Tween(
+        begin: _panelHeight,
+        end: to.clamp(widget.minHeight, widget.maxHeight),
+      );
       _anim.forward(from: 0);
     }
     // maxHeight が変わった場合、現在値がはみ出していれば補正
@@ -106,9 +119,26 @@ class _ResizableBottomPanelState extends State<ResizableBottomPanel> with Single
     }
   }
 
+  void _onDragUpdate(DragUpdateDetails details) {
+    _anim.stop();
+    final next = _panelHeight - details.delta.dy;
+    setState(
+      () => _panelHeight = next > widget.maxHeight ? widget.maxHeight : next,
+    );
+    if (next < widget.minHeight) {
+      // minHeight 未満 → 閉じる（高さは記憶したまま）
+      widget.onOpenChanged?.call(false);
+    } else if (next <= widget.maxHeight) {
+      widget.onHeightChanged?.call(next);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final clampedHeight = _panelHeight.clamp(widget.minHeight, widget.maxHeight);
+    final clampedHeight = _panelHeight.clamp(
+      widget.minHeight,
+      widget.maxHeight,
+    );
 
     return SizedBox(
       height: clampedHeight,
@@ -120,20 +150,7 @@ class _ResizableBottomPanelState extends State<ResizableBottomPanel> with Single
             // 上端ドラッグハンドル
             GestureDetector(
               behavior: HitTestBehavior.translucent,
-              onVerticalDragUpdate: (details) {
-                _anim.stop();
-                setState(() {
-                  _panelHeight -= details.delta.dy;
-                  if (_panelHeight < widget.minHeight) {
-                    // minHeight 未満 → 閉じる（高さは記憶したまま）
-                    widget.onOpenChanged?.call(false);
-                  } else if (_panelHeight > widget.maxHeight) {
-                    _panelHeight = widget.maxHeight;
-                  } else {
-                    widget.onHeightChanged?.call(_panelHeight);
-                  }
-                });
-              },
+              onVerticalDragUpdate: _onDragUpdate,
               child: MouseRegion(
                 cursor: SystemMouseCursors.resizeRow,
                 child: Container(
@@ -152,7 +169,8 @@ class _ResizableBottomPanelState extends State<ResizableBottomPanel> with Single
             Expanded(
               // Material で塗る（Container だと中の ListTile の押した色や波紋が隠れ、debug では毎フレーム assertion が出る）
               child: Material(
-                color: widget.backgroundColor ??
+                color:
+                    widget.backgroundColor ??
                     Theme.of(context).colorScheme.surface,
                 child: widget.child,
               ),

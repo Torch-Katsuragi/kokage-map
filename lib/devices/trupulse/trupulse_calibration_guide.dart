@@ -45,49 +45,61 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
   bool get _isTilt => widget.type == CalibrationType.tilt;
   int _currentStep = 0;
 
-  List<_Step> get _steps => _isTilt ? _tiltSteps : _compassSteps;
+  /// 手順 3〜8 のアイコンは両方の較正で共通
+  static const _commonIcons = [
+    Icons.looks_one,
+    Icons.looks_two,
+    Icons.looks_3,
+    Icons.looks_4,
+    Icons.looks_5,
+    Icons.check_circle_outline,
+  ];
 
-  // ======== Tilt Cal: マニュアル p.24-26 ========
-
-  List<_Step> get _tiltSteps {
-    final g = t.trupulse.guide.tilt;
+  /// 手順の一覧。Tilt はマニュアル p.24-26、Compass は p.32-34。
+  /// 言語が変わりうるので build ごとに 1 回だけ組む
+  List<_Step> _buildSteps() {
+    final List<IconData> icons;
+    final List<(String, String)> texts;
+    if (_isTilt) {
+      final g = t.trupulse.guide.tilt;
+      icons = const [Icons.settings, Icons.phone_android, ..._commonIcons];
+      texts = [
+        (g.step1Title, g.step1Detail),
+        (g.step2Title, g.step2Detail),
+        (g.step3Title, g.step3Detail),
+        (g.step4Title, g.step4Detail),
+        (g.step5Title, g.step5Detail),
+        (g.step6Title, g.step6Detail),
+        (g.step7Title, g.step7Detail),
+        (g.step8Title, g.step8Detail),
+      ];
+    } else {
+      final g = t.trupulse.guide.compass;
+      icons = const [Icons.warning_amber, Icons.settings, ..._commonIcons];
+      texts = [
+        (g.step1Title, g.step1Detail),
+        (g.step2Title, g.step2Detail),
+        (g.step3Title, g.step3Detail),
+        (g.step4Title, g.step4Detail),
+        (g.step5Title, g.step5Detail),
+        (g.step6Title, g.step6Detail),
+        (g.step7Title, g.step7Detail),
+        (g.step8Title, g.step8Detail),
+      ];
+    }
     return [
-      _Step(icon: Icons.settings, title: g.step1Title, detail: g.step1Detail),
-      _Step(icon: Icons.phone_android, title: g.step2Title, detail: g.step2Detail),
-      _Step(icon: Icons.looks_one, title: g.step3Title, detail: g.step3Detail),
-      _Step(icon: Icons.looks_two, title: g.step4Title, detail: g.step4Detail),
-      _Step(icon: Icons.looks_3, title: g.step5Title, detail: g.step5Detail),
-      _Step(icon: Icons.looks_4, title: g.step6Title, detail: g.step6Detail),
-      _Step(icon: Icons.looks_5, title: g.step7Title, detail: g.step7Detail),
-      _Step(icon: Icons.check_circle_outline, title: g.step8Title, detail: g.step8Detail),
-    ];
-  }
-
-  // ======== Compass Cal: マニュアル p.32-34 ========
-
-  List<_Step> get _compassSteps {
-    final g = t.trupulse.guide.compass;
-    return [
-      _Step(icon: Icons.warning_amber, title: g.step1Title, detail: g.step1Detail),
-      _Step(icon: Icons.settings, title: g.step2Title, detail: g.step2Detail),
-      _Step(icon: Icons.looks_one, title: g.step3Title, detail: g.step3Detail),
-      _Step(icon: Icons.looks_two, title: g.step4Title, detail: g.step4Detail),
-      _Step(icon: Icons.looks_3, title: g.step5Title, detail: g.step5Detail),
-      _Step(icon: Icons.looks_4, title: g.step6Title, detail: g.step6Detail),
-      _Step(icon: Icons.looks_5, title: g.step7Title, detail: g.step7Detail),
-      _Step(icon: Icons.check_circle_outline, title: g.step8Title, detail: g.step8Detail),
+      for (var i = 0; i < texts.length; i++)
+        _Step(icon: icons[i], title: texts[i].$1, detail: texts[i].$2),
     ];
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final steps = _buildSteps();
     final title = _isTilt
         ? t.trupulse.detail.tiltCalibration
         : t.trupulse.detail.compassCalibration;
-    final step = _steps[_currentStep];
-    final isFirst = _currentStep == 0;
-    final isLast = _currentStep == _steps.length - 1;
 
     return Scaffold(
       appBar: AppBar(
@@ -95,136 +107,143 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(4),
           child: LinearProgressIndicator(
-            value: (_currentStep + 1) / _steps.length,
+            value: (_currentStep + 1) / steps.length,
           ),
         ),
       ),
       body: Column(
         children: [
-          // Step indicator
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: theme.colorScheme.primaryContainer,
-                  child: Text(
-                    '${_currentStep + 1}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        t.trupulse.guide.stepOf(current: _currentStep + 1, total: _steps.length),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      Text(
-                        step.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(step.icon, size: 32, color: theme.colorScheme.primary),
-              ],
-            ),
-          ),
-
+          _buildStepHeader(theme, steps),
           const Divider(height: 1),
+          Expanded(child: _buildStepDetail(theme, steps)),
+          _buildNavigation(steps.length),
+        ],
+      ),
+    );
+  }
 
-          // Step detail
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      step.detail,
-                      style: const TextStyle(fontSize: 14, height: 1.6),
-                    ),
-                  ),
-                  // Overview: all steps (mini list)
-                  const SizedBox(height: 24),
-                  Text(
-                    t.trupulse.guide.allSteps,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  for (int i = 0; i < _steps.length; i++)
-                    _miniStepRow(i, theme),
-                ],
+  /// 番号・「n / N」・手順名・アイコン
+  Widget _buildStepHeader(ThemeData theme, List<_Step> steps) {
+    final step = steps[_currentStep];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: theme.colorScheme.primaryContainer,
+            child: Text(
+              '${_currentStep + 1}',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: theme.colorScheme.onPrimaryContainer,
               ),
             ),
           ),
-
-          // Navigation
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!isFirst)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () =>
-                          setState(() => _currentStep--),
-                      icon: const Icon(Icons.arrow_back),
-                      label: Text(t.trupulse.guide.back),
-                    ),
+                Text(
+                  t.trupulse.guide.stepOf(
+                    current: _currentStep + 1,
+                    total: steps.length,
                   ),
-                if (!isFirst && !isLast) const SizedBox(width: 12),
-                if (!isLast)
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () =>
-                          setState(() => _currentStep++),
-                      icon: const Icon(Icons.arrow_forward),
-                      label: Text(t.trupulse.guide.next),
-                    ),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                if (isLast)
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.check),
-                      label: Text(t.trupulse.guide.done),
-                    ),
+                ),
+                Text(
+                  step.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
+                ),
               ],
             ),
+          ),
+          Icon(step.icon, size: 32, color: theme.colorScheme.primary),
+        ],
+      ),
+    );
+  }
+
+  /// 今の手順の説明と、全手順の一覧
+  Widget _buildStepDetail(ThemeData theme, List<_Step> steps) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              steps[_currentStep].detail,
+              style: const TextStyle(fontSize: 14, height: 1.6),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            t.trupulse.guide.allSteps,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (int i = 0; i < steps.length; i++)
+            _miniStepRow(i, steps[i].title, theme),
+        ],
+      ),
+    );
+  }
+
+  /// 戻る / 次へ / 完了
+  Widget _buildNavigation(int stepCount) {
+    final isFirst = _currentStep == 0;
+    final isLast = _currentStep == stepCount - 1;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          if (!isFirst)
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => setState(() => _currentStep--),
+                icon: const Icon(Icons.arrow_back),
+                label: Text(t.trupulse.guide.back),
+              ),
+            ),
+          if (!isFirst && !isLast) const SizedBox(width: 12),
+          Expanded(
+            child: isLast
+                ? FilledButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.check),
+                    label: Text(t.trupulse.guide.done),
+                  )
+                : FilledButton.icon(
+                    onPressed: () => setState(() => _currentStep++),
+                    icon: const Icon(Icons.arrow_forward),
+                    label: Text(t.trupulse.guide.next),
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _miniStepRow(int index, ThemeData theme) {
+  Widget _miniStepRow(int index, String title, ThemeData theme) {
     final isCurrent = index == _currentStep;
     final isPast = index < _currentStep;
     return Padding(
@@ -241,8 +260,8 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
                 backgroundColor: isCurrent
                     ? theme.colorScheme.primary
                     : isPast
-                        ? theme.colorScheme.primaryContainer
-                        : theme.colorScheme.surfaceContainerHighest,
+                    ? theme.colorScheme.primaryContainer
+                    : theme.colorScheme.surfaceContainerHighest,
                 child: Text(
                   '${index + 1}',
                   style: TextStyle(
@@ -257,7 +276,7 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  _steps[index].title,
+                  title,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: isCurrent ? FontWeight.w600 : null,
@@ -268,8 +287,7 @@ class _TruPulseCalibrationGuideState extends State<TruPulseCalibrationGuide> {
                 ),
               ),
               if (isPast)
-                Icon(Icons.check, size: 16,
-                    color: theme.colorScheme.primary),
+                Icon(Icons.check, size: 16, color: theme.colorScheme.primary),
             ],
           ),
         ),

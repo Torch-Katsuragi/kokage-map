@@ -15,7 +15,6 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: Binary Utilities
 // バイト変換ヘルパー（Shapefile等のバイナリファイル処理用）
-import 'dart:typed_data';
 import 'package:charset/charset.dart' as charset;
 import 'package:root_maps/utils/app_logger.dart';
 
@@ -34,24 +33,6 @@ class BinaryUtils {
   /// 16bit整数をリトルエンディアンで書き込み
   static List<int> writeInt16LittleEndian(int value) {
     return [value & 0xFF, (value >> 8) & 0xFF];
-  }
-
-  /// 32bit整数をビッグエンディアンで読み込み
-  static int readInt32BigEndian(Uint8List bytes, int offset) {
-    return ByteData.sublistView(bytes, offset, offset + 4)
-        .getInt32(0, Endian.big);
-  }
-
-  /// 32bit整数をリトルエンディアンで読み込み
-  static int readInt32LittleEndian(Uint8List bytes, int offset) {
-    return ByteData.sublistView(bytes, offset, offset + 4)
-        .getInt32(0, Endian.little);
-  }
-
-  /// 64bit浮動小数点をリトルエンディアンで読み込み
-  static double readFloat64LittleEndian(Uint8List bytes, int offset) {
-    return ByteData.sublistView(bytes, offset, offset + 8)
-        .getFloat64(0, Endian.little);
   }
 
   /// 文字列をShift-JIS（CP932）でエンコードし、指定バイト長に調整

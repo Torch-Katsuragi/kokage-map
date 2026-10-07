@@ -29,9 +29,6 @@ class TurfConverter {
   static List<double> latlngToPosition(LatLng latlng) =>
       [latlng.longitude, latlng.latitude];
 
-  static List<List<double>> latlngsToPositions(List<LatLng> latlngs) =>
-      latlngs.map(latlngToPosition).toList();
-
   static List<turf.Position> _toRing(List<LatLng> line) =>
       [for (final p in line) p.toTurfPosition()];
 

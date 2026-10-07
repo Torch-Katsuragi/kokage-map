@@ -48,63 +48,29 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       
       final selected = ref.read(selectedLayerNodeProvider);
       if (selected == null) {
-        if (mounted) {
-          ref.read(notificationCenterProvider.notifier).add(
-            title: t.gps.noLayerSelected,
-            level: NotificationLevel.warning,
-          );
-        }
+        _notify(t.gps.noLayerSelected, NotificationLevel.warning);
         return;
       }
       
       if (!selected.isVisibleRecursive()) {
-        if (mounted) {
-          ref.read(notificationCenterProvider.notifier).add(
-            title: t.gps.layerInvisible,
-            level: NotificationLevel.warning,
-          );
-        }
+        _notify(t.gps.layerInvisible, NotificationLevel.warning);
         return;
       }
       
-      if (mounted) {
-        ref.read(notificationCenterProvider.notifier).add(
-          title: t.gps.acquiringGps,
-          level: NotificationLevel.info,
-        );
-      }
+      _notify(t.gps.acquiringGps, NotificationLevel.info);
       
       // GPS位置を記録
       final success = await currentTool.recordCurrentGpsPosition();
       if (success) {
         ref.read(tutorialProvider.notifier).report(const GpsPointRecorded());
         
-        if (mounted) {
-          final drawState = GlobalDrawingState.instance;
-          final totalPoints =
-              drawState.drawingLine.length +
-              drawState.drawingPolygon.length;
-          ref.read(notificationCenterProvider.notifier).add(
-            title: t.gps.gpsRecorded(count: '$totalPoints'),
-            level: NotificationLevel.success,
-          );
-        }
+        _notify(t.gps.gpsRecorded(count: '$_drawingPointCount'), NotificationLevel.success);
       } else {
-        if (mounted) {
-          ref.read(notificationCenterProvider.notifier).add(
-            title: t.gps.gpsUnavailable,
-            level: NotificationLevel.error,
-          );
-        }
+        _notify(t.gps.gpsUnavailable, NotificationLevel.error);
       }
     } catch (e) {
       AppLogger.debug('[MapGpsSurveyMixin] GPS測量エラー: $e');
-      if (mounted) {
-        ref.read(notificationCenterProvider.notifier).add(
-          title: t.gps.gpsSurveyError(error: '$e'),
-          level: NotificationLevel.error,
-        );
-      }
+      _notify(t.gps.gpsSurveyError(error: '$e'), NotificationLevel.error);
     }
   }
   
@@ -127,21 +93,11 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       AppLogger.debug('[MapGpsSurveyMixin] GPS長押し測量開始');
       currentTool.startLongPressGpsSurvey();
       
-      if (mounted) {
-        ref.read(notificationCenterProvider.notifier).add(
-          title: t.gps.longPressSurveying,
-          level: NotificationLevel.info,
-        );
-      }
+      _notify(t.gps.longPressSurveying, NotificationLevel.info);
     } catch (e) {
       AppLogger.debug('[MapGpsSurveyMixin] GPS長押し測量開始エラー: $e');
       triggerSetState(() => isLongPressing = false);
-      if (mounted) {
-        ref.read(notificationCenterProvider.notifier).add(
-          title: t.gps.longPressSurveyStartError(error: '$e'),
-          level: NotificationLevel.error,
-        );
-      }
+      _notify(t.gps.longPressSurveyStartError(error: '$e'), NotificationLevel.error);
     }
   }
   
@@ -163,21 +119,11 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       
       triggerSetState(() => isLongPressing = false);
       
-      if (mounted) {
-        ref.read(notificationCenterProvider.notifier).add(
-          title: t.gps.longPressSurveyDone,
-          level: NotificationLevel.success,
-        );
-      }
+      _notify(t.gps.longPressSurveyDone, NotificationLevel.success);
     } catch (e) {
       AppLogger.debug('[MapGpsSurveyMixin] GPS長押し測量停止エラー: $e');
       triggerSetState(() => isLongPressing = false);
-      if (mounted) {
-        ref.read(notificationCenterProvider.notifier).add(
-          title: t.gps.longPressSurveyStopError(error: '$e'),
-          level: NotificationLevel.error,
-        );
-      }
+      _notify(t.gps.longPressSurveyStopError(error: '$e'), NotificationLevel.error);
     }
   }
   
@@ -218,7 +164,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  t.gps.surveyDataInfo(count: '${GlobalDrawingState.instance.drawingLine.length + GlobalDrawingState.instance.drawingPolygon.length}'),
+                  t.gps.surveyDataInfo(count: '$_drawingPointCount'),
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -268,31 +214,27 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         await gpsManager.stopGpsSurvey();
         await updateFeatures();
         
-        if (mounted) {
-          ref.read(notificationCenterProvider.notifier).add(
-            title: t.gps.surveyFeatureCreated,
-            level: NotificationLevel.success,
-          );
-        }
+        _notify(t.gps.surveyFeatureCreated, NotificationLevel.success);
       } else {
-        if (mounted) {
-          ref.read(notificationCenterProvider.notifier).add(
-            title: t.gps.surveyFeatureCreateFailed,
-            level: NotificationLevel.error,
-          );
-        }
+        _notify(t.gps.surveyFeatureCreateFailed, NotificationLevel.error);
       }
     } catch (e) {
       AppLogger.debug('[MapGpsSurveyMixin] GPS測量確定エラー: $e');
-      if (mounted) {
-        ref.read(notificationCenterProvider.notifier).add(
-          title: t.gps.surveyConfirmError(error: '$e'),
-          level: NotificationLevel.error,
-        );
-      }
+      _notify(t.gps.surveyConfirmError(error: '$e'), NotificationLevel.error);
     }
   }
   
+  /// 通知センターに出す（画面が閉じていたら出さない）
+  void _notify(String title, NotificationLevel level) {
+    if (mounted) ref.read(notificationCenterProvider.notifier).add(title: title, level: level);
+  }
+
+  /// 描きかけの線・面に足した測量点の数
+  int get _drawingPointCount {
+    final drawState = GlobalDrawingState.instance;
+    return drawState.drawingLine.length + drawState.drawingPolygon.length;
+  }
+
   // =============================================
   // 抽象メソッド（サブクラスで実装）
   // =============================================

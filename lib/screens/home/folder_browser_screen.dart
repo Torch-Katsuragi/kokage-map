@@ -73,7 +73,7 @@ class _FolderBrowserScreenState extends State<FolderBrowserScreen> {
 
   Future<void> _start() async {
     final root = await GlobalFolderLocator.kokageRoot();
-    if (!await fs.exists(root)) await fs.createDirectory(root);
+    await fs.createDirectory(root); // 在れば何もしない
     _root = root;
     _trail.add(_Entry(root, isDirectory: true));
     await _load();

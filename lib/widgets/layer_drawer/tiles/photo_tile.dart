@@ -68,7 +68,7 @@ class PhotoTile extends ConsumerWidget {
     final dimmed = !node.isVisibleRecursive();
 
     // チュートリアルの案内先: 練習フォルダの写真（最初の 1 枚。鍵は 1 つしか付けられない）
-    final guiding = ref.watch(tutorialProvider) != null;
+    final guiding = ref.watch(tutorialProvider.select((s) => s != null));
     final key = guiding && !isOverlay && _isFirstPracticePhoto(node) ? TutorialTargets.photoTile : null;
     return DrawerRow(
       key: key,
@@ -81,15 +81,7 @@ class PhotoTile extends ConsumerWidget {
           : node.hasLocation
               ? null
               : Text(t.layerDrawer.photo.noLocation, style: const TextStyle(fontSize: 13, color: Colors.grey)),
-      eye: VisibilityEye(
-        visible: node.visible,
-        effective: node.parent?.isVisibleRecursive() ?? true,
-        onToggle: () {
-          node.visible = !node.visible;
-          node.persistVisibility();
-          ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        },
-      ),
+      eye: nodeVisibilityEye(ref, node),
       onTap: () {
         ref.read(selectedFeaturesProvider.notifier).set([node]);
         ref.read(tutorialProvider.notifier).report(const PhotoSelected());
@@ -131,7 +123,7 @@ class PhotoTile extends ConsumerWidget {
       execute: () async {
         ref.read(selectedFeaturesProvider.notifier).remove(node);
         await node.dispose();
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.refreshMap();
       },
     );
   }
@@ -221,7 +213,7 @@ class PhotoTile extends ConsumerWidget {
         await node.parent!.updateChildren();
       }
       if (context.mounted) {
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.refreshMap();
       }
     }
   }
@@ -256,7 +248,7 @@ class PhotoTile extends ConsumerWidget {
         await node.parent!.updateChildren();
       }
       if (context.mounted) {
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.refreshMap();
       }
     }
   }

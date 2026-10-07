@@ -307,7 +307,8 @@ class FolderNode extends LayerTreeNode {
 
   @override
   Future<void> dispose() async {
-    for (final child in children) {
+    // 子は dispose で自分を children から外す。写しを回す（そのまま回すと 2 つ目で落ちる）
+    for (final child in List.of(children)) {
       await child.dispose();
     }
     children.clear();

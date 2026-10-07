@@ -145,7 +145,7 @@ class NodePresenter {
   // ========================================
   
   /// 同期状態に対応するオーバーレイアイコンを取得
-  static IconData? getSyncOverlayIcon(SyncStatus status) {
+  static IconData? _syncOverlayIcon(SyncStatus status) {
     switch (status) {
       case SyncStatus.synced:
         return null; // オーバーレイなし
@@ -165,7 +165,7 @@ class NodePresenter {
   }
   
   /// 同期状態に対応する色を取得
-  static Color? getSyncOverlayColor(SyncStatus status) {
+  static Color? _syncOverlayColor(SyncStatus status) {
     switch (status) {
       case SyncStatus.synced:
         return null;
@@ -201,7 +201,7 @@ class NodePresenter {
       return baseIcon;
     }
     
-    final overlayIcon = getSyncOverlayIcon(syncStatus);
+    final overlayIcon = _syncOverlayIcon(syncStatus);
     if (overlayIcon == null) {
       return baseIcon;
     }
@@ -228,7 +228,7 @@ class NodePresenter {
             child: Icon(
               overlayIcon,
               size: size * 0.5,
-              color: getSyncOverlayColor(syncStatus),
+              color: _syncOverlayColor(syncStatus),
             ),
           ),
         ),

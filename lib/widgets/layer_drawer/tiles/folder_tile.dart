@@ -25,7 +25,6 @@ import '../../../i18n/strings.g.dart';
 import '../../../models/nodes/drive_folder_node.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../presentation/node_presenter.dart';
-import '../../../providers/ui_state_providers.dart';
 import '../../dialogs/drive_qr_dialog.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
@@ -82,15 +81,7 @@ class FolderTile extends ConsumerWidget {
           : _canSync
               ? _buildSyncSubtitle(context, drive)
               : Text(t.layerDrawer.folder.pcSyncDisabled, style: const TextStyle(fontSize: 13, color: Colors.grey)),
-      eye: VisibilityEye(
-        visible: node.visible,
-        effective: node.parent?.isVisibleRecursive() ?? true,
-        onToggle: () {
-          node.visible = !node.visible;
-          node.persistVisibility();
-          ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        },
-      ),
+      eye: nodeVisibilityEye(ref, node),
       onTap: onTap,
       menu: () => _menuItems(drive),
       onMenu: (v) => _onMenu(context, ref, v, drive),
@@ -154,7 +145,7 @@ class FolderTile extends ConsumerWidget {
           await fs.delete(absPath, recursive: true);
         }
         await node.dispose();
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        ref.refreshMap();
       },
     );
   }

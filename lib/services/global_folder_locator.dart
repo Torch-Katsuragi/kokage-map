@@ -109,18 +109,23 @@ class GlobalFolderLocator {
   ///
   /// path_provider に「共有ストレージのルート」を返す口は無いので、
   /// アプリ専用外部領域（`.../Android/data/<pkg>/files`）から `/Android/` より前を取る。
+  ///
+  /// 取れた値は覚えておく（地図を開くたびに置き場所・Global の場所決め・移行で何度も引くため）。取れなかったときは覚えない
   static Future<String?> _sharedStorageRoot() async {
+    if (_sharedRootCache != null) return _sharedRootCache;
     try {
       final ext = await getExternalStorageDirectory();
       if (ext == null) return null;
       final idx = ext.path.indexOf('/Android/');
       if (idx <= 0) return null;
-      return ext.path.substring(0, idx);
+      return _sharedRootCache = ext.path.substring(0, idx);
     } catch (e) {
       AppLogger.debug('[GlobalFolder] 共有ストレージのルート取得に失敗: $e');
       return null;
     }
   }
+
+  static String? _sharedRootCache;
 
   /// 実際に使うパスを決める。
   ///

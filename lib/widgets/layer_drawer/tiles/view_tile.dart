@@ -27,8 +27,6 @@ import '../../../i18n/strings.g.dart';
 import '../../../models/app_notification.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/view_node.dart';
-import '../../../providers/notification_providers.dart';
-import '../../../providers/ui_state_providers.dart';
 import '../../../screens/layer_style_settings_screen.dart';
 import '../../../tutorial/practice_project.dart';
 import '../../../tutorial/tutorial.dart';
@@ -74,7 +72,7 @@ class ViewTile extends ConsumerWidget {
             node.visible = !node.visible;
             await node.persistVisibility();
             await node.layerNode.updateChildren();
-            ref.read(featureRefreshTriggerProvider.notifier).trigger();
+            ref.refreshMap();
             ref.read(tutorialProvider.notifier).report(ViewVisibilityToggled(node));
           },
         ),
@@ -113,7 +111,7 @@ class ViewTile extends ConsumerWidget {
 
   /// チュートリアルの案内先: 練習のエリアに足した View（いちばん上の、既定でない View）
   bool _guiding(WidgetRef ref) =>
-      ref.watch(tutorialProvider) != null &&
+      ref.watch(tutorialProvider.select((s) => s != null)) &&
       !node.isDefaultView &&
       _layer.views.indexOf(node) == 0 &&
       isPracticeLayer(_layer, PracticeProject.areaLayer);
@@ -134,7 +132,7 @@ class ViewTile extends ConsumerWidget {
     if (trimmed == _layer.layerName && !node.hasFilter) trimmed = kDefaultViewName;
 
     if (_layer.views.any((v) => v != node && v.name == trimmed)) {
-      _notify(ref, t.layerDrawer.view.nameDuplicate, NotificationLevel.warning);
+      ref.notify(t.layerDrawer.view.nameDuplicate, level: NotificationLevel.warning);
       return;
     }
     node.name = trimmed;
@@ -147,11 +145,7 @@ class ViewTile extends ConsumerWidget {
   Future<void> _openStyle(BuildContext context, WidgetRef ref) async {
     final folderPath = _layer.folderNode?.getAbsoluteFilePath();
     if (folderPath == null) {
-      _notify(
-        ref,
-        t.layerDrawer.layer.couldNotDetermineFolder,
-        NotificationLevel.error,
-      );
+      ref.notify(t.layerDrawer.layer.couldNotDetermineFolder, level: NotificationLevel.error);
       return;
     }
     await Navigator.push(
@@ -166,7 +160,7 @@ class ViewTile extends ConsumerWidget {
             ),
       ),
     );
-    ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    ref.refreshMap();
   }
 
   Future<void> _editFilter(BuildContext context, WidgetRef ref) async {
@@ -207,34 +201,16 @@ class ViewTile extends ConsumerWidget {
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     if (_layer.views.length <= 1) {
-      _notify(
-        ref,
-        t.layerDrawer.view.cannotDeleteLast,
-        NotificationLevel.warning,
-      );
+      ref.notify(t.layerDrawer.view.cannotDeleteLast, level: NotificationLevel.warning);
       return;
     }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text(t.layerDrawer.view.delete),
-            content: Text(
-              t.layerDrawer.view.deleteConfirm(name: node.displayName),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(t.common.cancel),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(t.layerDrawer.view.delete),
-              ),
-            ],
-          ),
+    final ok = await showConfirmDialog(
+      context,
+      title: t.layerDrawer.view.delete,
+      content: Text(t.layerDrawer.view.deleteConfirm(name: node.displayName)),
+      confirmLabel: t.layerDrawer.view.delete,
     );
-    if (ok != true) return;
+    if (!ok) return;
     _layer.views.remove(node);
     await _persist(ref, reloadFeatures: true);
   }
@@ -253,10 +229,6 @@ class ViewTile extends ConsumerWidget {
   Future<void> _persist(WidgetRef ref, {required bool reloadFeatures}) async {
     await _layer.persistViews();
     if (reloadFeatures) await _layer.updateChildren();
-    ref.read(featureRefreshTriggerProvider.notifier).trigger();
-  }
-
-  void _notify(WidgetRef ref, String title, NotificationLevel level) {
-    ref.read(notificationCenterProvider.notifier).add(title: title, level: level);
+    ref.refreshMap();
   }
 }

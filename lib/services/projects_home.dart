@@ -48,10 +48,9 @@ class ProjectsHome {
   /// いつもの地図のフォルダ（中身をそろえてから返す）
   static Future<String> myMap() async {
     final root = await GlobalFolderLocator.kokageRoot();
-    if (!await fs.exists(root)) await fs.createDirectory(root);
     // 写真は決めた入れ先を作らない（取り込みはレイヤ一覧で開いている場所に入る。ほかのフォルダと同じ決まり）
-    final shared = p.join(root, sharedDirName);
-    if (!await fs.exists(shared)) await fs.createDirectory(shared);
+    // createDirectory は親ごと作り、在れば何もしない（置き場所と 共有/ を 1 回で）
+    await fs.createDirectory(p.join(root, sharedDirName));
     final gpkgPath = p.join(root, myMapName);
     if (!await fs.exists(gpkgPath)) {
       final gpkg = GeoPackageFile([myMapName], absolutePath: gpkgPath);

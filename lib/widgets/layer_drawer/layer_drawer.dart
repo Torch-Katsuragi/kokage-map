@@ -38,7 +38,6 @@ import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/sys_node.dart';
 import '../../presentation/node_presenter.dart';
-import '../../providers/notification_providers.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../screens/gallery_import_screen.dart';
@@ -81,8 +80,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
   GeoPackageNode? _dropTarget;
 
   @override
-  void triggerMapRefresh() =>
-      ref.read(featureRefreshTriggerProvider.notifier).trigger();
+  void triggerMapRefresh() => ref.refreshMap();
 
   // --- ライフサイクル ---
 
@@ -151,10 +149,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     if (sourcePath == newPath) return;
 
     if (await fs.exists(newPath)) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.alreadyExists(name: baseName, target: target.name),
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.alreadyExists(name: baseName, target: target.name));
       return;
     }
 
@@ -174,16 +169,10 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         if (moved != null) await moved.updateChildren();
       }
 
-      ref.read(featureRefreshTriggerProvider.notifier).trigger();
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.movedTo(source: source.name, target: target.name),
-            level: NotificationLevel.info,
-          );
+      ref.refreshMap();
+      ref.notify(t.layerDrawer.movedTo(source: source.name, target: target.name));
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.moveFailed(error: '$e'),
-            level: NotificationLevel.error,
-          );
+      ref.notify(t.layerDrawer.moveFailed(error: '$e'), level: NotificationLevel.error);
     }
   }
 
@@ -284,19 +273,19 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     if (node is FolderNode) {
       // 「この端末」とグローバルフォルダ本体は、名前変更・削除・ドラッグの対象にしない
       final fixed = node is SysNode || node is GlobalFolderNode;
-      final movable = node is! DriveFolderNode && !fixed;
-      final tile = FolderTile(
+      final drive = node is DriveFolderNode;
+      final movable = !drive && !fixed;
+      return FolderTile(
         node: node,
         fixed: fixed,
         onTap: () => widget.onDirChanged(node),
-        onRename: node is! DriveFolderNode && !fixed ? () => _renameFolder(context, node) : null,
-        onSyncMerge: node is DriveFolderNode ? openSyncMergeDialog : null,
-        onRefreshSync: node is DriveFolderNode ? refreshSyncStatus : null,
-        onUnlinkDrive: node is DriveFolderNode ? unlinkDriveFolder : null,
-        onDeleteDrive: node is DriveFolderNode ? deleteDriveFolder : null,
+        onRename: movable ? () => _renameFolder(context, node) : null,
+        onSyncMerge: drive ? openSyncMergeDialog : null,
+        onRefreshSync: drive ? refreshSyncStatus : null,
+        onUnlinkDrive: drive ? unlinkDriveFolder : null,
+        onDeleteDrive: drive ? deleteDriveFolder : null,
         onSwipeMove: movable ? () => _swipeMove(node) : null,
       );
-      return tile;
     }
     if (node is ImageNode) {
       return PhotoTile(
@@ -321,101 +310,85 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
   // --- UI アクション ---
 
-  Future<void> _renameFolder(BuildContext context, FolderNode node) async {
-    final result = await RenameDialog.show(
-      context,
-      title: t.layerDrawer.renameFolder,
-      currentName: node.name,
-      label: t.layerDrawer.newName,
-    );
-    if (result == null || result.isEmpty || result == node.name) return;
+  /// 名前を聞いて [apply] で変える。やめた・空・同じ名前なら何もしない。失敗は通知する
+  Future<void> _rename(
+    BuildContext context, {
+    required String title,
+    required String currentName,
+    required String label,
+    required Future<void> Function(String name) apply,
+  }) async {
+    final result = await RenameDialog.show(context, title: title, currentName: currentName, label: label);
+    if (result == null || result.isEmpty || result == currentName) return;
     try {
-      final absPath = node.getAbsoluteFilePath();
-      if (absPath != null) {
-        final newPath = p.join(p.dirname(absPath), result);
-        await fs.rename(absPath, newPath);
-        await LayerDrawerService.notifySyncedPathChange(node, absPath, newPath);
-      }
-      node.name = result;
-      triggerMapRefresh();
+      await apply(result);
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.renameFailed(error: '$e'),
-            level: NotificationLevel.info,
-          );
+      ref.notify(t.layerDrawer.renameFailed(error: '$e'));
     }
   }
 
-  Future<void> _renamePhoto(BuildContext context, ImageNode node) async {
-    final currentName = p.basenameWithoutExtension(node.name);
-    final result = await RenameDialog.show(
-      context,
-      title: t.layerDrawer.renamePhoto,
-      currentName: currentName,
-      label: t.layerDrawer.newFileName,
-    );
-    if (result == null || result.isEmpty || result == currentName) return;
-    try {
-      await LayerDrawerService.renamePhoto(node, result);
-      triggerMapRefresh();
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.photoRenamed(name: result),
-            level: NotificationLevel.info,
-          );
-    } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.renameFailed(error: '$e'),
-            level: NotificationLevel.info,
-          );
-    }
-  }
-
-  Future<void> _renameGeoPackage(BuildContext context, GeoPackageNode node) async {
-    final currentName = p.basenameWithoutExtension(node.name);
-    final result = await RenameDialog.show(
-      context,
-      title: t.layerDrawer.renameGeoPackage,
-      currentName: currentName,
-      label: t.layerDrawer.newFileName,
-    );
-    if (result == null || result.isEmpty || result == currentName) return;
-    try {
-      final oldPath = node.geoPackageFile.getAbsolutePath();
-      final wasExpanded = ref.read(expandedGeoPackagesProvider).isExpanded(oldPath);
-      // updateChildren()でnode.parentがnullになるため、先に保持
-      final parentNode = node.parent;
-
-      final projectRoot = ref.read(projectRootDirProvider);
-      final newFileName = await LayerDrawerService.renameGeoPackage(
-        node, result, projectRootDir: projectRoot ?? '',
+  Future<void> _renameFolder(BuildContext context, FolderNode node) => _rename(
+        context,
+        title: t.layerDrawer.renameFolder,
+        currentName: node.name,
+        label: t.layerDrawer.newName,
+        apply: (name) async {
+          final absPath = node.getAbsoluteFilePath();
+          if (absPath != null) {
+            final newPath = p.join(p.dirname(absPath), name);
+            await fs.rename(absPath, newPath);
+            await LayerDrawerService.notifySyncedPathChange(node, absPath, newPath);
+          }
+          node.name = name;
+          triggerMapRefresh();
+        },
       );
 
-      if (oldPath != null && parentNode != null) {
-        final newPath = p.join(p.dirname(oldPath), newFileName);
-        if (wasExpanded) {
-          ref.read(expandedGeoPackagesProvider.notifier).updatePath(oldPath, newPath);
-        }
-        // 新しいGeoPackageNodeのレイヤを読み込む
-        for (final child in parentNode.children) {
-          if (child is GeoPackageNode && child.geoPackageFile.getAbsolutePath() == newPath) {
-            await child.updateChildren();
-            break;
-          }
-        }
-      }
+  Future<void> _renamePhoto(BuildContext context, ImageNode node) => _rename(
+        context,
+        title: t.layerDrawer.renamePhoto,
+        currentName: p.basenameWithoutExtension(node.name),
+        label: t.layerDrawer.newFileName,
+        apply: (name) async {
+          await LayerDrawerService.renamePhoto(node, name);
+          triggerMapRefresh();
+          ref.notify(t.layerDrawer.photoRenamed(name: name));
+        },
+      );
 
-      triggerMapRefresh();
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.gpkgRenamed(name: newFileName),
-            level: NotificationLevel.info,
+  Future<void> _renameGeoPackage(BuildContext context, GeoPackageNode node) => _rename(
+        context,
+        title: t.layerDrawer.renameGeoPackage,
+        currentName: p.basenameWithoutExtension(node.name),
+        label: t.layerDrawer.newFileName,
+        apply: (name) async {
+          final oldPath = node.geoPackageFile.getAbsolutePath();
+          final wasExpanded = ref.read(expandedGeoPackagesProvider).isExpanded(oldPath);
+          // updateChildren()でnode.parentがnullになるため、先に保持
+          final parentNode = node.parent;
+
+          final projectRoot = ref.read(projectRootDirProvider);
+          final newFileName = await LayerDrawerService.renameGeoPackage(
+            node, name, projectRootDir: projectRoot ?? '',
           );
-    } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.layerDrawer.renameFailed(error: '$e'),
-            level: NotificationLevel.info,
-          );
-    }
-  }
+
+          if (oldPath != null && parentNode != null) {
+            final newPath = p.join(p.dirname(oldPath), newFileName);
+            if (wasExpanded) {
+              ref.read(expandedGeoPackagesProvider.notifier).updatePath(oldPath, newPath);
+            }
+            // 新しいGeoPackageNodeのレイヤを読み込む
+            final renamed = parentNode.children
+                .whereType<GeoPackageNode>()
+                .where((c) => c.geoPackageFile.getAbsolutePath() == newPath)
+                .firstOrNull;
+            await renamed?.updateChildren();
+          }
+
+          triggerMapRefresh();
+          ref.notify(t.layerDrawer.gpkgRenamed(name: newFileName));
+        },
+      );
 
   Future<void> _handleCloudAction(
     BuildContext context,
@@ -442,25 +415,14 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     BuildContext context,
     DriveFolderNode driveRoot,
   ) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(t.layerDrawer.folder.unlinkDrive),
-        content: Text(t.layerDrawer.unlinkDriveConfirm(name: driveRoot.name)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(t.common.cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(t.layerDrawer.unlink),
-          ),
-        ],
-      ),
+    final confirm = await showConfirmDialog(
+      context,
+      title: t.layerDrawer.folder.unlinkDrive,
+      content: Text(t.layerDrawer.unlinkDriveConfirm(name: driveRoot.name)),
+      confirmLabel: t.layerDrawer.unlink,
+      confirmColor: Colors.red,
     );
-    if (confirm != true || !mounted) return;
+    if (!confirm || !mounted) return;
 
     final folderPath = driveRoot.getAbsoluteFilePath();
     if (folderPath == null) return;
@@ -481,10 +443,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     ref.read(folderTreeProvider.notifier).set(replacement);
     widget.onDirChanged(replacement);
 
-    ref.read(notificationCenterProvider.notifier).add(
-          title: t.layerDrawer.driveUnlinked,
-          level: NotificationLevel.info,
-        );
+    ref.notify(t.layerDrawer.driveUnlinked);
   }
 
   Future<void> _addFolder(BuildContext context) async {
@@ -496,7 +455,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         await LayerDrawerService.createLocalFolder(widget.currentNode as FolderNode, typeResult.folderName!);
         triggerMapRefresh();
       } catch (e) {
-        ref.read(notificationCenterProvider.notifier).add(title: '$e', level: NotificationLevel.info);
+        ref.notify('$e');
       }
     } else {
       if (!context.mounted) return;
@@ -508,10 +467,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     final urlResult = await DriveUrlInputDialog.show(context);
     if (urlResult == null) return;
 
-    ref.read(notificationCenterProvider.notifier).add(
-          title: t.layerDrawer.cloningDrive(name: urlResult.folderName),
-          level: NotificationLevel.info,
-        );
+    ref.notify(t.layerDrawer.cloningDrive(name: urlResult.folderName));
 
     try {
       final node = await LayerDrawerService.cloneDriveFolder(
@@ -524,22 +480,13 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
       if (node != null) {
         triggerMapRefresh();
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.cloneSuccess(name: urlResult.folderName),
-              level: NotificationLevel.success,
-            );
+        ref.notify(t.layerDrawer.cloneSuccess(name: urlResult.folderName), level: NotificationLevel.success);
       } else {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.cloneFailed,
-              level: NotificationLevel.error,
-            );
+        ref.notify(t.layerDrawer.cloneFailed, level: NotificationLevel.error);
       }
     } catch (e) {
       AppLogger.error('[LayerDrawer] Driveフォルダクローンエラー: $e');
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.common.errorOccurred(error: '$e'),
-            level: NotificationLevel.error,
-          );
+      ref.notify(t.common.errorOccurred(error: '$e'), level: NotificationLevel.error);
     }
   }
 
@@ -556,17 +503,14 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     try {
       final newNode = await LayerDrawerService.createGeoPackage(widget.currentNode as FolderNode, result);
       if (newNode == null) {
-        ref.read(notificationCenterProvider.notifier).add(
-              title: t.layerDrawer.gpkgCreateFailed,
-              level: NotificationLevel.info,
-            );
+        ref.notify(t.layerDrawer.gpkgCreateFailed);
         return;
       }
       final absPath = newNode.geoPackageFile.getAbsolutePath();
       if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).addExpanded(absPath);
       triggerMapRefresh();
     } catch (e) {
-      ref.read(notificationCenterProvider.notifier).add(title: '$e', level: NotificationLevel.info);
+      ref.notify('$e');
     }
   }
 

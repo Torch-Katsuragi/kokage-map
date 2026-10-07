@@ -132,71 +132,66 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   /// Drive フォルダを、いつもの地図の 共有/ に取り込んで開く（QR のリンク）
-  Future<void> _receiveFromDrive(String driveId) async {
-    final notifier = ref.read(notificationCenterProvider.notifier);
-    setState(() {
-      _isOpeningProject = true;
-      _openingProjectStatus = t.home.receivingShared;
-    });
-    try {
-      final drive = GoogleDriveService();
-      // 起動直後は無音の復元が終わっていないことがある。先に無音で試し、だめなときだけサインインを出す
-      if (!drive.authState.isAuthenticated) await drive.restoreSessionSilently();
-      if (!drive.authState.isAuthenticated && !await drive.signIn()) {
-        notifier.add(title: drive.authState.errorMessage ?? t.home.receiveNeedsSignIn, level: NotificationLevel.warning);
-        return;
-      }
-      final info = await drive.getFolderInfo(driveId);
-      if (info == null) {
-        notifier.add(title: t.home.receiveFailed, level: NotificationLevel.error);
-        return;
-      }
-      final root = await receiveSharedMap(
-        driveId: driveId,
-        folderName: info.name ?? driveId,
-        driveUrl: 'https://drive.google.com/drive/folders/$driveId',
-        isReadOnly: !(info.capabilities?.canEdit ?? false),
-      );
-      if (!mounted) return;
-      setState(() => _isOpeningProject = false);
-      await _openProjectDir(root);
-      return;
-    } catch (e) {
-      AppLogger.debug('[HomeScreen] 共有の地図を取り込めない: $e');
-      notifier.add(title: t.home.receiveFailed, level: NotificationLevel.error);
-    } finally {
-      if (mounted && !_navigatedToMapPage) {
-        setState(() {
-          _isOpeningProject = false;
-          _openingProjectStatus = '';
-        });
-      }
-    }
-  }
+  Future<void> _receiveFromDrive(String driveId) => _receiveAndOpen(() async {
+        final drive = GoogleDriveService();
+        // 起動直後は無音の復元が終わっていないことがある。先に無音で試し、だめなときだけサインインを出す
+        if (!drive.authState.isAuthenticated) await drive.restoreSessionSilently();
+        if (!drive.authState.isAuthenticated && !await drive.signIn()) {
+          _notify(drive.authState.errorMessage ?? t.home.receiveNeedsSignIn, NotificationLevel.warning);
+          return null;
+        }
+        final info = await drive.getFolderInfo(driveId);
+        if (info == null) {
+          _notify(t.home.receiveFailed, NotificationLevel.error);
+          return null;
+        }
+        return receiveSharedMap(
+          driveId: driveId,
+          folderName: info.name ?? driveId,
+          driveUrl: 'https://drive.google.com/drive/folders/$driveId',
+          isReadOnly: !(info.capabilities?.canEdit ?? false),
+        );
+      });
 
   /// ホームの「QR で受け取る」: アプリのカメラで読む（Drive の URL を貼っても読める）
   Future<void> _receiveFromDialog() async {
     final result = await DriveUrlInputDialog.show(context);
     if (result == null || !mounted) return;
-    setState(() {
-      _isOpeningProject = true;
-      _openingProjectStatus = t.home.receivingShared;
-    });
+    await _receiveAndOpen(() => receiveSharedMap(
+          driveId: result.folderId,
+          folderName: result.folderName,
+          driveUrl: result.url,
+          isReadOnly: result.isReadOnly,
+        ));
+  }
+
+  /// 共有の地図を取り込んで（[receive] がいつもの地図のパスを返す。やめたら null）開く。取り込み中は進み具合を出す
+  Future<void> _receiveAndOpen(Future<String?> Function() receive) async {
+    _setOpening(t.home.receivingShared);
     try {
-      final root = await receiveSharedMap(
-        driveId: result.folderId,
-        folderName: result.folderName,
-        driveUrl: result.url,
-        isReadOnly: result.isReadOnly,
-      );
-      if (!mounted) return;
-      setState(() => _isOpeningProject = false);
+      final root = await receive();
+      if (root == null || !mounted) return;
+      _setOpening(null);
       await _openProjectDir(root);
     } catch (e) {
       AppLogger.debug('[HomeScreen] 共有の地図を取り込めない: $e');
-      ref.read(notificationCenterProvider.notifier).add(title: t.home.receiveFailed, level: NotificationLevel.error);
-      if (mounted) setState(() => _isOpeningProject = false);
+      _notify(t.home.receiveFailed, NotificationLevel.error);
+    } finally {
+      if (mounted && !_navigatedToMapPage) _setOpening(null);
     }
+  }
+
+  /// 開いている途中の表示。[status] が null なら終わり
+  void _setOpening(String? status) {
+    if (!mounted) return;
+    setState(() {
+      _isOpeningProject = status != null;
+      _openingProjectStatus = status ?? '';
+    });
+  }
+
+  void _notify(String title, NotificationLevel level, {String? detail}) {
+    ref.read(notificationCenterProvider.notifier).add(title: title, detail: detail, level: level);
   }
 
   /// いつもの地図（Documents/KokageMap）を開く
@@ -221,12 +216,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final dir = await reopenLastProjectFolder();
     if (!mounted) return;
     if (dir == null) {
-      ref
-          .read(notificationCenterProvider.notifier)
-          .add(
-            title: t.home.reopenLastFolderFailed,
-            level: NotificationLevel.warning,
-          );
+      _notify(t.home.reopenLastFolderFailed, NotificationLevel.warning);
       setState(() => _lastFolderName = null);
       return;
     }
@@ -314,16 +304,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Future<void> _startTutorial() async {
     if (!mounted || !_canTutorial || _isOpeningProject || _navigatedToMapPage) return;
     if (!_permissionsGranted) {
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.permissions.storageNotGranted,
-            level: NotificationLevel.error,
-          );
+      _notify(t.permissions.storageNotGranted, NotificationLevel.error);
       return;
     }
-    setState(() {
-      _isOpeningProject = true;
-      _openingProjectStatus = t.tutorial.preparing;
-    });
+    _setOpening(t.tutorial.preparing);
     final PracticeProject proj;
     try {
       proj = await PracticeProject.recreate();
@@ -331,10 +315,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       AppLogger.debug('[HomeScreen] 練習プロジェクトを作れない: $e');
       if (!mounted) return;
       setState(() => _isOpeningProject = false);
-      ref.read(notificationCenterProvider.notifier).add(
-            title: t.tutorial.failed,
-            level: NotificationLevel.error,
-          );
+      _notify(t.tutorial.failed, NotificationLevel.error);
       return;
     }
     // 地図は自分のいる場所（GPS）から始める。練習のデータへは「データの仕組み」でダブルタップして飛ぶ（MapPage 側）
@@ -416,12 +397,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   /// ストレージ権限の確認・リクエスト
   Future<void> _checkPermissions() async {
     if (!PlatformCapabilities.needsRuntimePermissions) {
-      if (mounted) {
-        setState(() {
-          _permissionsGranted = true;
-        });
-        unawaited(_loadProjects());
-      }
+      _onPermissionsGranted();
       return;
     }
 
@@ -514,29 +490,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       }
     }
 
-    // 位置情報権限の結果に関わらず、Bluetooth権限の状態確認へ進む
-    await _checkBluetoothPermissions();
+    // 位置情報権限の結果に関わらず先へ進む。
+    // Bluetooth は起動時に求めない（外部機器を使うときだけ要る。オンボーディングで飛ばしたのに
+    // ここで 2 回出ていた。2026-09-01）。求めるのは外部機器設定・GPS 設定の接続操作の直前
+    _onPermissionsGranted();
   }
 
-  /// Bluetooth権限の状態確認（起動時はリクエストしない）
-  ///
-  /// Bluetoothは外部機器（GNSS受信機・レーザー距離計）を使うときだけ必要なので、
-  /// 起動時に「付近のデバイス」のシステムプロンプトを出さない。
-  /// オンボーディングでスキップしたのにここで2回出ていた（2026-09-01 修正）。
-  /// 実際のリクエストは外部機器設定画面・GPS設定画面が接続操作の直前に行う。
-  Future<void> _checkBluetoothPermissions() async {
-    final bluetoothScan = await Permission.bluetoothScan.status;
-    final bluetoothConnect = await Permission.bluetoothConnect.status;
-
-    AppLogger.debug(
-      '[HomeScreen] Bluetooth権限状態: SCAN=$bluetoothScan, CONNECT=$bluetoothConnect'
-      '（起動時はリクエストしない）',
-    );
-
+  /// 地図を開ける状態になった（「続きから」を読み直す）
+  void _onPermissionsGranted() {
     if (!mounted) return;
-    setState(() {
-      _permissionsGranted = true;
-    });
+    setState(() => _permissionsGranted = true);
     unawaited(_loadProjects());
   }
 
@@ -565,11 +528,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
+  /// グローバルフォルダの置き場所を決める（旧場所からの移行もここで走る）。web・失敗時は null
+  Future<GlobalFolderResolution?> _resolveGlobalFolder() async {
+    if (!PlatformCapabilities.hasLocalFileSystem) return null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return await GlobalFolderLocator.resolve(customPath: prefs.getString(kGlobalFolderCustomPathKey));
+    } catch (e) {
+      AppLogger.debug('[HomeScreen] グローバルフォルダの置き場所を決められない: $e');
+      return null;
+    }
+  }
+
   /// グローバルフォルダの初期化
   /// SharedPreferencesにカスタムパスがあればそちらを使用、なければデフォルト
   /// （Android の既定は共有ストレージ。場所決めと旧場所からの移行は
   /// `GlobalFolderLocator` に集約）
-  Future<void> _initializeGlobalFolder() async {
+  ///
+  /// [resolved] は [_resolveGlobalFolder] で先に決めた結果（決められなかったら null で、ここでもう一度試す）
+  Future<void> _initializeGlobalFolder(GlobalFolderResolution? resolved) async {
     // ⚠ グローバルフォルダは「アプリのドキュメント領域」に置く仕組みで、
     // web にはその概念が無い（path_provider が未対応）。
     // web でプロジェクトを開いたときは黙って飛ばす。
@@ -578,42 +555,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       return;
     }
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final customPath = prefs.getString(kGlobalFolderCustomPathKey);
-
-      final resolution = await GlobalFolderLocator.resolve(customPath: customPath);
+      final resolution = resolved ?? await _resolveGlobalFolder();
+      if (resolution == null) return;
       final globalPath = resolution.path;
 
       // グローバルフォルダパスを保存
       ref.read(globalFolderPathProvider.notifier).set(globalPath);
       AppLogger.debug('[HomeScreen] グローバルフォルダパス: $globalPath');
 
-      final notifier = ref.read(notificationCenterProvider.notifier);
       if (resolution.migrated) {
-        notifier.add(
-          title: t.globalFolder.migrated(count: resolution.migratedFiles),
-          detail: globalPath,
-          level: NotificationLevel.info,
-        );
+        _notify(t.globalFolder.migrated(count: resolution.migratedFiles), NotificationLevel.info, detail: globalPath);
       }
       if (resolution.fellBack) {
-        notifier.add(
-          title: t.globalFolder.fallback,
-          detail: resolution.fallbackReason,
-          level: NotificationLevel.warning,
-        );
+        _notify(t.globalFolder.fallback, NotificationLevel.warning, detail: resolution.fallbackReason);
       }
 
       // 含有関係チェック（プロジェクトフォルダとの重複警告）
       final projectDir = ref.read(projectRootDirProvider);
-      if (projectDir != null) {
-        final warning = checkContainmentRelation(globalPath, projectDir);
-        if (warning != null) {
-          ref
-              .read(notificationCenterProvider.notifier)
-              .add(title: warning, level: NotificationLevel.warning);
-        }
-      }
+      final warning = projectDir == null ? null : checkContainmentRelation(globalPath, projectDir);
+      if (warning != null) _notify(warning, NotificationLevel.warning);
 
       // グローバルフォルダは「System」（sys）の下に置く。sys はルート直下の先頭
       // （[[docs/features/layer-management#System（sys）]]）
@@ -638,12 +598,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     if (!_permissionsGranted) {
       AppLogger.debug('[HomeScreen] 権限が許可されていません');
-      ref
-          .read(notificationCenterProvider.notifier)
-          .add(
-            title: t.permissions.storageNotGranted,
-            level: NotificationLevel.error,
-          );
+      _notify(t.permissions.storageNotGranted, NotificationLevel.error);
       return;
     }
 
@@ -664,55 +619,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   /// フォルダの出所（ピッカー / `--dart-define=PROJECT_DIR`）に依らず同じ経路を通す。
   Future<void> _openProjectDir(String dir) async {
     if (!mounted) return;
-    setState(() {
-      _projectDir = dir;
-      _isOpeningProject = true;
-      _openingProjectStatus = t.home.initializingProject;
-    });
+    _projectDir = dir;
+    _setOpening(t.home.initializingProject);
     AppLogger.debug('[HomeScreen] フォルダ選択完了、初期化を開始');
     ref.read(projectRootDirProvider.notifier).set(dir);
     AppLogger.debug('[HomeScreen] projectRootDirProvider 設定完了');
-    // Global の置き場所を先に決める（旧 Global を .kokage へ移し、移せなかった旧フォルダを地図に出さない印を付ける）
-    if (PlatformCapabilities.hasLocalFileSystem) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await GlobalFolderLocator.resolve(customPath: prefs.getString(kGlobalFolderCustomPathKey));
-      } catch (_) {}
-    }
+    // Global の置き場所を先に決める（旧 Global を .kokage へ移し、移せなかった旧フォルダを地図に出さない印を付ける）。
+    // 決めた結果は下の _initializeGlobalFolder でそのまま使う（以前は二度決めていて、移した件数のお知らせが出なかった）
+    final globalResolution = await _resolveGlobalFolder();
     if (_usesProjectsHome) unawaited(ProjectsHome.remember(dir));
     final rootNode = await FolderNode.createRootNode(dir);
     ref.read(folderTreeProvider.notifier).set(rootNode);
     AppLogger.debug('[HomeScreen] rootNode 設定完了 (${rootNode.runtimeType})');
 
-    setState(() {
-      _openingProjectStatus = t.home.preparingSharedFolder;
-    });
-    await _initializeGlobalFolder();
+    _setOpening(t.home.preparingSharedFolder);
+    await _initializeGlobalFolder(globalResolution);
     AppLogger.debug('[HomeScreen] GlobalFolder 初期化完了');
 
     // フォルダ選択後すぐ地図編集画面へ遷移
-    if (mounted) {
-      AppLogger.debug('[HomeScreen] 地図画面に遷移中...');
-      // マップ画面遷移後は権限チェックを無効化（GPS権限リクエストとの競合防止）
-      _navigatedToMapPage = true;
-      unawaited(Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const RootMapsHomePage()),
-      ).then((_) {
-        if (!mounted) return;
-        ref.read(tutorialProvider.notifier).stop(); // 地図を閉じたら案内も終わり
-        setState(() {
-          _navigatedToMapPage = false;
-          _isOpeningProject = false;
-          _openingProjectStatus = '';
-        });
-        unawaited(_loadProjects());
-        if (_tutorialPending) {
-          _tutorialPending = false;
-          unawaited(_startTutorial());
-        }
-      }));
-    }
+    if (!mounted) return;
+    AppLogger.debug('[HomeScreen] 地図画面に遷移中...');
+    _pushMapPage(onReturned: () {
+      ref.read(tutorialProvider.notifier).stop(); // 地図を閉じたら案内も終わり
+      _setOpening(null);
+      unawaited(_loadProjects());
+      if (_tutorialPending) {
+        _tutorialPending = false;
+        unawaited(_startTutorial());
+      }
+    });
+  }
+
+  /// 地図画面へ移る。戻ってきたら [onReturned]（画面が残っていれば）
+  void _pushMapPage({VoidCallback? onReturned}) {
+    // マップ画面遷移後は権限チェックを無効化（GPS権限リクエストとの競合防止）
+    _navigatedToMapPage = true;
+    unawaited(Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RootMapsHomePage()),
+    ).then((_) {
+      if (!mounted) return;
+      setState(() => _navigatedToMapPage = false);
+      onReturned?.call();
+    }));
   }
 
   /// フォルダを開けない環境向けの入口カード（地図だけ見る）
@@ -720,45 +669,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   /// いま該当するのは **File System Access API を持たないブラウザ**
   /// （Firefox / Safari）だけ。Chrome / Edge なら通常のフォルダ選択が出る。
   Widget _buildWebPreviewCard() {
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const Icon(Icons.public, size: 48, color: Colors.blue),
-            const SizedBox(height: 16),
-            Text(
-              t.home.webUnsupportedBrowserTitle,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              t.home.webUnsupportedBrowserDesc,
-              style: const TextStyle(color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _openMapWithoutProject,
-              icon: const Icon(Icons.map),
-              label: Text(t.home.openMap),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
-                textStyle: const TextStyle(fontSize: 16),
-              ),
-            ),
-          ],
+    return _StartCard(
+      icon: Icons.public,
+      iconColor: Colors.blue,
+      title: t.home.webUnsupportedBrowserTitle,
+      description: t.home.webUnsupportedBrowserDesc,
+      children: [
+        ElevatedButton.icon(
+          onPressed: _openMapWithoutProject,
+          icon: const Icon(Icons.map),
+          label: Text(t.home.openMap),
+          style: _StartCard.buttonStyle(Colors.blue),
         ),
-      ),
+      ],
     );
   }
 
@@ -775,14 +698,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         .read(folderTreeProvider.notifier)
         .set(FolderNode('Home', visible: true));
 
-    _navigatedToMapPage = true;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const RootMapsHomePage()),
-    ).then((_) {
-      if (!mounted) return;
-      setState(() => _navigatedToMapPage = false);
-    });
+    _pushMapPage();
   }
 
   /// 置き場所のホーム（native）。権限が無い間は案内とやり直しだけ
@@ -831,6 +747,87 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
         ],
       ],
+    );
+  }
+
+  /// フォルダを選んで開く（web の Chrome / Edge）
+  Widget _buildFolderPickerCard() {
+    final ready = _permissionsGranted && !_isOpeningProject;
+    return _StartCard(
+      icon: Icons.folder_open,
+      iconColor: Colors.orange,
+      title: t.home.startProject,
+      description: t.home.selectProjectFolder,
+      children: [
+        ElevatedButton.icon(
+          onPressed: ready ? _pickProjectDir : null,
+          icon: Icon(
+            _isOpeningProject ? Icons.hourglass_top : (_permissionsGranted ? Icons.folder : Icons.warning),
+          ),
+          label: Text(
+            _isOpeningProject
+                ? t.home.launching
+                : (_permissionsGranted ? t.home.selectFolder : t.home.permissionRequired),
+          ),
+          style: _StartCard.buttonStyle(ready ? Colors.blue : Colors.grey),
+        ),
+        if (_lastFolderName != null && !_isOpeningProject) ...[
+          const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: _permissionsGranted ? _reopenLastProjectDir : null,
+            icon: const Icon(Icons.history),
+            label: Text('${t.home.reopenLastFolder}（$_lastFolderName）'),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+          ),
+        ],
+        if (_canTutorial && !_isOpeningProject) ...[
+          const SizedBox(height: 4),
+          TextButton.icon(
+            onPressed: _permissionsGranted ? _startTutorial : null,
+            icon: const Icon(Icons.school_outlined),
+            label: Text(t.tutorial.homeButton),
+          ),
+        ],
+        if (_isOpeningProject) ...[
+          const SizedBox(height: 12),
+          Text(_openingProjectStatus, style: const TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          const LinearProgressIndicator(),
+        ],
+        if (!_permissionsGranted) ...[
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: _checkPermissions,
+            icon: const Icon(Icons.refresh),
+            label: Text(t.home.recheckPermission),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// 地図から戻ってきたときの導線。タップでピッカーを通さず同じフォルダを開き直す
+  Widget _buildReopenCard(String dir) {
+    return Card(
+      color: Colors.green[50],
+      child: InkWell(
+        onTap: _isOpeningProject ? null : () => _openProjectDir(dir),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green, size: 24),
+              const SizedBox(height: 8),
+              Text(t.common.selectedFolder, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(dir, style: const TextStyle(fontSize: 12, fontFamily: 'monospace'), textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              Text(t.home.tapToOpenMap, style: TextStyle(color: Colors.green[800])),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -894,162 +891,59 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     else if (_usesProjectsHome)
                       _buildLauncher()
                     else
-                      Card(
-                        elevation: 4,
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            children: [
-                              const Icon(
-                                Icons.folder_open,
-                                size: 48,
-                                color: Colors.orange,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                t.home.startProject,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                t.home.selectProjectFolder,
-                                style: const TextStyle(color: Colors.grey),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 24),
-                              ElevatedButton.icon(
-                                onPressed:
-                                    (_permissionsGranted && !_isOpeningProject)
-                                        ? _pickProjectDir
-                                        : null,
-                                icon: Icon(
-                                  _isOpeningProject
-                                      ? Icons.hourglass_top
-                                      : (_permissionsGranted
-                                          ? Icons.folder
-                                          : Icons.warning),
-                                ),
-                                label: Text(
-                                  _isOpeningProject
-                                      ? t.home.launching
-                                      : (_permissionsGranted
-                                          ? t.home.selectFolder
-                                          : t.home.permissionRequired),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      (_permissionsGranted && !_isOpeningProject)
-                                          ? Colors.blue
-                                          : Colors.grey,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 32,
-                                    vertical: 16,
-                                  ),
-                                  textStyle: const TextStyle(fontSize: 16),
-                                ),
-                              ),
-                              if (_lastFolderName != null &&
-                                  !_isOpeningProject) ...[
-                                const SizedBox(height: 12),
-                                TextButton.icon(
-                                  onPressed:
-                                      _permissionsGranted
-                                          ? _reopenLastProjectDir
-                                          : null,
-                                  icon: const Icon(Icons.history),
-                                  label: Text(
-                                    '${t.home.reopenLastFolder}'
-                                    '（$_lastFolderName）',
-                                  ),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.blue,
-                                  ),
-                                ),
-                              ],
-                              if (_canTutorial && !_isOpeningProject) ...[
-                                const SizedBox(height: 4),
-                                TextButton.icon(
-                                  onPressed: _permissionsGranted ? _startTutorial : null,
-                                  icon: const Icon(Icons.school_outlined),
-                                  label: Text(t.tutorial.homeButton),
-                                ),
-                              ],
-                              if (_isOpeningProject) ...[
-                                const SizedBox(height: 12),
-                                Text(
-                                  _openingProjectStatus,
-                                  style: const TextStyle(color: Colors.grey),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 12),
-                                const LinearProgressIndicator(),
-                              ],
-                              if (!_permissionsGranted) ...[
-                                const SizedBox(height: 16),
-                                TextButton.icon(
-                                  onPressed: _checkPermissions,
-                                  icon: const Icon(Icons.refresh),
-                                  label: Text(t.home.recheckPermission),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.blue,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
+                      _buildFolderPickerCard(),
                     if (_projectDir != null && !_usesProjectsHome) ...[
                       const SizedBox(height: 16),
-                      // 地図から戻ってきたときの導線。タップでピッカーを通さず同じフォルダを開き直す
-                      Card(
-                        color: Colors.green[50],
-                        child: InkWell(
-                          onTap: _isOpeningProject ? null : () => _openProjectDir(_projectDir!),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              children: [
-                                const Icon(
-                                  Icons.check_circle,
-                                  color: Colors.green,
-                                  size: 24,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  t.common.selectedFolder,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _projectDir!,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontFamily: 'monospace',
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  t.home.tapToOpenMap,
-                                  style: TextStyle(color: Colors.green[800]),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                      _buildReopenCard(_projectDir!),
                     ],
                   ],
                 ),
               ),
             ),
+      ),
+    );
+  }
+}
+
+/// 入口のカード（アイコン・見出し・説明の下にボタンを並べる）
+class _StartCard extends StatelessWidget {
+  const _StartCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.description,
+    required this.children,
+  });
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String description;
+  final List<Widget> children;
+
+  static ButtonStyle buttonStyle(Color background) => ElevatedButton.styleFrom(
+        backgroundColor: background,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        textStyle: const TextStyle(fontSize: 16),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            Icon(icon, size: 48, color: iconColor),
+            const SizedBox(height: 16),
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(description, style: const TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            ...children,
+          ],
+        ),
       ),
     );
   }

@@ -59,6 +59,13 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
   List<GpsTrackPoint> _allPoints = [];
   List<GpsTrackPoint> _selectedPoints = [];
 
+  // 描画・簡略化に渡す座標列と距離。build ごとに作り直すと、プレビューが毎回描き直され
+  // SimplificationControls も「元ラインが変わった」とみなして簡略化をやり直すので、
+  // 読み込み・範囲確定のときだけ作る
+  List<LatLng> _allLine = const [];
+  List<LatLng> _selectedLine = const [];
+  double _selectedDistanceKm = 0;
+
   // 時間範囲
   RangeValues? _timeRange;
   double _timeMin = 0;
@@ -105,6 +112,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
 
     setState(() {
       _allPoints = points;
+      _allLine = [for (final p in points) p.toLatLng()];
       _isLoading = false;
 
       if (points.isNotEmpty) {
@@ -115,6 +123,8 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
       } else {
         _timeRange = null;
         _selectedPoints = [];
+        _selectedLine = const [];
+        _selectedDistanceKm = 0;
         _simplifiedLine = [];
       }
     });
@@ -130,6 +140,8 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
       start.clamp(0, _allPoints.length - 1),
       (end + 1).clamp(0, _allPoints.length),
     );
+    _selectedLine = [for (final p in _selectedPoints) p.toLatLng()];
+    _selectedDistanceKm = _calculateDistance(_selectedLine) / 1000;
 
     setState(() {});
   }
@@ -162,6 +174,10 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
         '${dt.minute.toString().padLeft(2, '0')}:'
         '${dt.second.toString().padLeft(2, '0')}';
   }
+
+  /// スライダーのつまみ位置にある点の時刻
+  String _timeAt(double index) =>
+      _formatTime(_allPoints[index.round().clamp(0, _allPoints.length - 1)].timestamp);
 
   /// 時間差を表示用にフォーマット
   String _formatDuration(Duration d) {
@@ -385,12 +401,12 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
                 Row(
                   children: [
                     Text(
-                      t.track.startLabel(time: _formatTime(_allPoints[_timeRange!.start.round().clamp(0, _allPoints.length - 1)].timestamp)),
+                      t.track.startLabel(time: _timeAt(_timeRange!.start)),
                       style: const TextStyle(fontSize: 12),
                     ),
                     const Spacer(),
                     Text(
-                      t.track.endLabel(time: _formatTime(_allPoints[_timeRange!.end.round().clamp(0, _allPoints.length - 1)].timestamp)),
+                      t.track.endLabel(time: _timeAt(_timeRange!.end)),
                       style: const TextStyle(fontSize: 12),
                     ),
                   ],
@@ -423,7 +439,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
                     borderRadius: BorderRadius.circular(8),
                     child: CustomPaint(
                       painter: LinePreviewPainter(
-                        backgroundLine: _allPoints.map((p) => p.toLatLng()).toList(),
+                        backgroundLine: _allLine,
                         foregroundLine: _simplifiedLine,
                       ),
                       size: Size.infinite,
@@ -465,7 +481,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
                         children: [
                           Expanded(
                             child: Text(
-                              t.track.distance(value: (_calculateDistance(_selectedPoints.map((p) => p.toLatLng()).toList()) / 1000).toStringAsFixed(2)),
+                              t.track.distance(value: _selectedDistanceKm.toStringAsFixed(2)),
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),
@@ -479,7 +495,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
 
               // 簡略化コントロール（共通ウィジェット）
               SimplificationControls(
-                originalLine: _selectedPoints.map((p) => p.toLatLng()).toList(),
+                originalLine: _selectedLine,
                 initialTolerance: 5.0,
                 onChanged: (simplified) =>
                     setState(() => _simplifiedLine = simplified),

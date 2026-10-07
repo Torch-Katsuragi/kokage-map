@@ -89,11 +89,13 @@ class SimplificationControlsState extends State<SimplificationControls> {
   void didUpdateWidget(covariant SimplificationControls oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.originalLine != widget.originalLine) {
-      _runSimplification();
+      // 親のビルド中に onChanged（親の setState）を呼ばないようフレーム後に回す
+      WidgetsBinding.instance.addPostFrameCallback((_) => _runSimplification());
     }
   }
 
   Future<void> _runSimplification() async {
+    if (!mounted) return;
     if (widget.originalLine.length < 2) {
       _simplified = List.of(widget.originalLine);
       _stats = null;

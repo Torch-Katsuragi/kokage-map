@@ -363,6 +363,8 @@ class TutorialStepDef {
 }
 
 bool _area(LayerNode? l) => isPracticeLayer(l, PracticeProject.areaLayer);
+bool _route(LayerNode? l) => isPracticeLayer(l, PracticeProject.routeLayer);
+bool _points(LayerNode? l) => isPracticeLayer(l, PracticeProject.pointsLayer);
 
 /// 線・面を描く手順の枠: 一覧が開いていれば閉じる所、ペンでなければペン、描いていれば ✓
 List<GlobalKey> _drawTargets(String tool, bool listOpen) => listOpen
@@ -370,10 +372,15 @@ List<GlobalKey> _drawTargets(String tool, bool listOpen) => listOpen
     : tool != 'Pen'
         ? [TutorialTargets.penButton]
         : [TutorialTargets.confirmButton];
-bool _route(LayerNode? l) => isPracticeLayer(l, PracticeProject.routeLayer);
-bool _points(LayerNode? l) => isPracticeLayer(l, PracticeProject.pointsLayer);
 
-List<TutorialStepDef> stepsOf(TutorialChapter c) {
+/// 章ごとの手順。中身は変わらないので 1 度だけ組む
+/// （同じ手順が同じ物であることを重ね絵が当てにしている。手順ごとに 1 度だけ送って見せる）
+final _stepsCache = <TutorialChapter, List<TutorialStepDef>>{};
+
+List<TutorialStepDef> stepsOf(TutorialChapter c) =>
+    _stepsCache[c] ??= List.unmodifiable(_buildSteps(c));
+
+List<TutorialStepDef> _buildSteps(TutorialChapter c) {
   return switch (c) {
     TutorialChapter.view => [
       // 指で動かす・拡大するは、満足するまで触ってもらう（自動で先へ進めない。松本 2026-10-01）
@@ -531,8 +538,9 @@ class TutorialState {
   /// 今の手順の操作が済んだ（「とばす」が「次へ」に替わる）
   final bool satisfied;
 
-  TutorialStepDef get step => stepsOf(chapter)[index];
-  int get stepCount => stepsOf(chapter).length;
+  List<TutorialStepDef> get _steps => stepsOf(chapter);
+  TutorialStepDef get step => _steps[index];
+  int get stepCount => _steps.length;
 
   /// 章を終えた直後か（一覧に「おわりました」を出す）
   bool get justFinished => menu && finished.contains(chapter);

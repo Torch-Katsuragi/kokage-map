@@ -86,6 +86,9 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
 
   /// 位置の有無（id → 有り）。読み終えた写真だけ入る
   final _hasLocation = <String, bool>{};
+
+  /// 位置を読んでいる最中の写真（二度読まない）
+  final _reading = <String>{};
   bool _onlyWithLocation = false;
 
   @override
@@ -135,13 +138,13 @@ class _PhotoPickerScreenState extends State<PhotoPickerScreen> {
   }
 
   Future<void> _checkLocation(AssetEntity a) async {
-    if (_hasLocation.containsKey(a.id)) return;
-    _hasLocation[a.id] = false; // 読み中に二度読まない
+    if (_hasLocation.containsKey(a.id) || !_reading.add(a.id)) return;
     bool has = false;
     try {
       final ll = await a.latlngAsync();
       has = ll != null && (ll.latitude != 0 || ll.longitude != 0);
     } catch (_) {}
+    _reading.remove(a.id);
     if (!mounted) return;
     setState(() => _hasLocation[a.id] = has);
   }

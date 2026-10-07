@@ -17,13 +17,13 @@
 // CSVエクスポートクラス
 import 'dart:io';
 
-import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 
 import '../../../models/geometry_type.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../import_export_models.dart';
 import 'base_exporter.dart';
+import 'feature_parts.dart';
 
 /// CSVエクスポーター
 class CSVExporter extends BaseExporter {
@@ -71,8 +71,9 @@ class CSVExporter extends BaseExporter {
         row.add(geometryType?.value ?? 'unknown');
 
         // 座標データを取得
-        if (geometryType == GeometryType.point && feature['points'] != null) {
-          final points = feature['points'] as List<LatLng>;
+        final parts = geometryType == null ? null : featureParts(feature, geometryType);
+        if (geometryType == GeometryType.point && parts != null) {
+          final points = parts.first;
           if (points.isNotEmpty) {
             row.add(points.first.longitude.toString());
             row.add(points.first.latitude.toString());
@@ -80,9 +81,8 @@ class CSVExporter extends BaseExporter {
             row.add('');
             row.add('');
           }
-        } else if (geometryType == GeometryType.linestring &&
-            feature['lines'] != null) {
-          final lines = feature['lines'] as List<LatLng>;
+        } else if (geometryType == GeometryType.linestring && parts != null) {
+          final lines = parts.first;
           if (lines.isNotEmpty) {
             // 線の中心点を計算
             final double avgLng =

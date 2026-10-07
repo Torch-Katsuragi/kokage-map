@@ -18,7 +18,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:turf/turf.dart' as turf;
 
@@ -27,6 +26,7 @@ import '../../../models/geometry_type.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../import_export_models.dart';
 import 'base_exporter.dart';
+import 'feature_parts.dart';
 
 /// GeoJSONエクスポーター（turfパッケージ活用）
 class GeoJSONExporter extends BaseExporter {
@@ -99,21 +99,21 @@ class GeoJSONExporter extends BaseExporter {
     try {
       turf.GeometryObject? geometry;
 
+      final parts = geometryType == null ? null : featureParts(feature, geometryType);
       switch (geometryType) {
         case GeometryType.point:
-          final points = feature['points'] as List<LatLng>?;
-          if (points != null && points.isNotEmpty) {
-            geometry = TurfConverter.createPoint(points.first);
+          if (parts != null) {
+            geometry = TurfConverter.createPoint(parts.first.first);
           }
 
         case GeometryType.linestring:
-          final lines = feature['lines'] as List<LatLng>?;
-          if (lines != null && lines.length >= 2) {
-            geometry = TurfConverter.createLineString(lines);
+          final line = parts?.first;
+          if (line != null && line.length >= 2) {
+            geometry = TurfConverter.createLineString(line);
           }
 
         case GeometryType.polygon:
-          final polygons = feature['polygons'] as List<List<LatLng>>?;
+          final polygons = parts;
           if (polygons != null && polygons.isNotEmpty) {
             // ポリゴンを閉じる処理
             final closedRings = polygons.map((ring) {

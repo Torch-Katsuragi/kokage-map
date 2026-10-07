@@ -3,9 +3,9 @@
   "error": null,
   "metadata": {
     "outputPath": "lns.geojson",
-    "featureCount": 0,
+    "featureCount": 2,
     "geometryType": "MULTILINESTRING",
     "format": "GeoJSON",
-    "fileSize": 84
+    "fileSize": 938
   }
 }

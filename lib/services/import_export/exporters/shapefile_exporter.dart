@@ -16,7 +16,6 @@
 // Root Maps: Shapefile Exporter
 // Shapefileエクスポートクラス（CRS変換対応）
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
@@ -24,12 +23,12 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../../../models/geometry_type.dart';
 import '../../../models/nodes/layer_node.dart';
-import '../../../utils/wkb_utils.dart';
 import '../../coordinate/epsg_registry.dart';
 import '../../coordinate/projections.dart';
 import '../import_export_models.dart';
 import '../parsers/shapefile_binary_parser.dart' show ShapeType;
 import 'base_exporter.dart';
+import 'feature_parts.dart';
 import 'shapefile_writer.dart';
 
 /// Shapefileエクスポーター（CRS変換対応）
@@ -150,63 +149,15 @@ class ShapefileExporter extends BaseExporter {
     GeometryType type,
     Projection? target,
   ) {
-    List<List<double>> project(List<LatLng> ring) =>
-        [for (final p in ring) _project(p, target)];
-
-    switch (type) {
-      case GeometryType.point:
-        var points = feature['points'] as List<LatLng>?;
-        if (points == null || points.isEmpty) {
-          final parsed = _parseGeom(feature);
-          if (parsed is List<LatLng>) points = parsed;
-        }
-        if (points == null || points.isEmpty) return null;
-        return [
-          [_project(points.first, target)]
-        ];
-
-      case GeometryType.linestring:
-        var lines = feature['lines'] as List<List<LatLng>>?;
-        if (lines == null || lines.isEmpty) {
-          final parsed = _parseGeom(feature);
-          if (parsed is List<List<LatLng>>) {
-            lines = parsed;
-          } else if (parsed is List<LatLng>) {
-            lines = [parsed];
-          }
-        }
-        if (lines == null || lines.isEmpty) return null;
-        return [project(lines.first)];
-
-      case GeometryType.polygon:
-        var rings = feature['polygons'] as List<List<LatLng>>?;
-        if (rings == null || rings.isEmpty) {
-          final parsed = _parseGeom(feature);
-          if (parsed is List<List<List<LatLng>>>) {
-            rings = parsed.isNotEmpty ? parsed.first : null;
-          } else if (parsed is List<List<LatLng>>) {
-            rings = parsed;
-          }
-        }
-        if (rings == null || rings.isEmpty) return null;
-        return [
-          for (final ring in rings)
-            project(ring)..closeRing(),
-        ];
-    }
-  }
-
-  /// `geom` 列（GeoPackage のバイナリ）から LatLng の入れ子を取り出す
-  Object? _parseGeom(Map<String, dynamic> feature) {
-    final geom = feature['geom'];
-    final bytes = switch (geom) {
-      Uint8List() => geom,
-      List<int>() => Uint8List.fromList(geom),
-      _ => null,
-    };
-    if (bytes == null) return null;
-    final parsed = parseGpkgGeometry(bytes);
-    return parsed == null ? null : geobaseGeometryToLatLngs(parsed);
+    final parts = featureParts(feature, type);
+    if (parts == null) return null;
+    return [
+      for (final part in parts)
+        if (type == GeometryType.polygon)
+          [for (final p in part) _project(p, target)]..closeRing()
+        else
+          [for (final p in part) _project(p, target)],
+    ];
   }
 
   /// レジストリ未登録のCRSはWGS84のWKTにフォールバック

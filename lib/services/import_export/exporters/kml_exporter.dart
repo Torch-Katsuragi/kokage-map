@@ -17,13 +17,13 @@
 // KMLエクスポートクラス
 import 'dart:io';
 
-import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 
 import '../../../models/geometry_type.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../import_export_models.dart';
 import 'base_exporter.dart';
+import 'feature_parts.dart';
 
 /// KMLエクスポーター
 class KMLExporter extends BaseExporter {
@@ -68,19 +68,18 @@ class KMLExporter extends BaseExporter {
         }
 
         // ジオメトリ
-        if (geometryType == GeometryType.point && feature['points'] != null) {
-          final points = feature['points'] as List<LatLng>;
-          if (points.isNotEmpty) {
-            final point = points.first;
+        final parts = geometryType == null ? null : featureParts(feature, geometryType);
+        if (geometryType == GeometryType.point && parts != null) {
+          {
+            final point = parts.first.first;
             kmlContent.writeln('      <Point>');
             kmlContent.writeln(
               '        <coordinates>${point.longitude},${point.latitude},0</coordinates>',
             );
             kmlContent.writeln('      </Point>');
           }
-        } else if (geometryType == GeometryType.linestring &&
-            feature['lines'] != null) {
-          final lines = feature['lines'] as List<LatLng>;
+        } else if (geometryType == GeometryType.linestring && parts != null) {
+          final lines = parts.first;
           if (lines.isNotEmpty) {
             kmlContent.writeln('      <LineString>');
             kmlContent.writeln('        <coordinates>');
@@ -90,9 +89,8 @@ class KMLExporter extends BaseExporter {
             kmlContent.writeln('        </coordinates>');
             kmlContent.writeln('      </LineString>');
           }
-        } else if (geometryType == GeometryType.polygon &&
-            feature['polygons'] != null) {
-          final polygons = feature['polygons'] as List<List<LatLng>>;
+        } else if (geometryType == GeometryType.polygon && parts != null) {
+          final polygons = parts;
           if (polygons.isNotEmpty) {
             kmlContent.writeln('      <Polygon>');
             kmlContent.writeln('        <outerBoundaryIs>');

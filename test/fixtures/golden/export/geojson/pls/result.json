@@ -3,9 +3,9 @@
   "error": null,
   "metadata": {
     "outputPath": "pls.geojson",
-    "featureCount": 0,
+    "featureCount": 2,
     "geometryType": "MULTIPOLYGON",
     "format": "GeoJSON",
-    "fileSize": 84
+    "fileSize": 1669
   }
 }

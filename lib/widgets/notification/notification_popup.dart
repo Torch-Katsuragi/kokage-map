@@ -21,18 +21,16 @@ import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
 
 /// 通知ドロップダウン一覧
-class NotificationPopup extends StatelessWidget {
+///
+/// Overlay に載るので、ベル側の ref を借りずに自分で購読する
+/// （借りると既読にしても一覧が描き直されなかった）
+class NotificationPopup extends ConsumerWidget {
   final VoidCallback onDismiss;
-  final WidgetRef ref;
 
-  const NotificationPopup({
-    super.key,
-    required this.onDismiss,
-    required this.ref,
-  });
+  const NotificationPopup({super.key, required this.onDismiss});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final notifications = ref.watch(notificationCenterProvider);
     final theme = Theme.of(context);
 
@@ -49,7 +47,7 @@ class NotificationPopup extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildHeader(context, notifications),
+            _buildHeader(context, ref, notifications),
             const Divider(height: 1),
             if (notifications.isEmpty)
               Padding(
@@ -86,6 +84,7 @@ class NotificationPopup extends StatelessWidget {
 
   Widget _buildHeader(
     BuildContext context,
+    WidgetRef ref,
     List<AppNotification> notifications,
   ) {
     final unread = notifications.where((n) => !n.isRead).length;
@@ -175,15 +174,10 @@ class _NotificationPanelState extends State<_NotificationPanel> {
   Widget build(BuildContext context) {
     final n = widget.notification;
     return InkWell(
-      onTap:
-          n.isExpandable
-              ? () {
-                setState(() => _expanded = !_expanded);
-                if (!n.isRead) widget.onMarkAsRead();
-              }
-              : () {
-                if (!n.isRead) widget.onMarkAsRead();
-              },
+      onTap: () {
+        if (n.isExpandable) setState(() => _expanded = !_expanded);
+        if (!n.isRead) widget.onMarkAsRead();
+      },
       child: Container(
         decoration: BoxDecoration(
           border: Border(

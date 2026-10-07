@@ -101,7 +101,7 @@ void main() {
       container: container,
       child: MaterialApp(
         home: Scaffold(
-          body: Consumer(builder: (context, ref, _) => NotificationPopup(onDismiss: () {}, ref: ref)),
+          body: NotificationPopup(onDismiss: () {}),
         ),
       ),
     ));

@@ -36,7 +36,6 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
   OverlayEntry? _popupEntry;
   OverlayEntry? _toastEntry;
   Timer? _toastTimer;
-  int _prevCount = 0;
 
   @override
   void dispose() {
@@ -73,12 +72,11 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
     if (bottomY == null) return;
 
     _popupEntry = OverlayEntry(
-      builder:
-          (_) => _PopupOverlay(
-            anchorBottomY: bottomY,
-            onDismiss: _removePopup,
-            ref: ref,
-          ),
+      builder: (_) => _AnchoredOverlay(
+        anchorBottomY: bottomY,
+        onDismiss: _removePopup,
+        child: NotificationPopup(onDismiss: _removePopup),
+      ),
     );
     overlay.insert(_popupEntry!);
   }
@@ -97,16 +95,15 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
     if (bottomY == null) return;
 
     _toastEntry = OverlayEntry(
-      builder:
-          (_) => _NotificationToast(
-            notification: notification,
-            anchorBottomY: bottomY,
-            onTap: () {
-              _removeToast();
-              _showPopup();
-            },
-            onDismiss: _removeToast,
-          ),
+      builder: (_) => _NotificationToast(
+        notification: notification,
+        anchorBottomY: bottomY,
+        onTap: () {
+          _removeToast();
+          _showPopup();
+        },
+        onDismiss: _removeToast,
+      ),
     );
     overlay.insert(_toastEntry!);
 
@@ -123,17 +120,17 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
   @override
   Widget build(BuildContext context) {
     final unreadCount = ref.watch(unreadNotificationCountProvider);
-    final notifications = ref.watch(notificationCenterProvider);
 
-    // 通知追加を検知して自動トースト
-    if (notifications.isNotEmpty && notifications.length > _prevCount) {
+    // 通知追加を検知して自動トースト。新しい通知は先頭に入るので先頭の id で見る
+    // （件数で見ると上限 100 件に達したあとトーストが出なくなる）
+    ref.listen(notificationCenterProvider, (prev, next) {
+      final isNew = next.isNotEmpty &&
+          (prev == null || prev.isEmpty || prev.first.id != next.first.id);
+      if (!isNew) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_popupEntry == null && mounted) {
-          _showAutoToast(notifications.first);
-        }
+        if (_popupEntry == null && mounted) _showAutoToast(next.first);
       });
-    }
-    _prevCount = notifications.length;
+    });
 
     return IconButton(
       key: _bellKey,
@@ -151,16 +148,16 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
   }
 }
 
-/// ポップアップ全体（背景タップで閉じる + 通知リスト）
-class _PopupOverlay extends StatelessWidget {
+/// ベルの下に出す重ね表示（背景タップで閉じる）。一覧・トースト共通
+class _AnchoredOverlay extends StatelessWidget {
   final double anchorBottomY;
   final VoidCallback onDismiss;
-  final WidgetRef ref;
+  final Widget child;
 
-  const _PopupOverlay({
+  const _AnchoredOverlay({
     required this.anchorBottomY,
     required this.onDismiss,
-    required this.ref,
+    required this.child,
   });
 
   @override
@@ -172,11 +169,7 @@ class _PopupOverlay extends StatelessWidget {
           behavior: HitTestBehavior.translucent,
           child: const SizedBox.expand(),
         ),
-        Positioned(
-          top: anchorBottomY + 4,
-          right: 8,
-          child: NotificationPopup(onDismiss: onDismiss, ref: ref),
-        ),
+        Positioned(top: anchorBottomY + 4, right: 8, child: child),
       ],
     );
   }
@@ -230,56 +223,47 @@ class _NotificationToastState extends State<_NotificationToast>
   @override
   Widget build(BuildContext context) {
     final n = widget.notification;
-    return Stack(
-      children: [
-        GestureDetector(
-          onTap: widget.onDismiss,
-          behavior: HitTestBehavior.translucent,
-          child: const SizedBox.expand(),
-        ),
-        Positioned(
-          top: widget.anchorBottomY + 4,
-          right: 8,
-          child: SlideTransition(
-            position: _slide,
-            child: FadeTransition(
-              opacity: _opacity,
-              child: GestureDetector(
-                onTap: widget.onTap,
-                child: Material(
-                  elevation: 8,
+    return _AnchoredOverlay(
+      anchorBottomY: widget.anchorBottomY,
+      onDismiss: widget.onDismiss,
+      child: SlideTransition(
+        position: _slide,
+        child: FadeTransition(
+          opacity: _opacity,
+          child: GestureDetector(
+            onTap: widget.onTap,
+            child: Material(
+              elevation: 8,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 300,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    width: 300,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border(
-                        left: BorderSide(color: n.level.color, width: 4),
+                  border: Border(
+                    left: BorderSide(color: n.level.color, width: 4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(n.level.icon, color: n.level.color, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        n.title,
+                        style: const TextStyle(fontSize: 13),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(n.level.icon, color: n.level.color, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            n.title,
-                            style: const TextStyle(fontSize: 13),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }

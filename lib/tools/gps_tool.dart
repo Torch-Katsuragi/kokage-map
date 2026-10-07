@@ -232,10 +232,10 @@ class GpsTool extends MapTool {
         });
       } else if (selected is LineLayerNode) {
         // GlobalDrawingStateにGPS測量データとして追加
-        drawingState.addLinePoint(position, optimizedGpsData);
+        drawingState.addPoint(position, optimizedGpsData, isLine: true);
       } else if (selected is PolygonLayerNode) {
         // GlobalDrawingStateにGPS測量データとして追加
-        drawingState.addPolygonPoint(position, optimizedGpsData);
+        drawingState.addPoint(position, optimizedGpsData, isLine: false);
       }
 
       // クリーンアップ
@@ -321,10 +321,10 @@ class GpsTool extends MapTool {
         });
       } else if (selected is LineLayerNode) {
         // GlobalDrawingStateにGPS測量データとして追加
-        drawingState.addLinePoint(position, optimizedGpsData);
+        drawingState.addPoint(position, optimizedGpsData, isLine: true);
       } else if (selected is PolygonLayerNode) {
         // GlobalDrawingStateにGPS測量データとして追加
-        drawingState.addPolygonPoint(position, optimizedGpsData);
+        drawingState.addPoint(position, optimizedGpsData, isLine: false);
       }
 
       AppLogger.debug(

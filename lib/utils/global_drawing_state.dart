@@ -25,7 +25,8 @@ import '../models/nodes/layer_node.dart';
 import '../providers/selection_providers.dart';
 
 /// グローバルな描画状態とメタデータを管理するクラス
-/// GPS測量とペンツールでの描画状態を共有する
+/// GPS測量とペンツールでの描画状態を共有する。
+/// 線と面は同じ形の描きかけ（[_Stroke]）を 1 本ずつ持ち、どちらを触るかは `isLine` で選ぶ
 class GlobalDrawingState {
   static final GlobalDrawingState instance = GlobalDrawingState._internal();
   factory GlobalDrawingState() => instance;
@@ -37,18 +38,11 @@ class GlobalDrawingState {
     _ref = ref;
   }
 
-  /// 線の描画点列（グローバル共有）
-  final List<LatLng> _drawingLine = [];
+  final _line = _Stroke();
+  final _polygon = _Stroke();
 
-  /// ポリゴンの描画点列（グローバル共有）
-  final List<LatLng> _drawingPolygon = [];
+  _Stroke _stroke(bool isLine) => isLine ? _line : _polygon;
 
-  /// 描画点に対応するメタデータのリスト
-  /// 各要素は `Map<String, dynamic>` またはnull（pen_toolでタップした点）
-  final List<Map<String, dynamic>?> _lineMetadata = [];
-  final List<Map<String, dynamic>?> _polygonMetadata = [];
-
-  /// 追記モード関連
   /// 追記対象のFeatureNode（nullの場合は新規作成モード）
   FeatureNode? _editingFeature;
 
@@ -57,48 +51,20 @@ class GlobalDrawingState {
   static const Duration _autoSaveInterval = Duration(minutes: 1);
   int _autoSaveCounter = 0;
 
-  /// 追記モードかどうか
-  bool get isEditMode => _editingFeature != null;
-
-  /// Getters。複製（呼んだ側が持っていても後から変わらない）は中身が変わったときだけ作り直す。
-  /// 以前は呼ぶたびに複製していて、描いている間は指の 1 動きで何十回も点の数ぶん複製していた（2026-10-06）。
-  /// 変わったかどうかは点の数と最初・最後の点で見る（追加・取消・入れ替えのどれでもどれかが変わる）
-  List<LatLng> get drawingLine => (_lineView = _view(_drawingLine, _lineView, _lineMetadata)).$1;
-  List<LatLng> get drawingPolygon => (_polygonView = _view(_drawingPolygon, _polygonView, _polygonMetadata)).$1;
-  List<Map<String, dynamic>?> get lineMetadata => (_lineView = _view(_drawingLine, _lineView, _lineMetadata)).$2;
-  List<Map<String, dynamic>?> get polygonMetadata =>
-      (_polygonView = _view(_drawingPolygon, _polygonView, _polygonMetadata)).$2;
-
-  _DrawingView? _lineView;
-  _DrawingView? _polygonView;
-
-  static _DrawingView _view(List<LatLng> pts, _DrawingView? before, List<Map<String, dynamic>?> meta) {
-    final key = (pts.length, meta.length, pts.isEmpty ? null : pts.first, pts.isEmpty ? null : pts.last);
-    if (before != null && before.$3 == key) return before;
-    return (List<LatLng>.unmodifiable(pts), List<Map<String, dynamic>?>.unmodifiable(meta), key);
-  }
+  /// 描きかけの点列と付帯情報（呼んだ側が持っていても後から変わらない複製）
+  List<LatLng> get drawingLine => _line.view.$1;
+  List<LatLng> get drawingPolygon => _polygon.view.$1;
+  List<Map<String, dynamic>?> get lineMetadata => _line.view.$2;
+  List<Map<String, dynamic>?> get polygonMetadata => _polygon.view.$2;
 
   /// プレビュー用の点座標（点描画用）
   LatLng? _pointPreview;
   LatLng? get pointPreview => _pointPreview;
 
-  /// 線描画に点を追加
-  /// [position] - 追加する座標
-  /// [metadata] - GPSメタデータ（nullの場合はpen_toolによる点）
-  void addLinePoint(LatLng position, Map<String, dynamic>? metadata) {
-    _drawingLine.add(position);
-    _lineMetadata.add(metadata);
-
-    // 自動保存タイマーの開始/リセット
-    _resetAutoSaveTimer();
-  }
-
-  /// ポリゴン描画に点を追加
-  /// [position] - 追加する座標
-  /// [metadata] - GPSメタデータ（nullの場合はpen_toolによる点）
-  void addPolygonPoint(LatLng position, Map<String, dynamic>? metadata) {
-    _drawingPolygon.add(position);
-    _polygonMetadata.add(metadata);
+  /// 線（[isLine]）か面に点を追加する。
+  /// [metadata] は GPS 測量の値（ペンで打った点は null）
+  void addPoint(LatLng position, Map<String, dynamic>? metadata, {required bool isLine}) {
+    _stroke(isLine).add(position, metadata);
 
     // 自動保存タイマーの開始/リセット
     _resetAutoSaveTimer();
@@ -109,24 +75,16 @@ class GlobalDrawingState {
     _pointPreview = position;
   }
 
-  /// 線描画データをクリア
-  void clearLine() {
-    _drawingLine.clear();
-    _lineMetadata.clear();
-    AppLogger.debug('[GlobalDrawingState] 線描画データをクリア');
-  }
-
-  /// ポリゴン描画データをクリア
-  void clearPolygon() {
-    _drawingPolygon.clear();
-    _polygonMetadata.clear();
-    AppLogger.debug('[GlobalDrawingState] ポリゴン描画データをクリア');
+  /// 線（[isLine]）か面の描きかけを捨てる
+  void clear({required bool isLine}) {
+    _stroke(isLine).clear();
+    AppLogger.debug('[GlobalDrawingState] ${isLine ? '線' : 'ポリゴン'}描画データをクリア');
   }
 
   /// 全描画データをクリア
   void clearAll() {
-    clearLine();
-    clearPolygon();
+    _line.clear();
+    _polygon.clear();
     _pointPreview = null;
     _editingFeature = null; // 追記モードもクリア
     _stopAutoSaveTimer(); // 自動保存タイマーも停止
@@ -134,144 +92,64 @@ class GlobalDrawingState {
   }
 
   /// 線描画が進行中かチェック
-  bool get isLineDrawing => _drawingLine.isNotEmpty;
+  bool get isLineDrawing => _line.points.isNotEmpty;
 
   /// ポリゴン描画が進行中かチェック
-  bool get isPolygonDrawing => _drawingPolygon.isNotEmpty;
+  bool get isPolygonDrawing => _polygon.points.isNotEmpty;
 
   /// 何らかの描画が進行中かチェック
   bool get isDrawing => isLineDrawing || isPolygonDrawing;
 
-  /// 元に戻す処理（Undo）- 統一インターフェース
-  /// [isLine] - true: 線の最後の点を削除, false: ポリゴンの最後の点を削除
+  /// 線（[isLine]）か面の最後の点を取り消す
   void undo({required bool isLine}) {
-    if (isLine && isLineDrawing) {
-      if (_drawingLine.isNotEmpty) {
-        final removedPoint = _drawingLine.removeLast();
-        _lineMetadata.removeLast();
-        AppLogger.debug('[GlobalDrawingState] 線の最後の点を削除: $removedPoint');
-      }
-    } else if (!isLine && isPolygonDrawing) {
-      if (_drawingPolygon.isNotEmpty) {
-        final removedPoint = _drawingPolygon.removeLast();
-        _polygonMetadata.removeLast();
-        AppLogger.debug('[GlobalDrawingState] ポリゴンの最後の点を削除: $removedPoint');
-      }
-    } else {
-      AppLogger.debug('[GlobalDrawingState] Undo: 削除する点がありません');
-    }
+    final removed = _stroke(isLine).removeLast();
+    AppLogger.debug(removed == null
+        ? '[GlobalDrawingState] Undo: 削除する点がありません'
+        : '[GlobalDrawingState] ${isLine ? '線' : 'ポリゴン'}の最後の点を削除: $removed');
   }
 
-  /// キャンセル処理 - 統一インターフェース
-  /// [isLine] - true: 線描画をクリア, false: ポリゴン描画をクリア
-  void cancel({required bool isLine}) {
-    if (isLine) {
-      clearLine();
-    } else {
-      clearPolygon();
-    }
-    AppLogger.debug('[GlobalDrawingState] ${isLine ? '線' : 'ポリゴン'}描画をキャンセル');
-  }
+  /// 線（[isLine]）か面の点ごとの付帯情報（GPS 測量の値。ペンの点は座標だけ）
+  List<Map<String, dynamic>> pointsWithMetadata({required bool isLine}) => _stroke(isLine).withMetadata();
 
-  /// 線フィーチャの確定作成・更新
-  /// [layerNode] - 作成先のLayerNode（新規作成の場合のみ）
-  /// [name] - フィーチャ名
-  /// [description] - フィーチャ説明
-  /// [additionalMetadata] - 追加メタデータ（GPS測量データなど）
-  /// [refreshCallback] - フィーチャ作成後のUI更新コールバック
-  /// [clearAfterConfirm] - 確定後に描画データをクリアするか（デフォルト: true）
-  Future<bool> confirmLineFeature({
-    LineLayerNode? layerNode,
-    required String name,
-    required String description,
-    Map<String, dynamic>? additionalMetadata,
-    void Function()? refreshCallback,
-    bool clearAfterConfirm = true,
-  }) async {
-    if (_drawingLine.length < 2) {
-      AppLogger.debug('[GlobalDrawingState] 線確定: 点数が不足しています（最低2点必要）');
-      return false;
-    }
-
-    try {
-      // メタデータを統合
-      final metadata = <String, dynamic>{};
-      if (additionalMetadata != null) {
-        metadata.addAll(additionalMetadata);
-      }
-
-      // GPS測量データまたはpen_toolデータを含める
-      final pointsWithMetadata = getLineWithMetadata();
-      if (pointsWithMetadata.isNotEmpty) {
-        metadata['drawing_points'] = pointsWithMetadata;
-      }
-
-      if (isEditMode && _editingFeature is LineFeatureNode) {
-        // 追記モード：既存フィーチャを更新
-        final feature = _editingFeature as LineFeatureNode;
-
-        // updateGeometryで新しいジオメトリと属性を同時に更新
-        final success = await feature.updateGeometry(
-          name: name.isNotEmpty ? name : feature.name,
-          description: description,
-          metadata: metadata.isNotEmpty ? metadata : null,
-          newGeometry: List<LatLng>.from(_drawingLine),
-        );
-
-        if (success) {
-          AppLogger.debug('[GlobalDrawingState] 線フィーチャを更新しました: $name');
-        } else {
-          AppLogger.debug('[GlobalDrawingState] 線フィーチャ更新エラー');
-          return false;
-        }
-      } else {
-        // 新規作成モード
-        if (layerNode == null) {
-          AppLogger.debug('[GlobalDrawingState] 新規作成にはlayerNodeが必要です');
-          return false;
-        }
-
-        await LineFeatureNode.createIn(
-          layerNode,
-          List<LatLng>.from(_drawingLine),
-          name.isNotEmpty ? name : t.editor.lineFeature,
-          description,
-          metadata: metadata.isNotEmpty ? metadata : null,
-        );
-
-        AppLogger.debug('[GlobalDrawingState] 線フィーチャを確定作成しました: $name');
-      }
-
-      // 描画データをクリア
-      if (clearAfterConfirm) {
-        clearAll();
-      }
-
-      // UI更新（追記モードの場合はより強力な更新を実行）
-      refreshCallback?.call();
-
-      // 追記モードの場合はデバッグログ出力
-      if (isEditMode) {
-        AppLogger.debug('[GlobalDrawingState] 追記モード完了 - UI強制更新を実行');
-      }
-
-      return true;
-    } catch (e) {
-      AppLogger.debug('[GlobalDrawingState] 線フィーチャ処理エラー: $e');
-      return false;
-    }
-  }
-
-  /// ポリゴンフィーチャの確定作成・更新
-  /// [layerNode] - 作成先のLayerNode（新規作成の場合のみ）
-  /// [name] - フィーチャ名
-  /// [description] - フィーチャ説明
+  /// 描きかけを地物として確定する。追記中は追記先を更新、そうでなければ [layerNode] に作る。
+  /// 線か面かは、追記中は追記先の形、新規は [layerNode] の形で決まる
   /// [closeRing] - ポリゴンを閉じる処理
   /// [additionalMetadata] - 追加メタデータ（GPS測量データなど）
   /// [refreshCallback] - フィーチャ作成後のUI更新コールバック
-  /// [clearAfterConfirm] - 確定後に描画データをクリアするか（デフォルト: true）
-  Future<bool> confirmPolygonFeature({
-    PolygonLayerNode? layerNode,
+  Future<bool> confirmCurrentFeature({
+    LayerNode? layerNode,
+    required String name,
+    required String description,
+    required List<LatLng> Function(List<LatLng>) closeRing,
+    Map<String, dynamic>? additionalMetadata,
+    void Function()? refreshCallback,
+  }) async {
+    final shape = _editingFeature ?? layerNode;
+    final isLine = switch (shape) {
+      LineFeatureNode() || LineLayerNode() => true,
+      PolygonFeatureNode() || PolygonLayerNode() => false,
+      _ => null,
+    };
+    if (isLine == null || _stroke(isLine).points.isEmpty) {
+      AppLogger.debug('[GlobalDrawingState] 確定処理: 有効な描画データまたはレイヤーがありません');
+      return false;
+    }
+    return _confirm(
+      isLine: isLine,
+      layerNode: layerNode,
+      name: name,
+      description: description,
+      closeRing: closeRing,
+      additionalMetadata: additionalMetadata,
+      refreshCallback: refreshCallback,
+    );
+  }
+
+  /// 線（[isLine]）か面の確定作成・更新
+  /// [clearAfterConfirm] - 確定後に描画データをクリアするか（自動保存はクリアしない）
+  Future<bool> _confirm({
+    required bool isLine,
+    LayerNode? layerNode,
     required String name,
     required String description,
     required List<LatLng> Function(List<LatLng>) closeRing,
@@ -279,299 +157,97 @@ class GlobalDrawingState {
     void Function()? refreshCallback,
     bool clearAfterConfirm = true,
   }) async {
-    if (_drawingPolygon.length < 3) {
-      AppLogger.debug('[GlobalDrawingState] ポリゴン確定: 点数が不足しています（最低3点必要）');
+    final kind = isLine ? '線' : 'ポリゴン';
+    final points = _stroke(isLine).points;
+    if (points.length < (isLine ? 2 : 3)) {
+      AppLogger.debug('[GlobalDrawingState] $kind確定: 点数が不足しています');
       return false;
     }
 
     try {
-      // ポリゴンを閉じる
-      final closedPolygon = closeRing(_drawingPolygon);
+      final closed = isLine ? null : closeRing(points);
 
-      // メタデータを統合
-      final metadata = <String, dynamic>{};
-      if (additionalMetadata != null) {
-        metadata.addAll(additionalMetadata);
-      }
-
-      // GPS測量データまたはpen_toolデータを含める
-      final pointsWithMetadata = getPolygonWithMetadata();
+      // メタデータを統合（GPS測量データまたはpen_toolデータを含める）
+      final metadata = <String, dynamic>{...?additionalMetadata};
+      final pointsWithMetadata = _stroke(isLine).withMetadata();
       if (pointsWithMetadata.isNotEmpty) {
         metadata['drawing_points'] = pointsWithMetadata;
       }
 
-      if (isEditMode && _editingFeature is PolygonFeatureNode) {
-        // 追記モード：既存フィーチャを更新
-        final feature = _editingFeature as PolygonFeatureNode;
-
-        // updateGeometryで新しいジオメトリと属性を同時に更新
-        final success = await feature.updateGeometry(
-          name: name.isNotEmpty ? name : feature.name,
+      final editing = _editingFeature;
+      if (editing != null && (isLine ? editing is LineFeatureNode : editing is PolygonFeatureNode)) {
+        // 追記モード：updateGeometryで新しいジオメトリと属性を同時に更新
+        final success = await editing.updateGeometry(
+          name: name.isNotEmpty ? name : editing.name,
           description: description,
           metadata: metadata.isNotEmpty ? metadata : null,
-          newGeometry: [closedPolygon],
+          newGeometry: isLine ? List<LatLng>.from(points) : [closed!],
         );
-
-        if (success) {
-          AppLogger.debug('[GlobalDrawingState] ポリゴンフィーチャを更新しました: $name');
-        } else {
-          AppLogger.debug('[GlobalDrawingState] ポリゴンフィーチャ更新エラー');
+        if (!success) {
+          AppLogger.debug('[GlobalDrawingState] $kindフィーチャ更新エラー');
           return false;
         }
+        AppLogger.debug('[GlobalDrawingState] $kindフィーチャを更新しました: $name');
       } else {
         // 新規作成モード
-        if (layerNode == null) {
-          AppLogger.debug('[GlobalDrawingState] 新規作成にはlayerNodeが必要です');
-          return false;
+        switch (layerNode) {
+          case final LineLayerNode layer when isLine:
+            await LineFeatureNode.createIn(
+              layer,
+              List<LatLng>.from(points),
+              name.isNotEmpty ? name : t.editor.lineFeature,
+              description,
+              metadata: metadata.isNotEmpty ? metadata : null,
+            );
+          case final PolygonLayerNode layer when !isLine:
+            await PolygonFeatureNode.createIn(
+              layer,
+              [closed!],
+              name.isNotEmpty ? name : t.editor.polygonFeature,
+              description,
+              metadata: metadata.isNotEmpty ? metadata : null,
+            );
+          default:
+            AppLogger.debug('[GlobalDrawingState] 新規作成には$kindのlayerNodeが必要です');
+            return false;
         }
-
-        await PolygonFeatureNode.createIn(
-          layerNode,
-          [closedPolygon],
-          name.isNotEmpty ? name : t.editor.polygonFeature,
-          description,
-          metadata: metadata.isNotEmpty ? metadata : null,
-        );
-
-        AppLogger.debug('[GlobalDrawingState] ポリゴンフィーチャを確定作成しました: $name');
+        AppLogger.debug('[GlobalDrawingState] $kindフィーチャを確定作成しました: $name');
       }
 
-      // 描画データをクリア
       if (clearAfterConfirm) {
         clearAll();
       }
-
-      // UI更新（追記モードの場合はより強力な更新を実行）
       refreshCallback?.call();
-
-      // 追記モードの場合はデバッグログ出力
-      if (isEditMode) {
-        AppLogger.debug('[GlobalDrawingState] 追記モード完了 - UI強制更新を実行');
-      }
-
       return true;
     } catch (e) {
-      AppLogger.debug('[GlobalDrawingState] ポリゴンフィーチャ処理エラー: $e');
+      AppLogger.debug('[GlobalDrawingState] $kindフィーチャ処理エラー: $e');
       return false;
     }
   }
 
-  /// 汎用的な確定処理
-  /// [layerNode] - 作成先のLayerNode（新規作成の場合のみ）
-  /// [name] - フィーチャ名
-  /// [description] - フィーチャ説明
-  /// [closeRing] - ポリゴンを閉じる処理（PolygonLayerNodeの場合のみ）
-  /// [additionalMetadata] - 追加メタデータ
-  /// [refreshCallback] - フィーチャ作成後のUI更新コールバック
-  Future<bool> confirmCurrentFeature({
-    LayerNode? layerNode,
-    required String name,
-    required String description,
-    List<LatLng> Function(List<LatLng>)? closeRing,
-    Map<String, dynamic>? additionalMetadata,
-    void Function()? refreshCallback,
-  }) async {
-    // 追記モードの場合、layerNodeは不要
-    if (isEditMode) {
-      if (_editingFeature is LineFeatureNode && isLineDrawing) {
-        return confirmLineFeature(
-          name: name,
-          description: description,
-          additionalMetadata: additionalMetadata,
-          refreshCallback: refreshCallback,
-        );
-      } else if (_editingFeature is PolygonFeatureNode && isPolygonDrawing) {
-        if (closeRing == null) {
-          AppLogger.debug('[GlobalDrawingState] ポリゴン確定: closeRing関数が必要です');
-          return false;
-        }
-        return confirmPolygonFeature(
-          name: name,
-          description: description,
-          closeRing: closeRing,
-          additionalMetadata: additionalMetadata,
-          refreshCallback: refreshCallback,
-        );
-      }
-    } else {
-      // 新規作成モード
-      if (layerNode == null) {
-        AppLogger.debug('[GlobalDrawingState] 新規作成にはlayerNodeが必要です');
-        return false;
-      }
-
-      if (layerNode is LineLayerNode && isLineDrawing) {
-        return confirmLineFeature(
-          layerNode: layerNode,
-          name: name,
-          description: description,
-          additionalMetadata: additionalMetadata,
-          refreshCallback: refreshCallback,
-        );
-      } else if (layerNode is PolygonLayerNode && isPolygonDrawing) {
-        if (closeRing == null) {
-          AppLogger.debug('[GlobalDrawingState] ポリゴン確定: closeRing関数が必要です');
-          return false;
-        }
-        return confirmPolygonFeature(
-          layerNode: layerNode,
-          name: name,
-          description: description,
-          closeRing: closeRing,
-          additionalMetadata: additionalMetadata,
-          refreshCallback: refreshCallback,
-        );
-      }
-    }
-
-    AppLogger.debug('[GlobalDrawingState] 確定処理: 有効な描画データまたはレイヤーがありません');
-    return false;
-  }
-
-  /// メタデータ付きの線座標リストを取得
-  /// 戻り値: `List<Map<String, dynamic>>` - 座標とメタデータを含む構造
-  List<Map<String, dynamic>> getLineWithMetadata() {
-    final result = <Map<String, dynamic>>[];
-    for (int i = 0; i < _drawingLine.length; i++) {
-      final point = _drawingLine[i];
-      final metadata = _lineMetadata[i];
-
-      if (metadata != null) {
-        // GPS測量データの場合、既存のメタデータを使用
-        result.add(metadata);
-      } else {
-        // pen_toolでタップした点の場合、座標のみのデータを作成
-        result.add({
-          'latitude': point.latitude,
-          'longitude': point.longitude,
-          'data_source': 'pen_tool',
-          'timestamp': DateTime.now().toIso8601String(),
-        });
-      }
-    }
-    return result;
-  }
-
-  /// メタデータ付きのポリゴン座標リストを取得
-  /// 戻り値: `List<Map<String, dynamic>>` - 座標とメタデータを含む構造
-  List<Map<String, dynamic>> getPolygonWithMetadata() {
-    final result = <Map<String, dynamic>>[];
-    for (int i = 0; i < _drawingPolygon.length; i++) {
-      final point = _drawingPolygon[i];
-      final metadata = _polygonMetadata[i];
-
-      if (metadata != null) {
-        // GPS測量データの場合、既存のメタデータを使用
-        result.add(metadata);
-      } else {
-        // pen_toolでタップした点の場合、座標のみのデータを作成
-        result.add({
-          'latitude': point.latitude,
-          'longitude': point.longitude,
-          'data_source': 'pen_tool',
-          'timestamp': DateTime.now().toIso8601String(),
-        });
-      }
-    }
-    return result;
-  }
-
-  /// 線フィーチャの追記を開始
-  /// [feature] - 追記対象のLineFeatureNode
-  void startEditingLineFeature(LineFeatureNode feature) {
-    // 現在の描画データをクリア
-    clearAll();
-
-    // 追記対象を設定
-    _editingFeature = feature;
-
-    // 既存の線データを復元
-    final existingLine = feature.line;
-    _drawingLine.addAll(existingLine);
-
-    // 既存のメタデータを復元（drawing_pointsから復元を試行）
-    final existingMetadata = feature.metadata;
-    if (existingMetadata != null &&
-        existingMetadata.containsKey('drawing_points')) {
-      final drawingPoints =
-          existingMetadata['drawing_points'] as List<dynamic>?;
-      if (drawingPoints != null) {
-        // メタデータから復元
-        for (final pointData in drawingPoints) {
-          if (pointData is Map<String, dynamic>) {
-            if (pointData['data_source'] == 'pen_tool') {
-              _lineMetadata.add(null); // pen_toolの点はnull
-            } else {
-              _lineMetadata.add(Map<String, dynamic>.from(pointData));
-            }
-          } else {
-            _lineMetadata.add(null); // デフォルトはpen_tool扱い
-          }
-        }
-      }
-    }
-
-    // メタデータの数が足りない場合は補完
-    while (_lineMetadata.length < _drawingLine.length) {
-      _lineMetadata.add(null); // pen_tool扱いで補完
-    }
-
-    AppLogger.debug(
-      '[GlobalDrawingState] 線フィーチャの追記開始: ${feature.name} (${_drawingLine.length}点)',
-    );
-  }
-
-  /// ポリゴンフィーチャの追記を開始
-  /// [feature] - 追記対象のPolygonFeatureNode
-  void startEditingPolygonFeature(PolygonFeatureNode feature) {
-    // 現在の描画データをクリア
-    clearAll();
-
-    // 追記対象を設定
-    _editingFeature = feature;
-
-    // 既存のポリゴンデータを復元（外環のみ）
-    if (feature.polygon.isNotEmpty) {
-      final outerRing = feature.polygon[0];
-      // 最後の点が最初の点と同じ場合（閉じられている場合）は除外
-      if (outerRing.length > 1 &&
+  /// 線・面の地物の追記を始める（今の形と点ごとの付帯情報を描きかけに戻す）。線・面以外は何もしない
+  void _resumeEditing(FeatureNode feature) {
+    final List<LatLng> points;
+    if (feature is LineFeatureNode) {
+      points = feature.line;
+    } else if (feature is PolygonFeatureNode) {
+      // 外環のみ。閉じている（最後の点が最初の点と同じ）なら最後の点は除く
+      final outerRing = feature.polygon.firstOrNull ?? const <LatLng>[];
+      final closed = outerRing.length > 1 &&
           outerRing.first.latitude == outerRing.last.latitude &&
-          outerRing.first.longitude == outerRing.last.longitude) {
-        _drawingPolygon.addAll(outerRing.sublist(0, outerRing.length - 1));
-      } else {
-        _drawingPolygon.addAll(outerRing);
-      }
+          outerRing.first.longitude == outerRing.last.longitude;
+      points = closed ? outerRing.sublist(0, outerRing.length - 1) : outerRing;
+    } else {
+      return;
     }
 
-    // 既存のメタデータを復元（drawing_pointsから復元を試行）
-    final existingMetadata = feature.metadata;
-    if (existingMetadata != null &&
-        existingMetadata.containsKey('drawing_points')) {
-      final drawingPoints =
-          existingMetadata['drawing_points'] as List<dynamic>?;
-      if (drawingPoints != null) {
-        // メタデータから復元
-        for (final pointData in drawingPoints) {
-          if (pointData is Map<String, dynamic>) {
-            if (pointData['data_source'] == 'pen_tool') {
-              _polygonMetadata.add(null); // pen_toolの点はnull
-            } else {
-              _polygonMetadata.add(Map<String, dynamic>.from(pointData));
-            }
-          } else {
-            _polygonMetadata.add(null); // デフォルトはpen_tool扱い
-          }
-        }
-      }
-    }
-
-    // メタデータの数が足りない場合は補完
-    while (_polygonMetadata.length < _drawingPolygon.length) {
-      _polygonMetadata.add(null); // pen_tool扱いで補完
-    }
+    // 現在の描画データをクリアして追記対象を設定
+    clearAll();
+    _editingFeature = feature;
+    final stroke = _stroke(feature is LineFeatureNode)..restore(points, feature.metadata);
 
     AppLogger.debug(
-      '[GlobalDrawingState] ポリゴンフィーチャの追記開始: ${feature.name} (${_drawingPolygon.length}点)',
+      '[GlobalDrawingState] フィーチャの追記開始: ${feature.name} (${stroke.points.length}点)',
     );
   }
 
@@ -618,88 +294,44 @@ class GlobalDrawingState {
     _autoSaveCounter++;
     final autoSaveName =
         '${t.editor.autoSavePrefix}_${_autoSaveCounter}_${DateTime.now().millisecondsSinceEpoch}';
-    final autoSaveDescription = t.editor.autoSaveDescription;
 
     AppLogger.debug('[GlobalDrawingState] 自動保存実行: $autoSaveName');
     AppLogger.debug(
-      '[GlobalDrawingState] 自動保存DEBUG - selectedLayer: ${selectedLayer.name} (${selectedLayer.runtimeType})',
+      '[GlobalDrawingState] 自動保存DEBUG - selectedLayer: ${selectedLayer.name} (${selectedLayer.runtimeType}), '
+      'isLineDrawing: $isLineDrawing, isPolygonDrawing: $isPolygonDrawing, isEditMode: ${_editingFeature != null}',
     );
-    AppLogger.debug(
-      '[GlobalDrawingState] 自動保存DEBUG - isLineDrawing: $isLineDrawing, isPolygonDrawing: $isPolygonDrawing',
-    );
-    AppLogger.debug('[GlobalDrawingState] 自動保存DEBUG - isEditMode: $isEditMode');
+
+    final isLine = isLineDrawing && selectedLayer is LineLayerNode
+        ? true
+        : isPolygonDrawing && selectedLayer is PolygonLayerNode
+            ? false
+            : null;
+    if (isLine == null) {
+      AppLogger.debug(
+        '[GlobalDrawingState] 自動保存エラー: レイヤータイプが描画タイプと一致しません '
+        '(selectedLayer=${selectedLayer.runtimeType}, isLineDrawing=$isLineDrawing, isPolygonDrawing=$isPolygonDrawing)',
+      );
+      return;
+    }
 
     try {
-      bool success = false;
-      FeatureNode? savedFeature;
+      // 追記中なら追記先を更新、そうでなければ新規作成。描画データはクリアしない
+      final success = await _confirm(
+        isLine: isLine,
+        layerNode: selectedLayer,
+        name: autoSaveName,
+        description: t.editor.autoSaveDescription,
+        closeRing: (points) => List<LatLng>.from(points)..add(points.first),
+        clearAfterConfirm: false,
+      );
 
-      if (isLineDrawing && selectedLayer is LineLayerNode) {
-        AppLogger.debug('[GlobalDrawingState] 自動保存: 線の処理開始 - 点数: ${_drawingLine.length}');
-
-        // 線の自動保存（常に新規作成、描画データはクリアしない）
-        success = await confirmLineFeature(
-          layerNode: selectedLayer,
-          name: autoSaveName,
-          description: autoSaveDescription,
-          refreshCallback: () {},
-          clearAfterConfirm: false,
-        );
-
-        // 作成されたフィーチャを取得
-        if (success) {
-          final features = selectedLayer.features;
-          if (features.isNotEmpty) {
-            savedFeature = features.last;
-            AppLogger.debug(
-              '[GlobalDrawingState] 自動保存: 作成された線フィーチャを取得 - ${savedFeature.name}',
-            );
-          }
-        }
-      } else if (isPolygonDrawing && selectedLayer is PolygonLayerNode) {
-        AppLogger.debug(
-          '[GlobalDrawingState] 自動保存: ポリゴンの処理開始 - 点数: ${_drawingPolygon.length}',
-        );
-
-        // ポリゴンの自動保存（常に新規作成、描画データはクリアしない）
-        success = await confirmPolygonFeature(
-          layerNode: selectedLayer,
-          name: autoSaveName,
-          description: autoSaveDescription,
-          closeRing: (points) => List<LatLng>.from(points)..add(points.first),
-          refreshCallback: () {},
-          clearAfterConfirm: false,
-        );
-
-        // 作成されたフィーチャを取得
-        if (success) {
-          final features = selectedLayer.features;
-          if (features.isNotEmpty) {
-            savedFeature = features.last;
-            AppLogger.debug(
-              '[GlobalDrawingState] 自動保存: 作成されたポリゴンフィーチャを取得 - ${savedFeature.name}',
-            );
-          }
-        }
-      } else {
-        AppLogger.debug('[GlobalDrawingState] 自動保存エラー: レイヤータイプが描画タイプと一致しません');
-        AppLogger.debug(
-          '[GlobalDrawingState] 自動保存エラー: selectedLayer=${selectedLayer.runtimeType}, isLineDrawing=$isLineDrawing, isPolygonDrawing=$isPolygonDrawing',
-        );
-      }
-
-      if (success && savedFeature != null) {
-        // 自動保存成功後、追記モードで描画を継続（clearAll()は呼ばない）
-        AppLogger.debug('[GlobalDrawingState] 自動保存成功 - 追記モードで継続開始');
-
-        if (savedFeature is LineFeatureNode) {
-          startEditingLineFeature(savedFeature);
-        } else if (savedFeature is PolygonFeatureNode) {
-          startEditingPolygonFeature(savedFeature);
-        }
-
-        // タイマーを再開（追記モードでの継続）
+      // 作成されたフィーチャを取得
+      final savedFeature = success ? selectedLayer.features.lastOrNull : null;
+      if (savedFeature != null) {
+        // 自動保存成功後、追記モードで描画を継続し、タイマーを再開する
+        AppLogger.debug('[GlobalDrawingState] 自動保存成功 - 追記モードで継続開始: ${savedFeature.name}');
+        _resumeEditing(savedFeature);
         _resetAutoSaveTimer();
-        AppLogger.debug('[GlobalDrawingState] 自動保存: 追記モードでタイマー再開');
       } else {
         AppLogger.debug(
           '[GlobalDrawingState] 自動保存失敗 - success: $success, savedFeature: $savedFeature',
@@ -708,6 +340,69 @@ class GlobalDrawingState {
     } catch (e, stackTrace) {
       AppLogger.debug('[GlobalDrawingState] 自動保存エラー: $e');
       AppLogger.debug('[GlobalDrawingState] 自動保存スタックトレース: $stackTrace');
+    }
+  }
+}
+
+/// 描きかけの線または面 1 本: 点列と点ごとの付帯情報（GPS 測量の値。ペンの点は null）
+class _Stroke {
+  final points = <LatLng>[];
+  final metadata = <Map<String, dynamic>?>[];
+
+  /// 外に渡す複製。中身が変わったときだけ作り直す。
+  /// 以前は呼ぶたびに複製していて、描いている間は指の 1 動きで何十回も点の数ぶん複製していた（2026-10-06）。
+  /// 変わったかどうかは点の数と最初・最後の点で見る（追加・取消・入れ替えのどれでもどれかが変わる）
+  _DrawingView? _view;
+
+  _DrawingView get view {
+    final key = (points.length, metadata.length, points.firstOrNull, points.lastOrNull);
+    final before = _view;
+    if (before != null && before.$3 == key) return before;
+    return _view = (List<LatLng>.unmodifiable(points), List<Map<String, dynamic>?>.unmodifiable(metadata), key);
+  }
+
+  void add(LatLng position, Map<String, dynamic>? meta) {
+    points.add(position);
+    metadata.add(meta);
+  }
+
+  void clear() {
+    points.clear();
+    metadata.clear();
+  }
+
+  /// 最後の点を外して返す（点が無ければ null）
+  LatLng? removeLast() {
+    if (points.isEmpty) return null;
+    metadata.removeLast();
+    return points.removeLast();
+  }
+
+  /// 点ごとの付帯情報。GPS 測量の点はその値、ペンの点は座標だけ
+  List<Map<String, dynamic>> withMetadata() => [
+        for (var i = 0; i < points.length; i++)
+          metadata[i] ??
+              {
+                'latitude': points[i].latitude,
+                'longitude': points[i].longitude,
+                'data_source': 'pen_tool',
+                'timestamp': DateTime.now().toIso8601String(),
+              },
+      ];
+
+  /// 追記を始めるときに、地物の今の形 [shape] と保存してある点ごとの付帯情報（`drawing_points`）を戻す
+  void restore(List<LatLng> shape, Map<String, dynamic>? featureMetadata) {
+    points.addAll(shape);
+    final drawingPoints = featureMetadata?['drawing_points'] as List<dynamic>?;
+    for (final pointData in drawingPoints ?? const []) {
+      // pen_tool の点（と形の分からないもの）は null
+      metadata.add(pointData is Map<String, dynamic> && pointData['data_source'] != 'pen_tool'
+          ? Map<String, dynamic>.from(pointData)
+          : null);
+    }
+    // メタデータの数が足りない場合は pen_tool 扱いで補完
+    while (metadata.length < points.length) {
+      metadata.add(null);
     }
   }
 }

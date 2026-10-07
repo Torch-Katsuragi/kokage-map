@@ -173,8 +173,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   void _resetForTutorial(TutorialChapter chapter) {
     final me = ModalRoute.of(context);
     if (me != null) Navigator.of(context).popUntil((r) => r == me);
-    GlobalDrawingState.instance.cancel(isLine: true);
-    GlobalDrawingState.instance.cancel(isLine: false);
+    GlobalDrawingState.instance.clear(isLine: true);
+    GlobalDrawingState.instance.clear(isLine: false);
     if (showAttributeTable) _closeAttributeTable();
     triggerSetState(() => drawerOpen = false);
     ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));

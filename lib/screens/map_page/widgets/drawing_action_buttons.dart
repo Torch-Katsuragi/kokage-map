@@ -173,7 +173,7 @@ class DrawingActionButtons extends ConsumerWidget {
         FloatingActionButton(
           heroTag: 'cancel',
           onPressed: () {
-            drawingState.cancel(isLine: isLineDrawing);
+            drawingState.clear(isLine: isLineDrawing);
             onTriggerSetState();
           },
           tooltip: t.map.drawing.cancel,

@@ -123,7 +123,7 @@ class PenTool extends MapTool {
     } else if (selected is LineLayerNode) {
       AppLogger.debug('[DEBUG] PenTool.onTap: ラインレイヤー処理');
 
-      drawingState.addLinePoint(latlng, null);
+      drawingState.addPoint(latlng, null, isLine: true);
       mapState.setState(() {});
     } else if (selected is PolygonLayerNode) {
       AppLogger.debug(
@@ -132,7 +132,7 @@ class PenTool extends MapTool {
 
       // タップ時のポリゴン描画
       try {
-        drawingState.addPolygonPoint(latlng, null);
+        drawingState.addPoint(latlng, null, isLine: false);
 
         // デバウンス機能：50ms後にUI更新を実行
         _uiUpdateTimer?.cancel();
@@ -190,16 +190,16 @@ class PenTool extends MapTool {
       // Pointerバッファがあれば最初に反映
       if (pointerBuffer.isNotEmpty) {
         if (selected is LineLayerNode) {
-          drawingState.clearLine();
+          drawingState.clear(isLine: true);
           for (final offset in pointerBuffer) {
             final latlng = mapState.offsetToLatLng(offset);
-            drawingState.addLinePoint(latlng, null);
+            drawingState.addPoint(latlng, null, isLine: true);
           }
         } else if (selected is PolygonLayerNode) {
-          drawingState.clearPolygon();
+          drawingState.clear(isLine: false);
           for (final offset in pointerBuffer) {
             final latlng = mapState.offsetToLatLng(offset);
-            drawingState.addPolygonPoint(latlng, null);
+            drawingState.addPoint(latlng, null, isLine: false);
           }
         }
         clearPointerBuffer();
@@ -210,13 +210,13 @@ class PenTool extends MapTool {
         mapState.setState(() {});
       } else if (selected is LineLayerNode) {
         if (drawingLine.isEmpty) {
-          drawingState.addLinePoint(latlng, null);
+          drawingState.addPoint(latlng, null, isLine: true);
           mapState.setState(() {});
         }
         _isDrawing = true;
       } else if (selected is PolygonLayerNode) {
         if (drawingPolygon.isEmpty) {
-          drawingState.addPolygonPoint(latlng, null);
+          drawingState.addPoint(latlng, null, isLine: false);
           mapState.setState(() {});
         }
         _isDrawing = true;
@@ -260,10 +260,10 @@ class PenTool extends MapTool {
         drawingState.setPointPreview(latlng);
         mapState.setState(() {});
       } else if (selected is LineLayerNode && _isDrawing) {
-        drawingState.addLinePoint(latlng, null);
+        drawingState.addPoint(latlng, null, isLine: true);
         mapState.setState(() {});
       } else if (selected is PolygonLayerNode && _isDrawing) {
-        drawingState.addPolygonPoint(latlng, null);
+        drawingState.addPoint(latlng, null, isLine: false);
         mapState.setState(() {});
       }
     }
@@ -308,7 +308,7 @@ class PenTool extends MapTool {
         ).then((_) {
           mapState.refreshFeatures();
         });
-        drawingState.clearLine();
+        drawingState.clear(isLine: true);
         mapState.setState(() {});
       } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
         final closed = mapState.closeRing(drawingPolygon);
@@ -320,7 +320,7 @@ class PenTool extends MapTool {
         ).then((_) {
           mapState.refreshFeatures();
         });
-        drawingState.clearPolygon();
+        drawingState.clear(isLine: false);
         _isDrawing = false;
         mapState.setState(() {});
       }

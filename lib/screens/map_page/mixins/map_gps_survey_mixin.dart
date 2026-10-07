@@ -281,9 +281,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       final drawingState = GlobalDrawingState.instance;
       
       // GPS測量データを追加メタデータとして準備
-      final surveyGpsData = drawingState.isLineDrawing
-          ? drawingState.getLineWithMetadata()
-          : drawingState.getPolygonWithMetadata();
+      final surveyGpsData = drawingState.pointsWithMetadata(isLine: drawingState.isLineDrawing);
       final additionalMetadata = {
         'type': 'measurement_log',
         'contents': List<Map<String, dynamic>>.from(

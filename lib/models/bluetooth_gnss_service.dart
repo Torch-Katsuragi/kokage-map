@@ -376,7 +376,7 @@ class BluetoothGnssService extends ChangeNotifier {
     final double hdop = double.tryParse(parts[8]) ?? 1.0;
     _gpsQuality = quality;
     _hdop = hdop;
-    _accuracy = _calculateAccuracy(quality, hdop);
+    _accuracy = calculateAccuracy(quality, hdop);
 
     // 衛星数（フィールド7）
     if (parts[7].isNotEmpty) {
@@ -508,24 +508,17 @@ class BluetoothGnssService extends ChangeNotifier {
   }
 
   /// GPS品質とHDOPから精度を推定
-  double _calculateAccuracy(int quality, double hdop) {
-    switch (quality) {
-      case 0:
-        return 50.0; // 無効
-      case 1:
-        return hdop * 5.0; // 標準GPS
-      case 2:
-        return hdop * 2.0; // DGPS
-      case 3:
-        return hdop * 1.0; // RTK固定解
-      case 4:
-        return hdop * 2.0; // RTK浮動小数点解
-      case 5:
-        return hdop * 5.0; // 推測航法
-      default:
-        return hdop * 5.0;
-    }
-  }
+  /// （GGA の品質番号: 0 無効・1 単独・2 DGPS・3 PPS・4 RTK 固定解・5 RTK 浮動解・6 推測航法・9 SBAS）
+  ///
+  /// ⚠ 以前は 3〜5 を一つずつずらして読んでいて、RTK 固定解（4）を浮動解の ×2、浮動解（5）を推測航法の ×5 で
+  ///   記録していた（2026-10-07 に修正）
+  @visibleForTesting
+  static double calculateAccuracy(int quality, double hdop) => switch (quality) {
+        0 => 50.0,
+        4 => hdop * 1.0,
+        5 || 2 || 3 || 9 => hdop * 2.0,
+        _ => hdop * 5.0, // 単独・推測航法ほか
+      };
 
   /// 現在のNMEAバッファを文字列として取得
   String getNmeaBufferAsString() {

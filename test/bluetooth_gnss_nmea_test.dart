@@ -89,4 +89,15 @@ void main() {
     expect(lines, hasLength(20));
     expect(lines.first, r'$GPTXT,5');
   });
+
+  test('推定精度は GGA の品質番号どおり（RTK 固定解がいちばん良い）', () {
+    double acc(int q) => BluetoothGnssService.calculateAccuracy(q, 1.0);
+    expect(acc(4), 1.0); // RTK 固定解
+    expect(acc(5), 2.0); // RTK 浮動解
+    expect(acc(2), 2.0); // DGPS
+    expect(acc(9), 2.0); // SBAS
+    expect(acc(1), 5.0); // 単独
+    expect(acc(6), 5.0); // 推測航法
+    expect(acc(0), 50.0);
+  });
 }

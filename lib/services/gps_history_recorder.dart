@@ -829,7 +829,31 @@ class GpsHistoryRecorder extends ChangeNotifier {
   }
 
   /// 特定日付の全ポイントを取得
-  Future<List<GpsTrackPoint>> getPointsForDate(String dateKey) async {
+  /// 軌跡のフィーチャ名（`2026_09_12` / `2026_09_12 #2`）の区間の点。
+  ///
+  /// 点の表は日付でしか引けないので、その日の点を記録と同じ規則（[segmentGap] 以上空いたら次の区間）で分けて返す。
+  /// ⚠ 以前は名前をそのまま日付として引いていて、2 本目以降の区間は 0 点、日付だけの区間はその日の全点になっていた
+  Future<List<GpsTrackPoint>> getPointsForDate(String name) async {
+    final dateKey = name.split(' #').first;
+    final index = segmentIndexOf(name, dateKey) ?? 1;
+    return segmentOf(await _pointsOfDay(dateKey), index);
+  }
+
+  /// [points]（時刻順）を [segmentGap] で区切った [index] 本目（1 始まり）
+  @visibleForTesting
+  static List<GpsTrackPoint> segmentOf(List<GpsTrackPoint> points, int index) {
+    var segment = 1;
+    var start = 0;
+    for (var i = 1; i < points.length; i++) {
+      if (points[i].timestamp.difference(points[i - 1].timestamp) < segmentGap) continue;
+      if (segment == index) return points.sublist(start, i);
+      segment++;
+      start = i;
+    }
+    return segment == index ? points.sublist(start) : const [];
+  }
+
+  Future<List<GpsTrackPoint>> _pointsOfDay(String dateKey) async {
     if (_historyFile == null) return [];
 
     try {
@@ -859,7 +883,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
     DateTime start,
     DateTime end,
   ) async {
-    final allPoints = await getPointsForDate(dateKey);
+    final allPoints = await _pointsOfDay(dateKey);
     return allPoints
         .where((p) =>
             !p.timestamp.isBefore(start) && !p.timestamp.isAfter(end))

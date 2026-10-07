@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/models/gps_position_record.dart';
+import 'package:root_maps/models/gps_track.dart';
 import 'package:root_maps/services/gps_history_recorder.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -73,5 +74,17 @@ void main() {
     expect(points.map((p) => p.latitude), [for (var i = 0; i < 5; i++) closeTo(34.0 + i * 0.0001, 1e-9)]);
     expect(restarted.lastConsolidatedLine, hasLength(5));
     restarted.dispose();
+  });
+
+  test('区間の名前（日付 / 日付 #n）でその区間の点だけを返す（10 分以上空いたら次の区間）', () {
+    final t0 = DateTime(2026, 9, 12, 8);
+    GpsTrackPoint at(int minutes) =>
+        GpsTrackPoint(latitude: 34, longitude: 135, timestamp: t0.add(Duration(minutes: minutes)), sourceType: 'GPS');
+    final day = [at(0), at(1), at(2), at(30), at(31), at(60)];
+    expect(GpsHistoryRecorder.segmentOf(day, 1).map((p) => p.timestamp.minute), [0, 1, 2]);
+    expect(GpsHistoryRecorder.segmentOf(day, 2).map((p) => p.timestamp.minute), [30, 31]);
+    expect(GpsHistoryRecorder.segmentOf(day, 3).map((p) => p.timestamp.hour), [9]);
+    expect(GpsHistoryRecorder.segmentOf(day, 4), isEmpty);
+    expect(GpsHistoryRecorder.segmentOf(const [], 1), isEmpty);
   });
 }

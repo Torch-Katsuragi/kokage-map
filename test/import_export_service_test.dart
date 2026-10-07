@@ -18,6 +18,11 @@ void main() {
       service = ImportExportService();
     });
 
+    test('getSupportedExportFormats は書き出せる形式だけ（ダイアログの選択肢）', () {
+      expect(service.getSupportedExportFormats(), [FileFormat.shapefile, FileFormat.geojson, FileFormat.csv, FileFormat.kml]);
+      expect(service.getSupportedExportFormats().every((f) => f.isExportSupported), isTrue);
+    });
+
     test('FileFormat.fromExtension should correctly identify file formats', () {
       expect(FileFormat.fromExtension('.shp'), FileFormat.shapefile);
       expect(FileFormat.fromExtension('.SHP'), FileFormat.shapefile);
@@ -45,22 +50,6 @@ void main() {
       expect(FileFormat.csv.isExportSupported, isTrue);
       expect(FileFormat.gpx.isExportSupported, isFalse); // 将来実装予定
       expect(FileFormat.unknown.isExportSupported, isFalse);
-    });
-
-    test('getSupportedImportFormats should return only supported formats', () {
-      final supportedFormats = service.getSupportedImportFormats();
-      expect(supportedFormats, contains(FileFormat.shapefile));
-      expect(supportedFormats, contains(FileFormat.geojson));
-      expect(supportedFormats, isNot(contains(FileFormat.gpx))); // 未実装
-    });
-
-    test('getSupportedImportExtensions should return correct extensions', () {
-      final extensions = service.getSupportedImportExtensions();
-      expect(extensions, contains('.shp'));
-      expect(extensions, contains('.geojson'));
-      expect(extensions, contains('.json')); // GeoJSONは.jsonも受理する
-      // 将来実装される形式はこの時点では含まれない
-      expect(extensions, isNot(contains('.gpx')));
     });
 
     test('ImportExportResult factory methods should work correctly', () {

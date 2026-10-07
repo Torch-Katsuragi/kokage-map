@@ -59,9 +59,6 @@ class ImportExportResult {
   final List<LayerNode>? createdLayers;
   final Map<String, dynamic>? metadata;
 
-  /// 後方互換: 最初の作成レイヤを返す
-  LayerNode? get createdLayer => createdLayers?.firstOrNull;
-
   ImportExportResult({
     required this.success,
     this.errorMessage,

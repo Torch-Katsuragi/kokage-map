@@ -15,127 +15,87 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: KML Exporter
 // KMLエクスポートクラス
-import 'dart:io';
-
-import 'package:root_maps/utils/app_logger.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../models/geometry_type.dart';
-import '../../../models/nodes/layer_node.dart';
 import '../import_export_models.dart';
 import 'base_exporter.dart';
-import 'feature_parts.dart';
 
-/// KMLエクスポーター
+/// KMLエクスポーター。面は外周だけを書く
 class KMLExporter extends BaseExporter {
   @override
   FileFormat get format => FileFormat.kml;
 
   @override
-  Future<ImportExportResult> export(
-    LayerNode layer,
-    String outputPath, {
-    ExportOptions options = const ExportOptions(),
-  }) async {
-    try {
-      AppLogger.debug('[KMLExporter] エクスポート開始: ${layer.layerName}');
+  Future<ImportExportResult> write(ExportSource source, String outputPath, ExportOptions options) {
+    final kml = StringBuffer()
+      ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
+      ..writeln('<kml xmlns="http://www.opengis.net/kml/2.2">')
+      ..writeln('  <Document>')
+      ..writeln('    <name>${_escapeXmlValue(source.layer.layerName)}</name>');
 
-      final features = await layer.geoPackageNode.geoPackageFile.getFeatures(
-        layer.layerName,
-      );
-      final geometryType = await layer.geoPackageNode.geoPackageFile
-          .getGeometryType(layer.layerName);
-      final crs = await layerCrs(layer);
-
-      if (features.isEmpty) {
-        return ImportExportResult.error('No features found in layer: ${layer.layerName}');
+    for (final feature in source.features) {
+      kml
+        ..writeln('    <Placemark>')
+        ..writeln('      <name>${_escapeXmlValue(feature['name']?.toString() ?? 'Feature ${feature['id']}')}</name>');
+      final description = feature['description']?.toString();
+      if (description != null && description.isNotEmpty) {
+        kml.writeln('      <description>${_escapeXmlValue(description)}</description>');
       }
+      _writeGeometry(kml, source.geometryType, source.parts(feature));
+      kml.writeln('    </Placemark>');
+    }
 
-      final kmlContent = StringBuffer();
-      kmlContent.writeln('<?xml version="1.0" encoding="UTF-8"?>');
-      kmlContent.writeln('<kml xmlns="http://www.opengis.net/kml/2.2">');
-      kmlContent.writeln('  <Document>');
-      kmlContent.writeln('    <name>${_escapeXmlValue(layer.layerName)}</name>');
+    kml
+      ..writeln('  </Document>')
+      ..writeln('</kml>');
+    return writeText(source, outputPath, kml.toString(), featureCount: source.features.length);
+  }
 
-      for (final feature in features) {
-        kmlContent.writeln('    <Placemark>');
-        kmlContent.writeln(
-          '      <name>${_escapeXmlValue(feature['name']?.toString() ?? 'Feature ${feature['id']}')}</name>',
-        );
-        if (feature['description'] != null &&
-            feature['description'].toString().isNotEmpty) {
-          kmlContent.writeln(
-            '      <description>${_escapeXmlValue(feature['description'].toString())}</description>',
-          );
-        }
+  static void _writeGeometry(StringBuffer kml, GeometryType? type, List<List<LatLng>>? parts) {
+    if (parts == null) return;
+    final first = parts.first;
+    switch (type) {
+      case GeometryType.point:
+        final point = first.first;
+        kml
+          ..writeln('      <Point>')
+          ..writeln('        <coordinates>${point.longitude},${point.latitude},0</coordinates>')
+          ..writeln('      </Point>');
+      case GeometryType.linestring:
+        if (first.isEmpty) return;
+        kml
+          ..writeln('      <LineString>')
+          ..writeln('        <coordinates>');
+        _writeCoordinates(kml, first, '          ');
+        kml
+          ..writeln('        </coordinates>')
+          ..writeln('      </LineString>');
+      case GeometryType.polygon:
+        kml
+          ..writeln('      <Polygon>')
+          ..writeln('        <outerBoundaryIs>')
+          ..writeln('          <LinearRing>')
+          ..writeln('            <coordinates>');
+        _writeCoordinates(kml, first, '              ');
+        kml
+          ..writeln('            </coordinates>')
+          ..writeln('          </LinearRing>')
+          ..writeln('        </outerBoundaryIs>')
+          ..writeln('      </Polygon>');
+      case null:
+        return;
+    }
+  }
 
-        // ジオメトリ
-        final parts = geometryType == null ? null : featureParts(feature, geometryType, crs);
-        if (geometryType == GeometryType.point && parts != null) {
-          {
-            final point = parts.first.first;
-            kmlContent.writeln('      <Point>');
-            kmlContent.writeln(
-              '        <coordinates>${point.longitude},${point.latitude},0</coordinates>',
-            );
-            kmlContent.writeln('      </Point>');
-          }
-        } else if (geometryType == GeometryType.linestring && parts != null) {
-          final lines = parts.first;
-          if (lines.isNotEmpty) {
-            kmlContent.writeln('      <LineString>');
-            kmlContent.writeln('        <coordinates>');
-            for (final point in lines) {
-              kmlContent.write('          ${point.longitude},${point.latitude},0\n');
-            }
-            kmlContent.writeln('        </coordinates>');
-            kmlContent.writeln('      </LineString>');
-          }
-        } else if (geometryType == GeometryType.polygon && parts != null) {
-          final polygons = parts;
-          if (polygons.isNotEmpty) {
-            kmlContent.writeln('      <Polygon>');
-            kmlContent.writeln('        <outerBoundaryIs>');
-            kmlContent.writeln('          <LinearRing>');
-            kmlContent.writeln('            <coordinates>');
-            for (final point in polygons.first) {
-              kmlContent.write('              ${point.longitude},${point.latitude},0\n');
-            }
-            kmlContent.writeln('            </coordinates>');
-            kmlContent.writeln('          </LinearRing>');
-            kmlContent.writeln('        </outerBoundaryIs>');
-            kmlContent.writeln('      </Polygon>');
-          }
-        }
-
-        kmlContent.writeln('    </Placemark>');
-      }
-
-      kmlContent.writeln('  </Document>');
-      kmlContent.writeln('</kml>');
-
-      // ファイルに書き込み
-      final file = File(outputPath);
-      await file.writeAsString(kmlContent.toString());
-
-      AppLogger.debug('[KMLExporter] エクスポート完了: ${features.length}個のフィーチャ');
-
-      return ImportExportResult.success(
-        metadata: {
-          'outputPath': outputPath,
-          'featureCount': features.length,
-          'geometryType': geometryType?.value,
-          'format': 'KML',
-          'fileSize': (await file.stat()).size,
-        },
-      );
-    } catch (e) {
-      AppLogger.debug('[KMLExporter] エクスポートエラー: $e');
-      return ImportExportResult.error('KML export failed: $e');
+  static void _writeCoordinates(StringBuffer kml, List<LatLng> points, String indent) {
+    for (final point in points) {
+      kml.write('$indent${point.longitude},${point.latitude},0\n');
     }
   }
 
   /// XML値をエスケープ
-  String _escapeXmlValue(String value) {
+  static String _escapeXmlValue(String value) {
     return value
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
@@ -144,4 +104,3 @@ class KMLExporter extends BaseExporter {
         .replaceAll("'", '&apos;');
   }
 }
-

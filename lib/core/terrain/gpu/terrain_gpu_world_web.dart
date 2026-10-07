@@ -29,6 +29,7 @@ import '../terrain_lifted.dart';
 import '../terrain_mesh.dart';
 import '../terrain_scene.dart';
 import '../terrain_world_painter.dart' show TerrainTileDrawable;
+import 'frame_projection.dart';
 import 'gpu_geometry.dart';
 import 'part_cache.dart';
 
@@ -180,70 +181,27 @@ class TerrainGpuWorldRenderer {
     }
     if (entries.isEmpty) return null;
 
-    // 2. 投影（Android 版と同じ式）
-    final zs = camera.zScale;
+    // 2. カメラ中心基準の投影（[writeBaseProjection]。Android 版・web 版で共通）
     final persp = camera.perspective && camera.viewport != ui.Size.zero;
     final m = _base;
-    var kz = 0.0;
-    if (persp) {
-      final toUnit = vm.Matrix4.identity()
-        ..setEntry(2, 2, 0.5)
-        ..setEntry(2, 3, 0.5);
-      final model = vm.Matrix4.identity()..setEntry(2, 2, zs);
-      // WebGL の NDC z は [-1, 1] なので toUnit は要らないが、深度バイアスの式を Android と揃えるため [0,1] に畳んでから戻す
-      final mvp = toUnit.multiplied(camera.perspectiveViewProjection(centerHeight)).multiplied(model);
-      m.setAll(0, mvp.storage);
-    } else {
-      final cosB = math.cos(camera.bearing);
-      final sinB = math.sin(camera.bearing);
-      final cosP = math.cos(camera.pitch);
-      final sinP = math.sin(camera.pitch);
-      final pc = camera.project(0, 0, centerHeight);
-      final kx = 2 * camera.scale / size.width;
-      final ky = 2 * camera.scale / size.height;
-      var dMin = double.infinity;
-      var dMax = -double.infinity;
-      var zLo = heightRange.$1;
-      var zHi = heightRange.$2;
-      for (final e in entries) {
-        if (e.terrain.minZ < zLo) zLo = e.terrain.minZ;
-        if (e.terrain.maxZ > zHi) zHi = e.terrain.maxZ;
-      }
-      final zPad = math.max(10.0, (zHi - zLo) * 0.05);
-      zLo -= zPad;
-      zHi += zPad;
-      for (final e in entries) {
-        final ox = e.tile.originX - camera.centerX;
-        final oy = e.tile.originY - camera.centerY;
-        final dem = e.tile.mesh.dem;
-        for (final x in [ox, ox + dem.width]) {
-          for (final y in [oy, oy + dem.height]) {
-            for (final z in [zLo, zHi]) {
-              final d = camera.depth(x, y, z);
-              if (d < dMin) dMin = d;
-              if (d > dMax) dMax = d;
-            }
-          }
-        }
-      }
-      final span = math.max(1e-3, dMax - dMin);
-      final pad = span * 0.02;
-      kz = 1 / (span + 2 * pad);
-      final d0 = dMin - pad;
-      m.fillRange(0, 16, 0);
-      m[0] = kx * cosB;
-      m[4] = -kx * sinB;
-      m[12] = -kx * pc.dx;
-      m[1] = ky * sinB * cosP;
-      m[5] = ky * cosB * cosP;
-      m[9] = ky * zs * sinP;
-      m[13] = ky * pc.dy;
-      m[2] = kz * sinB * sinP;
-      m[6] = kz * cosB * sinP;
-      m[10] = -kz * zs * cosP;
-      m[14] = -kz * d0;
-      m[15] = 1;
-    }
+    final kz = writeBaseProjection(
+      m,
+      camera,
+      size,
+      centerHeight: centerHeight,
+      heightRange: heightRange,
+      tiles: [
+        for (final e in entries)
+          (
+            originX: e.tile.originX,
+            originY: e.tile.originY,
+            width: e.tile.mesh.dem.width,
+            height: e.tile.mesh.dem.height,
+            minZ: e.terrain.minZ,
+            maxZ: e.terrain.maxZ,
+          ),
+      ],
+    );
     // Impeller の NDC z ∈ [0, 1] に合わせた行列を WebGL の [-1, 1] へ（z' = 2z − w）
     final toGl = vm.Matrix4.identity()
       ..setEntry(2, 2, 2)

@@ -580,7 +580,7 @@ PC からは同じタイルが 0.1〜0.15 秒で取れるのでサーバは速�
 - **同じタイルの同時要求を 1 本に**（`BaseMapService._inflight`）。等高線 4 枚が同じ DEM を頼み、キャッシュに書く前に次が来て DEM1A が 4 回、AWS が 5 回
 - **等高線用の DEM を LRU に**（`TerrainWorld.demFor`、24 枚）
 - **DEM は順に取って穴が無ければ止める**（以前は 1A / 5A / 10B を同時に取っていた。1 枚 100 KB × 2〜3 → 100 KB）。
-  `_mergeGrids(remember:)` で「無かった」の記憶は取りに行ったものだけ
+  `TerrainWorld._fetchPrimary` で「無かった」の記憶は取りに行ったものだけ
 - **段階読み込み**: 細かい段のテクスチャはまず 1 段上（地図 4 枚 × 層）で貼って出し、`TerrainTile.pendingTextureOffset` に 2 段上を覚える。
   本体の読み込みが空いたとき（`_inFlight` も `_queue` も空）に中心に近い順に 2 枚ずつ差し替える（`_pumpUpgrades`）。`retexture` も同じ
 - **粗い段の等高線は薄く**（テクスチャ z ≤ 13 は alpha 0.55、`ContourTileArgs.alpha`、`contours_v5`）。読み込み中の親タイルの継ぎはぎがうるさくない

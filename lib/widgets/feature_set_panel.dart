@@ -36,11 +36,11 @@ import 'long_press_delete_button.dart';
 /// 選択集合の集計。UI から切り離してあるのでテストできる
 class FeatureSetSummary {
   FeatureSetSummary(List<LayerTreeNode> nodes)
-      : points = nodes.whereType<PointFeatureNode>().toList(),
-        lines = nodes.whereType<LineFeatureNode>().toList(),
-        polygons = nodes.whereType<PolygonFeatureNode>().toList(),
-        photos = nodes.whereType<ImageNode>().toList(),
-        total = nodes.length;
+    : points = nodes.whereType<PointFeatureNode>().toList(),
+      lines = nodes.whereType<LineFeatureNode>().toList(),
+      polygons = nodes.whereType<PolygonFeatureNode>().toList(),
+      photos = nodes.whereType<ImageNode>().toList(),
+      total = nodes.length;
 
   final List<PointFeatureNode> points;
   final List<LineFeatureNode> lines;
@@ -88,17 +88,18 @@ class FeatureSetPanel extends ConsumerWidget {
     final tr = t.featureSet;
 
     Widget row(String label, String value) => Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
-              Expanded(child: Text(value)),
-            ],
-          ),
-        );
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
 
     final centroid = s.pointsCentroid;
+    final byLayer = s.countByLayer;
     return InfoPanelCard(
       title: tr.title(n: s.total),
       onClose: () => ref.read(selectedFeaturesProvider.notifier).clear(),
@@ -120,9 +121,9 @@ class FeatureSetPanel extends ConsumerWidget {
             tr.centroid,
             '${centroid.latitude.toStringAsFixed(6)}, ${centroid.longitude.toStringAsFixed(6)}',
           ),
-        if (s.countByLayer.length > 1) ...[
+        if (byLayer.length > 1) ...[
           const SizedBox(height: 4),
-          for (final e in s.countByLayer.entries) row(e.key, '${e.value}'),
+          for (final e in byLayer.entries) row(e.key, '${e.value}'),
         ],
         const SizedBox(height: 12),
         LongPressDeleteButton(

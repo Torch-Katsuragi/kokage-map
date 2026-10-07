@@ -16,7 +16,6 @@
 /// 地図画面AppBarの「≡」メニュー: パーティ・水準器（コンパス）・設定を集約。
 library;
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -43,6 +42,9 @@ class MapMenuButton extends ConsumerWidget {
   static const String _level = 'level';
   static const String _settings = 'settings';
 
+  static void _push(BuildContext context, Widget screen) =>
+      Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(partySessionProvider);
@@ -68,15 +70,9 @@ class MapMenuButton extends ConsumerWidget {
           case _reload:
             onReload?.call();
           case _level:
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const LevelScreen()),
-            );
+            _push(context, const LevelScreen());
           case _settings:
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            );
+            _push(context, const SettingsScreen());
         }
       },
       itemBuilder: (context) => [

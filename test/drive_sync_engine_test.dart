@@ -321,6 +321,19 @@ void main() {
       expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.synced);
     });
 
+    test('上げるものが無い push（改名と削除だけ）も成功し、帳簿を書く', () async {
+      await shared();
+      local('del.jpg').deleteSync();
+      local('keep.jpg').renameSync(local('kept.jpg').path);
+      await KMetaService.instance.renameSyncedFiles(a, 'keep.jpg', 'kept.jpg');
+      await tick();
+      final r = await engine.push(a, driveFolder: rootId);
+      expect(r.success, isTrue, reason: r.errorMessage);
+      expect((r.uploadedCount, r.deletedCount), (0, 1));
+      expect(drivePhotos(), ['kept.jpg', 'mod.jpg', 'sub/moved.jpg']);
+      expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.synced);
+    });
+
     test('pull は全部落とし、Drive に無いものと空のフォルダを手元から消す', () async {
       await shared();
       put('stray.jpg', 9);

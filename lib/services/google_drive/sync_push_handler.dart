@@ -152,6 +152,7 @@ class SyncPushHandler {
 
       int uploadedCount = 0;
       int skippedCount = 0;
+      int failedCount = 0; // 上げようとして上がらなかった数
       int completedCount = 0;
       final syncedFiles = <String, KMetaSyncFile>{};
 
@@ -191,6 +192,7 @@ class SyncPushHandler {
           final targetFolderForFile = resolvedFolders[i];
           if (targetFolderForFile == null) {
             skippedCount++;
+            failedCount++;
             processedBytes += fileSize;
             completedCount++;
             return;
@@ -224,6 +226,7 @@ class SyncPushHandler {
             await SyncBaseStore.saveBase(projectPath, relativePath);
           } else {
             skippedCount++;
+            failedCount++;
           }
           processedBytes += fileSize;
           completedCount++;
@@ -292,9 +295,11 @@ class SyncPushHandler {
         '[SyncEngine] Push完了: $uploadedCount uploaded, $deletedCount deleted, $skippedCount skipped',
       );
 
-      if (uploadedCount == 0 && filesToSync.isNotEmpty) {
+      // 上げようとして 1 つも上がらなかったときだけ失敗（変わっていないものしか無い push は成功。
+      // 以前は改名・削除だけの push も失敗扱いで、帳簿を書かずに終わっていた）
+      if (uploadedCount == 0 && failedCount > 0) {
         return SyncResult.failure(
-          t.services.uploadFailed(count: skippedCount.toString()),
+          t.services.uploadFailed(count: failedCount.toString()),
         );
       }
 

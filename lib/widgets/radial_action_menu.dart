@@ -52,21 +52,27 @@ VoidCallback showRadialMenu({
   double buttonSize = 48,
 }) {
   late OverlayEntry entry;
+  var removed = false;
+  // 外のタップ・項目のタップ・呼び出し側のどれから来ても 1 回だけ外して破棄する
+  void dismiss() {
+    if (removed) return;
+    removed = true;
+    entry
+      ..remove()
+      ..dispose();
+  }
+
   entry = OverlayEntry(
     builder: (_) => _RadialMenuOverlay(
       center: center,
       actions: actions,
       radius: radius,
       buttonSize: buttonSize,
-      onDismiss: () {
-        try { entry.remove(); } catch (_) {}
-      },
+      onDismiss: dismiss,
     ),
   );
   Overlay.of(context).insert(entry);
-  return () {
-    try { entry.remove(); } catch (_) {}
-  };
+  return dismiss;
 }
 
 class _RadialMenuOverlay extends StatefulWidget {
@@ -90,35 +96,32 @@ class _RadialMenuOverlay extends StatefulWidget {
 
 class _RadialMenuOverlayState extends State<_RadialMenuOverlay>
     with TickerProviderStateMixin {
-  late final AnimationController _primaryCtrl;
-  AnimationController? _secondaryCtrl;
+  late final _RingAnimation _primary;
+  _RingAnimation? _secondary;
   List<RadialAction>? _secondaryActions;
 
   @override
   void initState() {
     super.initState();
-    _primaryCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    )..forward();
+    _primary = _RingAnimation(this);
   }
 
   @override
   void dispose() {
-    _primaryCtrl.dispose();
-    _secondaryCtrl?.dispose();
+    _primary.dispose();
+    _secondary?.dispose();
     super.dispose();
   }
 
   void _onActionTap(RadialAction action) {
     action.onTap();
-    if (action.secondaryActions != null && action.secondaryActions!.isNotEmpty) {
-      setState(() => _secondaryActions = action.secondaryActions);
-      _secondaryCtrl?.dispose();
-      _secondaryCtrl = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 250),
-      )..forward();
+    final secondary = action.secondaryActions;
+    if (secondary != null && secondary.isNotEmpty) {
+      setState(() {
+        _secondaryActions = secondary;
+        _secondary?.dispose();
+        _secondary = _RingAnimation(this);
+      });
     } else {
       widget.onDismiss();
     }
@@ -141,14 +144,14 @@ class _RadialMenuOverlayState extends State<_RadialMenuOverlay>
             ..._buildRing(
               widget.actions,
               widget.radius,
-              _primaryCtrl,
+              _primary.curve,
               _onActionTap,
             ),
-            if (_secondaryActions != null && _secondaryCtrl != null)
+            if (_secondaryActions != null && _secondary != null)
               ..._buildRing(
                 _secondaryActions!,
                 widget.radius * 2,
-                _secondaryCtrl!,
+                _secondary!.curve,
                 _onSecondaryTap,
               ),
           ],
@@ -160,13 +163,12 @@ class _RadialMenuOverlayState extends State<_RadialMenuOverlay>
   List<Widget> _buildRing(
     List<RadialAction> actions,
     double radius,
-    AnimationController ctrl,
+    Animation<double> curved,
     void Function(RadialAction) onTap,
   ) {
     final count = actions.length;
     const startAngle = -math.pi / 2;
     final sweep = count == 1 ? 0.0 : 2 * math.pi / count;
-    final curved = CurvedAnimation(parent: ctrl, curve: Curves.easeOutBack);
 
     return List.generate(count, (i) {
       final angle = startAngle + sweep * i;
@@ -195,6 +197,26 @@ class _RadialMenuOverlayState extends State<_RadialMenuOverlay>
   }
 }
 
+/// 1 つの輪が開くアニメーション（作った時点で再生を始める）。
+/// CurvedAnimation は親に購読を張るので、毎ビルド作らずここで持って一緒に破棄する
+class _RingAnimation {
+  _RingAnimation(TickerProvider vsync)
+    : controller = AnimationController(
+        vsync: vsync,
+        duration: const Duration(milliseconds: 250),
+      )..forward() {
+    curve = CurvedAnimation(parent: controller, curve: Curves.easeOutBack);
+  }
+
+  final AnimationController controller;
+  late final CurvedAnimation curve;
+
+  void dispose() {
+    curve.dispose();
+    controller.dispose();
+  }
+}
+
 class _RadialButton extends StatelessWidget {
   final RadialAction action;
   final double size;
@@ -220,7 +242,11 @@ class _RadialButton extends StatelessWidget {
               shape: BoxShape.circle,
               color: action.color,
               boxShadow: const [
-                BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
               ],
             ),
             child: Icon(action.icon, size: size * 0.5),

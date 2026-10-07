@@ -347,20 +347,22 @@ class WebFileSystem implements KFileSystem {
     return entries;
   }
 
+  /// [path] のファイルの中身（`File`）。無ければ null
+  Future<web.File?> _file(String path) async {
+    final handle = await _fileHandle(path);
+    return handle == null ? null : await handle.getFile().toDart;
+  }
+
   @override
   Future<Uint8List> readAsBytes(String path) async {
-    final handle = await _fileHandle(path);
-    if (handle == null) throw _notFound(path);
-    final file = await handle.getFile().toDart;
+    final file = await _file(path) ?? (throw _notFound(path));
     final buffer = await file.arrayBuffer().toDart;
     return buffer.toDart.asUint8List();
   }
 
   @override
   Future<String> readAsString(String path) async {
-    final handle = await _fileHandle(path);
-    if (handle == null) throw _notFound(path);
-    final file = await handle.getFile().toDart;
+    final file = await _file(path) ?? (throw _notFound(path));
     return (await file.text().toDart).toDart;
   }
 
@@ -415,20 +417,13 @@ class WebFileSystem implements KFileSystem {
 
   @override
   Future<DateTime?> lastModified(String path) async {
-    final handle = await _fileHandle(path);
-    if (handle == null) return null;
-    final file = await handle.getFile().toDart;
+    final file = await _file(path);
     // JS の lastModified はエポックミリ秒
-    return DateTime.fromMillisecondsSinceEpoch(file.lastModified);
+    return file == null ? null : DateTime.fromMillisecondsSinceEpoch(file.lastModified);
   }
 
   @override
-  Future<int?> length(String path) async {
-    final handle = await _fileHandle(path);
-    if (handle == null) return null;
-    final file = await handle.getFile().toDart;
-    return file.size;
-  }
+  Future<int?> length(String path) async => (await _file(path))?.size;
 
   Exception _notFound(String path) =>
       KFileSystemException('パスを解決できません（ルート未選択か範囲外）: $path');

@@ -27,10 +27,12 @@ import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:turf/turf.dart';
 
+import '../converters/turf_converter.dart';
 import '../models/nodes/feature_node.dart';
+import 'geo_converter.dart';
 
 /// degree・metre変換系
-class DegreeMeterConverter {
+class _DegreeMeterConverter {
   /// 緯度1度あたりの距離（メートル）
   static double metersPerDegreeLat() {
     // 地球半径R=6378137m, 1度=π/180ラジアン
@@ -56,8 +58,8 @@ class GeometryCalc {
   /// 戻り値: 距離（m）
   static double calcDistance(LatLng a, LatLng b) {
     // turf_dartを使用した高精度な距離計算
-    final pointA = Point(coordinates: Position(a.longitude, a.latitude));
-    final pointB = Point(coordinates: Position(b.longitude, b.latitude));
+    final pointA = Point(coordinates: a.toTurfPosition());
+    final pointB = Point(coordinates: b.toTurfPosition());
     return distance(pointA, pointB, Unit.meters).toDouble();
   }
 
@@ -67,11 +69,7 @@ class GeometryCalc {
   static double calcLineLength(List<LatLng> line) {
     if (line.length < 2) return 0.0;
 
-    // turf_dartのLineStringとlength関数を使用
-    final coordinates =
-        line.map((ll) => Position(ll.longitude, ll.latitude)).toList();
-    final lineString = LineString(coordinates: coordinates);
-    final feature = Feature(geometry: lineString);
+    final feature = Feature(geometry: TurfConverter.createLineString(line));
     return length(feature, Unit.meters).toDouble();
   }
 
@@ -81,19 +79,7 @@ class GeometryCalc {
   static double calcPolygonArea(List<List<LatLng>> polygon) {
     if (polygon.isEmpty || polygon[0].length < 3) return 0.0;
 
-    // turf_dartのPolygonとarea関数を使用
-    final coordinates =
-        polygon
-            .map(
-              (ring) =>
-                  ring
-                      .map((ll) => Position(ll.longitude, ll.latitude))
-                      .toList(),
-            )
-            .toList();
-
-    final polygonGeometry = Polygon(coordinates: coordinates);
-    final feature = Feature(geometry: polygonGeometry);
+    final feature = Feature(geometry: TurfConverter.createPolygon(polygon));
     return area(feature)?.toDouble() ?? 0.0; // デフォルトで平方メートル
   }
 
@@ -104,15 +90,8 @@ class GeometryCalc {
     if (line.isEmpty) return const LatLng(0, 0);
     if (line.length == 1) return line.first;
 
-    // turf_dartのLineStringとcentroid関数を使用
-    final coordinates =
-        line.map((ll) => Position(ll.longitude, ll.latitude)).toList();
-    final lineString = LineString(coordinates: coordinates);
-    final feature = Feature(geometry: lineString);
-    final center = centroid(feature);
-
-    final centerCoords = center.geometry!.coordinates;
-    return LatLng(centerCoords.lat.toDouble(), centerCoords.lng.toDouble());
+    final center = centroid(Feature(geometry: TurfConverter.createLineString(line)));
+    return center.geometry!.coordinates.toLatLng();
   }
 
   /// ポリゴン（外環＋穴リスト）の重心を計算
@@ -121,23 +100,8 @@ class GeometryCalc {
   static LatLng calcPolygonCentroid(List<List<LatLng>> polygon) {
     if (polygon.isEmpty || polygon[0].isEmpty) return const LatLng(0, 0);
 
-    // turf_dartのPolygonとcentroid関数を使用
-    final coordinates =
-        polygon
-            .map(
-              (ring) =>
-                  ring
-                      .map((ll) => Position(ll.longitude, ll.latitude))
-                      .toList(),
-            )
-            .toList();
-
-    final polygonGeometry = Polygon(coordinates: coordinates);
-    final feature = Feature(geometry: polygonGeometry);
-    final center = centroid(feature);
-
-    final centerCoords = center.geometry!.coordinates;
-    return LatLng(centerCoords.lat.toDouble(), centerCoords.lng.toDouble());
+    final center = centroid(Feature(geometry: TurfConverter.createPolygon(polygon)));
+    return center.geometry!.coordinates.toLatLng();
   }
 
   /// 点集合（`List<LatLng>`）の重心を計算
@@ -145,15 +109,9 @@ class GeometryCalc {
     if (points.isEmpty) return const LatLng(0, 0);
     if (points.length == 1) return points.first;
 
-    // turf_dartのMultiPointとcentroid関数を使用
-    final coordinates =
-        points.map((ll) => Position(ll.longitude, ll.latitude)).toList();
-    final multiPoint = MultiPoint(coordinates: coordinates);
-    final feature = Feature(geometry: multiPoint);
-    final center = centroid(feature);
-
-    final centerCoords = center.geometry!.coordinates;
-    return LatLng(centerCoords.lat.toDouble(), centerCoords.lng.toDouble());
+    final multiPoint = MultiPoint(coordinates: [for (final p in points) p.toTurfPosition()]);
+    final center = centroid(Feature(geometry: multiPoint));
+    return center.geometry!.coordinates.toLatLng();
   }
 
   /// 点と線分（`List<LatLng>`）の最短距離（メートル）を計算
@@ -197,7 +155,7 @@ class GeometryCalc {
 
     try {
       // turf_dartのbooleanPointInPolygon関数を使用
-      final pointPos = Position(pt.longitude, pt.latitude);
+      final pointPos = pt.toTurfPosition();
       
       // 各リングを閉じる（最初と最後の座標が同じでない場合は最初の座標を追加）
       final closedPolygon = polygon.map((ring) {
@@ -215,17 +173,7 @@ class GeometryCalc {
         return ring;
       }).toList();
       
-      final coordinates =
-          closedPolygon
-              .map(
-                (ring) =>
-                    ring
-                        .map((ll) => Position(ll.longitude, ll.latitude))
-                        .toList(),
-              )
-              .toList();
-      final polygonGeometry = Polygon(coordinates: coordinates);
-      final feature = Feature(geometry: polygonGeometry);
+      final feature = Feature(geometry: TurfConverter.createPolygon(closedPolygon));
 
       return booleanPointInPolygon(pointPos, feature);
     } catch (e) {
@@ -244,8 +192,8 @@ class GeometryCalc {
 
     // 緯度経度をメートル単位の平面座標に変換して計算
     final centerLat = (a.latitude + b.latitude) / 2;
-    final mPerDegLat = DegreeMeterConverter.metersPerDegreeLat();
-    final mPerDegLng = DegreeMeterConverter.metersPerDegreeLng(centerLat);
+    final mPerDegLat = _DegreeMeterConverter.metersPerDegreeLat();
+    final mPerDegLng = _DegreeMeterConverter.metersPerDegreeLng(centerLat);
 
     // メートル単位の座標に変換
     final x0 = p.longitude * mPerDegLng;
@@ -442,7 +390,7 @@ class LineSimplification {
     int maxDistanceIndex = 0;
 
     for (int i = 1; i < points.length - 1; i++) {
-      final distance = _distancePointToSegment(points[i], startPoint, endPoint);
+      final distance = GeometryCalc.distancePointToSegment(points[i], startPoint, endPoint);
 
       if (distance > maxDistance) {
         maxDistance = distance;
@@ -475,13 +423,6 @@ class LineSimplification {
       // 許容誤差以下なら開始点と終了点のみ
       return [startPoint, endPoint];
     }
-  }
-
-  /// 点と線分の最短距離（メートル）を計算
-  /// Douglas-Peucker専用の高速版
-  static double _distancePointToSegment(LatLng point, LatLng a, LatLng b) {
-    // 既存のGeometryCalcの実装を活用
-    return GeometryCalc.distancePointToSegment(point, a, b);
   }
 
   /// ライン簡略化の統計情報を取得

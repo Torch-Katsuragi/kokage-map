@@ -20,14 +20,10 @@
 import 'package:geobase/geobase.dart' as geo;
 import 'package:proj4dart/proj4dart.dart';
 
+import 'projections.dart';
+
 /// ジオメトリ座標の双方向変換ユーティリティ
 class GeometryReprojector {
-  // WGS84 Projection（キャッシュ）
-  static Projection? _wgs84;
-  static Projection get wgs84 =>
-      _wgs84 ??= Projection.get('EPSG:4326') ??
-          Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
-
   /// ソースCRS → WGS84 に変換（読み込み用）
   ///
   /// [geom] 変換元ジオメトリ（ソースCRSの座標値）
@@ -41,7 +37,7 @@ class GeometryReprojector {
     return _reprojectGeometry(
       geom,
       sourceProj,
-      wgs84,
+      Projections.wgs84,
       needsAxisSwap: needsAxisSwap,
       toWgs84: true,
     );
@@ -59,7 +55,7 @@ class GeometryReprojector {
   }) {
     return _reprojectGeometry(
       geom,
-      wgs84,
+      Projections.wgs84,
       targetProj,
       needsAxisSwap: needsAxisSwap,
       toWgs84: false,

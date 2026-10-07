@@ -29,7 +29,6 @@ import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../utils/geo_converter.dart';
-import '../../utils/turf_geo_convert.dart';
 
 /// 組み立ての材料
 class FeatureGeoJsonInput {

@@ -17,26 +17,22 @@
 // 全プロジェクトのSingle Source of Truth
 // JGD2011/JGD2000平面直角座標系、UTM、WGS84を統合管理
 
-import 'package:latlong2/latlong.dart';
-
 /// EPSG座標系の定義
 class EpsgDefinition {
   final String code;
   final String name;
   final String proj4String;
-  final List<String>? prefectures; // 対応する都道府県（JGD2011用）
-  final LatLngBounds? bounds; // 適用範囲（UTM用、nullなら無制限）
+  final List<String>? prefectures; // 対応する都道府県（検索用）
 
   const EpsgDefinition({
     required this.code,
     required this.name,
     required this.proj4String,
     this.prefectures,
-    this.bounds,
   });
 
-  /// 指定された緯度経度がこの座標系の適用範囲内か（範囲未定義なら常にtrue）
-  bool contains(LatLng point) => bounds?.contains(point) ?? true;
+  /// 緯度経度のままの座標系（WGS84・JGD2011 地理座標系）。変換しない
+  bool get isWgs84 => code == 'EPSG:4326' || code == 'EPSG:6668';
 
   /// EPSGコード番号部分を取得（例: "EPSG:6677" → "6677"）
   String get codeNumber => code.replaceFirst('EPSG:', '');
@@ -48,21 +44,6 @@ class EpsgDefinition {
   String get displayString => '$codeNumber $name';
 }
 
-/// 緯度経度の範囲
-class LatLngBounds {
-  final LatLng southwest;
-  final LatLng northeast;
-
-  const LatLngBounds(this.southwest, this.northeast);
-
-  bool contains(LatLng point) {
-    return point.latitude >= southwest.latitude &&
-        point.latitude <= northeast.latitude &&
-        point.longitude >= southwest.longitude &&
-        point.longitude <= northeast.longitude;
-  }
-}
-
 /// 統合EPSG座標系レジストリ（シングルトン）
 class EpsgRegistry {
   static final EpsgRegistry instance = EpsgRegistry._internal();
@@ -72,45 +53,23 @@ class EpsgRegistry {
   /// 全EPSG定義のリスト
   List<EpsgDefinition> get allDefinitions => [..._allDefinitions];
 
-  /// WGS84以外のEPSG定義（座標変換用、WGS84は変換先として不要）
-  List<EpsgDefinition> get transformableDefinitions =>
-      _allDefinitions.where((e) => e.code != 'EPSG:4326' && e.code != 'EPSG:6668').toList();
-
-  /// EPSGコードで検索
+  /// EPSGコードで検索（"EPSG:" は省略可）
   EpsgDefinition? getByCode(String code) {
     final normalizedCode = code.startsWith('EPSG:') ? code : 'EPSG:$code';
-    return _allDefinitions.cast<EpsgDefinition?>().firstWhere(
-      (e) => e?.code == normalizedCode,
-      orElse: () => null,
-    );
+    return _allDefinitions.where((e) => e.code == normalizedCode).firstOrNull;
   }
 
   /// クエリで検索（コード、名前、地域名で部分一致）
   List<EpsgDefinition> search(String query) {
-    if (query.isEmpty) return transformableDefinitions;
-    
     final lowerQuery = query.toLowerCase();
     return _allDefinitions.where((epsg) {
       // WGS84系は検索結果から除外（変換先としては不要）
-      if (epsg.code == 'EPSG:4326' || epsg.code == 'EPSG:6668') return false;
-      
+      if (epsg.isWgs84) return false;
+      if (query.isEmpty) return true;
       return epsg.codeNumber.contains(lowerQuery) ||
           epsg.name.toLowerCase().contains(lowerQuery) ||
           (epsg.prefectures?.any((p) => p.contains(query)) ?? false);
     }).toList();
-  }
-
-  /// 都道府県からJGD2011座標系を取得
-  EpsgDefinition? getJgd2011FromPrefecture(String prefecture) {
-    // 都道府県名を正規化（「県」「府」「都」「道」を含めて検索）
-    final normalizedPref = prefecture.replaceAll(RegExp(r'[県府都道]$'), '');
-    
-    for (final epsg in _jgd2011Definitions) {
-      if (epsg.prefectures?.any((p) => p.contains(normalizedPref)) ?? false) {
-        return epsg;
-      }
-    }
-    return null;
   }
 
   /// 軸入れ替えが必要か判定（日本の平面直角座標系）
@@ -123,32 +82,6 @@ class EpsgRegistry {
     if (code >= 2443 && code <= 2461) return true;
     return false;
   }
-
-  /// 緯度経度からUTMゾーン番号を計算
-  int calculateUtmZone(double longitude) => ((longitude + 180) / 6).floor() + 1;
-
-  /// 緯度経度から最適なUTM座標系を取得
-  EpsgDefinition getUtmZone(LatLng point) =>
-      getUtmZoneDefinition(calculateUtmZone(point.longitude));
-
-  /// UTMゾーン番号（1-60、北半球）からEPSG定義を取得
-  /// レジストリ未登録のゾーンは動的に生成する
-  EpsgDefinition getUtmZoneDefinition(int zone) {
-    final epsgCode = 'EPSG:326${zone.toString().padLeft(2, '0')}';
-    return getByCode(epsgCode) ??
-        EpsgDefinition(
-          code: epsgCode,
-          name: 'WGS 84 / UTM zone ${zone}N',
-          proj4String: '+proj=utm +zone=$zone +datum=WGS84 +units=m +no_defs',
-          bounds: utmNorthBounds(zone),
-        );
-  }
-
-  /// UTM北半球ゾーンの適用範囲（経度6度幅、緯度0〜84度）
-  static LatLngBounds utmNorthBounds(int zone) => LatLngBounds(
-        LatLng(0, (zone * 6 - 186).toDouble()),
-        LatLng(84, (zone * 6 - 180).toDouble()),
-      );
 
   // ========== JGD2011 平面直角座標系（全19系）==========
 
@@ -341,37 +274,31 @@ class EpsgRegistry {
       code: 'EPSG:32651',
       name: 'WGS 84 / UTM zone 51N (九州西部)',
       proj4String: '+proj=utm +zone=51 +datum=WGS84 +units=m +no_defs',
-      bounds: LatLngBounds(LatLng(0, 120), LatLng(84, 126)),
     ),
     EpsgDefinition(
       code: 'EPSG:32652',
       name: 'WGS 84 / UTM zone 52N (九州・四国)',
       proj4String: '+proj=utm +zone=52 +datum=WGS84 +units=m +no_defs',
-      bounds: LatLngBounds(LatLng(0, 126), LatLng(84, 132)),
     ),
     EpsgDefinition(
       code: 'EPSG:32653',
       name: 'WGS 84 / UTM zone 53N (本州西部)',
       proj4String: '+proj=utm +zone=53 +datum=WGS84 +units=m +no_defs',
-      bounds: LatLngBounds(LatLng(0, 132), LatLng(84, 138)),
     ),
     EpsgDefinition(
       code: 'EPSG:32654',
       name: 'WGS 84 / UTM zone 54N (本州中部・東部)',
       proj4String: '+proj=utm +zone=54 +datum=WGS84 +units=m +no_defs',
-      bounds: LatLngBounds(LatLng(0, 138), LatLng(84, 144)),
     ),
     EpsgDefinition(
       code: 'EPSG:32655',
       name: 'WGS 84 / UTM zone 55N (北海道・東北)',
       proj4String: '+proj=utm +zone=55 +datum=WGS84 +units=m +no_defs',
-      bounds: LatLngBounds(LatLng(0, 144), LatLng(84, 150)),
     ),
     EpsgDefinition(
       code: 'EPSG:32656',
       name: 'WGS 84 / UTM zone 56N (千島列島)',
       proj4String: '+proj=utm +zone=56 +datum=WGS84 +units=m +no_defs',
-      bounds: LatLngBounds(LatLng(0, 150), LatLng(84, 156)),
     ),
   ];
 

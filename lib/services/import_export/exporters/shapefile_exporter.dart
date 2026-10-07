@@ -26,6 +26,7 @@ import '../../../models/geometry_type.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../utils/wkb_utils.dart';
 import '../../coordinate/epsg_registry.dart';
+import '../../coordinate/projections.dart';
 import '../import_export_models.dart';
 import '../parsers/shapefile_binary_parser.dart' show ShapeType;
 import 'base_exporter.dart';
@@ -34,9 +35,6 @@ import 'shapefile_writer.dart';
 /// Shapefileエクスポーター（CRS変換対応）
 class ShapefileExporter extends BaseExporter {
   final EpsgRegistry _epsgRegistry = EpsgRegistry();
-
-  // WGS84の投影定義
-  static final Projection _wgs84 = Projection.WGS84;
 
   /// 属性に出さない列（形の列と GeoPackage の内部列）
   static const _reservedKeys = {
@@ -81,13 +79,11 @@ class ShapefileExporter extends BaseExporter {
       // 座標変換用の投影を準備
       Projection? targetProjection;
       if (targetCrs != null && !options.isWgs84) {
-        try {
-          targetProjection = Projection.parse(targetCrs.proj4String);
-          AppLogger.debug('[ShapefileExporter] 座標変換有効: ${targetCrs.code}');
-        } catch (e) {
-          AppLogger.debug('[ShapefileExporter] 投影定義の解析に失敗: $e');
+        targetProjection = Projections.parse(targetCrs.proj4String);
+        if (targetProjection == null) {
           return ImportExportResult.error('Invalid CRS definition: ${targetCrs.code}');
         }
+        AppLogger.debug('[ShapefileExporter] 座標変換有効: ${targetCrs.code}');
       }
 
       final shapes = <ShpShape>[];
@@ -143,7 +139,7 @@ class ShapefileExporter extends BaseExporter {
   /// QGISを含む多くのGISソフトは(Easting, Northing)として扱うので入れ替えない
   List<double> _project(LatLng p, Projection? target) {
     if (target == null) return [p.longitude, p.latitude];
-    final out = _wgs84.transform(target, Point(x: p.longitude, y: p.latitude));
+    final out = Projections.wgs84.transform(target, Point(x: p.longitude, y: p.latitude));
     return [out.x, out.y];
   }
 

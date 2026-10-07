@@ -20,4 +20,5 @@ export 'coordinate_service.dart';
 export 'epsg_registry.dart';
 export 'geometry_reprojector.dart';
 export 'gpkg_crs_resolver.dart';
+export 'projections.dart';
 export 'wkt_parser.dart';

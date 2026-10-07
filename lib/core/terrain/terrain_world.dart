@@ -252,7 +252,10 @@ class TerrainTile {
   Future<TerrainMeshBuilder> builderFor(int step, {int chunkSize = 32, double skirtDepth = 0}) {
     final ready = builders[step];
     if (ready != null) return Future.value(ready);
-    return _building[step] ??= TerrainWorker.instance.run(
+    final running = _building[step];
+    if (running != null) return running;
+    late final Future<TerrainMeshBuilder> future;
+    return _building[step] = future = TerrainWorker.instance.run(
       TerrainMeshBuilder.buildInIsolate,
       TerrainMeshBuilderArgs(
         dem: bordered,
@@ -263,8 +266,9 @@ class TerrainTile {
         skirtDepth: skirtDepth,
       ),
     ).then((b) {
-      // 作っている間に縁が変わっていたら捨てる（呼び出し側が作り直す）
-      if (identical(_building[step], null)) return b;
+      // 作っている間に縁が変わっていたら捨てる（呼び出し側が作り直す）。
+      // 作り直しが既に走っていればそちらの Future が入っているので、自分のものかどうかで見る
+      if (!identical(_building[step], future)) return b;
       _building.remove(step);
       builders[step] = b;
       // 持つのは 2 段まで（1 段 数 MB）。新しい段から一番遠いものを捨てる（step 16 は穴埋めなので数えない）

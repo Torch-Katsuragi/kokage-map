@@ -108,18 +108,6 @@ abstract class LayerTreeNode {
     return segments;
   }
 
-  /// 再帰的に子ノードをたどり、ノード構造を辞書形式で返す
-  /// @return `Map<String, dynamic>` ノード構造を示す辞書
-  Map<String, dynamic> toDict() {
-    final Map<String, dynamic> dict = {
-      'name': name,
-      'type': nodeType.value,
-      'visible': visible,
-      'children': children.map((child) => child.toDict()).toList(),
-    };
-    return dict;
-  }
-
   /// 可視状態のLayerNodeリストを再帰的に取得（高速化用）
   List<LayerTreeNode> getVisibleLayerNodes() {
     final result = <LayerTreeNode>[];
@@ -194,18 +182,6 @@ abstract class LayerTreeNode {
     }
   }
 
-  /// 自分自身を含むツリー構造を再帰的に辞書(Map)として出力
-  /// 例: {"ノード名": {"nodeType": "folder", "children": [...], "visible": true}}
-  Map<String, dynamic> toMap() {
-    return {
-      name: {
-        'nodeType': nodeType.value,
-        'children': children.map((c) => c.toMap()).toList(),
-        'visible': visible,
-      },
-    };
-  }
-
   /// 子ノード名と（必要なら）nodeTypeで該当ノードを取得。なければnull
   /// @param name 子ノード名
   /// @param type ノード種別（省略可）
@@ -215,23 +191,6 @@ abstract class LayerTreeNode {
       if (child.name == name && (type == null || child.nodeType == type)) {
         return child;
       }
-    }
-    return null;
-  }
-
-  /// パスリスト（このノードからのノード名リスト）を受け取り、該当する子孫ノードへの参照を返す
-  /// 例: ["root", "folderA", "layer1"]
-  /// 見つからなければnullを返す
-  LayerTreeNode? getNodeByPath(List<String> pathList) {
-    if (pathList.isEmpty) return null;
-    if (pathList[0] != name) return null;
-    if (pathList.length == 1) return this;
-    for (final type in NodeType.values) {
-      final next = getChild(pathList[1], type: type);
-      if (next != null) {
-        return next.getNodeByPath(pathList.sublist(1));
-      }
-      return null;
     }
     return null;
   }
@@ -257,12 +216,5 @@ abstract class LayerTreeNode {
     final absPath = getAbsoluteFilePath();
     if (absPath == null) return const [];
     return fs.list(absPath);
-  }
-
-  /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
-  static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
-    // 基底クラスでは空のリストを返す
-    // 各サブクラス（FolderNode、GeoPackageNode、LayerNode）で具体的な実装をする
-    return <LayerTreeNode>[];
   }
 }

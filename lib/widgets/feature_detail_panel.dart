@@ -87,26 +87,13 @@ class FeatureDetailPanel extends ConsumerWidget {
             ),
           ),
           // 名前
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t.featureDetail.nameLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Expanded(child: Text(overlay.name)),
-            ],
-          ),
+          _labelRow(t.featureDetail.nameLabel, overlay.name),
           const SizedBox(height: 4),
           // 中心座標
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t.featureDetail.coordLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Expanded(
-                child: Text(
-                  '${params.centerLat.toStringAsFixed(6)}, ${params.centerLng.toStringAsFixed(6)}',
-                  style: const TextStyle(fontSize: 11),
-                ),
-              ),
-            ],
+          _labelRow(
+            t.featureDetail.coordLabel,
+            '${params.centerLat.toStringAsFixed(6)}, ${params.centerLng.toStringAsFixed(6)}',
+            style: _small,
           ),
           const SizedBox(height: 4),
           // スケール・回転
@@ -122,24 +109,14 @@ class FeatureDetailPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           // 画像サイズ
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t.featureDetail.sizeLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Expanded(
-                child: Text(
-                  '${params.imageWidth} x ${params.imageHeight}',
-                  style: const TextStyle(fontSize: 11),
-                ),
-              ),
-            ],
+          _labelRow(
+            t.featureDetail.sizeLabel,
+            '${params.imageWidth} x ${params.imageHeight}',
+            style: _small,
           ),
           // 削除ボタン
           const SizedBox(height: 12),
-          LongPressDeleteButton(
-            label: t.featureDetail.delete,
-            onDelete: () => _handleDelete(ref),
-          ),
+          _deleteButton(ref),
         ],
       );
     }
@@ -175,101 +152,39 @@ class FeatureDetailPanel extends ConsumerWidget {
         ),
         children: [
           // 詳細情報
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t.featureDetail.nameLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Expanded(child: Text(photo.name)),
-            ],
-          ),
+          _labelRow(t.featureDetail.nameLabel, photo.name),
           const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t.featureDetail.pathLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Expanded(
-                child: Text(displayPath, style: const TextStyle(fontSize: 11)),
-              ),
-            ],
-          ),
+          _labelRow(t.featureDetail.pathLabel, displayPath, style: _small),
           const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t.featureDetail.coordLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Expanded(
-                child: Text(
-                  photo.hasLocation
-                      ? '${photo.location!.latitude.toStringAsFixed(6)}, ${photo.location!.longitude.toStringAsFixed(6)}'
-                      : t.featureDetail.noLocation,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: photo.hasLocation ? null : Colors.grey,
-                    fontStyle: photo.hasLocation ? null : FontStyle.italic,
-                  ),
-                ),
-              ),
-            ],
+          _labelRow(
+            t.featureDetail.coordLabel,
+            photo.hasLocation
+                ? '${photo.location!.latitude.toStringAsFixed(6)}, ${photo.location!.longitude.toStringAsFixed(6)}'
+                : t.featureDetail.noLocation,
+            style: TextStyle(
+              fontSize: 11,
+              color: photo.hasLocation ? null : Colors.grey,
+              fontStyle: photo.hasLocation ? null : FontStyle.italic,
+            ),
           ),
           if (photo.takenAt != null) ...[
             const SizedBox(height: 4),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  t.featureDetail.dateLabel,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Expanded(
-                  child: Text(
-                    '${photo.takenAt}',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-              ],
-            ),
+            _labelRow(t.featureDetail.dateLabel, '${photo.takenAt}', style: _small),
           ],
           const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                t.featureDetail.sizeLabel,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Expanded(
-                child: Text(
-                  '${(photo.metadata.fileSize / (1024 * 1024)).toStringAsFixed(1)} MB',
-                  style: const TextStyle(fontSize: 11),
-                ),
-              ),
-            ],
+          _labelRow(
+            t.featureDetail.sizeLabel,
+            '${(photo.metadata.fileSize / (1024 * 1024)).toStringAsFixed(1)} MB',
+            style: _small,
           ),
           // 位置がある写真は点と同じく Google Maps のリンク（長押しで開く）
           if (photo.hasLocation) ...[
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _copyGoogleMapsLink(ref, photo.location!.latitude, photo.location!.longitude),
-                onLongPress: () => _openInGoogleMaps(ref, photo.location!.latitude, photo.location!.longitude),
-                icon: const Icon(Icons.link, size: 16),
-                label: Text(t.featureDetail.copyGoogleMapsLink),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade50,
-                  foregroundColor: Colors.green.shade700,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                ),
-              ),
-            ),
+            _googleMapsButton(ref, photo.location!.latitude, photo.location!.longitude),
           ],
           // 削除ボタン
           const SizedBox(height: 12),
-          LongPressDeleteButton(
-            label: t.featureDetail.delete,
-            onDelete: () => _handleDelete(ref),
-          ),
+          _deleteButton(ref),
         ],
       );
     }
@@ -290,16 +205,7 @@ class FeatureDetailPanel extends ConsumerWidget {
         for (final entry in filteredEntries)
           Padding(
             padding: const EdgeInsets.only(bottom: 4.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${entry.key}: ',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Expanded(child: Text(entry.value)),
-              ],
-            ),
+            child: _labelRow('${entry.key}: ', entry.value),
           ),
       ];
 
@@ -310,32 +216,14 @@ class FeatureDetailPanel extends ConsumerWidget {
         final lng = point.longitude;
         children.addAll([
           const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => _copyGoogleMapsLink(ref, lat, lng),
-              onLongPress: () => _openInGoogleMaps(ref, lat, lng),
-              icon: const Icon(Icons.link, size: 16),
-              label: Text(t.featureDetail.copyGoogleMapsLink),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade50,
-                foregroundColor: Colors.green.shade700,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-            ),
-          ),
+          _googleMapsButton(ref, lat, lng),
         ]);
       }
 
       // 全フィーチャ共通: 削除ボタンを追加
       children.addAll([
         const SizedBox(height: 12),
-        LongPressDeleteButton(
-          label: t.featureDetail.delete,
-          key: TutorialTargets.deleteButton,
-          onDelete: () => _handleDelete(ref),
-        ),
+        _deleteButton(ref, key: TutorialTargets.deleteButton),
       ]);
 
       // タイトルをシンプルに（PointFeatureNode → Point等）
@@ -365,6 +253,41 @@ class FeatureDetailPanel extends ConsumerWidget {
     }
     return const SizedBox.shrink();
   }
+
+  static const _small = TextStyle(fontSize: 11);
+
+  /// 「名前: 値」の 1 行（値は折り返す）
+  static Widget _labelRow(String label, String value, {TextStyle? style}) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Expanded(child: Text(value, style: style)),
+        ],
+      );
+
+  /// Google Maps のリンクをコピーするボタン（長押しで開く。開くのは隠し機能扱い）
+  Widget _googleMapsButton(WidgetRef ref, double lat, double lng) => SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: () => _copyGoogleMapsLink(ref, lat, lng),
+          onLongPress: () => _openInGoogleMaps(ref, lat, lng),
+          icon: const Icon(Icons.link, size: 16),
+          label: Text(t.featureDetail.copyGoogleMapsLink),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green.shade50,
+            foregroundColor: Colors.green.shade700,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+          ),
+        ),
+      );
+
+  /// 長押しで消すボタン
+  Widget _deleteButton(WidgetRef ref, {Key? key}) => LongPressDeleteButton(
+        key: key,
+        label: t.featureDetail.delete,
+        onDelete: () => _handleDelete(ref),
+      );
 
   static Uri _googleMapsWebUri(double lat, double lng) =>
       Uri.parse('https://www.google.com/maps?q=$lat,$lng');

@@ -307,32 +307,36 @@ class TerrainMeshBuilder {
     this.chunkSize = 32,
     this.step = 1,
     this.skirtDepth = 0,
-    int lightAzimuthDeg = 315,
-    int lightAltitudeDeg = 45,
   })  : cols = (dem.cols - 1) ~/ step + 1,
         rows = (dem.rows - 1) ~/ step + 1,
         assert(chunkSize > 0 && (chunkSize + 1) * (chunkSize + 1) <= 65536) {
-    final cell = dem.cellSize * step;
-    _cellSize = cell;
-    // 間引いた標高
-    _heights = Float32List(cols * rows);
+    _cellSize = dem.cellSize * step;
+    _texW = textureWidth.toDouble();
+    _texH = textureHeight.toDouble();
+    _heights = _decimatedHeights();
+    _cellCols = cols - 1;
+    _cellCount = _cellCols * (rows - 1);
+    _cellBand = Uint16List(_cellCount);
+    final vertexColor = _computeShading();
+    _chunks = _splitChunks(textureWidth, textureHeight, vertexColor);
+    _bandChunk = Int32List(_chunks.length);
+  }
+
+  /// 間引いた標高（[step] ごと）
+  Float32List _decimatedHeights() {
+    final h = Float32List(cols * rows);
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        _heights[r * cols + c] = dem.heightAtIndex(c * step, r * step);
+        h[r * cols + c] = dem.heightAtIndex(c * step, r * step);
       }
     }
-    final cellCols = cols - 1;
-    final cellRows = rows - 1;
-    _cellCols = cellCols;
-    _cellCount = cellCols * cellRows;
-    _cellBand = Uint16List(_cellCount);
+    return h;
+  }
 
-    // 頂点ごとの陰影（中央差分の法線 → [TerrainShading]。傾斜の濃淡か光源）。
-    // `_shade` はオーバーレイ用のグレー（0.5 = 変化なし）、純 Dart 経路の頂点色は乗算なので 2 倍
-    if (lightAzimuthDeg != 315 || lightAltitudeDeg != 45) {
-      TerrainShading.lightAzimuthDeg = lightAzimuthDeg;
-      TerrainShading.lightAltitudeDeg = lightAltitudeDeg;
-    }
+  /// 頂点ごとの陰影（中央差分の法線 → [TerrainShading]。傾斜の濃淡か光源）と傾斜を埋め、純 Dart 経路の頂点色を返す。
+  /// `_shade` はオーバーレイ用のグレー（0.5 = 変化なし）、純 Dart 経路の頂点色は乗算なので 2 倍
+  Int32List _computeShading() {
+    final cell = _cellSize;
     final vertexColor = Int32List(cols * rows);
     _shade = Float32List(cols * rows);
     _slope = Float32List(cols * rows);
@@ -352,15 +356,19 @@ class TerrainMeshBuilder {
         vertexColor[r * cols + c] = 0xFF000000 | (g << 16) | (g << 8) | g;
       }
     }
+    return vertexColor;
+  }
 
-    // チャンク分割（左下から東・北へ）
+  /// チャンク分割（左下から東・北へ）。テクスチャ座標と頂点色はチャンクごとに持つ
+  List<_Chunk> _splitChunks(int textureWidth, int textureHeight, Int32List vertexColor) {
+    final cell = _cellSize;
+    final cellCols = _cellCols;
+    final cellRows = rows - 1;
     final texSx = textureWidth / dem.width;
     final texSy = textureHeight / dem.height;
-    _texW = textureWidth.toDouble();
-    _texH = textureHeight.toDouble();
     _chunkCols = (cellCols + chunkSize - 1) ~/ chunkSize;
     _chunkRows = (cellRows + chunkSize - 1) ~/ chunkSize;
-    _chunks = <_Chunk>[];
+    final chunks = <_Chunk>[];
     for (var cr = 0; cr < _chunkRows; cr++) {
       for (var cc = 0; cc < _chunkCols; cc++) {
         final c0 = cc * chunkSize;
@@ -380,12 +388,10 @@ class TerrainMeshBuilder {
             v++;
           }
         }
-        _chunks.add(
-          _Chunk(c0: c0, r0: r0, cellCols: w, cellRows: h, texCoords: tex, colors: colors),
-        );
+        chunks.add(_Chunk(c0: c0, r0: r0, cellCols: w, cellRows: h, texCoords: tex, colors: colors));
       }
     }
-    _bandChunk = Int32List(_chunks.length);
+    return chunks;
   }
 
   /// isolate で作る（`compute` 向け）。前計算が 512² で 200ms 前後あるので UI スレッドを塞がない

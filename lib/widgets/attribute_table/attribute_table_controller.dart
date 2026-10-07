@@ -80,7 +80,7 @@ class AttributeTableController extends ChangeNotifier {
   List<TrinaRow> _displayRows = [];
 
   // ページング
-  static const int defaultPageSize = 100;
+  static const int _pageSize = 100;
 
   // エラー状態
   String? _lastError;
@@ -89,7 +89,6 @@ class AttributeTableController extends ChangeNotifier {
   final Set<String> _hiddenColumns = {};
 
   // ゲッター
-  TrinaGridStateManager? get stateManager => _stateManager;
   List<TrinaColumn> get columns => _columns;
   List<TrinaRow> get rows => _displayRows;
   List<String> get columnNames => _columnNames;
@@ -105,7 +104,6 @@ class AttributeTableController extends ChangeNotifier {
   bool get isPointLayer => layer is PointLayerNode;
   bool get isFiltered => _isFiltered;
   String get filterSql => _filterSql;
-  String? get filterError => _filterError;
   int get totalCount => _features.length;
   int get filteredCount => _displayFeatures.length;
   String? get lastError => _lastError;
@@ -195,7 +193,7 @@ class AttributeTableController extends ChangeNotifier {
         _applyFilterToDisplay();
       } else {
         _displayFeatures = _features;
-        _displayRows = _createRowsForRange(0, defaultPageSize);
+        _displayRows = _createRowsForRange(0, _pageSize);
       }
 
       AppLogger.debug('[AttributeTableController] 初期化完了');
@@ -342,7 +340,7 @@ class AttributeTableController extends ChangeNotifier {
       for (final f in _features)
         if (_filteredRowIds.contains(f.rowId)) f,
     ];
-    _displayRows = _createRowsForRange(0, defaultPageSize);
+    _displayRows = _createRowsForRange(0, _pageSize);
 
     AppLogger.debug(
       '[AttributeTableController] フィルタ適用: '
@@ -357,7 +355,7 @@ class AttributeTableController extends ChangeNotifier {
     _isFiltered = false;
     _filterError = null;
     _displayFeatures = _features;
-    _displayRows = _createRowsForRange(0, defaultPageSize);
+    _displayRows = _createRowsForRange(0, _pageSize);
     notifyListeners();
   }
 
@@ -398,7 +396,7 @@ class AttributeTableController extends ChangeNotifier {
   // ========== Phase 3: 複数行操作 ==========
 
   /// チェックされた行のフィーチャを取得
-  List<FeatureNode> getCheckedFeatures() {
+  List<FeatureNode> _checkedFeatures() {
     if (_stateManager == null) return [];
     return [
       for (final row in _stateManager!.checkedRows)
@@ -411,7 +409,7 @@ class AttributeTableController extends ChangeNotifier {
 
   /// チェックされた行に対して一括値設定
   Future<int> batchSetValue(String columnName, dynamic value) async {
-    final features = getCheckedFeatures();
+    final features = _checkedFeatures();
     if (features.isEmpty) return 0;
 
     int count = 0;
@@ -626,7 +624,7 @@ class AttributeTableController extends ChangeNotifier {
     TrinaLazyPaginationRequest request,
   ) async {
     final page = request.page;
-    const pageSize = defaultPageSize;
+    const pageSize = _pageSize;
     final totalFeatures = _displayFeatures.length;
     final totalPages =
         (totalFeatures / pageSize).ceil().clamp(1, double.infinity).toInt();

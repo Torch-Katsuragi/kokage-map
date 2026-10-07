@@ -30,6 +30,7 @@ import '../terrain_mesh.dart';
 import '../terrain_scene.dart';
 import '../terrain_world_painter.dart' show TerrainTileDrawable;
 import 'gpu_geometry.dart';
+import 'part_cache.dart';
 
 /// web 版の GPU 描画系（WebGL2 を `package:web` で直接叩く）
 ///
@@ -80,10 +81,10 @@ class TerrainGpuWorldRenderer {
 
   final Map<TerrainMeshBuilder, _TerrainBuffers> _terrainBuffers = {};
   final Map<Object, _TextureEntry> _textures = {};
-  final Map<List<LiftedPolygon>, _Parts> _polygons = {};
-  final Map<List<LiftedPolyline>, _Parts> _lines = {};
-  final Map<List<TerrainPoint>, _Parts> _points = {};
-  final Map<List<LiftedSegments>, _Parts> _segments = {};
+  late final _polygons = GpuPartCache<LiftedPolygon, _PartBuffers>((p) => p.dispose(_gl));
+  late final _lines = GpuPartCache<LiftedPolyline, _PartBuffers>((p) => p.dispose(_gl));
+  late final _points = GpuPartCache<TerrainPoint, _PartBuffers>((p) => p.dispose(_gl));
+  late final _segments = GpuPartCache<LiftedSegments, _PartBuffers>((p) => p.dispose(_gl));
   static const _sweepMs = 3000;
   int _lastSweep = 0;
 
@@ -509,33 +510,18 @@ class TerrainGpuWorldRenderer {
     return tex;
   }
 
-  _Parts _partsFor<T>(Map<List<T>, _Parts> cache, List<T> list, int nowMs, _PartBuffers? Function(List<T>, int) pack) {
-    var parts = cache[list];
-    if (parts == null) {
-      parts = _Parts();
-      cache[list] = parts;
-    }
-    if (list.length > parts.packed) {
-      final u = Stopwatch()..start();
-      final p = pack(list, parts.packed);
-      if (p != null) parts.parts.add(p);
-      parts.packed = list.length;
-      parts.lastGrowMs = nowMs;
-      lastUpload += u.elapsed;
-      lastUploads++;
-    } else if (parts.parts.length > 1 && nowMs - parts.lastGrowMs > 1000) {
-      final u = Stopwatch()..start();
-      for (final p in parts.parts) {
-        p.dispose(_gl);
-      }
-      final p = pack(list, 0);
-      parts.parts
-        ..clear()
-        ..addAll([?p]);
-      lastUpload += u.elapsed;
+  /// 束のバッファ（[GpuPartCache.partsFor]）。上げ直した時間は計測に足す
+  GpuParts<_PartBuffers> _partsFor<T>(
+    GpuPartCache<T, _PartBuffers> cache,
+    List<T> list,
+    int nowMs,
+    _PartBuffers? Function(List<T>, int) pack,
+  ) {
+    final (parts, took) = cache.partsFor(list, nowMs, pack);
+    if (took != null) {
+      lastUpload += took;
       lastUploads++;
     }
-    parts.lastUsed = nowMs;
     return parts;
   }
 
@@ -614,14 +600,8 @@ class TerrainGpuWorldRenderer {
       gl.deleteBuffer(v.indices);
       return true;
     });
-    for (final cache in [_polygons, _lines, _points, _segments]) {
-      cache.removeWhere((_, v) {
-        if (nowMs - v.lastUsed <= _sweepMs) return false;
-        for (final p in v.parts) {
-          p.dispose(gl);
-        }
-        return true;
-      });
+    for (final c in [_polygons, _lines, _points, _segments]) {
+      c.sweep(nowMs, _sweepMs);
     }
   }
 
@@ -636,13 +616,8 @@ class TerrainGpuWorldRenderer {
       if (v.texture != null) gl.deleteTexture(v.texture);
     }
     _textures.clear();
-    for (final cache in [_polygons, _lines, _points, _segments]) {
-      for (final v in cache.values) {
-        for (final p in v.parts) {
-          p.dispose(gl);
-        }
-      }
-      cache.clear();
+    for (final c in [_polygons, _lines, _points, _segments]) {
+      c.clear();
     }
     if (_fbo != null) {
       gl.deleteFramebuffer(_fbo);
@@ -736,22 +711,15 @@ class _PartBuffers {
   }
 }
 
-class _Parts {
-  final List<_PartBuffers> parts = [];
-  int packed = 0;
-  int lastGrowMs = 0;
-  int lastUsed = 0;
-}
-
 class _TileEntry {
   _TileEntry(this.tile, this.terrain, this.texture, this.polygons, this.lines, this.points, this.segments);
   final TerrainTileDrawable tile;
   final _TerrainBuffers terrain;
   final web.WebGLTexture texture;
-  final _Parts? polygons;
-  final _Parts? lines;
-  final _Parts? points;
-  final _Parts? segments;
+  final GpuParts<_PartBuffers>? polygons;
+  final GpuParts<_PartBuffers>? lines;
+  final GpuParts<_PartBuffers>? points;
+  final GpuParts<_PartBuffers>? segments;
   Float32List? terrainMvp;
   Float32List? polygonMvp;
   Float32List? lineMvp;

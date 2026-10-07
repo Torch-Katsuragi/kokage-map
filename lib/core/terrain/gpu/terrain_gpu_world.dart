@@ -29,6 +29,7 @@ import '../terrain_scene.dart';
 import '../terrain_worker.dart';
 import '../terrain_world_painter.dart' show TerrainTileDrawable;
 import 'gpu_geometry.dart';
+import 'part_cache.dart';
 
 /// 世界（複数タイル）を `package:flutter_gpu` で描く（Android / iOS / desktop。web は stub）
 ///
@@ -187,10 +188,10 @@ class TerrainGpuWorldRenderer {
   final Map<Object, _TextureEntry> _textures = {};
 
   /// 静的な面・線・点（シーンのリストごと。育ったぶんを足す）
-  final Map<List<LiftedPolygon>, _Parts> _polygons = {};
-  final Map<List<LiftedPolyline>, _Parts> _lines = {};
-  final Map<List<TerrainPoint>, _Parts> _points = {};
-  final Map<List<LiftedSegments>, _Parts> _segments = {};
+  late final _polygons = GpuPartCache<LiftedPolygon, _PartBuffers>((_) {});
+  late final _lines = GpuPartCache<LiftedPolyline, _PartBuffers>((_) {});
+  late final _points = GpuPartCache<TerrainPoint, _PartBuffers>((_) {});
+  late final _segments = GpuPartCache<LiftedSegments, _PartBuffers>((_) {});
 
   /// 色分けのランプ（256×1）。設定が変わったら作り直す（TerrainAppearance.revision）
   gpu.Texture? _ramp;
@@ -679,30 +680,18 @@ class TerrainGpuWorldRenderer {
   }
 
   /// [list] の育ったぶんを 1 バッファ足す。1 秒育っていなければ 1 本に畳む（描画呼び出しを減らす）
-  _Parts _partsFor<T>(Map<List<T>, _Parts> cache, List<T> list, int nowMs, _PartBuffers? Function(List<T>, int) pack) {
-    var parts = cache[list];
-    if (parts == null) {
-      parts = _Parts();
-      cache[list] = parts;
-    }
-    if (list.length > parts.packed) {
-      final u = Stopwatch()..start();
-      final p = pack(list, parts.packed);
-      if (p != null) parts.parts.add(p);
-      parts.packed = list.length;
-      parts.lastGrowMs = nowMs;
-      lastUpload += u.elapsed;
-      lastUploads++;
-    } else if (parts.parts.length > 1 && nowMs - parts.lastGrowMs > 1000) {
-      final u = Stopwatch()..start();
-      final p = pack(list, 0);
-      parts.parts
-        ..clear()
-        ..addAll([?p]);
-      lastUpload += u.elapsed;
+  /// 束のバッファ（[GpuPartCache.partsFor]）。上げ直した時間は計測に足す
+  GpuParts<_PartBuffers> _partsFor<T>(
+    GpuPartCache<T, _PartBuffers> cache,
+    List<T> list,
+    int nowMs,
+    _PartBuffers? Function(List<T>, int) pack,
+  ) {
+    final (parts, took) = cache.partsFor(list, nowMs, pack);
+    if (took != null) {
+      lastUpload += took;
       lastUploads++;
     }
-    parts.lastUsed = nowMs;
     return parts;
   }
 
@@ -750,10 +739,9 @@ class TerrainGpuWorldRenderer {
     if (nowMs - _lastSweep < 1000) return;
     _lastSweep = nowMs;
     _terrain.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
-    _polygons.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
-    _lines.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
-    _points.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
-    _segments.removeWhere((_, v) => nowMs - v.lastUsed > _sweepMs);
+    for (final c in [_polygons, _lines, _points, _segments]) {
+      c.sweep(nowMs, _sweepMs);
+    }
   }
 
   int get terrainBufferCount => _terrain.length;
@@ -763,10 +751,9 @@ class TerrainGpuWorldRenderer {
   void dispose() {
     _terrain.clear();
     _textures.clear();
-    _polygons.clear();
-    _lines.clear();
-    _points.clear();
-    _segments.clear();
+    for (final c in [_polygons, _lines, _points, _segments]) {
+      c.clear();
+    }
     _targets.clear();
     _depth = null;
     _msaaColor = null;
@@ -800,23 +787,16 @@ class _PartBuffers {
   final int count;
 }
 
-class _Parts {
-  final List<_PartBuffers> parts = [];
-  int packed = 0;
-  int lastGrowMs = 0;
-  int lastUsed = 0;
-}
-
 class _TileEntry {
   _TileEntry(this.tile, this.terrain, this.texture, this.polygons, this.lines, this.points, this.segments);
 
   final TerrainTileDrawable tile;
   final _TerrainBuffers terrain;
   final gpu.Texture texture;
-  final _Parts? polygons;
-  final _Parts? lines;
-  final _Parts? points;
-  final _Parts? segments;
+  final GpuParts<_PartBuffers>? polygons;
+  final GpuParts<_PartBuffers>? lines;
+  final GpuParts<_PartBuffers>? points;
+  final GpuParts<_PartBuffers>? segments;
   gpu.BufferView? terrainInfo;
   gpu.BufferView? polygonInfo;
   gpu.BufferView? lineInfo;

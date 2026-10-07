@@ -155,8 +155,20 @@ class PartyLocationStore {
 
   void _onPeers(Map<String, PeerPosition> incoming) {
     final next = Map<String, PeerPosition>.from(incoming)..remove(selfUid);
+    // `live` は丸ごと届くので、自分が送っただけでも流れてくる。
+    // 他メンバーが変わっていなければ流さない（地図のマーカーを組み直さない）。
+    if (_samePeers(next, _peers)) return;
     _peers = next;
     _peersController.add(next);
+  }
+
+  static bool _samePeers(
+      Map<String, PeerPosition> a, Map<String, PeerPosition> b) {
+    if (a.length != b.length) return false;
+    for (final e in a.entries) {
+      if (b[e.key] != e.value) return false;
+    }
+    return true;
   }
 
   void _onTracks(Map<String, List<PeerTrack>> incoming) {
@@ -215,8 +227,7 @@ class PartyLocationStore {
   void _maybePublish(GpsPositionRecord rec) {
     final now = _clock();
     final current = LatLng(rec.latitude, rec.longitude);
-    final moving =
-        (rec.speed ?? 0) >= throttle.movingSpeedThreshold;
+    final moving = (rec.speed ?? 0) >= throttle.movingSpeedThreshold;
     final should = throttle.shouldPublish(
       current: current,
       now: now,

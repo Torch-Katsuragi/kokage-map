@@ -27,7 +27,6 @@ import '../../../converters/turf_converter.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../models/geometry_type.dart';
 import '../../../models/nodes/geopackage_node.dart';
-import '../../../models/nodes/layer_node.dart';
 import '../import_export_models.dart';
 import 'base_importer.dart';
 
@@ -56,9 +55,9 @@ class GeoJSONImporter extends BaseImporter {
         return ImportExportResult.error('GeoJSONファイルが見つかりません: $filePath');
       }
 
-      final fileContent = await file.readAsString();
-
-      final geoJson = turf.GeoJSONObject.fromJson(json.decode(fileContent));
+      // バイト列から直接 JSON にする（文字列を 1 本挟まない）
+      final decoded = utf8.decoder.fuse(json.decoder).convert(await file.readAsBytes());
+      final geoJson = turf.GeoJSONObject.fromJson(decoded as Map<String, dynamic>);
 
       if (geoJson is! turf.FeatureCollection) {
         return ImportExportResult.error('FeatureCollection形式のGeoJSONのみサポートしています');
@@ -72,7 +71,11 @@ class GeoJSONImporter extends BaseImporter {
       AppLogger.debug('[GeoJSONImporter] フィーチャ数: ${turfFeatures.length}');
 
       // フィーチャをジオメトリ型ごとにグループ化
-      final grouped = _groupByGeometryType(turfFeatures);
+      final grouped = <GeometryType, List<turf.Feature>>{};
+      for (final feature in turfFeatures) {
+        final type = _detectGeometryType(feature);
+        if (type != null) grouped.putIfAbsent(type, () => []).add(feature);
+      }
       if (grouped.isEmpty) {
         return ImportExportResult.error(t.importExport.noSupportedGeometry);
       }
@@ -85,17 +88,14 @@ class GeoJSONImporter extends BaseImporter {
       int totalSuccess = 0;
       int totalSkip = 0;
 
-      for (final entry in grouped.entries) {
-        final geometryType = entry.key;
-        final features = entry.value;
-
+      for (final MapEntry(key: geometryType, value: features) in grouped.entries) {
         final rawName = useTypeSuffix ? '${baseName}_${geometryType.value}' : baseName;
-        final actualLayerName = await _generateUniqueLayerName(targetGeoPackage, rawName);
+        final actualLayerName = await uniqueLayerName(targetGeoPackage, rawName);
 
         await targetGeoPackage.geoPackageFile.addLayer(actualLayerName, geometryType);
         await _addSchemaFromFeatures(targetGeoPackage, actualLayerName, features);
 
-        final batchData = <Map<String, dynamic>>[];
+        final batch = <Map<String, dynamic>>[];
         int successCount = 0;
         int skipCount = 0;
 
@@ -103,25 +103,22 @@ class GeoJSONImporter extends BaseImporter {
           try {
             final featureData = _convertTurfFeatureToData(feature, geometryType);
             if (featureData != null) {
-              batchData.add(featureData);
+              batch.add(featureData);
               successCount++;
             } else {
               skipCount++;
             }
 
-            if (batchData.length >= 1000) {
-              await _processBatch(targetGeoPackage, actualLayerName, geometryType, batchData);
-              batchData.clear();
+            if (batch.length >= BaseImporter.batchSize) {
+              await addBatch(targetGeoPackage, actualLayerName, geometryType, batch);
+              batch.clear();
             }
           } catch (e) {
             AppLogger.debug('[GeoJSONImporter] フィーチャ処理エラー ($actualLayerName): $e');
             skipCount++;
           }
         }
-
-        if (batchData.isNotEmpty) {
-          await _processBatch(targetGeoPackage, actualLayerName, geometryType, batchData);
-        }
+        await addBatch(targetGeoPackage, actualLayerName, geometryType, batch);
 
         createdLayerNames.add(actualLayerName);
         totalSuccess += successCount;
@@ -129,13 +126,7 @@ class GeoJSONImporter extends BaseImporter {
         AppLogger.debug('[GeoJSONImporter] レイヤ "$actualLayerName": $successCount成功, $skipCountスキップ');
       }
 
-      await targetGeoPackage.updateChildren();
-
-      final createdLayers = targetGeoPackage.children
-          .whereType<LayerNode>()
-          .where((layer) => createdLayerNames.contains(layer.layerName))
-          .toList();
-
+      final createdLayers = await reloadLayers(targetGeoPackage, createdLayerNames);
       if (createdLayers.isEmpty) {
         return ImportExportResult.error('GeoJSONレイヤー作成後の取得に失敗しました');
       }
@@ -157,31 +148,21 @@ class GeoJSONImporter extends BaseImporter {
     }
   }
 
-  /// フィーチャをジオメトリ型ごとにグループ化
-  Map<GeometryType, List<turf.Feature>> _groupByGeometryType(List<turf.Feature> features) {
-    final grouped = <GeometryType, List<turf.Feature>>{};
-    for (final feature in features) {
-      final type = _detectGeometryType(feature);
-      if (type == null) continue;
-      grouped.putIfAbsent(type, () => []).add(feature);
-    }
-    return grouped;
-  }
+  /// turfのFeatureからジオメトリタイプを判定（多重の形も同じ種類）
+  static GeometryType? _detectGeometryType(turf.Feature feature) => switch (feature.geometry) {
+    turf.Point() || turf.MultiPoint() => GeometryType.point,
+    turf.LineString() || turf.MultiLineString() => GeometryType.linestring,
+    turf.Polygon() || turf.MultiPolygon() => GeometryType.polygon,
+    _ => null,
+  };
 
-  /// turfのFeatureからジオメトリタイプを判定
-  GeometryType? _detectGeometryType(turf.Feature feature) {
-    final geometry = feature.geometry;
-    if (geometry is turf.Point) return GeometryType.point;
-    if (geometry is turf.MultiPoint) return GeometryType.point;
-    if (geometry is turf.LineString) return GeometryType.linestring;
-    if (geometry is turf.MultiLineString) return GeometryType.linestring;
-    if (geometry is turf.Polygon) return GeometryType.polygon;
-    if (geometry is turf.MultiPolygon) return GeometryType.polygon;
-    return null;
-  }
+  static List<LatLng> _latLngs(List<turf.Position> positions) => [
+    for (final pos in positions) LatLng(pos.lat.toDouble(), pos.lng.toDouble()),
+  ];
 
-  /// turfのFeatureをGeoPackage保存用データに変換
-  Map<String, dynamic>? _convertTurfFeatureToData(
+  /// turfのFeatureをGeoPackage保存用データに変換。
+  /// 多重の形は最初の 1 つだけ。2 点未満の線・3 点未満の外周の面は捨てる（null）
+  static Map<String, dynamic>? _convertTurfFeatureToData(
     turf.Feature turfFeature,
     GeometryType geometryType,
   ) {
@@ -189,77 +170,38 @@ class GeoJSONImporter extends BaseImporter {
       final geometry = turfFeature.geometry;
       if (geometry == null) return null;
 
-      // プロパティを取得
-      final properties = turfFeature.properties ?? {};
-      final featureData = Map<String, dynamic>.from(properties);
+      final featureData = Map<String, dynamic>.from(turfFeature.properties ?? {});
 
       switch (geometryType) {
         case GeometryType.point:
-          if (geometry is turf.Point) {
-            featureData['point'] = TurfConverter.pointToLatlng(geometry);
-          } else if (geometry is turf.MultiPoint) {
-            // MultiPointの最初のポイントを使用
-            final coords = geometry.coordinates;
-            if (coords.isNotEmpty) {
-              featureData['point'] = LatLng(
-                coords.first.lat.toDouble(),
-                coords.first.lng.toDouble(),
-              );
-            }
-          } else {
-            return null;
+          switch (geometry) {
+            case turf.Point():
+              featureData['point'] = TurfConverter.pointToLatlng(geometry);
+            case turf.MultiPoint(:final coordinates):
+              if (coordinates.isNotEmpty) featureData['point'] = _latLngs([coordinates.first]).first;
+            default:
+              return null;
           }
 
         case GeometryType.linestring:
-          if (geometry is turf.LineString) {
-            final line = TurfConverter.lineStringToLatlngs(geometry);
-            if (line.length >= 2) {
-              featureData['line'] = line;
-            } else {
-              return null;
-            }
-          } else if (geometry is turf.MultiLineString) {
-            // MultiLineStringの最初のラインを使用
-            final coords = geometry.coordinates;
-            if (coords.isNotEmpty && coords.first.length >= 2) {
-              featureData['line'] = coords.first
-                  .map((pos) => LatLng(pos.lat.toDouble(), pos.lng.toDouble()))
-                  .toList();
-            } else {
-              return null;
-            }
-          } else {
-            return null;
-          }
+          final line = switch (geometry) {
+            turf.LineString() => TurfConverter.lineStringToLatlngs(geometry),
+            turf.MultiLineString(:final coordinates) when coordinates.isNotEmpty => _latLngs(coordinates.first),
+            _ => null,
+          };
+          if (line == null || line.length < 2) return null;
+          featureData['line'] = line;
 
         case GeometryType.polygon:
-          if (geometry is turf.Polygon) {
-            final rings = TurfConverter.polygonToLatlngs(geometry);
-            if (rings.isNotEmpty && rings.first.length >= 3) {
-              featureData['rings'] = rings;
-            } else {
-              return null;
-            }
-          } else if (geometry is turf.MultiPolygon) {
-            // MultiPolygonの最初のポリゴンを使用
-            final coords = geometry.coordinates;
-            if (coords.isNotEmpty && coords.first.isNotEmpty) {
-              final rings = coords.first
-                  .map((ring) => ring
-                      .map((pos) => LatLng(pos.lat.toDouble(), pos.lng.toDouble()))
-                      .toList())
-                  .toList();
-              if (rings.isNotEmpty && rings.first.length >= 3) {
-                featureData['rings'] = rings;
-              } else {
-                return null;
-              }
-            } else {
-              return null;
-            }
-          } else {
-            return null;
-          }
+          final rings = switch (geometry) {
+            turf.Polygon() => TurfConverter.polygonToLatlngs(geometry),
+            turf.MultiPolygon(:final coordinates) when coordinates.isNotEmpty && coordinates.first.isNotEmpty => [
+              for (final ring in coordinates.first) _latLngs(ring),
+            ],
+            _ => null,
+          };
+          if (rings == null || rings.isEmpty || rings.first.length < 3) return null;
+          featureData['rings'] = rings;
       }
 
       return featureData;
@@ -269,28 +211,7 @@ class GeoJSONImporter extends BaseImporter {
     }
   }
 
-  /// 重複しないレイヤ名を生成
-  Future<String> _generateUniqueLayerName(
-    GeoPackageNode geoPackageNode,
-    String baseName,
-  ) async {
-    final existingLayerNames = await geoPackageNode.geoPackageFile.getLayerNames();
-
-    if (!existingLayerNames.contains(baseName)) {
-      return baseName;
-    }
-
-    int counter = 1;
-    String candidateName;
-    do {
-      candidateName = '${baseName}_$counter';
-      counter++;
-    } while (existingLayerNames.contains(candidateName));
-
-    return candidateName;
-  }
-
-  /// turfのFeatureリストからスキーマを抽出してGeoPackageに追加
+  /// turfのFeatureリストからスキーマを抽出してGeoPackageに追加（列の型は最初に出てきた値で決める）
   Future<void> _addSchemaFromFeatures(
     GeoPackageNode targetGeoPackage,
     String layerName,
@@ -298,55 +219,16 @@ class GeoJSONImporter extends BaseImporter {
   ) async {
     try {
       final attributeSchema = <String, String>{};
-
       for (final feature in features) {
-        final properties = feature.properties;
-        if (properties == null) continue;
-
-        for (final entry in properties.entries) {
-          final fieldName = entry.key;
-          final value = entry.value;
-
-          if (attributeSchema.containsKey(fieldName)) continue;
-
-          String sqliteType = 'TEXT';
-          if (value is num || value is int || value is double) {
-            sqliteType = 'REAL';
-          } else if (value is bool) {
-            sqliteType = 'INTEGER';
-          }
-
-          attributeSchema[fieldName] = sqliteType;
+        for (final MapEntry(:key, :value) in (feature.properties ?? const <String, dynamic>{}).entries) {
+          attributeSchema.putIfAbsent(key, () => BaseImporter.sqliteTypeOf(value));
         }
       }
-
       if (attributeSchema.isNotEmpty) {
-        await targetGeoPackage.geoPackageFile.addAttributeColumns(
-          layerName,
-          attributeSchema,
-        );
+        await targetGeoPackage.geoPackageFile.addAttributeColumns(layerName, attributeSchema);
       }
     } catch (e) {
       AppLogger.debug('[GeoJSONImporter] スキーマ追加エラー: $e');
-    }
-  }
-
-  /// バッチデータを処理
-  Future<void> _processBatch(
-    GeoPackageNode targetGeoPackage,
-    String layerName,
-    GeometryType geometryType,
-    List<Map<String, dynamic>> batchData,
-  ) async {
-    if (batchData.isEmpty) return;
-
-    switch (geometryType) {
-      case GeometryType.point:
-        await targetGeoPackage.geoPackageFile.addPointsBatch(layerName, batchData);
-      case GeometryType.linestring:
-        await targetGeoPackage.geoPackageFile.addLinesBatch(layerName, batchData);
-      case GeometryType.polygon:
-        await targetGeoPackage.geoPackageFile.addPolygonsBatch(layerName, batchData);
     }
   }
 }

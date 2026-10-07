@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "error": null,
+  "metadata": {
+    "outputPath": "pts.kml",
+    "featureCount": 3,
+    "geometryType": "MULTIPOINT",
+    "format": "KML",
+    "fileSize": 664
+  }
+}

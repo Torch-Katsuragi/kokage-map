@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qgis projectname="sub" version="3.34.0-Prizren"  saveUser="kokage-map" >
+  <homePath path=""/>
+  <title>sub</title>
+  <properties>
+    <Paths>
+      <Absolute type="bool">false</Absolute>
+    </Paths>
+    <kokage>
+      <meta type="QString">{"version":2,"styles":{"layers":{"b.gpkg/pls":{"polygonFillColor":"#FF0000FF","polygonFillOpacity":0.5}}}}</meta>
+      <schemaVersion type="int">2</schemaVersion>
+      <app type="QString"></app>
+      <savedAt type="QString"></savedAt>
+      <dirName type="QString">sub</dirName>
+    </kokage>
+  </properties>
+  <projectCrs>
+    <spatialrefsys>
+      <proj4>+proj=longlat +datum=WGS84 +no_defs</proj4>
+      <srid>4326</srid>
+      <authid>EPSG:4326</authid>
+      <description>WGS 84</description>
+      <geographicflag>true</geographicflag>
+    </spatialrefsys>
+  </projectCrs>
+  <layer-tree-group>
+    <layer-tree-group name="b.gpkg" expanded="1" checked="Qt::Checked">
+      <customproperties/>
+      <layer-tree-group name="pts" expanded="1" checked="Qt::Checked">
+        <customproperties/>
+        <layer-tree-layer id="b_gpkg_pts____8edd79eaecfc" name="pts" source="./b.gpkg|layername=pts" providerKey="ogr" expanded="1" checked="Qt::Checked" patch_size="-1,-1">
+          <customproperties/>
+        </layer-tree-layer>
+      </layer-tree-group>
+      <layer-tree-group name="lns" expanded="1" checked="Qt::Checked">
+        <customproperties/>
+        <layer-tree-layer id="b_gpkg_lns____c8f568d3904e" name="lns" source="./b.gpkg|layername=lns" providerKey="ogr" expanded="1" checked="Qt::Checked" patch_size="-1,-1">
+          <customproperties/>
+        </layer-tree-layer>
+      </layer-tree-group>
+      <layer-tree-group name="pls" expanded="1" checked="Qt::Checked">
+        <customproperties/>
+        <layer-tree-layer id="b_gpkg_pls____dcf1ec8dd579" name="pls" source="./b.gpkg|layername=pls" providerKey="ogr" expanded="1" checked="Qt::Checked" patch_size="-1,-1">
+          <customproperties/>
+        </layer-tree-layer>
+      </layer-tree-group>
+    </layer-tree-group>
+    <custom-order enabled="0"/>
+  </layer-tree-group>
+  <projectlayers>
+    <maplayer type="vector" geometry="Point" hasScaleBasedVisibilityFlag="0" minScale="1e+08" maxScale="0" readOnly="0" refreshOnNotifyEnabled="0" autoRefreshMode="Disabled" styleCategories="AllStyleCategories" labelsEnabled="0">
+      <id>b_gpkg_pts____8edd79eaecfc</id>
+      <datasource>./b.gpkg|layername=pts</datasource>
+      <layername>pts</layername>
+      <provider encoding="UTF-8">ogr</provider>
+      <srs>
+        <spatialrefsys>
+          <srid>4326</srid>
+          <authid>EPSG:4326</authid>
+          <description>WGS 84</description>
+          <geographicflag>true</geographicflag>
+        </spatialrefsys>
+      </srs>
+      <previewExpression></previewExpression>
+    </maplayer>
+    <maplayer type="vector" geometry="Line" hasScaleBasedVisibilityFlag="0" minScale="1e+08" maxScale="0" readOnly="0" refreshOnNotifyEnabled="0" autoRefreshMode="Disabled" styleCategories="AllStyleCategories" labelsEnabled="0">
+      <id>b_gpkg_lns____c8f568d3904e</id>
+      <datasource>./b.gpkg|layername=lns</datasource>
+      <layername>lns</layername>
+      <provider encoding="UTF-8">ogr</provider>
+      <srs>
+        <spatialrefsys>
+          <srid>4326</srid>
+          <authid>EPSG:4326</authid>
+          <description>WGS 84</description>
+          <geographicflag>true</geographicflag>
+        </spatialrefsys>
+      </srs>
+      <previewExpression></previewExpression>
+    </maplayer>
+    <maplayer type="vector" geometry="Polygon" hasScaleBasedVisibilityFlag="0" minScale="1e+08" maxScale="0" readOnly="0" refreshOnNotifyEnabled="0" autoRefreshMode="Disabled" styleCategories="AllStyleCategories" labelsEnabled="0">
+      <id>b_gpkg_pls____dcf1ec8dd579</id>
+      <datasource>./b.gpkg|layername=pls</datasource>
+      <layername>pls</layername>
+      <provider encoding="UTF-8">ogr</provider>
+      <srs>
+        <spatialrefsys>
+          <srid>4326</srid>
+          <authid>EPSG:4326</authid>
+          <description>WGS 84</description>
+          <geographicflag>true</geographicflag>
+        </spatialrefsys>
+      </srs>
+      <renderer-v2 type="singleSymbol" forceraster="0" symbollevels="0" enableorderby="0" referencescale="-1">
+        <symbols>
+          <symbol name="0" type="fill" alpha="1" clip_to_extent="1" force_rhr="0" frame_rate="10" is_animated="0">
+            <layer class="SimpleFill" enabled="1" locked="0" pass="0">
+              <Option type="Map">
+                <Option name="border_width_map_unit_scale" type="QString" value="3x:0,0,0,0,0,0"/>
+                <Option name="color" type="QString" value="0,0,255,128"/>
+                <Option name="joinstyle" type="QString" value="bevel"/>
+                <Option name="offset" type="QString" value="0,0"/>
+                <Option name="offset_map_unit_scale" type="QString" value="3x:0,0,0,0,0,0"/>
+                <Option name="offset_unit" type="QString" value="MM"/>
+                <Option name="outline_color" type="QString" value="0,0,0,255"/>
+                <Option name="outline_style" type="QString" value="solid"/>
+                <Option name="outline_width" type="QString" value="0.26"/>
+                <Option name="outline_width_unit" type="QString" value="MM"/>
+                <Option name="style" type="QString" value="solid"/>
+              </Option>
+            </layer>
+          </symbol>
+        </symbols>
+      </renderer-v2>
+      <previewExpression></previewExpression>
+    </maplayer>
+  </projectlayers>
+  <layerorder>
+    <layer id="b_gpkg_pts____8edd79eaecfc"/>
+    <layer id="b_gpkg_lns____c8f568d3904e"/>
+    <layer id="b_gpkg_pls____dcf1ec8dd579"/>
+  </layerorder>
+</qgis>

@@ -125,7 +125,6 @@ void main() {
 
   test('QGIS で作った `.qgs`（kokage/meta 無し）は空の設定。設定を持つ dir として扱う', () async {
     File(qgsPath()).writeAsStringSync(QgsDocument.create(projectName: 'Kitayama').toXmlString());
-    expect(await QgsMetaStore.exists(dir), isTrue);
     final read = await QgsMetaStore.read(dir);
     expect(read, isNotNull);
     expect(read!.isEmpty, isTrue);
@@ -177,7 +176,6 @@ void main() {
   });
 
   test('何も無い dir は null（設定を持たない）', () async {
-    expect(await QgsMetaStore.exists(dir), isFalse);
     expect(await QgsMetaStore.read(dir), isNull);
   });
 

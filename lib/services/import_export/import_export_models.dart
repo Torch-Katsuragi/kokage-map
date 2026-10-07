@@ -20,100 +20,35 @@ import '../coordinate/epsg_registry.dart';
 
 /// ファイル形式の種類
 enum FileFormat {
-  shapefile,
-  geojson,
-  kml,
-  csv,
-  gpx,
-  unknown;
+  shapefile('Shapefile', '.shp', isImportSupported: true, isExportSupported: true),
+  geojson('GeoJSON', '.geojson', isImportSupported: true, isExportSupported: true),
+  kml('KML', '.kml', isExportSupported: true),
+  csv('CSV', '.csv', isExportSupported: true),
+  gpx('GPX', '.gpx'), // 将来実装予定
+  unknown('Unknown', '');
 
-  /// 各形式の表示名を取得
-  String get value {
-    switch (this) {
-      case FileFormat.shapefile:
-        return 'Shapefile';
-      case FileFormat.geojson:
-        return 'GeoJSON';
-      case FileFormat.kml:
-        return 'KML';
-      case FileFormat.csv:
-        return 'CSV';
-      case FileFormat.gpx:
-        return 'GPX';
-      case FileFormat.unknown:
-        return 'Unknown';
-    }
-  }
+  const FileFormat(this.value, this.extension, {this.isImportSupported = false, this.isExportSupported = false});
 
-  /// ファイル拡張子から形式を判定
+  /// 表示名
+  final String value;
+
+  /// 形式に対応する拡張子（`.` 付き）
+  final String extension;
+
+  /// 読み込み対応か
+  final bool isImportSupported;
+
+  /// 書き出し対応か
+  final bool isExportSupported;
+
+  /// ファイル拡張子（`.` 付き・大小は問わない）から形式を判定。`.json` も GeoJSON
   static FileFormat fromExtension(String extension) {
-    switch (extension.toLowerCase()) {
-      case '.shp':
-        return FileFormat.shapefile;
-      case '.geojson':
-      case '.json':
-        return FileFormat.geojson;
-      case '.kml':
-        return FileFormat.kml;
-      case '.csv':
-        return FileFormat.csv;
-      case '.gpx':
-        return FileFormat.gpx;
-      default:
-        return FileFormat.unknown;
-    }
-  }
-
-  /// 読み込み対応の判定
-  bool get isImportSupported {
-    switch (this) {
-      case FileFormat.shapefile:
-        return true;
-      case FileFormat.geojson:
-        return true;
-      case FileFormat.kml:
-      case FileFormat.csv:
-      case FileFormat.gpx:
-        return false; // 将来実装予定
-      case FileFormat.unknown:
-        return false;
-    }
-  }
-
-  /// エクスポート対応の判定
-  bool get isExportSupported {
-    switch (this) {
-      case FileFormat.shapefile:
-        return true;
-      case FileFormat.geojson:
-        return true;
-      case FileFormat.kml:
-        return true;
-      case FileFormat.csv:
-        return true;
-      case FileFormat.gpx:
-        return false; // 将来実装予定
-      case FileFormat.unknown:
-        return false;
-    }
-  }
-
-  /// 形式に対応する拡張子を取得
-  String get extension {
-    switch (this) {
-      case FileFormat.shapefile:
-        return '.shp';
-      case FileFormat.geojson:
-        return '.geojson';
-      case FileFormat.kml:
-        return '.kml';
-      case FileFormat.csv:
-        return '.csv';
-      case FileFormat.gpx:
-        return '.gpx';
-      case FileFormat.unknown:
-        return '';
-    }
+    final ext = extension.toLowerCase();
+    if (ext == '.json') return FileFormat.geojson;
+    return FileFormat.values.firstWhere(
+      (f) => f != FileFormat.unknown && f.extension == ext,
+      orElse: () => FileFormat.unknown,
+    );
   }
 }
 
@@ -123,9 +58,6 @@ class ImportExportResult {
   final String? errorMessage;
   final List<LayerNode>? createdLayers;
   final Map<String, dynamic>? metadata;
-
-  /// 後方互換: 最初の作成レイヤを返す
-  LayerNode? get createdLayer => createdLayers?.firstOrNull;
 
   ImportExportResult({
     required this.success,

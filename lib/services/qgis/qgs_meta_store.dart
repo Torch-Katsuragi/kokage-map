@@ -164,13 +164,6 @@ abstract final class QgsProjectFile {
 
 /// フォルダ設定の読み書き
 abstract final class QgsMetaStore {
-  /// [dirPath] が自分の設定を持つか（`.qgs` か、まだ移していない `.kmeta.json` がある）
-  static Future<bool> exists(String dirPath) async {
-    final names = await QgsProjectFile.fileNames(dirPath);
-    if (names == null) return false;
-    return names.contains(kMetaFileName) || await QgsProjectFile.find(dirPath, names: names) != null;
-  }
-
   /// [dirPath] の設定を読む。`.qgs` も `.kmeta.json` も無ければ null。
   ///
   /// `.qgs` はあるが `kokage/meta` が無い（QGIS で作ったもの）ときは空の設定を返す。
@@ -257,16 +250,7 @@ abstract final class QgsMetaStore {
           return true;
         }
         doc.kokageMeta = json;
-        if (claim) {
-          doc.setStamp(
-            KokageStamp(
-              schemaVersion: kQgsSchemaVersion,
-              app: await appLabel(),
-              savedAt: DateTime.now(),
-              dirName: name,
-            ),
-          );
-        }
+        if (claim) doc.setStamp(await newStamp(name));
         await QgsFileWriter.write(path, doc.toXmlString());
         return true;
       } on Object catch (e) {
@@ -283,15 +267,7 @@ abstract final class QgsMetaStore {
           if (!await fs.exists(path)) return;
           final doc = QgsDocument.parse(await fs.readAsString(path));
           if (doc.lastWrittenByKokage) return;
-          final dirPath = p.dirname(path);
-          doc.setStamp(
-            KokageStamp(
-              schemaVersion: kQgsSchemaVersion,
-              app: await appLabel(),
-              savedAt: DateTime.now(),
-              dirName: doc.stamp?.dirName ?? QgsProjectFile.dirNameOf(dirPath),
-            ),
-          );
+          doc.setStamp(await newStamp(doc.stamp?.dirName ?? QgsProjectFile.dirNameOf(p.dirname(path))));
           await QgsFileWriter.write(path, doc.toXmlString());
         } on Object catch (e) {
           AppLogger.debug('[QgsMetaStore] 印を付け直せない: $e');
@@ -320,6 +296,14 @@ abstract final class QgsMetaStore {
       AppLogger.debug('[QgsMetaStore] $kMetaFileName を退避できない: $e');
     }
   }
+
+  /// いま書く印。[dirName] は書いた時点の dir 名（プロジェクト名）
+  static Future<KokageStamp> newStamp(String dirName) async => KokageStamp(
+    schemaVersion: kQgsSchemaVersion,
+    app: await appLabel(),
+    savedAt: DateTime.now(),
+    dirName: dirName,
+  );
 
   static String? _appLabelCache;
 

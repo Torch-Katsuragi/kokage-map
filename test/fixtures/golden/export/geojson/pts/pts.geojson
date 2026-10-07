@@ -1,0 +1,58 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": null,
+      "geometry": {
+        "type": "Point",
+        "bbox": null,
+        "coordinates": [
+          135.97,
+          33.91
+        ]
+      },
+      "properties": {
+        "id": 1,
+        "name": "杉",
+        "description": "樹高 \"高い\", 太い"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": null,
+      "geometry": {
+        "type": "Point",
+        "bbox": null,
+        "coordinates": [
+          135.98,
+          33.92
+        ]
+      },
+      "properties": {
+        "id": 2,
+        "name": "hinoki",
+        "description": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "id": null,
+      "geometry": {
+        "type": "Point",
+        "bbox": null,
+        "coordinates": [
+          135.99,
+          33.93
+        ]
+      },
+      "properties": {
+        "id": 3,
+        "name": "",
+        "description": "line\nbreak"
+      }
+    }
+  ],
+  "bbox": null,
+  "name": "pts"
+}

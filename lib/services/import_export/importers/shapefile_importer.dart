@@ -24,7 +24,6 @@ import 'package:root_maps/utils/app_logger.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../models/geometry_type.dart';
 import '../../../models/nodes/geopackage_node.dart';
-import '../../../models/nodes/layer_node.dart';
 import '../import_export_models.dart';
 import '../parsers/dbf_reader.dart';
 import '../parsers/prj_reader.dart';
@@ -57,125 +56,50 @@ class ShapefileImporter extends BaseImporter {
       }
 
       final basePath = p.withoutExtension(filePath);
-      final dbfFile = File('$basePath.dbf');
-      final prjFile = File('$basePath.prj');
-      final cpgFile = File('$basePath.cpg');
-
-      // CPGファイルから文字コードを読み取り
-      String? dbfEncoding;
-      if (cpgFile.existsSync()) {
-        try {
-          dbfEncoding = (await cpgFile.readAsString()).trim();
-          AppLogger.debug('[ShapefileImporter] CPGファイルから文字コード取得: $dbfEncoding');
-        } catch (e) {
-          AppLogger.debug('[ShapefileImporter] CPGファイル読み込みエラー: $e');
-        }
-      }
-
-      // DBF属性データ読み込み
-      Map<String, List<dynamic>>? dbfData;
-      if (dbfFile.existsSync()) {
-        dbfData = await DbfReader.read(
-          dbfFile.path,
-          encoding: dbfEncoding ?? 'Shift_JIS',
-        );
-        if (dbfData != null) {
-          AppLogger.debug('[ShapefileImporter] DBF属性データ読み込み成功');
-          AppLogger.debug('  フィールド数: ${dbfData.keys.length}');
-          AppLogger.debug('  レコード数: ${dbfData.values.firstOrNull?.length ?? 0}');
-        }
-      }
+      final dbfData = await _readDbf(basePath);
 
       // PRJ座標系読み込み
-      final sourceCoordinateSystem = prjFile.existsSync()
-          ? await PrjReader.read(prjFile.path)
-          : null;
+      final prjFile = File('$basePath.prj');
+      final sourceCoordinateSystem = prjFile.existsSync() ? await PrjReader.read(prjFile.path) : null;
       if (sourceCoordinateSystem != null) {
         AppLogger.debug('[ShapefileImporter] 座標系: ${sourceCoordinateSystem.name}');
       }
 
-      // SHP基本情報読み込み
-      final shapeInfo = await ShapefileBinaryParser.readInfo(filePath);
-      if (shapeInfo == null) {
+      // SHP は 1 回だけ読む（基本情報もレコードも同じバイト列から）
+      final shpBytes = await ShapefileBinaryParser.readBytes(filePath);
+      final shapeInfo = shpBytes == null ? null : ShapefileBinaryParser.infoFromBytes(shpBytes);
+      if (shpBytes == null || shapeInfo == null) {
         return ImportExportResult.error(t.importExport.shapefileReadError);
       }
 
       // レイヤ名決定
       final fileName = p.basenameWithoutExtension(filePath);
-      final actualLayerName = await _generateUniqueLayerName(
-        targetGeoPackage,
-        layerName ?? fileName,
-      );
+      final actualLayerName = await uniqueLayerName(targetGeoPackage, layerName ?? fileName);
+      final geometryType = _convertShapeTypeToGeometryType(shapeInfo['geometryType'] as String);
 
-      // ジオメトリタイプ
-      final geometryType = _convertShapeTypeToGeometryType(
-        shapeInfo['geometryType'] as String,
-      );
-
-      // レイヤ作成
+      // レイヤ作成と DBF のスキーマ
       await targetGeoPackage.geoPackageFile.addLayer(actualLayerName, geometryType);
-
-      // DBFスキーマをGeoPackageに追加
       if (dbfData != null) {
-        await _addDbfSchemaToGeoPackage(targetGeoPackage, actualLayerName, dbfData);
+        await _addDbfSchema(targetGeoPackage, actualLayerName, dbfData);
       }
 
-      // フィーチャをインポート
+      // フィーチャをインポート（書くときだけ待つ）
       int featureCount = 0;
-      final batchData = <Map<String, dynamic>>[];
-      const batchSize = 1000;
-
-      await ShapefileBinaryParser.parseRecords(
-        filePath,
-        sourceCoordinateSystem: sourceCoordinateSystem,
-        onRecord: (recordIndex, shapeType, geometry) async {
-          final attributes = DbfReader.getAttributesForRecord(dbfData, featureCount);
-          
-          Map<String, dynamic>? featureData;
-
-          switch (shapeType) {
-            case ShapeType.point:
-              if (geometry is LatLng) {
-                featureData = {'point': geometry, ...attributes};
-              }
-            case ShapeType.polyLine:
-              if (geometry is List<LatLng> && geometry.isNotEmpty) {
-                featureData = {'line': geometry, ...attributes};
-              }
-            case ShapeType.polygon:
-              if (geometry is List<List<LatLng>> && geometry.isNotEmpty) {
-                featureData = {'rings': geometry, ...attributes};
-              }
-          }
-
-          if (featureData != null) {
-            batchData.add(featureData);
-            featureCount++;
-
-            // バッチ処理
-            if (batchData.length >= batchSize) {
-              await _processBatch(targetGeoPackage, actualLayerName, geometryType, batchData);
-              batchData.clear();
-              AppLogger.debug('[ShapefileImporter] バッチ処理完了: $featureCount件');
-            }
-          }
-        },
-      );
-
-      // 残りのバッチを処理
-      if (batchData.isNotEmpty) {
-        await _processBatch(targetGeoPackage, actualLayerName, geometryType, batchData);
+      final batch = <Map<String, dynamic>>[];
+      for (final record in ShapefileBinaryParser.records(shpBytes, sourceCoordinateSystem: sourceCoordinateSystem)) {
+        final featureData = _featureData(record, DbfReader.getAttributesForRecord(dbfData, record.index));
+        if (featureData == null) continue;
+        batch.add(featureData);
+        featureCount++;
+        if (batch.length >= BaseImporter.batchSize) {
+          await addBatch(targetGeoPackage, actualLayerName, geometryType, batch);
+          batch.clear();
+          AppLogger.debug('[ShapefileImporter] バッチ処理完了: $featureCount件');
+        }
       }
+      await addBatch(targetGeoPackage, actualLayerName, geometryType, batch);
 
-      // レイヤ更新
-      await targetGeoPackage.updateChildren();
-
-      // 作成されたレイヤノードを取得
-      final createdLayer = targetGeoPackage.children
-          .whereType<LayerNode>()
-          .where((layer) => layer.layerName == actualLayerName)
-          .firstOrNull;
-
+      final createdLayer = (await reloadLayers(targetGeoPackage, [actualLayerName])).firstOrNull;
       if (createdLayer == null) {
         return ImportExportResult.error(t.importExport.layerFetchError(name: actualLayerName));
       }
@@ -199,96 +123,69 @@ class ShapefileImporter extends BaseImporter {
     }
   }
 
-  /// 重複しないレイヤ名を生成
-  Future<String> _generateUniqueLayerName(
-    GeoPackageNode geoPackageNode,
-    String baseName,
-  ) async {
-    final existingLayerNames = await geoPackageNode.geoPackageFile.getLayerNames();
+  /// `.dbf` の属性。文字コードは `.cpg` に従う（無ければ Shift_JIS）
+  Future<Map<String, List<dynamic>>?> _readDbf(String basePath) async {
+    final dbfFile = File('$basePath.dbf');
+    final cpgFile = File('$basePath.cpg');
 
-    if (!existingLayerNames.contains(baseName)) {
-      return baseName;
+    String? dbfEncoding;
+    if (cpgFile.existsSync()) {
+      try {
+        dbfEncoding = (await cpgFile.readAsString()).trim();
+        AppLogger.debug('[ShapefileImporter] CPGファイルから文字コード取得: $dbfEncoding');
+      } catch (e) {
+        AppLogger.debug('[ShapefileImporter] CPGファイル読み込みエラー: $e');
+      }
     }
 
-    int counter = 1;
-    String candidateName;
-    do {
-      candidateName = '${baseName}_$counter';
-      counter++;
-    } while (existingLayerNames.contains(candidateName));
+    if (!dbfFile.existsSync()) return null;
+    final dbfData = await DbfReader.read(dbfFile.path, encoding: dbfEncoding ?? 'Shift_JIS');
+    if (dbfData != null) {
+      AppLogger.debug('[ShapefileImporter] DBF属性データ読み込み成功');
+      AppLogger.debug('  フィールド数: ${dbfData.keys.length}');
+      AppLogger.debug('  レコード数: ${dbfData.values.firstOrNull?.length ?? 0}');
+    }
+    return dbfData;
+  }
 
-    return candidateName;
+  /// レコードを GeoPackage に書く形にする。形の種類が合わなければ null
+  static Map<String, dynamic>? _featureData(ShpRecord record, Map<String, dynamic> attributes) {
+    final geometry = record.geometry;
+    return switch (record.shapeType) {
+      ShapeType.point when geometry is LatLng => {'point': geometry, ...attributes},
+      ShapeType.polyLine when geometry is List<LatLng> && geometry.isNotEmpty => {'line': geometry, ...attributes},
+      ShapeType.polygon when geometry is List<List<LatLng>> && geometry.isNotEmpty => {
+        'rings': geometry,
+        ...attributes,
+      },
+      _ => null,
+    };
   }
 
   /// シェープタイプをGeometryTypeに変換
-  GeometryType _convertShapeTypeToGeometryType(String shapeTypeString) {
-    switch (shapeTypeString.toLowerCase()) {
-      case 'point':
-        return GeometryType.point;
-      case 'linestring':
-      case 'polyline':
-        return GeometryType.linestring;
-      case 'polygon':
-        return GeometryType.polygon;
-      default:
-        return GeometryType.point;
-    }
-  }
+  static GeometryType _convertShapeTypeToGeometryType(String shapeTypeString) =>
+      switch (shapeTypeString.toLowerCase()) {
+        'linestring' || 'polyline' => GeometryType.linestring,
+        'polygon' => GeometryType.polygon,
+        _ => GeometryType.point,
+      };
 
-  /// DBFスキーマをGeoPackageに追加
-  Future<void> _addDbfSchemaToGeoPackage(
+  /// DBFスキーマをGeoPackageに追加（列の型は最初の値で決める）
+  Future<void> _addDbfSchema(
     GeoPackageNode targetGeoPackage,
     String layerName,
     Map<String, List<dynamic>> dbfData,
   ) async {
     try {
-      final attributeSchema = <String, String>{};
-
-      for (final entry in dbfData.entries) {
-        final fieldName = entry.key;
-        final values = entry.value;
-
-        String sqliteType = 'TEXT';
-        if (values.isNotEmpty && values.first != null) {
-          final firstValue = values.first;
-          if (firstValue is num || firstValue is int || firstValue is double) {
-            sqliteType = 'REAL';
-          } else if (firstValue is bool) {
-            sqliteType = 'INTEGER';
-          }
-        }
-
-        attributeSchema[fieldName] = sqliteType;
-      }
-
+      final attributeSchema = <String, String>{
+        for (final MapEntry(key: fieldName, value: values) in dbfData.entries)
+          fieldName: BaseImporter.sqliteTypeOf(values.firstOrNull),
+      };
       if (attributeSchema.isNotEmpty) {
-        await targetGeoPackage.geoPackageFile.addAttributeColumns(
-          layerName,
-          attributeSchema,
-        );
+        await targetGeoPackage.geoPackageFile.addAttributeColumns(layerName, attributeSchema);
       }
     } catch (e) {
       AppLogger.debug('[ShapefileImporter] DBFスキーマ追加エラー: $e');
     }
   }
-
-  /// バッチデータを処理
-  Future<void> _processBatch(
-    GeoPackageNode targetGeoPackage,
-    String layerName,
-    GeometryType geometryType,
-    List<Map<String, dynamic>> batchData,
-  ) async {
-    if (batchData.isEmpty) return;
-
-    switch (geometryType) {
-      case GeometryType.point:
-        await targetGeoPackage.geoPackageFile.addPointsBatch(layerName, batchData);
-      case GeometryType.linestring:
-        await targetGeoPackage.geoPackageFile.addLinesBatch(layerName, batchData);
-      case GeometryType.polygon:
-        await targetGeoPackage.geoPackageFile.addPolygonsBatch(layerName, batchData);
-    }
-  }
 }
-

@@ -33,7 +33,6 @@ library;
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart' show Color;
 import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
@@ -48,6 +47,7 @@ import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/label_expression.dart';
 import '../kmeta_service.dart';
+import 'qgs_xml.dart';
 
 /// px ⇄ mm（QGISのシンボル単位はMM）。96dpi 相当。[[qgs_writer]] の逆。
 const double _kMmToPx = 96 / 25.4;
@@ -137,60 +137,23 @@ class QgsImporter {
   }) async {
     bool accepts(FolderNode? owner) => acceptOwner == null || (owner != null && acceptOwner(owner));
     final discarded = <String>[];
-    final viewsByLayer = <String, List<String>>{};
-
-    final String raw;
-    try {
-      raw = await readQgsText(qgsPath);
-    } catch (e) {
-      AppLogger.debug('[QgsImporter] 読めない: $e');
-      return QgsImportResult(
-        viewsByLayer: const {},
-        discarded: ['$qgsPath を読めませんでした（$e）'],
-      );
-    }
 
     final XmlDocument doc;
     try {
-      doc = XmlDocument.parse(raw);
-    } catch (e) {
-      return QgsImportResult(
-        viewsByLayer: const {},
-        discarded: ['XMLとして読めませんでした（$e）'],
-      );
-    }
-
-    final qgsDir = p.dirname(p.normalize(qgsPath));
-    final rootPath = root.getAbsoluteFilePath();
-    final gpkgIndex = _indexGeoPackages(root);
-
-    // ツリーの表示状態（checked）はレイヤツリー側にある。IDで引けるようにする。
-    // QGIS は親グループが Unchecked なら子も描かないので、祖先の checked を AND で畳む
-    // （QGIS ユーザーがグループごと消灯した場合も読み戻せるように）
-    final checkedById = <String, bool>{};
-    // こかげマップが書いた形（dir グループ > gpkg グループ > レイヤグループ > View）なら、
-    // グループの checked はそれぞれ dir・gpkg・レイヤの可視性に戻す（畳まずに）。そのための
-    // 自分の checked と、近い順の祖先グループ（名前と checked）
-    final ownCheckedById = <String, bool>{};
-    final ancestorsById = <String, List<(String, bool)>>{};
-    void walkTree(XmlElement node, bool parentChecked, List<(String, bool)> ancestors) {
-      for (final child in node.childElements) {
-        final own = child.getAttribute('checked') != 'Qt::Unchecked';
-        final checked = parentChecked && own;
-        if (child.name.local == 'layer-tree-group') {
-          walkTree(child, checked, [(child.getAttribute('name') ?? '', own), ...ancestors]);
-        } else if (child.name.local == 'layer-tree-layer') {
-          final id = child.getAttribute('id');
-          if (id != null) {
-            checkedById[id] = checked;
-            ownCheckedById[id] = own;
-            ancestorsById[id] = ancestors;
-          }
-        }
+      final raw = await readQgsText(qgsPath);
+      try {
+        doc = XmlDocument.parse(raw);
+      } catch (e) {
+        return QgsImportResult(viewsByLayer: const {}, discarded: ['XMLとして読めませんでした（$e）']);
       }
+    } catch (e) {
+      AppLogger.debug('[QgsImporter] 読めない: $e');
+      return QgsImportResult(viewsByLayer: const {}, discarded: ['$qgsPath を読めませんでした（$e）']);
     }
-    final treeRoot = doc.rootElement.findElements('layer-tree-group').firstOrNull;
-    if (treeRoot != null) walkTree(treeRoot, true, const []);
+
+    final rootPath = root.getAbsoluteFilePath();
+    final sources = _SourceResolver(p.dirname(p.normalize(qgsPath)), rootPath, _indexGeoPackages(root));
+    final tree = _TreeVisibility.read(doc);
     // 形が合ったレイヤの、グループ側の可視性（レイヤ・gpkg・dir）
     final layerGroupChecked = <LayerNode, bool>{};
     final containerChecked = <LayerTreeNode, bool>{};
@@ -201,79 +164,21 @@ class QgsImporter {
     // ⚠ `maplayer` は文書全体を探さない。QGIS は `<main-annotation-layer>` の
     //    ような「ユーザーのレイヤではないもの」も同じ形で書くため、
     //    `<projectlayers>` の下だけを相手にする。
-    final projectLayers =
-        doc.rootElement.findElements('projectlayers').firstOrNull;
-    for (final maplayer in projectLayers?.findElements('maplayer') ??
-        const <XmlElement>[]) {
-      // 埋め込みスタブ（別プロジェクトの管轄。2026-09-30 以前にこかげマップが書いたものか、手で足したもの）
-      if (maplayer.getAttribute('embedded') == '1') continue;
-
-      final name = _text(maplayer, 'layername') ?? '(名前なし)';
-      final provider = _text(maplayer, 'provider')?.toLowerCase();
-
-      // ラスタは取り込まない（自分が書いたオーバーレイの参照は フォルダ設定（`.qgs`） が正典。
-      // QGIS 側で足したラスタは扱えないが、毎回の読み戻しで「取り込めません」と騒がない）
-      if (maplayer.getAttribute('type') == 'raster') continue;
-
-      if (provider != null && provider != 'ogr') {
-        // PostGIS / WMS / メモリレイヤ等。ファイルとして持ち歩けない
-        discarded.add('$name（$provider は取り込めません）');
-        continue;
-      }
-
-      final source = QgsDataSource.parse(_text(maplayer, 'datasource') ?? '');
-      if (source == null || source.layerName == null) {
-        discarded.add('$name（データソースを読み取れません）');
-        continue;
-      }
-
-      final absPath = p.normalize(
-        p.isAbsolute(source.path) ? source.path : p.join(qgsDir, source.path),
-      );
-
-      if (!_isInsideRoot(rootPath, absPath)) {
-        // ⚠ 相対パスで root 外を指すケース（`../shared/kyoyu.gpkg`）は
-        //    林業では現実にありそう。判定は正規化した絶対パスで行う
-        discarded.add('$name（プロジェクトフォルダの外を参照している）');
-        continue;
-      }
-
-      final gpkg = gpkgIndex[absPath];
-      if (gpkg == null) {
-        discarded.add('$name（${p.basename(absPath)} が見つかりません）');
-        continue;
-      }
-
-      final layer = gpkg.children
-          .whereType<LayerNode>()
-          .where((l) => l.layerName == source.layerName)
-          .firstOrNull;
-      if (layer == null) {
-        discarded.add('$name（${gpkg.name} に ${source.layerName} がありません）');
-        continue;
-      }
+    final projectLayers = doc.rootElement.findElements('projectlayers').firstOrNull;
+    for (final maplayer in projectLayers?.findElements('maplayer') ?? const <XmlElement>[]) {
+      final target = sources.resolve(maplayer, discarded);
+      if (target == null) continue;
+      final (:name, :source, :layer, :gpkg) = target;
       // 持ち主のほうが新しい（この写しは古い）。黙って飛ばす
       if (!accepts(layer.folderNode)) continue;
 
-      final id = _text(maplayer, 'id');
-      final chain = id == null ? null : ancestorsById[id];
-      // こかげマップが書いた形か: 親がレイヤグループ、その親が gpkg グループ
-      final shaped = chain != null && chain.length >= 2 && chain[0].$1 == layer.layerName && chain[1].$1 == gpkg.name;
-      if (shaped) {
-        layerGroupChecked[layer] = chain[0].$2;
-        containerChecked[gpkg] = chain[1].$2;
-        // その上は dir グループ（プロジェクト root 自身はグループにならない）
-        LayerTreeNode? folder = gpkg.parent;
-        for (var i = 2; i < chain.length && folder is FolderNode && !identical(folder, root); i++) {
-          if (chain[i].$1 != folder.name) break;
-          containerChecked[folder] = chain[i].$2;
-          folder = folder.parent;
-        }
-      }
+      final id = childText(maplayer, 'id');
+      final shaped = id != null && tree.readGroups(id, layer, gpkg, root, layerGroupChecked, containerChecked);
       final views = touched.putIfAbsent(layer, () => []);
       // レイヤと同じ名前でフィルタの無い QGIS レイヤは既定 View（こかげマップは既定 View をレイヤ名で書く。
       // QGIS でふつうに足したレイヤもこの形）。旧版が書いた「既定」もそのまま既定 View
-      final isDefault = name == layer.layerName && (source.subset == null || source.subset!.isEmpty) &&
+      final isDefault = name == layer.layerName &&
+          (source.subset == null || source.subset!.isEmpty) &&
           !views.any((v) => v.name == kDefaultViewName);
       views.add(
         ViewNode(
@@ -281,39 +186,15 @@ class QgsImporter {
           parent: layer,
           filter: source.subset,
           style: readStyleWithLabel(maplayer),
-          visible: id == null ? true : (shaped ? ownCheckedById[id]! : (checkedById[id] ?? true)),
+          visible: id == null ? true : (shaped ? tree.ownChecked[id]! : (tree.checked[id] ?? true)),
         ),
       );
     }
 
     // まとめて差し替える。途中で失敗しても中途半端に混ざらないように
-    for (final entry in touched.entries) {
-      final layer = entry.key;
-      layer.views
-        ..clear()
-        ..addAll(entry.value);
-      await layer.persistViews();
-      // 可視性は View 定義とは別の場所に持つ。
-      // 既定 View 1枚だけのレイヤは View ではなく**レイヤの可視性**で表す
-      // （暗黙の既定 View は フォルダ設定（`.qgs`） に書かれず、可視性も読まれないため）
-      final views = entry.value;
-      final groupChecked = layerGroupChecked[layer];
-      if (views.length == 1 && views.first.isDefaultView) {
-        layer.visible = views.first.visible && (groupChecked ?? true);
-        await layer.persistVisibility();
-        // スタイルもレイヤ側に持つ。既定 View は書かれないので、View に入れたままだと消える
-        // （2026-09-29 まで、QGIS で変えた色は既定 View 1枚のレイヤに届いていなかった）
-        final imported = views.first.style;
-        if (imported != null) await _applyLayerStyle(layer, imported);
-      } else {
-        for (final v in views) {
-          await v.persistVisibility();
-        }
-        if (groupChecked != null && layer.visible != groupChecked) {
-          layer.visible = groupChecked;
-          await layer.persistVisibility();
-        }
-      }
+    final viewsByLayer = <String, List<String>>{};
+    for (final MapEntry(key: layer, value: views) in touched.entries) {
+      await _replaceViews(layer, views, layerGroupChecked[layer]);
       // 子孫の dir の写しも取り込むので、同名の gpkg/レイヤが別の dir にありうる。dir を添えて数え分ける
       final folderPath = layer.folderNode?.getAbsoluteFilePath();
       final relDir = folderPath == null || rootPath == null ? '.' : p.relative(folderPath, from: rootPath);
@@ -323,12 +204,12 @@ class QgsImporter {
     }
 
     // gpkg と dir のグループの可視性（変わったものだけ書く）
-    for (final e in containerChecked.entries) {
-      if (e.key.visible == e.value) continue;
-      final owner = e.key.parent;
+    for (final MapEntry(key: node, value: checked) in containerChecked.entries) {
+      if (node.visible == checked) continue;
+      final owner = node.parent;
       if (!accepts(owner is FolderNode ? owner : null)) continue;
-      e.key.visible = e.value;
-      await e.key.persistVisibility();
+      node.visible = checked;
+      await node.persistVisibility();
     }
 
     AppLogger.debug(
@@ -341,6 +222,34 @@ class QgsImporter {
   // =============================================
   // 部品
   // =============================================
+
+  /// [layer] の View を [views] に置き換えて保存する。可視性とスタイルも書く。
+  /// [groupChecked] はこかげマップが書いた形のときの、レイヤグループの可視性
+  Future<void> _replaceViews(LayerNode layer, List<ViewNode> views, bool? groupChecked) async {
+    layer.views
+      ..clear()
+      ..addAll(views);
+    await layer.persistViews();
+    // 可視性は View 定義とは別の場所に持つ。
+    // 既定 View 1枚だけのレイヤは View ではなく**レイヤの可視性**で表す
+    // （暗黙の既定 View は フォルダ設定（`.qgs`） に書かれず、可視性も読まれないため）
+    if (views.length == 1 && views.first.isDefaultView) {
+      layer.visible = views.first.visible && (groupChecked ?? true);
+      await layer.persistVisibility();
+      // スタイルもレイヤ側に持つ。既定 View は書かれないので、View に入れたままだと消える
+      // （2026-09-29 まで、QGIS で変えた色は既定 View 1枚のレイヤに届いていなかった）
+      final imported = views.first.style;
+      if (imported != null) await _applyLayerStyle(layer, imported);
+      return;
+    }
+    for (final v in views) {
+      await v.persistVisibility();
+    }
+    if (groupChecked != null && layer.visible != groupChecked) {
+      layer.visible = groupChecked;
+      await layer.persistVisibility();
+    }
+  }
 
   /// QGIS から読んだスタイルをレイヤのスタイルに重ねる。QGIS が持たない項目（ラベルの濃さ等）は残し、
   /// 描き分けの印（[KMetaLayerStyle.qgisRenderer]）は QGIS の今の状態に合わせる（単一シンボルに戻したら外す）
@@ -376,11 +285,6 @@ class QgsImporter {
     throw const FormatException('.qgz の中に .qgs がありません');
   }
 
-  String? _text(XmlElement parent, String tag) {
-    final e = parent.findElements(tag).firstOrNull;
-    return e?.innerText.trim().isEmpty ?? true ? null : e!.innerText.trim();
-  }
-
   /// ルート以下の GeoPackage を、正規化した絶対パスで引けるようにする
   Map<String, GeoPackageNode> _indexGeoPackages(LayerTreeNode node) {
     final result = <String, GeoPackageNode>{};
@@ -398,12 +302,6 @@ class QgsImporter {
     return result;
   }
 
-  bool _isInsideRoot(String? rootPath, String absPath) {
-    if (rootPath == null) return false;
-    final rel = p.relative(absPath, from: p.normalize(rootPath));
-    return !rel.startsWith('..') && !p.isAbsolute(rel);
-  }
-
   /// 同一レイヤ内で View名が衝突しないようにする（QGISは同名レイヤを許す）
   String _uniqueName(String base, List<ViewNode> existing) {
     if (!existing.any((v) => v.name == base)) return base;
@@ -418,13 +316,6 @@ class QgsImporter {
   // レンダラ → KMetaLayerStyle
   // =============================================
 
-  /// `renderer-v2` から見た目を拾う。読めない形なら null（＝スタイル無し）。
-  ///
-  /// > [!NOTE] 拾うのは単一シンボルの1レイヤ目だけ
-  /// > QGISのシンボルは重ね合わせも段階分けもできるが、こかげマップ 側に受け皿が無い。
-  /// > 分類分け（categorizedSymbol 等）は最初のシンボルの色を採るだけ。
-  /// > **完全再現は狙わない。** 狙うと「開けるファイルを選り好みする」方向に行く。
-  @visibleForTesting
   /// シンボルとラベルをまとめて読む（どちらも無ければ null）
   KMetaLayerStyle? readStyleWithLabel(XmlElement maplayer) {
     final symbol = readStyle(maplayer);
@@ -474,6 +365,12 @@ class QgsImporter {
     );
   }
 
+  /// `renderer-v2` から見た目を拾う。読めない形なら null（＝スタイル無し）。
+  ///
+  /// > [!NOTE] 拾うのは単一シンボルの1レイヤ目だけ
+  /// > QGISのシンボルは重ね合わせも段階分けもできるが、こかげマップ 側に受け皿が無い。
+  /// > 分類分け（categorizedSymbol 等）は最初のシンボルの色を採るだけ。
+  /// > **完全再現は狙わない。** 狙うと「開けるファイルを選り好みする」方向に行く。
   KMetaLayerStyle? readStyle(XmlElement maplayer) {
     final style = _readSymbolStyle(maplayer);
     final type = maplayer.findElements('renderer-v2').firstOrNull?.getAttribute('type');
@@ -584,5 +481,132 @@ class QgsImporter {
     final value = double.tryParse(mm.trim());
     if (value == null) return null;
     return value * _kMmToPx / divideBy;
+  }
+}
+
+/// `<maplayer>` のデータソースを、ツリーの GeoPackage レイヤに結びつける
+class _SourceResolver {
+  _SourceResolver(this.qgsDir, this.rootPath, this.gpkgIndex);
+
+  /// `.qgs` のある dir（相対パスの基準）
+  final String qgsDir;
+  final String? rootPath;
+
+  /// 正規化した絶対パス → GeoPackage
+  final Map<String, GeoPackageNode> gpkgIndex;
+
+  /// 取り込む先のレイヤ。取り込めなければ理由を [discarded] に足して null。
+  /// 黙って飛ばすもの（埋め込みスタブ・ラスタ）も null
+  ({String name, QgsDataSource source, LayerNode layer, GeoPackageNode gpkg})? resolve(
+    XmlElement maplayer,
+    List<String> discarded,
+  ) {
+    // 埋め込みスタブ（別プロジェクトの管轄。2026-09-30 以前にこかげマップが書いたものか、手で足したもの）
+    if (maplayer.getAttribute('embedded') == '1') return null;
+
+    final name = childText(maplayer, 'layername') ?? '(名前なし)';
+    final provider = childText(maplayer, 'provider')?.toLowerCase();
+
+    // ラスタは取り込まない（自分が書いたオーバーレイの参照は フォルダ設定（`.qgs`） が正典。
+    // QGIS 側で足したラスタは扱えないが、毎回の読み戻しで「取り込めません」と騒がない）
+    if (maplayer.getAttribute('type') == 'raster') return null;
+
+    if (provider != null && provider != 'ogr') {
+      // PostGIS / WMS / メモリレイヤ等。ファイルとして持ち歩けない
+      discarded.add('$name（$provider は取り込めません）');
+      return null;
+    }
+
+    final source = QgsDataSource.parse(childText(maplayer, 'datasource') ?? '');
+    if (source == null || source.layerName == null) {
+      discarded.add('$name（データソースを読み取れません）');
+      return null;
+    }
+
+    final absPath = p.normalize(p.isAbsolute(source.path) ? source.path : p.join(qgsDir, source.path));
+    final root = rootPath;
+    if (root == null || relativeInside(root, absPath) == null) {
+      // ⚠ 相対パスで root 外を指すケース（`../shared/kyoyu.gpkg`）は
+      //    林業では現実にありそう。判定は正規化した絶対パスで行う
+      discarded.add('$name（プロジェクトフォルダの外を参照している）');
+      return null;
+    }
+
+    final gpkg = gpkgIndex[absPath];
+    if (gpkg == null) {
+      discarded.add('$name（${p.basename(absPath)} が見つかりません）');
+      return null;
+    }
+
+    final layer = gpkg.children.whereType<LayerNode>().where((l) => l.layerName == source.layerName).firstOrNull;
+    if (layer == null) {
+      discarded.add('$name（${gpkg.name} に ${source.layerName} がありません）');
+      return null;
+    }
+    return (name: name, source: source, layer: layer, gpkg: gpkg);
+  }
+}
+
+/// レイヤツリーの表示状態（checked）。レイヤの id で引く
+class _TreeVisibility {
+  /// 祖先の checked を AND で畳んだもの。QGIS は親グループが Unchecked なら子も描かないので、
+  /// QGIS ユーザーがグループごと消灯した場合も読み戻せるように
+  final checked = <String, bool>{};
+
+  /// レイヤ自身の checked（こかげマップが書いた形なら、グループの checked は別に読むので畳まない）
+  final ownChecked = <String, bool>{};
+
+  /// 近い順の祖先グループ（名前と自身の checked）
+  final ancestors = <String, List<(String, bool)>>{};
+
+  static _TreeVisibility read(XmlDocument doc) {
+    final result = _TreeVisibility();
+    final treeRoot = doc.rootElement.findElements('layer-tree-group').firstOrNull;
+    if (treeRoot != null) result._walk(treeRoot, true, const []);
+    return result;
+  }
+
+  void _walk(XmlElement node, bool parentChecked, List<(String, bool)> chain) {
+    for (final child in node.childElements) {
+      final own = child.getAttribute('checked') != 'Qt::Unchecked';
+      final folded = parentChecked && own;
+      if (child.name.local == 'layer-tree-group') {
+        _walk(child, folded, [(child.getAttribute('name') ?? '', own), ...chain]);
+      } else if (child.name.local == 'layer-tree-layer') {
+        final id = child.getAttribute('id');
+        if (id != null) {
+          checked[id] = folded;
+          ownChecked[id] = own;
+          ancestors[id] = chain;
+        }
+      }
+    }
+  }
+
+  /// こかげマップが書いた形（dir グループ > gpkg グループ > レイヤグループ > View）なら、
+  /// グループの checked をレイヤ・gpkg・dir の可視性として [layerGroup] と [containers] に入れて true
+  bool readGroups(
+    String id,
+    LayerNode layer,
+    GeoPackageNode gpkg,
+    FolderNode root,
+    Map<LayerNode, bool> layerGroup,
+    Map<LayerTreeNode, bool> containers,
+  ) {
+    final chain = ancestors[id];
+    // 親がレイヤグループ、その親が gpkg グループ
+    if (chain == null || chain.length < 2 || chain[0].$1 != layer.layerName || chain[1].$1 != gpkg.name) {
+      return false;
+    }
+    layerGroup[layer] = chain[0].$2;
+    containers[gpkg] = chain[1].$2;
+    // その上は dir グループ（プロジェクト root 自身はグループにならない）
+    LayerTreeNode? folder = gpkg.parent;
+    for (var i = 2; i < chain.length && folder is FolderNode && !identical(folder, root); i++) {
+      if (chain[i].$1 != folder.name) break;
+      containers[folder] = chain[i].$2;
+      folder = folder.parent;
+    }
+    return true;
   }
 }

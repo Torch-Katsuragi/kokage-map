@@ -1,0 +1,28 @@
+{
+  "344": {
+    "removed": [
+      "全部",
+      "root外"
+    ],
+    "untouched": []
+  },
+  "42a": {
+    "removed": [
+      "既定"
+    ],
+    "untouched": []
+  },
+  "42b": {
+    "removed": [],
+    "untouched": []
+  },
+  "cat": {
+    "removed": [
+      "既定"
+    ],
+    "untouched": [
+      "forest_roads_gpkg_forest_roads____c153b039d508",
+      "survey_points_gpkg_survey_points____17ee55305316"
+    ]
+  }
+}

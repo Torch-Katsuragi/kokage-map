@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "error": null,
+  "metadata": {
+    "outputPath": "pts.shp",
+    "featureCount": 3,
+    "geometryType": "MULTIPOINT",
+    "format": "Shapefile",
+    "crs": "EPSG:4326"
+  }
+}

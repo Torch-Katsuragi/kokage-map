@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "error": null,
+  "metadata": {
+    "outputPath": "lns.csv",
+    "featureCount": 2,
+    "geometryType": "MULTILINESTRING",
+    "format": "CSV",
+    "fileSize": 144
+  }
+}

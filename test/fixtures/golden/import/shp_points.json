@@ -1,0 +1,63 @@
+{
+  "success": true,
+  "error": null,
+  "layers": [
+    "existing_1"
+  ],
+  "metadata": {
+    "sourceFile": "existing.shp",
+    "fileName": "existing",
+    "featureCount": 3,
+    "geometryType": "MULTIPOINT",
+    "shapeInfo": {
+      "geometryType": "Point",
+      "shapeType": 1,
+      "featureCount": 4,
+      "fileSize": 212,
+      "bounds": {
+        "minX": 135.97,
+        "minY": 33.91,
+        "maxX": 200.0,
+        "maxY": 33.93
+      }
+    }
+  },
+  "tables": {
+    "existing_1": {
+      "columns": [
+        "fid INTEGER",
+        "geom BLOB",
+        "NAME TEXT",
+        "H REAL",
+        "N REAL",
+        "OK INTEGER"
+      ],
+      "rows": [
+        {
+          "fid": 1,
+          "geom": "47500003e6100000d7a3703d0aff6040d7a3703d0aff604014ae47e17af4404014ae47e17af440400101000000d7a3703d0aff604014ae47e17af44040",
+          "NAME": "sugi",
+          "H": 21.5,
+          "N": 3.0,
+          "OK": 1
+        },
+        {
+          "fid": 2,
+          "geom": "47500003e61000008fc2f5285cff60408fc2f5285cff6040f6285c8fc2f54040f6285c8fc2f5404001010000008fc2f5285cff6040f6285c8fc2f54040",
+          "NAME": null,
+          "H": 1.0,
+          "N": 4.0,
+          "OK": 0
+        },
+        {
+          "fid": 3,
+          "geom": "47500003e610000048e17a14aeff604048e17a14aeff6040d7a3703d0af74040d7a3703d0af74040010100000048e17a14aeff6040d7a3703d0af74040",
+          "NAME": "last",
+          "H": 3.0,
+          "N": 6.0,
+          "OK": 1
+        }
+      ]
+    }
+  }
+}

@@ -149,32 +149,9 @@ class ImportExportService {
     }
   }
 
-  /// サポートされているインポート形式のリストを取得
-  List<FileFormat> getSupportedImportFormats() {
-    return _importers.map((i) => i.format).toList();
-  }
-
   /// サポートされているエクスポート形式のリストを取得
   List<FileFormat> getSupportedExportFormats() {
     return _exporters.map((e) => e.format).toList();
-  }
-
-  // ============================================
-  // 後方互換性のためのメソッド
-  // ============================================
-
-  /// サポートされているインポート拡張子のリストを取得
-  /// 後方互換性のために維持
-  List<String> getSupportedImportExtensions() {
-    final extensions = <String>[];
-    for (final importer in _importers) {
-      extensions.add(importer.format.extension);
-      // GeoJSONは.jsonもサポート
-      if (importer.format == FileFormat.geojson) {
-        extensions.add('.json');
-      }
-    }
-    return extensions;
   }
 }
 

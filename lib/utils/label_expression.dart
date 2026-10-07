@@ -113,8 +113,10 @@ LabelEvalResult evalLabelExpression(LabelExpr e, Map<String, Object?>? props) {
   switch (e) {
     case FieldRef(:final name):
       final v = props?[name];
-      final s = v == null ? null : _stringify(v);
-      return (value: s == null || s.isEmpty ? null : s, usedField: s != null && s.isNotEmpty);
+      final s = v == null ? '' : stringifyLabelValue(v);
+      return s.isEmpty
+          ? (value: null, usedField: false)
+          : (value: s, usedField: true);
     case StringLit(:final value):
       return (value: value, usedField: false);
     case NumberLit(:final value):
@@ -126,9 +128,11 @@ LabelEvalResult evalLabelExpression(LabelExpr e, Map<String, Object?>? props) {
       var used = false;
       for (final p in parts) {
         final r = evalLabelExpression(p, props);
-        if (r.value == null) return (value: null, usedField: false); // QGIS: NULL が混じると NULL
+        if (r.value == null) {
+          return (value: null, usedField: false); // QGIS: NULL が混じると NULL
+        }
         used = used || r.usedField;
-        buf.write(_stringify(r.value!));
+        buf.write(stringifyLabelValue(r.value!));
       }
       return (value: buf.toString(), usedField: used);
     case FuncCall(:final name, :final args):
@@ -140,7 +144,12 @@ LabelEvalResult _call(String name, List<LabelEvalResult> args) {
   final used = args.any((a) => a.usedField);
   switch (name) {
     case 'concat':
-      return (value: args.map((a) => a.value == null ? '' : _stringify(a.value!)).join(), usedField: used);
+      return (
+        value: args
+            .map((a) => a.value == null ? '' : stringifyLabelValue(a.value!))
+            .join(),
+        usedField: used,
+      );
     case 'coalesce':
       for (final a in args) {
         if (a.value != null) return a;
@@ -156,32 +165,47 @@ LabelEvalResult _call(String name, List<LabelEvalResult> args) {
       return _str(args, used, (s) => s);
     case 'length':
       final v = args.first.value;
-      return (value: v == null ? null : _stringify(v).length.toDouble(), usedField: used);
+      return (
+        value: v == null ? null : stringifyLabelValue(v).length.toDouble(),
+        usedField: used,
+      );
     case 'round':
-      final v = _num(args.first.value);
-      if (v == null) return (value: null, usedField: false);
-      final places = args.length > 1 ? (_num(args[1].value) ?? 0).round() : 0;
-      final f = _pow10(places);
-      return (value: (v * f).round() / f, usedField: used);
+      return _numeric(args, used, (v, places) {
+        final f = _pow10(places);
+        return (v * f).round() / f;
+      });
     case 'format_number':
-      final v = _num(args.first.value);
-      if (v == null) return (value: null, usedField: false);
-      final places = args.length > 1 ? (_num(args[1].value) ?? 0).round() : 0;
-      return (value: _formatNumber(v, places), usedField: used);
+      return _numeric(args, used, _formatNumber);
   }
   return (value: null, usedField: false);
 }
 
-LabelEvalResult _str(List<LabelEvalResult> args, bool used, String Function(String) f) {
+LabelEvalResult _str(
+  List<LabelEvalResult> args,
+  bool used,
+  String Function(String) f,
+) {
   final v = args.first.value;
-  return (value: v == null ? null : f(_stringify(v)), usedField: used);
+  return (value: v == null ? null : f(stringifyLabelValue(v)), usedField: used);
+}
+
+/// `round(x [, 桁])` / `format_number(x [, 桁])` の共通部分。x が数でなければ NULL
+LabelEvalResult _numeric(
+  List<LabelEvalResult> args,
+  bool used,
+  Object Function(double v, int places) f,
+) {
+  final v = _num(args.first.value);
+  if (v == null) return (value: null, usedField: false);
+  final places = args.length > 1 ? (_num(args[1].value) ?? 0).round() : 0;
+  return (value: f(v, places), usedField: used);
 }
 
 double? _num(Object? v) => switch (v) {
-      final num n => n.toDouble(),
-      final String s => double.tryParse(s.trim()),
-      _ => null,
-    };
+  final num n => n.toDouble(),
+  final String s => double.tryParse(s.trim()),
+  _ => null,
+};
 
 double _pow10(int n) {
   var f = 1.0;
@@ -208,10 +232,10 @@ String _formatNumber(double v, int places) {
 }
 
 /// 値の文字列化。整数値の double は小数点なし（`1971.0` → `1971`）
-String stringifyLabelValue(Object v) => _stringify(v);
-
-String _stringify(Object v) {
-  if (v is double && v == v.roundToDouble() && v.abs() < 1e15) return v.toInt().toString();
+String stringifyLabelValue(Object v) {
+  if (v is double && v == v.roundToDouble() && v.abs() < 1e15) {
+    return v.toInt().toString();
+  }
   return v.toString();
 }
 
@@ -223,11 +247,17 @@ String formatLabelExpression(LabelExpr e) {
     case StringLit(:final value):
       return quoteString(value);
     case NumberLit(:final value):
-      return _stringify(value);
+      return stringifyLabelValue(value);
     case NullLit():
       return 'NULL';
     case ConcatOp(:final parts):
-      return parts.map((p) => p is ConcatOp ? '(${formatLabelExpression(p)})' : formatLabelExpression(p)).join(' || ');
+      return parts
+          .map(
+            (p) => p is ConcatOp
+                ? '(${formatLabelExpression(p)})'
+                : formatLabelExpression(p),
+          )
+          .join(' || ');
     case FuncCall(:final name, :final args):
       return '$name(${args.map(formatLabelExpression).join(', ')})';
   }
@@ -276,12 +306,14 @@ class _Parser {
 
   static final _identStart = RegExp('[A-Za-z_À-￿]');
   static final _identBody = RegExp('[A-Za-z0-9_À-￿]');
-  static final _numberRe = RegExp(r'^-?\d+(\.\d+)?');
+  static final _numberRe = RegExp(r'-?\d+(\.\d+)?');
 
   LabelExpr parseAll() {
     if (src.trim().isEmpty) throw const LabelExprParseException('空', 0);
     final e = _expr();
-    if (_cur.type != _Tok.end) throw LabelExprParseException('余分な文字: ${_cur.text}', _cur.offset);
+    if (_cur.type != _Tok.end) {
+      throw LabelExprParseException('余分な文字: ${_cur.text}', _cur.offset);
+    }
     return e;
   }
 
@@ -314,25 +346,7 @@ class _Parser {
       case _Tok.ident:
         _cur = _next();
         if (t.text.toUpperCase() == 'NULL') return const NullLit();
-        if (_cur.type == _Tok.lparen) {
-          final name = t.text.toLowerCase();
-          final arity = labelFunctions[name];
-          if (arity == null) throw LabelExprParseException('知らない関数: ${t.text}', t.offset);
-          _cur = _next();
-          final args = <LabelExpr>[];
-          if (_cur.type != _Tok.rparen) {
-            args.add(_expr());
-            while (_cur.type == _Tok.comma) {
-              _cur = _next();
-              args.add(_expr());
-            }
-          }
-          _expect(_Tok.rparen, ')');
-          if (args.length < arity.$1 || args.length > arity.$2) {
-            throw LabelExprParseException('${t.text} の引数の数', t.offset);
-          }
-          return FuncCall(name, args);
-        }
+        if (_cur.type == _Tok.lparen) return _funcCall(t);
         return FieldRef(t.text); // 裸の名前は列
       case _Tok.rparen:
       case _Tok.comma:
@@ -342,8 +356,33 @@ class _Parser {
     }
   }
 
+  /// 関数名 [t] の直後の `(` から。引数を読んで数を確かめる
+  LabelExpr _funcCall(_Token t) {
+    final name = t.text.toLowerCase();
+    final arity = labelFunctions[name];
+    if (arity == null) {
+      throw LabelExprParseException('知らない関数: ${t.text}', t.offset);
+    }
+    _cur = _next();
+    final args = <LabelExpr>[];
+    if (_cur.type != _Tok.rparen) {
+      args.add(_expr());
+      while (_cur.type == _Tok.comma) {
+        _cur = _next();
+        args.add(_expr());
+      }
+    }
+    _expect(_Tok.rparen, ')');
+    if (args.length < arity.$1 || args.length > arity.$2) {
+      throw LabelExprParseException('${t.text} の引数の数', t.offset);
+    }
+    return FuncCall(name, args);
+  }
+
   void _expect(_Tok type, String what) {
-    if (_cur.type != type) throw LabelExprParseException('$what が要る', _cur.offset);
+    if (_cur.type != type) {
+      throw LabelExprParseException('$what が要る', _cur.offset);
+    }
     _cur = _next();
   }
 
@@ -358,7 +397,9 @@ class _Parser {
       final buf = StringBuffer();
       _pos++;
       while (true) {
-        if (_pos >= src.length) throw LabelExprParseException('引用符が閉じていない', start);
+        if (_pos >= src.length) {
+          throw LabelExprParseException('引用符が閉じていない', start);
+        }
         if (src[_pos] == c) {
           if (_pos + 1 < src.length && src[_pos + 1] == c) {
             buf.write(c);
@@ -389,9 +430,9 @@ class _Parser {
       _pos++;
       return _Token(_Tok.comma, c, start);
     }
-    final num = _numberRe.firstMatch(src.substring(_pos));
-    if (num != null && (c != '-' || num.end > 1)) {
-      _pos += num.end;
+    final num = _numberRe.matchAsPrefix(src, _pos);
+    if (num != null && (c != '-' || num.end - _pos > 1)) {
+      _pos = num.end;
       return _Token(_Tok.number, num.group(0)!, start);
     }
     if (_identStart.hasMatch(c)) {

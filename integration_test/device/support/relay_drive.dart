@@ -75,7 +75,7 @@ class RelayGoogleDrive implements GoogleDriveService {
       _file(await relay.call('uploadBytes', {'bytes': base64Encode(bytes), 'name': fileName, 'parentId': parentId}));
 
   @override
-  Future<drive.File?> uploadFile(String localPath, String parentId, {void Function(double progress)? onProgress}) async =>
+  Future<drive.File?> uploadFile(String localPath, String parentId) async =>
       uploadBytes(await File(localPath).readAsBytes(), p.basename(localPath), parentId);
 
   @override
@@ -88,7 +88,7 @@ class RelayGoogleDrive implements GoogleDriveService {
       }));
 
   @override
-  Future<bool> downloadFile(String fileId, String localPath, {void Function(double progress)? onProgress}) async {
+  Future<bool> downloadFile(String fileId, String localPath) async {
     final b64 = await relay.call('download', {'id': fileId});
     if (b64 == null) return false;
     await File(localPath).parent.create(recursive: true);

@@ -87,12 +87,6 @@ class GoogleDriveService {
   /// UIはこれを見て、出すボタンを1つに絞ること。
   bool get hasAccount => _currentUser != null;
 
-  /// こかげマップ用のDriveルートフォルダ名
-  ///
-  /// ⚠ **値を変えないこと。** これは客のDriveに実際に作られたフォルダの名前で、
-  /// 変えると連携済みのフォルダを見失う。2026-08-27 の改名でも据え置いた。
-  static const String kMapsFolderName = 'RootMap GIS Projects';
-
   /// 必要なOAuthスコープ
   static const List<String> _scopes = [
     drive.DriveApi.driveScope, // Driveへのフルアクセス
@@ -548,9 +542,6 @@ class GoogleDriveService {
   /// Drive APIが利用可能か確認
   bool get isDriveApiAvailable => _driveApi != null;
 
-  /// Drive APIを取得（認証済みの場合のみ）
-  drive.DriveApi? get driveApi => _driveApi;
-
   // ========== Drive API の共通部分 ==========
 
   static const String _folderMime = 'application/vnd.google-apps.folder';
@@ -641,20 +632,6 @@ class GoogleDriveService {
 
   // ========== フォルダ操作 ==========
 
-  /// こかげマップのルートフォルダを取得または作成
-  Future<drive.File?> getOrCreateRootMapsFolder() => _call('フォルダ取得/作成エラー', null, (api) async {
-        // 既存のフォルダを検索
-        final result = await api.files.list(
-          q: "name = '$kMapsFolderName' and mimeType = '$_folderMime' and trashed = false",
-        );
-        final existing = result.files?.firstOrNull;
-        if (existing != null) return existing;
-
-        final created = await api.files.create(drive.File(name: kMapsFolderName, mimeType: _folderMime));
-        AppLogger.debug('[GoogleDriveService] ルートフォルダ作成: ${created.id}');
-        return created;
-      });
-
   /// 指定フォルダ内にサブフォルダを取得または作成
   Future<drive.File?> getOrCreateSubFolder(String parentId, String folderName) =>
       _call('サブフォルダ作成エラー', null, (api) async {
@@ -671,18 +648,6 @@ class GoogleDriveService {
           supportsAllDrives: true,
         );
         AppLogger.debug('[GoogleDriveService] サブフォルダ作成: $folderName');
-        return created;
-      });
-
-  /// 新しいプロジェクトフォルダを作成
-  Future<drive.File?> createProjectFolder(String name, {String? parentId}) =>
-      _call('フォルダ作成エラー', null, (api) async {
-        // 親フォルダが指定されていない場合はルートフォルダに作成
-        final parent = parentId ?? (await getOrCreateRootMapsFolder())?.id;
-        if (parent == null) return null;
-
-        final created = await api.files.create(drive.File(name: name, mimeType: _folderMime, parents: [parent]));
-        AppLogger.debug('[GoogleDriveService] プロジェクトフォルダ作成: ${created.id}');
         return created;
       });
 

@@ -16,8 +16,6 @@
 // Root Maps: 同期Pullハンドラー
 // Google Drive→ローカルへのPull（ダウンロード）処理を担当
 
-import 'package:path/path.dart' as p;
-
 import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/kmeta.dart';
@@ -46,12 +44,10 @@ class SyncPullHandler {
   /// DriveからプロジェクトをPull（ダウンロード）
   /// [driveFolderId] DriveフォルダID
   /// [localPath] ローカル保存先パス
-  /// [onProgress] 進捗コールバック
   /// [snapshot] 同じ連携先の判定に使った材料（あれば Drive をたどり直さない）
   Future<SyncResult> pull(
     String driveFolderId,
     String localPath, {
-    void Function(SyncProgress progress)? onProgress,
     SyncSnapshot? snapshot,
   }) async {
     if (!_driveService.isDriveApiAvailable) {
@@ -92,21 +88,7 @@ class SyncPullHandler {
 
       int downloadedCount = 0;
       int skippedCount = 0;
-      int completedCount = 0;
       final syncedFiles = <String, KMetaSyncFile>{};
-
-      final totalBytes = filesToDownload.fold<int>(
-        0, (sum, e) => sum + (int.tryParse(e.file.size ?? '') ?? 0),
-      );
-      int processedBytes = 0;
-
-      onProgress?.call(SyncProgress(
-        currentFile: t.drive.syncProgressStart,
-        processedCount: 0,
-        totalCount: filesToDownload.length,
-        processedBytes: 0,
-        totalBytes: totalBytes,
-      ));
 
       await SyncFileOperations.runParallel(
         filesToDownload.map((driveEntry) => () async {
@@ -124,15 +106,6 @@ class SyncPullHandler {
           } else {
             skippedCount++;
           }
-          processedBytes += int.tryParse(driveFile.size ?? '') ?? 0;
-          completedCount++;
-          onProgress?.call(SyncProgress(
-            currentFile: p.posix.basename(driveEntry.relativePath),
-            processedCount: completedCount,
-            totalCount: filesToDownload.length,
-            processedBytes: processedBytes,
-            totalBytes: totalBytes,
-          ));
         }),
         maxConcurrency: _downloadConcurrency,
       );
@@ -149,14 +122,6 @@ class SyncPullHandler {
 
       // Driveに存在しない空フォルダをローカルから削除（深い階層から処理）
       await _fileOps.removeEmptyLocalDirs(localPath, tree.folderPaths.toSet());
-
-      onProgress?.call(SyncProgress(
-        currentFile: t.drive.syncProgressComplete,
-        processedCount: filesToDownload.length,
-        totalCount: filesToDownload.length,
-        processedBytes: totalBytes,
-        totalBytes: totalBytes,
-      ));
 
       AppLogger.debug(
         '[SyncEngine] Pull完了: $downloadedCount downloaded, $deletedCount deleted, $skippedCount skipped',
@@ -187,23 +152,6 @@ class SyncPullHandler {
     }
   }
 
-  /// 共有URLからプロジェクトをPull
-  /// [shareUrl] Google Drive共有URL
-  /// [localPath] ローカル保存先パス
-  /// [onProgress] 進捗コールバック
-  Future<SyncResult> pullFromUrl(
-    String shareUrl,
-    String localPath, {
-    void Function(SyncProgress progress)? onProgress,
-  }) async {
-    final folderId = GoogleDriveService.extractFolderIdFromUrl(shareUrl);
-    if (folderId == null) {
-      return SyncResult.failure(t.drive.invalidShareUrl);
-    }
-
-    return pull(folderId, localPath, onProgress: onProgress);
-  }
-
   /// Driveフォルダをローカルにクローン
   ///
   /// 実質的には「メタデータ設定 → 空フォルダへのpull」と同じ。
@@ -214,7 +162,6 @@ class SyncPullHandler {
     required String folderName,
     required String driveUrl,
     required bool isReadOnly,
-    void Function(SyncProgress progress)? onProgress,
   }) async {
     AppLogger.debug('[SyncEngine] クローン開始: $folderName ($driveId)');
 
@@ -234,7 +181,7 @@ class SyncPullHandler {
     }
 
     // あとは通常のダウンロード同期と同じ
-    final result = await pull(driveId, localPath, onProgress: onProgress);
+    final result = await pull(driveId, localPath);
 
     if (!result.success) {
       AppLogger.error('[SyncEngine] クローン失敗: ${result.errorMessage}');

@@ -138,14 +138,6 @@ class FakeGoogleDrive implements GoogleDriveService {
   }
 
   @override
-  Future<drive.File?> createProjectFolder(String name, {String? parentId}) async {
-    _count('createProjectFolder');
-    final id = _newId();
-    items[id] = FakeDriveItem(id: id, name: name, parentId: parentId, isFolder: true);
-    return items[id]!.toFile();
-  }
-
-  @override
   Future<drive.File?> uploadBytes(Uint8List bytes, String fileName, String parentId) async {
     _count('uploadBytes');
     final existing = findByName(parentId, fileName);
@@ -167,11 +159,7 @@ class FakeGoogleDrive implements GoogleDriveService {
   }
 
   @override
-  Future<drive.File?> uploadFile(
-    String localPath,
-    String parentId, {
-    void Function(double progress)? onProgress,
-  }) async {
+  Future<drive.File?> uploadFile(String localPath, String parentId) async {
     _count('uploadFile');
     return uploadBytes(await File(localPath).readAsBytes(), p.basename(localPath), parentId);
   }
@@ -196,11 +184,7 @@ class FakeGoogleDrive implements GoogleDriveService {
   }
 
   @override
-  Future<bool> downloadFile(
-    String fileId,
-    String localPath, {
-    void Function(double progress)? onProgress,
-  }) async {
+  Future<bool> downloadFile(String fileId, String localPath) async {
     _count('downloadFile');
     final f = items[fileId];
     if (f == null || f.isFolder || f.trashed) return false;

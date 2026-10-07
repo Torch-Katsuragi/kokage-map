@@ -17,7 +17,6 @@
 // Google DriveとローカルファイルのPush/Pull同期を担当するオーケストレーター
 
 import 'package:googleapis/drive/v3.dart' as drive;
-import 'package:path/path.dart' as p;
 
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
@@ -110,58 +109,6 @@ class SyncResult {
   }
 }
 
-/// 同期進捗情報
-class SyncProgress {
-  /// 現在のファイル名
-  final String currentFile;
-
-  /// 処理済みファイル数
-  final int processedCount;
-
-  /// 総ファイル数
-  final int totalCount;
-
-  /// 処理済みバイト数（null = 不明）
-  final int? processedBytes;
-
-  /// 総バイト数（null = 不明）
-  final int? totalBytes;
-
-  /// 進捗率（0.0〜1.0）
-  double get progress =>
-      totalCount > 0 ? processedCount / totalCount : 0.0;
-
-  const SyncProgress({
-    required this.currentFile,
-    required this.processedCount,
-    required this.totalCount,
-    this.processedBytes,
-    this.totalBytes,
-  });
-}
-
-/// ローカル同期対象ファイル
-///
-/// ⚠ `dart:io` の `File` は持たない。web には無いため
-/// （2026-08-27 に載せ替え）。パスとサイズだけあれば足りる。
-class LocalSyncFile {
-  final String path;
-  final String relativePath;
-
-  /// バイト数。列挙時に1回だけ問い合わせて持ち回る
-  /// （web はサイズ取得もハンドル操作なので、都度聞くと高い）。
-  final int size;
-
-  const LocalSyncFile({
-    required this.path,
-    required this.relativePath,
-    required this.size,
-  });
-
-  /// ファイル名（拡張子つき）
-  String get name => p.basename(path);
-}
-
 /// Drive側ファイルエントリ（相対パス付き）
 class DriveFileEntry {
   final drive.File file;
@@ -204,25 +151,16 @@ class SyncEngine {
         _conflictResolver =
             SyncConflictResolver(driveService: _driveService, kmetaService: _kmetaService, fileOps: _fileOps);
 
-  /// プロジェクトをDriveにPush（アップロード）
-  Future<SyncResult> push(
-    String projectPath, {
-    String? driveFolder,
-    void Function(SyncProgress progress)? onProgress,
-  }) =>
-      _pushHandler.push(projectPath, driveFolder: driveFolder, onProgress: onProgress);
+  /// プロジェクトを Drive の [driveFolder] にPush（アップロード）
+  Future<SyncResult> push(String projectPath, {required String driveFolder}) =>
+      _pushHandler.push(projectPath, driveFolder: driveFolder);
 
   /// フォルダ単位でPush（[snapshot] は同じフォルダの判定に使った材料）
   Future<SyncResult> pushFolder(String localPath, {SyncSnapshot? snapshot}) =>
       _pushHandler.pushFolder(localPath, snapshot: snapshot);
 
   /// DriveからプロジェクトをPull（ダウンロード）
-  Future<SyncResult> pull(
-    String driveFolderId,
-    String localPath, {
-    void Function(SyncProgress progress)? onProgress,
-  }) =>
-      _pullHandler.pull(driveFolderId, localPath, onProgress: onProgress);
+  Future<SyncResult> pull(String driveFolderId, String localPath) => _pullHandler.pull(driveFolderId, localPath);
 
   /// Driveフォルダをローカルにクローン
   Future<bool> cloneFromDrive({
@@ -231,7 +169,6 @@ class SyncEngine {
     required String folderName,
     required String driveUrl,
     required bool isReadOnly,
-    void Function(SyncProgress progress)? onProgress,
   }) =>
       _pullHandler.cloneFromDrive(
         driveId: driveId,
@@ -239,7 +176,6 @@ class SyncEngine {
         folderName: folderName,
         driveUrl: driveUrl,
         isReadOnly: isReadOnly,
-        onProgress: onProgress,
       );
 
   /// フォルダ単位でPull（[snapshot] は同じフォルダの判定に使った材料）

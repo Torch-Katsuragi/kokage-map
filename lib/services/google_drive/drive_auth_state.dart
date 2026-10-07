@@ -117,12 +117,4 @@ class DriveAuthState extends ChangeNotifier {
     _errorMessage = message;
     notifyListeners();
   }
-
-  /// 状態をリセット
-  void reset() {
-    _status = DriveAuthStatus.unauthenticated;
-    _user = null;
-    _errorMessage = null;
-    notifyListeners();
-  }
 }

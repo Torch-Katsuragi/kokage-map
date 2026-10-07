@@ -122,18 +122,6 @@ class SyncFileOperations {
     return out;
   }
 
-  /// push 用に同期対象ファイルを収集（サイズ付き）
-  Future<List<LocalSyncFile>> collectSyncFiles(String projectPath) async {
-    final files = <LocalSyncFile>[];
-    for (final entry in await listLocalSyncFiles(projectPath)) {
-      // サイズはここで1回だけ聞いて持ち回る（web は都度問い合わせが高い）
-      final size = await fs.length(entry.path) ?? 0;
-      files.add(LocalSyncFile(path: entry.path, relativePath: entry.relativePath, size: size));
-      AppLogger.debug('[SyncEngine] 同期対象: ${entry.relativePath}');
-    }
-    return files;
-  }
-
   /// 手元の同期対象ファイルの、相対パス→更新日時
   Future<Map<String, DateTime>> scanLocalFiles(String localPath) async {
     final localFiles = <String, DateTime>{};

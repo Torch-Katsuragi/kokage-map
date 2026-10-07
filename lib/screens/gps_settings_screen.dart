@@ -35,6 +35,7 @@ import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
 import '../services/gps_manager_service.dart';
+import '../utils/app_permissions.dart';
 import '../widgets/gps_info_widget.dart';
 import '../widgets/settings_widgets.dart';
 
@@ -150,10 +151,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
   Future<bool> _checkBluetoothPermissions() async {
     try {
       // Android 12以降の場合は新しい権限を確認
-      if (await Permission.bluetoothScan.isGranted &&
-          await Permission.bluetoothConnect.isGranted) {
-        return true;
-      }
+      if (await AppPermissions.bluetoothGranted()) return true;
 
       // 権限要求
       final Map<Permission, PermissionStatus> statuses =

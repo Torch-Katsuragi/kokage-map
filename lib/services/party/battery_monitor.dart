@@ -51,6 +51,8 @@ class BatteryMonitor {
     if (_started) return;
     _started = true;
     await _refresh();
+    // 初回取得を待つ間に dispose された（すぐ退出した）なら、購読もタイマーも張らない。
+    if (!_started) return;
     // 充放電状態が変わったタイミングで残量を取り直す。
     _stateSub = _battery.onBatteryStateChanged.listen(
       (_) => _refresh(),

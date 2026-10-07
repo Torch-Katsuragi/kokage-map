@@ -125,35 +125,23 @@ extension KFileSystemRecursive on KFileSystem {
   /// > [!WARNING] 深いツリーでは高くつく
   /// > web はディレクトリ1つにつきハンドル走査が1回。
   /// > 呼ぶ側で回数を減らせるなら減らすこと。
-  Future<List<KFileEntry>> listRecursive(String path) async {
-    final result = <KFileEntry>[];
-    final queue = <String>[path];
-    while (queue.isNotEmpty) {
-      final dir = queue.removeLast();
-      for (final entry in await list(dir)) {
-        if (entry.isDirectory) {
-          queue.add(entry.path);
-        } else {
-          result.add(entry);
-        }
-      }
-    }
-    return result;
-  }
+  Future<List<KFileEntry>> listRecursive(String path) => _walk(path, directories: false);
 
   /// 下位のディレクトリを全部たどって**ディレクトリだけ**を返す。
   ///
   /// `dart:io` の `Directory.list(recursive: true).whereType<Directory>()` 相当。
   /// 空フォルダの掃除などに使う。
-  Future<List<KFileEntry>> listDirectoriesRecursive(String path) async {
+  Future<List<KFileEntry>> listDirectoriesRecursive(String path) => _walk(path, directories: true);
+
+  /// [path] の下を全部たどり、[directories] ならディレクトリだけ、でなければファイルだけを返す
+  Future<List<KFileEntry>> _walk(String path, {required bool directories}) async {
     final result = <KFileEntry>[];
     final queue = <String>[path];
     while (queue.isNotEmpty) {
       final dir = queue.removeLast();
       for (final entry in await list(dir)) {
-        if (!entry.isDirectory) continue;
-        result.add(entry);
-        queue.add(entry.path);
+        if (entry.isDirectory) queue.add(entry.path);
+        if (entry.isDirectory == directories) result.add(entry);
       }
     }
     return result;

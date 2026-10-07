@@ -16,6 +16,7 @@
 // Root Maps: フォルダノードクラス
 // ファイルシステムのフォルダに対応するレイヤツリーノード
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/utils/app_logger.dart';
 
@@ -102,56 +103,55 @@ class FolderNode extends LayerTreeNode {
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
 
   /// このフォルダ直下のFolderNode, GeoPackageNode, ImageNodeのみ生成
+  ///
+  /// 子の作り方はサブクラスが [loadFolderNodes] / [loadGeoPackageNodes] / [loadImageNodes] で替える
+  /// （グローバルフォルダ・Drive 連携フォルダ）。
   @override
   Future<void> updateChildren() async {
+    if (!await prepareDirectory()) return;
+
     // メタデータを読み込み（展開状態を復元）
     await loadMetaState();
 
     // ファイルシステムから現在の構造を取得。
     // 列挙は1回だけ行い、3つのローダーに配る（web はハンドル走査が高いため）
     final entries = await listOnce();
-    final folderNodes = await FolderNode.loadNodes(this, entries: entries);
-    final gpkgNodes = await GeoPackageNode.loadNodes(this, entries: entries);
-    final photoNodes = await ImageNode.loadNodes(this, entries: entries);
-
-    // 現在のファイルシステムに存在するノード名のセットを作成
-    final currentFolderNames = folderNodes.map((n) => n.name).toSet();
-    final currentGpkgNames = gpkgNodes.map((n) => n.name).toSet();
-    final currentPhotoNames = photoNodes.map((n) => n.name).toSet();
-    final allCurrentNames = {
-      ...currentFolderNames,
-      ...currentGpkgNames,
-      ...currentPhotoNames,
-    };
-
-    // 既存の子ノードで、ファイルシステムに存在しないものを削除
-    // ただし、sys・グローバル構造ノードはファイルシステム外に存在するため削除しない
-    children.removeWhere((child) {
-      if (child is SysNode || child is GlobalFolderNode || child is GlobalSubFolderNode) {
-        return false;
-      }
-      final shouldRemove = !allCurrentNames.contains(child.name);
-      if (shouldRemove) {
-        child.parent = null;
-      }
-      return shouldRemove;
-    });
-
-    // 新しいノードを追加（既存ノードは再利用）
-    for (final node in folderNodes) {
-      addChildIfNotExists(node);
-    }
-    for (final node in gpkgNodes) {
-      addChildIfNotExists(node);
-    }
-    for (final node in photoNodes) {
-      addChildIfNotExists(node);
-    }
+    syncChildren(
+      [
+        ...await loadFolderNodes(entries),
+        ...await loadGeoPackageNodes(entries),
+        ...await loadImageNodes(entries),
+      ],
+      keep: keepsChild,
+    );
 
     // KMetaの可視性設定を子ノードに適用
     await applyMetaVisibility();
-
   }
+
+  /// 子を読む前の用意。false なら何もしない（フォルダが無いなど）
+  @protected
+  Future<bool> prepareDirectory() async => true;
+
+  /// 直下のフォルダのノード
+  @protected
+  Future<List<LayerTreeNode>> loadFolderNodes(List<KFileEntry> entries) =>
+      FolderNode.loadNodes(this, entries: entries);
+
+  /// 直下の .gpkg のノード
+  @protected
+  Future<List<LayerTreeNode>> loadGeoPackageNodes(List<KFileEntry> entries) =>
+      GeoPackageNode.loadNodes(this, entries: entries);
+
+  /// 直下の画像のノード
+  @protected
+  Future<List<LayerTreeNode>> loadImageNodes(List<KFileEntry> entries) =>
+      ImageNode.loadNodes(this, entries: entries);
+
+  /// ファイルシステムに無くても外さない子。sys・グローバル構造ノードはファイルシステム外にある
+  @protected
+  bool keepsChild(LayerTreeNode child) =>
+      child is SysNode || child is GlobalFolderNode || child is GlobalSubFolderNode;
 
   /// メタデータから状態を読み込み（サブクラスから呼び出し可能）
   Future<void> loadMetaState() async {

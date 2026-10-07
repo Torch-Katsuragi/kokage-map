@@ -162,6 +162,76 @@ class SpatialIndexManager {
     }
   }
 
+  /// [tableName] の SpatiaLite 依存トリガーと rtree_ トリガーを検出・除去（書き込み前に 1 回）
+  ///
+  /// QGIS/GeoPandasが生成するRTree自動更新トリガーは
+  /// ST_IsEmpty, ST_MinX等のSpatiaLite関数を使用するが、
+  /// sqfliteにはSpatiaLite拡張がないためINSERT/UPDATE時にエラーとなる。
+  /// こかげマップはここ（[indexRows]）でrtreeを管理するため、
+  /// これらのトリガーは不要。
+  Future<void> removeTableTriggers(String tableName) async {
+    try {
+      final db = await connection.getDatabase();
+      // テーブルに関連するトリガーを全取得
+      final triggers = await db.rawQuery(
+        'SELECT name, sql FROM sqlite_master '
+        "WHERE type = 'trigger' AND tbl_name = ?",
+        [tableName],
+      );
+
+      if (triggers.isEmpty) return;
+
+      // SpatiaLite関数を使っているトリガーを検出
+      const spatialiteFunctions = [
+        'ST_IsEmpty',
+        'ST_MinX',
+        'ST_MaxX',
+        'ST_MinY',
+        'ST_MaxY',
+        'ST_MinZ',
+        'ST_MaxZ',
+        'ST_MinM',
+        'ST_MaxM',
+      ];
+
+      final triggersToRemove = <String>[];
+      for (final trigger in triggers) {
+        final sql = trigger['sql'] as String? ?? '';
+        final name = trigger['name'] as String;
+
+        // SpatiaLite関数を使っているトリガーを検出
+        final usesSpatialiteFunction = spatialiteFunctions.any(
+          sql.contains,
+        );
+
+        // rtree仮想テーブルを参照するトリガーを検出
+        // (DELETE時のrtreeクリーンアップ等、ST_関数を使わないものも含む)
+        final referencesRtree = name.startsWith('rtree_');
+
+        if (usesSpatialiteFunction || referencesRtree) {
+          // ⚠ 落とす前に定義を控える（クローズ時に復元してQGISへ返す）
+          qgisInterop.rememberTrigger(name, sql);
+          triggersToRemove.add(name);
+        }
+      }
+
+      if (triggersToRemove.isEmpty) return;
+
+      // トリガーを除去
+      for (final name in triggersToRemove) {
+        await db.execute('DROP TRIGGER IF EXISTS ${quoteIdent(name)}');
+      }
+
+      AppLogger.debug(
+        '[SpatialIndexManager] 🧹 SpatiaLiteトリガーを除去: '
+        '$tableName (${triggersToRemove.length}個: '
+        '${triggersToRemove.join(", ")})',
+      );
+    } catch (e) {
+      AppLogger.debug('[SpatialIndexManager] ⚠️ トリガー除去エラー: $tableName - $e');
+    }
+  }
+
   /// SQLにSpatiaLite固有の関数が含まれているかチェック
   bool _containsSpatiaLiteFunctions(String sql) {
     const spatialiteFunctions = [

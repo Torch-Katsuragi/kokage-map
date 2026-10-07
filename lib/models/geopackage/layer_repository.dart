@@ -72,6 +72,28 @@ class LayerRepository {
     }
   }
 
+  /// レイヤ名（[getLayerNames] の順）→ ジオメトリタイプ。1 回の問い合わせで引く（レイヤごとに [getGeometryType] を呼ばない）
+  Future<Map<String, GeometryType?>> getLayerGeometryTypes() async {
+    final names = await getLayerNames();
+    if (names.isEmpty) return {};
+    final types = <String, String?>{};
+    try {
+      final db = await connection.getDatabase();
+      for (final row in await db.rawQuery('SELECT table_name, geometry_type_name FROM gpkg_geometry_columns')) {
+        types.putIfAbsent(row['table_name'] as String, () => row['geometry_type_name'] as String?);
+      }
+    } catch (e) {
+      AppLogger.debug('[LayerRepository] getLayerGeometryTypes: エラー発生 - $e');
+    }
+    return {
+      for (final name in names)
+        name: switch (types[name]) {
+          final String t => GeometryType.fromString(t),
+          null => null,
+        },
+    };
+  }
+
   /// レイヤ追加（DBにテーブル作成）
   /// QGIS互換性のため、PRIMARY KEYは fid を使用
   Future<void> addLayer(String name, GeometryType geomType) async {
@@ -109,6 +131,8 @@ class LayerRepository {
         'm': 0,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
+      schema.invalidate(); // 同名の古い控えが残らないように
+
       // 空間インデックスを作成
       await spatialIndex.createSpatialIndex(name);
     } catch (e) {
@@ -136,8 +160,8 @@ class LayerRepository {
         whereArgs: [name],
       );
 
-      // PRIMARY KEYキャッシュをクリア
-      schema.clearPrimaryKeyCache();
+      // 控えた列・主キーを捨てる
+      schema.invalidate();
     } catch (e) {
       AppLogger.debug('[LayerRepository] removeLayer: エラー発生 - $e');
     }
@@ -169,38 +193,13 @@ class LayerRepository {
         whereArgs: [oldName],
       );
 
-      // PRIMARY KEYキャッシュをクリア
-      schema.clearPrimaryKeyCache();
+      // 控えた列・主キーを捨てる
+      schema.invalidate();
 
       AppLogger.debug('[LayerRepository] renameLayer: $oldName -> $newName');
     } catch (e) {
       AppLogger.debug('[LayerRepository] renameLayer: エラー発生 - $e');
       rethrow;
-    }
-  }
-
-  /// レイヤが存在するかチェック
-  Future<bool> layerExists(String name) async {
-    try {
-      final layers = await getLayerNames();
-      return layers.contains(name);
-    } catch (e) {
-      AppLogger.debug('[LayerRepository] layerExists: エラー発生 - $e');
-      return false;
-    }
-  }
-
-  /// レイヤのフィーチャ数を取得
-  Future<int> getFeatureCount(String tableName) async {
-    try {
-      final db = await connection.getDatabase();
-      final result = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM ${quoteIdent(tableName)}',
-      );
-      return (result.first['count'] as int?) ?? 0;
-    } catch (e) {
-      AppLogger.debug('[LayerRepository] getFeatureCount: エラー発生 - $e');
-      return 0;
     }
   }
 }

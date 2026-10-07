@@ -64,6 +64,28 @@ class GeoPackageConnection {
 
   static String _registryKey(String path) => p.canonicalize(path);
 
+  /// 同じファイルを開いている接続で共有するスキーマの控え（正規化した絶対パス → 控え）。
+  ///
+  /// sqflite の singleInstance で同じパスの接続は 1 つの DB を共有しているので、控えもパスごとに 1 つにする
+  /// （接続ごとに持つと、別の [GeoPackageFile] が足した列が見えない）。
+  /// 開き直したとき・閉じたときに捨てる（閉じている間に geodiff や Drive がファイルを書き換えるため）。
+  static final Map<String, GpkgSchemaCache> _schemaCaches = {};
+
+  /// パスが決まらない接続用（開けないので中身は空のまま）
+  final GpkgSchemaCache _detachedCache = GpkgSchemaCache();
+
+  /// このファイルのスキーマの控え
+  GpkgSchemaCache get schemaCache {
+    final path = absPath;
+    if (path == null) return _detachedCache;
+    return _schemaCaches[_registryKey(path)] ??= GpkgSchemaCache();
+  }
+
+  void _dropSchemaCache() {
+    final path = absPath;
+    if (path != null) _schemaCaches.remove(_registryKey(path));
+  }
+
   /// 書き込みが残っている接続をすぐ書き戻す（web のみ。タブを隠した・閉じかけたとき。見回りの待ちを飛ばす）
   static Future<void> flushPendingCheckIns() async {
     if (fs.hasRealPaths) return;
@@ -264,7 +286,7 @@ class GeoPackageConnection {
   Future<void> checkIn() async {
     if (fs.hasRealPaths) return;
     if (!_isInitialized || _database == null) return;
-    final absPath = _resolveAbsolutePath();
+    final absPath = this.absPath;
     if (absPath == null) return;
     try {
       final bytes = await databaseFactory.readDatabaseBytes(_databaseKey(absPath));
@@ -290,8 +312,8 @@ class GeoPackageConnection {
     return 'gpkg_$digest.db';
   }
 
-  /// このGeoPackageの絶対パス（未設定なら null）
-  String? _resolveAbsolutePath() {
+  /// このGeoPackageの絶対パス（[absolutePath] が無ければ [projectRootDir] と [pathList] から。どちらも無ければ null）
+  String? get absPath {
     if (absolutePath != null) return absolutePath;
     if (projectRootDir == null) return null;
     return p.joinAll([projectRootDir!, ...pathList]);
@@ -300,7 +322,7 @@ class GeoPackageConnection {
   /// データベース初期化の実体
   Future<void> _initializeDatabaseImpl() async {
     // 絶対パスが指定されている場合はそれを使用（グローバルフォルダ用）
-    final absPath = _resolveAbsolutePath();
+    final absPath = this.absPath;
     if (absPath == null) {
       AppLogger.debug('[GeoPackageConnection] 初期化失敗: projectRootDirが未設定');
       return;
@@ -346,6 +368,7 @@ class GeoPackageConnection {
       await _validateGeoPackageStructure();
 
       _isInitialized = true;
+      _dropSchemaCache(); // 閉じている間に外で書き換えられたかもしれない
       _registeredKey = _registryKey(absPath);
       (_openConnections[_registeredKey!] ??= <GeoPackageConnection>{}).add(this);
 
@@ -565,6 +588,7 @@ class GeoPackageConnection {
 
   /// データベースのクローズ処理
   Future<void> dispose() async {
+    _dropSchemaCache();
     final key = _registeredKey;
     if (key != null) {
       final set = _openConnections[key];
@@ -591,18 +615,12 @@ class GeoPackageConnection {
       // まずデータベース接続を閉じる
       await dispose();
 
-      // 絶対パスが指定されている場合はそれを使用（グローバルフォルダ用）
-      final String absPath;
-      if (absolutePath != null) {
-        absPath = absolutePath!;
-      } else {
-        if (projectRootDir == null) {
-          AppLogger.debug(
-            '[GeoPackageConnection] deleteFile: projectRootDirが未設定',
-          );
-          return false;
-        }
-        absPath = p.joinAll([projectRootDir!, ...pathList]);
+      final absPath = this.absPath;
+      if (absPath == null) {
+        AppLogger.debug(
+          '[GeoPackageConnection] deleteFile: projectRootDirが未設定',
+        );
+        return false;
       }
       if (!await fs.exists(absPath)) {
         AppLogger.debug(
@@ -619,5 +637,22 @@ class GeoPackageConnection {
       AppLogger.debug('スタックトレース: $stack');
       return false;
     }
+  }
+}
+
+/// テーブルの構造の控え（`PRAGMA table_info` と主キー名）。
+///
+/// 属性の保存やフィーチャの追加のたびに同じ PRAGMA を引いていたので控える。
+/// ⚠ 列やテーブルを変えたら必ず [clear] する（`GeoPackageSchema.invalidate`）。
+class GpkgSchemaCache {
+  /// テーブル名 → `PRAGMA table_info` の行
+  final Map<String, List<Map<String, Object?>>> tableInfo = {};
+
+  /// テーブル名 → 主キーの列名（無ければ fid / id / rowid）
+  final Map<String, String> primaryKey = {};
+
+  void clear() {
+    tableInfo.clear();
+    primaryKey.clear();
   }
 }

@@ -18,15 +18,17 @@
 // turf_dartのFeatureCollectionオブジェクトをメインデータとして使用
 
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:turf/turf.dart' as turf;
 
-import '../../converters/turf_converter.dart';
 import '../../core/node_types.dart';
 import '../../services/kmeta_service.dart';
 import '../geometry_type.dart';
+import '../geopackage/feature_repository.dart' show toGeoMultiLine, toGeoMultiPolygon, toGeoPoint;
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
 import 'feature_node.dart';
@@ -72,10 +74,6 @@ abstract class LayerNode extends LayerTreeNode {
   /// turf_dartのFeatureをrowIdで管理するMap（真のデータソース）
   final Map<int, turf.Feature> _featureMap = {};
 
-  /// 変更の追跡フラグ（将来的なバッチ保存最適化用に予約）
-  // ignore: unused_field
-  bool _isDirty = false;
-
   /// dispose済みフラグ（null参照対策）
   bool _isDisposed = false;
 
@@ -93,28 +91,12 @@ abstract class LayerNode extends LayerTreeNode {
   bool get isDisposed => _isDisposed;
 
   /// 親のGeoPackageNodeを取得
-  GeoPackageNode get geoPackageNode {
-    LayerTreeNode? current = parent;
-    while (current != null) {
-      if (current is GeoPackageNode) {
-        return current;
-      }
-      current = current.parent;
-    }
-    throw StateError('LayerNode must have a GeoPackageNode parent');
-  }
+  GeoPackageNode get geoPackageNode =>
+      ancestorOf<GeoPackageNode>() ??
+      (throw StateError('LayerNode must have a GeoPackageNode parent'));
 
   /// 親のFolderNodeを取得
-  FolderNode? get folderNode {
-    LayerTreeNode? current = parent;
-    while (current != null) {
-      if (current is FolderNode) {
-        return current;
-      }
-      current = current.parent;
-    }
-    return null;
-  }
+  FolderNode? get folderNode => ancestorOf<FolderNode>();
 
   @override
   Future<void> persistVisibility() async {
@@ -360,15 +342,6 @@ abstract class LayerNode extends LayerTreeNode {
   /// 読み込み済みならその値、未ロードなら null（描画の同期経路用）
   KMetaLayerStyle? get kmetaStyleIfLoaded => _cachedKmetaStyle;
 
-  /// turf_dartのFeatureCollectionオブジェクトを取得
-  /// _featureMapから動的に生成（常に最新の状態を反映）
-  turf.FeatureCollection get turfFeatureCollection {
-    if (_isDisposed) {
-      throw StateError('LayerNode is disposed');
-    }
-    return TurfConverter.createFeatureCollection(_featureMap.values.toList());
-  }
-
   /// rowIdでFeatureを取得（null安全）
   turf.Feature? getFeatureById(int rowId) {
     if (_isDisposed) return null;
@@ -382,7 +355,6 @@ abstract class LayerNode extends LayerTreeNode {
       return;
     }
     _featureMap[rowId] = feature;
-    _markDirty();
   }
 
   /// Featureを削除（内部用、null参照対策含む）
@@ -392,7 +364,6 @@ abstract class LayerNode extends LayerTreeNode {
       return;
     }
     _featureMap.remove(rowId);
-    _markDirty();
   }
 
   /// Featureの属性を更新（内部用、null参照対策含む）
@@ -408,7 +379,6 @@ abstract class LayerNode extends LayerTreeNode {
 
     feature.properties ??= {};
     feature.properties![key] = value;
-    _markDirty();
     return true;
   }
 
@@ -421,11 +391,6 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// 地物の数（地図に読み込んだ分）。[features] のように一覧を複製しない（レイヤ一覧の行が組み立てのたびに数える）
   int get featureCount => _featureMap.length;
-
-  /// position型の座標データを取得（全フィーチャの重心座標リスト）
-  List<List<double>> get positions {
-    return features.map((feature) => feature.position).toList();
-  }
 
   /// 全フィーチャの実座標を収集（バウンディングボックス計算等に使用）
   List<LatLng> getAllCoordinates() {
@@ -442,13 +407,6 @@ abstract class LayerNode extends LayerTreeNode {
       }
     }
     return coords;
-  }
-
-  /// 変更フラグをセット
-  void _markDirty() {
-    if (_isDisposed) return;
-    _isDirty = true;
-    // FeatureCollectionは動的生成なのでキャッシュクリア不要
   }
 
   /// 属性テーブルのカラム名キャッシュ
@@ -520,17 +478,6 @@ abstract class LayerNode extends LayerTreeNode {
     return node;
   }
 
-  /// FeatureNodeを安全に追加するメソッド
-  void addFeature(FeatureNode feature) {
-    if (_isDisposed) {
-      AppLogger.debug('[WARNING] LayerNode is disposed, cannot add feature');
-      return;
-    }
-    super.addChild(feature);
-    // _featureMapにも追加（FeatureNodeが持つturfFeatureを登録）
-    addFeatureToMap(feature.rowId, feature.turfFeature);
-  }
-
   /// FeatureNodeを安全に削除するメソッド
   void removeFeature(FeatureNode feature) {
     if (_isDisposed) {
@@ -555,42 +502,17 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
-    final nodes = <LayerTreeNode>[];
-    if (parent is! GeoPackageNode) return nodes;
-    final gpkgNode = parent;
-    final tableNames = await gpkgNode.geoPackageFile.getLayerNames();
-    for (final tableName in tableNames) {
-      final type = await gpkgNode.geoPackageFile.getGeometryType(tableName);
-      if (type == GeometryType.point) {
-        nodes.add(
-          PointLayerNode(
-            gpkgNode.geoPackageFile,
-            tableName,
-            visible: true,
-            parent: parent,
-          ),
-        );
-      } else if (type == GeometryType.linestring) {
-        nodes.add(
-          LineLayerNode(
-            gpkgNode.geoPackageFile,
-            tableName,
-            visible: true,
-            parent: parent,
-          ),
-        );
-      } else if (type == GeometryType.polygon) {
-        nodes.add(
-          PolygonLayerNode(
-            gpkgNode.geoPackageFile,
-            tableName,
-            visible: true,
-            parent: parent,
-          ),
-        );
-      }
-    }
-    return nodes;
+    if (parent is! GeoPackageNode) return [];
+    final file = parent.geoPackageFile;
+    return [
+      for (final MapEntry(key: table, value: type) in (await file.getLayerGeometryTypes()).entries)
+        ?switch (type) {
+          GeometryType.point => PointLayerNode(file, table, visible: true, parent: parent),
+          GeometryType.linestring => LineLayerNode(file, table, visible: true, parent: parent),
+          GeometryType.polygon => PolygonLayerNode(file, table, visible: true, parent: parent),
+          null => null,
+        },
+    ];
   }
 
   @override
@@ -648,18 +570,13 @@ abstract class LayerNode extends LayerTreeNode {
       final featureList = await _loadFeaturesFromDB();
       _featuresLoaded = true;
 
-      // コンストラクタで _featureMap に登録済みの新エントリを退避
-      final newEntries = <int, turf.Feature>{};
-      for (final node in featureList) {
-        final f = _featureMap[node.rowId];
-        if (f != null) newEntries[node.rowId] = f;
-      }
+      // 新しいノードはコンストラクタで _featureMap に登録（上書き）済み。読み直しで無くなった行だけ落とす
+      // （以前は新しい分を別の Map に写してから入れ直していた。1.5 万件で 2 回の写し）
+      final loadedIds = {for (final node in featureList) node.rowId};
 
       // 同期的にスワップ（ここでは await しない）
       children.clear();
-      _featureMap
-        ..clear()
-        ..addAll(newEntries);
+      _featureMap.removeWhere((rowId, _) => !loadedIds.contains(rowId));
 
       for (final node in featureList) {
         super.addChild(node);
@@ -667,7 +584,6 @@ abstract class LayerNode extends LayerTreeNode {
 
       // 子ノードの変更があったためキャッシュをクリア
       clearColumnNamesCache();
-      _markDirty();
       _featuresRevision++;
       // フィーチャが入れ替わったので、どれがどの View のものかも取り直す
       await refreshStyleGroups();
@@ -833,110 +749,50 @@ abstract class LayerNode extends LayerTreeNode {
   }
 
   /// フィーチャデータを移植先に書き込み
+  ///
+  /// 移植元を 1 回で読み（形は WGS84 に直してある）、1000 件ずつ書く。
+  /// 形は Multi のまま渡す（以前は最初の 1 部分しか取れず、線・面は Multi で読めるので 1 件も渡らなかった）
   Future<int> _migrateFeatureData(
     GeoPackageNode targetGeoPackage,
     String targetLayerName,
     GeometryType geometryType,
   ) async {
     try {
-      // 移植元のすべてのフィーチャを取得
-      final sourceFeatures = await geoPackageFile.getFeatures(layerName);
-
+      final sourceFeatures = await geoPackageFile.getFeaturesWithGeometry(layerName);
       if (sourceFeatures.isEmpty) {
         AppLogger.debug('[LayerNode] 移植するフィーチャがありません');
         return 0;
       }
-
       AppLogger.debug('[LayerNode] 移植対象フィーチャ数: ${sourceFeatures.length}個');
 
-      // バッチ処理でフィーチャを移植
-      final batchData = <Map<String, dynamic>>[];
-      const batchSize = 1000; // 1000個ずつバッチ処理
-      int migratedCount = 0;
-      int skippedCount = 0;
+      const batchSize = 1000;
+      final batch = <(geo.Geometry, Map<String, dynamic>)>[];
+      var migratedCount = 0;
+      var skippedCount = 0;
 
-      for (final sourceFeature in sourceFeatures) {
-        final featureId = sourceFeature['id'] as int?;
-        if (featureId == null) {
-          AppLogger.debug('[LayerNode] フィーチャIDがnull: $sourceFeature');
-          skippedCount++;
-          continue;
-        }
-
-        // 完全なフィーチャデータを取得（geometry変換済み）
-        final completeFeature = await geoPackageFile.getFeature(
-          layerName,
-          featureId,
-        );
-        if (completeFeature == null) {
-          AppLogger.debug('[LayerNode] フィーチャ取得失敗 ID=$featureId');
-          skippedCount++;
-          continue;
-        }
-
-        AppLogger.debug(
-          '[LayerNode] フィーチャ詳細 ID=$featureId: ${completeFeature.keys}',
-        );
-
-        // ジオメトリデータを取得
-        final geometryData = _extractGeometryData(
-          completeFeature,
-          geometryType,
-        );
-        if (geometryData == null) {
-          AppLogger.debug(
-            '[LayerNode] ジオメトリ抽出失敗 ID=$featureId, type=$geometryType',
-          );
-          AppLogger.debug('[LayerNode] フィーチャ内容: $completeFeature');
-          skippedCount++;
-          continue;
-        }
-
-        AppLogger.debug('[LayerNode] 抽出されたジオメトリ: $geometryData');
-
-        // 属性データを取得（idとgeomを除く）
-        final attributes = Map<String, dynamic>.from(completeFeature);
-        attributes.remove('id');
-        attributes.remove('geom');
-        attributes.remove('geometry'); // 変換済みgeometryも除外
-        attributes.remove('points'); // 変換済みpointsも除外
-        attributes.remove('lines'); // 変換済みlinesも除外
-        attributes.remove('polygons'); // 変換済みpolygonsも除外
-
-        AppLogger.debug('[LayerNode] 抽出された属性: $attributes');
-
-        // バッチデータに追加
-        final batchItem = {...geometryData, ...attributes};
-        batchData.add(batchItem);
-        AppLogger.debug('[LayerNode] バッチアイテム: $batchItem');
-
-        // バッチサイズに達したら処理
-        if (batchData.length >= batchSize) {
-          final processedCount = await _processMigrationBatch(
-            targetGeoPackage,
-            targetLayerName,
-            geometryType,
-            batchData,
-          );
-          migratedCount += processedCount;
-          batchData.clear();
-
-          if (migratedCount % 5000 == 0) {
-            AppLogger.debug('[LayerNode] 移植進捗: $migratedCount個完了');
-          }
-        }
+      Future<void> flush() async {
+        migratedCount += (await targetGeoPackage.geoPackageFile.addGeometries(targetLayerName, batch)).length;
+        batch.clear();
       }
 
-      // 残りのバッチを処理
-      if (batchData.isNotEmpty) {
-        final processedCount = await _processMigrationBatch(
-          targetGeoPackage,
-          targetLayerName,
-          geometryType,
-          batchData,
-        );
-        migratedCount += processedCount;
+      for (final row in sourceFeatures) {
+        final geometry = _toGeoGeometry(row['geometry'], geometryType);
+        if (geometry == null) {
+          AppLogger.debug('[LayerNode] ジオメトリ抽出失敗 ID=${row['id']}, type=$geometryType');
+          skippedCount++;
+          continue;
+        }
+        // 属性（主キー・形の列は書く側が捨てる）。メタデータは読むときに JSON を解いているので文字列に戻す
+        batch.add((
+          geometry,
+          {
+            for (final MapEntry(:key, :value) in row.entries)
+              if (key != 'geometry') key: value is Map ? jsonEncode(value) : value,
+          },
+        ));
+        if (batch.length >= batchSize) await flush();
       }
+      if (batch.isNotEmpty) await flush();
 
       AppLogger.debug(
         '[LayerNode] 移植完了: $migratedCount個成功, $skippedCount個スキップ',
@@ -949,123 +805,28 @@ abstract class LayerNode extends LayerTreeNode {
     }
   }
 
-  /// ジオメトリデータを抽出
-  Map<String, dynamic>? _extractGeometryData(
-    Map<String, dynamic> feature,
-    GeometryType geometryType,
-  ) {
-    try {
-      AppLogger.debug(
-        '[LayerNode] ジオメトリ抽出開始: type=$geometryType, 利用可能なキー=${feature.keys}',
-      );
-
-      // getFeatureメソッドは'geometry'キーにデータを格納する
-      final geometryData = feature['geometry'];
-      AppLogger.debug(
-        '[LayerNode] geometryデータ: $geometryData (型: ${geometryData.runtimeType})',
-      );
-
-      switch (geometryType) {
-        case GeometryType.point:
-          // ポイントの場合：[LatLng] の配列で返される
-          if (geometryData is List<LatLng> && geometryData.isNotEmpty) {
-            AppLogger.debug('[LayerNode] ポイント抽出成功: ${geometryData.first}');
-            return {'point': geometryData.first};
-          }
-          // 旧形式との互換性
-          final points = feature['points'] as List<LatLng>?;
-          if (points != null && points.isNotEmpty) {
-            AppLogger.debug('[LayerNode] ポイント抽出成功（旧形式）: ${points.first}');
-            return {'point': points.first};
-          }
-
-        case GeometryType.linestring:
-          // ラインの場合：List<LatLng> で返される
-          if (geometryData is List<LatLng> && geometryData.isNotEmpty) {
-            AppLogger.debug('[LayerNode] ライン抽出成功: ${geometryData.length}個の頂点');
-            return {'line': geometryData};
-          }
-          // 旧形式との互換性
-          final lines = feature['lines'] as List<LatLng>?;
-          if (lines != null && lines.isNotEmpty) {
-            AppLogger.debug('[LayerNode] ライン抽出成功（旧形式）: ${lines.length}個の頂点');
-            return {'line': lines};
-          }
-
-        case GeometryType.polygon:
-          // ポリゴンの場合：List<List<LatLng>> で返される
-          if (geometryData is List<List<LatLng>> && geometryData.isNotEmpty) {
-            AppLogger.debug(
-              '[LayerNode] ポリゴン抽出成功: ${geometryData.length}個のリング',
-            );
-            return {'rings': geometryData};
-          }
-          // 旧形式との互換性
-          final polygons = feature['polygons'] as List<List<LatLng>>?;
-          if (polygons != null && polygons.isNotEmpty) {
-            AppLogger.debug(
-              '[LayerNode] ポリゴン抽出成功（旧形式）: ${polygons.length}個のリング',
-            );
-            return {'rings': polygons};
-          }
-      }
-
-      AppLogger.debug('[LayerNode] ジオメトリデータの抽出に失敗');
-      return null;
-    } catch (e, stack) {
-      AppLogger.debug('[LayerNode] ジオメトリデータ抽出エラー: $e');
-      AppLogger.debug('[LayerNode] スタックトレース: $stack');
-      return null;
+  /// 読み出した形（[geobaseGeometryToLatLngs] の LatLng の入れ子）を書き込み用の形に戻す。部分は落とさない
+  static geo.Geometry? _toGeoGeometry(Object? data, GeometryType type) {
+    geo.Geographic g(LatLng p) => geo.Geographic(lon: p.longitude, lat: p.latitude);
+    switch (type) {
+      case GeometryType.point:
+        if (data is List<LatLng> && data.isNotEmpty) {
+          return data.length == 1 ? toGeoPoint(data.single) : geo.MultiPoint.from(data.map(g));
+        }
+      case GeometryType.linestring:
+        if (data is List<List<LatLng>> && data.isNotEmpty) {
+          return geo.MultiLineString.from([for (final line in data) line.map(g)]);
+        }
+        if (data is List<LatLng> && data.isNotEmpty) return toGeoMultiLine(data);
+      case GeometryType.polygon:
+        if (data is List<List<List<LatLng>>> && data.isNotEmpty) {
+          return geo.MultiPolygon.from([
+            for (final polygon in data) [for (final ring in polygon) ring.map(g)],
+          ]);
+        }
+        if (data is List<List<LatLng>> && data.isNotEmpty) return toGeoMultiPolygon(data);
     }
-  }
-
-  /// バッチデータを移植先に書き込み
-  Future<int> _processMigrationBatch(
-    GeoPackageNode targetGeoPackage,
-    String targetLayerName,
-    GeometryType geometryType,
-    List<Map<String, dynamic>> batchData,
-  ) async {
-    try {
-      AppLogger.debug(
-        '[LayerNode] バッチ処理開始: ${batchData.length}個のフィーチャ, タイプ=$geometryType',
-      );
-
-      List<int> insertedIds = [];
-
-      switch (geometryType) {
-        case GeometryType.point:
-          AppLogger.debug('[LayerNode] ポイントバッチ処理実行');
-          insertedIds = await targetGeoPackage.geoPackageFile.addPointsBatch(
-            targetLayerName,
-            batchData,
-          );
-
-        case GeometryType.linestring:
-          AppLogger.debug('[LayerNode] ラインバッチ処理実行');
-          insertedIds = await targetGeoPackage.geoPackageFile.addLinesBatch(
-            targetLayerName,
-            batchData,
-          );
-
-        case GeometryType.polygon:
-          AppLogger.debug('[LayerNode] ポリゴンバッチ処理実行');
-          insertedIds = await targetGeoPackage.geoPackageFile.addPolygonsBatch(
-            targetLayerName,
-            batchData,
-          );
-      }
-
-      AppLogger.debug('[LayerNode] バッチ処理完了: ${insertedIds.length}個挿入');
-      AppLogger.debug('[LayerNode] 挿入されたID: $insertedIds');
-
-      return insertedIds.length;
-    } catch (e, stack) {
-      AppLogger.debug('[LayerNode] バッチ処理エラー: $e');
-      AppLogger.debug('[LayerNode] バッチデータサンプル: ${batchData.take(3).toList()}');
-      AppLogger.debug('[LayerNode] スタックトレース: $stack');
-      rethrow;
-    }
+    return null;
   }
 
   /// 自分自身を親から削除

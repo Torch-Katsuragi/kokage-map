@@ -34,6 +34,22 @@ import 'sql_identifier.dart';
 /// 地物ごとのメタデータ（JSON）を入れる列。アプリは列を作らない（古いファイルにだけある）
 const metadataColumn = 'kmaps_metadata';
 
+/// 点（WGS84）を geobase の形に
+geo.Point toGeoPoint(LatLng pt) =>
+    geo.Point(geo.Geographic(lon: pt.longitude, lat: pt.latitude));
+
+/// 線（WGS84）を geobase の MultiLineString に（GeoPackage には Multi で書く）
+geo.MultiLineString toGeoMultiLine(List<LatLng> line) => geo.MultiLineString.from([
+      line.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
+    ]);
+
+/// 面（外環＋穴、WGS84）を geobase の MultiPolygon に
+geo.MultiPolygon toGeoMultiPolygon(List<List<LatLng>> rings) => geo.MultiPolygon.from([
+      rings.map(
+        (ring) => ring.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
+      ),
+    ]);
+
 /// compute()用パラメータ
 class _GeometryParseParams {
   final List<Map<String, dynamic>> rows;
@@ -105,13 +121,6 @@ class FeatureRepository {
   /// クリンナップ済みテーブルの記録（1テーブルにつき1回だけ実行）
   final Set<String> _cleanedTables = {};
 
-  /// 書き込み前にテーブルをクリンナップする
-  ///
-  /// 外部ツール（QGIS/GeoPandas等）が作成したGPKGには
-  /// SpatiaLite拡張に依存するトリガーが含まれることがあり、
-  /// sqfliteでは実行できない。書き込み前に検出・除去する。
-  ///
-  /// 将来の前処理もここに追加可能。
   /// 1 行の 1 列にそのまま値を書く（同期の衝突を相手の値に戻すとき）。
   /// 書く前に ST_ トリガーを外す（[_prepareForWrite]）。値の型は呼び手が合わせる（ジオメトリは GPKG の blob）
   Future<bool> setColumnValue(
@@ -123,89 +132,23 @@ class FeatureRepository {
   ) async {
     await _prepareForWrite(tableName);
     final db = await connection.getDatabase();
-    String q(String i) => '"${i.replaceAll('"', '""')}"';
     final n = await db.rawUpdate(
-      'UPDATE ${q(tableName)} SET ${q(column)} = ? WHERE ${q(pkColumn)} = ?',
+      'UPDATE ${quoteIdent(tableName)} SET ${quoteIdent(column)} = ? WHERE ${quoteIdent(pkColumn)} = ?',
       [value, pk],
     );
     return n > 0;
   }
 
+  /// 書き込み前にテーブルをクリンナップする
+  ///
+  /// 外部ツール（QGIS/GeoPandas等）が作成したGPKGには
+  /// SpatiaLite拡張に依存するトリガーが含まれることがあり、
+  /// sqfliteでは実行できない。書き込み前に検出・除去する。
   Future<void> _prepareForWrite(String tableName) async {
     if (_cleanedTables.contains(tableName)) return;
 
-    final db = await connection.getDatabase();
-    await _removeSpatialiteTriggers(db, tableName);
+    await spatialIndex.removeTableTriggers(tableName);
     _cleanedTables.add(tableName);
-  }
-
-  /// SpatiaLite依存のトリガーを検出・除去
-  ///
-  /// QGIS/GeoPandasが生成するRTree自動更新トリガーは
-  /// ST_IsEmpty, ST_MinX等のSpatiaLite関数を使用するが、
-  /// sqfliteにはSpatiaLite拡張がないためINSERT/UPDATE時にエラーとなる。
-  /// こかげマップは独自のSpatialIndexManagerでrtreeを管理するため、
-  /// これらのトリガーは不要。
-  Future<void> _removeSpatialiteTriggers(Database db, String tableName) async {
-    try {
-      // テーブルに関連するトリガーを全取得
-      final triggers = await db.rawQuery(
-        'SELECT name, sql FROM sqlite_master '
-        "WHERE type = 'trigger' AND tbl_name = ?",
-        [tableName],
-      );
-
-      if (triggers.isEmpty) return;
-
-      // SpatiaLite関数を使っているトリガーを検出
-      const spatialiteFunctions = [
-        'ST_IsEmpty',
-        'ST_MinX',
-        'ST_MaxX',
-        'ST_MinY',
-        'ST_MaxY',
-        'ST_MinZ',
-        'ST_MaxZ',
-        'ST_MinM',
-        'ST_MaxM',
-      ];
-
-      final triggersToRemove = <String>[];
-      for (final trigger in triggers) {
-        final sql = trigger['sql'] as String? ?? '';
-        final name = trigger['name'] as String;
-
-        // SpatiaLite関数を使っているトリガーを検出
-        final usesSpatialiteFunction = spatialiteFunctions.any(
-          sql.contains,
-        );
-
-        // rtree仮想テーブルを参照するトリガーを検出
-        // (DELETE時のrtreeクリーンアップ等、ST_関数を使わないものも含む)
-        final referencesRtree = name.startsWith('rtree_');
-
-        if (usesSpatialiteFunction || referencesRtree) {
-          // ⚠ 落とす前に定義を控える（クローズ時に復元してQGISへ返す）
-          spatialIndex.qgisInterop.rememberTrigger(name, sql);
-          triggersToRemove.add(name);
-        }
-      }
-
-      if (triggersToRemove.isEmpty) return;
-
-      // トリガーを除去
-      for (final name in triggersToRemove) {
-        await db.execute('DROP TRIGGER IF EXISTS ${quoteIdent(name)}');
-      }
-
-      AppLogger.debug(
-        '[FeatureRepository] 🧹 SpatiaLiteトリガーを除去: '
-        '$tableName (${triggersToRemove.length}個: '
-        '${triggersToRemove.join(", ")})',
-      );
-    } catch (e) {
-      AppLogger.debug('[FeatureRepository] ⚠️ トリガー除去エラー: $tableName - $e');
-    }
   }
 
   // ============================================================
@@ -218,9 +161,9 @@ class FeatureRepository {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    final db = await connection.getDatabase();
-    final columns = await db.rawQuery('PRAGMA table_info(${quoteIdent(tableName)});');
-    final columnNames = columns.map((row) => row['name'] as String).toSet();
+    final columnNames = {
+      for (final row in await schema.tableInfo(tableName)) row['name'] as String,
+    };
 
     final attributes = <String, dynamic>{};
     if (columnNames.contains('name')) attributes['name'] = name;
@@ -282,26 +225,6 @@ class FeatureRepository {
   }
 
   // ============================================================
-  // geobase Geometry 構築ヘルパー
-  // ============================================================
-
-  geo.Point _buildGeoPoint(LatLng pt) =>
-      geo.Point(geo.Geographic(lon: pt.longitude, lat: pt.latitude));
-
-  geo.MultiLineString _buildGeoMultiLineString(List<LatLng> line) =>
-      geo.MultiLineString.from([
-        line.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
-      ]);
-
-  geo.MultiPolygon _buildGeoMultiPolygon(List<List<LatLng>> rings) => geo
-      .MultiPolygon.from([
-    rings.map(
-      (ring) =>
-          ring.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
-    ),
-  ]);
-
-  // ============================================================
   // フィーチャ追加・更新
   // ============================================================
 
@@ -322,7 +245,8 @@ class FeatureRepository {
     return wkb;
   }
 
-  Future<int?> _addWithAttributes(
+  /// 形（WGS84）と属性で 1 行足し、rowid を返す。失敗は null
+  Future<int?> addGeometry(
     String tableName,
     geo.Geometry geom,
     Map<String, dynamic> attributes,
@@ -340,34 +264,9 @@ class FeatureRepository {
     }
   }
 
-  Future<int?> addPointWithAttributes(
-    String tableName,
-    LatLng point,
-    Map<String, dynamic> attributes,
-  ) => _addWithAttributes(tableName, _buildGeoPoint(point), attributes);
-
-  Future<int?> addLineWithAttributes(
-    String tableName,
-    List<LatLng> line,
-    Map<String, dynamic> attributes,
-  ) => _addWithAttributes(
-    tableName,
-    _buildGeoMultiLineString(line),
-    attributes,
-  );
-
-  Future<int?> addPolygonWithAttributes(
-    String tableName,
-    List<List<LatLng>> polygon,
-    Map<String, dynamic> attributes,
-  ) => _addWithAttributes(
-    tableName,
-    _buildGeoMultiPolygon(polygon),
-    attributes,
-  );
-
+  /// 形と name・description・メタデータで 1 行足す。
   /// name・description・メタデータ（[metadataColumn]）はレイヤに列があるものだけ書く
-  Future<int?> _addSimple(
+  Future<int?> addGeometryWithBasics(
     String tableName,
     geo.Geometry geom, {
     required String name,
@@ -381,56 +280,15 @@ class FeatureRepository {
         description: description,
         metadata: metadata,
       );
-      return await _addWithAttributes(tableName, geom, attributes);
+      return await addGeometry(tableName, geom, attributes);
     } catch (e) {
       AppLogger.debug('[ERROR] FeatureRepository: add ${geom.geomType} failed: $e');
       return null;
     }
   }
 
-  Future<int?> addPoint(
-    String tableName,
-    LatLng pt, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _addSimple(
-    tableName,
-    _buildGeoPoint(pt),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  Future<int?> addLine(
-    String tableName,
-    List<LatLng> line, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _addSimple(
-    tableName,
-    _buildGeoMultiLineString(line),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  Future<int?> addPolygon(
-    String tableName,
-    List<List<LatLng>> rings, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _addSimple(
-    tableName,
-    _buildGeoMultiPolygon(rings),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  Future<bool> _update(
+  /// 行 [id] の形と name・description・メタデータを書き換える（列があるものだけ）
+  Future<bool> updateGeometry(
     String tableName,
     int id,
     geo.Geometry geom, {
@@ -451,54 +309,6 @@ class FeatureRepository {
     if (ok) await spatialIndex.indexRows(tableName, {id: wkb});
     return ok;
   }
-
-  Future<bool> updatePoint(
-    String tableName,
-    int id,
-    LatLng pt, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _update(
-    tableName,
-    id,
-    _buildGeoPoint(pt),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  Future<bool> updateLine(
-    String tableName,
-    int id,
-    List<LatLng> line, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _update(
-    tableName,
-    id,
-    _buildGeoMultiLineString(line),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
-
-  Future<bool> updatePolygon(
-    String tableName,
-    int id,
-    List<List<LatLng>> rings, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) => _update(
-    tableName,
-    id,
-    _buildGeoMultiPolygon(rings),
-    name: name,
-    description: description,
-    metadata: metadata,
-  );
 
   // ============================================================
   // 共通 Feature 操作
@@ -537,12 +347,10 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause =
-          pkColumn == 'rowid'
-              ? 'SELECT rowid, * FROM ${quoteIdent(tableName)} WHERE rowid = ?'
-              : 'SELECT * FROM ${quoteIdent(tableName)} WHERE ${quoteIdent(pkColumn)} = ?';
-
-      final rows = await db.rawQuery(selectClause, [rowId]);
+      final rows = await db.rawQuery(
+        'SELECT ${selectAllColumns(pkColumn)} FROM ${quoteIdent(tableName)} WHERE ${pkEquals(pkColumn)}',
+        [rowId],
+      );
       if (rows.isEmpty) return null;
 
       final row = Map<String, dynamic>.from(rows.first);
@@ -578,12 +386,9 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause =
-          pkColumn == 'rowid'
-              ? 'SELECT rowid, * FROM ${quoteIdent(tableName)}'
-              : 'SELECT * FROM ${quoteIdent(tableName)}';
-
-      final rows = await db.rawQuery(selectClause);
+      final rows = await db.rawQuery(
+        'SELECT ${selectAllColumns(pkColumn)} FROM ${quoteIdent(tableName)}',
+      );
       return rows.map((row) {
         final normalizedRow = Map<String, dynamic>.from(row);
         _normalizePrimaryKey(normalizedRow, pkColumn);
@@ -614,19 +419,14 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause =
-          pkColumn == 'rowid'
-              ? 'SELECT rowid, * FROM ${quoteIdent(tableName)}'
-              : 'SELECT * FROM ${quoteIdent(tableName)}';
-
-      final sql = StringBuffer(selectClause);
+      final sql = StringBuffer('SELECT ${selectAllColumns(pkColumn)} FROM ${quoteIdent(tableName)}');
       final safeWhere = sanitizeFilter(where);
       if (safeWhere != null) sql.write(' WHERE $safeWhere');
 
       // 2000 行ずつ読む。1 回で読むと 1.5 万面（24MB）が 1 通のメッセージになり、プラットフォームチャネルを塞いで
       // 同じ時間のタイルキャッシュの読み出しまで 2.5 秒待たされていた（2026-10-06、Fold で起動時）。
       // 大きいレイヤはページごとに isolate で解析を始め、次のページの読み込みと重ねる
-      final orderCol = pkColumn == 'rowid' ? 'rowid' : quoteIdent(pkColumn);
+      final orderCol = pkRef(pkColumn);
       final crs = geomType == null ? null : await _getLayerCrs(tableName);
       final needsReproject = crs != null && !crs.isWgs84 && crs.projection != null;
       if (needsReproject) {
@@ -708,10 +508,8 @@ class FeatureRepository {
 
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
-      final column = pkColumn == 'rowid' ? 'rowid' : quoteIdent(pkColumn);
-
       final rows = await db.rawQuery(
-        'SELECT $column AS id FROM ${quoteIdent(tableName)} WHERE $safeWhere',
+        'SELECT ${pkRef(pkColumn)} AS id FROM ${quoteIdent(tableName)} WHERE $safeWhere',
       );
       return {
         for (final row in rows)
@@ -745,11 +543,8 @@ class FeatureRepository {
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
       final columnList = columns?.map(quoteIdent).join(', ') ?? '*';
-      final orderByClause =
-          pkColumn == 'rowid' ? 'ORDER BY rowid' : 'ORDER BY ${quoteIdent(pkColumn)}';
-
       return await db.rawQuery(
-        'SELECT $columnList FROM ${quoteIdent(tableName)} $orderByClause',
+        'SELECT $columnList FROM ${quoteIdent(tableName)} ORDER BY ${pkRef(pkColumn)}',
       );
     } catch (e) {
       AppLogger.debug('[FeatureRepository] getAllFeatureAttributes エラー発生 - $e');
@@ -863,19 +658,38 @@ class FeatureRepository {
   // バッチ操作
   // ============================================================
 
-  Future<List<int>> _addGeometryBatch<T>(
+  /// [dataList] の各要素の [geometryKey] にある形を [build] で作り、残りを属性として一度に足す。
+  /// 足した行の rowid を返す。テーブルに無い列は捨てる
+  Future<List<int>> addGeometryBatch<T>(
     String tableName,
     List<Map<String, dynamic>> dataList,
     String geometryKey,
     geo.Geometry Function(T) build,
   ) async {
+    final List<(geo.Geometry, Map<String, dynamic>)> items;
+    try {
+      items = [for (final data in dataList) (build(data[geometryKey] as T), data)];
+    } catch (e) {
+      AppLogger.debug('[ERROR] FeatureRepository.addGeometryBatch<$T>: $e');
+      return [];
+    }
+    return addGeometries(tableName, items, reserved: {geometryKey});
+  }
+
+  /// 形（WGS84）と属性の組を一度に足し、足した行の rowid を返す。
+  /// 属性のうち主キー・形の列・[reserved] とテーブルに無い列は捨てる。失敗は空
+  Future<List<int>> addGeometries(
+    String tableName,
+    List<(geo.Geometry, Map<String, dynamic>)> items, {
+    Set<String> reserved = const {},
+  }) async {
     final reservedColumns = {
       'fid',
       'geom',
       'id',
       'rowid',
       'geometry',
-      geometryKey,
+      ...reserved,
     };
 
     try {
@@ -889,9 +703,8 @@ class FeatureRepository {
       final tableColumns = await schema.getTableColumns(tableName);
       final tableColumnSet = tableColumns.map((c) => c.toLowerCase()).toSet();
 
-      for (final data in dataList) {
-        final geometry = data[geometryKey] as T;
-        final wkb = _encodeInCrs(crs, build(geometry));
+      for (final (geometry, data) in items) {
+        final wkb = _encodeInCrs(crs, geometry);
         wkbs.add(wkb);
         final insertData = <String, dynamic>{'geom': wkb};
 
@@ -924,40 +737,10 @@ class FeatureRepository {
       await spatialIndex.indexRows(tableName, inserted);
       return inserted.keys.toList();
     } catch (e) {
-      AppLogger.debug('[ERROR] FeatureRepository._addGeometryBatch<$T>: $e');
+      AppLogger.debug('[ERROR] FeatureRepository.addGeometries: $e');
       return [];
     }
   }
-
-  Future<List<int>> addPointsBatch(
-    String tableName,
-    List<Map<String, dynamic>> pointData,
-  ) => _addGeometryBatch<LatLng>(
-    tableName,
-    pointData,
-    'point',
-    _buildGeoPoint,
-  );
-
-  Future<List<int>> addLinesBatch(
-    String tableName,
-    List<Map<String, dynamic>> lineData,
-  ) => _addGeometryBatch<List<LatLng>>(
-    tableName,
-    lineData,
-    'line',
-    _buildGeoMultiLineString,
-  );
-
-  Future<List<int>> addPolygonsBatch(
-    String tableName,
-    List<Map<String, dynamic>> polygonData,
-  ) => _addGeometryBatch<List<List<LatLng>>>(
-    tableName,
-    polygonData,
-    'rings',
-    _buildGeoMultiPolygon,
-  );
 
   /// WHERE句でフィルタしたフィーチャのrowIdリストを取得
   Future<List<int>> getFilteredFeatureIds(
@@ -968,12 +751,9 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause =
-          pkColumn == 'rowid'
-              ? 'SELECT rowid FROM ${quoteIdent(tableName)} WHERE $whereClause'
-              : 'SELECT ${quoteIdent(pkColumn)} FROM ${quoteIdent(tableName)} WHERE $whereClause';
-
-      final rows = await db.rawQuery(selectClause);
+      final rows = await db.rawQuery(
+        'SELECT ${pkRef(pkColumn)} FROM ${quoteIdent(tableName)} WHERE $whereClause',
+      );
       return rows
           .map((row) {
             final val = row.values.first;
@@ -1009,24 +789,7 @@ class FeatureRepository {
     String whereClause,
   ) async {
     try {
-      final db = await connection.getDatabase();
-      final sourceColumns = await schema.getTableColumns(sourceTable);
-      final columnsToInsert =
-          sourceColumns
-              .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
-              .toList();
-
-      if (columnsToInsert.isEmpty) return 0;
-
-      final columnList = columnsToInsert.map(quoteIdent).join(', ');
-      await db.execute('''
-        INSERT INTO ${quoteIdent(targetTable)} ($columnList)
-        SELECT $columnList FROM ${quoteIdent(sourceTable)}
-        WHERE $whereClause
-      ''');
-
-      final countResult = await db.rawQuery('SELECT changes() as count');
-      final copiedCount = (countResult.first['count'] as int?) ?? 0;
+      final copiedCount = await _copyRows(sourceTable, targetTable, where: whereClause) ?? 0;
       AppLogger.debug(
         '[FeatureRepository] duplicateFilteredFeatures: '
         '$sourceTable -> $targetTable ($copiedCount件, WHERE: $whereClause)',
@@ -1043,26 +806,11 @@ class FeatureRepository {
     String targetTable,
   ) async {
     try {
-      final db = await connection.getDatabase();
-      final sourceColumns = await schema.getTableColumns(sourceTable);
-      final columnsToInsert =
-          sourceColumns
-              .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
-              .toList();
-
-      if (columnsToInsert.isEmpty) {
+      final copiedCount = await _copyRows(sourceTable, targetTable);
+      if (copiedCount == null) {
         AppLogger.debug('[FeatureRepository] コピー可能なカラムがありません');
         return 0;
       }
-
-      final columnList = columnsToInsert.map(quoteIdent).join(', ');
-      await db.execute('''
-        INSERT INTO ${quoteIdent(targetTable)} ($columnList)
-        SELECT $columnList FROM ${quoteIdent(sourceTable)}
-      ''');
-
-      final countResult = await db.rawQuery('SELECT changes() as count');
-      final copiedCount = (countResult.first['count'] as int?) ?? 0;
       AppLogger.debug(
         '[FeatureRepository] フィーチャコピー完了: $sourceTable -> $targetTable ($copiedCount件)',
       );
@@ -1073,21 +821,24 @@ class FeatureRepository {
     }
   }
 
-  Future<int?> addFeatureWithAttributes(
-    String tableName,
-    Uint8List geometry,
-    Map<String, dynamic> attributes,
-  ) async {
-    try {
-      final db = await connection.getDatabase();
-      final data = <String, dynamic>{'geom': geometry, ...attributes};
-      return await _insertRow(db, tableName, data);
-    } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] addFeatureWithAttributes エラー発生 - $e',
-      );
-      return null;
-    }
+  /// [sourceTable] の行（[where] があれば当てはまる行）を [targetTable] へ写し、写した数を返す。
+  /// 主キー（id / fid）は写さず振り直させる。写せる列が無ければ null
+  Future<int?> _copyRows(String sourceTable, String targetTable, {String? where}) async {
+    final columnsToInsert = [
+      for (final c in await schema.getTableColumns(sourceTable))
+        if (c.toLowerCase() != 'id' && c.toLowerCase() != 'fid') c,
+    ];
+    if (columnsToInsert.isEmpty) return null;
+
+    final db = await connection.getDatabase();
+    final columnList = columnsToInsert.map(quoteIdent).join(', ');
+    await db.execute(
+      'INSERT INTO ${quoteIdent(targetTable)} ($columnList) '
+      'SELECT $columnList FROM ${quoteIdent(sourceTable)}'
+      '${where == null ? '' : ' WHERE $where'}',
+    );
+    final countResult = await db.rawQuery('SELECT changes() as count');
+    return (countResult.first['count'] as int?) ?? 0;
   }
 
   // ============================================================

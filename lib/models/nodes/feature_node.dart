@@ -47,10 +47,6 @@ abstract class FeatureNode extends LayerTreeNode {
   /// DB上のrowId（主キー）- データは持たず、IDのみ保持
   final int _rowId;
 
-  /// 変更の追跡フラグ（将来的なバッチ保存最適化用に予約）
-  // ignore: unused_field
-  bool _isDirty = false;
-  
   /// dispose済みフラグ（null参照対策）
   bool _isDisposed = false;
 
@@ -92,46 +88,6 @@ abstract class FeatureNode extends LayerTreeNode {
     if (_isDisposed || parent.isDisposed) return const LatLng(0, 0);
     return _cachedCentroid ??=
         TurfConverter.calculateCentroid(turfFeature) ?? const LatLng(0, 0);
-  }
-
-  /// 座標データをposition型で取得（turf_dart形式）
-  List<double> get position {
-    if (_isDisposed || parent.isDisposed) return [0, 0];
-    final geometry = turfFeature.geometry;
-    if (geometry is turf.Point) {
-      return TurfConverter.latlngToPosition(
-        TurfConverter.pointToLatlng(geometry),
-      );
-    }
-    // Point以外の場合は重心のpositionを返す
-    return TurfConverter.latlngToPosition(centroid);
-  }
-
-  /// 複数座標データをpositionリストで取得
-  List<List<double>> get positions {
-    if (_isDisposed || parent.isDisposed) return [];
-    final g = turfFeature.geometry;
-    if (g is turf.MultiLineString) {
-      final lines = TurfConverter.multiLineStringToLatlngs(g);
-      return lines.isNotEmpty
-          ? TurfConverter.latlngsToPositions(lines.first)
-          : [];
-    } else if (g is turf.LineString) {
-      return TurfConverter.latlngsToPositions(
-        TurfConverter.lineStringToLatlngs(g),
-      );
-    } else if (g is turf.MultiPolygon) {
-      final polys = TurfConverter.multiPolygonToLatlngs(g);
-      if (polys.isNotEmpty && polys.first.isNotEmpty) {
-        return TurfConverter.latlngsToPositions(polys.first.first);
-      }
-    } else if (g is turf.Polygon) {
-      final rings = TurfConverter.polygonToLatlngs(g);
-      if (rings.isNotEmpty) {
-        return TurfConverter.latlngsToPositions(rings.first);
-      }
-    }
-    return [];
   }
 
   /// ジオメトリデータ（レガシー互換用、turf_dartから変換して返す）
@@ -220,18 +176,17 @@ abstract class FeatureNode extends LayerTreeNode {
   }
 
   /// 変更フラグをセット
+  ///
+  /// ⚠ ここと [setAttributeValue] は属性表の一括設定で地物ごとに呼ばれる。1 回ごとのログ
+  /// （以前は行の中身まで出していた）を足さない。AppLogger はリリースでも控えに積む
   void _markDirty() {
-    AppLogger.debug('[DEBUG] FeatureNode: _markDirty呼び出し - レイヤー:$layerName, 行ID:$rowId');
-    _isDirty = true;
     _invalidateCache();
-    
+
     if (_isDisposed) return;
-    
+
     // GeoPackageFileの遅延保存キューに追加
     final rowData = TurfConverter.featureToRowData(turfFeature);
     if (rowData != null) {
-      AppLogger.debug('[DEBUG] FeatureNode: rowData変換成功 - 属性数:${rowData.length}');
-      AppLogger.debug('[DEBUG] FeatureNode: rowData内容: $rowData');
       geoPackageFile.queueAttributeUpdates(layerName, rowId, rowData);
     } else {
       AppLogger.debug('[ERROR] FeatureNode: rowData変換に失敗しました');
@@ -322,8 +277,6 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// 属性値の設定（親のMapを更新し、バックグラウンドでDB書き込み）
   Future<void> setAttributeValue(String attributeName, dynamic value) async {
-    AppLogger.debug('[DEBUG] FeatureNode: Setting attribute $attributeName = $value');
-
     if (_isDisposed) {
       AppLogger.debug('[WARNING] FeatureNode is disposed, cannot set attribute');
       return;
@@ -343,8 +296,6 @@ abstract class FeatureNode extends LayerTreeNode {
   /// 複数の属性値を一括設定
   /// カラムが存在しない場合は自動的に作成する（TEXT型）
   Future<void> setAttributeValues(Map<String, dynamic> attributes) async {
-    AppLogger.debug('[DEBUG] FeatureNode: Setting ${attributes.length} attributes');
-
     if (_isDisposed) {
       AppLogger.debug('[WARNING] FeatureNode is disposed, cannot set attributes');
       return;
@@ -392,20 +343,6 @@ abstract class FeatureNode extends LayerTreeNode {
   Future<void> flushChanges() async {
     await geoPackageFile.flushChanges();
   }
-
-  /// 詳細情報（項目名と値のペア、順序付き）
-  List<MapEntry<String, String>> get detailEntries => [
-    MapEntry('name', name),
-    if (description != null && description!.isNotEmpty)
-      MapEntry('description', description!),
-    if (metadata != null && metadata!.isNotEmpty)
-      ...metadata!.entries.map(
-        (e) => MapEntry('metadata.${e.key}', e.value.toString()),
-      ),
-    MapEntry('id', rowId.toString()),
-    MapEntry('latitude', centroid.latitude.toStringAsFixed(6)),
-    MapEntry('longitude', centroid.longitude.toStringAsFixed(6)),
-  ];
 
   /// 詳細情報をMap形式で返す（表示用）
   Map<String, String> get infoMap {
@@ -458,13 +395,6 @@ abstract class FeatureNode extends LayerTreeNode {
     _isDisposed = true;
     
     try {
-      // nameアクセス時のエラーを回避するため、try-catchで囲む
-      AppLogger.debug('[DEBUG] FeatureNode.dispose: disposing rowId=$rowId ($runtimeType)');
-    } catch (e) {
-      AppLogger.debug('[DEBUG] FeatureNode.dispose: disposing rowId=$rowId (name取得失敗)');
-    }
-
-    try {
       // 保留中の変更を即座に保存（エラーが発生しても続行）
       await flushChanges();
     } catch (e) {
@@ -475,12 +405,10 @@ abstract class FeatureNode extends LayerTreeNode {
     // LayerNode.removeFeature()を使用することで、childrenと_featureMapの両方から削除される
     try {
       parent.removeFeature(this);
-      AppLogger.debug('[DEBUG] FeatureNode.dispose: removed from parent children and featureMap');
     } catch (e) {
       AppLogger.debug('[WARNING] FeatureNode.dispose: removeFeature failed: $e');
       // フォールバック: 直接削除を試みる
       parent.children.remove(this);
-      AppLogger.debug('[DEBUG] FeatureNode.dispose: fallback - removed from parent children only');
     }
 
     _onDispose?.call(this);
@@ -493,18 +421,15 @@ abstract class FeatureNode extends LayerTreeNode {
     //   レイヤ」を DB から読み直すと、まだ消えていない行が新しいノードとして
     //   復活していた（「たまに削除したフィーチャが残る」の正体）
     try {
-      final removed = await geoPackageFile.removeFeature(layerName, rowId);
-      AppLogger.debug(
-        '[DEBUG] FeatureNode.dispose: DB deletion ${removed ? 'completed' : 'matched no row'} (rowId=$rowId)',
-      );
+      if (!await geoPackageFile.removeFeature(layerName, rowId)) {
+        AppLogger.debug('[DEBUG] FeatureNode.dispose: DB deletion matched no row (rowId=$rowId)');
+      }
     } catch (e) {
       // エラーが発生しても処理は続行（壊れたデータでも削除できるようにする）
       AppLogger.debug(
         '[ERROR] FeatureNode.dispose: DB deletion failed (rowId=$rowId): $e',
       );
     }
-
-    AppLogger.debug('[DEBUG] FeatureNode.dispose: base dispose completed');
 
     // 基底クラスのdisposeを呼び出し
     try {
@@ -663,20 +588,6 @@ class PointFeatureNode extends FeatureNode {
     return const LatLng(0, 0);
   }
 
-  /// 点座標をposition形式で取得
-  @override
-  List<double> get position {
-    return TurfConverter.latlngToPosition(point);
-  }
-
-  /// 点座標リスト（レガシー互換用）
-  List<LatLng> get points => [point];
-
-  @override
-  List<MapEntry<String, String>> get detailEntries {
-    return [...super.detailEntries];
-  }
-  
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
   
   @override
@@ -781,33 +692,11 @@ class LineFeatureNode extends FeatureNode {
     return [];
   }
 
-  /// 線の座標をpositionリストで取得
-  @override
-  List<List<double>> get positions {
-    return TurfConverter.latlngsToPositions(line);
-  }
-
   /// 線の長さを計算（turf_dartで計算、キャッシュあり）
   double get length {
     if (_isDisposed || parent.isDisposed) return 0.0;
     return _cachedLength ??=
         TurfConverter.calculateLength(turfFeature) ?? 0.0;
-  }
-
-  @override
-  List<MapEntry<String, String>> get detailEntries {
-    final len = length;
-    String lengthStr;
-    if (len >= 10000) {
-      lengthStr = '${(len / 1000).toStringAsFixed(2)} km';
-    } else {
-      lengthStr = '${len.toStringAsFixed(2)} m';
-    }
-    return [
-      ...super.detailEntries,
-      MapEntry('length', lengthStr),
-      MapEntry('vertex_count', '${line.length}'),
-    ];
   }
 
   @override
@@ -943,43 +832,11 @@ class PolygonFeatureNode extends FeatureNode {
     return [];
   }
 
-  /// ポリゴンの座標をpositionリストで取得（外環のみ）
-  @override
-  List<List<double>> get positions {
-    final rings = polygon;
-    if (rings.isNotEmpty) {
-      return TurfConverter.latlngsToPositions(rings.first);
-    }
-    return [];
-  }
-
   /// ポリゴンの面積を計算（turf_dartで計算、キャッシュあり）
   double get area {
     if (_isDisposed || parent.isDisposed) return 0.0;
     return _cachedArea ??=
         TurfConverter.calculateArea(turfFeature) ?? 0.0;
-  }
-
-  @override
-  List<MapEntry<String, String>> get detailEntries {
-    final areaM2 = area; // turf_dartで計算された面積（平方メートル）
-    String areaStr;
-    if (areaM2 >= 10000) {
-      areaStr = '${(areaM2 / 10000).toStringAsFixed(3)} ha';
-    } else {
-      areaStr = '${areaM2.toStringAsFixed(3)} m²';
-    }
-    // 全リングの頂点数の合計を計算（閉じたリングの最後の点を除く）
-    final totalVertices = polygon.fold<int>(0, (sum, ring) {
-      if (ring.isEmpty) return sum;
-      // 閉じたリングの場合は最後の点を除く（最初と最後が同じため）
-      return sum + (ring.length > 1 ? ring.length - 1 : ring.length);
-    });
-    return [
-      ...super.detailEntries,
-      MapEntry('area', areaStr),
-      MapEntry('vertex_count', '$totalVertices'),
-    ];
   }
 
   @override

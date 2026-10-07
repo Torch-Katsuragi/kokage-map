@@ -22,7 +22,6 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
-import '../../i18n/strings.g.dart';
 import '../../models/kmeta.dart';
 import '../../services/geotiff_service.dart';
 import '../../services/kmeta_service.dart';
@@ -80,33 +79,6 @@ class ImageNode extends LayerTreeNode {
     if (parentPath == null) return;
     await KMetaService.instance.setImageVisibility(parentPath, name, visible);
     parentFolder.invalidateMetaCache();
-  }
-
-  /// 詳細情報（項目名と値のペア、順序付き）
-  List<MapEntry<String, String>> get detailEntries => [
-    MapEntry('name', name),
-    MapEntry('file_path', filePath),
-    if (hasLocation) ...[
-      MapEntry('latitude', location!.latitude.toStringAsFixed(6)),
-      MapEntry('longitude', location!.longitude.toStringAsFixed(6)),
-    ] else
-      MapEntry('location', t.gps.noLocation),
-    if (direction != null) MapEntry('direction', '${direction!.toStringAsFixed(1)}°'),
-    if (takenAt != null) MapEntry('taken_at', takenAt!.toLocal().toString()),
-    MapEntry('file_size', _formatFileSize(metadata.fileSize)),
-    if (metadata.width != null && metadata.height != null)
-      MapEntry('dimensions', '${metadata.width} x ${metadata.height}'),
-    if (metadata.camera != null) MapEntry('camera', metadata.camera!),
-  ];
-
-  /// ファイルサイズを読みやすい形式に変換
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   /// 指定したフォルダ内の画像ファイルをスキャンし、ImageNodeリストを返す
@@ -184,22 +156,9 @@ class ImageNode extends LayerTreeNode {
   Future<void> rename(String newName) async {
     AppLogger.debug('[DEBUG] ImageNode.rename: 開始 - $name → $newName');
     try {
-      if (!await fs.exists(filePath)) {
-        throw Exception(t.services.fileNotFound(path: filePath));
-      }
-
-      final directory = p.dirname(filePath);
-      final extension = p.extension(filePath);
-      final newFileName = newName.endsWith(extension) ? newName : '$newName$extension';
-      final newPath = p.join(directory, newFileName);
-
+      final newPath =
+          await renameFileInSameDir(filePath, newName, p.extension(filePath));
       AppLogger.debug('[DEBUG] ImageNode.rename: $filePath → $newPath');
-
-      if (await fs.exists(newPath)) {
-        throw Exception(t.services.fileAlreadyExists(name: newFileName));
-      }
-
-      await fs.rename(filePath, newPath);
       AppLogger.debug('[DEBUG] ImageNode.rename: ファイルリネーム完了');
       
       if (parent != null) {

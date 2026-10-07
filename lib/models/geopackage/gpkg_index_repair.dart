@@ -140,10 +140,10 @@ abstract final class GpkgIndexRepair {
         maxY = maxY == null || env.maxY > maxY ? env.maxY : maxY;
       }
 
-      statements.add('DELETE FROM ${_q(rtree)}');
+      statements.add('DELETE FROM ${quoteIdent(rtree)}');
       for (var i = 0; i < values.length; i += 500) {
         final chunk = values.sublist(i, i + 500 > values.length ? values.length : i + 500);
-        statements.add('INSERT INTO ${_q(rtree)} (id, minx, maxx, miny, maxy) VALUES ${chunk.join(',')}');
+        statements.add('INSERT INTO ${quoteIdent(rtree)} (id, minx, maxx, miny, maxy) VALUES ${chunk.join(',')}');
       }
       if (minX != null && maxX != null && minY != null && maxY != null) {
         statements.add('UPDATE gpkg_contents SET min_x = ${_num(minX)}, min_y = ${_num(minY)}, '
@@ -165,7 +165,6 @@ abstract final class GpkgIndexRepair {
     return null;
   }
 
-  static String _q(String ident) => '"${ident.replaceAll('"', '""')}"';
   static String _s(String text) => "'${text.replaceAll("'", "''")}'";
   static String _num(double v) => v.isFinite ? v.toString() : 'NULL';
 }

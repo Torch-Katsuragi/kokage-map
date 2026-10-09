@@ -60,7 +60,7 @@ enum EditMode {
   /// 線の端から続けて描く
   extend,
 
-  /// 頂点を間引く（パネルのつまみで許す幅を決める）
+  /// 頂点を減らす簡略化（パネルのつまみで消す数を決める）
   simplify,
 
   /// 線の両端を切り落とす（パネルのつまみで残す範囲を決める）
@@ -132,7 +132,7 @@ class EditState {
   final Map<String, Object?> originalAttrs;
   final bool saving;
 
-  /// 間引くときの許す幅（m）。つまみの位置
+  /// 簡略化で許す幅（m）。つまみの段から決まる
   final double tolerance;
 
   /// 切り落とすときに残す範囲（元の頂点の番号, 両端を含む）。つまみの位置
@@ -205,7 +205,7 @@ class FeatureEditor extends Notifier<EditState?> {
   /// 編集の前に持っていた道具（終わったら戻す）
   MapTool? _toolBefore;
 
-  /// 間引く・切り落とすの元（その道具に入ったときの形。つまみはいつもこれから計算する）
+  /// 簡略化・切り落とすの元（その道具に入ったときの形。つまみはいつもこれから計算する）
   Snap? _toolBase;
 
   /// つまみを動かし始めたときの形（離したらこれを 1 手の前として積む）
@@ -334,7 +334,7 @@ class FeatureEditor extends Notifier<EditState?> {
     _rebaseTool();
   }
 
-  /// 元に戻したあとは、間引く・切り落とすのつまみを今の形から始め直す
+  /// 元に戻したあとは、簡略化・切り落とすのつまみを今の形から始め直す
   void _rebaseTool() {
     final s = state;
     if (s == null) return;
@@ -385,7 +385,7 @@ class FeatureEditor extends Notifier<EditState?> {
     select(atStart ? (0, 0) : (0, g[0].length - 1));
   }
 
-  // ── つまみの道具（間引く・切り落とす） ──
+  // ── つまみの道具（簡略化・切り落とす） ──
 
   void sliderStart() => _sliderStart = state?.snap;
 
@@ -395,7 +395,26 @@ class FeatureEditor extends Notifier<EditState?> {
     if (before != null) commit(before);
   }
 
-  /// 間引く（外周と線だけ。穴はそのまま）
+  /// 簡略化のつまみの段。`steps[k - 1]` が k 個消える許容幅（m）。
+  /// 消える数は、線なら端の 2 点、面なら 3 点を残すところまで
+  List<double> get simplifySteps {
+    final s = state;
+    final base = _toolBase ?? s?.snap;
+    if (s == null || base == null) return const [];
+    if (base == _stepsBase) return _steps;
+    final ring = base.$1.first;
+    final closed = s.kind == EditKind.polygon;
+    final input = closed ? [...ring, ring.first] : ring;
+    final thresholds = LineSimplification.douglasPeuckerThresholds(input).where((t) => t.isFinite).toList()..sort();
+    final kMax = (ring.length - minVertices(s.kind)).clamp(0, thresholds.length);
+    _stepsBase = base;
+    return _steps = thresholds.sublist(0, kMax);
+  }
+
+  Snap? _stepsBase;
+  List<double> _steps = const [];
+
+  /// 簡略化（外周と線だけ。穴はそのまま）
   void setTolerance(double meters) {
     final s = state;
     final base = _toolBase ?? s?.snap;

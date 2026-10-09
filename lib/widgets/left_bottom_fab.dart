@@ -16,7 +16,6 @@
 // 左下フローティングアクションボタンウィジェット
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../i18n/strings.g.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../tools/pen_tool.dart';
@@ -39,18 +38,8 @@ class LeftBottomFab extends ConsumerWidget {
     };
 
     return GestureDetector(
-      onTap: () {
-        final on = !isActive;
-        ref.read(isFabActiveProvider.notifier).set(on);
-        // モードが変わるので中央に出す（ほかのツールでは意味を持たないので出さない）
-        final flash = t.map.flash;
-        final label = switch (currentTool) {
-          PenTool() => on ? flash.eraserOn : flash.eraserOff,
-          SelectTool() => on ? flash.multiSelectOn : flash.multiSelectOff,
-          _ => null,
-        };
-        if (label != null) ref.read(mapFlashProvider.notifier).show(label);
-      },
+      // 中央のモード名はツールとこのボタンの組から ToolNameFlash が出す
+      onTap: () => ref.read(isFabActiveProvider.notifier).set(!isActive),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         width: 56,

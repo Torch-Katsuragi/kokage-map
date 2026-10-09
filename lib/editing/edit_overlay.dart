@@ -100,7 +100,7 @@ class _EditPainter extends CustomPainter {
     }
 
     // 頂点
-    // 間引く・切り落とすでも頂点を出す（どれが残るかを見るため）
+    // 簡略化・切り落とすでも頂点を出す（どれが残るかを見るため）
     final showVertices = s.mode == EditMode.vertex ||
         s.mode == EditMode.extend ||
         s.mode == EditMode.simplify ||

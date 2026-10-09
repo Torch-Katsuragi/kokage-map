@@ -146,7 +146,7 @@ class EditTool extends MapTool {
       case EditMode.extend:
       case EditMode.simplify:
       case EditMode.trim:
-        break; // 間引く・切り落とすはパネルのつまみで
+        break; // 簡略化・切り落とすはパネルのつまみで
     }
   }
 

@@ -372,6 +372,33 @@ class LineSimplification {
     return result;
   }
 
+  /// 各点が [simplifyLineDouglasPeucker] で消える許容幅（m）。両端は消えないので無限大。
+  ///
+  /// 許容幅 ε で残るのは、この値が ε より大きい点だけ（DP が分ける距離を、分けた先へは親の値で頭打ちにして配る）。
+  /// 簡略化のつまみを「消える点の数」の段にするのに使う
+  static List<double> douglasPeuckerThresholds(List<LatLng> line) {
+    final out = List<double>.filled(line.length, double.infinity);
+    void walk(int start, int end, double cap) {
+      if (end - start < 2) return;
+      var maxDistance = 0.0;
+      var maxIndex = start + 1;
+      for (var i = start + 1; i < end; i++) {
+        final d = GeometryCalc.distancePointToSegment(line[i], line[start], line[end]);
+        if (d > maxDistance) {
+          maxDistance = d;
+          maxIndex = i;
+        }
+      }
+      final t = maxDistance < cap ? maxDistance : cap;
+      out[maxIndex] = t;
+      walk(start, maxIndex, t);
+      walk(maxIndex, end, t);
+    }
+
+    walk(0, line.length - 1, double.infinity);
+    return out;
+  }
+
   /// Douglas-Peucker アルゴリズムの再帰実装（標準的な実装）
   static List<LatLng> _douglasPeuckerRecursive(
     List<LatLng> points,

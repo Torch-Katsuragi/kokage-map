@@ -55,17 +55,21 @@ class _ToolNameFlashState extends ConsumerState<ToolNameFlash>
 
   String _label = '';
 
+  /// 最後に見たモードの名前（変わったときだけ出す）
+  String? _mode;
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
 
-  /// 内部名（`MapTool.name`）から表示名へ。知らないツールは内部名をそのまま出す
-  static String _labelOf(MapTool tool) => switch (tool.name) {
+  /// 今のモードの名前。ツールと左下ボタンの組で決まる（ペン＋ボタン = 消しゴム、選択＋ボタン = 複数選択）。
+  /// ボタンごとに文言を決めず、この名前が変わったときに出す
+  static String _modeOf(MapTool tool, bool fab) => switch (tool.name) {
     'Pan' => t.map.toolbar.pan,
-    'Pen' => t.map.toolbar.pen,
-    'Select' => t.map.toolbar.select,
+    'Pen' => fab ? t.map.flash.eraser : t.map.toolbar.pen,
+    'Select' => fab ? t.map.flash.multiSelect : t.map.toolbar.select,
     'GPS' => t.map.toolbar.gpsTool,
     'Overlay Transform' => t.map.toolbar.overlayTransform,
     'Compass' => t.trupulse.toolName,
@@ -79,10 +83,15 @@ class _ToolNameFlashState extends ConsumerState<ToolNameFlash>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<MapTool>(currentToolProvider, (prev, next) {
-      if (prev == null || prev == next) return;
-      _flash(_labelOf(next));
-    });
+    void onModeMaybeChanged() {
+      final mode = _modeOf(ref.read(currentToolProvider), ref.read(isFabActiveProvider));
+      if (_mode != null && mode != _mode) _flash(mode);
+      _mode = mode;
+    }
+
+    _mode ??= _modeOf(ref.read(currentToolProvider), ref.read(isFabActiveProvider));
+    ref.listen<MapTool>(currentToolProvider, (_, _) => onModeMaybeChanged());
+    ref.listen<bool>(isFabActiveProvider, (_, _) => onModeMaybeChanged());
     // ツール以外のモード切替（眺め・北上真上・3D/2D・ドライブ）も同じ演出で
     ref.listen<(String, int)>(mapFlashProvider, (prev, next) {
       if (prev == null || prev == next || next.$1.isEmpty) return;

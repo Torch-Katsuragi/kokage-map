@@ -642,10 +642,8 @@
       "perspectiveOff": "Perspective view off",
       "driveStart": "Drive started",
       "driveStop": "Drive stopped",
-      "eraserOn": "Eraser",
-      "eraserOff": "Eraser off",
-      "multiSelectOn": "Multi-select",
-      "multiSelectOff": "Multi-select off"
+      "eraser": "Eraser",
+      "multiSelect": "Multi-select"
     }
   },
   "importExport": {

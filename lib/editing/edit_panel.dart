@@ -172,20 +172,23 @@ class _EditPanelState extends ConsumerState<EditPanel> {
     );
   }
 
-  /// 間引く: 許す幅（m）。0〜50 m、0.5 m 刻み
+  /// 簡略化: つまみは消える頂点の数に比例（左端は 1 個、右端は線なら 2 点・面なら 3 点を残すところ）。
+  /// 表示はその段の許す幅（m）。以前は幅をそのまま 0〜50 m で動かしていて、効き方が形によってまちまちだった
   Widget _simplifySlider(EditState s) {
     final ed = ref.read(featureEditorProvider.notifier);
+    final steps = ed.simplifySteps;
+    final k = s.tolerance <= 0 ? 0 : steps.where((t) => t <= s.tolerance).length;
     return Row(
       children: [
         Expanded(
           child: Slider(
-            value: s.tolerance.clamp(0, 50),
-            max: 50,
-            divisions: 100,
+            value: k.toDouble(),
+            max: steps.isEmpty ? 1 : steps.length.toDouble(),
+            divisions: steps.isEmpty ? null : steps.length,
             label: '${s.tolerance.toStringAsFixed(1)} m',
-            onChangeStart: (_) => ed.sliderStart(),
-            onChanged: ed.setTolerance,
-            onChangeEnd: (_) => ed.sliderEnd(),
+            onChangeStart: steps.isEmpty ? null : (_) => ed.sliderStart(),
+            onChanged: steps.isEmpty ? null : (v) => ed.setTolerance(v < 1 ? 0 : steps[v.round() - 1]),
+            onChangeEnd: steps.isEmpty ? null : (_) => ed.sliderEnd(),
           ),
         ),
         SizedBox(width: 56, child: Text('${s.tolerance.toStringAsFixed(1)} m', textAlign: TextAlign.right)),

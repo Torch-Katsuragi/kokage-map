@@ -8,6 +8,10 @@ tags: [technical, geopackage, qgis, interop, import]
 2026-10-09 決定。「取り込み」をやめ、QGIS と同じく **dir に置かれたファイルがそのままレイヤになる** 形にする。
 新規に作るものは gpkg だけ。gpkg 以外は **読み取り専用** で開き、編集したければ gpkg へ **変換（置き換え）** する。
 
+> [!IMPORTANT] 読み手は GDAL に一本化する（2026-10-09 同日決定、[[gdal]]）
+> 下の「対応形式」の純 Dart の読み手（`ExternalReader`）は GDAL が入るまでのつなぎ。
+> GDAL が入ったら、キャッシュは `ogr2ogr` の出力（元の CRS のまま）になり、対応形式は GDAL が読めるもの全部になる。
+
 ## 原則
 
 - **dir 内に現に存在するファイルが正、`.qgs` は従**（[[qgis-interop]]）。

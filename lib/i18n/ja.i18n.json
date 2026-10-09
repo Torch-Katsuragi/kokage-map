@@ -1428,7 +1428,8 @@
     "inviteQrDesc": "スマホのカメラで読み取るとブラウザの参加ページが開きます。アプリの参加画面のQRスキャンでも読み取れます。",
     "kick": "退出させる",
     "kickConfirm": "${name} をルームから退出させますか？",
-    "kickedNotice": "ホストによってルームから退出しました"
+    "kickedNotice": "ホストによってルームから退出しました",
+    "roomClosedNotice": "ルームが終了したか期限が切れたため退出しました"
   },
   "qgis": {
     "discarded": "$count 件は取り込んでいません: $names",

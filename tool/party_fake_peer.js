@@ -14,12 +14,38 @@
 // 例（実機が作ったルーム ABCD2345 に、端末のGPS(33.931,135.963)付近で参加）:
 //   node tool/party_fake_peer.js join ABCD2345 Fake太郎 33.9312 135.9633
 //
-// Ctrl+C で live/members を掃除して退出する。
+// Ctrl+C で live/members を掃除して退出する（create で作った部屋は終了させる）。
+// ホストに退出させられた・ルームが終了/失効したら、送信がルールで弾かれた時点で終わる。
+//
+// 接続先は lib/firebase_options.dart の値（プロジェクト nemurigi-kobo）。
+// エミュレータに向けるときは環境変数で切り替える:
+//   FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:9000 \
+//     node tool/party_fake_peer.js create
 
-const API_KEY = 'AIzaSyABBbUulD2cEbVT7cHfRCDLk_R5QBocxDA'; // android client key（機密ではない）
-const DB = 'https://k-rootmap-default-rtdb.asia-southeast1.firebasedatabase.app';
+const crypto = require('node:crypto');
+
+// android client key（機密ではない。lib/firebase_options.dart の android.apiKey）。
+// キー制限で弾かれるときは PARTY_API_KEY で web 側（web.apiKey）などに差し替える。
+const API_KEY = process.env.PARTY_API_KEY || 'AIzaSyABB0YHs-KSUE7_t047WFkQ8v9GRe3LQjs';
+const DB_NAMESPACE = 'nemurigi-kobo-default-rtdb';
+const AUTH_EMU = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+const DB_EMU = process.env.FIREBASE_DATABASE_EMULATOR_HOST;
+const DB = DB_EMU
+  ? `http://${DB_EMU}`
+  : `https://${DB_NAMESPACE}.asia-southeast1.firebasedatabase.app`;
+const AUTH_BASE = AUTH_EMU
+  ? `http://${AUTH_EMU}/identitytoolkit.googleapis.com`
+  : 'https://identitytoolkit.googleapis.com';
 const SERVER_TS = { '.sv': 'timestamp' };
 const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // 0/O/1/I/L を除外（RoomCodeGeneratorと一致）
+// ルームの寿命（アプリの RtdbRoomRepository.createRoom と同じ 24h。ルールの上限は 26h）
+const ROOM_TTL_MS = 24 * 3600 * 1000;
+
+/** RTDB の REST URL（エミュレータなら ns を付ける） */
+function dbUrl(path, idToken) {
+  const ns = DB_EMU ? `&ns=${DB_NAMESPACE}` : '';
+  return `${DB}/${path}.json?auth=${idToken}${ns}`;
+}
 
 const args = process.argv.slice(2);
 const mode = args[0];
@@ -31,7 +57,7 @@ function die(msg) {
 
 async function anonSignIn() {
   const res = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${API_KEY}`,
+    `${AUTH_BASE}/v1/accounts:signUp?key=${API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -43,23 +69,28 @@ async function anonSignIn() {
   return { idToken: json.idToken, uid: json.localId };
 }
 
-async function put(path, body, idToken) {
-  const res = await fetch(`${DB}/${path}.json?auth=${idToken}`, {
-    method: 'PUT',
+async function write(method, path, body, idToken) {
+  const res = await fetch(dbUrl(path, idToken), {
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const text = await res.text();
-  if (!res.ok) die(`PUT ${path} 失敗 (${res.status}): ${text}`);
-  return text;
+  return { ok: res.ok, status: res.status, text };
+}
+
+async function put(path, body, idToken) {
+  const r = await write('PUT', path, body, idToken);
+  if (!r.ok) die(`PUT ${path} 失敗 (${r.status}): ${r.text}`);
+  return r.text;
 }
 
 async function del(path, idToken) {
-  await fetch(`${DB}/${path}.json?auth=${idToken}`, { method: 'DELETE' });
+  await fetch(dbUrl(path, idToken), { method: 'DELETE' });
 }
 
 async function get(path, idToken) {
-  const res = await fetch(`${DB}/${path}.json?auth=${idToken}`);
+  const res = await fetch(dbUrl(path, idToken));
   if (!res.ok) return null;
   const text = await res.text();
   try {
@@ -72,7 +103,7 @@ async function get(path, idToken) {
 function randomCode(len = 8) {
   let s = '';
   for (let i = 0; i < len; i++) {
-    s += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+    s += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
   }
   return s;
 }
@@ -98,7 +129,7 @@ async function main() {
         hostUid: uid,
         active: true,
         createdAt: SERVER_TS,
-        expiresAt: Date.now() + 24 * 3600 * 1000,
+        expiresAt: Date.now() + ROOM_TTL_MS,
         name,
       },
       idToken,
@@ -141,6 +172,10 @@ async function main() {
     console.log('\n退出中（live/members を削除）...');
     await del(`rooms/${code}/live/${uid}`, idToken);
     await del(`rooms/${code}/members/${uid}`, idToken);
+    if (mode === 'create') {
+      // アプリの endRoom と同じ。meta は消さず（ルールが禁止）、終了フラグと失効時刻で閉じる
+      await write('PATCH', `rooms/${code}/meta`, { active: false, expiresAt: SERVER_TS }, idToken);
+    }
     console.log('退出しました。');
     process.exit(0);
   };
@@ -167,7 +202,8 @@ async function main() {
       centerLng + (R * Math.cos(t / 6)) / Math.cos((centerLat * Math.PI) / 180);
     const bearing = (t * 18) % 360;
     if (t % 20 === 0 && battery > 5) battery--;
-    await put(
+    const r = await write(
+      'PUT',
       `rooms/${code}/live/${uid}`,
       {
         lat,
@@ -180,6 +216,12 @@ async function main() {
       },
       idToken,
     );
+    if (!r.ok) {
+      // ルールに弾かれた＝退出させられたか、ルームが終了・失効した
+      console.log(`\n送信が拒否されました (${r.status})。退出させられたか、ルームが終了/失効しています。`);
+      await del(`rooms/${code}/live/${uid}`, idToken);
+      process.exit(0);
+    }
     process.stdout.write(
       `\r[${t}] publish lat=${lat.toFixed(6)} lng=${lng.toFixed(6)} bearing=${bearing} batt=${battery}%   `,
     );

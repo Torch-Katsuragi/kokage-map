@@ -62,6 +62,9 @@ flutter pub add firebase_core firebase_database firebase_auth
 firebase deploy --only database
 ```
 
+変える前に `tool/rules_test` のエミュレータテストを回す（[[testing#パーティ位置共有の RTDB ルール]]）。
+⚠ purge（手順5）は `rooms/.indexOn` を使うので、**ルールを先に**配信する。
+
 ## 5. クリーンアップ関数のデプロイ
 
 失効/終了ルームの定期purge（[`functions/index.js`](../../functions/index.js)）。

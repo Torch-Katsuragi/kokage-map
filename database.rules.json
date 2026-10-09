@@ -1,34 +1,43 @@
 {
   "rules": {
     "rooms": {
+      ".indexOn": ["meta/expiresAt", "meta/active"],
+
       "$roomCode": {
         ".read": "auth != null && data.child('members').child(auth.uid).exists()",
 
         "meta": {
-          ".write": "auth != null && (!data.exists() ? newData.child('hostUid').val() === auth.uid : data.child('hostUid').val() === auth.uid)",
-          ".validate": "newData.hasChildren(['hostUid','active','createdAt'])",
-          "hostUid":   { ".validate": "newData.isString()" },
+          ".write": "auth != null && $roomCode.matches(/^[2-9A-HJKMNP-Z]{8}$/) && newData.exists() && (!data.exists() ? newData.child('hostUid').val() === auth.uid : data.child('hostUid').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['hostUid','active','createdAt','expiresAt'])",
+          "hostUid":   { ".validate": "newData.isString() && (!data.exists() || newData.val() === data.val())" },
           "active":    { ".validate": "newData.isBoolean()" },
-          "createdAt": { ".validate": "newData.isNumber()" },
-          "expiresAt": { ".validate": "newData.isNumber()" },
+          "createdAt": { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() : newData.val() === now)" },
+          "expiresAt": { ".validate": "newData.isNumber() && newData.val() <= now + 93600000 && (!data.exists() || newData.val() <= data.val() || newData.val() === now)" },
           "name":      { ".validate": "newData.isString() && newData.val().length <= 60" },
           "$other":    { ".validate": false }
         },
 
         "members": {
           "$uid": {
-            ".write": "auth != null && ( ($uid === auth.uid && root.child('rooms/'+$roomCode+'/meta/active').val() === true && root.child('rooms/'+$roomCode+'/meta/expiresAt').val() > now) || root.child('rooms/'+$roomCode+'/meta/hostUid').val() === auth.uid )",
+            ".write": "auth != null && $roomCode.matches(/^[2-9A-HJKMNP-Z]{8}$/) && ( ($uid === auth.uid && (!newData.exists() || (root.child('rooms/'+$roomCode+'/meta/active').val() === true && root.child('rooms/'+$roomCode+'/meta/expiresAt').val() > now && !root.child('rooms/'+$roomCode+'/banned/'+auth.uid).exists()))) || (!newData.exists() && root.child('rooms/'+$roomCode+'/meta/hostUid').val() === auth.uid) )",
             ".validate": "newData.hasChildren(['name','role'])",
             "name":  { ".validate": "newData.isString() && newData.val().length <= 40" },
-            "role":  { ".validate": "newData.val() === 'host' || newData.val() === 'guest'" },
+            "role":  { ".validate": "newData.val() === 'guest' || (newData.val() === 'host' && $uid === root.child('rooms/'+$roomCode+'/meta/hostUid').val())" },
             "color": { ".validate": "newData.isString() && newData.val().length <= 16" },
             "$other": { ".validate": false }
           }
         },
 
+        "banned": {
+          "$uid": {
+            ".write": "auth != null && root.child('rooms/'+$roomCode+'/meta/hostUid').val() === auth.uid",
+            ".validate": "newData.val() === true"
+          }
+        },
+
         "live": {
           "$uid": {
-            ".write": "auth != null && $uid === auth.uid && root.child('rooms/'+$roomCode+'/members/'+auth.uid).exists()",
+            ".write": "auth != null && $uid === auth.uid && (!newData.exists() || ($roomCode.matches(/^[2-9A-HJKMNP-Z]{8}$/) && root.child('rooms/'+$roomCode+'/members/'+auth.uid).exists() && !root.child('rooms/'+$roomCode+'/banned/'+auth.uid).exists() && root.child('rooms/'+$roomCode+'/meta/active').val() === true && root.child('rooms/'+$roomCode+'/meta/expiresAt').val() > now))",
             ".validate": "newData.hasChildren(['lat','lng','ts'])",
             "lat":       { ".validate": "newData.isNumber() && newData.val() >= -90  && newData.val() <= 90" },
             "lng":       { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
@@ -45,7 +54,7 @@
 
         "tracks": {
           "$uid": {
-            ".write": "auth != null && $uid === auth.uid && root.child('rooms/'+$roomCode+'/members/'+auth.uid).exists()",
+            ".write": "auth != null && $uid === auth.uid && (!newData.exists() || ($roomCode.matches(/^[2-9A-HJKMNP-Z]{8}$/) && root.child('rooms/'+$roomCode+'/members/'+auth.uid).exists() && !root.child('rooms/'+$roomCode+'/banned/'+auth.uid).exists() && root.child('rooms/'+$roomCode+'/meta/active').val() === true && root.child('rooms/'+$roomCode+'/meta/expiresAt').val() > now))",
             "$pushId": {
               ".validate": "newData.hasChildren(['pts','from','to'])",
               "pts":  { ".validate": "newData.isString() && newData.val().length <= 8000" },

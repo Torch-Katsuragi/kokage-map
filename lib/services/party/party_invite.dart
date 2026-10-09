@@ -24,6 +24,8 @@
 library;
 
 import '../../core/platform_capabilities.dart';
+import 'party_invite_url_io.dart'
+    if (dart.library.js_interop) 'party_invite_url_web.dart' as url_impl;
 import 'room_code_generator.dart';
 
 /// 招待リンクの行き先（web版の本番URL）
@@ -71,12 +73,20 @@ bool _pendingConsumed = false;
 ///
 /// 2回目以降と web 以外では null。地図画面が初回表示時に呼び、
 /// 参加ダイアログへコードを充填する。
+///
+/// 読んだらアドレスバーから `?room=` を消す（再読み込みでの再参加と、
+/// 画面共有・履歴からのコード漏れを防ぐ）。
 String? consumePendingRoomCode() {
   if (_pendingConsumed) return null;
   _pendingConsumed = true;
   if (!PlatformCapabilities.isWeb) return null;
   final raw = Uri.base.queryParameters[kRoomQueryParam];
   if (raw == null) return null;
+  try {
+    url_impl.removeRoomQueryFromAddressBar();
+  } catch (_) {
+    // 消せなくても参加には響かない
+  }
   final code = raw.trim().toUpperCase();
   return RoomCodeGenerator.isValid(code) ? code : null;
 }

@@ -188,6 +188,11 @@ GeoPackage を作れる（GeoPackageは規約に沿ったSQLiteでしかない�
 > 画面を機械的に確認したいときは `flutter build web --release` して
 > `build/web` を静的配信するほうが速くて確実。
 
+## パーティ位置共有の RTDB ルール
+
+`database.rules.json` と purge（`functions/purge.js`）は Firebase Local Emulator で確かめる。
+`tool/rules_test/` で `npm install` → `npm test`（Java 17 と firebase-tools が要る。実プロジェクトには触らない）。
+
 ## 既知の落とし穴
 
 - **integration_test はファイル単位で起動する。**

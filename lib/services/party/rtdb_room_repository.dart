@@ -145,17 +145,50 @@ class RtdbRoomRepository {
   }
 
   /// ルームを終了（host のみ）。active=false にし、定期purge対象にする。
+  ///
+  /// `expiresAt` もサーバー時刻（いま）へ縮める。purge は `meta/expiresAt` の
+  /// インデックスで失効分を引くので、終了した部屋も同じ条件で拾える。
+  /// ゲストは meta の購読でこれを見て自動退出する（ルールも以後の位置送信を弾く）。
   Future<void> endRoom(String code) async {
-    await _db.ref('rooms/$code/meta/active').set(false);
+    await _db.ref('rooms/$code/meta').update({
+      'active': false,
+      'expiresAt': ServerValue.timestamp,
+    });
   }
 
   /// メンバーを退出させる（host のみ。ルールが host 特権を担保）。
+  ///
+  /// members の削除と `banned/{uid}` の書き込みを1回の multi-path update で行う。
+  /// banned が無いと、蹴られた側が同じコードで members を書き直してすぐ戻れる。
   ///
   /// `live/{uid}` は本人以外書けないため消せない。members から外れた時点で
   /// 相手の `.read` が失効し、蹴られた側は購読エラー経由で自動退出する。
   /// 残った live の実体は定期purge（Cloud Functions）が回収する。
   Future<void> kickMember(String code, String uid) async {
-    await _db.ref('rooms/$code/members/$uid').remove();
+    await _db.ref('rooms/$code').update({
+      'members/$uid': null,
+      'banned/$uid': true,
+    });
+  }
+
+  /// ルームのメタ情報の購読（メンバーであること前提）。
+  ///
+  /// meta が消えた（purge された）ときは null を流す。
+  Stream<RoomMeta?> watchMeta(String code) {
+    return _db.ref('rooms/$code/meta').onValue.map((event) {
+      final val = event.snapshot.value;
+      if (val is! Map) return null;
+      return RoomMeta.fromMap(code, val);
+    });
+  }
+
+  /// サーバー時刻と端末時刻の差（ms）の購読（`.info/serverTimeOffset`）。
+  ///
+  /// 失効判定を端末時計のズレに左右させないために使う。
+  Stream<int> watchServerTimeOffset() {
+    return _db.ref('.info/serverTimeOffset').onValue.map(
+          (event) => (event.snapshot.value as num?)?.toInt() ?? 0,
+        );
   }
 
   /// メンバー一覧の購読（メンバーであること前提）

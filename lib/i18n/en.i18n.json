@@ -436,6 +436,27 @@
     "scanError": "Scan error: $error",
     "connectionFailed": "Connection failed: $error"
   },
+  "externalLayer": {
+    "readOnly": "This layer is read-only ($name)",
+    "readOnlyDetail": "Shapefile, GeoJSON and other formats are opened read-only. Convert to gpkg to edit.",
+    "badge": "Read-only",
+    "loadFailed": "Cannot read: $error",
+    "convertAction": "Convert to gpkg to edit",
+    "convertTitle": "Convert to gpkg",
+    "convertConfirm": "\"$name\" will be converted to $target in the same folder.\nAfter checking that the result matches the original, the original files ($files) will be deleted.",
+    "converting": "Converting \"$name\"…",
+    "converted": "Converted \"$name\" to $target",
+    "leftovers": "Some files could not be deleted: $files",
+    "verifyFailed": "The converted gpkg did not match the original, so the conversion was cancelled (the original files are unchanged)",
+    "convertFailed": "Conversion failed: $error",
+    "readOnlyFolder": "This is a read-only shared folder, so the original files cannot be replaced",
+    "deleteFailed": "The original files could not be deleted, so the conversion was cancelled (the original files are unchanged)",
+    "copyAction": "Copy as gpkg to my folder",
+    "copyTitle": "Copy \"$name\" to",
+    "copied": "Copied \"$name\" to $target",
+    "noWritableFolder": "No folder to copy into",
+    "deleteConfirm": "Delete $name?\nThe original files ($files) will be deleted."
+  },
   "layerDrawer": {
     "openDrawer": "Open layer list",
     "closeDrawer": "Close layer list",

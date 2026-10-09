@@ -46,6 +46,7 @@ import '../../services/survey/survey_chain_resolver.dart';
 import '../../tools/pan_tool.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/geo_converter.dart';
+import '../../widgets/external_layer_actions.dart';
 import '../../widgets/radial_action_menu.dart';
 import '../base/device_tool.dart';
 import 'trupulse_detail_screen.dart';
@@ -124,6 +125,8 @@ class TruPulseTool extends DeviceTool {
       }
 
       final stn = _station!;
+      // 読み取り専用レイヤ（shp・GeoJSON など）の点を基準点にしていても書き込まない
+      if (refuseReadOnlyEditBy(_ref.read, stn)) return;
       final stnPos = stn.point;
       final target = const Distance().offset(stnPos, m.hd, m.az);
 
@@ -310,6 +313,8 @@ class TruPulseTool extends DeviceTool {
   }
 
   void _showPointMenu(BuildContext context, Offset center, PointFeatureNode target) {
+    // 基準点・削除などはどれも書き込むので、読み取り専用レイヤの点ではメニューを出さない
+    if (refuseReadOnlyEditBy(_ref.read, target)) return;
     final dependents = _findDependents(target);
 
     _dismissMenu = showRadialMenu(

@@ -21,11 +21,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../i18n/strings.g.dart';
 import '../../../models/geometry_type.dart';
+import '../../../models/nodes/external_layer_node.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/view_node.dart';
+import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../screens/layer_style_settings_screen.dart';
@@ -35,6 +37,7 @@ import '../../../tutorial/practice_project.dart';
 import '../../../tutorial/tutorial.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/feature_calc_utils.dart';
+import '../../../widgets/external_layer_actions.dart';
 import '../../../widgets/geometry_conversion_dialogs.dart';
 import '../../../widgets/layer_import_export_dialog.dart';
 import '../../../widgets/survey_conversion_dialog.dart';
@@ -116,20 +119,36 @@ class LayerTile extends ConsumerWidget {
 
   // ---------- メニュー（長押し・右クリック） ----------
 
+  /// 読み取り専用レイヤ（shp・GeoJSON など）の中か。改名・削除・統合は出さず「gpkg に変換して編集」を出す。
+  /// 表示・スタイル・View・書き出し・線や面への変換（書き込み先は別のレイヤ）はできる
+  bool get _readOnly => isInReadOnlyLayer(node);
+
   List<RowMenuItem> _menuItems(bool guiding) => [
         RowMenuItem('zoom', t.layerDrawer.layer.zoomTo, icon: Icons.center_focus_strong),
-        RowMenuItem('rename', t.layerDrawer.layer.rename, icon: Icons.edit),
+        if (!_readOnly) RowMenuItem('rename', t.layerDrawer.layer.rename, icon: Icons.edit),
         RowMenuItem('style', t.layerDrawer.layer.style, icon: Icons.palette, key: guiding ? TutorialTargets.styleMenuItem : null),
         RowMenuItem('add_view', t.layerDrawer.view.addView, icon: Icons.filter_alt, key: guiding ? TutorialTargets.addViewMenuItem : null),
         RowMenuItem('export', t.layerDrawer.layer.exportLayer, icon: Icons.file_download, dividerBefore: true),
         if (node is PointLayerNode) RowMenuItem('convert_to_line', t.layerDrawer.layer.convertToLinePolygon, icon: Icons.transform),
-        if (node is PolygonLayerNode) RowMenuItem('merge', t.layerDrawer.layer.merge, icon: Icons.join_full),
-        RowMenuItem('absorb', t.layerDrawer.layer.absorbMatchingLayers, icon: Icons.merge_type),
-        RowMenuItem('delete', t.layerDrawer.layer.delete, icon: Icons.delete_outline, danger: true, dividerBefore: true),
+        if (node is PolygonLayerNode && !_readOnly) RowMenuItem('merge', t.layerDrawer.layer.merge, icon: Icons.join_full),
+        if (!_readOnly) RowMenuItem('absorb', t.layerDrawer.layer.absorbMatchingLayers, icon: Icons.merge_type),
+        if (!_readOnly)
+          RowMenuItem('delete', t.layerDrawer.layer.delete, icon: Icons.delete_outline, danger: true, dividerBefore: true),
+        if (_readOnly) RowMenuItem('convert_gpkg', t.externalLayer.convertAction, icon: Icons.edit_note, dividerBefore: true),
       ];
 
   Future<void> _onMenu(BuildContext context, WidgetRef ref, String value) async {
     switch (value) {
+      case 'convert_gpkg':
+        final external = readOnlyLayerOf(node);
+        if (external != null && await confirmConvertExternalLayer(context, external) && context.mounted) {
+          await convertExternalLayer(
+            ref.read(notificationCenterProvider.notifier),
+            external,
+            context: context,
+            onChanged: ref.refreshMap,
+          );
+        }
       case 'rename':
         await _showRenameDialog(context, ref);
       case 'style':
@@ -491,6 +510,8 @@ class LayerTile extends ConsumerWidget {
 
 /// GeoPackage にレイヤを足す（gpkg の見出しの長押しメニューと、空の gpkg の「レイヤ追加」の行から）
 Future<void> showAddLayerDialog(BuildContext context, WidgetRef ref, GeoPackageNode node) async {
+  // 読み取り専用レイヤ（shp・GeoJSON など）には足せない
+  if (refuseReadOnlyEdit(ref.read(notificationCenterProvider.notifier), node, onChanged: ref.refreshMap)) return;
   final result = await showDialog<Map<String, String>>(
     context: context,
     builder: (_) => const _NewLayerDialog(),

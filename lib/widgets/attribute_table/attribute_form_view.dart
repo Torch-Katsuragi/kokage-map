@@ -211,7 +211,7 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
             itemCount: ctrl.columnNames.length,
             itemBuilder: (context, index) {
               final col = ctrl.columnNames[index];
-              final isEditable = !isReadOnlyColumn(col);
+              final isEditable = !ctrl.readOnly && !isReadOnlyColumn(col);
               final sqlType = ctrl.columnSqlType(col);
               final numeric = isNumericSqlType(sqlType);
               return Padding(

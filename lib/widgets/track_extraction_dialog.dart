@@ -30,6 +30,7 @@ import 'package:latlong2/latlong.dart';
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
 import '../models/gps_track.dart';
+import '../models/nodes/external_layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/layer_tree_node.dart';
@@ -278,7 +279,8 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
     // ラインレイヤを検索
     final lineLayers = <LineLayerNode>[];
     void searchLineLayers(LayerTreeNode node) {
-      if (node is LineLayerNode) {
+      // 読み取り専用レイヤ（shp・GeoJSON など）には書けないので候補にしない
+      if (node is LineLayerNode && !isInReadOnlyLayer(node)) {
         lineLayers.add(node);
       }
       if (node is! FeatureNode) {

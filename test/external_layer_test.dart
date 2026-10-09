@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:charset/charset.dart' as charset;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
@@ -12,9 +13,12 @@ import 'package:root_maps/core/path_resolver.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/models/nodes/external_layer_node.dart';
+import 'package:root_maps/models/nodes/feature_node.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
+import 'package:root_maps/providers/notification_providers.dart';
+import 'package:root_maps/providers/selection_providers.dart';
 import 'package:root_maps/services/coordinate/epsg_registry.dart';
 import 'package:root_maps/services/external/external_layer_cache.dart';
 import 'package:root_maps/services/external/external_layer_converter.dart';
@@ -55,31 +59,37 @@ void main() {
   void writePoints(String base, {String? prj, bool cpg = true, String ext = '.dbf'}) {
     final r = encodeShpShx(ShapeType.point, [
       [
-        [[135.97, 33.91]],
+        [
+          [135.97, 33.91],
+        ],
       ],
       [
-        [[135.98, 33.92]],
+        [
+          [135.98, 33.92],
+        ],
       ],
       [
-        [[135.99, 33.93]],
+        [
+          [135.99, 33.93],
+        ],
       ],
     ]);
     File('$base.shp').writeAsBytesSync(r.shp);
     File('$base.shx').writeAsBytesSync(r.shx);
-    File('$base$ext').writeAsBytesSync(encodeDbf([
-      {'NAME': 'sugi', 'H': 21.5},
-      {'NAME': 'hinoki', 'H': 18.0},
-      {'NAME': 'matsu', 'H': 9.5},
-    ], now: DateTime(2026, 10, 9)));
+    File('$base$ext').writeAsBytesSync(
+      encodeDbf([
+        {'NAME': 'sugi', 'H': 21.5},
+        {'NAME': 'hinoki', 'H': 18.0},
+        {'NAME': 'matsu', 'H': 9.5},
+      ], now: DateTime(2026, 10, 9)),
+    );
     if (prj != null) File('$base.prj').writeAsStringSync(EpsgRegistry.instance.getWktString(prj)!);
     if (cpg) File('$base.cpg').writeAsStringSync('CP932');
   }
 
-  Map<String, Object?> feature(Map<String, Object?> geometry, Map<String, Object?> props) =>
-      {'type': 'Feature', 'properties': props, 'geometry': geometry};
+  Map<String, Object?> feature(Map<String, Object?> geometry, Map<String, Object?> props) => {'type': 'Feature', 'properties': props, 'geometry': geometry};
 
-  void writeGeoJson(String path, List<Map<String, Object?>> features) =>
-      File(path).writeAsStringSync(jsonEncode({'type': 'FeatureCollection', 'features': features}));
+  void writeGeoJson(String path, List<Map<String, Object?>> features) => File(path).writeAsStringSync(jsonEncode({'type': 'FeatureCollection', 'features': features}));
 
   group('読み手', () {
     test('拡張子で読み手を引く（大文字も）。付属ファイルは大文字小文字を問わず拾う', () async {
@@ -112,13 +122,17 @@ void main() {
       final base = p.join(proj, 'jp');
       final r = encodeShpShx(ShapeType.point, [
         [
-          [[135.0, 33.0]],
+          [
+            [135.0, 33.0],
+          ],
         ],
       ]);
       File('$base.shp').writeAsBytesSync(r.shp);
-      File('$base.dbf').writeAsBytesSync(encodeDbf([
-        {'NAME': '杉'},
-      ]));
+      File('$base.dbf').writeAsBytesSync(
+        encodeDbf([
+          {'NAME': '杉'},
+        ]),
+      );
       final ds = (await ShapefileReader().read('$base.shp')).single;
       expect(ds.features.single['NAME'], '杉');
       expect(charset.shiftJis.decode(charset.shiftJis.encode('杉')), '杉');
@@ -128,7 +142,9 @@ void main() {
       final base = p.join(proj, 'plane');
       final r = encodeShpShx(ShapeType.point, [
         [
-          [[0.0, 0.0]],
+          [
+            [0.0, 0.0],
+          ],
         ],
       ]);
       File('$base.shp').writeAsBytesSync(r.shp);
@@ -205,26 +221,47 @@ void main() {
     test('GeoJSON: 型が混ざれば <名前>_point / _line / _polygon に分ける', () async {
       final path = p.join(proj, 'mixed.geojson');
       writeGeoJson(path, [
-        feature({'type': 'Point', 'coordinates': [135.0, 33.0]}, {'name': 'a', 'n': 1, 'ok': true}),
-        feature({
-          'type': 'LineString',
-          'coordinates': [
-            [135.0, 33.0],
-            [135.1, 33.1],
-          ],
-        }, {'name': 'l'}),
-        feature({
-          'type': 'Polygon',
-          'coordinates': [
-            [
+        feature(
+          {
+            'type': 'Point',
+            'coordinates': [135.0, 33.0],
+          },
+          {'name': 'a', 'n': 1, 'ok': true},
+        ),
+        feature(
+          {
+            'type': 'LineString',
+            'coordinates': [
               [135.0, 33.0],
-              [135.1, 33.0],
               [135.1, 33.1],
-              [135.0, 33.0],
             ],
-          ],
-        }, {'name': 'p', 'nested': {'k': 1}}),
-        feature({'type': 'Point', 'coordinates': [135.2, 33.2]}, {'name': null, 'n': 2}),
+          },
+          {'name': 'l'},
+        ),
+        feature(
+          {
+            'type': 'Polygon',
+            'coordinates': [
+              [
+                [135.0, 33.0],
+                [135.1, 33.0],
+                [135.1, 33.1],
+                [135.0, 33.0],
+              ],
+            ],
+          },
+          {
+            'name': 'p',
+            'nested': {'k': 1},
+          },
+        ),
+        feature(
+          {
+            'type': 'Point',
+            'coordinates': [135.2, 33.2],
+          },
+          {'name': null, 'n': 2},
+        ),
       ]);
       final datasets = await GeoJsonReader().read(path);
       expect(datasets.map((d) => d.layerName), ['mixed_point', 'mixed_line', 'mixed_polygon']);
@@ -237,10 +274,23 @@ void main() {
     test('GeoJSON: .json は中身が FeatureCollection / Feature のときだけ', () async {
       final fc = p.join(proj, 'fc.json');
       writeGeoJson(fc, [
-        feature({'type': 'Point', 'coordinates': [135.0, 33.0]}, {}),
+        feature({
+          'type': 'Point',
+          'coordinates': [135.0, 33.0],
+        }, {}),
       ]);
       final single = p.join(proj, 'single.json');
-      File(single).writeAsStringSync(jsonEncode(feature({'type': 'Point', 'coordinates': [135.0, 33.0]}, {'a': 'b'})));
+      File(single).writeAsStringSync(
+        jsonEncode(
+          feature(
+            {
+              'type': 'Point',
+              'coordinates': [135.0, 33.0],
+            },
+            {'a': 'b'},
+          ),
+        ),
+      );
       final config = p.join(proj, 'settings.json');
       File(config).writeAsStringSync(jsonEncode({'type': 'config', 'value': 1}));
       final broken = p.join(proj, 'broken.json');
@@ -266,13 +316,16 @@ void main() {
     test('shp・GeoJSON はノードになり、付属ファイルや GeoJSON でない .json はならない', () async {
       writePoints(p.join(proj, '林班'));
       writeGeoJson(p.join(proj, 'roads.geojson'), [
-        feature({
-          'type': 'LineString',
-          'coordinates': [
-            [135.0, 33.0],
-            [135.1, 33.1],
-          ],
-        }, {'name': 'r'}),
+        feature(
+          {
+            'type': 'LineString',
+            'coordinates': [
+              [135.0, 33.0],
+              [135.1, 33.1],
+            ],
+          },
+          {'name': 'r'},
+        ),
       ]);
       File(p.join(proj, 'settings.json')).writeAsStringSync('{"a":1}');
 
@@ -295,7 +348,13 @@ void main() {
     test('元が変わらなければ作り直さず、変わったら作り直す', () async {
       final path = p.join(proj, 'pts.geojson');
       writeGeoJson(path, [
-        feature({'type': 'Point', 'coordinates': [135.0, 33.0]}, {'n': 1}),
+        feature(
+          {
+            'type': 'Point',
+            'coordinates': [135.0, 33.0],
+          },
+          {'n': 1},
+        ),
       ]);
       final root = await openRoot();
       final node = root.children.whereType<ExternalLayerNode>().single;
@@ -303,8 +362,20 @@ void main() {
       expect(await ExternalLayerCache.ensure(cache, path, node.reader), isFalse, reason: '同じ印なら作り直さない');
 
       writeGeoJson(path, [
-        feature({'type': 'Point', 'coordinates': [135.0, 33.0]}, {'n': 1}),
-        feature({'type': 'Point', 'coordinates': [135.1, 33.1]}, {'n': 2}),
+        feature(
+          {
+            'type': 'Point',
+            'coordinates': [135.0, 33.0],
+          },
+          {'n': 1},
+        ),
+        feature(
+          {
+            'type': 'Point',
+            'coordinates': [135.1, 33.1],
+          },
+          {'n': 2},
+        ),
       ]);
       File(path).setLastModifiedSync(DateTime(2030));
       await node.updateChildren();
@@ -329,6 +400,30 @@ void main() {
         expect(File('$base$ext').existsSync(), isFalse, reason: ext);
       }
       expect(File(cachePath).existsSync(), isFalse);
+    });
+  });
+
+  group('編集の門番', () {
+    test('選んだ地物をまとめて消しても、読み取り専用レイヤの地物は消さず「gpkg に変換して編集」を知らせる', () async {
+      writePoints(p.join(proj, 'trees'));
+      final root = FolderNode('Home', children: []);
+      await root.updateChildren();
+      final node = root.children.whereType<ExternalLayerNode>().single;
+      await node.updateChildren();
+      final layer = node.children.whereType<LayerNode>().single;
+      await layer.updateChildren();
+      final features = layer.children.whereType<FeatureNode>().toList();
+      expect(features, hasLength(3));
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      container.read(selectedFeaturesProvider.notifier).set(features);
+      await container.read(selectedFeaturesProvider.notifier).disposeSelectedFeatures();
+
+      expect(await node.geoPackageFile.countFilteredFeatures('trees', '1=1'), 3);
+      expect(File(p.join(proj, 'trees.shp')).existsSync(), isTrue);
+      final notes = container.read(notificationCenterProvider);
+      expect(notes.single.actionLabel, isNotNull);
     });
   });
 
@@ -378,7 +473,10 @@ void main() {
 
     test('同名の gpkg があれば _1 を付ける（既存の gpkg に混ぜない）', () async {
       writeGeoJson(p.join(proj, 'a.geojson'), [
-        feature({'type': 'Point', 'coordinates': [135.0, 33.0]}, {}),
+        feature({
+          'type': 'Point',
+          'coordinates': [135.0, 33.0],
+        }, {}),
       ]);
       File(p.join(proj, 'a.gpkg')).writeAsBytesSync(const [1]);
       File(p.join(proj, 'a_1.gpkg')).writeAsBytesSync(const [1]);
@@ -388,8 +486,20 @@ void main() {
     test('件数が食い違えば書いた gpkg を消し、元は残す', () async {
       final path = p.join(proj, 'pts.geojson');
       writeGeoJson(path, [
-        feature({'type': 'Point', 'coordinates': [135.0, 33.0]}, {'n': 1}),
-        feature({'type': 'Point', 'coordinates': [135.1, 33.1]}, {'n': 2}),
+        feature(
+          {
+            'type': 'Point',
+            'coordinates': [135.0, 33.0],
+          },
+          {'n': 1},
+        ),
+        feature(
+          {
+            'type': 'Point',
+            'coordinates': [135.1, 33.1],
+          },
+          {'n': 2},
+        ),
       ]);
       final (_, node) = await open('pts.geojson');
       // キャッシュから 1 件消して、元（2 件）と食い違わせる

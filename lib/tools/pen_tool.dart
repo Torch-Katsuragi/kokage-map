@@ -30,6 +30,7 @@ import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/global_drawing_state.dart';
+import '../widgets/external_layer_actions.dart';
 import 'map_tool.dart';
 import 'pan_tool.dart';
 import 'select_tool.dart';
@@ -76,6 +77,11 @@ class PenTool extends MapTool with PanDelegation {
       if (warn) _warn(t.editor.layerInvisible);
       return null;
     }
+    // 読み取り専用レイヤ（shp・GeoJSON など）には描けない（「gpkg に変換して編集」を出す）
+    if (readOnlyLayerOf(selected) != null) {
+      if (warn) refuseReadOnlyEditBy(_ref.read, selected);
+      return null;
+    }
     return selected;
   }
 
@@ -103,6 +109,7 @@ class PenTool extends MapTool with PanDelegation {
         _warn(t.editor.noLayerSelected);
         return;
       }
+      if (refuseReadOnlyEditBy(_ref.read, _ref.read(selectedLayerNodeProvider))) return;
       final hit = _eraserTarget(mapState.offsetToLatLng(details.localPosition), mapState);
       if (hit != null) _ref.read(selectedFeaturesProvider.notifier).toggle(hit);
       return;

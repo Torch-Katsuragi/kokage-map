@@ -436,6 +436,27 @@
     "scanError": "スキャンエラー: $error",
     "connectionFailed": "接続失敗: $error"
   },
+  "externalLayer": {
+    "readOnly": "読み取り専用のレイヤです（$name）",
+    "readOnlyDetail": "shp・GeoJSON などは読み取り専用で開いています。編集するには gpkg に変換してください。",
+    "badge": "読み取り専用",
+    "loadFailed": "読み込めません: $error",
+    "convertAction": "gpkgに変換して編集",
+    "convertTitle": "gpkg に変換",
+    "convertConfirm": "「$name」を同じフォルダの $target に変換します。\n書いた内容が元と一致することを確かめてから、元のファイル一式（$files）を削除します。",
+    "converting": "「$name」を変換しています…",
+    "converted": "「$name」を $target に変換しました",
+    "leftovers": "削除できなかったファイルがあります: $files",
+    "verifyFailed": "変換した gpkg が元と一致しないため、変換をやめました（元のファイルはそのままです）",
+    "convertFailed": "変換に失敗しました: $error",
+    "readOnlyFolder": "読み取り専用の共有フォルダなので、元のファイルを置き換えられません",
+    "deleteFailed": "元のファイルを削除できないため、変換をやめました（元のファイルはそのままです）",
+    "copyAction": "自分のフォルダにgpkgとして複製",
+    "copyTitle": "「$name」の複製先",
+    "copied": "「$name」を $target に複製しました",
+    "noWritableFolder": "複製できるフォルダがありません",
+    "deleteConfirm": "$name を削除しますか？\n元のファイル一式（$files）を削除します。"
+  },
   "layerDrawer": {
     "openDrawer": "レイヤ一覧を開く",
     "closeDrawer": "レイヤ一覧を閉じる",

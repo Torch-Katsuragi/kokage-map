@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 
+import '../models/nodes/external_layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
@@ -88,7 +89,8 @@ class GeometryConversionService {
     
     // currentNodeの直接の子（GeoPackageNode）のみを検索
     for (final child in currentDir.children) {
-      if (child is GeoPackageNode) {
+      // 読み取り専用レイヤ（shp・GeoJSON など）には書けないので候補にしない
+      if (child is GeoPackageNode && child is! ExternalLayerNode) {
         searchLineAndPolygonLayers(child, targetLayers);
       }
     }

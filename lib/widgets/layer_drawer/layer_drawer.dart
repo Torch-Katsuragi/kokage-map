@@ -29,6 +29,7 @@ import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/drive_folder_node.dart';
+import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
@@ -38,14 +39,17 @@ import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/sys_node.dart';
 import '../../presentation/node_presenter.dart';
+import '../../providers/notification_providers.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../screens/gallery_import_screen.dart';
+import '../../services/external/external_layer_cache.dart';
 import '../../services/kmeta_service.dart';
 import '../../services/layer_drawer_service.dart';
 import '../../tutorial/tutorial.dart';
 import '../dialogs/add_folder_type_dialog.dart';
 import '../dialogs/drive_url_input_dialog.dart';
+import '../external_layer_actions.dart';
 import 'common_dialogs.dart';
 import 'layer_drawer_drive_sync.dart';
 import 'layer_drawer_title_bar.dart';
@@ -125,6 +129,11 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
   /// 行の左スワイプ「移動」: 行き先を選ばせて動かす（フォルダ・gpkg・写真はフォルダへ、レイヤは別の gpkg へ移植）
   Future<void> _swipeMove(LayerTreeNode source) async {
+    // 読み取り専用レイヤの中のレイヤは別の gpkg へ移せない（ファイルごとのフォルダ移動はできる）
+    if (source is LayerNode &&
+        refuseReadOnlyEdit(ref.read(notificationCenterProvider.notifier), source, onChanged: ref.refreshMap)) {
+      return;
+    }
     LayerTreeNode root = widget.currentNode!;
     while (root.parent != null) {
       root = root.parent!;
@@ -139,6 +148,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
   }
 
   Future<void> _moveNodeToFolder(LayerTreeNode source, FolderNode target) async {
+    if (source is ExternalLayerNode) return _moveExternalToFolder(source, target);
 
     final sourcePath = source.getAbsoluteFilePath();
     final targetDir = target.getAbsoluteFilePath();
@@ -356,6 +366,35 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         },
       );
 
+  /// 読み取り専用レイヤ（shp など）のフォルダ移動。付属ファイルも一緒に動かす（キャッシュは移った先で作り直す）
+  Future<void> _moveExternalToFolder(ExternalLayerNode source, FolderNode target) async {
+    final targetDir = target.getAbsoluteFilePath();
+    if (targetDir == null || p.equals(p.dirname(source.sourcePath), targetDir)) return;
+    final files = await source.sourceFiles();
+    for (final file in files) {
+      if (await fs.exists(p.join(targetDir, p.basename(file)))) {
+        ref.notify(t.layerDrawer.alreadyExists(name: p.basename(file), target: target.name));
+        return;
+      }
+    }
+    try {
+      await ExternalLayerCache.discard(source.geoPackageFile.getAbsolutePath()!);
+      for (final file in files) {
+        final newPath = p.join(targetDir, p.basename(file));
+        await fs.rename(file, newPath);
+        await LayerDrawerService.notifySyncedPathChange(source, file, newPath);
+      }
+      await source.parent?.updateChildren();
+      await target.updateChildren();
+      final moved = target.children.whereType<ExternalLayerNode>().where((n) => n.name == source.name).firstOrNull;
+      await moved?.updateChildren();
+      ref.refreshMap();
+      ref.notify(t.layerDrawer.movedTo(source: source.name, target: target.name));
+    } catch (e) {
+      ref.notify(t.layerDrawer.moveFailed(error: '$e'), level: NotificationLevel.error);
+    }
+  }
+
   Future<void> _renameGeoPackage(BuildContext context, GeoPackageNode node) => _rename(
         context,
         title: t.layerDrawer.renameGeoPackage,
@@ -372,7 +411,15 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
             node, name, projectRootDir: projectRoot ?? '',
           );
 
-          if (oldPath != null && parentNode != null) {
+          if (node is ExternalLayerNode && parentNode != null) {
+            // 読み取り専用レイヤ: 開閉はキャッシュのパスで覚えている。元のパスが変わるとキャッシュも変わる
+            final newSource = p.join(p.dirname(node.sourcePath), newFileName);
+            if (wasExpanded && oldPath != null) {
+              ref.read(expandedGeoPackagesProvider.notifier).updatePath(oldPath, ExternalLayerCache.cachePathFor(newSource));
+            }
+            final renamed = parentNode.children.whereType<ExternalLayerNode>().where((c) => c.sourcePath == newSource).firstOrNull;
+            await renamed?.updateChildren();
+          } else if (oldPath != null && parentNode != null) {
             final newPath = p.join(p.dirname(oldPath), newFileName);
             if (wasExpanded) {
               ref.read(expandedGeoPackagesProvider.notifier).updatePath(oldPath, newPath);

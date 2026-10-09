@@ -29,8 +29,10 @@ import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/gps_manager_service.dart';
 import '../utils/global_drawing_state.dart';
+import '../widgets/external_layer_actions.dart';
 import 'map_tool.dart';
 import 'pan_tool.dart';
+
 /// GPS関連機能を扱うツール
 ///
 /// GPS測量機能を提供し、現在位置を記録してフィーチャを作成します:
@@ -172,6 +174,8 @@ class GpsTool extends MapTool with PanDelegation {
 
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = _ref.read(selectedLayerNodeProvider);
+      // 読み取り専用レイヤ（shp・GeoJSON など）には記録しない
+      if (refuseReadOnlyEditBy(_ref.read, selected)) return false;
       if (selected is PointLayerNode) {
         return await _recordPoint(selected, position, {
           'altitude': averagedResult['altitude'],
@@ -256,6 +260,8 @@ class GpsTool extends MapTool with PanDelegation {
 
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = _ref.read(selectedLayerNodeProvider);
+      // 読み取り専用レイヤ（shp・GeoJSON など）には記録しない
+      if (refuseReadOnlyEditBy(_ref.read, selected)) return false;
       if (selected is PointLayerNode) {
         return await _recordPoint(selected, position, {
           'altitude': gpsInfo['altitude'],

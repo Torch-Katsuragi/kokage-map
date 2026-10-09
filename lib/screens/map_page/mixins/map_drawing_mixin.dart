@@ -26,6 +26,7 @@ import '../../../providers/tool_providers.dart';
 import '../../../tutorial/tutorial.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/global_drawing_state.dart';
+import '../../../widgets/external_layer_actions.dart';
 import '../map_page_state_base.dart';
 
 /// 描画確定Mixin
@@ -101,6 +102,8 @@ mixin MapDrawingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
   /// [feature] - 追記対象のFeatureNode
   void startAppendMode(FeatureNode feature) {
     AppLogger.debug('[MAP] 追記モード開始: ${feature.name} (${feature.runtimeType})');
+    // 読み取り専用レイヤの地物には追記できない
+    if (refuseReadOnlyEditBy(ref.read, feature)) return;
     
     // 1. ツールをPenToolに切り替え
     ref.read(currentToolProvider.notifier).set(ref.read(penToolProvider));

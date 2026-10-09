@@ -26,6 +26,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/db/database_factory_setup.dart';
 import 'core/launch_request.dart';
+import 'core/native_licenses.dart';
 import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
 import 'i18n/strings.g.dart';
@@ -83,6 +84,9 @@ void main() async {
 
   // sqflite の実装をプラットフォームごとに選ぶ（web は sqlite3 WASM）
   setupDatabaseFactory();
+
+  // 同梱のネイティブライブラリ（GDAL など）のライセンスをライセンス画面に載せる
+  registerNativeLicenses();
 
   AppLogger.debug('[Boot] runApp');
   runApp(TranslationProvider(child: const ProviderScope(child: RootMapsApp())));

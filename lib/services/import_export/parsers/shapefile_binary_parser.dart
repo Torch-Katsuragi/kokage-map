@@ -167,22 +167,31 @@ class ShapefileBinaryParser {
         }
         recordIndex++;
 
-        // レコードシェープタイプ
-        final recordShapeType = reader.data.getInt32(offset, Endian.little);
+        // 次のレコードの頭（Z・M 付きの形は XY の後ろに高さ・計測値が続くので、読んだ量ではなく長さで進む）
+        final recordEnd = offset + contentLength * 2;
+
+        // レコードシェープタイプ。Z・M 付きは XY だけ読んで素の形として扱う
+        final recordShapeType = _baseShapeType(reader.data.getInt32(offset, Endian.little));
         offset += 4;
 
         // ジオメトリを解析
-        final (Object? geometry, int geometryBytes) = switch (recordShapeType) {
-          ShapeType.point => (reader.point(offset), 16),
-          ShapeType.polyLine => reader.polyLine(offset),
-          ShapeType.polygon => reader.polygon(offset),
-          _ => (null, (contentLength * 2) - 4),
+        final Object? geometry = switch (recordShapeType) {
+          ShapeType.point => reader.point(offset),
+          ShapeType.multiPoint => reader.multiPointFirst(offset),
+          ShapeType.polyLine => reader.polyLine(offset).$1,
+          ShapeType.polygon => reader.polygon(offset).$1,
+          _ => null,
         };
         if (geometry != null) {
-          record = ShpRecord(recordIndex, recordShapeType, geometry);
+          // マルチポイントは最初の点だけ（GeoJSON の読み込みと同じ扱い）
+          record = ShpRecord(
+            recordIndex,
+            recordShapeType == ShapeType.multiPoint ? ShapeType.point : recordShapeType,
+            geometry,
+          );
           recordCount++;
         }
-        offset += geometryBytes;
+        offset = recordEnd;
 
         // 進捗ログ
         if (recordCount < 10 ||
@@ -199,6 +208,15 @@ class ShapefileBinaryParser {
 
     AppLogger.debug('[ShpParser] 解析完了: $recordCount件');
   }
+
+  /// Z・M 付きの形を素の形に寄せる（XY の並びは同じ）
+  static int _baseShapeType(int shapeType) => switch (shapeType) {
+    ShapeType.pointZ || ShapeType.pointM => ShapeType.point,
+    ShapeType.polyLineZ || ShapeType.polyLineM => ShapeType.polyLine,
+    ShapeType.polygonZ || ShapeType.polygonM => ShapeType.polygon,
+    ShapeType.multiPointZ || ShapeType.multiPointM => ShapeType.multiPoint,
+    _ => shapeType,
+  };
 }
 
 /// 元の座標系 → WGS84。投影は最初に 1 回だけ用意する
@@ -253,6 +271,12 @@ class _RecordReader {
     final y = _f64(offset + 8);
     if (!x.isFinite || !y.isFinite) return null;
     return toWgs84(x, y);
+  }
+
+  /// マルチポイントの最初の点（範囲 32 バイト・点の数 4 バイトの後ろ）
+  LatLng? multiPointFirst(int start) {
+    if (start + 36 > bytes.length || _i32(start + 32) < 1) return null;
+    return point(start + 36);
   }
 
   /// 部分の区切りは見ず、全部の点を 1 本の線にする。変換できない点は飛ばす

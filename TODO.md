@@ -26,7 +26,7 @@
 ルール・関数・hosting ヘッダ・API キーの制限・GitHub の秘密スキャンは 2026-10-09 に反映済み。残りは段階導入の後半と本人操作:
 
 - [ ] Play Console の「アプリの完全性」で Cloud プロジェクト `nemurigi-kobo` を Play Integrity にリンク（本人操作）。App Check 側の Play Integrity 登録は済み
-- [ ] debug ビルドの App Check デバッグトークン（logcat に出る）を Firebase コンソールに登録
+- [ ] debug ビルドの App Check デバッグトークン（logcat に出る）を Firebase コンソールに登録（Pixel 9 は 2026-10-09 登録済み。Fold・メインPC側の端末が残り）
 - [ ] App Check の指標で web・Android とも検証済みの要求が来ているのを確かめてから、RTDB を「強制」に
 - [ ] 本番でログインして Drive 一覧・同期・App Check に CSP 違反が出ないのを確かめてから、`Content-Security-Policy-Report-Only` を強制に（ハッシュの作り直しは [[docs/technical/web-hosting]]）
 - [ ] release で外部インテントの `route` が効かないこと・共有リンクの確認ダイアログを実機で確認

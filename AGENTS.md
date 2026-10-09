@@ -15,6 +15,7 @@ Flutter製の地図アプリ（RootMap GIS）。**Android と web** の2プラ�
 ## 開発フロー
 
 1. 作業前: `TODO.md`、`docs/` を確認
+   - Flutter が stable の最新でない、または `flutter pub outdated` の直接依存に更新があれば、先に runbook「依存の最新化」を回す（常に最新を使う方針。上げるかどうかは判断事項にしない）
 2. 実装: できるだけ計画を立ててから実装に移る
 3. 作業後: `TODO.md` を更新
 

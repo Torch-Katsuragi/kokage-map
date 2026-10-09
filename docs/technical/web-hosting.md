@@ -13,6 +13,7 @@ tags: [technical, hosting, web]
 ## デプロイ
 
 ```bash
+bash tool/web/fetch_gdal3.sh   # gdal3.js（web/gdal3/<版>/、リポジトリに入れていない）。揃っていれば何もしない
 flutter build web --release --dart-define=GOOGLE_WEB_CLIENT_ID=348302294570-7srd6hqqpgpvu8sqilihhvhrd1p720p7.apps.googleusercontent.com
 firebase deploy --only hosting:kokage-map --project nemurigi-kobo
 ```
@@ -48,6 +49,7 @@ CSP の出所（足すときは、ここにも書く）:
 | ディレクティブ | オリジン | 何のため |
 | --- | --- | --- |
 | script-src | `www.gstatic.com/flutter-canvaskit/` | Flutter の CanvasKit（既定で CDN から取る）。`'wasm-unsafe-eval'` もこのため |
+| | `'self'`（足したものは無い） | GDAL（gdal3.js、[[gdal#web（gdal3.js）]]）は自前ホストの `/gdal3/`。worker（`worker-src 'self'`）が `importScripts` で読み、WASM は `'wasm-unsafe-eval'`、`.wasm` `.data` の取得は `connect-src 'self'` で通る。eval・`new Function` は使っていない。2026-10-09 に CSP を**強制**にした手元の配信で違反 0 を確認 |
 | | `www.gstatic.com/firebasejs/` | firebase_core が JS SDK を差し込む |
 | | `'sha256-...'` 8 個 | firebase_core_web が SDK ごとに差し込む**インラインスクリプト**（core / auth / database / app_check × Trusted Types の有無で 2 通り）。下の注意を参照 |
 | | `accounts.google.com/gsi/client` | Google ログイン（google_sign_in_web） |
@@ -72,12 +74,23 @@ CSP の出所（足すときは、ここにも書く）:
 強制に切り替えるとき（`-Report-Only` を外す）の前に確かめていないもの（2026-10-09 時点）:
 Google ログインのポップアップから戻った後の Drive 一覧・同期、QR 読み取りでの実カメラ、App Check（reCAPTCHA Enterprise）。
 地図・DEM・3D・背景地図の全種・チュートリアル・等高線・位置共有（匿名サインインと RTDB）・EPSG・GIS ボタンの表示と
-ポップアップが開くところ・zxing-wasm の読み込み・静的ページは、違反 0 を確認済み。
+ポップアップが開くところ・zxing-wasm の読み込み・静的ページ・GDAL（gdal3.js の worker と WASM）は、違反 0 を確認済み。
 
 > [!WARNING] Windows の `firebase serve` / hosting エミュレータでは headers が効かない
 > firebase-tools 14.1.0 の superstatic がヘッダの `source` を `\**` に変えてしまい、どのパスにも当たらない（2026-10-09）。
 > 手元で確かめるときは、`firebase.json` の headers を読んで付ける小さな静的サーバを使うか、WSL / CI の Linux で回す。
 > CSP に `report-uri` を一時的に足して違反を手元のサーバに集めると、コンソールを読むより取りこぼしが無い。
+
+## キャッシュ
+
+| パス | Cache-Control | |
+|---|---|---|
+| `**/*.@(js\|wasm)` | 1 時間 | Flutter の成果物（名前に版が入らない） |
+| `/gdal3/*/**` | 1 年・`immutable` | gdal3.js（40 MB）。版ごとのフォルダ（`/gdal3/2.8.1/`）なので、版を上げればパスが変わる。`/gdal3/worker.js`（自前）はここに当たらず 1 時間 |
+
+Flutter の `flutter_service_worker.js` は 3.47 では自分を外すだけの空の SW で、何も事前キャッシュしない（gdal3 を全員に配ってしまうことは無い）。
+
+COOP/COEP（`SharedArrayBuffer`）は要らない。gdal3.js 2.8.1 は単一スレッドのビルド。COOP は `same-origin-allow-popups` のまま。
 
 ⚠ Service Worker が古いビルドを配り続けることがある。デプロイ後に挙動が変わらないときは
 devtools → Application → Service Workers で unregister して再読込（2026-08-28に踏んだ）。

@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../../core/fs/k_file_system.dart';
+import '../../core/fs/safe_path.dart';
 import '../../models/geopackage/geopackage_connection.dart';
 import '../../utils/app_logger.dart';
 import '../geodiff/geodiff.dart';
@@ -23,13 +24,12 @@ abstract final class SyncBaseStore {
   /// base の置き場（dir）
   static String baseDir(String localPath) => p.join(_syncDir(localPath), 'base');
 
-  /// [relativePath] の base の絶対パス
-  static String basePath(String localPath, String relativePath) =>
-      p.join(baseDir(localPath), p.joinAll(p.posix.split(relativePath)));
+  /// [relativePath] の base の絶対パス。base の置き場の外を指す相対パスは [UnsafePathException]
+  static String basePath(String localPath, String relativePath) => resolveUnder(baseDir(localPath), relativePath);
 
   /// リモートを落とす一時ファイル
   static String tmpPath(String localPath, String relativePath) =>
-      p.join(_syncDir(localPath), 'tmp', '${p.posix.basename(relativePath)}.remote');
+      resolveUnder(p.join(_syncDir(localPath), 'tmp'), '${p.posix.basename(relativePath)}.remote');
 
   /// 同期対象から外す相対パスか（`.sync` 配下）
   static bool isInside(String relativePath) {
@@ -50,7 +50,7 @@ abstract final class SyncBaseStore {
   static bool keepsBase(String relativePath) => isQgs(relativePath) || (isAvailable && isGpkg(relativePath));
 
   static Future<bool> hasBase(String localPath, String relativePath) async {
-    if (!keepsBase(relativePath)) return false;
+    if (!keepsBase(relativePath) || !isSafeRelativePath(relativePath)) return false;
     return fs.exists(basePath(localPath, relativePath));
   }
 
@@ -58,8 +58,14 @@ abstract final class SyncBaseStore {
   /// gpkg と `.qgs` 以外では何もしない（web の gpkg も）。失敗しても同期自体は止めない（false を返すだけ）。
   static Future<bool> saveBase(String localPath, String relativePath, {Geodiff? geodiff}) async {
     if (!keepsBase(relativePath)) return false;
-    final src = p.join(localPath, p.joinAll(p.posix.split(relativePath)));
-    final dst = basePath(localPath, relativePath);
+    final String src, dst;
+    try {
+      src = resolveUnder(localPath, relativePath);
+      dst = basePath(localPath, relativePath);
+    } on UnsafePathException catch (e) {
+      AppLogger.debug('[SyncBase] base を置けないパス: $e');
+      return false;
+    }
     if (isQgs(relativePath)) {
       try {
         if (!await fs.exists(src)) return false;
@@ -117,8 +123,8 @@ abstract final class SyncBaseStore {
   }
 
   static Future<void> removeBase(String localPath, String relativePath) async {
-    final path = basePath(localPath, relativePath);
     try {
+      final path = basePath(localPath, relativePath);
       if (await fs.exists(path)) await fs.delete(path);
     } catch (e) {
       AppLogger.debug('[SyncBase] base の削除に失敗: $relativePath - $e');

@@ -63,7 +63,11 @@
     "reopenLastFolderFailed": "Couldn't reopen the last folder. Please pick it again.",
     "receivingShared": "Getting the shared map",
     "receiveNeedsSignIn": "Sign in to Google to receive the shared map",
-    "receiveFailed": "Couldn't open the shared map. Check its sharing settings"
+    "receiveFailed": "Couldn't open the shared map. Check its sharing settings",
+    "receiveConfirmTitle": "Get this shared map?",
+    "receiveConfirmBody": "\"${name}\" will be added to the Shared folder of your map. Don't get it if you don't recognize the link",
+    "receiveConfirmOwner": "Owner: ${owner}",
+    "receiveConfirmAction": "Get"
   },
   "permissions": {
     "storageRequired": "Storage permission is required",

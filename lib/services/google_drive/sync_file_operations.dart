@@ -19,6 +19,7 @@
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
+import '../../core/fs/safe_path.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
@@ -81,11 +82,8 @@ class SyncFileOperations {
     return path.replaceAll('\\', '/');
   }
 
-  /// 相対パスからローカルパスを生成
-  String relativePathToLocalPath(String basePath, String relativePath) {
-    final segments = p.posix.split(relativePath);
-    return p.joinAll([basePath, ...segments]);
-  }
+  /// 相対パスからローカルパスを生成。[basePath] の外を指す相対パスは [UnsafePathException]
+  String relativePathToLocalPath(String basePath, String relativePath) => resolveUnder(basePath, relativePath);
 
   /// ファイル名が同期パターンにマッチするか
   bool matchesSyncPattern(String fileName) {
@@ -236,6 +234,11 @@ class SyncFileOperations {
       final name = item.name ?? '';
       if (name.isEmpty) continue;
       final path = currentPath.isEmpty ? name : '$currentPath/$name';
+      // 手元のパスにできない名前（`..`・`/` 入りなど）と、アプリが手元で使う `.sync` は Drive から取らない
+      if (!isSafePathSegment(name) || SyncBaseStore.isInside(path)) {
+        AppLogger.log('[SyncEngine] Drive の項目を飛ばした（手元に置けない名前）: ${item.id} "$name"');
+        continue;
+      }
       if (item.mimeType == _folderMime) {
         folderMap[item.id!] = path;
         subFolders.add(_listDriveFolder(item.id!, path, folderMap));

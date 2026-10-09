@@ -20,6 +20,7 @@ library;
 import 'package:path/path.dart' as p;
 
 import '../core/fs/k_file_system.dart';
+import '../core/fs/safe_path.dart';
 import '../i18n/strings.g.dart';
 import '../models/geopackage/geopackage_file.dart';
 import '../models/nodes/drive_folder_node.dart';
@@ -80,20 +81,22 @@ class LayerDrawerService {
     final parentDir = parent.getAbsoluteFilePath();
     if (parentDir == null) return null;
 
-    final localPath = p.join(parentDir, folderName);
+    // Drive の名前は `/` や `..` を含められる。手元のフォルダ名 1 段にしてから使う
+    final name = toLocalFolderName(folderName, fallback: folderId);
+    final localPath = p.join(parentDir, name);
     await _ensureAbsent(localPath, t.services.folderAlreadyExists);
 
     final success = await SyncEngine().cloneFromDrive(
       driveId: folderId,
       localPath: localPath,
-      folderName: folderName,
+      folderName: name,
       driveUrl: url,
       isReadOnly: isReadOnly,
     );
     if (!success) return null;
 
     final node = DriveFolderNode(
-      folderName,
+      name,
       driveId: folderId,
       driveUrl: url,
       isReadOnly: isReadOnly,

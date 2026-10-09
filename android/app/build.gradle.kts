@@ -40,6 +40,16 @@ android {
         versionName = flutter.versionName
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
+    // `am start --es route "/map?project=..."` を受けるか（docs/technical/cli-launch.md）。
+    // 任意のパスを開かせる開発用の口なので、release では受けない（debug / profile は受ける）
+    buildTypes.configureEach {
+        buildConfigField("boolean", "ACCEPT_ROUTE_EXTRA", if (name == "release") "false" else "true")
+    }
+
     if (keystorePropertiesFile.exists()) {
         signingConfigs {
             create("release") {

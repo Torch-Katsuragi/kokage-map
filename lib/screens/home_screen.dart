@@ -21,6 +21,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:googleapis/drive/v3.dart' as drive show User;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -145,13 +146,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           _notify(t.home.receiveFailed, NotificationLevel.error);
           return null;
         }
+        final name = info.name ?? driveId;
         return receiveSharedMap(
           driveId: driveId,
-          folderName: info.name ?? driveId,
+          folderName: name,
           driveUrl: 'https://drive.google.com/drive/folders/$driveId',
           isReadOnly: !(info.capabilities?.canEdit ?? false),
+          // リンクは外から届くので、知らない人のフォルダを黙って取り込まない
+          confirm: () => _confirmReceive(name, info.owners?.firstOrNull),
         );
       });
+
+  /// 共有リンクの地図を取り込むか聞く（フォルダ名と、取れれば持ち主）
+  Future<bool> _confirmReceive(String folderName, drive.User? owner) async {
+    if (!mounted) return false;
+    final ownerLabel = [owner?.displayName, if (owner?.emailAddress != null) '<${owner!.emailAddress}>']
+        .whereType<String>()
+        .where((s) => s.isNotEmpty)
+        .join(' ');
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t.home.receiveConfirmTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(t.home.receiveConfirmBody(name: folderName)),
+            if (ownerLabel.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(t.home.receiveConfirmOwner(owner: ownerLabel)),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.common.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t.home.receiveConfirmAction)),
+        ],
+      ),
+    );
+    return yes == true;
+  }
 
   /// ホームの「QR で受け取る」: アプリのカメラで読む（Drive の URL を貼っても読める）
   Future<void> _receiveFromDialog() async {

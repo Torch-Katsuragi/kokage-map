@@ -20,6 +20,9 @@
 const kSharedLinkHost = 'kokage-map.sleeptree.jp';
 const kSharedLinkPath = '/open';
 
+/// Drive のファイル・フォルダ ID の形か。ID は Drive の検索式に連結するので、これ以外の文字は通さない
+bool isDriveId(String id) => RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(id);
+
 /// Drive フォルダ ID → QR に入れるリンク
 String sharedMapLink(String driveId) => Uri.https(kSharedLinkHost, kSharedLinkPath, {'drive': driveId}).toString();
 
@@ -28,5 +31,5 @@ String? driveIdFromSharedLink(String url) {
   final uri = Uri.tryParse(url.trim());
   if (uri == null || uri.host != kSharedLinkHost || uri.path != kSharedLinkPath) return null;
   final id = uri.queryParameters['drive'];
-  return id == null || id.isEmpty ? null : id;
+  return id == null || !isDriveId(id) ? null : id;
 }

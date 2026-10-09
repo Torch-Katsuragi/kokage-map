@@ -33,6 +33,8 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../utils/app_logger.dart';
+import 'fs/project_folder_picker.dart' show kOpfsPrefix;
+import 'fs/safe_path.dart';
 import 'launch_request_io.dart'
     if (dart.library.js_interop) 'launch_request_web.dart' as impl;
 
@@ -124,10 +126,10 @@ class LaunchRequest {
     if (_initialized) return;
     _initialized = true;
     final route = impl.initialRoute() ?? PlatformDispatcher.instance.defaultRouteName;
-    _pending = tryParse(route);
+    _pending = _guard(tryParse(route));
     if (_pending != null) AppLogger.debug('[Launch] 起動要求 $_pending');
     impl.listenRoutes((r) {
-      final req = tryParse(r);
+      final req = _guard(tryParse(r));
       if (req == null || req.isEmpty) return;
       AppLogger.debug('[Launch] 到着 $req');
       incoming.value = req;
@@ -140,6 +142,34 @@ class LaunchRequest {
       AppLogger.debug('[Launch] 起動時の共有リンク $link');
       sharedLinks.value = link;
     });
+  }
+
+  /// 外から受けてよい要求に絞る（project を受けられなければ project だけ落とす）
+  static LaunchRequest? _guard(LaunchRequest? req) {
+    final project = req?.project;
+    if (req == null || project == null || acceptsProject(project)) return req;
+    AppLogger.log('[Launch] project を受けない: $project');
+    return LaunchRequest(
+      lat: req.lat,
+      lon: req.lon,
+      zoom: req.zoom,
+      bearing: req.bearing,
+      pitch: req.pitch,
+      reload: req.reload,
+    );
+  }
+
+  /// `project=` を受けるか。
+  ///
+  /// 任意のパスを開かせる口なので、native は開発用のビルド（debug / profile）だけで受ける
+  /// （Android の release は MainActivity が `route` extra をそもそも渡さない）。
+  /// web は `opfs:<名前>`（ブラウザのサイト専用領域の中）だけで、名前は 1 段に限る
+  @visibleForTesting
+  static bool acceptsProject(String spec, {bool? web, bool? devBuild}) {
+    if (web ?? kIsWeb) {
+      return spec.startsWith(kOpfsPrefix) && isSafePathSegment(spec.substring(kOpfsPrefix.length));
+    }
+    return devBuild ?? (kDebugMode || kProfileMode);
   }
 
   /// 起動時の要求を覗く（消費しない）

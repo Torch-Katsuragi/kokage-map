@@ -434,5 +434,27 @@ void main() {
       expect(Directory(p.join(a, 'empty')).existsSync(), isTrue);
       expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.synced);
     });
+
+    // Drive の名前は `/` や `..` を含められる（2026-10-09）。手元の外へ書かず、`.sync` も Drive から取らない
+    test('pull は手元に置けない名前を飛ばし、フォルダの外へ書かない', () async {
+      await drive.uploadBytes(jpg(1), 'ok 写真.jpg', rootId);
+      await drive.uploadBytes(jpg(2), '../escape1.jpg', rootId);
+      await drive.uploadBytes(jpg(3), r'..\escape2.jpg', rootId);
+      final up = await drive.getOrCreateSubFolder(rootId, '..');
+      await drive.uploadBytes(jpg(4), 'escape3.jpg', up!.id!);
+      final slash = await drive.getOrCreateSubFolder(rootId, 'x/../..');
+      await drive.uploadBytes(jpg(5), 'escape4.jpg', slash!.id!);
+      final sync = await drive.getOrCreateSubFolder(rootId, '.sync');
+      await drive.uploadBytes(jpg(6), 'planted.jpg', sync!.id!);
+
+      final r = await engine.pull(rootId, a);
+      expect(r.success, isTrue, reason: r.errorMessage);
+      expect(local('ok 写真.jpg').readAsBytesSync(), jpg(1));
+      expect(local('.sync/planted.jpg').existsSync(), isFalse);
+      final outside = tmp.listSync(recursive: true).whereType<File>().map((f) => p.relative(f.path, from: tmp.path)).where((x) => !p.isWithin('A', x));
+      expect(outside, isEmpty);
+      final inside = Directory(a).listSync(recursive: true).whereType<File>().map((f) => p.basename(f.path));
+      expect(inside.where((n) => n.startsWith('escape')), isEmpty);
+    });
   });
 }

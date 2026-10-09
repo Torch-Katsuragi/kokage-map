@@ -570,6 +570,13 @@ class GoogleDriveService {
   @visibleForTesting
   static String queryLiteral(String value) => "'${value.replaceAll(r'\', r'\\').replaceAll("'", r"\'")}'";
 
+  /// 検索式の `'<ID>' in parents`。ID の形でなければ投げる（検索式に余計な条件を足させない）
+  @visibleForTesting
+  static String inParents(String parentId) {
+    if (!isDriveId(parentId)) throw ArgumentError.value(parentId, 'parentId', 'Drive の ID の形ではない');
+    return "'$parentId' in parents";
+  }
+
   /// [q] に当たるもの（共有ドライブも含めて探す）。最初の 1 ページだけ（名前で 1 件を探すとき用）
   static Future<List<drive.File>> _list(drive.DriveApi api, String q, {String? fields}) async {
     final result = await api.files.list(
@@ -637,7 +644,7 @@ class GoogleDriveService {
       _call('サブフォルダ作成エラー', null, (api) async {
         final existing = (await _list(
           api,
-          "name = ${queryLiteral(folderName)} and '$parentId' in parents and mimeType = '$_folderMime' and trashed = false",
+          "name = ${queryLiteral(folderName)} and ${inParents(parentId)} and mimeType = '$_folderMime' and trashed = false",
           fields: 'files(id, name)',
         ))
             .firstOrNull;
@@ -779,7 +786,7 @@ class GoogleDriveService {
     if (api == null) throw StateError('Drive にサインインしていない');
     return listAllPages(
       api,
-      "'$parentId' in parents and trashed = false",
+      '${inParents(parentId)} and trashed = false',
       fields: 'files(id, name, mimeType, modifiedTime, size, parents)',
     );
   }
@@ -788,7 +795,7 @@ class GoogleDriveService {
   Future<drive.File?> _findFileByName(String name, String parentId) => _call(
         '同名ファイルの検索エラー',
         null,
-        (api) async => (await _list(api, "name = ${queryLiteral(name)} and '$parentId' in parents and trashed = false")).firstOrNull,
+        (api) async => (await _list(api, 'name = ${queryLiteral(name)} and ${inParents(parentId)} and trashed = false')).firstOrNull,
       );
 
   // ========== 共有URL操作 ==========
@@ -814,7 +821,7 @@ class GoogleDriveService {
       if (shared != null) return shared;
 
       // drive.google.comドメインか確認
-      if (!uri.host.contains('google.com')) {
+      if (uri.host != 'google.com' && !uri.host.endsWith('.google.com')) {
         AppLogger.debug('[GoogleDriveService] Google Driveドメインではない: ${uri.host}');
         return null;
       }
@@ -827,14 +834,14 @@ class GoogleDriveService {
       if (foldersIndex != -1 && foldersIndex + 1 < pathSegments.length) {
         final folderId = pathSegments[foldersIndex + 1];
         AppLogger.debug('[GoogleDriveService] フォルダID検出 (folders): $folderId');
-        return folderId;
+        return isDriveId(folderId) ? folderId : null;
       }
       
       // パターン2: /open?id={folderId} または /folderview?id={folderId}
       final idParam = uri.queryParameters['id'];
       if (idParam != null && idParam.isNotEmpty) {
         AppLogger.debug('[GoogleDriveService] フォルダID検出 (id param): $idParam');
-        return idParam;
+        return isDriveId(idParam) ? idParam : null;
       }
       
       AppLogger.debug('[GoogleDriveService] フォルダIDが見つからない');

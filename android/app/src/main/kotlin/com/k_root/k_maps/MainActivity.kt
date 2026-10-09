@@ -30,8 +30,18 @@ class MainActivity : FlutterActivity() {
     /// 起動時に届いた共有リンク（App Links の `https://kokage-map.sleeptree.jp/open?drive=...`）。Dart が取りに来るまで持つ
     private var pendingLink: String? = null
 
-    private fun sharedLinkOf(intent: Intent?): String? =
-        if (intent?.action == Intent.ACTION_VIEW) intent.dataString else null
+    /// 共有リンクだけを通す。Activity は exported なので、明示インテントなら manifest の
+    /// intent-filter を通らずに任意の data が届く。host と path を完全一致で見る
+    private fun sharedLinkOf(intent: Intent?): String? {
+        if (intent?.action != Intent.ACTION_VIEW) return null
+        val data = intent.data ?: return null
+        if (data.scheme != "https" || data.host != "kokage-map.sleeptree.jp" || data.path != "/open") return null
+        return intent.dataString
+    }
+
+    /// 起動時の `route` extra（FlutterActivity が読む）。release では受けない（BuildConfig.ACCEPT_ROUTE_EXTRA）
+    override fun getInitialRoute(): String? =
+        if (BuildConfig.ACCEPT_ROUTE_EXTRA) super.getInitialRoute() else null
 
     // 起動中に `am start --es route "/map?..."` か共有リンクが来たとき（singleTop）。Dart 側に流す
     override fun onNewIntent(intent: Intent) {
@@ -42,6 +52,7 @@ class MainActivity : FlutterActivity() {
             launchChannel?.invokeMethod("link", it)
             return
         }
+        if (!BuildConfig.ACCEPT_ROUTE_EXTRA) return
         val route = intent.getStringExtra("route") ?: return
         Log.d("MainActivity", "onNewIntent route=$route")
         launchChannel?.invokeMethod("route", route)

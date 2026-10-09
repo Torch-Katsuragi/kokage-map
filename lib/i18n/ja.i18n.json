@@ -63,7 +63,11 @@
     "reopenLastFolderFailed": "前回のフォルダを開けませんでした。選び直してください",
     "receivingShared": "共有の地図を取り込んでいます",
     "receiveNeedsSignIn": "共有の地図を受け取るには Google にログインしてください",
-    "receiveFailed": "共有の地図を開けませんでした。共有の設定を確かめてください"
+    "receiveFailed": "共有の地図を開けませんでした。共有の設定を確かめてください",
+    "receiveConfirmTitle": "共有の地図を取り込みますか",
+    "receiveConfirmBody": "「${name}」を、いつもの地図の「共有」に取り込みます。心当たりのないリンクなら取り込まないでください",
+    "receiveConfirmOwner": "持ち主: ${owner}",
+    "receiveConfirmAction": "取り込む"
   },
   "permissions": {
     "storageRequired": "ストレージ権限が必要です",

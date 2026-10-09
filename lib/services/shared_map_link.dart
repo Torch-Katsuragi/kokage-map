@@ -25,6 +25,7 @@ import 'dart:math' as math;
 import 'package:path/path.dart' as p;
 
 import '../core/fs/k_file_system.dart';
+import '../core/fs/safe_path.dart';
 import '../core/launch_request.dart';
 import '../models/geopackage/geopackage_file.dart';
 import '../utils/app_logger.dart';
@@ -64,12 +65,15 @@ Future<void> _focusOn(String dir) async {
 }
 
 /// 共有の地図を、いつもの地図の `共有/` に取り込む（取り込み済みならそのまま）。いつもの地図のパスを返す。
-/// 開いた地図はその地図のある場所へ寄る
-Future<String> receiveSharedMap({
+/// 開いた地図はその地図のある場所へ寄る。
+///
+/// [confirm] は新しく取り込む前だけ聞く（取り込み済みなら聞かない）。false ならやめて null
+Future<String?> receiveSharedMap({
   required String driveId,
   required String folderName,
   required String driveUrl,
   required bool isReadOnly,
+  Future<bool> Function()? confirm,
 }) async {
   final root = await ProjectsHome.myMap();
   final sharedDir = p.join(root, ProjectsHome.sharedDirName);
@@ -84,7 +88,8 @@ Future<String> receiveSharedMap({
       }
     } catch (_) {}
   }
-  final base = folderName.trim().isEmpty ? driveId : folderName.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+  if (confirm != null && !await confirm()) return null;
+  final base = toLocalFolderName(folderName, fallback: driveId);
   var localPath = p.join(sharedDir, base);
   for (var n = 2; await fs.exists(localPath); n++) {
     localPath = p.join(sharedDir, '$base $n');

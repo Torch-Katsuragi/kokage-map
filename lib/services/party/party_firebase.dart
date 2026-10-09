@@ -37,6 +37,13 @@ import '../../utils/app_logger.dart';
 class PartyFirebase {
   PartyFirebase._();
 
+  /// App Check（web）の reCAPTCHA Enterprise サイトキー。公開値（ページに埋め込まれる）。
+  ///
+  /// 許可ドメイン: kokage-map.sleeptree.jp / kokage-map.web.app /
+  /// kokage-map.firebaseapp.com / localhost。
+  static const String _recaptchaEnterpriseSiteKey =
+      '6LcPLOYtAAAAAD-lfdUIGlnUrTOHFUmWqobKNUXG';
+
   /// 進行中/完了済みの初期化 Future。初回呼び出しで生成し以降は共有する。
   static Future<bool>? _future;
 
@@ -63,24 +70,23 @@ class PartyFirebase {
       // コンソールに登録して検証）、リリースは Play Integrity / App Attest。
       // コンソール側が monitor の間はブロックしないため、先に入れて段階導入する。
       //
-      // ⚠ **web にはプロバイダを渡していない。**
-      // web の App Check は reCAPTCHA のサイトキーが要り、それはコンソールで
-      // 発行するもの。2026-08-27 時点で App Check API はプロジェクトで
-      // 有効化されておらず、RTDB側も強制していないので、web はこのままで通る。
-      // 強制に切り替えるときは `providerWeb: ReCaptchaV3Provider(<siteKey>)` を足すこと。
-      if (!kIsWeb) {
-        try {
-          await FirebaseAppCheck.instance.activate(
-            providerAndroid: kDebugMode
-                ? const AndroidDebugProvider()
-                : const AndroidPlayIntegrityProvider(),
-            providerApple: kDebugMode
-                ? const AppleDebugProvider()
-                : const AppleAppAttestProvider(),
-          );
-        } catch (e) {
-          AppLogger.debug('[Party] App Check activate をスキップ: $e');
-        }
+      // web は reCAPTCHA Enterprise（[_recaptchaEnterpriseSiteKey]）。
+      // サイトキーの許可ドメインに localhost も入れてあるので、debug 実行でも同じ
+      // プロバイダで動く（web 用の debug プロバイダは使わない）。
+      // ⚠ 2026-10-09 時点はコンソールで監視のみ（強制していない）。強制に切り替える前に、
+      // コンソールの指標で web・Android とも検証済みリクエストが出ていることを確かめること。
+      try {
+        await FirebaseAppCheck.instance.activate(
+          providerWeb: ReCaptchaEnterpriseProvider(_recaptchaEnterpriseSiteKey),
+          providerAndroid: kDebugMode
+              ? const AndroidDebugProvider()
+              : const AndroidPlayIntegrityProvider(),
+          providerApple: kDebugMode
+              ? const AppleDebugProvider()
+              : const AppleAppAttestProvider(),
+        );
+      } catch (e) {
+        AppLogger.debug('[Party] App Check activate をスキップ: $e');
       }
 
       // 圏外中の書き込みをローカルに溜め、再接続時に自動フラッシュ（store-and-forward）。

@@ -47,6 +47,9 @@ jobs:
       # geodiff（行単位マージ）のホスト VM テスト用に Linux 版を焼く（third_party/geodiff/README.md）
       - name: geodiff を焼く（Linux）
         run: bash third_party/geodiff/build_linux.sh
+      # GDAL のホスト VM テスト（test/gdal_test.dart）用。libgdal-dev が libgdal.so を置く（無ければそのテストは skip）
+      - name: GDAL を入れる（apt）
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libgdal-dev
       - run: flutter test
 
   build-web:

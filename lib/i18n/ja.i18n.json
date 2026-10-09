@@ -1432,6 +1432,7 @@
     "roomClosedNotice": "ルームが終了したか期限が切れたため退出しました"
   },
   "qgis": {
+    "baseMapsAdded": "QGIS のプロジェクトにあった背景地図を足しました: $names",
     "discarded": "$count 件は取り込んでいません: $names",
     "readBack": "QGIS 側で編集された $file を読み込みました（View $count 件）"
   },

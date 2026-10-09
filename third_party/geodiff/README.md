@@ -9,7 +9,13 @@
 | `geodiff.dll`（Windows x64、ホスト VM テスト用） | `third_party/geodiff/windows/` | `build_windows.cmd` |
 | `libgeodiff.so`（Linux x64、CI のホスト VM テスト用。コミットしない） | `third_party/geodiff/linux/` | `build_linux.sh`（CI が毎回焼く） |
 
+コミット済みの `libgeodiff.so`（3 ABI）と `geodiff.dll` は、2026-09 に上の各スクリプトで手元のPCから焼いたもの（CI では作っていない）。
+
 ## 方針
+
+- **取得物は中身を固定してある**（2026-10-09）。sqlite amalgamation の zip と libgpkg の archive は SHA-256 を照合し、
+  geodiff はタグではなくコミット SHA で取る。版を上げるときはスクリプト冒頭の URL と SHA を組で書き換える
+  （3 本とも同じ値。sqlite は sqlite.org 掲載の SHA3-256 と突き合わせてから SHA-256 を控える）
 
 - **vcpkg は使わない**。Mergin の mobile-sdk は QGIS ごと焼くので vcpkg だが、こちらは sqlite3 と geodiff の 2 つだけ。
   sqlite3 は amalgamation 1 ファイルを直接コンパイルし、geodiff に静的リンクする

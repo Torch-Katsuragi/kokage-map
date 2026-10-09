@@ -82,7 +82,7 @@ part 'terrain_map_layer_scene.dart';
 /// - フィーチャはタイルごとに計算メッシュへ貼り付けてキャッシュ。パンで貼り直さない
 /// - 2D は真上から見ているだけ（コンパスのタップで切り替え）。カメラは `RMapController` に覚えさせる
 /// - `IMapState.offsetToLatLng` / `latLngToOffset` は [TerrainProjection] としてここを通る
-/// - 操作: 1 本指 = 回転と傾き、2 本指 = 平面移動と拡縮（松本の指定）
+/// - 操作: 1 本指 = 回転と傾き、2 本指 = 平面移動と拡縮（ユーザーの指定）
 class TerrainMapLayer extends ConsumerStatefulWidget {
   const TerrainMapLayer({
     super.key,
@@ -139,7 +139,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         _TerrainScenes,
         _TerrainBakes,
         _TerrainCameraControl {
-  /// 入ったときの傾き。起動時は真上（松本 2026-09-11 決定。2D と同じ絵で始まり、傾けたい人が傾ける）
+  /// 入ったときの傾き。起動時は真上（ユーザー 2026-09-11 決定。2D と同じ絵で始まり、傾けたい人が傾ける）
   static const _defaultPitchDeg = 0.0;
 
   /// 傾きの上限。正射影では 90° で地面が線に潰れる（横顔になる）ので手前で止める。
@@ -232,7 +232,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     return TerrainWorker.instance.run(renderContourTilePng, args);
   }
 
-  /// 地図面に出す出典。普段は出さず（出典は設定の「地図・タイル」にまとめた。松本 2026-09-13）、
+  /// 地図面に出す出典。普段は出さず（出典は設定の「地図・タイル」にまとめた。ユーザー 2026-09-13）、
   /// OpenStreetMap が見えているときだけ出す（OSM の表示ガイドラインは対話型地図では地図上のクレジットを求める。
   /// 地理院タイルと Terrain Tiles は「出典を明示」で、置き場所は問わない）
   String _osmAttribution() => {
@@ -272,7 +272,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   /// 2D モード（真上固定。1 本指 = 移動、2 本指 = 移動・拡縮・回転。3D 導入前のパンと同じ）。
   /// 中身は 3D を真上から見ているだけ。3D モードは 1 本指 = 回転・傾き、2 本指 = 移動・拡縮。
-  /// 起動は 2D（真上）。切替はコンパスのタップ（松本 2026-09-13）
+  /// 起動は 2D（真上）。切替はコンパスのタップ（ユーザー 2026-09-13）
   @override
   bool _flat = true;
 
@@ -286,7 +286,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   void initState() {
     super.initState();
     // web: 右ドラッグ = 回転なので、ブラウザのコンテキストメニューを地図の間だけ止める
-    // （右ボタンを離すたびにメニューが出ていた。松本 2026-09-12）
+    // （右ボタンを離すたびにメニューが出ていた。ユーザー 2026-09-12）
     if (kIsWeb) BrowserContextMenu.disableContextMenu();
     final cam = widget.mapState.mapController.camera;
     final center = cam.center;

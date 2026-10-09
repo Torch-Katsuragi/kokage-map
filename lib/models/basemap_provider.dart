@@ -175,7 +175,7 @@ class BaseMapProvider {
       icon: Icons.crop_landscape,
     ),
     // 等高線（標高タイルからアプリ内で作る。`contour_tiles.dart`）。他の背景地図と重ねて使う（高度な設定）。
-    // 内部では生成プロバイダ（BaseMapType.generated）だが、一覧では普通の背景地図として振る舞う（松本 2026-09-13）
+    // 内部では生成プロバイダ（BaseMapType.generated）だが、一覧では普通の背景地図として振る舞う（ユーザー 2026-09-13）
     BaseMapProvider(
       id: 'contours',
       cacheId: 'contours_v${ContourTiles.version}', // 絵を変えたら版が上がり、古いキャッシュは `BaseMapService` が消す

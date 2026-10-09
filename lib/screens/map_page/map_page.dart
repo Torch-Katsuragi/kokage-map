@@ -115,7 +115,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     // レイヤ一覧を開いて始めるかは画面の幅で決める（MediaQuery は initState では読めないので views から）
     final view = WidgetsBinding.instance.platformDispatcher.views.first;
     drawerOpen = !tutorial && MapLayout.layerListOpenAtStart(view.physicalSize / view.devicePixelRatio);
-    // チュートリアルは「データが全部入る範囲」に合わせず、GPS の初回の位置へ飛ぶ（松本 2026-10-01。
+    // チュートリアルは「データが全部入る範囲」に合わせず、GPS の初回の位置へ飛ぶ（ユーザー 2026-10-01。
     // 自分のいる場所から始め、練習のデータへはダブルタップで飛んでもらう）
     if (tutorial) initialViewDecided = true;
   }

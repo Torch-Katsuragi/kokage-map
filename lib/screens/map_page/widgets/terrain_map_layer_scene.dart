@@ -345,7 +345,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
           clipRect: clip,
         ),
       );
-      // 写真はレイヤ一覧と同じカメラの印で（ただの黄色い丸では地物の点と見分けにくかった。松本 2026-10-02）。
+      // 写真はレイヤ一覧と同じカメラの印で（ただの黄色い丸では地物の点と見分けにくかった。ユーザー 2026-10-02）。
       // 選んだ写真は選択の色。記号を描くので GPU の点ではなく画面に描く点（[photoPoints]）にする
       final selImages = Set<geo.Feature>.identity()..addAll(g.selectedImages);
       final selColor = layerStyleSettings.getColor(selectedColorDef);

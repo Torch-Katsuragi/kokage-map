@@ -27,7 +27,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
   Map<String, TerrainFeatureStyle> _styleGroupsByKey();
 
   /// 引いた段の焼き込み: この段以下のタイルは、フィーチャ（面・線・点）を形として持ち上げず、
-  /// テクスチャに描き込む（真上からの投影。松本 2026-09-12「重いときはクラスタ省略でなく投影で」）。
+  /// テクスチャに描き込む（真上からの投影。ユーザー 2026-09-12「重いときはクラスタ省略でなく投影で」）。
   /// 引いた段なので傾けても粗さは目立たず、描画は基図と同じ 1 枚のテクスチャで済む。
   /// 選択・頂点・写真は形のまま（少ないし、光らせたい）。ヒットテストはデータから引くので影響しない
   static const kBakeMaxZoom = 13;
@@ -54,7 +54,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
   /// 世代が古いタイルは焼き直す（[_checkBakes]）。
   /// ⚠ 以前は「一覧が変わった瞬間に読み込み済みのタイル」だけ焼き直していたので、その瞬間に読み込み中だった親タイルは
   ///   フィーチャ無しのテクスチャのまま残り、寄せる最中に親と子が入れ替わるたびにフィーチャが出たり消えたりした
-  ///   （松本 2026-09-13「地形読み込み中だけフィーチャが表示されたりされなかったり」。web で目立つ）
+  ///   （ユーザー 2026-09-13「地形読み込み中だけフィーチャが表示されたりされなかったり」。web で目立つ）
   int _bakeGen = 0;
   final Map<TileKey, int> _bakedGen = {};
 
@@ -306,7 +306,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     }
     final off = range.z - demZoom;
     // 引いた段は面・線・点を全部、寄った段は面の塗りだけ描く（塗りを地形に沿わせた板にすると、尾根で地形に
-    // 突き抜けられて下の地図が白く抜けた。松本 2026-10-02。枠線・線・点は形のまま持ち上げる）
+    // 突き抜けられて下の地図が白く抜けた。ユーザー 2026-10-02。枠線・線・点は形のまま持ち上げる）
     _bakeFeatures(canvas, frame, demZoom, fillsOnly: demZoom > kBakeMaxZoom);
     // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）。確定はタイルに貼ったとき（[_onTextureApplied]）
     _composedGen[TileKey(demZoom, range.x0 >> off, range.y0 >> off)] = _bakeGen;
@@ -322,7 +322,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
   /// 引いた段のフィーチャをテクスチャに描く（真上からの投影。座標は範囲左上原点のピクセル）。
   ///
   /// 太さは画面で見える太さに合わせる。テクスチャは表示の段とほぼ同じ段で作るので、テクスチャの 1 px ≒ 画面の 1 px。
-  /// 以前は設定の半分にしていて、引くほど細く薄れて地物を見失った（松本 2026-10-02。MapLibre の頃は画面の px で
+  /// 以前は設定の半分にしていて、引くほど細く薄れて地物を見失った（ユーザー 2026-10-02。MapLibre の頃は画面の px で
   /// 一定の太さだったので、引いても色の塊として見えていた）
   void _bakeFeatures(ui.Canvas canvas, TextureFrame frame, int demZoom, {bool fillsOnly = false}) {
     final g = widget.geoJson;

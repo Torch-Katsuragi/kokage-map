@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// 情報パネルの背景に、選んだ地物の形を薄く敷く（松本 2026-10-01「背景が白なの勿体無い」）。
+// 情報パネルの背景に、選んだ地物の形を薄く敷く（ユーザー 2026-10-01「背景が白なの勿体無い」）。
 //
 // 線と面は形がひと目で分かるように、パネルいっぱいに縮尺を合わせて描く（向きは北が上）。
 // 点は形が無いので「POINT」の文字を薄く出す。文字や数値の邪魔にならない濃さに抑える。

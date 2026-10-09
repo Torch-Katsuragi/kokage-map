@@ -17,7 +17,7 @@
 //
 // MaterialApp の builder に置き、どの画面（ダイアログ・写真の選択）の上にも出す。
 // 押すのは本物の部品なので、札以外は触れる。画面を暗くしないのはダイアログまで暗くなるため。
-// 枠はくすんだ赤。外側のハローだけゆっくり広がって薄れる（目に入るが点滅ほどうるさくない。松本 2026-10-01）。
+// 枠はくすんだ赤。外側のハローだけゆっくり広がって薄れる（目に入るが点滅ほどうるさくない。ユーザー 2026-10-01）。
 // 枠が別の場所へ移るときは 0.22 秒で寄っていく（どこへ移ったかを目で追えるように）。
 // 案内先の位置は案内中だけ一定間隔で測り直す（一覧の開閉などで動くため）。
 
@@ -355,7 +355,7 @@ class _RingPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final r = RRect.fromRectAndRadius(hole(), const Radius.circular(10));
     final p = Curves.easeOut.transform(pulse.value);
-    // 広がりは 36px まで（12px では赤枠と脈動があっても見落とされた。24px でも「もうちょっと」。松本 2026-10-02）
+    // 広がりは 36px まで（12px では赤枠と脈動があっても見落とされた。24px でも「もうちょっと」。ユーザー 2026-10-02）
     canvas.drawRRect(r.inflate(3 + 33 * p), Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 8

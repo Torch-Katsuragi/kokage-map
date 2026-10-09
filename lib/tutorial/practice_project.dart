@@ -40,7 +40,7 @@ class PracticeProject {
 
   String get gpkgPath => p.join(dir, '${t.tutorial.practice.gpkg}.gpkg');
 
-  // 林業に寄せない一般的な名前にする（松本 2026-10-01「エリアとか測点とか」）
+  // 林業に寄せない一般的な名前にする（ユーザー 2026-10-01「エリアとか測点とか」）
   static String get areaLayer => t.tutorial.practice.area;
   static String get routeLayer => t.tutorial.practice.route;
   static String get pointsLayer => t.tutorial.practice.points;

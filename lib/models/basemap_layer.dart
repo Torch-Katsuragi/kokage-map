@@ -35,7 +35,7 @@ enum BaseMapBlend {
   static BaseMapBlend parse(String? name) => values.firstWhere((b) => b.name == name, orElse: () => normal);
 }
 
-/// 背景地図の 1 レイヤ（松本 2026-09-13「イメージはお絵描きソフトのレイヤ。順番・可視・透明度・合成モード」）
+/// 背景地図の 1 レイヤ（ユーザー 2026-09-13「イメージはお絵描きソフトのレイヤ。順番・可視・透明度・合成モード」）
 ///
 /// 並びは [BaseMapService.layers] が持つ（先頭が一番下）。同じプロバイダは 1 枚まで
 class BaseMapLayer {

@@ -150,7 +150,7 @@ class TerrainFramePlanner {
     // 1 段上の親は 1/4 の枚数で画面を覆えるので最初に取る（見た目が最短で埋まる）。
     // さらに上の親は「引いたとき」と圏外の近似のためで、急ぎではない。
     // ⚠ 以前は一番粗い親から 4 段ぶん（余白つきで 40 枚超）を核より先に読んでいて、一気に寄ると
-    //   中間の段を順に読み終えるまで理想の段が来なかった（松本 2026-09-11「4,5,6,7,8,9 と順番に読んでいる」）
+    //   中間の段を順に読み終えるまで理想の段が来なかった（ユーザー 2026-09-11「4,5,6,7,8,9 と順番に読んでいる」）
     final tBounds = sw.elapsedMilliseconds;
     final parents = world.ancestorRanges(range, levels: ancestorLevels, margin: 0).reversed.toList(); // 近い段から
     final order = [

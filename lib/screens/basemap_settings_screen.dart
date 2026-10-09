@@ -385,7 +385,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         BaseMapBlend.difference => t.basemap.layers.blendModes.difference,
       };
 
-  /// レイヤセクション（松本 2026-09-13「イメージはお絵描きソフトのレイヤ。順番・可視・透明度・合成モード」）。
+  /// レイヤセクション（ユーザー 2026-09-13「イメージはお絵描きソフトのレイヤ。順番・可視・透明度・合成モード」）。
   /// サービスは下から上に持つが、ここでは上（手前）から並べる
   Widget _buildLayersSection() {
     final svc = _baseMapService;
@@ -534,7 +534,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     ref.read(tutorialProvider.notifier).report(BasemapLayerAdded(picked.id));
   }
 
-  /// 出典（地図面に出すのをやめてここにまとめた。松本 2026-09-13。OSM だけは地図面にも出す）
+  /// 出典（地図面に出すのをやめてここにまとめた。ユーザー 2026-09-13。OSM だけは地図面にも出す）
   Widget _buildSourcesSection() {
     final basemaps = {for (final (p, _) in _baseMapService.activeLayers) if (p.attribution.isNotEmpty) p.attribution};
     final dems = {for (final s in DemTileSource.defaultCascade) s.attribution};

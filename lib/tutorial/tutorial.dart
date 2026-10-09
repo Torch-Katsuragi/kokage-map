@@ -356,7 +356,7 @@ class TutorialStepDef {
   final double cardLift;
 
   /// 済んでも自動で進まず「できました」と「次へ」を出す。結果を見てほしい手順
-  /// （地図の上で選ぶ・点を打つ・名前を入れる・線を引く・写真・GPS）。ボタンを押すだけの手順は自動で進む（松本 2026-10-01）
+  /// （地図の上で選ぶ・点を打つ・名前を入れる・線を引く・写真・GPS）。ボタンを押すだけの手順は自動で進む（ユーザー 2026-10-01）
   final bool waitNext;
 
   bool get isInfo => done == null;
@@ -383,7 +383,7 @@ List<TutorialStepDef> stepsOf(TutorialChapter c) =>
 List<TutorialStepDef> _buildSteps(TutorialChapter c) {
   return switch (c) {
     TutorialChapter.view => [
-      // 指で動かす・拡大するは、満足するまで触ってもらう（自動で先へ進めない。松本 2026-10-01）
+      // 指で動かす・拡大するは、満足するまで触ってもらう（自動で先へ進めない。ユーザー 2026-10-01）
       const TutorialStepDef('move'),
       const TutorialStepDef('zoom'),
       TutorialStepDef('mode', targets: [TutorialTargets.compassButton], done: (e) => e is MapModeToggled),
@@ -392,7 +392,7 @@ List<TutorialStepDef> _buildSteps(TutorialChapter c) {
       TutorialStepDef('basemap',
           targets: [TutorialTargets.basemapSetting, TutorialTargets.settingsMenuItem, TutorialTargets.menuButton],
           done: (e) => e is BasemapScreenOpened),
-      // 赤色立体図を重ねて透け具合を変える（松本 2026-10-01「背景地図のチュートリアルが中途半端」）
+      // 赤色立体図を重ねて透け具合を変える（ユーザー 2026-10-01「背景地図のチュートリアルが中途半端」）
       TutorialStepDef('relief', targets: [TutorialTargets.reliefOption, TutorialTargets.basemapAddButton],
           done: (e) => e is BasemapLayerAdded && e.providerId == reliefProviderId),
       TutorialStepDef('opacity', waitNext: true, cardBottom: true, targets: [TutorialTargets.reliefOpacity],
@@ -407,7 +407,7 @@ List<TutorialStepDef> _buildSteps(TutorialChapter c) {
       TutorialStepDef('hide', targets: [TutorialTargets.areaEye, TutorialTargets.layersButton],
           done: (e) => e is LayerVisibilityToggled && _area(e.layer) && !e.layer.visible),
       // 地図は自分のいる場所から始まるので、行のダブルタップでエリアのある所へ飛んでから
-      // 一覧を閉じ、消えているのを自分の目で見てもらう（松本 2026-10-01）
+      // 一覧を閉じ、消えているのを自分の目で見てもらう（ユーザー 2026-10-01）
       TutorialStepDef('zoomTo', targets: [TutorialTargets.areaTile, TutorialTargets.layersButton], done: (e) => e is LayerZoomed && _area(e.layer)),
       TutorialStepDef('hiddenClose', targets: [TutorialTargets.layersButton],
           done: (e) => e is LayersPanelToggled && !e.open),

@@ -25,7 +25,7 @@ import '../core/terrain/web_mercator.dart';
 import '../services/basemap_service.dart';
 
 /// 背景地図レイヤのプレビュー: いまのレイヤ設定で **タイル 1 枚** を 3D と同じ `composeLayers` で合成して見せる
-/// （松本 2026-09-13「タイル 1 つだけ出して、こうなりますよ」）。
+/// （ユーザー 2026-09-13「タイル 1 つだけ出して、こうなりますよ」）。
 ///
 /// タイルは地図の中心（無ければ東京）の [zoom]。設定が変わるたびに少し待ってから作り直す（スライダーの連打を吸う）
 class BaseMapPreview extends StatefulWidget {

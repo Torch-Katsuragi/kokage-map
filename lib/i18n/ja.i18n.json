@@ -508,7 +508,6 @@
     "geopackage": {
       "changeName": "名前の変更",
       "deleteGpkg": "削除",
-      "dropLayerHere": "レイヤをここにドロップ",
       "migrateTitle": "レイヤ移植",
       "migrateConfirm": "「$source」を「$target」に移植しますか？\n\n移植により、元のGeoPackageからこのレイヤは削除されます。",
       "migrateSuccess": "「$source」を「$target」に移植しました",
@@ -545,7 +544,14 @@
       "localLabel": "端末",
       "cloudLabel": "クラウド",
       "syncExecute": "同期実行",
-      "mergeLabel": "端末とクラウドを行ごとに合わせる"
+      "mergeLabel": "端末とクラウドを行ごとに合わせる",
+      "addFiles": "ファイルを追加",
+      "dropFilesHere": "ここにファイルを追加",
+      "filesAdded": "「$folder」に $count 件のファイルを追加しました",
+      "filesAddFailed": "$count 件のファイルを追加できませんでした",
+      "filesAddReadOnly": "「$folder」は読み取り専用のため、ファイルを追加できません",
+      "shpMissingSidecars": "Shapefile の付属ファイルが足りません: $names",
+      "shpMissingSidecarsDetail": ".shp と同じ名前の .dbf と .shx も一緒に選んでください（.prj・.cpg もあれば）。足りないままでは地図に出せません"
     },
     "photo": {
       "overlay": "オーバーレイ",
@@ -570,7 +576,8 @@
       "driveLinkedLabel": "Drive連携中",
       "addFolder": "フォルダ",
       "addGeoPackage": "GeoPackage",
-      "addPhotos": "写真"
+      "addPhotos": "写真",
+      "addFiles": "ファイル"
     },
     "directoryNotFound": "ディレクトリが見つかりません",
     "renamePhoto": "写真のリネーム",

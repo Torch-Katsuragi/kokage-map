@@ -508,7 +508,6 @@
     "geopackage": {
       "changeName": "Rename",
       "deleteGpkg": "Delete",
-      "dropLayerHere": "DROP LAYER HERE",
       "migrateTitle": "Migrate Layer",
       "migrateConfirm": "Migrate \"$source\" to \"$target\"?\\n\\nThe layer will be removed from the original GeoPackage.",
       "migrateSuccess": "Migrated \"$source\" to \"$target\"",
@@ -545,7 +544,14 @@
       "localLabel": "Local",
       "cloudLabel": "Cloud",
       "syncExecute": "Sync",
-      "mergeLabel": "Merge both, row by row"
+      "mergeLabel": "Merge both, row by row",
+      "addFiles": "Add files",
+      "dropFilesHere": "Add files here",
+      "filesAdded": "Added $count file(s) to \"$folder\"",
+      "filesAddFailed": "Could not add $count file(s)",
+      "filesAddReadOnly": "\"$folder\" is read-only; files cannot be added",
+      "shpMissingSidecars": "Shapefile companion files are missing: $names",
+      "shpMissingSidecarsDetail": "Pick the .dbf and .shx with the same name as the .shp too (and .prj / .cpg if present). Without them it cannot be shown on the map"
     },
     "photo": {
       "overlay": "Overlay",
@@ -570,7 +576,8 @@
       "driveLinkedLabel": "Drive linked",
       "addFolder": "Folder",
       "addGeoPackage": "GeoPackage",
-      "addPhotos": "Photos"
+      "addPhotos": "Photos",
+      "addFiles": "Files"
     },
     "directoryNotFound": "Directory not found",
     "renamePhoto": "Rename Photo",

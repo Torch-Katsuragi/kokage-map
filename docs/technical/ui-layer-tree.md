@@ -62,11 +62,11 @@ if (result.downloadedCount > 0 || result.deletedCount > 0) {
 }
 ```
 
-### インポート後
+### ファイルを追加したあと
 
 ```dart
-// Shapefile/GeoJSONインポート後
-await targetGeoPackage.updateChildren();
+// 「ファイルを追加」・ドラッグ＆ドロップでフォルダに写したあと（gpkg への取り込みは 2026-10-09 にやめた）
+await folder.updateChildren();
 ```
 
 ### レイヤ移植後
@@ -125,7 +125,9 @@ Future<void> initialize() async {
 - 動かせる行（レイヤ・gpkg・ローカルのフォルダ・写真）は**左スワイプで「移動」**（`Dismissible` を戻して `MoveTargetDialog`）。
   フォルダ・gpkg・写真はフォルダへ、レイヤは別の gpkg へ移植。sys の下へは移さない。
   2026-10-06 に長押しドラッグから替えた（長押しのメニューと取り合い、ドラッグ中の枠の付け外しで中身が作り直されて長押し中の行が消える、
-  という事故も踏んだ）。デスクトップからのファイルの取り込み（`DropTarget`）は残す
+  という事故も踏んだ）。ファイルのドラッグ＆ドロップ（`DropTarget`）は 2026-10-09 に gpkg への取り込みをやめ、
+  一覧に 1 つだけ置いて、落とした位置の下のフォルダの行（無ければ開いているフォルダ）にファイルをそのまま写す
+  （フォルダの「ファイルを追加」と同じ `add_files_action.dart` → `FolderFileAdder`）。行ごとに置くと入れ子で両方に届く
 - gpkg は行ではなく小さい見出し（`DrawerGroupHeader`。▾ で畳む・目で中をまとめて隠す・長押しにレイヤ追加）。
   空の gpkg にだけ「レイヤ追加」の行を出す
 - レイヤ・View の行の左端は描画色の見本（`tiles/layer_swatch.dart`。View → レイヤ → 全体設定の順に合成）、名前の横に件数

@@ -16,7 +16,6 @@
 /// Root Maps: GeoPackageタイルウィジェット
 library;
 
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,20 +26,17 @@ import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
-import '../../../services/import_export/import_export_service.dart';
 import '../../../tutorial/tutorial.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
 import 'layer_tile.dart';
 
 
-/// GeoPackage ノード用タイル（展開/折りたたみ・ドラッグ&ドロップ対応）
+/// GeoPackage ノード用タイル（展開/折りたたみ）。
+/// ファイルのドラッグ＆ドロップは 2026-10-09 にフォルダへ移した（gpkg への取り込みはやめた。layer_drawer.dart）
 class GeoPackageTile extends ConsumerWidget {
   final GeoPackageNode node;
-  final bool isDropTarget;
   final VoidCallback? onRename;
-  /// デスクトップからファイルを落としている先（光らせる）
-  final void Function(GeoPackageNode?) onDropTargetChanged;
 
   /// 左スワイプの「移動」（gpkg はフォルダへ、中のレイヤは別の gpkg へ）
   final ValueChanged<LayerTreeNode>? onSwipeMove;
@@ -50,8 +46,6 @@ class GeoPackageTile extends ConsumerWidget {
   const GeoPackageTile({
     super.key,
     required this.node,
-    required this.isDropTarget,
-    required this.onDropTargetChanged,
     this.onSwipeMove,
     this.onRename,
     this.currentDir,
@@ -74,10 +68,6 @@ class GeoPackageTile extends ConsumerWidget {
       title: _stripExt(node.name),
       expanded: isExpanded,
       dimmed: dimmed,
-      highlight: isDropTarget,
-      badge: isDropTarget
-          ? Text(t.layerDrawer.geopackage.dropLayerHere, style: const TextStyle(fontSize: 13, color: Colors.blue, fontWeight: FontWeight.bold))
-          : null,
       onToggleExpanded: () {
         if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).toggle(absPath);
       },
@@ -126,41 +116,10 @@ class GeoPackageTile extends ConsumerWidget {
       ],
     );
 
-    // ファイル D&D ターゲット（外側・デスクトップからのドロップ用）
-    return DropTarget(
-      onDragEntered: (_) => onDropTargetChanged(node),
-      onDragExited: (_) => onDropTargetChanged(null),
-      onDragDone: (details) async {
-        for (final file in details.files) {
-          await _handleFileDrop(file.path, ref);
-        }
-        onDropTargetChanged(null);
-      },
-      child: content,
-    );
+    return content;
   }
 
   static String _stripExt(String name) => name.toLowerCase().endsWith('.gpkg') ? name.substring(0, name.length - 5) : name;
-
-  Future<void> _handleFileDrop(String filePath, WidgetRef ref) async {
-    try {
-      final result = await ImportExportService().importFile(filePath, node);
-      if (result.success) {
-        await node.updateChildren();
-        if (result.createdLayers != null) {
-          for (final layer in result.createdLayers!) {
-            await layer.updateChildren();
-          }
-        }
-
-        final absPath = node.geoPackageFile.getAbsolutePath();
-        if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).addExpanded(absPath);
-
-        ref.refreshMap();
-        Future.delayed(const Duration(milliseconds: 500), ref.refreshMap);
-      }
-    } catch (_) {}
-  }
 
   Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
     await confirmAndExecute(

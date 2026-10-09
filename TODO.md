@@ -5,7 +5,11 @@
 
 ## 次にやる（実装）
 
-- （空。下の節から選ぶ）
+- [ ] 読み取り専用レイヤ（shp・GeoJSON）を実機と web で確かめる（[[docs/technical/external-formats]]）。
+  Pixel 9: Shift_JIS の shp が文字化けせず出る・大きい shp の初回のキャッシュ作りの時間・描こうとすると「gpkgに変換して編集」・
+  変換で元一式が消えて gpkg が出る・スタイル/View が引き継がれる・改名と左スワイプの移動で付属ファイルも動く。
+  web: OPFS/選んだフォルダで `.kokage/cache/external` が作られ、開き直しで作り直さない・変換と複製
+- [ ] Drive 同期で `.kokage/` を飛ばす（ルートが連携 dir だとキャッシュ gpkg まで上がる。`SyncFileOperations.listLocalSyncFiles`）
 
 ## リリース・Play
 

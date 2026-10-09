@@ -2,6 +2,14 @@
 
 ## Next release
 
+### Open files other than gpkg as they are
+
+- Shapefiles (.shp with their companion files) and GeoJSON (.geojson, or .json whose content is GeoJSON) placed in a folder now show up as layers without importing. They are read-only; visibility, style, labels, Views, the attribute table and export all work. A .shp without a .cpg is read as Shift_JIS
+- Trying to draw or edit attributes offers "Convert to gpkg to edit". Converting writes a gpkg with the same name in the same folder, checks that its contents match, and then deletes the original files. Style, View and visibility settings carry over
+- In read-only shared folders, "Copy as gpkg to my folder" is offered instead of converting
+- QGIS projects (.qgs) reference the original .shp / .geojson, and Views and styles edited in QGIS are read back
+- Shapefiles with heights (Z) and multipoint shapefiles can now be read
+
 ### Changed
 
 - "Open another folder" on Home is now "Choose a folder to open". Instead of the device's file picker, you browse the folders inside your everyday map, styled like the layer panel. Places outside it are under "Another place on the device…" in the top-right menu

@@ -8,6 +8,7 @@
 - The layer panel is redone: tighter rows, and only the visibility eye at the right end. Long-press a row (right-click on a PC) for its menu; swipe it left to move it elsewhere
 - Each layer row starts with a sample of its map color and shows its feature count. GeoPackages are small headings whose eye hides everything inside
 - A path (KokageMap › 共有) above the list takes you back to any level. The top shows the folder name instead of "Home"
+- Projects saved in QGIS now bring back whether each GeoTIFF is shown or hidden. If the project uses GSI or OpenStreetMap tiles, they are added to your background maps (once). Rasters that can't be read (such as WMS) are listed with the reason and left in the QGIS project
 
 ### Lighter
 

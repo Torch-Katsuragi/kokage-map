@@ -38,15 +38,20 @@ import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
 
 import '../../core/fs/k_file_system.dart';
+import '../../models/basemap_provider.dart';
 import '../../models/kmeta.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
+import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
+import '../../models/nodes/overlay_image_node.dart';
 import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/label_expression.dart';
 import '../kmeta_service.dart';
+import 'qgs_project_builder.dart' show QgsProjectBuilder;
+import 'qgs_raster_source.dart';
 import 'qgs_xml.dart';
 
 /// px ⇄ mm（QGISのシンボル単位はMM）。96dpi 相当。[[qgs_writer]] の逆。
@@ -57,6 +62,8 @@ class QgsImportResult {
   const QgsImportResult({
     required this.viewsByLayer,
     required this.discarded,
+    this.baseMaps = const [],
+    this.overlayCount = 0,
   });
 
   /// レイヤキー（`gpkgName/layerName`）→ 作った View名の並び
@@ -64,6 +71,13 @@ class QgsImportResult {
 
   /// 取り込めなかったもの。理由つきの1行で入れる。
   final List<String> discarded;
+
+  /// XYZ タイルのレイヤ（背景地図の一覧に当たったもの）。背景地図は端末の設定なので、
+  /// ここでは読むだけで足さない（`QgsBaseMapImport` が足す）
+  final List<QgsBaseMap> baseMaps;
+
+  /// 可視性を読み戻したオーバーレイ画像（GeoTIFF）の数
+  final int overlayCount;
 
   int get importedViewCount =>
       viewsByLayer.values.fold(0, (sum, list) => sum + list.length);
@@ -152,7 +166,8 @@ class QgsImporter {
     }
 
     final rootPath = root.getAbsoluteFilePath();
-    final sources = _SourceResolver(p.dirname(p.normalize(qgsPath)), rootPath, _indexGeoPackages(root));
+    final qgsDir = p.dirname(p.normalize(qgsPath));
+    final sources = _SourceResolver(qgsDir, rootPath, _indexGeoPackages(root), _indexImages(root));
     final tree = _TreeVisibility.read(doc);
     // 形が合ったレイヤの、グループ側の可視性（レイヤ・gpkg・dir）
     final layerGroupChecked = <LayerNode, bool>{};
@@ -212,11 +227,40 @@ class QgsImporter {
       await node.persistVisibility();
     }
 
+    // オーバーレイ画像（GeoTIFF）の可視性。ファイルは dir にあるものが正で、`.qgs` からは表示だけ取る
+    var overlayCount = 0;
+    for (final (:node, :id) in sources.overlays) {
+      final owner = node.parent;
+      if (owner is! FolderNode || !accepts(owner)) continue;
+      // こかげマップが書いた形（決定的な id）なら dir グループの消灯は dir の可視性なので、自身の checked。
+      // QGIS で足したものは祖先で畳む（グループごと消灯した場合も読み戻す）
+      final abs = node.getAbsoluteFilePath();
+      final rel = abs == null ? null : relativeInside(qgsDir, abs);
+      final ownForm = rel != null && id == QgsProjectBuilder.rasterLayerIdForPath('./$rel');
+      final visible = (ownForm ? tree.ownChecked[id] : tree.checked[id]) ?? true;
+      overlayCount++;
+      if (node.visible == visible) continue;
+      node.visible = visible;
+      await node.persistVisibility();
+    }
+
+    // XYZ タイル（背景地図）。端末の設定なのでここでは読むだけ
+    final baseMaps = [
+      for (final (:providerId, :name, :id, :opacity) in sources.baseMaps)
+        QgsBaseMap(providerId: providerId, layerName: name, visible: tree.checked[id] ?? true, opacity: opacity),
+    ];
+
     AppLogger.debug(
       '[QgsImporter] View ${viewsByLayer.values.fold(0, (s, l) => s + l.length)} 個を'
-      '${viewsByLayer.length} レイヤに取り込み（除外 ${discarded.length} 件）',
+      '${viewsByLayer.length} レイヤに取り込み（オーバーレイ $overlayCount 枚・背景地図 ${baseMaps.length} 枚・'
+      '除外 ${discarded.length} 件）',
     );
-    return QgsImportResult(viewsByLayer: viewsByLayer, discarded: discarded);
+    return QgsImportResult(
+      viewsByLayer: viewsByLayer,
+      discarded: discarded,
+      baseMaps: baseMaps,
+      overlayCount: overlayCount,
+    );
   }
 
   // =============================================
@@ -291,6 +335,23 @@ class QgsImporter {
     void walk(LayerTreeNode n) {
       if (n is GeoPackageNode) {
         final abs = n.geoPackageFile.getAbsolutePath();
+        if (abs != null) result[p.normalize(abs)] = n;
+      }
+      for (final child in n.children) {
+        walk(child);
+      }
+    }
+
+    walk(node);
+    return result;
+  }
+
+  /// ルート以下の画像（写真・オーバーレイ）を、正規化した絶対パスで引けるようにする
+  Map<String, ImageNode> _indexImages(LayerTreeNode node) {
+    final result = <String, ImageNode>{};
+    void walk(LayerTreeNode n) {
+      if (n is ImageNode) {
+        final abs = n.getAbsoluteFilePath();
         if (abs != null) result[p.normalize(abs)] = n;
       }
       for (final child in n.children) {
@@ -486,7 +547,7 @@ class QgsImporter {
 
 /// `<maplayer>` のデータソースを、ツリーの GeoPackage レイヤに結びつける
 class _SourceResolver {
-  _SourceResolver(this.qgsDir, this.rootPath, this.gpkgIndex);
+  _SourceResolver(this.qgsDir, this.rootPath, this.gpkgIndex, this.imageIndex);
 
   /// `.qgs` のある dir（相対パスの基準）
   final String qgsDir;
@@ -494,6 +555,15 @@ class _SourceResolver {
 
   /// 正規化した絶対パス → GeoPackage
   final Map<String, GeoPackageNode> gpkgIndex;
+
+  /// 正規化した絶対パス → 画像（写真・オーバーレイ）
+  final Map<String, ImageNode> imageIndex;
+
+  /// gdal のラスタのうち、dir にあるオーバーレイ画像に当たったもの（maplayer の id つき）
+  final overlays = <({OverlayImageNode node, String id})>[];
+
+  /// wms の XYZ タイルのうち、背景地図の一覧に当たったもの
+  final baseMaps = <({String providerId, String name, String id, int opacity})>[];
 
   /// 取り込む先のレイヤ。取り込めなければ理由を [discarded] に足して null。
   /// 黙って飛ばすもの（埋め込みスタブ・ラスタ）も null
@@ -507,9 +577,11 @@ class _SourceResolver {
     final name = childText(maplayer, 'layername') ?? '(名前なし)';
     final provider = childText(maplayer, 'provider')?.toLowerCase();
 
-    // ラスタは取り込まない（自分が書いたオーバーレイの参照は フォルダ設定（`.qgs`） が正典。
-    // QGIS 側で足したラスタは扱えないが、毎回の読み戻しで「取り込めません」と騒がない）
-    if (maplayer.getAttribute('type') == 'raster') return null;
+    // ラスタはレイヤ（View）にはならない。GeoTIFF はオーバーレイ画像、XYZ タイルは背景地図へ
+    if (maplayer.getAttribute('type') == 'raster') {
+      _resolveRaster(maplayer, name, provider, discarded);
+      return null;
+    }
 
     if (provider != null && provider != 'ogr') {
       // PostGIS / WMS / メモリレイヤ等。ファイルとして持ち歩けない
@@ -544,6 +616,59 @@ class _SourceResolver {
       return null;
     }
     return (name: name, source: source, layer: layer, gpkg: gpkg);
+  }
+
+  /// ラスタの `<maplayer>` を [overlays] か [baseMaps] に振り分ける。扱えなければ理由を [discarded] に足す。
+  ///
+  /// dir に置かれたファイルが正で、`.qgs` は表示の設定を運ぶだけ（[[docs/technical/external-formats]]）。
+  /// GeoTIFF のノードは dir の中身から作られているので、ここでは突き合わせるだけで作らない
+  void _resolveRaster(XmlElement maplayer, String name, String? provider, List<String> discarded) {
+    final id = childText(maplayer, 'id') ?? '';
+    final datasource = childText(maplayer, 'datasource') ?? '';
+    switch (provider) {
+      case 'gdal':
+        if (datasource.trim().isEmpty || QgsRasterSource.isNonFileSource(datasource)) {
+          discarded.add('$name（ファイルではないラスタは取り込めません）');
+          return;
+        }
+        final path = datasource.split('|').first.trim();
+        final absPath = p.normalize(p.isAbsolute(path) ? path : p.join(qgsDir, path));
+        final root = rootPath;
+        if (root == null || relativeInside(root, absPath) == null) {
+          discarded.add('$name（プロジェクトフォルダの外を参照している）');
+          return;
+        }
+        final ext = p.extension(absPath).toLowerCase();
+        if (ext != '.tif' && ext != '.tiff') {
+          discarded.add('$name（GeoTIFF 以外のラスタは未対応）');
+          return;
+        }
+        final node = imageIndex[absPath];
+        if (node == null) {
+          discarded.add('$name（${p.basename(absPath)} が見つかりません）');
+        } else if (node is! OverlayImageNode) {
+          // 位置を読めるのはこかげマップが書く形（ModelTransformationTag・WGS84）だけ。
+          // GDAL の既定（ModelTiepoint + ModelPixelScale）や投影座標系の GeoTIFF は写真として並ぶ
+          discarded.add('$name（${p.basename(absPath)} の位置を読めません。こかげマップで位置合わせした GeoTIFF のみ対応）');
+        } else {
+          overlays.add((node: node, id: id));
+        }
+      case 'wms':
+        final url = QgsRasterSource.xyzUrl(datasource);
+        if (url == null) {
+          discarded.add('$name（WMS は未対応）');
+          return;
+        }
+        final known = BaseMapProvider.findByTileUrl(url);
+        if (known == null) {
+          final host = Uri.tryParse(url)?.host ?? '';
+          discarded.add('$name（背景地図の一覧に無い XYZ タイル${host.isEmpty ? '' : ': $host'}）');
+          return;
+        }
+        baseMaps.add((providerId: known.id, name: name, id: id, opacity: QgsRasterSource.opacityPercent(maplayer)));
+      default:
+        discarded.add('$name（${provider ?? '不明なプロバイダ'} のラスタは取り込めません）');
+    }
   }
 }
 

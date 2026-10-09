@@ -206,6 +206,28 @@ class BaseMapProvider {
     return null;
   }
 
+  /// XYZ タイルの URL テンプレートから（QGIS の XYZ レイヤの読み戻し）。一覧に無ければ null。
+  ///
+  /// 突き合わせは http/https、ホスト名の大小、OSM の `a.` `{s}.` などのサブドメインを無視する。
+  /// 一覧に無い URL を勝手に足さないのは、利用規約で配布アプリからの利用を禁じているタイル
+  /// （QGIS でよく敷かれる Google の航空写真など）を持ち込まないため
+  static BaseMapProvider? findByTileUrl(String url) {
+    final key = _tileUrlKey(url);
+    if (key.isEmpty) return null;
+    for (final p in availableProviders) {
+      if (p.urlTemplate.isNotEmpty && _tileUrlKey(p.urlTemplate) == key) return p;
+    }
+    return null;
+  }
+
+  static String _tileUrlKey(String url) {
+    var s = url.trim();
+    s = s.replaceFirst(RegExp('^https?://', caseSensitive: false), '');
+    final slash = s.indexOf('/');
+    final host = (slash < 0 ? s : s.substring(0, slash)).toLowerCase().replaceFirst(RegExp(r'^(\{s\}|[abc])\.'), '');
+    return slash < 0 ? host : '$host${s.substring(slash)}';
+  }
+
   /// デフォルトの背景地図プロバイダー（国土地理院 標準地図）
   ///
   /// OSMを既定にしない: タイル利用ポリシー上、配布アプリの既定として

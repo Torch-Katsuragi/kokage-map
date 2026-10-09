@@ -26,6 +26,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/widgets.dart' show EdgeInsets;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -236,7 +237,19 @@ class FeatureEditor extends Notifier<EditState?> {
     _toolBefore = ref.read(currentToolProvider);
     ref.read(currentToolProvider.notifier).set(ref.read(editToolProvider));
     _tutorial(EditStarted(f.parent));
+    _fitTo(f, shape);
     await _loadAttributes(f);
+  }
+
+  /// 編集する形が見やすい大きさ・位置へ寄せる。編集パネルが出て地図が縮んでから測るので、少し待ってから
+  void _fitTo(FeatureNode f, List<List<LatLng>> shape) {
+    Future<void>.delayed(const Duration(milliseconds: 300), () {
+      if (!identical(state?.feature, f)) return; // その間に終わった・別の地物に替わった
+      ref.read(mapControllerHolderProvider)?.fitCoordinates(
+        [for (final r in shape) ...r],
+        padding: const EdgeInsets.all(48),
+      );
+    });
   }
 
   Future<void> _loadAttributes(FeatureNode f) async {

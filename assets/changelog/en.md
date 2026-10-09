@@ -15,6 +15,14 @@
 - Memory no longer keeps growing while you pan
 - Data with many areas opens faster, and the basemap shows while it loads
 
+### Safer
+
+- When you receive a map by QR or link, the app now shows the folder name and its owner and asks before importing
+- Location sharing: you leave rooms automatically, and stop sending your position, once the host ends the room or it expires
+- Location sharing: members removed by the host can no longer rejoin with the same code
+- File and folder names in a received map can no longer write outside the app's own folders
+- App settings are no longer included in device backups (they won't carry over to a new phone; your map data in Documents/KokageMap is unaffected)
+
 ### Fixed
 
 - In data with many areas (such as forest compartments), areas without a fill disappeared at some in-between zoom levels (between 14 and 15). They now stay visible

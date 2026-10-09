@@ -30,6 +30,14 @@
 )
 
 #fixes(
+  "Safer",
+  [Asks before importing a received map, showing its folder and owner],
+  [Location sharing: leaves ended or expired rooms on its own],
+  [Location sharing: removed members cannot rejoin with the same code],
+  [A received map cannot write outside the app's folders],
+)
+
+#fixes(
   "Fixed",
   [Areas without a fill disappeared between zoom 14 and 15 in data with many areas],
 )

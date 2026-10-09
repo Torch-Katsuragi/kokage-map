@@ -266,7 +266,7 @@ class QgsWriter {
         builder.element('layername', nest: layer.name);
         builder.element(
           'provider',
-          attributes: {'encoding': 'UTF-8'},
+          attributes: {'encoding': layer.providerEncoding},
           nest: 'ogr',
         );
         builder.element('srs', nest: () => _writeCrs(builder, layer.crs));

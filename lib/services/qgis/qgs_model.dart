@@ -72,6 +72,8 @@ class QgsLayer extends QgsTreeNode {
     this.subset,
     this.style,
     this.visible = true,
+    this.uriOptions,
+    this.providerEncoding = 'UTF-8',
   });
 
   /// プロジェクト内で一意なID。`layer-tree-layer` と `maplayer` を結ぶ。
@@ -101,11 +103,22 @@ class QgsLayer extends QgsTreeNode {
 
   final bool visible;
 
+  /// パスの後ろに `|` で続けるレイヤの指定。null なら `layername=<tableName>`（gpkg）。
+  /// 読み取り専用レイヤ（shp・GeoJSON）は 1 ファイル 1 レイヤなら空（`./林班.shp` だけ）、
+  /// GeoJSON の型の混在なら `geometrytype=Point` など（[[external-formats]]）
+  final List<String>? uriOptions;
+
+  /// `<provider encoding=…>`。shp の属性の文字コード（`.cpg` が無い shp は Shift_JIS で読んでいる）
+  final String providerEncoding;
+
   /// OGRプロバイダのデータソース文字列。
   ///
   /// QGIS は GeoPackage のレイヤ指定とフィルタをこの1本の文字列に詰める。
   String get dataSourceUri {
-    final buffer = StringBuffer('$dataSourcePath|layername=$tableName');
+    final buffer = StringBuffer(dataSourcePath);
+    for (final option in uriOptions ?? ['layername=$tableName']) {
+      buffer.write('|$option');
+    }
     if (subset != null && subset!.trim().isNotEmpty) {
       buffer.write('|subset=${subset!.trim()}');
     }

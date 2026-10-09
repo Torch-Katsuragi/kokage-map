@@ -38,7 +38,9 @@ import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
 
 import '../../core/fs/k_file_system.dart';
+import '../../models/geometry_type.dart';
 import '../../models/kmeta.dart';
+import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/layer_node.dart';
@@ -46,6 +48,7 @@ import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/label_expression.dart';
+import '../external/readers/geojson_reader.dart';
 import '../kmeta_service.dart';
 import 'qgs_xml.dart';
 
@@ -73,7 +76,7 @@ class QgsImportResult {
 
 /// QGISのデータソース文字列から取り出したもの。
 class QgsDataSource {
-  const QgsDataSource({required this.path, this.layerName, this.subset});
+  const QgsDataSource({required this.path, this.layerName, this.subset, this.geometryType});
 
   /// `.qgs` からの相対、または絶対パス
   final String path;
@@ -83,6 +86,9 @@ class QgsDataSource {
 
   /// subset string（SQLのWHERE句）
   final String? subset;
+
+  /// `geometrytype=`（QGIS が型の混ざったファイルの型ごとのサブレイヤに付ける。例 `Point`）
+  final String? geometryType;
 
   /// OGRのデータソース文字列を分解する。
   ///
@@ -103,16 +109,18 @@ class QgsDataSource {
     final parts = rest.split('|');
     final path = parts.first.trim();
     String? layerName;
+    String? geometryType;
     for (final part in parts.skip(1)) {
       final eq = part.indexOf('=');
       if (eq < 0) continue;
       final key = part.substring(0, eq).trim().toLowerCase();
       final value = part.substring(eq + 1).trim();
       if (key == 'layername') layerName = value;
+      if (key == 'geometrytype') geometryType = value;
       // layerid / geometrytype / table 等は使わない
     }
     if (path.isEmpty) return null;
-    return QgsDataSource(path: path, layerName: layerName, subset: subset);
+    return QgsDataSource(path: path, layerName: layerName, subset: subset, geometryType: geometryType);
   }
 }
 
@@ -290,7 +298,8 @@ class QgsImporter {
     final result = <String, GeoPackageNode>{};
     void walk(LayerTreeNode n) {
       if (n is GeoPackageNode) {
-        final abs = n.geoPackageFile.getAbsolutePath();
+        // 読み取り専用レイヤは元のファイルのパスで引く（キャッシュのパスは .qgs に出てこない）
+        final abs = n is ExternalLayerNode ? n.sourcePath : n.geoPackageFile.getAbsolutePath();
         if (abs != null) result[p.normalize(abs)] = n;
       }
       for (final child in n.children) {
@@ -485,6 +494,23 @@ class QgsImporter {
 }
 
 /// `<maplayer>` のデータソースを、ツリーの GeoPackage レイヤに結びつける
+bool _isGeoPackagePath(String path) => p.extension(path).toLowerCase() == '.gpkg';
+
+/// `|layername=` の無い外部形式のデータソースが指すレイヤ名。
+/// 1 レイヤならそれ、`geometrytype=` があれば `<名前>_point` など、なければファイル名（拡張子なし）
+String _externalLayerName(GeoPackageNode node, QgsDataSource source) {
+  final layers = node.children.whereType<LayerNode>().toList();
+  if (layers.length == 1) return layers.single.layerName;
+  final stem = p.basenameWithoutExtension(source.path.replaceAll(r'\', '/'));
+  final type = switch (source.geometryType?.toLowerCase().replaceAll(RegExp('^multi|25d\$|z\$|m\$|zm\$'), '')) {
+    'point' => GeometryType.point,
+    'linestring' => GeometryType.linestring,
+    'polygon' => GeometryType.polygon,
+    _ => null,
+  };
+  return type == null ? stem : '$stem${GeoJsonReader.suffixOf(type)}';
+}
+
 class _SourceResolver {
   _SourceResolver(this.qgsDir, this.rootPath, this.gpkgIndex);
 
@@ -518,7 +544,8 @@ class _SourceResolver {
     }
 
     final source = QgsDataSource.parse(childText(maplayer, 'datasource') ?? '');
-    if (source == null || source.layerName == null) {
+    // gpkg 以外（shp・GeoJSON など）は `|layername=` が無くてよい（読み取り専用レイヤに結びつける）
+    if (source == null || (source.layerName == null && _isGeoPackagePath(source.path))) {
       discarded.add('$name（データソースを読み取れません）');
       return null;
     }
@@ -538,9 +565,10 @@ class _SourceResolver {
       return null;
     }
 
-    final layer = gpkg.children.whereType<LayerNode>().where((l) => l.layerName == source.layerName).firstOrNull;
+    final layerName = source.layerName ?? _externalLayerName(gpkg, source);
+    final layer = gpkg.children.whereType<LayerNode>().where((l) => l.layerName == layerName).firstOrNull;
     if (layer == null) {
-      discarded.add('$name（${gpkg.name} に ${source.layerName} がありません）');
+      discarded.add('$name（${gpkg.name} に $layerName がありません）');
       return null;
     }
     return (name: name, source: source, layer: layer, gpkg: gpkg);

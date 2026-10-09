@@ -641,7 +641,11 @@
       "perspectiveOn": "眺めモード",
       "perspectiveOff": "眺めモード 解除",
       "driveStart": "ドライブ開始",
-      "driveStop": "ドライブ終了"
+      "driveStop": "ドライブ終了",
+      "eraserOn": "消しゴム",
+      "eraserOff": "消しゴム 解除",
+      "multiSelectOn": "複数選択",
+      "multiSelectOff": "複数選択 解除"
     }
   },
   "importExport": {

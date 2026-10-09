@@ -48,10 +48,7 @@ class DbfReader {
   /// [dbfFilePath] DBFファイルパス
   /// [encoding] 文字コード（デフォルト: Shift_JIS）
   /// 戻り値: Map<フィールド名, 値のリスト>
-  static Future<Map<String, List<dynamic>>?> read(
-    String dbfFilePath, {
-    String encoding = 'Shift_JIS',
-  }) async {
+  static Future<Map<String, List<dynamic>>?> read(String dbfFilePath, {String encoding = 'Shift_JIS'}) async {
     try {
       AppLogger.debug('[DbfReader] DBF読み込み開始: $dbfFilePath');
       AppLogger.debug('[DbfReader] 文字コード: $encoding');
@@ -92,9 +89,7 @@ class DbfReader {
         // フィールド名（11バイト、null-terminated）
         final nameBytes = bytes.sublist(offset, offset + 11);
         final nameEndIndex = nameBytes.indexOf(0);
-        final decodedName = await decoder.decode(
-          nameBytes.sublist(0, nameEndIndex >= 0 ? nameEndIndex : 11),
-        );
+        final decodedName = await decoder.decode(nameBytes.sublist(0, nameEndIndex >= 0 ? nameEndIndex : 11));
         fields.add((
           name: decodedName.replaceAll('\x00', '').replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim(),
           type: String.fromCharCode(bytes[offset + 11]),
@@ -105,6 +100,7 @@ class DbfReader {
 
       // レコードデータを読み込み
       final data = <String, List<dynamic>>{for (final field in fields) field.name: []};
+      final deleted = <int>{};
 
       offset = headerLength;
       for (int recordIndex = 0; recordIndex < recordCount; recordIndex++) {
@@ -114,7 +110,13 @@ class DbfReader {
         final deletionFlag = bytes[offset];
         offset++;
 
+        // 削除済みの行も詰めない（SHP のレコードとは行番号で対応するので、詰めると以降の属性がずれる）。
+        // 値は null で埋め、行番号を覚えておく
         if (deletionFlag == 0x2A) {
+          for (final field in fields) {
+            data[field.name]!.add(null);
+          }
+          deleted.add(recordIndex);
           offset += recordLength - 1;
           continue;
         }
@@ -122,13 +124,16 @@ class DbfReader {
         // 各フィールドの値を読み込み
         for (final field in fields) {
           if (offset + field.length > bytes.length) break;
-          final valueString = (await decoder.decode(Uint8List.sublistView(bytes, offset, offset + field.length))).trim();
+          final valueString = (await decoder.decode(
+            Uint8List.sublistView(bytes, offset, offset + field.length),
+          )).trim();
           data[field.name]!.add(_parseValue(field.type, valueString));
           offset += field.length;
         }
       }
 
-      AppLogger.debug('[DbfReader] DBFデータ読み込み完了: $recordCountレコード');
+      AppLogger.debug('[DbfReader] DBFデータ読み込み完了: $recordCountレコード（削除済み ${deleted.length}）');
+      if (deleted.isNotEmpty) _deletedRecords[data] = deleted;
       return data;
     } catch (e, stack) {
       AppLogger.debug('[DbfReader] DBF読み込みエラー: $e');
@@ -160,12 +165,17 @@ class DbfReader {
     }
   }
 
-  /// DBFデータから指定したインデックスのレコード属性を取得
-  static Map<String, dynamic> getAttributesForRecord(
-    Map<String, List<dynamic>>? dbfData,
-    int recordIndex,
-  ) {
-    if (dbfData == null) return {};
+  /// [read] の結果ごとの削除済みの行番号（戻り値の形を変えずに持たせるため Expando に置く）
+  static final _deletedRecords = Expando<Set<int>>('dbfDeletedRecords');
+
+  /// [recordIndex] 行目が削除フラグ（`*`）つきか。GDAL/QGIS はこの行の SHP レコードを読み飛ばす
+  static bool isDeletedRecord(Map<String, List<dynamic>>? dbfData, int recordIndex) =>
+      dbfData != null && (_deletedRecords[dbfData]?.contains(recordIndex) ?? false);
+
+  /// DBFデータから指定したインデックスのレコード属性を取得（削除済みの行は空）。
+  /// [recordIndex] は SHP のレコード番号（`ShpRecord.index`）と同じ 0 始まり
+  static Map<String, dynamic> getAttributesForRecord(Map<String, List<dynamic>>? dbfData, int recordIndex) {
+    if (dbfData == null || isDeletedRecord(dbfData, recordIndex)) return {};
 
     final attributes = <String, dynamic>{};
     for (final entry in dbfData.entries) {

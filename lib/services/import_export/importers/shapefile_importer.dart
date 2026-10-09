@@ -87,6 +87,8 @@ class ShapefileImporter extends BaseImporter {
       int featureCount = 0;
       final batch = <Map<String, dynamic>>[];
       for (final record in ShapefileBinaryParser.records(shpBytes, sourceCoordinateSystem: sourceCoordinateSystem)) {
+        // DBF で削除済みの行は GDAL/QGIS と同じくフィーチャごと読み飛ばす
+        if (DbfReader.isDeletedRecord(dbfData, record.index)) continue;
         final featureData = _featureData(record, DbfReader.getAttributesForRecord(dbfData, record.index));
         if (featureData == null) continue;
         batch.add(featureData);

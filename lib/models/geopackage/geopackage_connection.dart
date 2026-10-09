@@ -115,6 +115,21 @@ class GeoPackageConnection {
     return closed;
   }
 
+  /// web の sqlite3 WASM 側に残っている [absPath] の写しを捨てる（native は何もしない）。
+  ///
+  /// 元ファイルが無いと [_checkOut] は何も流し込まずに写しを開くので、消したファイルを同じパスで
+  /// 作り直すと前の中身が出てくる（読み取り専用レイヤのキャッシュの作り直しで使う）。先に [closeAllFor] すること
+  static Future<void> discardWebCopy(String absPath) async {
+    if (fs.hasRealPaths) return;
+    try {
+      await databaseFactory.deleteDatabase(_webDatabaseKey(absPath));
+    } catch (e) {
+      AppLogger.debug('[GeoPackageConnection] discardWebCopy: $absPath - $e');
+    }
+  }
+
+  static String _webDatabaseKey(String absPath) => 'gpkg_${sha1.convert(utf8.encode(absPath))}.db';
+
   /// いま [absPath] を開いている接続の数（別の SQLite で書く前に、誰も開いていないことを確かめる）
   static int openCountFor(String absPath) => _openConnections[_registryKey(absPath)]?.length ?? 0;
 
@@ -308,8 +323,7 @@ class GeoPackageConnection {
   /// スラッシュも非ASCIIも含まない安全な名前に潰す。
   String _databaseKey(String absPath) {
     if (fs.hasRealPaths) return absPath;
-    final digest = sha1.convert(utf8.encode(absPath)).toString();
-    return 'gpkg_$digest.db';
+    return _webDatabaseKey(absPath);
   }
 
   /// このGeoPackageの絶対パス（[absolutePath] が無ければ [projectRootDir] と [pathList] から。どちらも無ければ null）

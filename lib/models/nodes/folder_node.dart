@@ -27,6 +27,7 @@ import '../../services/google_drive/sync_base_store.dart';
 import '../../services/kmeta_service.dart';
 import '../kmeta.dart';
 import 'drive_folder_node.dart';
+import 'external_layer_node.dart';
 import 'geopackage_node.dart';
 import 'global_folder_node.dart';
 import 'image_node.dart';
@@ -102,9 +103,9 @@ class FolderNode extends LayerTreeNode {
   
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
 
-  /// このフォルダ直下のFolderNode, GeoPackageNode, ImageNodeのみ生成
+  /// このフォルダ直下のFolderNode, GeoPackageNode（読み取り専用の [ExternalLayerNode] を含む）, ImageNodeのみ生成
   ///
-  /// 子の作り方はサブクラスが [loadFolderNodes] / [loadGeoPackageNodes] / [loadImageNodes] で替える
+  /// 子の作り方はサブクラスが [loadFolderNodes] / [loadGeoPackageNodes] / [loadExternalNodes] / [loadImageNodes] で替える
   /// （グローバルフォルダ・Drive 連携フォルダ）。
   @override
   Future<void> updateChildren() async {
@@ -120,6 +121,7 @@ class FolderNode extends LayerTreeNode {
       [
         ...await loadFolderNodes(entries),
         ...await loadGeoPackageNodes(entries),
+        ...await loadExternalNodes(entries),
         ...await loadImageNodes(entries),
       ],
       keep: keepsChild,
@@ -142,6 +144,11 @@ class FolderNode extends LayerTreeNode {
   @protected
   Future<List<LayerTreeNode>> loadGeoPackageNodes(List<KFileEntry> entries) =>
       GeoPackageNode.loadNodes(this, entries: entries);
+
+  /// 直下の gpkg 以外の形式（shp・GeoJSON など）の読み取り専用ノード
+  @protected
+  Future<List<LayerTreeNode>> loadExternalNodes(List<KFileEntry> entries) =>
+      ExternalLayerNode.loadNodes(this, entries: entries);
 
   /// 直下の画像のノード
   @protected

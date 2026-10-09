@@ -20,6 +20,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
+import '../../services/global_folder_locator.dart';
 import '../../services/google_drive/sync_base_store.dart';
 import 'folder_node.dart';
 import 'global_folder_node.dart';
@@ -40,6 +41,8 @@ List<LayerTreeNode> _driveSubFolders(
 ) {
   final directories = entries
       .where((e) => e.isDirectory && e.name != SyncBaseStore.dirName) // 3-way マージの base 置き場は見せない
+      // アプリ用の `.kokage`（読み取り専用レイヤのキャッシュなど）は見せない。連携 dir がプロジェクトルートのとき直下にできる
+      .where((e) => e.name != GlobalFolderLocator.systemDirName)
       .toList()
     ..sort((a, b) => a.name.compareTo(b.name));
   return [

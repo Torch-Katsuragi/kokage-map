@@ -195,6 +195,40 @@ class KMetaService {
     });
   }
 
+  /// 消した gpkg（[gpkgName]）の設定を落とす（可視状態・中のレイヤと View の可視状態・スタイル・View）。
+  /// 何も持っていなければ書かない
+  Future<bool> forgetGeoPackage(String folderPath, String gpkgName) {
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath);
+      if (rawMeta == null) return true;
+      final prefix = '$gpkgName/';
+      bool keep(String key) => !key.startsWith(prefix);
+      final v = rawMeta.visibility;
+      final s = rawMeta.styles;
+      final touched = v.geopackages.containsKey(gpkgName) ||
+          !v.layers.keys.every(keep) ||
+          !v.views.keys.every(keep) ||
+          !s.layers.keys.every(keep) ||
+          !rawMeta.views.keys.every(keep);
+      if (!touched) return true;
+      final updatedMeta = rawMeta.copyWith(
+        visibility: KMetaVisibility(
+          layers: {for (final e in v.layers.entries) if (keep(e.key)) e.key: e.value},
+          geopackages: {...v.geopackages}..remove(gpkgName),
+          folders: v.folders,
+          images: v.images,
+          views: {for (final e in v.views.entries) if (keep(e.key)) e.key: e.value},
+        ),
+        styles: KMetaStyles(
+          defaultStyle: s.defaultStyle,
+          layers: {for (final e in s.layers.entries) if (keep(e.key)) e.key: e.value},
+        ),
+        views: {for (final e in rawMeta.views.entries) if (keep(e.key)) e.key: e.value},
+      );
+      return saveMeta(folderPath, updatedMeta);
+    });
+  }
+
   /// フォルダの可視状態を更新
   Future<bool> setFolderVisibility(
     String folderPath,

@@ -9,6 +9,7 @@
 - Each layer row starts with a sample of its map color and shows its feature count. GeoPackages are small headings whose eye hides everything inside
 - A path (KokageMap › 共有) above the list takes you back to any level. The top shows the folder name instead of "Home"
 - Folders have a new "Add files" entry (long-press menu and the + button) that copies the picked files into the folder as they are (Android and web). For a Shapefile, pick its .dbf, .shx and other companion files too. Files dropped onto the list on the web are also put into the folder as they are, instead of being imported into a GeoPackage
+- When moving a layer to another GeoPackage leaves the original GeoPackage empty, the empty file is now deleted (deleting the last layer still keeps the file)
 - Drive-linked folders now also sync Shapefiles (with their companion files), GeoJSON, KML/KMZ and CSV. Files with upper-case extensions (such as IMG.JPG) were skipped; they now sync too
 
 ### Lighter

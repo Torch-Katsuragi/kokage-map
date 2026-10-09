@@ -153,6 +153,7 @@ Future<void> migrateLayerTo(
   );
   if (!confirm) return;
 
+  final sourceGpkg = sourceLayer.geoPackageNode;
   final migrated = await sourceLayer.migrateToGeoPackage(targetGpkg, moveLayer: true);
   if (migrated != null) {
     ref.refreshMap();
@@ -161,6 +162,10 @@ Future<void> migrateLayerTo(
       t.layerDrawer.geopackage.migrateSuccess(source: sourceLayer.name, target: targetGpkg.name),
       level: NotificationLevel.success,
     );
+    // 移し元が空になってファイルごと消えた（LayerNode.migrateToGeoPackage → GeoPackageNode.deleteIfEmptiedByMove）
+    if (sourceGpkg.parent == null) {
+      ref.notify(t.layerDrawer.geopackage.removedEmpty(name: sourceGpkg.name));
+    }
   } else {
     ref.notify(t.layerDrawer.geopackage.migrateFailed, level: NotificationLevel.error);
   }

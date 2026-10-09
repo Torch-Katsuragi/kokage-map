@@ -25,8 +25,10 @@ import '../../services/kmeta_service.dart';
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
 import 'folder_node.dart';
+import 'global_folder_node.dart';
 import 'layer_node.dart';
 import 'layer_tree_node.dart';
+import 'sys_node.dart';
 
 /// GeoPackageファイルノード（GeoPackageFile参照型）
 /// LayerTreeNodeの共通機能はoverrideせず、GeoPackageFile参照のみ追加
@@ -186,6 +188,30 @@ class GeoPackageNode extends LayerTreeNode {
       AppLogger.debug('[ERROR] GeoPackageNode.rename: $e');
       rethrow;
     }
+  }
+
+  /// レイヤを別の gpkg へ移して中身が無くなったら、このファイルを消す（[[external-formats]]）。消したら true。
+  ///
+  /// - 空の判定は [GeoPackageFile.hasNoContents]（`layer_styles` だけなら空、アプリに見えない表が残っていれば消さない）
+  /// - 端末側（System・グローバルフォルダ）の gpkg は消さない。GPS 軌跡など、アプリが開いたまま書き込むものがある
+  /// - いつもの地図の `マイ地図.gpkg` は消してよい（「地図を開く」のたびに無ければ作り直す。ProjectsHome.myMap）
+  /// - レイヤの**削除**で空になったときは呼ばない（中身はどこにも渡っていない）
+  Future<bool> deleteIfEmptiedByMove() async {
+    for (LayerTreeNode? n = parent; n != null; n = n.parent) {
+      if (n is SysNode || n is GlobalFolderNode) return false;
+    }
+    if (!await geoPackageFile.hasNoContents()) return false;
+    final folder = parent;
+    final folderPath = folder is FolderNode ? folder.getAbsoluteFilePath() : null;
+    final gpkgName = name;
+    await dispose();
+    if (await fs.exists(geoPackageFile.getAbsolutePath() ?? '')) return false;
+    if (folderPath != null) {
+      await KMetaService.instance.forgetGeoPackage(folderPath, gpkgName);
+      if (folder is FolderNode) folder.invalidateMetaCache();
+    }
+    AppLogger.debug('[GeoPackageNode] レイヤを移して空になったので消した: $gpkgName');
+    return true;
   }
 
   /// GeoPackageファイルを含む削除処理（ファイル自体も削除）

@@ -512,6 +512,7 @@
       "migrateConfirm": "「$source」を「$target」に移植しますか？\n\n移植により、元のGeoPackageからこのレイヤは削除されます。",
       "migrateSuccess": "「$source」を「$target」に移植しました",
       "migrateFailed": "レイヤ移植に失敗しました",
+      "removedEmpty": "空になった ${name} を削除しました",
       "deleteTitle": "GeoPackage削除",
       "deleteConfirm": "${name} を本当に削除しますか？\nファイルも完全に削除されます。",
       "deleted": "${name} を削除しました"

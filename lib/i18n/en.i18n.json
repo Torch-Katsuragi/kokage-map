@@ -512,6 +512,7 @@
       "migrateConfirm": "Migrate \"$source\" to \"$target\"?\\n\\nThe layer will be removed from the original GeoPackage.",
       "migrateSuccess": "Migrated \"$source\" to \"$target\"",
       "migrateFailed": "Layer migration failed",
+      "removedEmpty": "Deleted ${name}, which is now empty",
       "deleteTitle": "Delete GeoPackage",
       "deleteConfirm": "Are you sure you want to delete $name?\\nThe file will be permanently deleted.",
       "deleted": "$name deleted"

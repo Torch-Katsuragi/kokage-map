@@ -80,6 +80,10 @@ await migratedLayerNode.updateChildren();
 await sourceLayer.geoPackageNode.updateChildren();
 ```
 
+移動で移し元の gpkg が空になったら（`gpkg_contents` が空。`layer_styles` だけなら空扱い）、`migrateToGeoPackage` の中で
+`GeoPackageNode.deleteIfEmptiedByMove()` がファイル（`-wal` `-shm` `-journal` も）を消し、ノードを親から外し、
+フォルダ設定からその gpkg の鍵を落とす。System・グローバルフォルダの下では消さない。削除で空になったときは消さない。
+
 ## UI更新の完全なフロー
 
 ```dart

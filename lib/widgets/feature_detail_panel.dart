@@ -36,6 +36,7 @@ import '../tutorial/tutorial.dart';
 import '../widgets/info_panel_card.dart';
 import '../widgets/long_press_delete_button.dart';
 import '../widgets/photo_viewer.dart';
+import 'external_layer_actions.dart';
 
 class FeatureDetailPanel extends ConsumerWidget {
   final dynamic feature;
@@ -243,6 +244,7 @@ class FeatureDetailPanel extends ConsumerWidget {
         // 「編集」は見出しに（パネルの下にあると送らないと見えなかった）。押すとパネルのまま編集に替わる
         action: FilledButton.tonalIcon(
           key: TutorialTargets.editButton,
+          // 読み取り専用レイヤ（shp・GeoJSON など）なら「gpkg に変換して編集」を知らせる（start の中で断る）
           onPressed: () => ref.read(featureEditorProvider.notifier).start(feature),
           icon: const Icon(Icons.edit, size: 16),
           label: Text(t.featureDetail.edit),
@@ -331,6 +333,8 @@ class FeatureDetailPanel extends ConsumerWidget {
   /// フィーチャ/写真を削除
   Future<void> _handleDelete(WidgetRef ref) async {
     final target = feature as LayerTreeNode; // FeatureNode / ImageNode / OverlayImageNode はいずれも LayerTreeNode
+    // 読み取り専用レイヤ（shp・GeoJSON など）の地物は消さない
+    if (refuseReadOnlyEditBy(ref.read, target)) return;
     // 選択解除でウィジェットがアンマウントされるため、先にNotifier参照をキャプチャ
     final selectionNotifier = ref.read(selectedFeaturesProvider.notifier);
     final refreshNotifier = ref.read(featureRefreshTriggerProvider.notifier);

@@ -22,6 +22,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../i18n/strings.g.dart';
+import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/layer_node.dart';
@@ -43,7 +44,8 @@ class MoveTargetDialog {
         for (final c in n.children) {
           walk(c, depth + 1);
         }
-      } else if (layer && n is GeoPackageNode) {
+      } else if (layer && n is GeoPackageNode && n is! ExternalLayerNode) {
+        // 読み取り専用レイヤ（shp など）へは移せない
         targets.add((n, depth));
       }
     }

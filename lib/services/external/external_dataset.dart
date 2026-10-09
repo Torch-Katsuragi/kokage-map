@@ -36,7 +36,7 @@ class ExternalDataset {
   final Map<String, String> columns;
 
   /// `GeoPackageFile.addPointsBatch` 等にそのまま渡せる形。
-  /// 形は点なら `point`（LatLng）、線なら `line`（List<LatLng>）、面なら `rings`（List<List<LatLng>>）に持ち、
+  /// 形は点なら `point`（`LatLng`）、線なら `line`（`List<LatLng>`）、面なら `rings`（`List<List<LatLng>>`）に持ち、
   /// 残りのキーが属性
   final List<Map<String, dynamic>> features;
 }

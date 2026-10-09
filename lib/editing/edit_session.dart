@@ -39,6 +39,7 @@ import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
 import '../utils/attribute_columns.dart';
 import '../utils/feature_calc_utils.dart';
+import '../widgets/external_layer_actions.dart';
 import '../widgets/feature_editor/shared/sub_table_helper.dart';
 import 'edit_tool.dart';
 
@@ -219,6 +220,8 @@ class FeatureEditor extends Notifier<EditState?> {
 
   /// 編集を始める。地図は 2D に固定され、左の列は編集の道具に替わる
   Future<void> start(FeatureNode f) async {
+    // 読み取り専用レイヤ（shp・GeoJSON など）は編集に入らず「gpkg に変換して編集」を知らせる
+    if (refuseReadOnlyEditBy(ref.read, f)) return;
     final (kind, shape) = switch (f) {
       final PointFeatureNode p => (EditKind.point, <List<LatLng>>[[p.point]]),
       final LineFeatureNode l => (EditKind.line, <List<LatLng>>[List.of(l.line)]),

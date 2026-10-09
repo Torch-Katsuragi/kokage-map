@@ -441,6 +441,11 @@ class QgsDocument {
     setChildText(e, 'datasource', layer.dataSourceUri);
     setChildText(e, 'layername', layer.name);
     e.setAttribute('geometry', qgsGeometryName(layer.geometryType));
+    // 文字コードは読み取り専用の shp で意味を持つ（gpkg は常に UTF-8）。アプリの読み方（.cpg が無ければ Shift_JIS）に合わせる
+    final provider = e.getElement('provider');
+    if (provider != null && provider.getAttribute('encoding') != layer.providerEncoding) {
+      provider.setAttribute('encoding', layer.providerEncoding);
+    }
 
     final renderer = e.getElement('renderer-v2');
     if (renderer == null) {

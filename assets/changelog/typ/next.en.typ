@@ -16,6 +16,14 @@
 )
 
 #fixes(
+  "Open files other than gpkg as they are",
+  [Shapefiles and GeoJSON in a folder show up as layers (read-only)],
+  [Editing offers "Convert to gpkg to edit"; the original is replaced after a check],
+  [In read-only shared folders: "Copy as gpkg to my folder"],
+  [QGIS projects reference the original files, and edits are read back],
+)
+
+#fixes(
   "Lighter",
   [Less battery drain while the map sits open],
   [Memory no longer grows while panning],

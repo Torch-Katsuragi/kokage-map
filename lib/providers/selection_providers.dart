@@ -15,10 +15,12 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../models/nodes/external_layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../utils/app_logger.dart';
+import '../widgets/external_layer_actions.dart';
 import 'ui_state_providers.dart';
 
 part 'selection_providers.g.dart';
@@ -54,7 +56,10 @@ class SelectedFeatures extends _$SelectedFeatures {
   }
 
   Future<void> disposeSelectedFeatures() async {
-    final features = List<LayerTreeNode>.from(state);
+    // 読み取り専用レイヤ（shp・GeoJSON など）の地物は消さない（消しゴム・Delete キー・属性表・まとめて削除の共通の口）
+    final readOnly = state.where(isInReadOnlyLayer).toList();
+    if (readOnly.isNotEmpty) refuseReadOnlyEditBy(ref.read, readOnly.first);
+    final features = state.where((n) => !isInReadOnlyLayer(n)).toList();
     AppLogger.debug(
       '[SelectedFeatures] 削除処理開始: ${features.length}個のフィーチャ',
     );

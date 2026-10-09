@@ -17,6 +17,7 @@ LayerTreeNode（基底）
 │  └─ GlobalFolderNode（グローバルフォルダ。SysNode の下に置く）
 │  └─ SysNode（「System」。ルート直下の仮想フォルダ。[[docs/features/layer-management#System（sys）]]）
 ├─ GeoPackageNode（.gpkgファイル）
+│  └─ ExternalLayerNode（shp・GeoJSON など。読み取り専用。裏はキャッシュ gpkg → [[external-formats]]）
 ├─ LayerNode（GeoPackage内レイヤ）
 ├─ FeatureNode（フィーチャ）
 │  ├─ PointFeatureNode
@@ -31,9 +32,10 @@ LayerTreeNode（基底）
 
 | ノードタイプ | 読み込み対象 |
 |------------|-------------|
-| FolderNode | サブフォルダ、GeoPackage、画像 |
+| FolderNode | サブフォルダ、GeoPackage、gpkg 以外の形式（`loadExternalNodes`）、画像 |
 | SysNode | なし（子は home_screen が差し込む。可視性だけ当て直す） |
 | GeoPackageNode | レイヤ一覧 |
+| ExternalLayerNode | キャッシュ gpkg を元に合わせてから（作り直したら読み込み済みのレイヤも読み直す）レイヤ一覧 |
 | LayerNode | フィーチャ一覧 |
 | FeatureNode | なし（childrenクリアのみ） |
 | ImageNode | なし（childrenクリアのみ） |

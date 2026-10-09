@@ -27,6 +27,7 @@ import '../../../tools/gps_tool.dart';
 import '../../../tutorial/tutorial.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/global_drawing_state.dart';
+import '../../../widgets/external_layer_actions.dart';
 import '../map_page_state_base.dart';
 
 /// GPS測量Mixin
@@ -56,6 +57,8 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         _notify(t.gps.layerInvisible, NotificationLevel.warning);
         return;
       }
+      // 読み取り専用レイヤ（shp・GeoJSON など）には記録しない
+      if (refuseReadOnlyEditBy(ref.read, selected)) return;
       
       _notify(t.gps.acquiringGps, NotificationLevel.info);
       

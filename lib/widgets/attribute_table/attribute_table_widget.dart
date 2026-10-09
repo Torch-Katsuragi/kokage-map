@@ -226,36 +226,38 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   }
 
   Widget _buildToolbar() {
+    // 読み取り専用レイヤ（shp・GeoJSON など）は書き換える操作を出さない（見る・選ぶ・コピー・書き出しは出す）
+    final readOnly = _controller.readOnly;
     return AttributeTableToolbar(
       controller: _controller,
       onRefresh: _rebuildGrid,
       onCopyTable: () => copyTableToClipboard(context, _controller, ref: ref),
-      onAddFeature: widget.onAddFeature,
-      onDeleteSelected: _handleDeleteSelected,
-      onSave: _handleSave,
-      onAddColumn: () =>
+      onAddFeature: readOnly ? null : widget.onAddFeature,
+      onDeleteSelected: readOnly ? null : _handleDeleteSelected,
+      onSave: readOnly ? null : _handleSave,
+      onAddColumn: readOnly ? null : () =>
           showAddColumnDialog(context, widget.layer, _rebuildGrid, ref: ref),
-      onFieldCalculator: () => showFieldCalculatorDialog(
+      onFieldCalculator: readOnly ? null : () => showFieldCalculatorDialog(
         context,
         widget.layer,
         _controller.userColumnNames,
         _rebuildGrid,
         ref: ref,
       ),
-      onColumnAction: _handleColumnAction,
+      onColumnAction: readOnly ? null : _handleColumnAction,
       onToggleView: () => setState(() {
         _viewMode =
             _viewMode == _ViewMode.table ? _ViewMode.form : _ViewMode.table;
       }),
       isFormView: _viewMode == _ViewMode.form,
-      onDuplicateFiltered: (filterSql) => showDuplicateFilteredDialog(
+      onDuplicateFiltered: readOnly ? null : (filterSql) => showDuplicateFilteredDialog(
         context,
         widget.layer,
         filterSql,
         _rebuildGrid,
         ref: ref,
       ),
-      onBatchEdit: _handleBatchEdit,
+      onBatchEdit: readOnly ? null : _handleBatchEdit,
       onCsvExport: _handleCsvExport,
     );
   }

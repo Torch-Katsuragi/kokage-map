@@ -301,6 +301,77 @@ class KMetaService {
     });
   }
 
+  /// gpkg（相当のノード）の名前が変わったとき、その下のレイヤ・View の鍵を新しい名前へ移す。
+  ///
+  /// 可視性（gpkg・レイヤ・View）・スタイル・View 定義・並び順の鍵を `<旧>/…` から `<新>/…` へ。
+  /// [layerNames] にあるレイヤは名前も替える（読み取り専用レイヤの改名で、中のレイヤ名が変わるとき）。
+  /// 移す先に既に鍵があれば上書きする。何も無ければ書かない
+  Future<bool> renameGeoPackageKeys(
+    String folderPath, {
+    required String oldName,
+    required String newName,
+    Map<String, String> layerNames = const {},
+  }) async {
+    if (oldName == newName && layerNames.isEmpty) return true;
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath);
+      if (rawMeta == null) return true;
+      final prefix = '$oldName/';
+      var changed = false;
+
+      // `<旧>/<レイヤ>[/<残り>]` → `<新>/<新レイヤ>[/<残り>]`。対象でなければ null
+      String? moveKey(String key) {
+        if (!key.startsWith(prefix)) return null;
+        final rest = key.substring(prefix.length);
+        for (final MapEntry(key: from, value: to) in layerNames.entries) {
+          if (rest == from) return '$newName/$to';
+          if (rest.startsWith('$from/')) return '$newName/$to${rest.substring(from.length)}';
+        }
+        return '$newName/$rest';
+      }
+
+      Map<String, T> moveAll<T>(Map<String, T> source) {
+        final out = <String, T>{};
+        final moved = <String, T>{};
+        for (final MapEntry(:key, :value) in source.entries) {
+          final to = moveKey(key);
+          if (to == null) {
+            out[key] = value;
+          } else {
+            moved[to] = value;
+            changed = true;
+          }
+        }
+        return {...out, ...moved};
+      }
+
+      final v = rawMeta.visibility;
+      final geopackages = {...v.geopackages};
+      if (geopackages.containsKey(oldName)) {
+        geopackages[newName] = geopackages.remove(oldName)!;
+        changed = true;
+      }
+      final sortOrder = rawMeta.layout.sortOrder;
+      final newSortOrder = sortOrder?.map((n) => n == oldName ? newName : n).toList();
+      if (sortOrder != null && sortOrder.contains(oldName)) changed = true;
+
+      final updated = rawMeta.copyWith(
+        visibility: KMetaVisibility(
+          layers: moveAll(v.layers),
+          geopackages: geopackages,
+          folders: v.folders,
+          images: v.images,
+          views: moveAll(v.views),
+        ),
+        styles: KMetaStyles(defaultStyle: rawMeta.styles.defaultStyle, layers: moveAll(rawMeta.styles.layers)),
+        views: moveAll(rawMeta.views),
+        layout: KMetaLayout(sortOrder: newSortOrder, expanded: rawMeta.layout.expanded),
+      );
+      if (!changed) return true;
+      return saveMeta(folderPath, updated);
+    });
+  }
+
   /// 展開状態を更新
   Future<bool> setExpanded(String folderPath, bool expanded) async {
     return _serial(folderPath, () async {

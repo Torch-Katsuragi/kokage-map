@@ -24,6 +24,7 @@ import '../i18n/strings.g.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../providers/selection_providers.dart';
+import '../widgets/external_layer_actions.dart';
 
 /// グローバルな描画状態とメタデータを管理するクラス
 /// GPS測量とペンツールでの描画状態を共有する。
@@ -135,6 +136,13 @@ class GlobalDrawingState extends ChangeNotifier {
     void Function()? refreshCallback,
   }) async {
     final shape = _editingFeature ?? layerNode;
+    // 読み取り専用レイヤ（shp・GeoJSON など）には書かない（ペン・GPS 測量・自動保存の確定がすべてここを通る）
+    final target = _editingFeature?.parent ?? layerNode;
+    if (readOnlyLayerOf(target) != null) {
+      final ref = _ref;
+      if (ref != null) refuseReadOnlyEditBy(ref.read, target);
+      return false;
+    }
     final isLine = switch (shape) {
       LineFeatureNode() || LineLayerNode() => true,
       PolygonFeatureNode() || PolygonLayerNode() => false,

@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trina_grid/trina_grid.dart';
 
 import '../../i18n/strings.g.dart';
+import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../providers/selection_providers.dart';
@@ -31,6 +32,7 @@ import '../../tutorial/tutorial.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/attribute_columns.dart';
 import '../../utils/qgis_expression_filter.dart';
+import '../external_layer_actions.dart';
 
 /// 属性テーブルの表示設定
 class AttributeTableSettings {
@@ -260,6 +262,9 @@ class AttributeTableController extends ChangeNotifier {
     AppLogger.debug('[AttributeTableController] 削除完了: $featureCount個');
   }
 
+  /// 読み取り専用レイヤ（shp・GeoJSON など）か。見る・選ぶ・書き出すだけで、属性は書き換えない
+  bool get readOnly => isInReadOnlyLayer(layer);
+
   /// 属性値を保存。失敗時はエラーメッセージを返す。
   Future<String?> saveAttributeChange(
     FeatureNode feature,
@@ -267,6 +272,7 @@ class AttributeTableController extends ChangeNotifier {
     dynamic value,
   ) async {
     if (isReadOnlyColumn(field)) return null;
+    if (refuseReadOnlyEditBy(_ref.read, layer)) return null;
 
     try {
       await feature.setAttributeValue(field, value);
@@ -415,6 +421,7 @@ class AttributeTableController extends ChangeNotifier {
 
   /// チェックされた行に対して一括値設定
   Future<int> batchSetValue(String columnName, dynamic value) async {
+    if (refuseReadOnlyEditBy(_ref.read, layer)) return 0;
     final features = _checkedFeatures();
     if (features.isEmpty) return 0;
 
@@ -486,6 +493,7 @@ class AttributeTableController extends ChangeNotifier {
 
   /// テキスト置換（指定カラム内）
   Future<int> replaceText(String column, String search, String replace) async {
+    if (refuseReadOnlyEditBy(_ref.read, layer)) return 0;
     final count = await layer.geoPackageFile.replaceText(
       layer.layerName,
       column,
@@ -537,7 +545,7 @@ class AttributeTableController extends ChangeNotifier {
           title: columnName,
           field: columnName,
           type: _determineColumnType(columnName),
-          enableEditingMode: !isReadOnlyColumn(columnName),
+          enableEditingMode: !readOnly && !isReadOnlyColumn(columnName),
           enableSorting: true, // Phase 3: カラムヘッダーでソート
           enableColumnDrag: true, // Phase 3: ドラッグで並替え
           enableContextMenu: true, // Phase 3: 右クリックメニュー

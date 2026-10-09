@@ -328,6 +328,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
               horizontalPadding: 6,
               fontSize: 10,
             ),
+            if (!widget.controller.readOnly)
             _smallButton(
               t.attributeTable.replaceButton,
               _doReplace,
@@ -527,22 +528,25 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
       },
       itemBuilder: (ctx) => [
         _menuItem('refresh', Icons.refresh, t.attributeTable.refresh),
-        _menuItem('save', Icons.save, t.attributeTable.save),
+        if (widget.onSave != null) _menuItem('save', Icons.save, t.attributeTable.save),
         const PopupMenuDivider(),
         _menuItem('copy', Icons.copy, t.attributeTable.copyTable),
         _menuItem('csv_export', Icons.download, t.attributeTable.csvExport),
         const PopupMenuDivider(),
-        _menuItem('batch_edit', Icons.edit_note, t.attributeTable.batchEdit),
-        _menuItem('field_calc', Icons.calculate, t.attributeTable.fieldCalculator),
+        // 書き換える項目は、読み取り専用レイヤではコールバックが無いので出さない
+        if (widget.onBatchEdit != null) _menuItem('batch_edit', Icons.edit_note, t.attributeTable.batchEdit),
+        if (widget.onFieldCalculator != null) _menuItem('field_calc', Icons.calculate, t.attributeTable.fieldCalculator),
         const PopupMenuDivider(),
-        _menuItem('add_column', Icons.add_box, t.attributeTable.addColumnMenu),
+        if (widget.onAddColumn != null) _menuItem('add_column', Icons.add_box, t.attributeTable.addColumnMenu),
         _menuItem('column_menu', Icons.view_column, t.attributeTable.columnVisibility),
         if (widget.onAddFeature != null) ...[
           const PopupMenuDivider(),
           _menuItem('add_feature', Icons.add, t.attributeTable.addFeature),
         ],
-        const PopupMenuDivider(),
-        _menuItem('delete', Icons.delete, t.attributeTable.deleteSelectedFeatures, iconColor: Colors.red),
+        if (widget.onDeleteSelected != null) ...[
+          const PopupMenuDivider(),
+          _menuItem('delete', Icons.delete, t.attributeTable.deleteSelectedFeatures, iconColor: Colors.red),
+        ],
       ],
     );
   }

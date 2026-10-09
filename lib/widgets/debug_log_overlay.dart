@@ -28,7 +28,10 @@ import 'package:flutter/services.dart';
 import '../core/platform_capabilities.dart';
 import '../utils/app_logger.dart';
 
-/// デバッグログのオーバーレイ。web でだけチップを出す
+/// デバッグログのオーバーレイ。web の開発ビルド（debug か `K_LOG`）でだけチップを出す
+///
+/// ⚠ 製品版には出さない（開発用の道具を製品UIに置かない）。
+/// 本番の web で読みたいときは `--dart-define=K_LOG=true` を付けてビルドする。
 class DebugLogOverlay extends StatefulWidget {
   final Widget child;
 
@@ -44,7 +47,7 @@ class _DebugLogOverlayState extends State<DebugLogOverlay> {
   @override
   Widget build(BuildContext context) {
     // ⚠ Android では出さない（現場の画面に邪魔）。web は開発の観測手段そのもの
-    if (!PlatformCapabilities.isWeb) return widget.child;
+    if (!PlatformCapabilities.isWeb || !AppLogger.enabled) return widget.child;
 
     return Directionality(
       textDirection: TextDirection.ltr,

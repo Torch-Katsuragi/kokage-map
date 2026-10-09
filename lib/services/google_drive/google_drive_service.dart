@@ -168,7 +168,7 @@ class GoogleDriveService {
       return false;
     }
 
-    AppLogger.debug('[GoogleDriveService] 認可を無音で復元: $hint');
+    AppLogger.debug('[GoogleDriveService] 認可を無音で復元: ${AppLogger.maskEmail(hint)}');
     String? token;
     try {
       token = await requestTokenSilently(
@@ -187,7 +187,7 @@ class GoogleDriveService {
 
     try {
       final email = await _adopt(drive.DriveApi(_BearerClient(token)), fallbackEmail: hint);
-      AppLogger.debug('[GoogleDriveService] 復元できた: $email');
+      AppLogger.debug('[GoogleDriveService] 復元できた: ${AppLogger.maskEmail(email)}');
       return true;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] 復元したトークンが使えない: $e');
@@ -243,7 +243,7 @@ class GoogleDriveService {
         return false;
       }
       final email = await _adopt(drive.DriveApi(authorization.authClient(scopes: _scopes)));
-      AppLogger.debug('[GoogleDriveService] 無音復元できた: $email');
+      AppLogger.debug('[GoogleDriveService] 無音復元できた: ${AppLogger.maskEmail(email)}');
       return true;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] 無音復元に失敗（画面は出さない）: $e');
@@ -279,7 +279,7 @@ class GoogleDriveService {
           }
           authState.setAuthenticated(DriveUser.fromGoogleAccount(event.user));
           await _rememberEmail(event.user.email);
-          AppLogger.debug('[GoogleDriveService] サインイン成功: ${event.user.email}');
+          AppLogger.debug('[GoogleDriveService] サインイン成功: ${AppLogger.maskEmail(event.user.email)}');
         } catch (e) {
           AppLogger.debug('[GoogleDriveService] Drive API初期化エラー: $e');
           authState.setError(t.services.signInFailed(error: e.toString()));
@@ -416,7 +416,7 @@ class GoogleDriveService {
       }
       authState.setAuthenticated(DriveUser.fromGoogleAccount(user));
       await _rememberEmail(user.email);
-      AppLogger.debug('[GoogleDriveService] サインイン成功: ${user.email}');
+      AppLogger.debug('[GoogleDriveService] サインイン成功: ${AppLogger.maskEmail(user.email)}');
       return true;
     } finally {
       _interactiveSignIn = false;

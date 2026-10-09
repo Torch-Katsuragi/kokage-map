@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- localhost タイルサーバーへの HTTP 通信を許可 -->
+<!-- 製品版: 平文 HTTP はどこにも許さない。
+     以前は maplibre 時代のローカルタイル配信（TileServer、http://localhost）のために localhost を許していたが、
+     maplibre と一緒に TileServer も無くなった（2026-10-04）。
+     開発用の localhost 平文は src/debug/res/xml/ の同名ファイルで debug ビルドにだけ足している -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">localhost</domain>
-        <domain includeSubdomains="false">127.0.0.1</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
 </network-security-config>

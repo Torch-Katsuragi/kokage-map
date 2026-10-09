@@ -8,8 +8,23 @@
 # 使い方: third_party/geodiff/build_android.sh [作業dir]
 set -euo pipefail
 
-GEODIFF_TAG="${GEODIFF_TAG:-2.3.1}"
-SQLITE_ZIP="${SQLITE_ZIP:-https://sqlite.org/2026/sqlite-amalgamation-3530400.zip}"
+# 取得物は中身を固定する（版を上げるときは URL と SHA を組で書き換える）
+GEODIFF_TAG="2.3.1"                                          # 表示用。取得はコミット SHA で行う
+GEODIFF_SHA="f32842c79effd1be5b74140d295a1b0bb9ee521c"       # MerginMaps/geodiff の 2.3.1 タグが指すコミット
+SQLITE_ZIP="https://sqlite.org/2026/sqlite-amalgamation-3530400.zip"
+SQLITE_SHA256="1e71ddf93849c6a6ecf58b827c0692073d2dd7ee40196158068f7b29f422e87d"   # sqlite.org 掲載の SHA3-256 と突き合わせ済み（2026-10-09）
+# libgpkg は geodiff の CMake が GitHub の archive を取りにいく（URL はコミット固定だが照合が無い）。
+# 先にこちらで落として照合し build dir に置いておくと、CMake は取得を飛ばす（libgpkg.tar.gz があれば使う）
+LIBGPKG_URL="https://github.com/benstadin/libgpkg/archive/0822c5cba7e1ac2c2806e445e5f5dd2f0d0a18b4.tar.gz"
+LIBGPKG_SHA256="2039f928724c57d7e8ba2983532346506cde48437e764efa243fbc6ba24fd1ba"
+
+# $1 のファイルが SHA-256 $2 でなければ消して止まる
+verify_sha256() {
+  local got; got="$(sha256sum "$1" | cut -d' ' -f1)"
+  if [ "$got" != "$2" ]; then
+    echo "SHA-256 不一致: $1 (got $got, want $2)" >&2; rm -f "$1"; exit 1
+  fi
+}
 NDK_VER="${NDK_VER:-28.2.13676358}"   # android/app/build.gradle.kts の ndkVersion と揃える
 API="${API:-24}"
 ABI="${ABI:-arm64-v8a}"
@@ -27,7 +42,8 @@ case "$ABI" in
 esac
 
 echo "== sqlite amalgamation"
-[ -f sqlite.zip ] || curl -sSL -o sqlite.zip "$SQLITE_ZIP"
+[ -f sqlite.zip ] || curl -fsSL -o sqlite.zip "$SQLITE_ZIP"
+verify_sha256 sqlite.zip "$SQLITE_SHA256"
 SQL_DIR="$(unzip -Z1 sqlite.zip | head -1 | cut -d/ -f1)"
 [ -d "$SQL_DIR" ] || unzip -q sqlite.zip
 
@@ -40,8 +56,15 @@ mkdir -p "sqlite-$ABI" && pushd "sqlite-$ABI" >/dev/null
 popd >/dev/null
 
 echo "== geodiff $GEODIFF_TAG"
-[ -d geodiff ] || git clone -q --depth 1 --branch "$GEODIFF_TAG" https://github.com/MerginMaps/geodiff.git
+if [ ! -d geodiff ]; then
+  git init -q geodiff
+  git -C geodiff fetch -q --depth 1 https://github.com/MerginMaps/geodiff.git "$GEODIFF_SHA"
+  git -C geodiff checkout -q FETCH_HEAD
+fi
+[ "$(git -C geodiff rev-parse HEAD)" = "$GEODIFF_SHA" ] || { echo "geodiff が $GEODIFF_SHA ではない（作業dirの geodiff/ を消して焼き直す）" >&2; exit 1; }
 mkdir -p "build-$ABI" && pushd "build-$ABI" >/dev/null
+[ -f libgpkg.tar.gz ] || curl -fsSL -o libgpkg.tar.gz "$LIBGPKG_URL"
+verify_sha256 libgpkg.tar.gz "$LIBGPKG_SHA256"
 "$CMAKE" -G Ninja -DCMAKE_MAKE_PROGRAM="$(cygpath -m "$NINJA")" \
   -DCMAKE_TOOLCHAIN_FILE="$(cygpath -m "$NDK/build/cmake/android.toolchain.cmake")" \
   -DANDROID_ABI="$ABI" -DANDROID_PLATFORM="android-$API" -DCMAKE_BUILD_TYPE=Release \

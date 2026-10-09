@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- debug ビルド専用（src/main の同名ファイルを上書きする）。
+     2 台同期テストの偽 Drive（tool/sync_relay、adb reverse で 127.0.0.1:8799）など、
+     開発用に localhost へ平文で繋ぐ経路のため。製品版には入らない -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

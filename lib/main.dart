@@ -25,6 +25,7 @@ import 'package:root_maps/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/db/database_factory_setup.dart';
+import 'core/gdal/gdal_debug_hook.dart';
 import 'core/launch_request.dart';
 import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
@@ -83,6 +84,9 @@ void main() async {
 
   // sqflite の実装をプラットフォームごとに選ぶ（web は sqlite3 WASM）
   setupDatabaseFactory();
+
+  // 開発用: web で window.kokageGdal（GDAL をコンソールから呼ぶ口）。製品版（K_LOG 無しの release）では差し込まない
+  if (AppLogger.enabled) installGdalDebugHook();
 
   AppLogger.debug('[Boot] runApp');
   runApp(TranslationProvider(child: const ProviderScope(child: RootMapsApp())));

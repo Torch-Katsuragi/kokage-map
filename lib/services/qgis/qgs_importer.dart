@@ -38,8 +38,8 @@ import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
 
 import '../../core/fs/k_file_system.dart';
-import '../../models/geometry_type.dart';
 import '../../models/basemap_provider.dart';
+import '../../models/geometry_type.dart';
 import '../../models/kmeta.dart';
 import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/folder_node.dart';

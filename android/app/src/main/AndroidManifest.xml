@@ -19,8 +19,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <!-- ペアリング済みデバイスとの通信 -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <!-- デバイスを検出可能にする（必要に応じて） -->
-    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <!-- BLUETOOTH_ADVERTISE は外した（端末を検出可能にする機能は使っていない。GNSS受信機・TruPulse へはこちらから繋ぐだけ） -->
     
     <!-- フォアグラウンドサービス権限 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -46,11 +45,15 @@
     <!-- Bluetooth機能要求 -->
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
+    <!-- allowBackup=false: 端末のバックアップ（adb backup・クラウドバックアップ・端末間移行）に
+         shared_prefs（Drive のサインイン情報）や Firebase のローカルDBを載せない。
+         プロジェクトのデータ本体は外部ストレージ／Drive にあるのでバックアップに頼っていない -->
     <application
         android:label="こかげマップ"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:networkSecurityConfig="@xml/network_security_config"
+        android:allowBackup="false"
         android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"

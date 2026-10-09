@@ -26,6 +26,7 @@ import '../../../models/nodes/drive_folder_node.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../presentation/node_presenter.dart';
 import '../../dialogs/drive_qr_dialog.dart';
+import '../add_files_action.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
 import '../sync_merge_dialog.dart';
@@ -47,6 +48,9 @@ class FolderTile extends ConsumerWidget {
   /// 左スワイプの「移動」（ローカルのフォルダだけ）
   final VoidCallback? onSwipeMove;
 
+  /// ファイルをこの行の上に落としている（光らせる）
+  final bool isDropTarget;
+
   const FolderTile({
     super.key,
     required this.node,
@@ -58,6 +62,7 @@ class FolderTile extends ConsumerWidget {
     this.onDeleteDrive,
     this.fixed = false,
     this.onSwipeMove,
+    this.isDropTarget = false,
   });
 
   /// このプラットフォームで実際に同期できるか。
@@ -76,7 +81,11 @@ class FolderTile extends ConsumerWidget {
           ? NodePresenter.buildIconWithSyncOverlay(drive, size: 22, syncStatus: drive.syncStatus)
           : Icon(NodePresenter.getIcon(node), size: 22, color: dimmed ? Colors.black26 : NodePresenter.getColor(node)),
       title: NodePresenter.getDisplayName(node),
-      subtitle: drive == null
+      selected: isDropTarget,
+      subtitle: isDropTarget
+          ? Text(t.layerDrawer.folder.dropFilesHere,
+              style: const TextStyle(fontSize: 13, color: Colors.blue, fontWeight: FontWeight.bold))
+          : drive == null
           ? null
           : _canSync
               ? _buildSyncSubtitle(context, drive)
@@ -93,13 +102,20 @@ class FolderTile extends ConsumerWidget {
     if (drive == null) {
       if (fixed) return const [];
       return [
+        if (canAddFilesTo(node)) RowMenuItem('add_files', t.layerDrawer.folder.addFiles, icon: Icons.note_add_outlined),
         RowMenuItem('rename', t.layerDrawer.folder.rename, icon: Icons.edit),
         RowMenuItem('delete', t.layerDrawer.folder.delete, icon: Icons.delete_outline, danger: true),
       ];
     }
     // 同期できない環境でも、QR で渡すことはできる（事務所の web で整えた dir を現場の Android に渡す出口）
-    if (!_canSync) return [RowMenuItem('qr', t.driveQr.menu, icon: Icons.qr_code_2)];
+    if (!_canSync) {
+      return [
+        if (!drive.isReadOnly) RowMenuItem('add_files', t.layerDrawer.folder.addFiles, icon: Icons.note_add_outlined),
+        RowMenuItem('qr', t.driveQr.menu, icon: Icons.qr_code_2),
+      ];
+    }
     return [
+      if (!drive.isReadOnly) RowMenuItem('add_files', t.layerDrawer.folder.addFiles, icon: Icons.note_add_outlined),
       if (!drive.isReadOnly) RowMenuItem('upload', t.layerDrawer.folder.upload, icon: Icons.cloud_upload),
       RowMenuItem('download', t.layerDrawer.folder.download, icon: Icons.cloud_download),
       RowMenuItem('refresh', t.layerDrawer.folder.refreshStatus, icon: Icons.refresh),
@@ -112,6 +128,8 @@ class FolderTile extends ConsumerWidget {
 
   Future<void> _onMenu(BuildContext context, WidgetRef ref, String value, DriveFolderNode? drive) async {
     switch (value) {
+      case 'add_files':
+        await pickAndAddFiles(ref, node);
       case 'rename':
         onRename?.call();
       case 'delete':

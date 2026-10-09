@@ -12,6 +12,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/services/google_drive/sync_engine.dart';
+import 'package:root_maps/services/google_drive/sync_file_operations.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -455,6 +456,61 @@ void main() {
       expect(outside, isEmpty);
       final inside = Directory(a).listSync(recursive: true).whereType<File>().map((f) => p.basename(f.path));
       expect(inside.where((n) => n.startsWith('escape')), isEmpty);
+    });
+  });
+
+  // 読み取り専用で開く形式（shp 一式・GeoJSON・KML・CSV）も運ぶ。拡張子の大文字小文字は問わない（2026-10-09）
+  group('同期対象の拡張子', () {
+    final ops = SyncFileOperations(driveService: FakeGoogleDrive());
+
+    test('許可リストと大文字小文字', () {
+      for (final n in [
+        'IMG.JPG', 'x.GPKG', 'a.Tif', '林班.shp', '林班.SHX', '林班.dbf', '林班.prj', '林班.cpg', '林班.qix',
+        '林班.sbn', '林班.sbx', '林班.shp.xml', 'a.geojson', 'a.json', 'a.kml', 'a.KMZ', 'a.csv', 'p.qgs',
+      ]) {
+        expect(ops.matchesSyncPattern(n), isTrue, reason: n);
+      }
+      for (final n in ['.kmeta.json', 'a.txt', 'a.xml', 'a.qgs~', 'a.fix', 'shp']) {
+        expect(ops.matchesSyncPattern(n), isFalse, reason: n);
+      }
+      expect(SyncFileOperations.isHiddenPath('.kokage/cache/external/x.gpkg'), isTrue);
+      expect(SyncFileOperations.isHiddenPath('sub/.sync/base/a.gpkg'), isTrue);
+      expect(SyncFileOperations.isHiddenPath(r'sub\.kmeta.json'), isTrue);
+      expect(SyncFileOperations.isHiddenPath('sub/a.json'), isFalse);
+    });
+
+    test('push は shp 一式・GeoJSON・大文字の拡張子を上げ、点で始まるものは上げない', () async {
+      for (final rel in [
+        '林班.shp', '林班.shx', '林班.dbf', '林班.prj', '林班.cpg', 'sub/IMG.JPG', 'sub/a.geojson', 'b.json', 'c.kml', 'd.csv',
+        '.hidden.json', '.kokage/cache/external/x.gpkg', '.kokage/a.json', 'notes.txt',
+      ]) {
+        put(rel, 1);
+      }
+      final r = await engine.push(a, driveFolder: rootId);
+      expect(r.success, isTrue, reason: r.errorMessage);
+      expect(
+        drive.allPaths(rootId).where((x) => !x.endsWith('.qgs')).toSet(),
+        {'林班.shp', '林班.shx', '林班.dbf', '林班.prj', '林班.cpg', 'sub/IMG.JPG', 'sub/a.geojson', 'b.json', 'c.kml', 'd.csv'},
+      );
+      await tick();
+      expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.synced);
+    });
+
+    test('pull は Drive に無い shp を手元から消すが、点で始まるものは触らない', () async {
+      await drive.uploadBytes(jpg(1), '林班.shp', rootId);
+      await drive.uploadBytes(jpg(2), 'IMG.JPG', rootId);
+      put('古い.shp', 1);
+      put('古い.dbf', 1);
+      put('.hidden.json', 1);
+      put('.kokage/cache/external/x.gpkg', 1);
+      final r = await engine.pull(rootId, a);
+      expect(r.success, isTrue, reason: r.errorMessage);
+      expect(local('林班.shp').readAsBytesSync(), jpg(1));
+      expect(local('IMG.JPG').readAsBytesSync(), jpg(2));
+      expect(local('古い.shp').existsSync(), isFalse);
+      expect(local('古い.dbf').existsSync(), isFalse);
+      expect(local('.hidden.json').existsSync(), isTrue);
+      expect(local('.kokage/cache/external/x.gpkg').existsSync(), isTrue);
     });
   });
 }

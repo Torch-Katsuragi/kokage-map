@@ -644,6 +644,14 @@ class GeoPackageConnection {
       }
 
       await fs.delete(absPath);
+      // SQLite の付属ファイル（WAL・共有メモリ・ロールバックジャーナル）が残っていれば一緒に消す
+      for (final suffix in const ['-wal', '-shm', '-journal']) {
+        try {
+          if (await fs.exists('$absPath$suffix')) await fs.delete('$absPath$suffix');
+        } on Object catch (e) {
+          AppLogger.debug('[GeoPackageConnection] deleteFile: $suffix を消せない - $e');
+        }
+      }
       AppLogger.debug('[GeoPackageConnection] deleteFile: ファイル削除完了 - $absPath');
       return true;
     } catch (e, stack) {

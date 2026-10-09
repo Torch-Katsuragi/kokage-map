@@ -69,6 +69,21 @@ class SyncFileOperations {
     '*.png',
     '*.tiff',
     '*.tif',
+    // 読み取り専用で開く形式（2026-10-09〜。[[external-formats]]）。shp は付属ファイルも一緒に運ぶ
+    '*.shp',
+    '*.shx',
+    '*.dbf',
+    '*.prj',
+    '*.cpg',
+    '*.qix',
+    '*.sbn',
+    '*.sbx',
+    '*.shp.xml',
+    '*.geojson',
+    '*.json', // 点で始まる名前（旧 `.kmeta.json`）と点で始まるフォルダの中は [isHiddenPath] で外す
+    '*.kml',
+    '*.kmz',
+    '*.csv',
   ];
 
   static const String _folderMime = 'application/vnd.google-apps.folder';
@@ -85,22 +100,29 @@ class SyncFileOperations {
   /// 相対パスからローカルパスを生成。[basePath] の外を指す相対パスは [UnsafePathException]
   String relativePathToLocalPath(String basePath, String relativePath) => resolveUnder(basePath, relativePath);
 
-  /// ファイル名が同期パターンにマッチするか
+  /// ファイル名が同期パターンにマッチするか（大文字小文字は区別しない。`IMG.JPG` も同期する）。
+  /// 点で始まる名前（`.kmeta.json` など）は対象外
   bool matchesSyncPattern(String fileName) {
+    if (fileName.startsWith('.')) return false;
+    final name = fileName.toLowerCase();
     for (final pattern in syncPatterns) {
       if (pattern.startsWith('*.')) {
-        final extension = pattern.substring(1);
-        if (fileName.endsWith(extension)) return true;
-      } else if (pattern == fileName) {
+        if (name.endsWith(pattern.substring(1))) return true;
+      } else if (pattern == name) {
         return true;
       }
     }
     return false;
   }
 
+  /// 同期しない相対パスか。点で始まるフォルダ（3-way マージの base を置く `.sync`、
+  /// 外部形式のキャッシュなどアプリ用の `.kokage`）とその中、点で始まるファイル
+  static bool isHiddenPath(String relativePath) =>
+      relativePath.replaceAll('\\', '/').split('/').any((segment) => segment.startsWith('.') && segment != '.');
+
   // ========== 手元 ==========
 
-  /// 手元の同期対象ファイルを列挙する（3-way マージの base を置く `.sync` の中は見ない）
+  /// 手元の同期対象ファイルを列挙する（`.sync`・`.kokage` など点で始まるフォルダの中は見ない）
   Future<List<LocalSyncEntry>> listLocalSyncFiles(String localPath) async {
     final out = <LocalSyncEntry>[];
     final queue = <String>[localPath];
@@ -108,8 +130,8 @@ class SyncFileOperations {
       final dir = queue.removeLast();
       for (final entry in await fs.list(dir)) {
         final relativePath = normalizeRelativePath(p.relative(entry.path, from: localPath));
-        // 3-way マージの base は同期しない（中も辿らない）
-        if (SyncBaseStore.isInside(relativePath)) continue;
+        // 3-way マージの base やアプリ用のフォルダは同期しない（中も辿らない）
+        if (isHiddenPath(relativePath)) continue;
         if (entry.isDirectory) {
           queue.add(entry.path);
         } else if (matchesSyncPattern(p.basename(entry.path))) {
@@ -145,14 +167,14 @@ class SyncFileOperations {
   }
 
   /// Drive に無い（[keep] に無い）空のフォルダを手元から消す。深い階層から消すので連鎖して消える。
-  /// `.sync`（3-way マージの base）は触らない
+  /// `.sync`（3-way マージの base）・`.kokage` など点で始まるフォルダは触らない
   Future<void> removeEmptyLocalDirs(String localPath, Set<String> keep) async {
     if (!await fs.isDirectory(localPath)) return;
     final localDirs = await fs.listDirectoriesRecursive(localPath);
     localDirs.sort((a, b) => b.path.length.compareTo(a.path.length));
     for (final dir in localDirs) {
       final relativePath = normalizeRelativePath(p.relative(dir.path, from: localPath));
-      if (SyncBaseStore.isInside(relativePath)) continue;
+      if (isHiddenPath(relativePath)) continue;
       if (keep.contains(relativePath)) continue;
       if ((await fs.list(dir.path)).isEmpty) {
         await fs.delete(dir.path);
@@ -234,8 +256,8 @@ class SyncFileOperations {
       final name = item.name ?? '';
       if (name.isEmpty) continue;
       final path = currentPath.isEmpty ? name : '$currentPath/$name';
-      // 手元のパスにできない名前（`..`・`/` 入りなど）と、アプリが手元で使う `.sync` は Drive から取らない
-      if (!isSafePathSegment(name) || SyncBaseStore.isInside(path)) {
+      // 手元のパスにできない名前（`..`・`/` 入りなど）と、点で始まるもの（アプリが手元で使う `.sync`・`.kokage`）は Drive から取らない
+      if (!isSafePathSegment(name) || isHiddenPath(path)) {
         AppLogger.log('[SyncEngine] Drive の項目を飛ばした（手元に置けない名前）: ${item.id} "$name"');
         continue;
       }

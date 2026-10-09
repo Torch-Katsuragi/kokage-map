@@ -254,6 +254,19 @@ class GeoPackageFile {
   /// DBからレイヤ名一覧を取得
   Future<List<String>> getLayerNames() => _layers.getLayerNames();
 
+  /// 中身が何も無いか（`gpkg_contents` に行が無い）。QGIS が足す `layer_styles`（スタイルの控え）だけなら空とみなす。
+  /// ラスタのタイルや属性だけの表など、アプリに見えない中身が載っていれば false。読めなければ false（消さない側に倒す）
+  Future<bool> hasNoContents() async {
+    try {
+      final db = await getDatabase();
+      final rows = await db.rawQuery('SELECT table_name FROM gpkg_contents');
+      return rows.every((r) => '${r['table_name']}'.toLowerCase() == 'layer_styles');
+    } on Object catch (e) {
+      AppLogger.debug('[GeoPackageFile] gpkg_contents を読めない: $e');
+      return false;
+    }
+  }
+
   /// 指定レイヤのジオメトリタイプを取得
   Future<GeometryType?> getGeometryType(String tableName) =>
       _layers.getGeometryType(tableName);

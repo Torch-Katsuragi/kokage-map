@@ -19,6 +19,7 @@
 library;
 
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -50,6 +51,7 @@ import '../../tutorial/tutorial.dart';
 import '../dialogs/add_folder_type_dialog.dart';
 import '../dialogs/drive_url_input_dialog.dart';
 import '../external_layer_actions.dart';
+import 'add_files_action.dart';
 import 'common_dialogs.dart';
 import 'layer_drawer_drive_sync.dart';
 import 'layer_drawer_title_bar.dart';
@@ -80,8 +82,14 @@ class LayerDrawer extends ConsumerStatefulWidget {
 
 class _LayerDrawerState extends ConsumerState<LayerDrawer>
     with LayerDrawerDriveSync {
-  /// デスクトップからファイルを落としている先の gpkg（光らせる）
-  GeoPackageNode? _dropTarget;
+  /// ファイルを落としている最中か（web のドラッグ＆ドロップ）
+  bool _dragging = false;
+
+  /// ファイルを落としている先のフォルダの行（光らせる）。null なら開いているフォルダそのもの
+  FolderNode? _dropFolder;
+
+  /// フォルダの行の位置を引くための鍵（落とした位置の下の行を探す）
+  final _folderKeys = Expando<GlobalKey>();
 
   @override
   void triggerMapRefresh() => ref.refreshMap();
@@ -255,6 +263,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
                 AddAction.folder => _addFolder(context),
                 AddAction.geoPackage => _addGeoPackage(context),
                 AddAction.photo => _addPhoto(context),
+                AddAction.files => pickAndAddFiles(ref, widget.currentNode! as FolderNode),
               }
           : null,
       onBack: parent != null ? () => widget.onDirChanged(parent) : null,
@@ -270,9 +279,25 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       children: [
         titleBar,
         Expanded(
-          child: ListView.builder(
-            itemCount: widget.currentNode!.children.length,
-            itemBuilder: (_, i) => _buildNodeTile(widget.currentNode!.children[i]),
+          // ファイルを落とすと、その下のフォルダの行（無ければ開いているフォルダ）にそのまま入れる。
+          // 行ごとに DropTarget を置くと入れ子で両方に届くので、ここ 1 つで受けて位置から行を探す
+          child: DropTarget(
+            onDragEntered: (d) => _onDragOver(d.globalPosition),
+            onDragUpdated: (d) => _onDragOver(d.globalPosition),
+            onDragExited: (_) => _endDrag(),
+            onDragDone: _onDrop,
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: BoxDecoration(
+                border: _dragging && _dropFolder == null && canAddHere
+                    ? Border.all(color: Colors.blue, width: 2)
+                    : null,
+              ),
+              child: ListView.builder(
+                itemCount: widget.currentNode!.children.length,
+                itemBuilder: (_, i) => _buildNodeTile(widget.currentNode!.children[i]),
+              ),
+            ),
           ),
         ),
       ],
@@ -286,8 +311,10 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       final drive = node is DriveFolderNode;
       final movable = !drive && !fixed;
       return FolderTile(
+        key: _folderKeys[node] ??= GlobalKey(),
         node: node,
         fixed: fixed,
+        isDropTarget: _dropFolder == node,
         onTap: () => widget.onDirChanged(node),
         onRename: movable ? () => _renameFolder(context, node) : null,
         onSyncMerge: drive ? openSyncMergeDialog : null,
@@ -308,14 +335,48 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     if (node is GeoPackageNode) {
       return GeoPackageTile(
         node: node,
-        isDropTarget: _dropTarget == node,
         onRename: () => _renameGeoPackage(context, node),
-        onDropTargetChanged: (t) => setState(() => _dropTarget = t),
         onSwipeMove: _swipeMove,
         currentDir: widget.currentNode,
       );
     }
     return const SizedBox.shrink();
+  }
+
+  // --- ファイルのドラッグ＆ドロップ ---
+
+  /// [global] の下にあるフォルダの行
+  FolderNode? _folderAt(Offset global) {
+    for (final node in widget.currentNode?.children.whereType<FolderNode>() ?? const <FolderNode>[]) {
+      final box = _folderKeys[node]?.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize || !box.attached) continue;
+      if ((box.localToGlobal(Offset.zero) & box.size).contains(global)) return node;
+    }
+    return null;
+  }
+
+  void _onDragOver(Offset global) {
+    final folder = _folderAt(global);
+    if (_dragging && folder == _dropFolder) return;
+    setState(() {
+      _dragging = true;
+      _dropFolder = folder;
+    });
+  }
+
+  void _endDrag() {
+    if (!_dragging && _dropFolder == null) return;
+    setState(() {
+      _dragging = false;
+      _dropFolder = null;
+    });
+  }
+
+  Future<void> _onDrop(DropDoneDetails details) async {
+    final target = _folderAt(details.globalPosition) ?? widget.currentNode;
+    _endDrag();
+    if (target is! FolderNode) return;
+    await addDroppedFiles(ref, target, details.files);
   }
 
   // --- UI アクション ---

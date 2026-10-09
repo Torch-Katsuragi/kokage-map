@@ -5,11 +5,14 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+import 'package:root_maps/core/path_resolver.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
+import 'package:root_maps/services/kmeta_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -105,7 +108,8 @@ void main() {
 
     final moved = await (await layer('stands')).migrateToGeoPackage(dstNode);
     expect(moved, isNotNull);
-    expect(await src.getLayerNames(), isNot(contains('stands')));
+    // 最後のレイヤを移したので、写し元の gpkg はファイルごと消える
+    expect(File(p.join(tmp.path, 'a.gpkg')).existsSync(), isFalse);
 
     final stands = await dst.getFeaturesWithGeometry('stands');
     expect(stands.map((r) => r['name']), ['s0', 's1', 's2']);
@@ -129,5 +133,97 @@ void main() {
     expect(moved, isNull);
     expect(await src.getLayerNames(), contains('stands'));
     expect(await dst.getLayerNames(), isNot(contains('stands')));
+  });
+
+  // レイヤを移して gpkg が空になったら gpkg を消す（2026-10-09、[[external-formats]]）
+  group('移して空になった gpkg', () {
+    Future<void> pointLayer(String name) async {
+      await src.addLayer(name, GeometryType.point);
+      await src.addPointWithAttributes(name, a, {});
+    }
+
+    bool srcExists() => File(p.join(tmp.path, 'a.gpkg')).existsSync();
+
+    test('レイヤが 1 枚だけなら、移すとファイルもツリーの行も消える', () async {
+      await pointLayer('pts');
+      expect(await (await layer('pts')).migrateToGeoPackage(dstNode), isNotNull);
+      expect(srcExists(), isFalse);
+      for (final suffix in ['-wal', '-shm', '-journal']) {
+        expect(File(p.join(tmp.path, 'a.gpkg$suffix')).existsSync(), isFalse, reason: suffix);
+      }
+      expect(srcNode.parent, isNull);
+      expect(dstNode.parent, isNotNull);
+    });
+
+    test('消した gpkg のフォルダ設定（可視状態・スタイル）を落とし、ほかの gpkg の設定は残す', () async {
+      SharedPreferences.setMockInitialValues({});
+      KMetaService.instance.clearCache();
+      ProjectPathResolver.instance.setRootPathGetter(() => tmp.path);
+      addTearDown(KMetaService.instance.clearCache);
+      final meta = KMetaService.instance;
+      await meta.setGeoPackageVisibility(tmp.path, 'a.gpkg', false);
+      await meta.setLayerVisibility(tmp.path, 'a.gpkg/pts', false);
+      await meta.setLayerVisibility(tmp.path, 'b.gpkg/other', false);
+
+      await pointLayer('pts');
+      expect(await (await layer('pts')).migrateToGeoPackage(dstNode), isNotNull);
+      expect(srcExists(), isFalse);
+
+      meta.clearCache();
+      final v = (await meta.getMeta(tmp.path)).visibility;
+      expect(v.geopackages.containsKey('a.gpkg'), isFalse);
+      expect(v.layers.keys, ['b.gpkg/other']);
+    });
+
+    test('まだレイヤが残っていれば消さない', () async {
+      await pointLayer('pts');
+      await pointLayer('more');
+      expect(await (await layer('pts')).migrateToGeoPackage(dstNode), isNotNull);
+      expect(srcExists(), isTrue);
+      expect(srcNode.parent, isNotNull);
+    });
+
+    test('QGIS の layer_styles だけ残っていれば空とみなして消す', () async {
+      await pointLayer('pts');
+      final db = await src.getDatabase();
+      await db.execute('CREATE TABLE layer_styles (id INTEGER PRIMARY KEY, f_table_name TEXT, styleQML TEXT)');
+      await db.insert('gpkg_contents', {'table_name': 'layer_styles', 'data_type': 'attributes', 'identifier': 'layer_styles'});
+      expect(await (await layer('pts')).migrateToGeoPackage(dstNode), isNotNull);
+      expect(srcExists(), isFalse);
+    });
+
+    test('属性だけの表（attributes）が残っていれば消さない', () async {
+      await pointLayer('pts');
+      final db = await src.getDatabase();
+      await db.execute('CREATE TABLE notes (id INTEGER PRIMARY KEY, memo TEXT)');
+      await db.insert('gpkg_contents', {'table_name': 'notes', 'data_type': 'attributes', 'identifier': 'notes'});
+      expect(await (await layer('pts')).migrateToGeoPackage(dstNode), isNotNull);
+      expect(srcExists(), isTrue);
+      expect(srcNode.parent, isNotNull);
+    });
+
+    test('ラスタのタイル（tiles）が残っていれば消さない', () async {
+      await pointLayer('pts');
+      final db = await src.getDatabase();
+      await db.execute('CREATE TABLE ortho (id INTEGER PRIMARY KEY, zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER, tile_data BLOB)');
+      await db.insert('gpkg_contents', {'table_name': 'ortho', 'data_type': 'tiles', 'identifier': 'ortho'});
+      expect(await (await layer('pts')).migrateToGeoPackage(dstNode), isNotNull);
+      expect(srcExists(), isTrue);
+    });
+
+    test('写す（移さない）ときは消さない', () async {
+      await pointLayer('pts');
+      expect(await (await layer('pts')).migrateToGeoPackage(dstNode, moveLayer: false), isNotNull);
+      expect(srcExists(), isTrue);
+    });
+
+    test('最後のレイヤを削除しても gpkg は消さない', () async {
+      await pointLayer('pts');
+      await (await layer('pts')).dispose();
+      await srcNode.updateChildren();
+      expect(await src.hasNoContents(), isTrue);
+      expect(srcExists(), isTrue);
+      expect(srcNode.parent, isNotNull);
+    });
   });
 }

@@ -678,8 +678,15 @@ abstract class LayerNode extends LayerTreeNode {
 
       // 移植元を削除（移動の場合）
       if (moveLayer) {
+        final sourceGpkg = geoPackageNode;
         await _removeSelfFromParent();
         AppLogger.debug('[LayerNode] 移植元レイヤ削除完了');
+        // 移し元の gpkg が空になったらファイルごと消す（2026-10-09。消せなくても移動は成立している）
+        try {
+          await sourceGpkg.deleteIfEmptiedByMove();
+        } on Object catch (e) {
+          AppLogger.debug('[LayerNode] 空になった移し元の gpkg を消せなかった: $e');
+        }
       }
 
       AppLogger.debug('[LayerNode] レイヤ移植成功: $migratedFeatureCount個のフィーチャを移植');

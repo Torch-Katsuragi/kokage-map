@@ -27,7 +27,7 @@ import '../../models/nodes/sys_node.dart';
 import '../../presentation/node_presenter.dart';
 import '../../tutorial/tutorial.dart';
 
-enum AddAction { folder, geoPackage, photo }
+enum AddAction { folder, geoPackage, photo, files }
 
 /// 濃グレーのタイトルパネル（currentNodeの名前を表示＋右側に統合追加ボタン）
 /// Drive連携フォルダ配下ではクラウドカラー背景＋同期UIを表示
@@ -258,6 +258,11 @@ class LayerDrawerTitleBar extends StatelessWidget {
           key: TutorialTargets.photoMenuItem,
           value: AddAction.photo,
           child: _menuRow(Icons.photo_library, Colors.blue, t.layerDrawer.titleBar.addPhotos),
+        ),
+        // そのまま地図に出せる形式（shp・GeoJSON など）や写真をこのフォルダに写す（2026-10-09〜）
+        PopupMenuItem(
+          value: AddAction.files,
+          child: _menuRow(Icons.note_add_outlined, Colors.teal, t.layerDrawer.titleBar.addFiles),
         ),
       ],
     );

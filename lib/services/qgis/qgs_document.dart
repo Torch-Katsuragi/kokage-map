@@ -262,15 +262,70 @@ class QgsDocument {
       ..children.clear()
       ..children.add(XmlText(project.name));
 
-    _applyTree(project);
-    _applyMapLayers(project, report);
-    _applyLayerOrder(project);
+    _adoptRasterIds(project);
+    final web = _webLayerIds();
+    _applyTree(project, web);
+    _applyMapLayers(project, report, web);
+    _applyLayerOrder(project, web);
     return report;
+  }
+
+  // ---- 管轄外のレイヤ（ネットワークのタイル・サービス）----
+
+  /// ネットワーク越しのデータを指すプロバイダ。ファイルではないのでこかげマップの管轄に入らず、
+  /// `.qgs` に QGIS 側で足されたものはそのまま残す（外すと QGIS の利用者の背景地図が消える）
+  static const _webProviders = {'wms', 'wcs', 'wfs', 'arcgismapserver', 'arcgisfeatureserver', 'xyzvectortiles'};
+
+  /// ネットワーク越しのレイヤ（XYZ タイル・WMS など）か
+  static bool isWebLayer(XmlElement maplayer) {
+    if (maplayer.getAttribute('type') == 'vector-tile') return true;
+    final provider = maplayer.getElement('provider')?.innerText.trim().toLowerCase();
+    return provider != null && _webProviders.contains(provider);
+  }
+
+  /// 残す（触らない）maplayer の id。ツリーと `<layerorder>` でも残す
+  Set<String> _webLayerIds() => {
+        for (final e in mapLayers)
+          if (!isEmbedded(e) && isWebLayer(e) && e.getElement('id') != null) e.getElement('id')!.innerText,
+      };
+
+  /// QGIS で足した gdal のラスタが、アプリの GeoTIFF（[QgsRasterLayer]）と同じファイルを指していれば、
+  /// アプリの決定的な id に付け替える。外して足し直すと QGIS が付けたレンダラ（不透明度など）が消えるため
+  void _adoptRasterIds(QgsProject project) {
+    final layers = mapLayers.toList();
+    final present = {for (final e in layers) e.getElement('id')?.innerText};
+    final byPath = <String, QgsRasterLayer>{
+      for (final r in project.rasterLayers)
+        if (!present.contains(r.id)) _rasterPathKey(r.dataSourcePath): r,
+    };
+    if (byPath.isEmpty) return;
+    final wanted = {for (final r in project.rasterLayers) r.id};
+    for (final e in layers) {
+      if (isEmbedded(e) || e.getAttribute('type') != 'raster') continue;
+      if (e.getElement('provider')?.innerText.trim() != 'gdal') continue;
+      final oldId = e.getElement('id')?.innerText;
+      if (oldId == null || wanted.contains(oldId)) continue;
+      final target = byPath.remove(_rasterPathKey(e.getElement('datasource')?.innerText ?? ''));
+      if (target == null) continue;
+      setChildText(e, 'id', target.id);
+      for (final t in root.findAllElements('layer-tree-layer').where((t) => t.getAttribute('id') == oldId)) {
+        t.setAttribute('id', target.id);
+      }
+    }
+  }
+
+  /// `./sub/a.tif` と `sub\a.tif` を同じに見る
+  static String _rasterPathKey(String path) {
+    var s = path.split('|').first.trim().replaceAll(r'\', '/');
+    while (s.startsWith('./')) {
+      s = s.substring(2);
+    }
+    return s.toLowerCase();
   }
 
   // ---- レイヤツリー ----
 
-  void _applyTree(QgsProject project) {
+  void _applyTree(QgsProject project, Set<String> web) {
     final treeRoot = ensureChild(root, 'layer-tree-group');
 
     // 既存ノードを控える（id とグループ名で引く）
@@ -279,7 +334,12 @@ class QgsDocument {
         if (e.getAttribute('id') != null) e.getAttribute('id')!: e,
     };
 
-    final rebuilt = _rebuildChildren(project.root, treeRoot, oldLayers);
+    // 管轄外（ネットワークのタイル等）は残す。グループは組み直すので root の一番下（地図では一番下）へ寄せる
+    final rebuilt = [
+      ..._rebuildChildren(project.root, treeRoot, oldLayers),
+      for (final MapEntry(key: id, value: e) in oldLayers.entries)
+        if (web.contains(id)) e.copy(),
+    ];
 
     // root 直下は customproperties と custom-order を残して差し替える
     final keep = <XmlNode>[
@@ -376,7 +436,7 @@ class QgsDocument {
 
   // ---- maplayer ----
 
-  void _applyMapLayers(QgsProject project, QgsApplyReport report) {
+  void _applyMapLayers(QgsProject project, QgsApplyReport report, Set<String> web) {
     final layers = project.layers;
     final rasters = project.rasterLayers;
     final wanted = <String, QgsTreeNode>{
@@ -398,6 +458,8 @@ class QgsDocument {
     for (final e in container.findElements('maplayer').toList()) {
       if (isEmbedded(e)) continue;
       final id = e.getElement('id')?.innerText;
+      // 管轄外（ネットワークのタイル等）は触らない
+      if (id != null && web.contains(id) && !wanted.containsKey(id)) continue;
       final layer = id == null ? null : wanted[id];
       if (layer == null) {
         final name = e.getElement('layername')?.innerText ?? id ?? '?';
@@ -562,10 +624,18 @@ class QgsDocument {
 
   // ---- layerorder ----
 
-  void _applyLayerOrder(QgsProject project) {
+  void _applyLayerOrder(QgsProject project, Set<String> web) {
     final order = ensureChild(root, 'layerorder');
+    // 管轄外のレイヤは下（後ろ）に、元の順のまま
+    final previous = [for (final l in order.findElements('layer')) l.getAttribute('id')];
+    final keptWeb = [
+      for (final id in previous)
+        if (id != null && web.contains(id)) id,
+      for (final id in web)
+        if (!previous.contains(id)) id,
+    ];
     order.children.clear();
-    for (final id in project.orderedLayerIds) {
+    for (final id in [...project.orderedLayerIds, ...keptWeb]) {
       order.children.add(
         XmlElement(const XmlName.parts('layer'), [XmlAttribute(const XmlName.parts('id'), id)]),
       );

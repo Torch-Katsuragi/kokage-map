@@ -30,9 +30,11 @@ import '../../models/nodes/folder_node.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import 'qgs_auto_refresh.dart';
+import 'qgs_base_map_import.dart';
 import 'qgs_document.dart';
 import 'qgs_importer.dart';
 import 'qgs_meta_store.dart';
+import 'qgs_raster_source.dart';
 
 /// 読み戻した結果。何もしなかったときは [QgsReadBack.run] が null を返す
 class QgsReadBackResult {
@@ -40,11 +42,19 @@ class QgsReadBackResult {
     required this.fileName,
     required this.importedViewCount,
     required this.discarded,
+    this.overlayCount = 0,
+    this.baseMapsAdded = const [],
   });
 
   final String fileName;
   final int importedViewCount;
   final List<String> discarded;
+
+  /// 可視性を読み戻したオーバーレイ画像（GeoTIFF）の数
+  final int overlayCount;
+
+  /// `.qgs` の XYZ タイルから背景地図に足したプロバイダの名前
+  final List<String> baseMapsAdded;
 }
 
 class QgsReadBack {
@@ -67,15 +77,25 @@ class QgsReadBack {
     saved.sort((a, b) => a.savedAt.compareTo(b.savedAt));
     final ownerWrittenAt = <String, DateTime?>{};
     final results = <QgsReadBackResult>[];
+    final baseMaps = <QgsBaseMap>[];
     for (final s in saved) {
-      final one = await _import(s, ownerWrittenAt);
+      final one = await _import(s, ownerWrittenAt, baseMaps);
       if (one != null) results.add(one);
     }
     if (results.isEmpty) return null;
+    // XYZ タイルは端末の背景地図へ（一度足したものは二度と足さない。[QgsBaseMapImport]）
+    var baseMapsAdded = const <String>[];
+    try {
+      baseMapsAdded = await QgsBaseMapImport.apply(baseMaps);
+    } on Object catch (e) {
+      AppLogger.debug('[QgsReadBack] 背景地図に足せない: $e');
+    }
     return QgsReadBackResult(
       fileName: results.map((r) => r.fileName).join(', '),
       importedViewCount: results.fold(0, (s, r) => s + r.importedViewCount),
       discarded: [for (final r in results) ...r.discarded],
+      overlayCount: results.fold(0, (s, r) => s + r.overlayCount),
+      baseMapsAdded: baseMapsAdded,
     );
   }
 
@@ -134,7 +154,11 @@ class QgsReadBack {
     return _QgisSaved(folder: root, folderPath: rootPath, path: path, savedAt: savedAt);
   }
 
-  Future<QgsReadBackResult?> _import(_QgisSaved s, Map<String, DateTime?> ownerWrittenAt) async {
+  Future<QgsReadBackResult?> _import(
+    _QgisSaved s,
+    Map<String, DateTime?> ownerWrittenAt,
+    List<QgsBaseMap> baseMaps,
+  ) async {
     // 持ち主の dir にこかげマップが最後に書いた時刻（印の savedAt）。この保存がそれより古ければ、
     // その持ち主の分は古い写しなので取り込まない（持ち主が別の端末で直されて同期で届いた等）
     final owners = <FolderNode, DateTime?>{};
@@ -152,6 +176,8 @@ class QgsReadBack {
       },
     );
 
+    baseMaps.addAll(result.baseMaps);
+
     // 取り込んだので印を付け直し（自動更新が書けるようになる）、取り込んだ結果（と正規化）を書き戻す
     await QgsMetaStore.claim(s.path);
     QgsAutoRefresh.instance.schedule(s.folderPath);
@@ -160,6 +186,7 @@ class QgsReadBack {
       fileName: p.basename(s.path),
       importedViewCount: result.importedViewCount,
       discarded: result.discarded,
+      overlayCount: result.overlayCount,
     );
   }
 

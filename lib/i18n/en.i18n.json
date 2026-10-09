@@ -1461,6 +1461,7 @@
     "roomClosedNotice": "The room was closed by the host or has expired"
   },
   "qgis": {
+    "baseMapsAdded": "Added the background maps from the QGIS project: $names",
     "discarded": "$count item(s) were not imported: $names",
     "readBack": "Loaded changes made in QGIS from $file ($count views)"
   },

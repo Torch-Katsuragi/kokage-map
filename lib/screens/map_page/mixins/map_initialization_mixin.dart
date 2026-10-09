@@ -119,6 +119,12 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
               ),
               level: NotificationLevel.info,
             );
+            if (readBack.baseMapsAdded.isNotEmpty) {
+              notifier.add(
+                title: t.qgis.baseMapsAdded(names: readBack.baseMapsAdded.join(' / ')),
+                level: NotificationLevel.info,
+              );
+            }
             if (readBack.discarded.isNotEmpty) {
               notifier.add(
                 title: t.qgis.discarded(

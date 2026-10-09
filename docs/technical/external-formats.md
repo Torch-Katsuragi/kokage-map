@@ -70,8 +70,56 @@ GDAL は無い（純 Dart）。FlatGeobuf などは要望が来てから。
 - 書く: 読み取り専用レイヤは `provider=ogr`、`datasource=./林班.shp`（shp・GeoJSON・KML は `|layername=` なし、
   KMZ・複数レイヤの KML は `|layername=`）。CSV は `delimitedtext` の URI
 - 読む（`_SourceResolver`）: ogr の非 gpkg は `ExternalLayerNode` に結びつける（`|layername=` が無ければファイル名）。
-  `delimitedtext` は CSV のノードへ。gdal のラスタはオーバーレイ（既存）、`wms`/`xyz` の XYZ タイルは背景地図のレイヤへ。
+  `delimitedtext` は CSV のノードへ。gdal のラスタはオーバーレイ、`wms`/`xyz` の XYZ タイルは背景地図のレイヤへ（下の 2 項）。
   PostGIS・メモリなどは従来どおり「取り込めません」
+
+#### ラスタ（2026-10-09 実装）
+
+`<maplayer type="raster">` は View にならない。`_SourceResolver._resolveRaster` が振り分け、部品は `qgs_raster_source.dart`。
+fixture は QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_raster_xyz.qgs`（`tool/qgis/write_raster_fixture.py`）、
+テストは `test/qgs_raster_read_back_test.dart`。
+
+**gdal（GeoTIFF）**: dir にあるファイルが正。ノード（`OverlayImageNode`）は dir の中身から作られているので、
+`.qgs` はそれに突き合わせて **可視性だけ** を読み戻す（フォルダ設定の `visibility.images` に書く）。
+こかげマップが書いた形（`raster_<相対パスの hash>` の id）なら自身の checked、QGIS で足したものは祖先のグループで畳む。
+
+| `.qgs` 側 | 扱い |
+|---|---|
+| dir 内の `.tif`、位置を読める（こかげマップの形） | オーバーレイの可視性に読み戻す |
+| dir 内の `.tif`、位置を読めない（GDAL 既定の Tiepoint 形式・投影座標系） | 報告「位置を読めません」（写真として並ぶ。TODO） |
+| ファイルが無い | 報告「見つかりません」 |
+| `.png` `.jp2` など GeoTIFF 以外 | 報告「GeoTIFF 以外のラスタは未対応」 |
+| root の外・`/vsicurl/`・`GPKG:…` | 報告 |
+
+- ⚠ 不透明度はアプリのオーバーレイに受け皿が無い（2026-04 に廃止、GeoTIFF のアルファで持つ）。読まない。
+  代わりに書き戻しで QGIS の `<pipe>` を残す: QGIS で足したラスタが同じ `.tif` を指していれば、外して足し直さずに
+  **アプリの決定的な id に付け替える**（`QgsDocument._adoptRasterIds`）。不透明度などは QGIS 側で生き残る
+
+**wms（XYZ タイル）**: URI（`type=xyz&url=<URL エンコード>`）の URL を背景地図の一覧（`BaseMapProvider.availableProviders`）と
+突き合わせる（`BaseMapProvider.findByTileUrl`。http/https・OSM の `a.` `{s}.` は無視）。
+
+| `.qgs` 側 | 扱い |
+|---|---|
+| 一覧にある XYZ（地理院・OSM） | 背景地図のレイヤに足す。可視は checked、不透明度は `<rasterrenderer opacity>` |
+| 一覧に無い XYZ | 報告「背景地図の一覧に無い XYZ タイル: ホスト」 |
+| 本物の WMS / WMTS（`type=xyz` でない） | 報告「WMS は未対応」 |
+
+> [!IMPORTANT] 背景地図は端末の設定のまま（2026-10-09 決定）
+> 背景地図（`BaseMapService.layers`、prefs `basemap_layers`）は端末ごとの設定で、プロジェクトには属さない。
+> プロジェクトごとに持たせる作り直しはしない。代わりに `.qgs` から足すときは:
+> - **一覧に既にあるプロバイダは触らない**（可視・不透明度も端末の利用者の選択を優先）
+> - **一度でも `.qgs` から足したプロバイダは二度と自動では足さない**（prefs `basemap_qgs_imported`）。
+>   開くたびに積み上がらず、端末で消したものが次の読み戻しで戻ってこない
+> - 足したら通知する（「QGIS のプロジェクトにあった背景地図を足しました」）
+>
+> 読み戻しは QGIS が保存した `.qgs` を開いたときだけ走る（印で判定。[[qgis-interop]]）ので、そもそも頻度は低い。
+> 実装は `lib/services/qgis/qgs_base_map_import.dart`（並びの計算は純粋関数 `merge`）
+
+> [!NOTE] 逆向き（端末の背景地図を `.qgs` に書く）はしない
+> 端末ごとに背景地図が違うので、書けば最後に書いた端末で `.qgs` が揺れ、Drive 同期が無駄に動く。
+> その代わり **QGIS で足したネットワークのレイヤ（wms・wcs・wfs・arcgis・ベクタタイル）は書き戻しで外さない**
+> （`QgsDocument.isWebLayer`）。以前は「プロジェクトに無いレイヤ」として外していたので、QGIS の利用者の背景地図が
+> 次の自動更新で消えていた。残したレイヤはツリーの root の一番下・`<layerorder>` の後ろに寄せる（入っていたグループは保たない）
 
 ### ファイルをフォルダに入れる経路
 

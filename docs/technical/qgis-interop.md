@@ -64,6 +64,8 @@ QgsDocument         既存の .qgs を読み、自分の管轄だけ差し替え
 > フィルタ・単一シンボルの色と太さ・`<layerorder>` だけを差し替える。QGIS 側で足した
 > 印刷レイアウト・フィールド設定・単一シンボルの細部（破線・オフセット等）はそのまま残る。
 > 単一シンボル以外のレンダラは触らず、件数を通知する。プロジェクトに無くなったレイヤは外して名前を通知する。
+> ただし QGIS で足したネットワークのレイヤ（XYZ タイル・WMS など）は管轄外として残す（2026-10-09。
+> [[external-formats#`.qgs` との往復]]）。
 > `properties/kokage/` に印（`schemaVersion` `app` `savedAt` `dirName`）を書き、root の
 > `saveDateTime` を同じ値にする。両者が一致していれば「最後に書いたのはこかげマップ」、
 > 違えば QGIS が後から保存した、と読める。テストは `test/qgs_document_test.dart`。
@@ -145,7 +147,10 @@ msiexec /a .temp\QGIS-LTR.msi /qn TARGETDIR=C:\Users\<user>\qgis-extract
 位置は `.tif` の GeoTIFF タグに焼き込み済み（`GeoTiffWriteScheduler`）なので、`.qgs` には
 `provider=gdal` の参照（相対パス）だけを書き、レンダラ（`<pipe>`）は書かない。QGIS は読込時に既定の
 レンダラを付ける。DOM 保持型の更新では参照と名前だけ直し、QGIS が付けた `<pipe>` は残す。
-読み戻し（インポータ）はラスタを黙って飛ばす（XML の形は `test/qgs_raster_test.dart`）。
+読み戻し（インポータ）は可視性だけをオーバーレイに戻し、XYZ タイルは背景地図に足す（2026-10-09。それまでは黙って飛ばしていた）。
+扱えないラスタ（GeoTIFF 以外・root の外・位置を読めない `.tif`・WMS）は理由つきで報告する。
+QGIS で足したラスタが同じ `.tif` を指していれば、書き戻しでアプリの id に付け替えて QGIS の `<pipe>`（不透明度など）を残す。
+詳細は [[external-formats#ラスタ（2026-10-09 実装）]]。XML の形は `test/qgs_raster_test.dart`、読み戻しは `test/qgs_raster_read_back_test.dart`。
 
 > [!NOTE] QGIS 4.2.0 で実開封を確認済み（2026-09-12、開発機に `C:\Program Files\QGIS 4.2.0` を入れて headless）
 > 実機（Pixel 9）から pull した `Kitayama-2026/` に `test_overlay.tif` を `QgsRasterLayer` で足した `.qgs` を

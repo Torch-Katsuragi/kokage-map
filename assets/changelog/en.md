@@ -8,6 +8,7 @@
 - The layer panel is redone: tighter rows, and only the visibility eye at the right end. Long-press a row (right-click on a PC) for its menu; swipe it left to move it elsewhere
 - Each layer row starts with a sample of its map color and shows its feature count. GeoPackages are small headings whose eye hides everything inside
 - A path (KokageMap › 共有) above the list takes you back to any level. The top shows the folder name instead of "Home"
+- Drive-linked folders now also sync Shapefiles (with their companion files), GeoJSON, KML/KMZ and CSV. Files with upper-case extensions (such as IMG.JPG) were skipped; they now sync too
 
 ### Lighter
 

@@ -13,10 +13,9 @@ tags: [technical, location-sharing, firebase, realtime, design]
 >
 > - `setPersistenceEnabled` は web 未対応なので呼ばない
 >   （タブが生きている間しか保たないので、そもそも意味が薄い）
-> - **App Check に web のプロバイダを渡していない。**
->   web は reCAPTCHA のサイトキーが要り、それはコンソール発行のもの。
->   App Check API はプロジェクトで有効化すらされていないので現状は素通りする。
->   強制に切り替えるときは `providerWeb: ReCaptchaV3Provider(<siteKey>)` を足すこと
+> - App Check の web プロバイダは 2026-10-09 に reCAPTCHA Enterprise で入れた
+>   （`PartyFirebase` のサイトキー。許可ドメインに localhost も入っている）。
+>   当初は渡しておらず素通りしていた。コンソールは監視のみで、強制はまだしていない
 >
 > ⚠ **`onDisconnect` の仕掛けどころに罠がある。**
 > `live/$uid` の書き込みは RTDBルールが `members/$uid` の存在を要求する。
@@ -119,8 +118,9 @@ OFFLINE ────────────────────────
 
 ```
 /rooms/{roomCode}/
-  meta/    { hostUid, name, active, createdAt, expiresAt }
-  members/{uid}/   { name, color, role: host|guest }
+  meta/    { hostUid, name, active, createdAt, expiresAt }   # 消せない（終了は active=false）
+  members/{uid}/   { name, color, role: host|guest }        # role=host は hostUid 本人だけ
+  banned/{uid}: true                                         # キックされた uid（host だけ書ける）
   live/{uid}/                       # 揮発する現在位置
     { lat, lng, alt, acc, bearing, speed,
       ts: ServerValue.timestamp,    # サーバー時刻（端末時計ズレ・改ざん回避）
@@ -134,85 +134,36 @@ OFFLINE ────────────────────────
 > **ルームコードは "鍵（capability）" そのもの。** 守りは3層で考える。
 
 ### 層1：コードの推測困難性
-- **8文字・曖昧文字除外**（0/O/1/l/I を抜いた32種）＋ `expiresAt`。
+- **8文字・曖昧文字除外**（0/O/1/I/L を抜いた31種）＋ `expiresAt`。
+  ルールも `$roomCode` を `^[2-9A-HJKMNP-Z]{8}$` に限る（`RoomCodeGenerator.alphabet` と一致。
+  ユニットテストで突き合わせている）。
 - `active=false` か期限切れの部屋は参加reject＝失効後の総当たり無効化。
 
 ### 層2：RTDB セキュリティルール（`database.rules.json`）
 
-```json
-{
-  "rules": {
-    "rooms": {
-      "$roomCode": {
-        ".read": "auth != null && data.child('members').child(auth.uid).exists()",
-
-        "meta": {
-          ".write": "auth != null && (!data.exists() ? newData.child('hostUid').val() === auth.uid : data.child('hostUid').val() === auth.uid)",
-          ".validate": "newData.hasChildren(['hostUid','active','createdAt'])",
-          "hostUid":   { ".validate": "newData.isString()" },
-          "active":    { ".validate": "newData.isBoolean()" },
-          "createdAt": { ".validate": "newData.isNumber()" },
-          "expiresAt": { ".validate": "newData.isNumber()" },
-          "name":      { ".validate": "newData.isString() && newData.val().length <= 60" },
-          "$other":    { ".validate": false }
-        },
-
-        "members": {
-          "$uid": {
-            ".write": "auth != null && ( ($uid === auth.uid && root.child('rooms/'+$roomCode+'/meta/active').val() === true && root.child('rooms/'+$roomCode+'/meta/expiresAt').val() > now) || root.child('rooms/'+$roomCode+'/meta/hostUid').val() === auth.uid )",
-            ".validate": "newData.hasChildren(['name','role'])",
-            "name":  { ".validate": "newData.isString() && newData.val().length <= 40" },
-            "role":  { ".validate": "newData.val() === 'host' || newData.val() === 'guest'" },
-            "color": { ".validate": "newData.isString() && newData.val().length <= 16" },
-            "$other": { ".validate": false }
-          }
-        },
-
-        "live": {
-          "$uid": {
-            ".write": "auth != null && $uid === auth.uid && root.child('rooms/'+$roomCode+'/members/'+auth.uid).exists()",
-            ".validate": "newData.hasChildren(['lat','lng','ts'])",
-            "lat": { ".validate": "newData.isNumber() && newData.val() >= -90  && newData.val() <= 90" },
-            "lng": { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
-            "ts":  { ".validate": "newData.val() === now" },
-            "alt": { ".validate": "newData.isNumber()" },
-            "acc": { ".validate": "newData.isNumber() && newData.val() >= 0" },
-            "bearing":  { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 360" },
-            "speed":    { ".validate": "newData.isNumber() && newData.val() >= 0" },
-            "battery":  { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
-            "connected":{ ".validate": "newData.isBoolean()" },
-            "$other":   { ".validate": false }
-          }
-        },
-
-        "tracks": {
-          "$uid": {
-            ".write": "auth != null && $uid === auth.uid && root.child('rooms/'+$roomCode+'/members/'+auth.uid).exists()",
-            "$pushId": {
-              ".validate": "newData.hasChildren(['pts','from','to'])",
-              "pts":  { ".validate": "newData.isString() && newData.val().length <= 8000" },
-              "from": { ".validate": "newData.isNumber() && newData.val() <= now" },
-              "to":   { ".validate": "newData.isNumber() && newData.val() <= now" },
-              "$other": { ".validate": false }
-            }
-          }
-        },
-
-        "$other": { ".validate": false }
-      }
-    }
-  }
-}
-```
+ルール本体は [`database.rules.json`](../../database.rules.json)。ここに全文は写さない（ずれるので）。
+エミュレータのテストは `tool/rules_test/`（回し方は [[testing#パーティ位置共有の RTDB ルール]]）。
 
 **守りどころ**
 
 - **書込みは本人のみ**：`/live/{uid}`・`/tracks/{uid}` は `$uid === auth.uid`。なりすまし不可。
 - **読取りはメンバーのみ**：room直下 `.read` を継承。非メンバーは一切見れない。
-- **host特権**：meta編集・キック（members削除）はhostのみ。
+- **host特権**：meta編集・キック（members削除＋`banned` 書き込み）はhostのみ。
+  hostが他人の members に書けるのは削除だけ。
+- **キックは BAN を伴う**：`banned/{uid}` がある uid は members を書けない（同じコードで戻れない）。
+  キックは `members/{uid}: null` と `banned/{uid}: true` の multi-path update。
+- **終了・失効後は送れない**：live/tracks の書き込みに `meta.active === true && meta.expiresAt > now` を要求。
+  削除（退出時の後始末）は本人ならいつでも通す。
+- **寿命は必須・有限**：meta に `expiresAt` 必須、`<= now + 26h`（アプリの寿命 24h＋端末時計のずれの余裕 2h）。
+  作成後は延ばせない（縮める・`now` に寄せるのは可）。`createdAt` は作成時 `=== now`、以後不変。`hostUid` も不変。
+- **meta は消せない**：null 書き込みを拒否。消えたコードに他人が meta を書いて乗っ取るのを防ぐ。
+- **role 偽装防止**：`role === 'host'` は `$uid === meta.hostUid` のときだけ。表示側も星は `meta.hostUid` で判定する。
 - **時刻偽装防止**：`ts === now` で ServerValue.timestamp を強制（鮮度表示の信頼性に直結）。
 - **スキーマ固定**：各階層 `$other: false` ＋長さ/範囲 validate でゴミ投入・ストレージ肥大攻撃を遮断。
-- **期限**：`expiresAt > now` の時のみ新規参加可。
+- **purge 用インデックス**：`rooms/.indexOn: ["meta/expiresAt", "meta/active"]`。
+
+受け側（`RtdbPeerSource` / `PeerTrack`）も他人の値を篩う。範囲外・非有限の座標は捨て、
+軌跡は1本 4000点・8000文字まで、1メンバーあたり新しい 50本までしか描かない。
 
 ### 層3：Firebase App Check
 正規アプリ以外（curl/スクリプト）からのDBアクセスを遮断。RTDBはルールでレート制限できないため、**叩ける主体を絞る**のが本命のコスト攻撃・荒らし対策。
@@ -227,8 +178,8 @@ OFFLINE ────────────────────────
 | **鮮度表示** | サーバー`ts`基準で3段階：`<30s`実線／`<5分`淡色＋「N分前」／閾値超（既定15分・設定可）→「最終既知地点」ピンに降格（消さない）。 |
 | **isolate境界** | Firebase I/Oはメインisolate固定（positionStream経由で受け取る）。前景サービス(別isolate)からは触らない（Bluetoothと同じ制約）。 |
 | **電池** | 距離主導（移動20〜30mごと）＋ハートビート上限（移動中60〜90秒／停止中は数分）。`/live/{uid}` は上書き（中間点を溜めない）。圏外＝送信ゼロ。低電池時は閾値を広げる。 |
-| **コスト/クリーンアップ** | host終了で即room削除＋定期Cloud Functionで孤児purge（active=false / 期限切れ）。極小ペイロード＋スキーマ固定でstorage肥大を根絶。 |
-| **ルームライフサイクル** | 8文字コード＋`expiresAt`（既定24h or host終了まで）。host終了で `active=false`→cleanup。 |
+| **コスト/クリーンアップ** | host終了で `active=false`＋`expiresAt=now`。定期Cloud Function（24時間ごと）が `meta/expiresAt <= now` と `meta/active == false` をインデックスで引いて削除（全件 get しない）。極小ペイロード＋スキーマ固定でstorage肥大を根絶。 |
+| **ルームライフサイクル** | 8文字コード＋`expiresAt`（既定24h or host終了まで）。host終了で `active=false`・`expiresAt=now`→cleanup。ゲストは meta を購読し、終了・失効・消失で自動退出（通知センターに表示）。 |
 | **将来拡張** | `PartyLocationStore` を `PeerSource` インターフェイスで抽象化（RTDB＝一実装）。将来 BLEメッシュ等を別ソースとして `GpsManagerService` 同様のマージ点で合流。 |
 | **テスト** | デバッグ用「強制オフライン」トグル（`goOffline/goOnline`直叩き）でトンネル遷移を再現。接続ステートマシンは単体テスト対象。 |
 
@@ -244,6 +195,8 @@ OFFLINE ────────────────────────
   飛ばして地図へ直行し、MapPage が参加ダイアログをコード充填済みで開く
 - **受け側（アプリ）**: 参加欄が生コード・招待URLの両方を受ける（読むときは寛容に）。
   カメラのある端末は参加欄のQRスキャンからも入れる
+- web は `?room=` を読んだら `history.replaceState` でアドレスバーから消す
+  （再読み込みでの入り直しと、画面共有・履歴からのコード漏れを防ぐ）
 
 ## 10. ステータス
 
@@ -254,11 +207,18 @@ Android実機×webのクロスプラットフォームで通し確認済み（�
 
 残り:
 
-- App Check の web プロバイダ（reCAPTCHA サイトキー・強制切替時に対応）
+- ~~App Check の web プロバイダ~~ → 2026-10-09 に reCAPTCHA Enterprise で入れた。残りは強制への切り替え
 - ~~クリーンアップ~~ → `functions/index.js` の `purgeExpiredRooms`（24時間ごと）実装済み
 
 > [!NOTE] キックの仕様
-> `members/{uid}` の削除は host 特権（ルールが担保）。`live/{uid}` は本人以外
-> 消せないため残るが、UI側でメンバー外の live は描かず、実体は定期purgeが回収。
+> `members/{uid}` の削除と `banned/{uid}` の書き込みは host 特権（ルールが担保）。
+> 2026-10-09 まで banned が無く、蹴られた側が同じコードで members を書き直せばすぐ戻れた。
 > 蹴られた側は members 購読（自分の消失 or `.read` 失効エラー）で自動退出し、
-> 通知センターに表示する（`PartySession._onKicked`）。
+> 通知センターに表示する（`PartySession._onKicked`）。退出時に自分の `live/{uid}` を消す
+> （本人の削除はルールが常に通す）。消せなかった分は定期purgeが回収。
+
+> [!WARNING] v0.11.0（Play クローズドテスト配布版）との関係
+> 旧版の書き込み形式（作成・参加・位置・軌跡・退出・終了・キック）は新ルールでも通る
+> （`tool/rules_test` の「旧版」の節で確認）。ただし旧版のホストのキックは banned を書かないので
+> 再参加を防げず、旧版のゲストは meta を見ないので、終了・失効後も地図に居残って
+> 位置送信の失敗（ログだけ）を繰り返す。旧版の星表示は members の role を信じる。

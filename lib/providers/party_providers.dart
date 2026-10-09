@@ -57,6 +57,9 @@ class PartySessionState {
   /// 自分の役割
   final PartyRole? role;
 
+  /// ホストのuid（meta.hostUid。星の表示はこれで判定し、members の role は信じない）
+  final String? hostUid;
+
   /// 接続状態
   final PartyConnectionState connection;
 
@@ -82,6 +85,7 @@ class PartySessionState {
     this.roomCode,
     this.selfUid,
     this.role,
+    this.hostUid,
     this.connection = PartyConnectionState.offline,
     this.peers = const {},
     this.tracks = const {},
@@ -98,6 +102,7 @@ class PartySessionState {
     String? roomCode,
     String? selfUid,
     PartyRole? role,
+    String? hostUid,
     PartyConnectionState? connection,
     Map<String, PeerPosition>? peers,
     Map<String, List<PeerTrack>>? tracks,
@@ -111,6 +116,7 @@ class PartySessionState {
       roomCode: roomCode ?? this.roomCode,
       selfUid: selfUid ?? this.selfUid,
       role: role ?? this.role,
+      hostUid: hostUid ?? this.hostUid,
       connection: connection ?? this.connection,
       peers: peers ?? this.peers,
       tracks: tracks ?? this.tracks,
@@ -136,6 +142,15 @@ class PartySession extends Notifier<PartySessionState> {
 
   /// 参加中に張っている購読（退出で全部止める）
   final _subs = <StreamSubscription<Object?>>[];
+
+  /// 失効時刻に自動退出するためのタイマー
+  Timer? _expiryTimer;
+
+  /// サーバー時刻 - 端末時刻（ms）。失効判定に使う
+  int _serverOffsetMs = 0;
+
+  /// 自動退出の処理中（キックと終了が同時に来ても1回だけ流す）
+  bool _closing = false;
 
   @override
   PartySessionState build() {
@@ -228,6 +243,17 @@ class PartySession extends Notifier<PartySessionState> {
         // これもキック（またはルーム消滅）として扱う。
         onError: (Object _) => unawaited(_onKicked()),
       ),
+      _repository.watchServerTimeOffset().listen(
+            (o) => _serverOffsetMs = o,
+            onError: (Object _) {},
+          ),
+      // ホストが終了した・失効した・meta が消えたら自動退出する。
+      // （RTDBルールもこの状態では位置送信を弾くので、居残っても送れない）
+      _repository.watchMeta(code).listen(
+            _onMeta,
+            // `.read` 失効（キック）でも来る。members 側と同じくキック扱い
+            onError: (Object _) => unawaited(_onKicked()),
+          ),
       store.ghostStream.listen((g) => state = state.copyWith(ghost: g)),
     ]);
 
@@ -258,15 +284,49 @@ class PartySession extends Notifier<PartySessionState> {
     }
   }
 
+  /// サーバー時刻の推定値（epoch ms）
+  int get _serverNowMs => DateTime.now().millisecondsSinceEpoch + _serverOffsetMs;
+
+  /// meta の更新。終了・失効・消失なら自動退出し、失効時刻にタイマーを張る
+  void _onMeta(RoomMeta? meta) {
+    if (meta == null || !meta.active || meta.expiresAtMs <= _serverNowMs) {
+      unawaited(_onRoomClosed());
+      return;
+    }
+    if (meta.hostUid.isNotEmpty) {
+      state = state.copyWith(hostUid: meta.hostUid);
+    }
+    _expiryTimer?.cancel();
+    final remaining = Duration(milliseconds: meta.expiresAtMs - _serverNowMs);
+    _expiryTimer = Timer(remaining, () => unawaited(_onRoomClosed()));
+  }
+
   /// hostに退出させられた（または部屋が消えた）ときの自動退出
-  Future<void> _onKicked() async {
-    if (!state.active) return;
-    await _teardown();
-    state = const PartySessionState();
-    ref.read(notificationCenterProvider.notifier).add(
-          title: t.party.kickedNotice,
-          level: NotificationLevel.warning,
-        );
+  Future<void> _onKicked() => _closeBy(t.party.kickedNotice);
+
+  /// ホストがルームを終了した・ルームが失効したときの自動退出
+  Future<void> _onRoomClosed() => _closeBy(t.party.roomClosedNotice);
+
+  Future<void> _closeBy(String notice) async {
+    if (!state.active || _closing) return;
+    _closing = true;
+    final code = state.roomCode;
+    try {
+      await _teardown();
+      if (code != null) {
+        // 自分の live/members を片付ける（ルールは本人の削除を常に通す）。
+        // 圏外だと書き込みの完了がいつまでも返らないので待たない。
+        // 消せなくても致命的でない（実体は定期purgeが回収）。
+        unawaited(_repository.leaveRoom(code).catchError((Object _) {}));
+      }
+      state = const PartySessionState();
+      ref.read(notificationCenterProvider.notifier).add(
+            title: notice,
+            level: NotificationLevel.warning,
+          );
+    } finally {
+      _closing = false;
+    }
   }
 
   /// 退出（host の場合はルームを終了）
@@ -286,6 +346,8 @@ class PartySession extends Notifier<PartySessionState> {
   }
 
   Future<void> _teardown() async {
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
     final subs = List.of(_subs);
     _subs.clear();
     for (final sub in subs) {

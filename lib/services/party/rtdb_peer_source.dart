@@ -90,7 +90,10 @@ class RtdbPeerSource implements PeerSource {
           final val = child.value;
           if (key == null || val is! Map) continue;
           try {
-            result[key] = PeerPosition.fromMap(key, val);
+            final pos = PeerPosition.fromMap(key, val);
+            // 範囲外・非有限の座標は描かない（ルールでも弾くが、受け側でも篩う）
+            if (!isValidCoordinate(pos.latitude, pos.longitude)) continue;
+            result[key] = pos;
           } catch (e) {
             AppLogger.debug('$_logTag: live parse skip ($key): $e');
           }
@@ -115,8 +118,8 @@ class RtdbPeerSource implements PeerSource {
             if (track != null) tracks.add(track);
           }
           if (tracks.isNotEmpty) {
-            tracks.sort((a, b) => a.fromMs.compareTo(b.fromMs));
-            result[uid] = tracks;
+            // 他人が書く値なので、1メンバーあたりの本数を絞ってから描画へ回す
+            result[uid] = PeerTrack.limitPerMember(tracks);
           }
         }
         _tracksController.add(result);

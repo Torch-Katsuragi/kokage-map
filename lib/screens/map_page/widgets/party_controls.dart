@@ -490,7 +490,8 @@ class _PartyStatusSheet extends ConsumerWidget {
     final battery = session.peers[m.uid]?.battery;
     // host は他メンバーを退出させられる（RTDBルールが特権を担保）
     final canKick = session.role == PartyRole.host && m.uid != session.selfUid;
-    final isHost = m.role == PartyRole.host;
+    // members の role は本人が書く値なので信じず、meta.hostUid で判定する
+    final isHost = m.uid == session.hostUid;
     return ListTile(
       dense: true,
       leading: Icon(

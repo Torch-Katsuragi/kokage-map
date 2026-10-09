@@ -47,5 +47,89 @@ void main() {
       });
       expect(track, isNull);
     });
+
+    test('範囲外の座標を含む軌跡は null（他人が書いた値は描く前に篩う）', () {
+      // LatLng は範囲外を作れないので、1e5 倍の整数から直接エンコードする
+      final pts = _encodeRaw([
+        [3400000, 13590000],
+        [9500000, 13590000], // 緯度 95 度
+      ]);
+      expect(PeerTrack.fromMap('u1', {'pts': pts, 'from': 1, 'to': 2}), isNull);
+    });
+
+    test('点数・文字数が上限を超える軌跡は null', () {
+      final many = List.generate(
+        PeerTrack.maxPoints + 1,
+        (i) => LatLng(34.0 + (i.isEven ? 0 : 1e-5), 135.9),
+      );
+      final pts = PolylineCodec.encode(many);
+      expect(PeerTrack.fromMap('u1', {'pts': pts, 'from': 1, 'to': 2}), isNull);
+      expect(
+        PeerTrack.fromMap('u1', {
+          'pts': '?' * (PeerTrack.maxEncodedLength + 2),
+          'from': 1,
+          'to': 2,
+        }),
+        isNull,
+      );
+    });
   });
+
+  group('PeerTrack.limitPerMember', () {
+    PeerTrack track(int from) => PeerTrack(
+          uid: 'u1',
+          points: const [LatLng(34, 135), LatLng(34.001, 135)],
+          fromMs: from,
+          toMs: from + 1,
+        );
+
+    test('新しいものから上限本数だけ残し、古い順に並べる', () {
+      final tracks = [
+        for (var i = PeerTrack.maxTracksPerMember + 10; i > 0; i--) track(i),
+      ];
+      final limited = PeerTrack.limitPerMember(tracks);
+      expect(limited, hasLength(PeerTrack.maxTracksPerMember));
+      expect(limited.first.fromMs, 11);
+      expect(limited.last.fromMs, PeerTrack.maxTracksPerMember + 10);
+    });
+
+    test('上限以下ならそのまま（古い順）', () {
+      final limited = PeerTrack.limitPerMember([track(3), track(1), track(2)]);
+      expect(limited.map((t) => t.fromMs), [1, 2, 3]);
+    });
+  });
+
+  group('isValidCoordinate', () {
+    test('範囲内だけ true', () {
+      expect(isValidCoordinate(34, 135), isTrue);
+      expect(isValidCoordinate(-90, 180), isTrue);
+      expect(isValidCoordinate(90.0001, 0), isFalse);
+      expect(isValidCoordinate(0, -180.1), isFalse);
+      expect(isValidCoordinate(double.nan, 0), isFalse);
+      expect(isValidCoordinate(0, double.infinity), isFalse);
+    });
+  });
+}
+
+/// 1e5 倍の整数座標列を Google Encoded Polyline にする（範囲チェック無し）
+String _encodeRaw(List<List<int>> coords) {
+  final sb = StringBuffer();
+  void enc(int value) {
+    var v = value < 0 ? ~(value << 1) : (value << 1);
+    while (v >= 0x20) {
+      sb.writeCharCode((0x20 | (v & 0x1f)) + 63);
+      v >>= 5;
+    }
+    sb.writeCharCode(v + 63);
+  }
+
+  var lastLat = 0;
+  var lastLng = 0;
+  for (final c in coords) {
+    enc(c[0] - lastLat);
+    enc(c[1] - lastLng);
+    lastLat = c[0];
+    lastLng = c[1];
+  }
+  return sb.toString();
 }

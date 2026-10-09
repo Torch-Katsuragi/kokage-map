@@ -1424,7 +1424,8 @@
     "inviteQrDesc": "Scan with a phone camera to open the join page in a browser. The QR scanner on the app's join screen reads it too.",
     "kick": "Remove",
     "kickConfirm": "Remove ${name} from the room?",
-    "kickedNotice": "You were removed from the room by the host"
+    "kickedNotice": "You were removed from the room by the host",
+    "roomClosedNotice": "The room was closed by the host or has expired"
   },
   "qgis": {
     "discarded": "$count item(s) were not imported: $names",

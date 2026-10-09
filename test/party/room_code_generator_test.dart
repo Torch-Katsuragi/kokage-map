@@ -36,5 +36,26 @@ void main() {
       expect(RoomCodeGenerator.isValid('ABCDEFG0'), isFalse, reason: '0を含む');
       expect(RoomCodeGenerator.isValid('abcdefgh'), isFalse, reason: '小文字');
     });
+
+    // database.rules.json の `$roomCode.matches(...)` と同じ正規表現。
+    // 片方だけ変えると、作ったルームにルールが書き込ませなくなる。
+    test('使用文字集合が RTDBルールのコード形式と一致する', () {
+      final rule = RegExp(r'^[2-9A-HJKMNP-Z]{8}$');
+      for (final ch in RoomCodeGenerator.alphabet.split('')) {
+        expect(rule.hasMatch(ch * 8), isTrue, reason: '$ch がルールで弾かれる');
+      }
+      // ルールが通す文字はすべて alphabet に含まれる（逆向き）
+      for (var c = 0x20; c < 0x7f; c++) {
+        final ch = String.fromCharCode(c);
+        if (rule.hasMatch(ch * 8)) {
+          expect(RoomCodeGenerator.alphabet.contains(ch), isTrue,
+              reason: '$ch はルールが通すが生成されない');
+        }
+      }
+      final gen = RoomCodeGenerator(Random(42));
+      for (var i = 0; i < 200; i++) {
+        expect(rule.hasMatch(gen.generate()), isTrue);
+      }
+    });
   });
 }

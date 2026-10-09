@@ -21,6 +21,17 @@
       どちらに直すか決める（公開の掲載情報なので本人の判断）
 - [ ] テスター募集ページ `/beta/`: テスター一覧のグループ化が審査を通ったら「準備中」の注記を書き換える
 
+### セキュリティの残り（2026-10-09 の点検から）
+
+ルール・関数・hosting ヘッダ・API キーの制限・GitHub の秘密スキャンは 2026-10-09 に反映済み。残りは段階導入の後半と本人操作:
+
+- [ ] Play Console の「アプリの完全性」で Cloud プロジェクト `nemurigi-kobo` を Play Integrity にリンク（本人操作）。App Check 側の Play Integrity 登録は済み
+- [ ] debug ビルドの App Check デバッグトークン（logcat に出る）を Firebase コンソールに登録
+- [ ] App Check の指標で web・Android とも検証済みの要求が来ているのを確かめてから、RTDB を「強制」に
+- [ ] 本番でログインして Drive 一覧・同期・App Check に CSP 違反が出ないのを確かめてから、`Content-Security-Policy-Report-Only` を強制に（ハッシュの作り直しは [[docs/technical/web-hosting]]）
+- [ ] release で外部インテントの `route` が効かないこと・共有リンクの確認ダイアログを実機で確認
+- [ ] プライバシーポリシーの「App Check で保護」は強制に切り替えるまで実態と食い違う。強制と同時に見直す
+
 ### OAuth 検証（一般公開・資金調達後）
 
 - [ ] デモ動画（OAuth `R22vltqCmt4`）のリンクを GCP のデータアクセスページに登録

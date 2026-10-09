@@ -15,11 +15,14 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: DBF Reader
 // DBFファイル（dBASE III）の読み込みクラス
-import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:charset/charset.dart' as charset;
 import 'package:charset_converter/charset_converter.dart';
 import 'package:root_maps/utils/app_logger.dart';
+
+import '../../../core/fs/k_file_system.dart';
 
 /// DBF のフィールド記述子
 typedef _DbfField = ({String name, String type, int length});
@@ -53,13 +56,13 @@ class DbfReader {
       AppLogger.debug('[DbfReader] DBF読み込み開始: $dbfFilePath');
       AppLogger.debug('[DbfReader] 文字コード: $encoding');
 
-      final dbfFile = File(dbfFilePath);
-      if (!dbfFile.existsSync()) {
+      // fs 経由で読む（web で dart:io に触れると落ちる。読み取り専用レイヤは web でも開く）
+      if (!await fs.exists(dbfFilePath)) {
         AppLogger.debug('[DbfReader] DBFファイルが見つかりません');
         return null;
       }
 
-      final bytes = await dbfFile.readAsBytes();
+      final bytes = await fs.readAsBytes(dbfFilePath);
       if (bytes.length < 32) {
         AppLogger.debug('[DbfReader] DBFファイルが小さすぎます: ${bytes.length}bytes');
         return null;
@@ -214,6 +217,19 @@ class _Decoder {
   }
 
   Future<String> _decodeOnPlatform(Uint8List bytes) async {
+    // 日本語の文字コードは純 Dart で解く（charset_converter はプラットフォームチャネルで、web とホストのテストに無い）
+    try {
+      switch (_charset) {
+        case 'Shift_JIS':
+          return charset.shiftJis.decode(bytes);
+        case 'EUC-JP':
+          return charset.eucJp.decode(bytes);
+        case 'UTF-8':
+          return utf8.decode(bytes, allowMalformed: true);
+      }
+    } catch (e) {
+      AppLogger.debug('[DbfReader] charset.decode失敗 ($_charset): $e');
+    }
     try {
       return await CharsetConverter.decode(_charset, Uint8List.fromList(bytes));
     } catch (e) {

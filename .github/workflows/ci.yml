@@ -64,6 +64,9 @@ jobs:
       #    strings*.g.dart があると Asset already exists で落ちる（i18n も build_runner が作る）
       - name: コード生成（riverpod + i18n）
         run: dart run build_runner build --delete-conflicting-outputs
+      # gdal3.js（web 版の GDAL、40 MB）はリポジトリに入れていない。版と SHA-256 の照合もここで見る
+      - name: gdal3.js を置く
+        run: bash tool/web/fetch_gdal3.sh
       # web版が「コンパイルすら通らない」状態に戻るのを防ぐゲート。
       # 実行時の振る舞いは下の e2e-web が見る。
       - run: flutter build web --release

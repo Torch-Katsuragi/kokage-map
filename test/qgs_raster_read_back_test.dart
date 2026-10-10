@@ -161,7 +161,7 @@ void main() {
       expect(pale.opacity, 60);
 
       expect(result.discarded, containsAll(<Matcher>[
-        contains('スキャン（GeoTIFF 以外のラスタは未対応）'),
+        contains('スキャン（scan.png の位置か座標系を読めません）'), // ワールドファイルの無い PNG は写真
         contains('共有オルソ（プロジェクトフォルダの外を参照している）'),
         contains('どこかのタイル（背景地図の一覧に無い XYZ タイル: tiles.example.com）'),
         contains('何かの WMS（WMS は未対応）'),
@@ -170,11 +170,11 @@ void main() {
     });
 
     test('位置を読めない TIFF・無いファイルは理由つきで報告する', () async {
-      await _tiff(p.join(proj, 'ortho.tif'), geo: false); // GDAL の既定の形などは写真として並ぶ
+      await _tiff(p.join(proj, 'ortho.tif'), geo: false); // 位置の無い TIFF は写真として並ぶ（GDAL で位置が読めればオーバーレイ: gdal_raster_overlay_test）
       final root = await loadTree();
       final result = await const QgsImporter().import(p.join(proj, 'proj.qgs'), root);
       expect(result.overlayCount, 0);
-      expect(result.discarded, contains(contains('オルソ（ortho.tif の位置を読めません')));
+      expect(result.discarded, contains(contains('オルソ（ortho.tif の位置か座標系を読めません')));
       expect(result.discarded, contains('hidden（hidden.tif が見つかりません）'));
     });
 

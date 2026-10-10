@@ -31,6 +31,7 @@ import '../../core/fs/k_file_system.dart';
 import '../../models/geometry_type.dart';
 import '../../models/kmeta.dart';
 import '../../models/nodes/external_layer_node.dart';
+import '../../models/nodes/external_overlay_image_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/layer_node.dart';
@@ -45,6 +46,7 @@ import '../coordinate/gpkg_crs_resolver.dart';
 import '../external/external_readers.dart';
 import '../external/readers/geojson_reader.dart';
 import '../external/readers/shapefile_reader.dart';
+import '../gdal_raster_overlay.dart';
 import '../kmeta_service.dart';
 import 'qgs_document.dart';
 import 'qgs_meta_store.dart';
@@ -276,6 +278,16 @@ class QgsProjectBuilder {
       skipped.add('${node.name}（プロジェクトフォルダの外を参照している）');
       return null;
     }
+    // QGIS / GDAL のラスタは元のファイルと座標系のまま書く（位置はファイルが持っている）
+    if (node is ExternalOverlayImageNode) {
+      return QgsRasterLayer(
+        id: rasterLayerIdForPath(relPath),
+        name: p.basenameWithoutExtension(relPath),
+        dataSourcePath: relPath,
+        crs: externalRasterCrs(node.probe),
+        visible: node.visible,
+      );
+    }
     final ext = p.extension(relPath).toLowerCase();
     if (ext != '.tif' && ext != '.tiff') {
       skipped.add('${node.name}（GeoTIFF ではないので QGIS では位置が付かない）');
@@ -288,6 +300,16 @@ class QgsProjectBuilder {
       visible: node.visible,
     );
   }
+
+  /// GDAL で読んだラスタの座標系（`gdalinfo -json -proj4` の WKT2・proj4）
+  static QgsCrs externalRasterCrs(GdalRasterProbe probe) => QgsCrs(
+        authId: probe.epsg == null ? '' : 'EPSG:${probe.epsg}',
+        srid: probe.epsg ?? 0,
+        description: probe.crsName,
+        wkt: probe.crsWkt,
+        proj4: probe.proj4,
+        isGeographic: probe.isGeographic,
+      );
 
   /// ラスタレイヤの決定的な id（相対パスのハッシュ。[layerIdForViewKey] と同じ考え）
   static String rasterLayerIdForPath(String relPath) =>

@@ -20,7 +20,7 @@
 // - 判定: `gdalinfo -json`。位置（geoTransform）と座標系があり、`wgs84Extent` が出ればオーバーレイ
 // - 表示: `gdalwarp -t_srs EPSG:4326 -ts W H -r bilinear -dstalpha` → `gdal_translate -of PNG`。
 //   W:H は地上の縦横比（メートル）に合わせる。アプリのオーバーレイの形（中心・m/px・回転 0）がそのまま使えるように
-// - 16bit・浮動小数（DEM など）は、ワープ後の統計（最小〜最大）で 0〜255 の灰色に伸ばす（`-scale_n` `-ot Byte`）
+// - 16bit・浮動小数（DEM など）は、ワープ後の最小〜最大（`gdalinfo -mm`）で 0〜255 の灰色に伸ばす（`-scale_n` `-ot Byte`）
 // - nodata は gdalwarp の `-dstalpha` で透明に
 // - ファイルが正なので書き換えない（位置合わせの道具は効かない）。キャッシュは付属ファイル一式の大きさ・更新時刻で作り直す
 library;
@@ -270,7 +270,8 @@ abstract final class GdalRasterOverlay {
       if (stretch) ...['-ot', 'Float32', '-dstnodata', 'nan'],
     ]);
     try {
-      final info = await _g.rasterInfo(tmp, args: stretch ? const ['-stats'] : const []);
+      // -mm（最小・最大を数えるだけ）。-stats は .aux.xml を書こうとする（web の入力は読み取り専用で mount される）
+      final info = await _g.rasterInfo(tmp, args: stretch ? const ['-mm'] : const []);
       final gt = (info['geoTransform'] as List).map((v) => (v as num).toDouble()).toList();
       final size = (info['size'] as List).map((v) => (v as num).toInt()).toList();
       final params = paramsFor(
@@ -289,8 +290,8 @@ abstract final class GdalRasterOverlay {
         for (var i = 0; i < bands.length; i++) {
           final b = bands[i];
           if (b['colorInterpretation'] == 'Alpha') continue; // 0/最大値 → Byte に丸まる
-          final min = (b['minimum'] ?? b['computedMin']) as num?;
-          final max = (b['maximum'] ?? b['computedMax']) as num?;
+          final min = (b['computedMin'] ?? b['minimum']) as num?;
+          final max = (b['computedMax'] ?? b['maximum']) as num?;
           if (min == null || max == null) continue;
           final hi = max > min ? max : min + 1;
           args.addAll(['-scale_${i + 1}', '$min', '$hi', '0', '255']);

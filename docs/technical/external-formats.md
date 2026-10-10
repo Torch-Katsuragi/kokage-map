@@ -182,8 +182,9 @@ QGIS / GDAL で作ったラスタは **GDAL で開いて読み取り専用のオ
     アプリのオーバーレイは「中心・m/px・回転」の形（ピクセルが m で正方形）なので、経緯度で正方形にすると横に伸びる
   - 範囲はワープ後の `geoTransform`（EPSG:4326 で軸に沿う）→ 回転 0、m/px は縦方向から
   - nodata は `-dstalpha` で透明。オーバービューは GDAL が自分で使う
-  - **Byte 以外（16bit・浮動小数の DEM など）は、ワープ後の統計（`gdalinfo -stats` の最小〜最大）で 0〜255 の灰色に伸ばす**
-    （`-ot Byte -scale_n min max 0 255`）。QGIS の既定（累積 2〜98%）とは濃淡が少し違う。陰影や色ランプはしない（いちばん素直な形）
+  - **Byte 以外（16bit・浮動小数の DEM など）は、ワープ後の最小〜最大（`gdalinfo -mm`）で 0〜255 の灰色に伸ばす**
+    （`-ot Byte -scale_n min max 0 255`）。範囲外と nodata を数えないよう、このときだけワープを `-ot Float32 -dstnodata nan` で受ける。
+    `-stats` は使わない（`.aux.xml` を書こうとし、web では入力が読み取り専用で mount される）。QGIS の既定（累積 2〜98%）とは濃淡が少し違う。陰影や色ランプはしない（いちばん素直な形）
 - **キャッシュ**: Android は GeoTiffService と同じアプリのキャッシュ領域 `overlay_png_cache/ext_<元のパスの MD5>.png`、
   web はプロジェクトの `.kokage/cache/overlay/`。隣の `.json` に形（中心・m/px・画素数）と印
   （`GDALGetFileList` の一式の名前・大きさ・更新時刻）を持ち、印が変われば作り直す。作業用の `.warp.tif` は消す

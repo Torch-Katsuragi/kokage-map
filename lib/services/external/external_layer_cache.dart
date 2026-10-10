@@ -31,9 +31,7 @@ import '../../models/geopackage/geopackage_file.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/stable_hash.dart';
 import '../global_folder_locator.dart';
-import 'external_dataset.dart';
-import 'external_dataset_writer.dart';
-import 'external_readers.dart';
+import 'external_source.dart';
 
 class ExternalLayerCache {
   ExternalLayerCache._();
@@ -41,8 +39,9 @@ class ExternalLayerCache {
   /// 印の表（キャッシュ gpkg の中。変換で書く gpkg からは落とす）
   static const markerTable = 'kokage_external_source';
 
-  /// 読み方を変えたら上げる（古い読み方で作ったキャッシュを作り直させる）
-  static const formatVersion = 1;
+  /// 読み方を変えたら上げる（古い読み方で作ったキャッシュを作り直させる）。
+  /// 2: GDAL（ogr2ogr）で書く。座標系は元のまま
+  static const formatVersion = 2;
 
   /// キャッシュの置き場（プロジェクトルートの `.kokage/cache/external`）。
   /// ルートが決まっていなければ元ファイルと同じ dir の `.kokage` の下
@@ -55,11 +54,11 @@ class ExternalLayerCache {
   static String cachePathFor(String sourcePath) =>
       p.join(cacheDirFor(sourcePath), '${stableHashHex(p.normalize(sourcePath), length: 20)}.gpkg');
 
-  /// 元ファイル一式の印（名前・更新時刻・大きさ）。元が無ければ null
-  static Future<String?> signatureOf(String sourcePath, ExternalReader reader) async {
-    final paths = [sourcePath, ...await existingSidecars(sourcePath, reader)];
+  /// 元ファイル一式（[ExternalSource.files]）の印（名前・更新時刻・大きさ）。元が無ければ null
+  static Future<String?> signatureOf(String sourcePath) async {
+    if (!await fs.exists(sourcePath)) return null;
     final parts = <String>['v$formatVersion'];
-    for (final path in paths) {
+    for (final path in await ExternalSource.files(sourcePath)) {
       final modified = await fs.lastModified(path);
       final size = await fs.length(path);
       if (modified == null || size == null) {
@@ -71,18 +70,25 @@ class ExternalLayerCache {
     return parts.join(';');
   }
 
-  /// [cache] に書いてある印。無い・読めなければ null
-  static Future<String?> storedSignature(GeoPackageFile cache) async {
+  /// [cache] の印の表の [key] の値。無い・読めなければ null
+  static Future<String?> _marker(GeoPackageFile cache, String key) async {
     final path = cache.getAbsolutePath();
     if (path == null || !await fs.exists(path)) return null;
     try {
       final db = await cache.getDatabase();
-      final rows = await db.rawQuery("SELECT value FROM $markerTable WHERE key = 'signature'");
+      final rows = await db.rawQuery('SELECT value FROM $markerTable WHERE key = ?', [key]);
       return rows.firstOrNull?['value'] as String?;
     } catch (_) {
       return null;
     }
   }
+
+  /// [cache] に書いてある印。無い・読めなければ null
+  static Future<String?> storedSignature(GeoPackageFile cache) => _marker(cache, 'signature');
+
+  /// [cache] を作ったときのレイヤの割り当て（元の GDAL のレイヤ・型の分け方）。無ければ null
+  static Future<ExternalSourcePlan?> storedPlan(GeoPackageFile cache) async =>
+      ExternalSourcePlan.decodeLayers(await _marker(cache, 'layers'));
 
   static final Map<String, Future<bool>> _running = {};
 
@@ -90,11 +96,11 @@ class ExternalLayerCache {
   ///
   /// 同じキャッシュへの呼び出しは 1 本にまとめる（フォルダの読み直しが重なっても 2 度作らない）。
   /// 読めなければ投げる（キャッシュは消える）
-  static Future<bool> ensure(GeoPackageFile cache, String sourcePath, ExternalReader reader) {
+  static Future<bool> ensure(GeoPackageFile cache, String sourcePath) {
     final key = cache.getAbsolutePath() ?? sourcePath;
     final running = _running[key];
     if (running != null) return running;
-    final future = _ensure(cache, sourcePath, reader).whenComplete(() {
+    final future = _ensure(cache, sourcePath).whenComplete(() {
       // ⚠ `=> _running.remove(key)` と書くと、取り除いた自分自身（Future）を待って止まる
       _running.remove(key);
     });
@@ -102,38 +108,32 @@ class ExternalLayerCache {
     return future;
   }
 
-  static Future<bool> _ensure(GeoPackageFile cache, String sourcePath, ExternalReader reader) async {
+  static Future<bool> _ensure(GeoPackageFile cache, String sourcePath) async {
     final cachePath = cache.getAbsolutePath()!;
-    final signature = await signatureOf(sourcePath, reader);
+    final signature = await signatureOf(sourcePath);
     if (signature == null) throw StateError('元のファイルがありません: $sourcePath');
     if (await storedSignature(cache) == signature) return false;
 
     AppLogger.debug('[ExternalLayerCache] 作り直す: $sourcePath → $cachePath');
-    final datasets = await reader.read(sourcePath);
-    await build(cachePath, p.basename(sourcePath), datasets, signature: signature, sourcePath: sourcePath);
+    await build(cachePath, sourcePath, signature: signature);
     return true;
   }
 
-  /// [datasets] から [cachePath] にキャッシュ gpkg を作る（あれば作り直す）
-  static Future<void> build(
-    String cachePath,
-    String sourceName,
-    List<ExternalDataset> datasets, {
-    required String signature,
-    required String sourcePath,
-  }) async {
+  /// [sourcePath] を GDAL（ogr2ogr）で [cachePath] のキャッシュ gpkg にする（あれば作り直す）。
+  /// 座標系は元のまま。レイヤ名は GDAL のレイヤ名（型の混ざったレイヤは `<名前>_point` などに分ける）
+  static Future<void> build(String cachePath, String sourcePath, {required String signature}) async {
     await discard(cachePath);
     await fs.createDirectory(p.dirname(cachePath));
-    final gpkg = GeoPackageFile([sourceName], absolutePath: cachePath);
+    final plan = await ExternalSource.plan(sourcePath);
+    if (plan.layers.isEmpty) throw StateError('形のあるレイヤがありません: ${p.basename(sourcePath)}');
+    final gpkg = GeoPackageFile([p.basename(sourcePath)], absolutePath: cachePath);
     try {
-      if (!await gpkg.createEmptyDatabase()) throw StateError('キャッシュを作れません: $cachePath');
-      for (final dataset in datasets) {
-        await writeExternalDataset(gpkg, dataset);
-      }
+      await ExternalSource.translate(sourcePath, cachePath, plan);
       final db = await gpkg.getDatabase();
       await db.execute('CREATE TABLE IF NOT EXISTS $markerTable (key TEXT PRIMARY KEY, value TEXT)');
-      await db.rawInsert('INSERT OR REPLACE INTO $markerTable (key, value) VALUES (?, ?)', ['signature', signature]);
-      await db.rawInsert('INSERT OR REPLACE INTO $markerTable (key, value) VALUES (?, ?)', ['source', sourcePath]);
+      for (final (key, value) in [('signature', signature), ('source', sourcePath), ('layers', plan.encodeLayers())]) {
+        await db.rawInsert('INSERT OR REPLACE INTO $markerTable (key, value) VALUES (?, ?)', [key, value]);
+      }
       await gpkg.dispose();
     } catch (e) {
       await gpkg.dispose();

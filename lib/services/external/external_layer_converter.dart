@@ -27,6 +27,7 @@ import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import '../layer_drawer_service.dart';
 import 'external_layer_cache.dart';
+import 'external_source.dart';
 
 /// 変換の結果
 enum ExternalConvertOutcome {
@@ -81,7 +82,7 @@ class ExternalLayerConverter {
   /// [node] を同じ dir の gpkg に置き換える。
   ///
   /// 1. キャッシュ gpkg を `<元の名前>.gpkg` に複製し、印の表を落とす
-  /// 2. 開き直して、件数・ジオメトリ型・列名が元と一致するか確かめる（違えば書いた gpkg を消して
+  /// 2. 開き直して、件数（元と書いた gpkg の両方を GDAL で数える）・ジオメトリ型・列名が一致するか確かめる（違えば書いた gpkg を消して
   ///    [ExternalConvertVerifyException]）
   /// 3. 元のファイル一式を消す（本体を消せなければ書いた gpkg を消して [ExternalConvertOutcome.deleteFailed]）
   /// 4. フォルダ設定の鍵（可視性・スタイル・View）を新しい gpkg へ移し、親を読み直す
@@ -138,7 +139,7 @@ class ExternalLayerConverter {
   static Future<void> _writeVerified(ExternalLayerNode node, String target) async {
     final cache = node.geoPackageFile;
     final cachePath = cache.getAbsolutePath()!;
-    await ExternalLayerCache.ensure(cache, node.sourcePath, node.reader);
+    await ExternalLayerCache.ensure(cache, node.sourcePath);
     // 開いている接続を閉じてから写す（書きかけを残さない）
     await GeoPackageConnection.closeAllFor(cachePath);
 
@@ -156,34 +157,39 @@ class ExternalLayerConverter {
     }
   }
 
-  /// [target] を開き直し、レイヤごとに件数（元を読み直した数）・ジオメトリ型・列名（キャッシュ）を比べる
+  /// [target] を確かめる: 元を GDAL で読み直した件数（`ogrinfo`）と、書いた gpkg を GDAL で読んだ件数をレイヤごとに比べる。
+  /// ジオメトリ型（アプリの 3 種）・列名（キャッシュと同じ）・印の表が無いことも見る
   static Future<void> _verify(ExternalLayerNode node, GeoPackageFile cache, String target) async {
-    final datasets = await node.reader.read(node.sourcePath);
+    final plan = await ExternalSource.plan(node.sourcePath);
+    final info = await ExternalGdal.instance.vectorInfo(target, args: const ['-so']);
+    final counts = {
+      for (final l in ((info['layers'] as List?) ?? const []).cast<Map<String, dynamic>>())
+        l['name'] as String: (l['featureCount'] as num?)?.toInt() ?? -1,
+    };
+    counts.remove(ExternalLayerCache.markerTable);
+    final expected = [for (final l in plan.layers) l.name];
+    if (counts.length != expected.length || !counts.keys.toSet().containsAll(expected)) {
+      throw ExternalConvertVerifyException('レイヤが違う: ${counts.keys.toList()} ≠ $expected');
+    }
     final written = GeoPackageFile([p.basename(target)], absolutePath: target);
     try {
-      final names = await written.getLayerNames();
-      final expected = [for (final d in datasets) d.layerName];
-      if (names.toSet().length != expected.toSet().length || !names.toSet().containsAll(expected)) {
-        throw ExternalConvertVerifyException('レイヤが違う: $names ≠ $expected');
-      }
       final db = await written.getDatabase();
       final marker = await db.rawQuery(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='${ExternalLayerCache.markerTable}'",
       );
       if (marker.isNotEmpty) throw const ExternalConvertVerifyException('印の表が残っている');
-      for (final dataset in datasets) {
-        final name = dataset.layerName;
-        final type = await written.getGeometryType(name);
-        if (type != dataset.geometryType) {
-          throw ExternalConvertVerifyException('$name の形の種類が違う: $type ≠ ${dataset.geometryType}');
+      for (final layer in plan.layers) {
+        final name = layer.name;
+        if (counts[name] != layer.featureCount) {
+          throw ExternalConvertVerifyException('$name の件数が違う: ${counts[name]} ≠ ${layer.featureCount}');
         }
-        final count = await written.countFilteredFeatures(name, '1=1');
-        if (count != dataset.features.length) {
-          throw ExternalConvertVerifyException('$name の件数が違う: $count ≠ ${dataset.features.length}');
+        final type = await written.getGeometryType(name);
+        if (type != layer.geometryType) {
+          throw ExternalConvertVerifyException('$name の形の種類が違う: $type ≠ ${layer.geometryType}');
         }
         final columns = await written.getColumnNames(name, getAll: true, skipPrimaryKey: true);
         final cacheColumns = await cache.getColumnNames(name, getAll: true, skipPrimaryKey: true);
-        if (columns.join('\u0000') != cacheColumns.join('\u0000') || columns.length < dataset.columns.length) {
+        if (columns.join('\u0000') != cacheColumns.join('\u0000')) {
           throw ExternalConvertVerifyException('$name の列が違う: $columns ≠ $cacheColumns');
         }
       }

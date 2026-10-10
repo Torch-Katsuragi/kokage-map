@@ -13,15 +13,14 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// gpkg 以外の形式のファイル（shp・GeoJSON など）を読み取り専用で開くノード
+// gpkg 以外の形式のファイル（shp・GeoJSON・KML など。GDAL で読む）を読み取り専用で開くノード
 // 設計は docs/technical/external-formats.md#ノード
 
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
-import '../../services/external/external_dataset.dart';
 import '../../services/external/external_layer_cache.dart';
-import '../../services/external/external_readers.dart';
+import '../../services/external/external_source.dart';
 import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
 import '../geopackage/geopackage_file.dart';
@@ -38,20 +37,17 @@ class ExternalLayerNode extends GeoPackageNode {
   ExternalLayerNode._(
     super.geoPackageFile, {
     required this.sourcePath,
-    required this.reader,
     super.visible,
     super.parent,
   });
 
   factory ExternalLayerNode(
-    String sourcePath,
-    ExternalReader reader, {
+    String sourcePath, {
     bool visible = true,
     LayerTreeNode? parent,
   }) => ExternalLayerNode._(
     GeoPackageFile([p.basename(sourcePath)], absolutePath: ExternalLayerCache.cachePathFor(sourcePath)),
     sourcePath: sourcePath,
-    reader: reader,
     visible: visible,
     parent: parent,
   );
@@ -59,7 +55,8 @@ class ExternalLayerNode extends GeoPackageNode {
   /// 元のファイル（shp なら `.shp`）
   final String sourcePath;
 
-  final ExternalReader reader;
+  /// キャッシュを作ったときのレイヤの割り当て（元の GDAL のレイヤ・型の分け方）。読めていなければ null
+  ExternalSourcePlan? sourcePlan;
 
   /// 常に読み取り専用（編集は gpkg へ変換してから）
   bool get isReadOnly => true;
@@ -71,13 +68,14 @@ class ExternalLayerNode extends GeoPackageNode {
   String? getAbsoluteFilePath() => sourcePath;
 
   /// 元のファイル一式（自分 + 実在する付属ファイル）
-  Future<List<String>> sourceFiles() async => [sourcePath, ...await existingSidecars(sourcePath, reader)];
+  Future<List<String>> sourceFiles() => ExternalSource.files(sourcePath);
 
   @override
   Future<void> updateChildren() async {
     var rebuilt = false;
     try {
-      rebuilt = await ExternalLayerCache.ensure(geoPackageFile, sourcePath, reader);
+      rebuilt = await ExternalLayerCache.ensure(geoPackageFile, sourcePath);
+      sourcePlan = await ExternalLayerCache.storedPlan(geoPackageFile);
       loadError = null;
     } catch (e) {
       AppLogger.debug('[ExternalLayerNode] 読めない: $sourcePath - $e');
@@ -103,7 +101,9 @@ class ExternalLayerNode extends GeoPackageNode {
 
     final dir = p.dirname(sourcePath);
     final moves = <(String, String)>[
-      for (final from in await sourceFiles()) (from, p.join(dir, '$newStem${p.basename(from).substring(oldStem.length)}')),
+      for (final from in await sourceFiles())
+        if (p.basename(from).toLowerCase().startsWith(oldStem.toLowerCase()))
+          (from, p.join(dir, '$newStem${p.basename(from).substring(oldStem.length)}')),
     ];
     for (final (_, to) in moves) {
       if (await fs.exists(to)) throw StateError('${p.basename(to)} は既にあります');
@@ -166,10 +166,9 @@ class ExternalLayerNode extends GeoPackageNode {
       ..sort((a, b) => a.name.compareTo(b.name));
     final nodes = <LayerTreeNode>[];
     for (final entry in files) {
-      if (externalReaderFor(entry.path) == null) continue; // 速い足切り（中身は読まない）
-      final reader = await acceptingExternalReader(entry.path);
-      if (reader == null) continue;
-      nodes.add(ExternalLayerNode(entry.path, reader, parent: parent));
+      if (!ExternalSource.isCandidate(entry.path)) continue; // 速い足切り（中身は読まない）
+      if (!await ExternalSource.accepts(entry.path)) continue;
+      nodes.add(ExternalLayerNode(entry.path, parent: parent));
     }
     return nodes;
   }

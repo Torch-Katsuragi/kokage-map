@@ -103,8 +103,14 @@ class GdalWeb implements Gdal {
   // 受け渡し
   // =============================================
 
-  Future<String> _info(String op, String path, List<String> args) async {
+  /// `/vsizip/<fs のパス>`（KMZ など）は、fs のパスと GDAL に付ける接頭辞に分ける
+  static (String vsi, String path) _splitVsi(String path) =>
+      path.startsWith('/vsizip/') ? ('/vsizip/', path.substring('/vsizip'.length)) : ('', path);
+
+  Future<String> _info(String op, String rawPath, List<String> args) async {
+    final (vsi, path) = _splitVsi(rawPath);
     final result = await _call(op, {
+      'vsi': vsi.toJS,
       'main': p.basename(path).toJS,
       'files': (await _siblings(path)).toJS,
       'args': _strings(args),
@@ -112,10 +118,12 @@ class GdalWeb implements Gdal {
     return (result as JSString).toDart;
   }
 
-  Future<void> _utility(String op, String src, String dst, List<String> args) async {
+  Future<void> _utility(String op, String rawSrc, String dst, List<String> args) async {
+    final (vsi, src) = _splitVsi(rawSrc);
     // 書き出し先が既にあればその一式も渡す（gdal_translate は常に作り直すので要らない）
     final dstFiles = op != 'translate' && await fs.exists(dst) ? await _siblings(dst) : <web.File>[];
     final result = await _call(op, {
+      'vsi': vsi.toJS,
       'main': p.basename(src).toJS,
       'files': (await _siblings(src)).toJS,
       'dstName': p.basename(dst).toJS,

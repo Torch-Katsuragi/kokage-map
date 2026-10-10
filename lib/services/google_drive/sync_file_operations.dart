@@ -84,6 +84,20 @@ class SyncFileOperations {
     '*.kml',
     '*.kmz',
     '*.csv',
+    // GDAL で読む形式（2026-10-10〜）。MapInfo の付属ファイル（.dat .map .id .ind .mid）も運ぶ
+    '*.gpx',
+    '*.fgb',
+    '*.gml',
+    '*.xsd',
+    '*.gfs',
+    '*.dxf',
+    '*.tab',
+    '*.dat',
+    '*.map',
+    '*.id',
+    '*.ind',
+    '*.mif',
+    '*.mid',
   ];
 
   static const String _folderMime = 'application/vnd.google-apps.folder';

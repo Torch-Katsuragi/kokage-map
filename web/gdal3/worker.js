@@ -115,7 +115,7 @@ function run(msg, transfer) {
       case 'rasterInfo':
         return withDataset(`${inDir}/${msg.main}`, GDAL_OF_RASTER, (ds) => runInfo(ds, config.args, false));
       case 'vectorInfo':
-        return withDataset(`${inDir}/${msg.main}`, GDAL_OF_VECTOR, (ds) => runInfo(ds, config.args, true));
+        return withDataset(`${msg.vsi || ''}${inDir}/${msg.main}`, GDAL_OF_VECTOR, (ds) => runInfo(ds, config.args, true));
       case 'fileList':
         return withDataset(`${inDir}/${msg.main}`, 0, (ds) => fileList(ds, `${inDir}/`));
       case 'vectorTranslate':
@@ -127,7 +127,7 @@ function run(msg, transfer) {
             M.FS.writeFile(`${outDir}/${f.name}`, new Uint8Array(new FileReaderSync().readAsArrayBuffer(f)));
           }
           const flags = msg.op === 'vectorTranslate' ? GDAL_OF_VECTOR : GDAL_OF_RASTER;
-          withDataset(`${inDir}/${msg.main}`, flags, (ds) => runUtility(msg.op, ds, `${outDir}/${msg.dstName}`, config.args));
+          withDataset(`${msg.vsi || ''}${inDir}/${msg.main}`, flags, (ds) => runUtility(msg.op, ds, `${outDir}/${msg.dstName}`, config.args));
           return collect(outDir, '', transfer);
         } finally {
           removeTree(outDir);

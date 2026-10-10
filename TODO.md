@@ -5,18 +5,25 @@
 
 ## 次にやる（実装）
 
-- [ ] 読み取り専用レイヤ（GDAL で読む。2026-10-10〜）を実機と web で確かめる（[[docs/technical/external-formats]]）。
-  Pixel 9: Shift_JIS の shp（.cpg なし）が文字化けせず出る・平面直角座標系の shp が正しい位置に出てタップで選べる・
-  KML（フォルダ 2 つ）・KMZ・CSV（経度/緯度）・GPX・型の混ざった GeoJSON・大きい shp の初回のキャッシュ作りの時間（UI が固まらない）・
-  描こうとすると「gpkgに変換して編集」・変換で元一式が消えて gpkg が出て CRS が元のまま・スタイル/View が引き継がれる・
-  改名と左スワイプの移動で付属ファイルも動く・.qgs を QGIS で開いて元ファイルを指している（`|layername=` `|geometrytype=`・`encoding="CP932"`）。
-  web: `tool/web/fetch_gdal3.sh` の後で、OPFS/選んだフォルダで `.kokage/cache/external` が作られ、開き直しで作り直さない・変換と複製・
-  KMZ（worker の `/vsizip/`、未確認）・.cpg の無い shp（web の GDAL は自分では CP932 にしない。呼ぶ側で `-oo ENCODING=CP932`）
+- [ ] **GDAL 統合のまとめての実機確認**（2026-10-09〜10 に入れたもの。途中では確かめず最後に 1 回。Pixel 9 で、Fold は使わない）
+  - [ ] GDAL の土台: `integration_test/device/gdal_smoke_test.dart`（`flutter test` は終わるとアプリを消す → applicationId を一時的に変えて並べて入れる）。
+        APK の増分・初回の proj.db / GDAL_DATA 書き出し
+  - [ ] 読み取り専用ベクタ（[[docs/technical/external-formats]]）: Shift_JIS の shp（.cpg なし）が文字化けしない・平面直角座標系の shp が正しい位置に出てタップで選べる・
+        KML（フォルダ 2 つ）・KMZ・CSV（経度/緯度）・GPX・型の混ざった GeoJSON・Z 付きの shp・大きい shp の初回のキャッシュ作りの時間（UI が固まらない）・
+        描こうとすると「gpkgに変換して編集」・変換で元一式が消えて gpkg が出て CRS と Z が元のまま・スタイル/View が引き継がれる・
+        改名と左スワイプの移動で付属ファイルも動く・.qgs を QGIS で開いて元ファイルを指している（`|layername=` `|geometrytype=` CSV の `option:`・`encoding="CP932"`）
+  - [ ] ラスタのオーバーレイ: QGIS の LZW GeoTIFF（平面直角）が正しい位置に出る・nodata が透ける・DEM が灰色・色表付き・PNG+.pgw・GCP だけのもの・
+        EXIF だけの写真は写真のまま・外部ラスタは位置合わせ不可で通知・削除で .pgw/.aux.xml まで消える・アプリ製 GeoTIFF は従来どおり編集できる・
+        大きなオルソの初回 PNG 作成時間と 2 回目のキャッシュ・.qgs の消灯の読み戻し
+  - [ ] ファイルの出し入れ: 「ファイルを追加」（SAF で .shp .dbf .shx を一緒に選べる・名前の衝突・.shp だけの警告）・移して空になった gpkg がツリーと .qgs から消える・
+        Drive で shp 一式・`IMG.JPG` が上がり下りし `.kokage` は上がらない
+  - [ ] web（`tool/web/fetch_gdal3.sh` の後）: 上の一式を OPFS と選んだフォルダで。`.kokage/cache/` が開き直しで作り直されない・KMZ（`/vsizip/`）・
+        .cpg の無い shp（呼ぶ側で `-oo ENCODING=CP932`）・「ファイルを追加」とドロップ・本番の `.wasm` `.data` の `content-encoding`
+- [ ] Z 付きのレイヤを変換した gpkg をアプリで編集すると Z が落ちるはず（`createGpkgWkb` は XY だけ書く。gpkg の z=1 は「必須」）。
+      QGIS 製の Z 付き gpkg も同じ。編集した地物の Z をどうするか（元の Z を保つ／0 で埋める）決めて直す
 - [ ] 旧来の取り込み（`lib/services/import_export/importers/`・`parsers/`）を消す。UI からは呼ばれていないが、
   `test/format_golden_test.dart`（取り込みの往復）・`shapefile_writer_test.dart`・`crs_resolution_test.dart`・`dbf_deleted_record_test.dart` が使っている。
   書き出しの検証を GDAL（`vectorInfo`）に載せ替えてから消す。`ShapeType` は `shapefile_writer.dart` へ移す
-- [ ] 読み取り専用レイヤの Z・M は落としている（`-dim XY`）。変換した gpkg にも Z が残らない。アプリが Z を扱えるか見て外す
-- [ ] Drive 同期で `.kokage/` を飛ばす（ルートが連携 dir だとキャッシュ gpkg まで上がる。`SyncFileOperations.listLocalSyncFiles`）
 
 ## リリース・Play
 
@@ -111,10 +118,8 @@
   - [ ] 再読込でフィルタが効いたままでも、ツールバーの表示は「未適用」に戻る
   - [ ] 編集パネルの属性欄では全角数字が半角にならない（フォームではなる）
 - 取り込み・書き出し
-  - [ ] フォルダの「ファイルを追加」・web のドラッグ＆ドロップ・移して空になった gpkg の削除を実機で確認（Pixel 9 と web。2026-10-09 に入れた、端末では未確認）
   - [ ] 書き出しダイアログの「ポイントクラウドに変換」はどの形式も読んでいない
   - [ ] GeoJSON・KML・CSV の書き出しは id・name・description しか出さない
-  - [ ] DBF の削除済みの行で属性がずれる
 - そのほか
   - [ ] メタデータ列（`metadataColumn` = kmaps_metadata）はアプリが作らないので、線・面の GPS 測量の記録（drawing_points）は捨てられている
   - [ ] TruPulse の計測のたびに地図ページ全体を組み直す購読が残っている

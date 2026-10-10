@@ -39,7 +39,6 @@ import 'package:xml/xml.dart';
 
 import '../../core/fs/k_file_system.dart';
 import '../../models/basemap_provider.dart';
-import '../../models/geometry_type.dart';
 import '../../models/kmeta.dart';
 import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/folder_node.dart';
@@ -51,7 +50,7 @@ import '../../models/nodes/overlay_image_node.dart';
 import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/label_expression.dart';
-import '../external/readers/geojson_reader.dart';
+import '../external/external_source.dart';
 import '../kmeta_service.dart';
 import 'qgs_project_builder.dart' show QgsProjectBuilder;
 import 'qgs_raster_source.dart';
@@ -557,19 +556,26 @@ class QgsImporter {
 /// `<maplayer>` のデータソースを、ツリーの GeoPackage レイヤに結びつける
 bool _isGeoPackagePath(String path) => p.extension(path).toLowerCase() == '.gpkg';
 
-/// `|layername=` の無い外部形式のデータソースが指すレイヤ名。
-/// 1 レイヤならそれ、`geometrytype=` があれば `<名前>_point` など、なければファイル名（拡張子なし）
+/// 外部形式（読み取り専用レイヤ）のデータソースが指すキャッシュのレイヤ名。
+///
+/// `|layername=` は元のファイルの GDAL のレイヤ名、`|geometrytype=` は型の混ざったレイヤの点・線・面。
+/// キャッシュを作ったときの割り当て（[ExternalLayerNode.sourcePlan]）で引く。
+/// 割り当てが無ければ、1 レイヤならそれ、`geometrytype=` があれば `<名前>_point` など、なければファイル名（拡張子なし）
 String _externalLayerName(GeoPackageNode node, QgsDataSource source) {
+  final type = geometryTypeFromQgis(source.geometryType);
+  final plan = node is ExternalLayerNode ? node.sourcePlan : null;
+  if (plan != null) {
+    final candidates = plan.layers.where((l) =>
+        (source.layerName == null || l.sourceLayer == source.layerName) &&
+        (type == null || !l.split || l.geometryType == type));
+    if (candidates.length == 1) return candidates.single.name;
+    if (source.layerName != null && candidates.isNotEmpty) return candidates.first.name;
+  }
+  if (source.layerName != null) return source.layerName!;
   final layers = node.children.whereType<LayerNode>().toList();
   if (layers.length == 1) return layers.single.layerName;
   final stem = p.basenameWithoutExtension(source.path.replaceAll(r'\', '/'));
-  final type = switch (source.geometryType?.toLowerCase().replaceAll(RegExp('^multi|25d\$|z\$|m\$|zm\$'), '')) {
-    'point' => GeometryType.point,
-    'linestring' => GeometryType.linestring,
-    'polygon' => GeometryType.polygon,
-    _ => null,
-  };
-  return type == null ? stem : '$stem${GeoJsonReader.suffixOf(type)}';
+  return type == null ? stem : '$stem${externalSplitSuffix(type)}';
 }
 
 class _SourceResolver {
@@ -637,7 +643,7 @@ class _SourceResolver {
       return null;
     }
 
-    final layerName = source.layerName ?? _externalLayerName(gpkg, source);
+    final layerName = gpkg is ExternalLayerNode ? _externalLayerName(gpkg, source) : source.layerName!;
     final layer = gpkg.children.whereType<LayerNode>().where((l) => l.layerName == layerName).firstOrNull;
     if (layer == null) {
       discarded.add('$name（${gpkg.name} に $layerName がありません）');

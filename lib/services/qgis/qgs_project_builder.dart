@@ -42,9 +42,7 @@ import '../../utils/app_logger.dart';
 import '../../utils/label_template.dart';
 import '../../utils/stable_hash.dart';
 import '../coordinate/gpkg_crs_resolver.dart';
-import '../external/external_readers.dart';
-import '../external/readers/geojson_reader.dart';
-import '../external/readers/shapefile_reader.dart';
+import '../external/external_source.dart';
 import '../kmeta_service.dart';
 import 'qgs_document.dart';
 import 'qgs_meta_store.dart';
@@ -341,11 +339,10 @@ class QgsProjectBuilder {
     );
   }
 
-  /// 読み取り専用レイヤ（shp・GeoJSON）→ `provider=ogr` で**元のファイル**を指す（キャッシュのパスは書かない）。
+  /// 読み取り専用レイヤ（GDAL で読む形式）→ `provider=ogr` で**元のファイル**を指す（キャッシュのパスは書かない）。
   ///
-  /// 1 ファイル 1 レイヤなら `./林班.shp` だけ。GeoJSON の型の混在は `|geometrytype=Point` など
-  /// （QGIS が同じファイルの型ごとのサブレイヤに付ける形）、それ以外の複数レイヤは `|layername=`。
-  /// CRS は元の `.prj`（無ければ WGS84）、shp の文字コードは `.cpg` が無ければ Shift_JIS
+  /// 1 ファイル 1 レイヤなら `./林班.shp` だけ。ほかは [externalUriOptions]。
+  /// CRS はキャッシュ gpkg のもの（ogr2ogr が元の CRS のまま書いている）、shp の文字コードは [externalProviderEncoding]
   Future<QgsTreeNode?> _convertExternal(
     ExternalLayerNode node,
     String? rootPath,
@@ -358,12 +355,10 @@ class QgsProjectBuilder {
       return null;
     }
     final layers = node.children.whereType<LayerNode>().toList();
-    final crs = await externalSourceCrs(node);
     final encoding = await externalProviderEncoding(node);
 
     final groups = <QgsTreeNode>[];
     for (final layer in layers) {
-      crsCache[layer] = crs;
       final group = await _convertLayer(
         layer,
         relPath,
@@ -378,53 +373,23 @@ class QgsProjectBuilder {
     return QgsGroup(name: node.name, children: groups, visible: node.visible);
   }
 
-  /// 読み取り専用レイヤの `|` の後ろ（[QgsLayer.uriOptions]）
+  /// 読み取り専用レイヤの `|` の後ろ（[QgsLayer.uriOptions]）。
+  /// 元のファイルに GDAL のレイヤが複数あれば `layername=<GDAL のレイヤ名>`、
+  /// 型の混ざったレイヤから分けたものは `geometrytype=Point` など（QGIS が型ごとのサブレイヤに付ける形）
   static List<String> externalUriOptions(ExternalLayerNode node, String layerName, {required int layerCount}) {
-    if (layerCount <= 1) return const [];
-    if (node.reader is GeoJsonReader) {
-      final stem = p.basenameWithoutExtension(node.sourcePath);
-      for (final (type, qgis) in const [
-        (GeometryType.point, 'Point'),
-        (GeometryType.linestring, 'LineString'),
-        (GeometryType.polygon, 'Polygon'),
-      ]) {
-        if (layerName == '$stem${GeoJsonReader.suffixOf(type)}') return ['geometrytype=$qgis'];
-      }
-    }
-    return ['layername=$layerName'];
+    final plan = node.sourcePlan;
+    final layer = plan?.layers.where((l) => l.name == layerName).firstOrNull;
+    if (plan == null || layer == null) return layerCount <= 1 ? const [] : ['layername=$layerName'];
+    return [
+      if (plan.sourceLayerCount > 1) 'layername=${layer.sourceLayer}',
+      if (layer.qgisGeometryType != null) 'geometrytype=${layer.qgisGeometryType}',
+    ];
   }
 
-  /// 読み取り専用レイヤの元の CRS（shp の `.prj`。無い・読めない・GeoJSON は WGS84）
-  static Future<QgsCrs> externalSourceCrs(ExternalLayerNode node) async {
-    if (node.reader is! ShapefileReader) return QgsCrs.wgs84;
-    final prj = await findSidecar(node.sourcePath, '.prj');
-    if (prj == null) return QgsCrs.wgs84;
-    try {
-      final wkt = await fs.readAsString(prj);
-      final def = await ShapefileReader.readPrj(node.sourcePath);
-      if (def == null) return QgsCrs.wgs84;
-      final srid = int.tryParse(def.codeNumber) ?? 0;
-      return QgsCrs(
-        authId: def.code.startsWith('EPSG:') ? def.code : '',
-        srid: srid,
-        description: def.name,
-        wkt: wkt,
-        proj4: def.proj4String,
-        // ESRI 形式の .prj は EPSG コードを持たないことが多い。そのときは WKT だけで QGIS に渡す
-        isGeographic: def.isWgs84 || RegExp(r'^\s*GEOG(CS|CRS)').hasMatch(wkt),
-      );
-    } catch (e) {
-      AppLogger.debug('[QgsProjectBuilder] .prj を読めない: $e');
-      return QgsCrs.wgs84;
-    }
-  }
-
-  /// 読み取り専用レイヤの `<provider encoding>`。shp は `.cpg` があれば GDAL がそれで読むので UTF-8、
-  /// 無ければアプリと同じ Shift_JIS
-  static Future<String> externalProviderEncoding(ExternalLayerNode node) async {
-    if (node.reader is! ShapefileReader) return 'UTF-8';
-    return await findSidecar(node.sourcePath, '.cpg') == null ? ShapefileReader.defaultEncoding : 'UTF-8';
-  }
+  /// 読み取り専用レイヤの `<provider encoding>`。`.cpg` も DBF の LDID も無い shp はアプリと同じ CP932
+  /// （[[gdal#Android の実装で決めたこと（2026-10-09）]]）。ほかは GDAL が自分で決めるので UTF-8
+  static Future<String> externalProviderEncoding(ExternalLayerNode node) async =>
+      await ExternalSource.needsFallbackEncoding(node.sourcePath) ? shapefileFallbackEncoding : 'UTF-8';
 
   /// Layer は**グループ**になり、その下の View が QGIS のレイヤになる。
   Future<QgsTreeNode?> _convertLayer(

@@ -1,16 +1,18 @@
-// gpkg 以外の形式を読み取り専用レイヤとして開く（読み手・キャッシュ・ノード・変換）
+// gpkg 以外の形式を読み取り専用レイヤとして開く（GDAL で読む・キャッシュ・ノード・変換）
 // 設計は docs/technical/external-formats.md
+//
+// GDAL（QGIS の gdal*.dll / apt の libgdal）が無ければ skip。
+// ⚠ GDAL を sqflite より先に読み込む（QGIS の DLL は sqlite3.dll を名前で読む。test/gdal_test.dart の注意）
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:charset/charset.dart' as charset;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+import 'package:root_maps/core/gdal/gdal_ffi.dart';
 import 'package:root_maps/core/path_resolver.dart';
 import 'package:root_maps/models/geometry_type.dart';
+import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/models/nodes/external_layer_node.dart';
 import 'package:root_maps/models/nodes/feature_node.dart';
@@ -20,22 +22,43 @@ import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/providers/notification_providers.dart';
 import 'package:root_maps/providers/selection_providers.dart';
 import 'package:root_maps/services/coordinate/epsg_registry.dart';
+import 'package:root_maps/services/coordinate/gpkg_crs_resolver.dart';
 import 'package:root_maps/services/external/external_layer_cache.dart';
 import 'package:root_maps/services/external/external_layer_converter.dart';
-import 'package:root_maps/services/external/external_readers.dart';
-import 'package:root_maps/services/external/readers/geojson_reader.dart';
-import 'package:root_maps/services/external/readers/shapefile_reader.dart';
+import 'package:root_maps/services/external/external_source.dart';
 import 'package:root_maps/services/import_export/exporters/shapefile_writer.dart';
 import 'package:root_maps/services/import_export/parsers/shapefile_binary_parser.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'support/gdal_host.dart';
+import 'support/gdal_scenarios.dart';
+
+const _fx = 'test/fixtures/gdal';
+
+const _surveyKml = '''<?xml version="1.0" encoding="utf-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<Folder><name>立木</name>
+  <Placemark><name>スギ1</name><Point><coordinates>135.96,33.93</coordinates></Point></Placemark>
+  <Placemark><name>ヒノキ2</name><Point><coordinates>135.961,33.931</coordinates></Point></Placemark>
+</Folder>
+<Folder><name>作業道</name>
+  <Placemark><name>道1</name><LineString><coordinates>135.96,33.93 135.97,33.94</coordinates></LineString></Placemark>
+</Folder>
+</Document></kml>''';
+
 void main() {
   late Directory tmp;
   late String proj;
+  final gdalConfig = findHostGdal();
+  final skip = gdalConfig == null ? 'GDAL が見つからない（QGIS か libgdal-dev を入れる）' : null;
 
-  setUpAll(() {
+  setUpAll(() async {
+    if (gdalConfig == null) return;
+    final gdal = GdalFfi(gdalConfig);
+    await gdal.version();
+    ExternalGdal.instance = gdal;
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   });
@@ -91,157 +114,88 @@ void main() {
 
   void writeGeoJson(String path, List<Map<String, Object?>> features) => File(path).writeAsStringSync(jsonEncode({'type': 'FeatureCollection', 'features': features}));
 
-  group('読み手', () {
-    test('拡張子で読み手を引く（大文字も）。付属ファイルは大文字小文字を問わず拾う', () async {
-      expect(externalReaderFor('a/林班.SHP'), isA<ShapefileReader>());
-      expect(externalReaderFor('a.geojson'), isA<GeoJsonReader>());
-      expect(externalReaderFor('a.json'), isA<GeoJsonReader>());
-      expect(externalReaderFor('a.gpkg'), isNull);
-      expect(externalReaderFor('a.dbf'), isNull, reason: '付属ファイルは単独でレイヤにしない');
+  /// [proj] 直下を開き、外部形式のノードのキャッシュを作る
+  Future<FolderNode> openRoot() async {
+    final root = FolderNode('Home', children: []);
+    await root.updateChildren();
+    for (final child in root.children.whereType<GeoPackageNode>()) {
+      await child.updateChildren();
+    }
+    return root;
+  }
 
-      final base = p.join(proj, 'rinpan');
-      writePoints(base, ext: '.DBF');
-      File('$base.shp.xml').writeAsStringSync('<x/>');
-      File(p.join(proj, 'rinpan2.dbf')).writeAsStringSync('');
-      final sidecars = (await existingSidecars('$base.shp', ShapefileReader())).map(p.basename).toList();
-      expect(sidecars, unorderedEquals(['rinpan.shx', 'rinpan.DBF', 'rinpan.cpg', 'rinpan.shp.xml']));
+  /// test/fixtures/gdal の [stem].* を [proj] へ写す
+  void copyFixture(String stem, {String? as}) {
+    for (final f in Directory(_fx).listSync().whereType<File>()) {
+      final name = p.basename(f.path);
+      if (p.basenameWithoutExtension(name) != stem) continue;
+      f.copySync(p.join(proj, '${as ?? stem}${p.extension(name)}'));
+    }
+  }
+
+  /// キャッシュの [layer] の [column] 列（fid 順）
+  Future<List<Object?>> namesIn(GeoPackageFile gpkg, String layer, {String column = 'name'}) async {
+    final db = await gpkg.getDatabase();
+    return [for (final r in await db.rawQuery('SELECT "$column" FROM "$layer" ORDER BY fid')) r[column]];
+  }
+
+  Future<String> epsgOf(GeoPackageFile gpkg, String layer) async =>
+      (await GpkgCrsResolver.instance.resolveLayerCrs(await gpkg.getDatabase(), layer)).epsgCode;
+
+  group('GDAL で読む', () {
+    test('候補の拡張子: .gpkg・付属ファイル・隠しフォルダは外す', () {
+      expect(ExternalSource.isCandidate(p.join(proj, '林班.SHP')), isTrue);
+      for (final ext in ['.geojson', '.json', '.kml', '.kmz', '.csv', '.gpx', '.fgb', '.gml', '.dxf', '.tab', '.mif']) {
+        expect(ExternalSource.isCandidate(p.join(proj, 'a$ext')), isTrue, reason: ext);
+      }
+      expect(ExternalSource.isCandidate(p.join(proj, 'a.gpkg')), isFalse);
+      expect(ExternalSource.isCandidate(p.join(proj, 'a.dbf')), isFalse, reason: '付属ファイルは単独でレイヤにしない');
+      expect(ExternalSource.isCandidate(p.join(proj, '.kokage', 'cache', 'a.geojson')), isFalse);
+      expect(ExternalSource.isCandidate(p.join(proj, '.a.geojson')), isFalse);
     });
 
-    test('shp: 点と属性・列の型・レイヤ名はファイル名', () async {
-      final base = p.join(proj, 'trees');
-      writePoints(base, prj: 'EPSG:4326');
-      final ds = (await ShapefileReader().read('$base.shp')).single;
-      expect(ds.layerName, 'trees');
-      expect(ds.geometryType, GeometryType.point);
-      expect(ds.columns, {'NAME': 'TEXT', 'H': 'REAL'});
-      expect(ds.features.map((f) => f['NAME']), ['sugi', 'hinoki', 'matsu']);
-      expect(ds.features.first['point'], const LatLng(33.91, 135.97));
-    });
+    test('shp（Shift_JIS、.cpg も LDID も無い）: CP932 で読み、CRS（EPSG:6674）は元のまま', () async {
+      copyFixture('sjis_nocpg', as: '林班');
+      expect(await ExternalSource.needsFallbackEncoding(p.join(proj, '林班.shp')), isTrue);
+      final root = await openRoot();
+      final node = root.children.whereType<ExternalLayerNode>().single;
+      expect(node.loadError, isNull);
+      expect(node.children.whereType<LayerNode>().single.layerName, '林班');
+      expect(await namesIn(node.geoPackageFile, '林班'), gdalScenarioNames);
+      expect(await epsgOf(node.geoPackageFile, '林班'), 'EPSG:6674');
+      expect(await node.geoPackageFile.getGeometryType('林班'), GeometryType.point);
+      expect((await node.sourceFiles()).map(p.basename), unorderedEquals(['林班.shp', '林班.shx', '林班.dbf', '林班.prj']));
+    }, skip: skip);
 
-    test('shp: .cpg が無ければ Shift_JIS で読む（日本語の属性）', () async {
-      final base = p.join(proj, 'jp');
-      final r = encodeShpShx(ShapeType.point, [
-        [
-          [
+    test('shp（.cpg あり）: .cpg の文字コードで読む', () async {
+      copyFixture('sjis_cpg');
+      expect(await ExternalSource.needsFallbackEncoding(p.join(proj, 'sjis_cpg.shp')), isFalse);
+      final node = (await openRoot()).children.whereType<ExternalLayerNode>().single;
+      expect(await namesIn(node.geoPackageFile, 'sjis_cpg'), gdalScenarioNames);
+      expect(await epsgOf(node.geoPackageFile, 'sjis_cpg'), 'EPSG:6674');
+    }, skip: skip);
+
+    test('GeoJSON: 型が混ざれば <名前>_point / _line / _polygon に分ける（Multi も同じ型）', () async {
+      writeGeoJson(p.join(proj, 'mixed.geojson'), [
+        feature({'type': 'Point', 'coordinates': [135.0, 33.0]}, {'n': 'a'}),
+        feature({
+          'type': 'MultiPoint',
+          'coordinates': [
             [135.0, 33.0],
+            [135.1, 33.1],
           ],
-        ],
-      ]);
-      File('$base.shp').writeAsBytesSync(r.shp);
-      File('$base.dbf').writeAsBytesSync(
-        encodeDbf([
-          {'NAME': '杉'},
-        ]),
-      );
-      final ds = (await ShapefileReader().read('$base.shp')).single;
-      expect(ds.features.single['NAME'], '杉');
-      expect(charset.shiftJis.decode(charset.shiftJis.encode('杉')), '杉');
-    });
-
-    test('shp: 平面直角座標系（.prj）は WGS84 に直す', () async {
-      final base = p.join(proj, 'plane');
-      final r = encodeShpShx(ShapeType.point, [
-        [
-          [
-            [0.0, 0.0],
+        }, {'n': 'b'}),
+        feature({
+          'type': 'LineString',
+          'coordinates': [
+            [135.0, 33.0],
+            [135.1, 33.1],
           ],
-        ],
-      ]);
-      File('$base.shp').writeAsBytesSync(r.shp);
-      File('$base.prj').writeAsStringSync(EpsgRegistry.instance.getWktString('EPSG:6674')!);
-      final ds = (await ShapefileReader().read('$base.shp')).single;
-      final pt = ds.features.single['point'] as LatLng;
-      // VI 系の原点は北緯 36 度・東経 136 度
-      expect(pt.latitude, closeTo(36.0, 1e-6));
-      expect(pt.longitude, closeTo(136.0, 1e-6));
-    });
-
-    test('shp: Z 付きの線（PolyLineZ）は XY だけ読み、次のレコードもずれない', () async {
-      // レコード: 型 13・範囲・部分 1・点 2・XY・Z 範囲と Z・M 範囲と M
-      Uint8List polyLineZ(List<List<double>> pts) {
-        final n = pts.length;
-        final d = ByteData(4 + 32 + 8 + 4 + 16 * n + 16 + 8 * n + 16 + 8 * n);
-        var o = 0;
-        d.setInt32(o, 13, Endian.little);
-        o += 4 + 32;
-        d.setInt32(o, 1, Endian.little);
-        d.setInt32(o + 4, n, Endian.little);
-        o += 8;
-        d.setInt32(o, 0, Endian.little);
-        o += 4;
-        for (final pt in pts) {
-          d.setFloat64(o, pt[0], Endian.little);
-          d.setFloat64(o + 8, pt[1], Endian.little);
-          o += 16;
-        }
-        // Z・M は 99 で埋める（XY と間違えて読むと範囲外になる）
-        while (o < d.lengthInBytes) {
-          d.setFloat64(o, 99999.0, Endian.little);
-          o += 8;
-        }
-        return d.buffer.asUint8List();
-      }
-
-      final records = [
-        polyLineZ([
-          [135.0, 33.0],
-          [135.1, 33.1],
-        ]),
-        polyLineZ([
-          [136.0, 34.0],
-          [136.1, 34.1],
-          [136.2, 34.2],
-        ]),
-      ];
-      final out = BytesBuilder();
-      final header = ByteData(100)
-        ..setInt32(0, 9994, Endian.big)
-        ..setInt32(28, 1000, Endian.little)
-        ..setInt32(32, 13, Endian.little);
-      final total = 100 + records.fold<int>(0, (s, r) => s + 8 + r.length);
-      header.setInt32(24, total ~/ 2, Endian.big);
-      out.add(header.buffer.asUint8List());
-      for (var i = 0; i < records.length; i++) {
-        final rh = ByteData(8)
-          ..setInt32(0, i + 1, Endian.big)
-          ..setInt32(4, records[i].length ~/ 2, Endian.big);
-        out
-          ..add(rh.buffer.asUint8List())
-          ..add(records[i]);
-      }
-      final base = p.join(proj, 'z');
-      File('$base.shp').writeAsBytesSync(out.takeBytes());
-      final ds = (await ShapefileReader().read('$base.shp')).single;
-      expect(ds.geometryType, GeometryType.linestring);
-      expect(ds.features.length, 2);
-      expect((ds.features[1]['line'] as List<LatLng>).length, 3);
-      expect((ds.features[1]['line'] as List<LatLng>).last, const LatLng(34.2, 136.2));
-    });
-
-    test('GeoJSON: 型が混ざれば <名前>_point / _line / _polygon に分ける', () async {
-      final path = p.join(proj, 'mixed.geojson');
-      writeGeoJson(path, [
-        feature(
-          {
-            'type': 'Point',
-            'coordinates': [135.0, 33.0],
-          },
-          {'name': 'a', 'n': 1, 'ok': true},
-        ),
-        feature(
-          {
-            'type': 'LineString',
-            'coordinates': [
-              [135.0, 33.0],
-              [135.1, 33.1],
-            ],
-          },
-          {'name': 'l'},
-        ),
-        feature(
-          {
-            'type': 'Polygon',
-            'coordinates': [
+        }, {'n': 'c'}),
+        feature({
+          'type': 'MultiPolygon',
+          'coordinates': [
+            [
               [
                 [135.0, 33.0],
                 [135.1, 33.0],
@@ -249,69 +203,64 @@ void main() {
                 [135.0, 33.0],
               ],
             ],
-          },
-          {
-            'name': 'p',
-            'nested': {'k': 1},
-          },
-        ),
-        feature(
-          {
-            'type': 'Point',
-            'coordinates': [135.2, 33.2],
-          },
-          {'name': null, 'n': 2},
-        ),
+            [
+              [
+                [136.0, 33.0],
+                [136.1, 33.0],
+                [136.1, 33.1],
+                [136.0, 33.0],
+              ],
+            ],
+          ],
+        }, {'n': 'd'}),
       ]);
-      final datasets = await GeoJsonReader().read(path);
-      expect(datasets.map((d) => d.layerName), ['mixed_point', 'mixed_line', 'mixed_polygon']);
-      final points = datasets.first;
-      expect(points.features.length, 2);
-      expect(points.columns, {'name': 'TEXT', 'n': 'REAL', 'ok': 'INTEGER'});
-      expect(datasets[2].features.single['nested'], '{"k":1}');
-    });
+      final node = (await openRoot()).children.whereType<ExternalLayerNode>().single;
+      final layers = node.children.whereType<LayerNode>().map((l) => l.layerName).toList();
+      expect(layers, unorderedEquals(['mixed_point', 'mixed_line', 'mixed_polygon']));
+      expect(await namesIn(node.geoPackageFile, 'mixed_point', column: 'n'), ['a', 'b']);
+      expect(await node.geoPackageFile.getGeometryType('mixed_polygon'), GeometryType.polygon);
+      final plan = node.sourcePlan!;
+      expect(plan.sourceLayerCount, 1);
+      expect(plan.layers.every((l) => l.split && l.sourceLayer == 'mixed'), isTrue);
+    }, skip: skip);
 
-    test('GeoJSON: .json は中身が FeatureCollection / Feature のときだけ', () async {
-      final fc = p.join(proj, 'fc.json');
-      writeGeoJson(fc, [
-        feature({
-          'type': 'Point',
-          'coordinates': [135.0, 33.0],
-        }, {}),
+    test('GeoJSON: .json は GDAL が形を見つけたときだけ', () async {
+      File(p.join(proj, 'settings.json')).writeAsStringSync('{"a":1}');
+      File(p.join(proj, 'broken.json')).writeAsStringSync('{');
+      writeGeoJson(p.join(proj, 'pts.json'), [
+        feature({'type': 'Point', 'coordinates': [135.0, 33.0]}, {}),
       ]);
-      final single = p.join(proj, 'single.json');
-      File(single).writeAsStringSync(
-        jsonEncode(
-          feature(
-            {
-              'type': 'Point',
-              'coordinates': [135.0, 33.0],
-            },
-            {'a': 'b'},
-          ),
-        ),
-      );
-      final config = p.join(proj, 'settings.json');
-      File(config).writeAsStringSync(jsonEncode({'type': 'config', 'value': 1}));
-      final broken = p.join(proj, 'broken.json');
-      File(broken).writeAsStringSync('{');
-      expect(await acceptingExternalReader(fc), isA<GeoJsonReader>());
-      expect(await acceptingExternalReader(single), isA<GeoJsonReader>());
-      expect(await acceptingExternalReader(config), isNull);
-      expect(await acceptingExternalReader(broken), isNull);
-      expect((await GeoJsonReader().read(single)).single.layerName, 'single');
-    });
+      final names = (await openRoot()).children.whereType<ExternalLayerNode>().map((n) => n.name);
+      expect(names, ['pts.json']);
+    }, skip: skip);
+
+    test('KML: フォルダごとのレイヤ（名前は GDAL のレイヤ名）', () async {
+      File(p.join(proj, 'survey.kml')).writeAsStringSync(_surveyKml);
+      final node = (await openRoot()).children.whereType<ExternalLayerNode>().single;
+      expect(node.loadError, isNull);
+      expect(node.children.whereType<LayerNode>().map((l) => l.layerName), unorderedEquals(['立木', '作業道']));
+      expect(await namesIn(node.geoPackageFile, '立木', column: 'Name'), ['スギ1', 'ヒノキ2']);
+      expect(await node.geoPackageFile.getGeometryType('作業道'), GeometryType.linestring);
+      expect(node.sourcePlan!.sourceLayerCount, 2);
+    }, skip: skip);
+
+    test('CSV: 経度・緯度の列があれば点のレイヤ、無ければレイヤにしない', () async {
+      File(p.join(proj, 'trees.csv')).writeAsStringSync('name,経度,緯度,dbh\nスギ1,135.96,33.93,32\nヒノキ2,135.961,33.931,28\n');
+      File(p.join(proj, 'lonlat.csv')).writeAsStringSync('name,lon,lat\na,135.0,33.0\n');
+      File(p.join(proj, 'plain.csv')).writeAsStringSync('name,dbh\nスギ1,32\n');
+      final root = await openRoot();
+      final nodes = root.children.whereType<ExternalLayerNode>().toList();
+      expect(nodes.map((n) => n.name), ['lonlat.csv', 'trees.csv']);
+      final trees = nodes[1];
+      expect(await namesIn(trees.geoPackageFile, 'trees'), ['スギ1', 'ヒノキ2']);
+      final columns = await trees.geoPackageFile.getColumnNames('trees', getAll: true, skipPrimaryKey: true);
+      expect(columns, isNot(contains('経度')), reason: 'KEEP_GEOM_COLUMNS=NO');
+      final db = await trees.geoPackageFile.getDatabase();
+      expect((await db.rawQuery('SELECT dbh FROM trees ORDER BY fid')).first['dbh'], 32, reason: 'AUTODETECT_TYPE=YES');
+    }, skip: skip);
   });
 
   group('ノードとキャッシュ', () {
-    Future<FolderNode> openRoot() async {
-      final root = FolderNode('Home', children: []);
-      await root.updateChildren();
-      for (final child in root.children.whereType<GeoPackageNode>()) {
-        await child.updateChildren();
-      }
-      return root;
-    }
 
     test('shp・GeoJSON はノードになり、付属ファイルや GeoJSON でない .json はならない', () async {
       writePoints(p.join(proj, '林班'));
@@ -343,7 +292,7 @@ void main() {
       expect(await shp.geoPackageFile.countFilteredFeatures('林班', '1=1'), 3);
       // .kokage はツリーに出ない
       expect(root.children.whereType<FolderNode>(), isEmpty);
-    });
+    }, skip: skip);
 
     test('元が変わらなければ作り直さず、変わったら作り直す', () async {
       final path = p.join(proj, 'pts.geojson');
@@ -359,7 +308,7 @@ void main() {
       final root = await openRoot();
       final node = root.children.whereType<ExternalLayerNode>().single;
       final cache = node.geoPackageFile;
-      expect(await ExternalLayerCache.ensure(cache, path, node.reader), isFalse, reason: '同じ印なら作り直さない');
+      expect(await ExternalLayerCache.ensure(cache, path), isFalse, reason: '同じ印なら作り直さない');
 
       writeGeoJson(path, [
         feature(
@@ -380,8 +329,8 @@ void main() {
       File(path).setLastModifiedSync(DateTime(2030));
       await node.updateChildren();
       expect(await cache.countFilteredFeatures('pts', '1=1'), 2);
-      expect(await ExternalLayerCache.ensure(cache, path, node.reader), isFalse);
-    });
+      expect(await ExternalLayerCache.ensure(cache, path), isFalse);
+    }, skip: skip);
 
     test('ツリーの読み直しで外れても元は消さない。利用者の削除で元・付属・キャッシュを消す', () async {
       final base = p.join(proj, 'trees');
@@ -400,7 +349,7 @@ void main() {
         expect(File('$base$ext').existsSync(), isFalse, reason: ext);
       }
       expect(File(cachePath).existsSync(), isFalse);
-    });
+    }, skip: skip);
   });
 
   group('編集の門番', () {
@@ -424,7 +373,7 @@ void main() {
       expect(File(p.join(proj, 'trees.shp')).existsSync(), isTrue);
       final notes = container.read(notificationCenterProvider);
       expect(notes.single.actionLabel, isNotNull);
-    });
+    }, skip: skip);
   });
 
   group('gpkg への変換', () {
@@ -469,7 +418,7 @@ void main() {
       expect(meta.styles.layers['trees.gpkg/trees']?.pointSize, 7);
       expect(meta.views['trees.gpkg/trees']?.single.filter, 'H > 10');
       await gpkg.geoPackageFile.dispose();
-    });
+    }, skip: skip);
 
     test('同名の gpkg があれば _1 を付ける（既存の gpkg に混ぜない）', () async {
       writeGeoJson(p.join(proj, 'a.geojson'), [
@@ -481,7 +430,7 @@ void main() {
       File(p.join(proj, 'a.gpkg')).writeAsBytesSync(const [1]);
       File(p.join(proj, 'a_1.gpkg')).writeAsBytesSync(const [1]);
       expect(p.basename(await ExternalLayerConverter.uniqueGpkgPath(proj, 'a')), 'a_2.gpkg');
-    });
+    }, skip: skip);
 
     test('件数が食い違えば書いた gpkg を消し、元は残す', () async {
       final path = p.join(proj, 'pts.geojson');
@@ -509,7 +458,23 @@ void main() {
       await expectLater(ExternalLayerConverter.convert(node), throwsA(isA<ExternalConvertVerifyException>()));
       expect(File(path).existsSync(), isTrue);
       expect(File(p.join(proj, 'pts.gpkg')).existsSync(), isFalse);
-    });
+    }, skip: skip);
+
+    test('変換しても CRS は元のまま（EPSG:6674 の shp → EPSG:6674 の gpkg）、日本語の属性も', () async {
+      copyFixture('sjis_nocpg', as: '林班');
+      final (root, node) = await open('林班.shp');
+      expect(await epsgOf(node.geoPackageFile, '林班'), 'EPSG:6674');
+      final result = await ExternalLayerConverter.convert(node);
+      expect(result.outcome, ExternalConvertOutcome.converted);
+      final gpkg = root.children.whereType<GeoPackageNode>().single;
+      expect(gpkg.name, '林班.gpkg');
+      expect(await epsgOf(gpkg.geoPackageFile, '林班'), 'EPSG:6674');
+      expect(await namesIn(gpkg.geoPackageFile, '林班'), gdalScenarioNames);
+      // 書いた gpkg を GDAL で読み直しても同じ（QGIS からも 6674 に見える）
+      final info = await ExternalGdal.instance.vectorInfo(result.gpkgPath!, args: const ['-so']);
+      expect(layerEpsg(info), 6674);
+      await gpkg.geoPackageFile.dispose();
+    }, skip: skip);
 
     test('自分のフォルダへ gpkg として複製（元は残す）', () async {
       writePoints(p.join(proj, 'trees'));
@@ -521,6 +486,6 @@ void main() {
       expect(result.gpkgPath, p.join(mine.path, 'trees.gpkg'));
       expect(File(p.join(proj, 'trees.shp')).existsSync(), isTrue);
       expect(target.children.whereType<GeoPackageNode>().single.name, 'trees.gpkg');
-    });
+    }, skip: skip);
   });
 }

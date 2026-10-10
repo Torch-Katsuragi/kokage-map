@@ -1,4 +1,6 @@
-// 読み取り専用レイヤ（shp・GeoJSON）の `.qgs` との往復（[[external-formats#.qgs との往復]]）
+// 読み取り専用レイヤ（GDAL で読む形式）の `.qgs` との往復（[[external-formats#.qgs との往復]]）
+//
+// GDAL（QGIS の gdal*.dll / apt の libgdal）が無ければ skip。⚠ GDAL を sqflite より先に読み込む（test/gdal_test.dart の注意）
 //
 // 書く: provider=ogr で元のファイルを指す（キャッシュのパスは書かない）。1 ファイル 1 レイヤなら `|layername=` なし。
 // 読む: ogr の非 gpkg は `|layername=` が無ければファイル名で ExternalLayerNode のレイヤに結びつける。
@@ -7,12 +9,14 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:root_maps/core/gdal/gdal_ffi.dart';
 import 'package:root_maps/core/path_resolver.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/nodes/external_layer_node.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/services/coordinate/epsg_registry.dart';
+import 'package:root_maps/services/external/external_source.dart';
 import 'package:root_maps/services/import_export/exporters/shapefile_writer.dart';
 import 'package:root_maps/services/import_export/parsers/shapefile_binary_parser.dart';
 import 'package:root_maps/services/kmeta_service.dart';
@@ -24,11 +28,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:xml/xml.dart';
 
+import 'support/gdal_host.dart';
+
 void main() {
   late Directory tmp;
   late String proj;
 
-  setUpAll(() {
+  final gdalConfig = findHostGdal();
+  final skip = gdalConfig == null ? 'GDAL が見つからない（QGIS か libgdal-dev を入れる）' : null;
+
+  setUpAll(() async {
+    if (gdalConfig == null) return;
+    final gdal = GdalFfi(gdalConfig);
+    await gdal.version();
+    ExternalGdal.instance = gdal;
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
     QgsAutoRefresh.instance.enabled = false;
@@ -99,16 +112,16 @@ void main() {
     return root;
   }
 
-  test('書く: 元のファイルを ogr で指し、CRS は .prj、文字コードは Shift_JIS', () async {
+  test('書く: 元のファイルを ogr で指し、CRS は元のまま（キャッシュ gpkg から）、.cpg の無い shp は CP932', () async {
     final root = await loadTree();
     final project = await const QgsProjectBuilder().build(root);
     final layers = project.layers;
     final shp = layers.singleWhere((l) => l.dataSourcePath == './林班.shp');
     expect(shp.dataSourceUri, './林班.shp', reason: '1 ファイル 1 レイヤなら |layername= を付けない');
-    // .prj の WKT をそのまま書く（ESRI 形式で EPSG コードが無ければ authid は空）
-    expect(shp.crs.wkt, File(p.join(proj, '林班.prj')).readAsStringSync());
+    // キャッシュは ogr2ogr が元の CRS のまま書いている（.prj → EPSG:6674）
+    expect(shp.crs.authId, 'EPSG:6674');
     expect(shp.crs.isGeographic, isFalse);
-    expect(shp.providerEncoding, 'Shift_JIS');
+    expect(shp.providerEncoding, 'CP932');
 
     final mixed = layers.where((l) => l.dataSourcePath == './mixed.geojson').map((l) => l.dataSourceUri).toList();
     expect(mixed, unorderedEquals(['./mixed.geojson|geometrytype=Point', './mixed.geojson|geometrytype=LineString']));
@@ -124,8 +137,8 @@ void main() {
     }
     final xml = File(result!.path).readAsStringSync();
     expect(xml, contains('<datasource>./林班.shp</datasource>'));
-    expect(xml, contains('encoding="Shift_JIS"'));
-  });
+    expect(xml, contains('encoding="CP932"'));
+  }, skip: skip);
 
   test('読む: |layername= の無い shp・geometrytype の GeoJSON を読み取り専用レイヤに結びつける', () async {
     final root = await loadTree();
@@ -161,7 +174,7 @@ void main() {
     final mixed = root.children.whereType<ExternalLayerNode>().singleWhere((n) => n.name == 'mixed.geojson');
     final points = mixed.children.whereType<LayerNode>().singleWhere((l) => l.layerName == 'mixed_point');
     expect(points.views.map((v) => v.name), contains('点だけ'));
-  });
+  }, skip: skip);
 
   test('QgsDataSource は geometrytype を読む', () {
     final s = QgsDataSource.parse('./a.geojson|geometrytype=Point|subset=x = 1')!;

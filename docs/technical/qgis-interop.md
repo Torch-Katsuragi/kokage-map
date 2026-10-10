@@ -141,14 +141,17 @@ msiexec /a .temp\QGIS-LTR.msi /qn TARGETDIR=C:\Users\<user>\qgis-extract
 書かないもの（`QgsProject.skipped` に入り、通知に出る）:
 
 - 写真（`ImageNode`。QGIS には写真の概念が無い）
-- GeoTIFF でないオーバーレイ画像（png/jpg は位置を QGIS に伝えられない）
+- こかげマップで位置合わせした GeoTIFF でない png/jpg のオーバーレイ（位置を QGIS に伝えられない。QGIS 由来のワールドファイル付きは書く）
 
 オーバーレイ画像のうち **GeoTIFF（.tif/.tiff）はラスタレイヤとして書く**（2026-09-11）。
 位置は `.tif` の GeoTIFF タグに焼き込み済み（`GeoTiffWriteScheduler`）なので、`.qgs` には
 `provider=gdal` の参照（相対パス）だけを書き、レンダラ（`<pipe>`）は書かない。QGIS は読込時に既定の
 レンダラを付ける。DOM 保持型の更新では参照と名前だけ直し、QGIS が付けた `<pipe>` は残す。
 読み戻し（インポータ）は可視性だけをオーバーレイに戻し、XYZ タイルは背景地図に足す（2026-10-09。それまでは黙って飛ばしていた）。
-扱えないラスタ（GeoTIFF 以外・root の外・位置を読めない `.tif`・WMS）は理由つきで報告する。
+扱えないラスタ（root の外・位置か座標系を読めないもの・WMS）は理由つきで報告する。
+QGIS / GDAL で作ったラスタ（GeoTIFF・JPEG2000・ワールドファイル付き PNG/JPEG・VRT。GDAL で位置と座標系が読めるもの）は
+2026-10-10 から読み取り専用のオーバーレイ（`ExternalOverlayImageNode`）になり、可視性を読み戻す。書き戻しは元のファイルの相対パスと
+元の座標系（`gdalinfo` の WKT2・EPSG）で書く（[[external-formats#ラスタのオーバーレイ（GDAL、2026-10-10）]]）。
 QGIS で足したラスタが同じ `.tif` を指していれば、書き戻しでアプリの id に付け替えて QGIS の `<pipe>`（不透明度など）を残す。
 詳細は [[external-formats#ラスタ（2026-10-09 実装）]]。XML の形は `test/qgs_raster_test.dart`、読み戻しは `test/qgs_raster_read_back_test.dart`。
 

@@ -83,10 +83,10 @@
 - [ ] `proj4dart` 3（geobase 1.5.0 が ^2.0.0 を求めるので待ち）
 - [ ] 更新履歴の v0.6.0 以前の節が開発ログ調のまま
 - [ ] ~~`layer_styles`~~（`.qgs` にレンダラを書くので冗長。gpkg 単体で渡す場合の保険のみ）
-- [ ] GDAL の既定の GeoTIFF（ModelTiepoint + ModelPixelScale）と投影座標系（JGD2011 平面直角など）の GeoTIFF をオーバーレイとして開く。
-      いまは `GeoTiffService.readGeoTiffParams` が ModelTransformationTag（こかげマップが書く形）しか読まず写真として並ぶ。
-      オーバーレイは「ピクセルが正方形（m）」のモデルなので、経緯度で正方形のピクセル（m では横長）と投影座標系の変換が要る。
-      `.qgs` の読み戻しはこの場合「位置を読めません」と報告している（[[docs/technical/external-formats#`.qgs` との往復]]）
+- [x] QGIS で普通に作った GeoTIFF はオーバーレイとして開けない → GDAL で開くようにした（2026-10-10、`GdalRasterOverlay`、
+      [[docs/technical/external-formats#ラスタのオーバーレイ（GDAL、2026-10-10）]]）。純 Dart で読む試み（`feat/ext-geotiff`）は捨てた
+- [ ] 外のラスタの残り: GCP だけで位置を持つラスタ（`wgs84Extent` が出ない）、パレットのラスタ（PNG の色表が落ちる。`-expand rgba` が要る）、
+      大きな `.tif` の判定で中身を丸ごと読む（アプリの GeoTIFF のタグを見るため。先頭だけ読めば足りる）、削除で付属ファイル（.pgw・.aux.xml）が残る
 - [ ] オーバーレイ画像の不透明度（2026-04 に廃止、GeoTIFF のアルファで持つ）。復活させるなら `.qgs` の `<rasterrenderer opacity>` と往復させる
 - [ ] 背景地図の一覧に無い XYZ タイル（独自 URL）を背景地図に足す。利用規約で配布アプリから使えないタイル（Google など）を
       持ち込まない仕組みと、出典表示が先。いまは `.qgs` の読み戻しで「背景地図の一覧に無い XYZ タイル」と報告して `.qgs` には残す

@@ -32,7 +32,7 @@ tags: [technical, geopackage, qgis, interop, import]
 | GeoJSON | `.geojson` `.json`（中身が FeatureCollection / Feature のときだけ） | `readers/geojson_reader.dart` | 1（済） |
 | KML / KMZ | `.kml` `.kmz` | 新規（純 Dart、KMZ は archive で展開） | 2 |
 | CSV（点） | `.csv`（緯度経度・XY 列を推定できたときだけ） | 新規 | 2 |
-| GeoTIFF | `.tif` | 既存（オーバーレイ） | 済 |
+| ラスタ（GeoTIFF・JPEG2000・ワールドファイル付き PNG/JPEG・VRT） | `.tif` `.tiff` `.jp2` `.png` `.jpg` `.vrt` | GDAL（オーバーレイ、読み取り専用。下の「ラスタのオーバーレイ」） | 済（2026-10-10） |
 
 GDAL は無い（純 Dart）。FlatGeobuf などは要望が来てから。
 
@@ -128,10 +128,11 @@ fixture は QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_raster_xyz.qgs`�
 
 | `.qgs` 側 | 扱い |
 |---|---|
-| dir 内の `.tif`、位置を読める（こかげマップの形） | オーバーレイの可視性に読み戻す |
-| dir 内の `.tif`、位置を読めない（GDAL 既定の Tiepoint 形式・投影座標系） | 報告「位置を読めません」（写真として並ぶ。TODO） |
+| dir 内の `.tif`、こかげマップの形（ModelTransformationTag・WGS84） | オーバーレイの可視性に読み戻す |
+| dir 内のラスタ、GDAL で位置と座標系が読める（QGIS / GDAL の形、2026-10-10） | 読み取り専用のオーバーレイの可視性に読み戻す |
+| dir 内のラスタ、位置か座標系が読めない（ワールドファイルの無い PNG など） | 報告「位置か座標系を読めません」（写真として並ぶ） |
 | ファイルが無い | 報告「見つかりません」 |
-| `.png` `.jp2` など GeoTIFF 以外 | 報告「GeoTIFF 以外のラスタは未対応」 |
+| `.asc` など GDAL で開かない拡張子 | 報告「… ラスタは未対応」 |
 | root の外・`/vsicurl/`・`GPKG:…` | 報告 |
 
 - ⚠ 不透明度はアプリのオーバーレイに受け皿が無い（2026-04 に廃止、GeoTIFF のアルファで持つ）。読まない。
@@ -163,6 +164,34 @@ fixture は QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_raster_xyz.qgs`�
 > その代わり **QGIS で足したネットワークのレイヤ（wms・wcs・wfs・arcgis・ベクタタイル）は書き戻しで外さない**
 > （`QgsDocument.isWebLayer`）。以前は「プロジェクトに無いレイヤ」として外していたので、QGIS の利用者の背景地図が
 > 次の自動更新で消えていた。残したレイヤはツリーの root の一番下・`<layerorder>` の後ろに寄せる（入っていたグループは保たない）
+
+### ラスタのオーバーレイ（GDAL、2026-10-10）
+
+QGIS / GDAL で作ったラスタは **GDAL で開いて読み取り専用のオーバーレイ** にする（[[gdal]]）。実装は
+`lib/services/gdal_raster_overlay.dart`（`GdalRasterOverlay`）と `lib/models/nodes/external_overlay_image_node.dart`。
+テストは `test/gdal_raster_overlay_test.dart`（fixture は `test/fixtures/gdal/make_raster_fixtures.sh` で QGIS の GDAL に作らせる）。
+純 Dart で GeoTIFF を解く試み（`feat/ext-geotiff`）は捨てた。
+
+- **判定**（`ImageNode.loadNodes`・グローバルフォルダ）: `.tif` はまずこかげマップの形（ModelTransformationTag）を見て、
+  そうなら従来どおり編集できるオーバーレイ。違えば `gdalinfo -json -proj4` を呼び、`geoTransform`・座標系・`wgs84Extent` が
+  揃えば外のオーバーレイ。`.jp2` `.vrt` も同じ（位置が無ければ写真としても出さない）。
+  `.png` `.jpg` は **ワールドファイル（`.pgw` `.pngw` `.jgw` `.jpgw` `.wld`）か `<名前>.aux.xml` があるときだけ** GDAL に聞く
+  （写真のたびに GDAL を呼ばない。web で gdal3.js の読み込みを起こさない）。結果は大きさ・更新時刻で控える
+- **表示**: `gdalwarp -t_srs EPSG:4326 -ts W H -r bilinear -dstalpha -of GTiff` → `gdal_translate -of PNG`。
+  - 長辺 W/H は元の画素数（上限 4096）。縦横比は `wgs84Extent` の地上の長さ（m）に合わせる。
+    アプリのオーバーレイは「中心・m/px・回転」の形（ピクセルが m で正方形）なので、経緯度で正方形にすると横に伸びる
+  - 範囲はワープ後の `geoTransform`（EPSG:4326 で軸に沿う）→ 回転 0、m/px は縦方向から
+  - nodata は `-dstalpha` で透明。オーバービューは GDAL が自分で使う
+  - **Byte 以外（16bit・浮動小数の DEM など）は、ワープ後の統計（`gdalinfo -stats` の最小〜最大）で 0〜255 の灰色に伸ばす**
+    （`-ot Byte -scale_n min max 0 255`）。QGIS の既定（累積 2〜98%）とは濃淡が少し違う。陰影や色ランプはしない（いちばん素直な形）
+- **キャッシュ**: Android は GeoTiffService と同じアプリのキャッシュ領域 `overlay_png_cache/ext_<元のパスの MD5>.png`、
+  web はプロジェクトの `.kokage/cache/overlay/`。隣の `.json` に形（中心・m/px・画素数）と印
+  （`GDALGetFileList` の一式の名前・大きさ・更新時刻）を持ち、印が変われば作り直す。作業用の `.warp.tif` は消す
+- 作るのは地図の描き直し（`updateFeatures`）で、見えているものだけ。GDAL は Android では別アイソレート、web は worker で動く
+- **読み取り専用**: 位置はファイルが正。位置合わせの道具は押すと通知センターに「位置合わせできません」を出して起動しない
+  （`OverlayImageNode.isReadOnly`、`saveOverlayParams` も何もしない）。「通常の写真に戻す」も出さない（元ファイルを消してしまうため）
+- `.qgs` には元のファイルの相対パスと元の座標系（`gdalinfo` の WKT2・末尾の EPSG・proj4）で `provider=gdal` を書く
+- 未対応（TODO）: GCP だけで位置を持つラスタ、パレットのラスタ（色表が落ちる）
 
 ### ファイルをフォルダに入れる経路
 

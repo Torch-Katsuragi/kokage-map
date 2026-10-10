@@ -20,6 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../editing/edit_session.dart';
 import '../../../models/map_style_group.dart';
+import '../../../models/nodes/external_overlay_image_node.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/image_node.dart';
 import '../../../models/nodes/layer_node.dart';
@@ -117,8 +118,17 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     );
 
     // GeoTIFF オーバーレイの PNG キャッシュを事前生成（3D の地図面はこれを読む。web はアプリのキャッシュ領域が無いので元ファイルを直接読む）
+    // QGIS / GDAL のラスタは GDAL でワープした PNG を作る（web も。GDAL は別スレッド／worker で動く）
+    for (final node in newOverlayNodes.whereType<ExternalOverlayImageNode>()) {
+      try {
+        await node.ensureRendered();
+      } catch (e) {
+        AppLogger.debug('[Features] ${node.name} の PNG を作れない: $e');
+      }
+    }
     if (!kIsWeb) {
       for (final node in newOverlayNodes) {
+        if (node is ExternalOverlayImageNode) continue;
         final absPath = node.getAbsoluteFilePath();
         if (absPath == null) continue;
         final lower = absPath.toLowerCase();

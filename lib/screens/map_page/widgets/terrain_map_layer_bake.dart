@@ -247,7 +247,12 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
   Future<ui.Image?> _loadOverlayImage(OverlayImageNode n) async {
     try {
       final String path;
-      if (kIsWeb) {
+      if (n is ExternalOverlayImageNode) {
+        // QGIS / GDAL のラスタは GDAL が作った PNG キャッシュ（web も `fs` で読める所に置く）
+        final png = n.cachedPngPath;
+        if (png == null) return null;
+        path = png;
+      } else if (kIsWeb) {
         path = n.getAbsoluteFilePath() ?? n.filePath;
       } else {
         final url = n.imageUrl;

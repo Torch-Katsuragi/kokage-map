@@ -54,18 +54,18 @@ class OverlayImageNode extends ImageNode {
   @override
   bool get hasLocation => true;
 
-  /// ensurePngCacheで解決されたPNGキャッシュのパス
-  String? _cachedPngPath;
+  /// ensurePngCache / GDAL で解決された PNG キャッシュのパス（まだなら null）
+  String? cachedPngPath;
 
-  /// PNGキャッシュパスを設定（ensurePngCache後に呼ばれる）
-  set cachedPngPath(String path) => _cachedPngPath = path;
+  /// 位置合わせで書き換えられないか（QGIS / GDAL で作ったラスタはファイルが正。[ExternalOverlayImageNode]）
+  bool get isReadOnly => false;
 
   /// 画像URLを取得（file://プロトコル）
   /// TIFFの場合はPNGキャッシュ（アプリキャッシュ領域）を参照
   String get imageUrl {
     // TIFFでPNGキャッシュが解決済みならそちらを使用
-    if (_cachedPngPath != null) {
-      final normalized = _cachedPngPath!.replaceAll('\\', '/');
+    if (cachedPngPath != null) {
+      final normalized = cachedPngPath!.replaceAll('\\', '/');
       return 'file:///$normalized';
     }
     // JPG/PNGなど直接読めるファイル
@@ -120,6 +120,7 @@ class OverlayImageNode extends ImageNode {
 
   /// 変換パラメータをKMetaに永続化し、GeoTIFFタグ更新をスケジュール
   Future<void> saveOverlayParams() async {
+    if (isReadOnly) return; // 外のラスタは書き換えない
     final absPath = getAbsoluteFilePath();
     if (absPath == null) return;
 

@@ -9,7 +9,7 @@
 - In read-only shared folders, "Copy as gpkg to my folder" is offered instead of converting
 - QGIS projects (.qgs) reference the original .shp / .geojson, and Views and styles edited in QGIS are read back
 - Shapefiles with heights (Z) and multipoint shapefiles can now be read
-- Rasters made in QGIS and similar tools (GeoTIFF, JPEG2000, PNG/JPEG with a world file, VRT) placed in a folder now appear on the map as overlays. Any coordinate system works (including Japan Plane Rectangular), nodata is transparent, and numeric rasters such as DEMs are shown in grayscale. Their position comes from the file, so they cannot be repositioned in the app. They are written to .qgs as the original files, and layers hidden in QGIS are read back as hidden
+- Rasters made in QGIS and similar tools (GeoTIFF, JPEG2000, PNG/JPEG with a world file, VRT) placed in a folder now appear on the map as overlays. Any coordinate system works (including Japan Plane Rectangular), nodata is transparent, and numeric rasters such as DEMs are shown in grayscale, and paletted rasters keep their colors. Their position comes from the file, so they cannot be repositioned in the app. They are written to .qgs as the original files, and layers hidden in QGIS are read back as hidden. Deleting one also deletes its companion files such as the world file
 
 ### Changed
 

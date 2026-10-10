@@ -183,7 +183,7 @@ QGIS / GDAL で作ったラスタは **GDAL で開いて読み取り専用のオ
   - 範囲はワープ後の `geoTransform`（EPSG:4326 で軸に沿う）→ 回転 0、m/px は縦方向から
   - nodata は `-dstalpha` で透明。オーバービューは GDAL が自分で使う
   - **Byte 以外（16bit・浮動小数の DEM など）は、ワープ後の最小〜最大（`gdalinfo -mm`）で 0〜255 の灰色に伸ばす**
-    （`-ot Byte -scale_n min max 0 255`）。範囲外と nodata を数えないよう、このときだけワープを `-ot Float32 -dstnodata nan` で受ける。
+    （`-ot Byte -scale_n min max 0 255`、色表のラスタは除く）。範囲外と nodata を数えないよう、このときだけワープを `-ot Float32 -dstnodata nan` で受ける。
     `-stats` は使わない（`.aux.xml` を書こうとし、web では入力が読み取り専用で mount される）。QGIS の既定（累積 2〜98%）とは濃淡が少し違う。陰影や色ランプはしない（いちばん素直な形）
 - **キャッシュ**: Android は GeoTiffService と同じアプリのキャッシュ領域 `overlay_png_cache/ext_<元のパスの MD5>.png`、
   web はプロジェクトの `.kokage/cache/overlay/`。隣の `.json` に形（中心・m/px・画素数）と印
@@ -192,7 +192,13 @@ QGIS / GDAL で作ったラスタは **GDAL で開いて読み取り専用のオ
 - **読み取り専用**: 位置はファイルが正。位置合わせの道具は押すと通知センターに「位置合わせできません」を出して起動しない
   （`OverlayImageNode.isReadOnly`、`saveOverlayParams` も何もしない）。「通常の写真に戻す」も出さない（元ファイルを消してしまうため）
 - `.qgs` には元のファイルの相対パスと元の座標系（`gdalinfo` の WKT2・末尾の EPSG・proj4）で `provider=gdal` を書く
-- 未対応（TODO）: GCP だけで位置を持つラスタ、パレットのラスタ（色表が落ちる）
+- **色表（Palette）のラスタ**: 番号は補間できないので `-r near` でワープし、PNG にするとき `-expand rgba` で色に開く
+  （ワープの `-dstalpha` は 4 バンド目のアルファとして残る）
+- **GCP だけのラスタ**（geoTransform も `wgs84Extent` も無い。ジオリファレンサでワープする前の形）: 判定時に長辺 16 画素で
+  ワープして範囲を取る（gdalwarp は GCP を使う）。座標系は `gcps.coordinateSystem`。表示は他と同じ
+- **削除**: 元のファイル一式（`GDALGetFileList`。`.pgw` `.aux.xml` `.ovr` `.tfw` …）と PNG キャッシュを消す（読み取り専用の
+  ベクタレイヤと同じ）。確認ダイアログに消えるファイルを並べる
+- 未対応（TODO）: 判定でこかげマップの形かを見るために `.tif` を丸ごと読む
 
 ### ファイルをフォルダに入れる経路
 

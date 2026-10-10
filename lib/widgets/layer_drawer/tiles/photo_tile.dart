@@ -92,7 +92,8 @@ class PhotoTile extends ConsumerWidget {
       menu: () => [
         RowMenuItem('rename', t.layerDrawer.photo.changeName, icon: Icons.edit),
         if (!isOverlay) RowMenuItem('convert_to_overlay', t.layerDrawer.photo.convertToOverlay, icon: Icons.layers),
-        if (isOverlay) RowMenuItem('convert_to_normal', t.layerDrawer.photo.convertToNormal, icon: Icons.photo),
+        // QGIS / GDAL のラスタは戻す元の写真が無い（戻すとファイルを消してしまう）
+        if (isOverlay && !(node as OverlayImageNode).isReadOnly) RowMenuItem('convert_to_normal', t.layerDrawer.photo.convertToNormal, icon: Icons.photo),
         RowMenuItem('delete', t.layerDrawer.photo.deletePhoto, icon: Icons.delete_outline, danger: true, dividerBefore: true),
       ],
       onMenu: (value) async {

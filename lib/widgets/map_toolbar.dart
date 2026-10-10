@@ -21,6 +21,7 @@ import '../core/map_layout.dart';
 import '../i18n/strings.g.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../providers/device_tool_providers.dart';
+import '../providers/notification_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import '../tools/map_tool.dart';
@@ -123,6 +124,14 @@ class MapToolbar extends ConsumerWidget {
                     final overlay = selectedFeatures
                         .whereType<OverlayImageNode>()
                         .firstOrNull;
+                    // QGIS / GDAL のラスタはファイルが正なので動かさない
+                    if (overlay != null && overlay.isReadOnly) {
+                      ref.read(notificationCenterProvider.notifier).add(
+                            title: t.map.toolbar.overlayReadOnly,
+                            detail: t.map.toolbar.overlayReadOnlyDetail,
+                          );
+                      return;
+                    }
                     tool.setTarget(overlay);
                     ref.read(currentToolProvider.notifier).set(tool);
                     onToolChanged();

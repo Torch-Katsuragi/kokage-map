@@ -653,7 +653,9 @@
       "pen": "ペン",
       "select": "選択",
       "gpsTool": "GPSツール",
-      "overlayTransform": "オーバーレイ変換"
+      "overlayTransform": "オーバーレイ変換",
+      "overlayReadOnly": "QGIS などで作ったラスタは位置合わせできません",
+      "overlayReadOnlyDetail": "位置はファイル（GeoTIFF のタグ・ワールドファイル・.aux.xml）が正です。動かすときは QGIS で直してください"
     },
     "jump": {
       "noLocation": "現在位置をまだ取得できていません",

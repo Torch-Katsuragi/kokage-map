@@ -375,14 +375,21 @@ class QgsProjectBuilder {
 
   /// 読み取り専用レイヤの `|` の後ろ（[QgsLayer.uriOptions]）。
   /// 元のファイルに GDAL のレイヤが複数あれば `layername=<GDAL のレイヤ名>`、
-  /// 型の混ざったレイヤから分けたものは `geometrytype=Point` など（QGIS が型ごとのサブレイヤに付ける形）
+  /// 型の混ざったレイヤから分けたものは `geometrytype=Point` など（QGIS が型ごとのサブレイヤに付ける形）。
+  /// CSV はアプリが開くときと同じオープンオプションを `option:` で添える（無いと QGIS では形の無い表になる。
+  /// QGIS 4.2.2 で確認、2026-10-10）
   static List<String> externalUriOptions(ExternalLayerNode node, String layerName, {required int layerCount}) {
+    final csv = [
+      if (p.extension(node.sourcePath).toLowerCase() == '.csv')
+        for (final option in csvOpenOptions) 'option:$option',
+    ];
     final plan = node.sourcePlan;
     final layer = plan?.layers.where((l) => l.name == layerName).firstOrNull;
-    if (plan == null || layer == null) return layerCount <= 1 ? const [] : ['layername=$layerName'];
+    if (plan == null || layer == null) return [if (layerCount > 1) 'layername=$layerName', ...csv];
     return [
       if (plan.sourceLayerCount > 1) 'layername=${layer.sourceLayer}',
       if (layer.qgisGeometryType != null) 'geometrytype=${layer.qgisGeometryType}',
+      ...csv,
     ];
   }
 

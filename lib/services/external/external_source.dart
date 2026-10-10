@@ -314,9 +314,10 @@ class ExternalSource {
         '-f', 'GPKG',
         if (!first) '-update',
         ...oo,
-        // 形の型はアプリの 3 種（MULTI 系）に揃える。Z・M は落とす（アプリは XY だけ扱う）
+        // 形の型はアプリの 3 種（MULTI 系）に揃える。Z・M は元のまま（変換した gpkg で高さを失わないため。
+        // 表示とヒットテストは XY だけ見る）
         '-nlt', layer.geometryType.value,
-        '-dim', 'XY',
+        '-dim', 'layer_dim',
         '-nln', layer.name,
         if (layer.where != null) ...['-where', layer.where!],
         layer.sourceLayer,

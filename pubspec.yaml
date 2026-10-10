@@ -164,6 +164,10 @@ flutter:
     - assets/changelog/svg/
     - assets/user_guide/
     - build/shaderbundles/terrain.shaderbundle # hook/build.dart が作る（flutter_gpu）
+    - assets/licenses/ # 同梱のネイティブライブラリのライセンス本文（lib/core/native_licenses.dart）
+    # GDAL の proj.db と GDAL_DATA（third_party/gdal/build_android.sh が作る）。web は gdal3.js が自前で持つので Android だけ
+    - path: assets/gdal/
+      platforms: [android]
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -1,6 +1,6 @@
 # 実機専用の統合テスト
 
-`dart:io` / `dart:ffi`（geodiff のネイティブライブラリ）を使うので、web では動かない。
+`dart:io` / `dart:ffi`（geodiff・GDAL のネイティブライブラリ）を使うので、web では動かない。
 CI の e2e(web) は `integration_test/*_test.dart` だけを回すので、ここは対象外。
 
 | ファイル | 中身 |
@@ -10,6 +10,7 @@ CI の e2e(web) は `integration_test/*_test.dart` だけを回すので、こ�
 | `geodiff_two_device_test.dart` | 実機 2 台で往復（`tool/sync_relay/run_two_device.sh` から） |
 | `gpkg_rtree_android_test.dart` | Android の SQLite に rtree が無いこと、geodiff の SQLite で焼き直せること |
 | `geodiff_bench_test.dart` | 面 2 万筆での速さ |
+| `gdal_smoke_test.dart` | `libgdal.so` が読めるか、proj.db / GDAL_DATA の書き出し、各ドライバ・Shift_JIS の shp・CRS・ラスタ（ホスト版 `test/gdal_test.dart` と筋書きを共有） |
 
 ```bash
 flutter test integration_test/device/geodiff_sync_roundtrip_test.dart -d <device>

@@ -2,3 +2,8 @@
 * text=auto
 # 更新履歴の図解（tool/changelog/build.py の出力）。改行を変換しない
 assets/changelog/svg/*.svg -text
+# WSL の bash で Windows 側の作業ツリーから直接回すスクリプト（CRLF だと bash が読めない）
+third_party/gdal/*.sh text eol=lf
+# GDAL のテスト入力はバイト列そのものを見る（Shift_JIS の dbf、CSV の改行）
+test/fixtures/gdal/** -text
+test/fixtures/gdal/*.sh text eol=lf

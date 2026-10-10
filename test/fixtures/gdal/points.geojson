@@ -1,0 +1,5 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"name":"スギ1","dbh":32},"geometry":{"type":"Point","coordinates":[135.96,33.93]}},
+{"type":"Feature","properties":{"name":"ヒノキ2","dbh":28},"geometry":{"type":"Point","coordinates":[135.961,33.931]}},
+{"type":"Feature","properties":{"name":"北山村役場","dbh":0},"geometry":{"type":"Point","coordinates":[135.97,33.94]}}
+]}

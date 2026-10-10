@@ -1,17 +1,11 @@
-// Copyright (C) 2024-2026 Torch-Katsuragi
+// GDAL の実装の差し替え口。呼ぶ側は `createGdal()` で [Gdal] を得る（使い回してよい）。
 //
-// This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation; either version 2 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, write to the Free Software Foundation, Inc.,
-// 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// [Gdal] の実装をプラットフォームで選ぶ。どれも `Gdal createGdal()` を持つ。設計は docs/technical/gdal.md
-export 'gdal_stub.dart' if (dart.library.ffi) 'gdal_ffi.dart' if (dart.library.js_interop) 'gdal_web.dart';
+// 各実装ファイルは同じ名前のトップレベル関数 `Gdal createGdal()` を持つこと:
+//   - gdal_ffi.dart  … Android / ホスト VM（libgdal.so ／ QGIS の gdal*.dll ／ apt の libgdal）
+//   - gdal_web.dart  … web（gdal3.js）
+//   - gdal_stub.dart … どちらでもない環境（呼ぶと UnsupportedError）
+// 設計: docs/technical/gdal.md
+export 'gdal.dart';
+export 'gdal_stub.dart'
+    if (dart.library.ffi) 'gdal_ffi.dart'
+    if (dart.library.js_interop) 'gdal_web.dart';

@@ -4,11 +4,10 @@
 
 ### Open files other than gpkg as they are
 
-- Shapefiles (.shp with their companion files) and GeoJSON (.geojson, or .json whose content is GeoJSON) placed in a folder now show up as layers without importing. They are read-only; visibility, style, labels, Views, the attribute table and export all work. A .shp without a .cpg is read as Shift_JIS
-- Trying to draw or edit attributes offers "Convert to gpkg to edit". Converting writes a gpkg with the same name in the same folder, checks that its contents match, and then deletes the original files. Style, View and visibility settings carry over
+- Shapefiles (.shp with their companion files), GeoJSON, KML/KMZ, CSV (with longitude/latitude columns), GPX, FlatGeobuf, GML, DXF and MapInfo (.tab, .mif) placed in a folder now show up as layers without importing. They are read with GDAL, the same library QGIS uses. They are read-only; visibility, style, labels, Views, the attribute table and export all work. A .shp without a .cpg is read as Shift_JIS (CP932), as the Japanese QGIS does. KML folders become separate layers, and files mixing points, lines and polygons get one layer per kind
+- Trying to draw or edit attributes offers "Convert to gpkg to edit". Converting writes a gpkg with the same name in the same folder, checks that the feature counts match, and then deletes the original files. The coordinate system is kept (a plane-rectangular shapefile becomes a plane-rectangular gpkg), and style, View and visibility settings carry over
 - In read-only shared folders, "Copy as gpkg to my folder" is offered instead of converting
-- QGIS projects (.qgs) reference the original .shp / .geojson, and Views and styles edited in QGIS are read back
-- Shapefiles with heights (Z) and multipoint shapefiles can now be read
+- QGIS projects (.qgs) reference the original files, and Views and styles edited in QGIS are read back
 
 ### Changed
 
@@ -18,7 +17,7 @@
 - A path (KokageMap › 共有) above the list takes you back to any level. The top shows the folder name instead of "Home"
 - Folders have a new "Add files" entry (long-press menu and the + button) that copies the picked files into the folder as they are (Android and web). For a Shapefile, pick its .dbf, .shx and other companion files too. Files dropped onto the list on the web are also put into the folder as they are, instead of being imported into a GeoPackage
 - When moving a layer to another GeoPackage leaves the original GeoPackage empty, the empty file is now deleted (deleting the last layer still keeps the file)
-- Drive-linked folders now also sync Shapefiles (with their companion files), GeoJSON, KML/KMZ and CSV. Files with upper-case extensions (such as IMG.JPG) were skipped; they now sync too
+- Drive-linked folders now also sync Shapefiles (with their companion files), GeoJSON, KML/KMZ, CSV, GPX, FlatGeobuf, GML, DXF and MapInfo. Files with upper-case extensions (such as IMG.JPG) were skipped; they now sync too
 - Projects saved in QGIS now bring back whether each GeoTIFF is shown or hidden. If the project uses GSI or OpenStreetMap tiles, they are added to your background maps (once). Rasters that can't be read (such as WMS) are listed with the reason and left in the QGIS project
 
 ### Lighter

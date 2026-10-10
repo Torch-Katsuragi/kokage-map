@@ -5,10 +5,17 @@
 
 ## 次にやる（実装）
 
-- [ ] 読み取り専用レイヤ（shp・GeoJSON）を実機と web で確かめる（[[docs/technical/external-formats]]）。
-  Pixel 9: Shift_JIS の shp が文字化けせず出る・大きい shp の初回のキャッシュ作りの時間・描こうとすると「gpkgに変換して編集」・
-  変換で元一式が消えて gpkg が出る・スタイル/View が引き継がれる・改名と左スワイプの移動で付属ファイルも動く。
-  web: OPFS/選んだフォルダで `.kokage/cache/external` が作られ、開き直しで作り直さない・変換と複製
+- [ ] 読み取り専用レイヤ（GDAL で読む。2026-10-10〜）を実機と web で確かめる（[[docs/technical/external-formats]]）。
+  Pixel 9: Shift_JIS の shp（.cpg なし）が文字化けせず出る・平面直角座標系の shp が正しい位置に出てタップで選べる・
+  KML（フォルダ 2 つ）・KMZ・CSV（経度/緯度）・GPX・型の混ざった GeoJSON・大きい shp の初回のキャッシュ作りの時間（UI が固まらない）・
+  描こうとすると「gpkgに変換して編集」・変換で元一式が消えて gpkg が出て CRS が元のまま・スタイル/View が引き継がれる・
+  改名と左スワイプの移動で付属ファイルも動く・.qgs を QGIS で開いて元ファイルを指している（`|layername=` `|geometrytype=`・`encoding="CP932"`）。
+  web: `tool/web/fetch_gdal3.sh` の後で、OPFS/選んだフォルダで `.kokage/cache/external` が作られ、開き直しで作り直さない・変換と複製・
+  KMZ（worker の `/vsizip/`、未確認）・.cpg の無い shp（web の GDAL は自分では CP932 にしない。呼ぶ側で `-oo ENCODING=CP932`）
+- [ ] 旧来の取り込み（`lib/services/import_export/importers/`・`parsers/`）を消す。UI からは呼ばれていないが、
+  `test/format_golden_test.dart`（取り込みの往復）・`shapefile_writer_test.dart`・`crs_resolution_test.dart`・`dbf_deleted_record_test.dart` が使っている。
+  書き出しの検証を GDAL（`vectorInfo`）に載せ替えてから消す。`ShapeType` は `shapefile_writer.dart` へ移す
+- [ ] 読み取り専用レイヤの Z・M は落としている（`-dim XY`）。変換した gpkg にも Z が残らない。アプリが Z を扱えるか見て外す
 - [ ] Drive 同期で `.kokage/` を飛ばす（ルートが連携 dir だとキャッシュ gpkg まで上がる。`SyncFileOperations.listLocalSyncFiles`）
 
 ## リリース・Play

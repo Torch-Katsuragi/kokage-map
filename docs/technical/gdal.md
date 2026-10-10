@@ -144,6 +144,8 @@ kokageGdal.loadMs()                                                         // �
   GDAL 単体はこの場合に変換せずバイト列を返し（Shift_JIS が化ける）、QGIS は「システムの文字コード」で読み直すので
   日本語版 Windows の QGIS では CP932 に見える。その見え方に合わせた。呼ぶ側が `-oo ENCODING=...` を渡せばそちらが勝つ。
   `SHAPE_ENCODING`（設定オプション）は `.cpg` まで上書きしてしまうので使わない
+  - FFI 版は `gdal_ffi.dart` が自分で足す。web 版は足さないので、読み取り専用レイヤは呼ぶ側（`ExternalSource.openArgs`）でも同じ判定で渡す。
+    `.qgs` には `<provider encoding="CP932">` と書く（2026-10-10）
 - ⚠ shp を **書く** ときは `-lco ENCODING=UTF-8` を付ける。付けないと GDAL は ISO-8859-1 で書き、日本語が落ちる（QGIS の新規 shp は UTF-8）
 - **スレッド**: 呼び出しは 1 回ごとに `Isolate.run`（別スレッド）で、開いて閉じるまでを同期で済ませる。データセットのハンドルはスレッドをまたがない。
   プロセス全体の設定（ドライバ登録・データの在処・`PROJ_NETWORK=OFF`・エラーハンドラ）は最初の 1 回だけ、ほかの呼び出しより先に

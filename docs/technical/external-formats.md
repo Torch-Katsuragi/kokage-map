@@ -8,9 +8,9 @@ tags: [technical, geopackage, qgis, interop, import]
 2026-10-09 決定。「取り込み」をやめ、QGIS と同じく **dir に置かれたファイルがそのままレイヤになる** 形にする。
 新規に作るものは gpkg だけ。gpkg 以外は **読み取り専用** で開き、編集したければ gpkg へ **変換（置き換え）** する。
 
-> [!IMPORTANT] 読み手は GDAL に一本化する（2026-10-09 同日決定、[[gdal]]）
-> 下の「対応形式」の純 Dart の読み手（`ExternalReader`）は GDAL が入るまでのつなぎ。
-> GDAL が入ったら、キャッシュは `ogr2ogr` の出力（元の CRS のまま）になり、対応形式は GDAL が読めるもの全部になる。
+> [!IMPORTANT] 読み手は GDAL（2026-10-10 実装、[[gdal]]）
+> 純 Dart の読み手（`ExternalReader`・`readers/`）は撤去した。キャッシュは `ogr2ogr` の出力（元の CRS のまま）で、
+> 対応形式は同梱の GDAL のベクタドライバが読めるもの。
 
 ## 原則
 
@@ -19,37 +19,43 @@ tags: [technical, geopackage, qgis, interop, import]
 - **変換は置き換え**: gpkg を書いて読み直して一致を確かめたら、元のファイル一式を消す。
   変換後の状態はフォルダを見れば分かる。途中で落ちて両方残ったら、両方見えるだけ（データは失われない）
 - 消せない場所（読み取り専用の Drive 共有フォルダ）では変換を出さず、「自分のフォルダに gpkg として複製」だけ出す
-- 1 ファイル（shp は付属ファイル一式）＝ 1 ノード（gpkg 1 本に相当）。中のレイヤはふつう 1 枚で、名前は元の名前。
-  KML のフォルダや GeoJSON のジオメトリ型の混在では複数枚になる（`<名前>_point` など）。
+- 1 ファイル（shp は付属ファイル一式）＝ 1 ノード（gpkg 1 本に相当）。中のレイヤ名は **GDAL のレイヤ名**
+  （shp・GeoJSON はふつうファイル名、KML はフォルダ名、GeoJSON の `name` メンバー、DXF は `entities`）。
+  点・線・面が混ざったレイヤは `<名前>_point` `_line` `_polygon` に分ける。
   変換先は同じ dir の `<元の名前>.gpkg`。同名の gpkg があれば `<名前>_1.gpkg` …（既存の gpkg に混ぜない。どこに入ったか分からなくなる）
-- 読み手の共通の形は `lib/services/external/external_dataset.dart`（`ExternalReader` → `ExternalDataset`）
+- 窓口は `lib/services/external/external_source.dart`（`ExternalSource`）
 
 ## 対応形式
 
-| 形式 | 拡張子 | 読み方 | 段 |
-|---|---|---|---|
-| Shapefile | `.shp`（`.shx` `.dbf` `.prj` `.cpg` を伴う） | `readers/shapefile_reader.dart`（既存パーサー `parsers/` を fs 経由で） | 1（済） |
-| GeoJSON | `.geojson` `.json`（中身が FeatureCollection / Feature のときだけ） | `readers/geojson_reader.dart` | 1（済） |
-| KML / KMZ | `.kml` `.kmz` | 新規（純 Dart、KMZ は archive で展開） | 2 |
-| CSV（点） | `.csv`（緯度経度・XY 列を推定できたときだけ） | 新規 | 2 |
-| GeoTIFF | `.tif` | 既存（オーバーレイ） | 済 |
+拡張子で候補にし（`externalVectorExtensions`）、`.json` `.csv` だけは GDAL で開いて形のあるレイヤがあるときだけレイヤにする
+（結果は更新時刻と大きさで控える）。`.gpkg` は従来の経路。隠しファイル・隠しフォルダ（`.kokage` など）の中は外す。
 
-GDAL は無い（純 Dart）。FlatGeobuf などは要望が来てから。
+| 形式 | 拡張子 | 備考 |
+|---|---|---|
+| Shapefile | `.shp`（付属は `GDALGetFileList` の一式） | `.cpg` も DBF の LDID も無ければ `-oo ENCODING=CP932`（[[gdal#Android の実装で決めたこと（2026-10-09）]]） |
+| GeoJSON | `.geojson` `.json` | `.json` は GDAL が形を見つけたときだけ |
+| KML / KMZ | `.kml` `.kmz` | 同梱の GDAL は LIBKML なし。KMZ は `/vsizip/<パス>` で KML ドライバに渡す（web は worker が `vsi` を付ける） |
+| CSV（点） | `.csv` | `X_POSSIBLE_NAMES`（lon・lng・long・longitude・経度・x）/`Y_POSSIBLE_NAMES`（lat・latitude・緯度・y）、`KEEP_GEOM_COLUMNS=NO`、`AUTODETECT_TYPE=YES`。座標列が無ければレイヤにしない |
+| GPX | `.gpx` | waypoints・routes・tracks… が別レイヤ（空のレイヤも GDAL が出す） |
+| FlatGeobuf | `.fgb` | |
+| GML | `.gml`（`.xsd` `.gfs`） | 基盤地図情報は GDAL_DATA の `.gfs` を使う |
+| DXF | `.dxf` | 1 レイヤ（`entities`）で型が混ざる → 分ける |
+| MapInfo | `.tab`（`.dat` `.map` `.id` `.ind`）`.mif`（`.mid`） | |
+| GeoTIFF | `.tif` | 既存（オーバーレイ） |
 
-読み手の一覧は `lib/services/external/external_readers.dart`（拡張子で引く。形式を足すときは 1 行足す）。
+### キャッシュの作り方（`ExternalSource.plan` → `translate`）
 
-### 読み方の細部（2026-10-09 実装）
+1. `ogrinfo -json -so`（`vectorInfo`）でレイヤと形の型・件数を見る。形の無いレイヤは飛ばす
+2. 型が `Geometry`（混在）・`GeometryCollection` のレイヤは、`-where "OGR_GEOMETRY IN (...)"` で点・線・面ごとに数え、
+   2 種以上あれば分ける（1 種だけなら名前はそのまま）。GeometryCollection の地物は落ちる
+3. レイヤごとに `ogr2ogr -f GPKG [-update] -nlt MULTIPOINT|MULTILINESTRING|MULTIPOLYGON -dim XY -nln <名前> [-where …] <元> <GDAL のレイヤ名>`。
+   **`-t_srs` は付けない**（元の CRS のまま。アプリは投影座標系の gpkg を描ける・選べる）。Z・M は落とす（`-dim XY`）
+4. 印の表 `kokage_external_source` に `signature`（`GDALGetFileList` の一式の名前・更新時刻・大きさ＋`formatVersion`）・`source`・
+   `layers`（キャッシュのレイヤ → 元の GDAL のレイヤ名・分けた型・件数。`.qgs` の `|layername=` `|geometrytype=` に使う）
 
-- shp: `.cpg` があればその文字コード、無ければ Shift_JIS。DBF の文字コードは `charset`（純 Dart）で解く
-  （`charset_converter` はプラットフォームチャネルで web とホストのテストに無い）。DBF は fs 経由で読む（web で dart:io に触れない）。
-  DBF で削除済みの行のレコードは読み飛ばす（GDAL/QGIS と同じ）。`.prj` があれば WGS84 に直す。
-  Z・M 付きの形は XY だけ読む。マルチポイントは最初の点
-- GeoJSON: 多重の形（MultiLineString・MultiPolygon）は最初の 1 つだけ（旧来の取り込みと同じ。⚠ 変換すると残りの部分は落ちる）。
-  入れ子の属性（オブジェクト・配列）は JSON の文字列。列の型は最初に値が入っていた行で決める。`crs` メンバーは見ない（WGS84 とみなす）
-- 付属ファイルは「拡張子を除いた名前 + 付属の拡張子」を大文字小文字を区別せずに探す（`林班.SHP` と `林班.dbf` の混在）
-- 列名が gpkg 側の予約名（`fid` `id` `geom` `geometry` `rowid`、大文字小文字を問わない）なら後ろに `_` を足す
-  （`FeatureRepository` が黙って捨てていた。shp の `ID` 列は多い）
-- 旧来の「取り込み」（`importers/`）は読み手に載せ替えていない。ドラッグ＆ドロップの置き換えで撤去する前提で、そのまま残した
+- 列名は GDAL のまま（旧来の予約名の言い換え `ID` → `ID_` はやめた）。属性の型も GDAL の判定（CSV は `AUTODETECT_TYPE`）
+- GDAL の呼び出しは FFI 版なら 1 回ごとに `Isolate.run`（UI を塞がない）、web は worker
+- 使う GDAL は `ExternalGdal.instance`（既定は `createGdal()`。テストは `GdalFfi(findHostGdal())` を差す）
 
 ## 仕組み
 
@@ -61,14 +67,14 @@ GDAL は無い（純 Dart）。FlatGeobuf などは要望が来てから。
 - `name` は元のファイル名（例 `林班.shp`）、`getAbsoluteFilePath()` は元のファイルのパス
 - `geoPackageFile` は `.kokage/cache/external/<元のパスの hash>.gpkg`（プロジェクトルート直下の `.kokage`。同期しない）。
   hash は正規化した元の絶対パスの MD5 の先頭 20 桁（`ExternalLayerCache.cachePathFor`）。ルートが決まっていなければ元と同じ dir の `.kokage`。
-  中のレイヤ名は元の名前（拡張子なし）
-- キャッシュの作り直しは元ファイル（shp は付属一式）の名前・更新時刻・大きさが変わったとき。印はキャッシュ gpkg の中の
-  `kokage_external_source` 表（`key`/`value`。`signature` と `source`）に持つ（キャッシュの都合の印で、真実源ではない）。
+  中のレイヤ名は GDAL のレイヤ名
+- キャッシュの作り直しは元ファイル（`GDALGetFileList` の一式）の名前・更新時刻・大きさが変わったとき。印はキャッシュ gpkg の中の
+  `kokage_external_source` 表（`key`/`value`。`signature` `source` `layers`）に持つ（キャッシュの都合の印で、真実源ではない）。
   印には読み方の版（`ExternalLayerCache.formatVersion`）も入れる。読み方を変えたら上げると全部作り直す
 - web: 消したキャッシュを同じパスで作り直すと sqlite3 WASM 側に残った前の写しが開くので、作り直す前に捨てる
   （`GeoPackageConnection.discardWebCopy`）。キャッシュは fs 経由で書くので web でも同じ置き場
-- ツリーには `FolderNode.loadExternalNodes` で載る（グローバル・Drive 連携 dir も同じ経路）。`.json` の中身の判定は
-  更新時刻と大きさで控える（フォルダを開くたびに読み直さない）
+- ツリーには `FolderNode.loadExternalNodes` で載る（グローバル・Drive 連携 dir も同じ経路）。`.json` `.csv` の中身の判定は
+  更新時刻と大きさで控える（フォルダを開くたびに GDAL で開き直さない）
 - `isReadOnly == true`。編集の入口（描画・頂点編集・属性の編集・レイヤの改名・View の追加は可/不可は下表）を閉じる
 - 削除: 元のファイル一式とキャッシュを消す（gpkg の削除と同じ扱い）。`syncChildren` で外れるだけのときは何も消さない
 - ファイルの改名は元一式の改名（拡張子は保つ）。中のレイヤ名も変わるので、フォルダ設定の鍵を移す
@@ -89,30 +95,28 @@ GDAL は無い（純 Dart）。FlatGeobuf などは要望が来てから。
 ### 変換（`ExternalLayerConverter`）
 
 1. `<元の名前>.gpkg` を同じ dir に作る（キャッシュ gpkg を複製し、`kokage_external_source` 表を落とす）
-2. 書いた gpkg を開き直し、件数・ジオメトリ型・列名が元と一致するか確かめる。件数とジオメトリ型は元を読み直した値と、
-   列名はキャッシュと比べる（列名は gpkg に書くときに整える＝予約名に `_` を足すので、元の名前とは比べられない）。
+2. 書いた gpkg を確かめる。件数はレイヤごとに **元と書いた gpkg の両方を GDAL（`ogrinfo -so`）で数えて** 比べる
+   （分けたレイヤは `-where` 付きで数えた元の件数）。ジオメトリ型はアプリの 3 種、列名はキャッシュと比べる。
    食い違えば書いた gpkg を消して元を残す（`ExternalConvertVerifyException`）
-3. 一致したら元のファイル一式を消す（shp: `.shp .shx .dbf .prj .cpg .qix .sbn .sbx .shp.xml .fix .aih .ain`）。
+3. 一致したら元のファイル一式（`GDALGetFileList`）を消す。
    本体を先に消し、消せなければ書いた gpkg を消して元のまま戻し、「自分のフォルダにgpkgとして複製」を出す。
    付属ファイルだけ消せなかったときは残ったものを通知する
 4. 親 dir の `updateChildren()`。`.qgs` の参照は次の自動更新で実態に合わせて付け替わる。
    スタイル・View・可視性はレイヤの鍵が変わるので **変換時に新しい鍵へ移す**（フォルダ設定の書き換え）
 
-⚠ 変換後の座標系は EPSG:4326（アプリが作るレイヤはすべて 4326）。元の CRS を保つのは後回し。
+変換後の座標系は **元のまま**（キャッシュが ogr2ogr の出力で、それを複製するので。2026-10-10〜）。
 
 ### `.qgs` との往復
 
-- 書く: 読み取り専用レイヤは `provider=ogr`、`datasource=./林班.shp`（shp・GeoJSON・KML は `|layername=` なし、
-  KMZ・複数レイヤの KML は `|layername=`）。CSV は `delimitedtext` の URI。キャッシュのパスは書かない
-  - GeoJSON の型の混在は `|layername=` ではなく `|geometrytype=Point`（`LineString` `Polygon`）。QGIS が同じファイルの
-    型ごとのサブレイヤに付ける形で、OGR の GeoJSON はレイヤが 1 枚なので `|layername=<名前>_point` では開けない
-  - CRS は `.prj` の WKT をそのまま書く（ESRI 形式の `.prj` は EPSG コードを持たないことが多い。QGIS は WKT から EPSG を引き当てる）。
-    `.prj` の無い shp・GeoJSON は EPSG:4326
-  - `.cpg` の無い shp は `<provider encoding="Shift_JIS">`（アプリと同じ読み方。`.cpg` があれば GDAL がそれで読む）
+- 書く: 読み取り専用レイヤは `provider=ogr`、`datasource=./林班.shp`。元の GDAL のレイヤが 2 枚以上なら `|layername=<GDAL のレイヤ名>`、
+  型の混ざったレイヤから分けたものは `|geometrytype=Point`（`LineString` `Polygon`。QGIS が型ごとのサブレイヤに付ける形）。
+  CSV も `provider=ogr`（GDAL の CSV ドライバ。⚠ QGIS では `-oo` の座標列の指定が無いので形の無い表に見えるかもしれない。未確認）。キャッシュのパスは書かない
+  - CRS はキャッシュ gpkg のもの（ogr2ogr が元の CRS のまま書いている）を gpkg と同じ経路（`GpkgCrsResolver`）で書く
+  - `.cpg` も DBF の LDID も無い shp は `<provider encoding="CP932">`（アプリと同じ読み方。それ以外は UTF-8 で、GDAL が自分で決める）
   - QGIS 4.2.2 で開いて valid・件数・CRS（平面直角 VI 系の `.prj` → EPSG:6674）・`geometrytype` のサブレイヤを確認（2026-10-09。
     `test/qgs_external_layer_test.dart` を `KOKAGE_KEEP_QGS=<dir>` で走らせると一式が残る）
-- 読む（`_SourceResolver`）: ogr の非 gpkg は `ExternalLayerNode` に結びつける（`|layername=` が無ければ、1 レイヤならそれ、
-  `geometrytype=` があれば `<名前>_point` など、それ以外はファイル名）。
+- 読む（`_SourceResolver`）: ogr の非 gpkg は `ExternalLayerNode` に結びつける。`|layername=`（GDAL のレイヤ名）と
+  `|geometrytype=` をキャッシュの `layers` の割り当てで引く（無ければ、1 レイヤならそれ、`<名前>_point` など、ファイル名）。
   `delimitedtext` は CSV のノードへ。gdal のラスタはオーバーレイ、`wms`/`xyz` の XYZ タイルは背景地図のレイヤへ（下の 2 項）。
   PostGIS・メモリなどは従来どおり「取り込めません」
 

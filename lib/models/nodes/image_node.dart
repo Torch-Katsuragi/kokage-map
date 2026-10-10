@@ -26,6 +26,7 @@ import '../../models/kmeta.dart';
 import '../../services/geotiff_service.dart';
 import '../../services/kmeta_service.dart';
 import '../../utils/exif_parser.dart';
+import 'external_overlay_image_node.dart';
 import 'folder_node.dart';
 import 'layer_tree_node.dart';
 import 'overlay_image_node.dart';
@@ -95,9 +96,11 @@ class ImageNode extends LayerTreeNode {
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) return nodes;
 
-    const supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'};
+    const supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.jp2', '.vrt'};
 
-    final imageFiles = (entries ?? await fs.list(absPath))
+    final all = entries ?? await fs.list(absPath);
+    final siblingNames = {for (final e in all) if (!e.isDirectory) e.name.toLowerCase()};
+    final imageFiles = all
         .where((e) =>
             !e.isDirectory &&
             supportedExtensions.contains(p.extension(e.path).toLowerCase()))
@@ -126,6 +129,14 @@ class ImageNode extends LayerTreeNode {
             visible: true,
             parent: parent,
           ));
+          continue;
+        }
+        // QGIS / GDAL で作ったラスタ（読み取り専用のオーバーレイ）
+        final external = await ExternalOverlayImageNode.tryCreate(entity.path, siblingNames, parent: parent);
+        if (external != null) {
+          nodes.add(external);
+        } else if (ext == '.jp2' || ext == '.vrt') {
+          // 位置の無い JPEG2000 / VRT は写真としても見せない
         } else {
           // 通常画像
           final exifData = await ExifParser.extractFromFile(entity.path);

@@ -23,7 +23,8 @@ tags: [technical, gdal, qgis, interop]
 - **読み取り専用レイヤのキャッシュ**: `ogr2ogr -f GPKG <cache> <src>`（座標系は元のまま。アプリは投影座標の gpkg を描ける）
 - **gpkg への変換**: キャッシュの複製（= ogr2ogr の出力。元の CRS が保たれる）
 - **ラスタのオーバーレイ**: `gdalwarp -t_srs EPSG:4326 -ts <長辺 ≤ 4096>` → `gdal_translate -of PNG`。
-  オーバービューがあれば GDAL が自分で使う。四隅は `gdalinfo -json` の `wgs84Extent`
+  オーバービューがあれば GDAL が自分で使う。四隅はワープ後の `geoTransform`（2026-10-10 実装、
+  [[external-formats#ラスタのオーバーレイ（GDAL、2026-10-10）]]）
 - 範囲は「読む・変換する」だけ。gpkg の編集はこれまでどおり sqflite（同期のマージは geodiff）
 
 ## 実装の選び方

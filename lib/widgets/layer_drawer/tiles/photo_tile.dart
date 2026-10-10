@@ -26,6 +26,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../i18n/strings.g.dart';
 import '../../../models/kmeta.dart';
+import '../../../models/nodes/external_overlay_image_node.dart';
 import '../../../models/nodes/image_node.dart';
 import '../../../models/nodes/overlay_image_node.dart';
 import '../../../providers/selection_providers.dart';
@@ -92,7 +93,8 @@ class PhotoTile extends ConsumerWidget {
       menu: () => [
         RowMenuItem('rename', t.layerDrawer.photo.changeName, icon: Icons.edit),
         if (!isOverlay) RowMenuItem('convert_to_overlay', t.layerDrawer.photo.convertToOverlay, icon: Icons.layers),
-        if (isOverlay) RowMenuItem('convert_to_normal', t.layerDrawer.photo.convertToNormal, icon: Icons.photo),
+        // QGIS / GDAL のラスタは戻す元の写真が無い（戻すとファイルを消してしまう）
+        if (isOverlay && !(node as OverlayImageNode).isReadOnly) RowMenuItem('convert_to_normal', t.layerDrawer.photo.convertToNormal, icon: Icons.photo),
         RowMenuItem('delete', t.layerDrawer.photo.deletePhoto, icon: Icons.delete_outline, danger: true, dividerBefore: true),
       ],
       onMenu: (value) async {
@@ -112,11 +114,17 @@ class PhotoTile extends ConsumerWidget {
   }
 
   Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
+    // QGIS / GDAL のラスタは元のファイル一式（.pgw・.aux.xml・.ovr …）を消すので、消えるファイルを見せる
+    final self = node;
+    final message = self is ExternalOverlayImageNode
+        ? t.externalLayer.deleteConfirm(name: self.name, files: (await self.sourceFiles()).map(p.basename).join('、'))
+        : t.layerDrawer.photo.deleteConfirm(name: self.name);
+    if (!context.mounted) return;
     await confirmAndExecute(
       context,
       ref: ref,
       title: t.layerDrawer.photo.deleteTitle,
-      content: Text(t.layerDrawer.photo.deleteConfirm(name: node.name)),
+      content: Text(message),
       confirmLabel: t.common.delete,
       confirmColor: Colors.red,
       successMessage: t.layerDrawer.photo.photoDeleted(name: node.name),

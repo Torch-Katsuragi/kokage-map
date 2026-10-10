@@ -86,7 +86,7 @@ class OverlayTransformTool extends MapTool with PanDelegation {
   void onActivate() {
     // 選択中のOverlayImageNodeを取得
     final selected = _ref.read(selectedFeaturesProvider);
-    _target = selected.whereType<OverlayImageNode>().firstOrNull;
+    _target = selected.whereType<OverlayImageNode>().where((n) => !n.isReadOnly).firstOrNull;
   }
 
   @override
@@ -99,7 +99,8 @@ class OverlayTransformTool extends MapTool with PanDelegation {
 
   /// 操作対象を設定（外部から呼び出し可能）
   void setTarget(OverlayImageNode? node) {
-    _target = node;
+    // QGIS / GDAL のラスタ（読み取り専用）は動かさない
+    _target = node != null && node.isReadOnly ? null : node;
   }
 
   /// 操作対象を取得

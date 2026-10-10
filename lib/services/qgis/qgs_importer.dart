@@ -51,6 +51,7 @@ import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/label_expression.dart';
 import '../external/external_source.dart';
+import '../gdal_raster_overlay.dart';
 import '../kmeta_service.dart';
 import 'qgs_project_builder.dart' show QgsProjectBuilder;
 import 'qgs_raster_source.dart';
@@ -673,17 +674,17 @@ class _SourceResolver {
           return;
         }
         final ext = p.extension(absPath).toLowerCase();
-        if (ext != '.tif' && ext != '.tiff') {
-          discarded.add('$name（GeoTIFF 以外のラスタは未対応）');
+        if (!GdalRasterOverlay.rasterExtensions.contains(ext)) {
+          discarded.add('$name（${ext.isEmpty ? '拡張子の無い' : ext} ラスタは未対応）');
           return;
         }
         final node = imageIndex[absPath];
         if (node == null) {
           discarded.add('$name（${p.basename(absPath)} が見つかりません）');
         } else if (node is! OverlayImageNode) {
-          // 位置を読めるのはこかげマップが書く形（ModelTransformationTag・WGS84）だけ。
-          // GDAL の既定（ModelTiepoint + ModelPixelScale）や投影座標系の GeoTIFF は写真として並ぶ
-          discarded.add('$name（${p.basename(absPath)} の位置を読めません。こかげマップで位置合わせした GeoTIFF のみ対応）');
+          // こかげマップの GeoTIFF でも、GDAL で位置と座標系が読めるラスタ（ExternalOverlayImageNode）でもない。
+          // GDAL が無い環境（読み込みに失敗した web など）でもここに来る
+          discarded.add('$name（${p.basename(absPath)} の位置か座標系を読めません）');
         } else {
           overlays.add((node: node, id: id));
         }

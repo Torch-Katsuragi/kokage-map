@@ -49,6 +49,7 @@ import '../../../interfaces/map_state_interface.dart';
 import '../../../interfaces/terrain_projection.dart';
 import '../../../models/basemap_provider.dart';
 import '../../../models/map_style_group.dart';
+import '../../../models/nodes/external_overlay_image_node.dart';
 import '../../../models/nodes/overlay_image_node.dart';
 import '../../../models/party/party_room.dart';
 import '../../../providers/party_providers.dart';

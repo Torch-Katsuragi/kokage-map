@@ -8,6 +8,7 @@
 - Trying to draw or edit attributes offers "Convert to gpkg to edit". Converting writes a gpkg with the same name in the same folder, checks that the feature counts match, and then deletes the original files. The coordinate system is kept (a plane-rectangular shapefile becomes a plane-rectangular gpkg), and style, View and visibility settings carry over
 - In read-only shared folders, "Copy as gpkg to my folder" is offered instead of converting
 - QGIS projects (.qgs) reference the original files, and Views and styles edited in QGIS are read back
+- Rasters made in QGIS and similar tools (GeoTIFF, JPEG2000, PNG/JPEG with a world file, VRT) placed in a folder now appear on the map as overlays. Any coordinate system works (including Japan Plane Rectangular), nodata is transparent, and numeric rasters such as DEMs are shown in grayscale, and paletted rasters keep their colors. Their position comes from the file, so they cannot be repositioned in the app. They are written to .qgs as the original files, and layers hidden in QGIS are read back as hidden. Deleting one also deletes its companion files such as the world file
 
 ### Changed
 

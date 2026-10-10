@@ -31,6 +31,7 @@ import '../../services/google_drive/sync_base_store.dart';
 import '../../utils/exif_parser.dart';
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
+import 'external_overlay_image_node.dart';
 import 'folder_node.dart';
 import 'geopackage_node.dart';
 import 'image_node.dart';
@@ -103,7 +104,8 @@ mixin _GlobalChildren on FolderNode {
   @override
   Future<List<LayerTreeNode>> loadImageNodes(List<KFileEntry> entries) async {
     final nodes = <LayerTreeNode>[];
-    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
+    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.jp2', '.vrt'];
+    final siblingNames = {for (final e in entries) if (!e.isDirectory) e.name.toLowerCase()};
     final imageFiles = entries
         .where((e) =>
             !e.isDirectory &&
@@ -126,7 +128,13 @@ mixin _GlobalChildren on FolderNode {
         nodes.add(await GlobalOverlayImageNode._fromGeoTiff(
           entity.path, overlayParams, parent: this,
         ));
-      } else {
+        continue;
+      }
+      // QGIS / GDAL で作ったラスタ（読み取り専用のオーバーレイ）
+      final external = await ExternalOverlayImageNode.tryCreate(entity.path, siblingNames, parent: this);
+      if (external != null) {
+        nodes.add(external);
+      } else if (ext != '.jp2' && ext != '.vrt') {
         final node = await GlobalImageNode.fromPath(entity.path, parent: this);
         if (node != null) nodes.add(node);
       }

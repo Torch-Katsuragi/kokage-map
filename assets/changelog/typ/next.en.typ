@@ -17,10 +17,18 @@
 
 #fixes(
   "Open files other than gpkg as they are",
-  [Shapefiles and GeoJSON in a folder show up as layers (read-only)],
-  [Editing offers "Convert to gpkg to edit"; the original is replaced after a check],
+  [Shapefile, GeoJSON, KML, CSV, GPX and more in a folder show up as layers (read-only, read with the same GDAL as QGIS)],
+  [Rasters made in QGIS, such as GeoTIFF, show up as overlays],
+  [Editing offers "Convert to gpkg to edit"; the CRS is kept and the original is replaced after a check],
   [In read-only shared folders: "Copy as gpkg to my folder"],
   [QGIS projects reference the original files, and edits are read back],
+)
+
+#fixes(
+  "Getting files in and out",
+  [Folders get "Add files" (long-press and +, Android and web)],
+  [A GeoPackage left empty by a move is deleted],
+  [Drive sync now carries Shapefile sets, KML, CSV and more; upper-case extensions too],
 )
 
 #fixes(

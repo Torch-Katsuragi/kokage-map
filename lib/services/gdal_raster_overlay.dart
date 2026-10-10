@@ -82,7 +82,11 @@ class GdalRasterProbe {
   bool get needsStretch => [
         for (var i = 0; i < bandTypes.length; i++)
           if (colorInterpretations.elementAtOrNull(i) != 'Alpha') bandTypes[i],
-      ].any((t) => t != 'Byte');
+      ].any((t) => t != 'Byte') &&
+      !isPalette;
+
+  /// 色表のラスタ（1 バンドの Palette）。番号を補間できないので最近傍でワープし、PNG にするとき `-expand rgba` で色に開く
+  bool get isPalette => colorInterpretations.firstOrNull == 'Palette';
 
   bool get isGeographic => RegExp(r'^\s*GEOG(CRS|CS)\[').hasMatch(crsWkt);
 
@@ -149,7 +153,13 @@ abstract final class GdalRasterOverlay {
     if (hit != null && hit.$1 == stamp) return hit.$2;
     GdalRasterProbe? result;
     try {
-      result = parseInfo(await _g.rasterInfo(path, args: const ['-proj4']));
+      final info = await _g.rasterInfo(path, args: const ['-proj4']);
+      // GCP だけで位置を持つラスタ（`wgs84Extent` が出ない）は、小さくワープして範囲を取る（gdalwarp は GCP を使う）
+      final gcps = info['gcps'];
+      final bounds = info['geoTransform'] == null && gcps is Map && (gcps['gcpList'] as List?)?.isNotEmpty == true
+          ? await _warpedBounds(path)
+          : null;
+      result = parseInfo(info, bounds: bounds);
     } catch (e) {
       AppLogger.debug('[GdalRasterOverlay] ${p.basename(path)} を GDAL で開けない: $e');
     }
@@ -157,18 +167,29 @@ abstract final class GdalRasterOverlay {
     return result;
   }
 
-  /// `gdalinfo -json` の結果を読む。位置（geoTransform）・座標系・`wgs84Extent` のどれかが無ければ null
-  static GdalRasterProbe? parseInfo(Map<String, dynamic> info) {
-    final gt = info['geoTransform'];
-    final cs = info['coordinateSystem'] is Map ? info['coordinateSystem'] as Map : const {};
+  /// `gdalinfo -json` の結果を読む。座標系と範囲（`wgs84Extent`、GCP のラスタは [bounds]）が無ければ null。
+  /// [bounds] は (西, 南, 東, 北)
+  static GdalRasterProbe? parseInfo(Map<String, dynamic> info, {(double, double, double, double)? bounds}) {
+    final gcps = info['gcps'] is Map ? info['gcps'] as Map : const {};
+    final cs = info['coordinateSystem'] is Map
+        ? info['coordinateSystem'] as Map
+        : (gcps['coordinateSystem'] is Map ? gcps['coordinateSystem'] as Map : const {});
     final wkt = cs['wkt'] as String?;
-    final extent = info['wgs84Extent'];
     final size = info['size'];
-    if (gt is! List || wkt == null || wkt.trim().isEmpty || extent is! Map || size is! List) return null;
-    final ring = (extent['coordinates'] as List?)?.firstOrNull as List?;
-    if (ring == null || ring.isEmpty) return null;
-    final lons = [for (final c in ring) ((c as List)[0] as num).toDouble()];
-    final lats = [for (final c in ring) ((c as List)[1] as num).toDouble()];
+    if (wkt == null || wkt.trim().isEmpty || size is! List) return null;
+    var lons = <double>[], lats = <double>[];
+    final extent = info['wgs84Extent'];
+    if (info['geoTransform'] is List && extent is Map) {
+      final ring = (extent['coordinates'] as List?)?.firstOrNull as List?;
+      if (ring == null || ring.isEmpty) return null;
+      lons = [for (final c in ring) ((c as List)[0] as num).toDouble()];
+      lats = [for (final c in ring) ((c as List)[1] as num).toDouble()];
+    } else if (bounds != null) {
+      lons = [bounds.$1, bounds.$3];
+      lats = [bounds.$2, bounds.$4];
+    } else {
+      return null;
+    }
     final bands = (info['bands'] as List? ?? const []).cast<Map>();
     final epsg = RegExp(r'ID\["EPSG",(\d+)\]\]\s*$').firstMatch(wkt)?.group(1);
     final proj4 = cs['proj4'] as String?;
@@ -237,10 +258,46 @@ abstract final class GdalRasterOverlay {
     return dir;
   }
 
+  /// 小さく（長辺 16 画素）ワープした範囲 (西, 南, 東, 北)。GCP のラスタの判定用
+  static Future<(double, double, double, double)> _warpedBounds(String src) async {
+    final tmp = p.join(await _cacheDir(src), 'probe_${stableHashHex(src, length: 16)}.tif');
+    await _deleteQuietly(tmp);
+    try {
+      await _g.warp(src, tmp, args: const ['-t_srs', 'EPSG:4326', '-ts', '16', '0', '-of', 'GTiff', '-overwrite']);
+      final info = await _g.rasterInfo(tmp);
+      final gt = (info['geoTransform'] as List).map((v) => (v as num).toDouble()).toList();
+      final size = (info['size'] as List).map((v) => (v as num).toInt()).toList();
+      return (gt[0], gt[3] + gt[5] * size[1], gt[0] + gt[1] * size[0], gt[3]);
+    } finally {
+      await _deleteQuietly(tmp);
+    }
+  }
+
+  static String _key(String src) => 'ext_${stableHashHex(src, length: 16)}';
+
+  /// 元のファイル一式（`GDALGetFileList`。.pgw・.aux.xml・.ovr・.tfw …、自分自身を含む）。GDAL で開けなければ自分だけ
+  static Future<List<String>> sourceFiles(String src) async {
+    try {
+      final files = await _g.fileList(src);
+      if (files.isNotEmpty) return files;
+    } catch (e) {
+      AppLogger.debug('[GdalRasterOverlay] ${p.basename(src)} の付属ファイルを数えられない: $e');
+    }
+    return [src];
+  }
+
+  /// [src] の PNG キャッシュと形の控えを消す
+  static Future<void> discardCache(String src) async {
+    final dir = await _cacheDir(src);
+    await _deleteQuietly(p.join(dir, '${_key(src)}.png'));
+    await _deleteQuietly(p.join(dir, '${_key(src)}.json'));
+    _probeCache.remove(src);
+  }
+
   /// PNG キャッシュを作る（あれば使う）。付属ファイル一式（`GDALGetFileList`）の大きさ・更新時刻が変われば作り直す
   static Future<GdalRasterRender> render(String src, GdalRasterProbe probe) async {
     final dir = await _cacheDir(src);
-    final key = 'ext_${stableHashHex(src, length: 16)}';
+    final key = _key(src);
     final png = p.join(dir, '$key.png');
     final meta = p.join(dir, '$key.json');
 
@@ -264,7 +321,8 @@ abstract final class GdalRasterOverlay {
     final (w, h) = outputSize(probe);
     final stretch = probe.needsStretch;
     await _g.warp(src, tmp, args: [
-      '-t_srs', 'EPSG:4326', '-ts', '$w', '$h', '-r', 'bilinear', '-dstalpha', '-of', 'GTiff', '-overwrite',
+      '-t_srs', 'EPSG:4326', '-ts', '$w', '$h', '-r', probe.isPalette ? 'near' : 'bilinear', '-dstalpha', '-of', 'GTiff',
+      '-overwrite',
       // 伸ばすときは、範囲外と nodata を統計から外すため NaN を nodata にした Float32 で受ける
       // （-dstalpha だけでは範囲外が 0 の値になり、gdalinfo -stats の最小値に入ってしまう）
       if (stretch) ...['-ot', 'Float32', '-dstnodata', 'nan'],
@@ -283,7 +341,8 @@ abstract final class GdalRasterOverlay {
         height: size[1],
       );
 
-      final args = ['-of', 'PNG'];
+      // 色表は RGBA に開く（ワープの -dstalpha のアルファはそのまま 4 バンド目に残る）
+      final args = ['-of', 'PNG', if (probe.isPalette) ...['-expand', 'rgba']];
       if (stretch) {
         args.addAll(['-ot', 'Byte']);
         final bands = (info['bands'] as List).cast<Map>();

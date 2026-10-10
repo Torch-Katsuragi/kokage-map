@@ -19,6 +19,7 @@
 
 import '../../core/fs/k_file_system.dart';
 import '../../services/gdal_raster_overlay.dart';
+import '../../utils/app_logger.dart';
 import 'image_node.dart';
 import 'layer_tree_node.dart';
 import 'overlay_image_node.dart';
@@ -61,6 +62,27 @@ class ExternalOverlayImageNode extends OverlayImageNode {
 
   @override
   bool get isReadOnly => true;
+
+  /// 元のファイル一式（.pgw・.aux.xml・.ovr・.tfw …、自分自身を含む）。削除の確認に並べる
+  Future<List<String>> sourceFiles() => GdalRasterOverlay.sourceFiles(filePath);
+
+  /// 利用者が消したとき: 元のファイル一式と PNG キャッシュを消す（読み取り専用のベクタレイヤと同じ扱い）
+  @override
+  Future<void> dispose() async {
+    for (final path in await sourceFiles()) {
+      try {
+        if (await fs.exists(path)) await fs.delete(path);
+      } catch (e) {
+        AppLogger.debug('[ExternalOverlayImageNode] 消せない: $path - $e');
+      }
+    }
+    try {
+      await GdalRasterOverlay.discardCache(filePath);
+    } catch (e) {
+      AppLogger.debug('[ExternalOverlayImageNode] キャッシュを消せない: $e');
+    }
+    await super.dispose(); // 本体は消えているので、親から外れるだけ
+  }
 
   /// PNG キャッシュを用意し、形をワープ後の範囲に合わせる（GDAL は別スレッド／web は worker で動く）
   Future<void> ensureRendered() async {

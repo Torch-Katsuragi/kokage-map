@@ -26,7 +26,16 @@ import 'package:xml/xml.dart';
 import 'support/gdal_host.dart';
 
 const _fx = 'test/fixtures/gdal';
-const _ext = ['ext_rgb_6674.tif', 'ext_gray_4326.tif', 'ext_png.png', 'ext_png.pgw', 'ext_png.png.aux.xml', 'ext_dem_6674.tif'];
+const _ext = [
+  'ext_rgb_6674.tif',
+  'ext_gray_4326.tif',
+  'ext_png.png',
+  'ext_png.pgw',
+  'ext_png.png.aux.xml',
+  'ext_dem_6674.tif',
+  'ext_pal_6674.tif',
+  'ext_gcp_6674.tif',
+];
 
 void main() {
   final config = findHostGdal();
@@ -159,6 +168,30 @@ void main() {
       expectBoundsMatch(probe, r.params);
     }, skip: skip);
 
+    test('色表（Palette）: RGBA に開いて色が残り、nodata は透明', () async {
+      final (probe, r, png) = await renderOf('ext_pal_6674.tif');
+      expect(probe.isPalette, isTrue);
+      expect(probe.needsStretch, isFalse);
+      expect(png.numChannels, 4);
+      final colors = {
+        for (final px in png)
+          if (px.a > 0) (px.r.toInt(), px.g.toInt(), px.b.toInt()),
+      };
+      expect(colors, {(255, 0, 0), (0, 255, 0), (0, 0, 255)}, reason: '最近傍なので色表の色だけ');
+      expect(png.any((px) => px.a == 0), isTrue, reason: 'nodata（番号 0）の画素');
+      expectBoundsMatch(probe, r.params);
+    }, skip: skip);
+
+    test('GCP だけのラスタ: 小さくワープして範囲を取り、同じ範囲の GeoTIFF と同じ所に出る', () async {
+      final gcp = (await GdalRasterOverlay.probe(at('ext_gcp_6674.tif')))!;
+      final ref = (await GdalRasterOverlay.probe(at('ext_rgb_6674.tif')))!;
+      expect(gcp.epsg, 6674);
+      final (_, r, png) = await renderOf('ext_gcp_6674.tif');
+      expect(png.numChannels, 4);
+      expectBoundsMatch(ref, r.params);
+      expect(Directory(p.join(tmp.path, 'cache')).listSync().where((e) => p.basename(e.path).startsWith('probe_')), isEmpty);
+    }, skip: skip);
+
     test('キャッシュ: 変わらなければ作り直さず、元が変われば作り直す', () async {
       final src = at('ext_rgb_6674.tif');
       final probe = (await GdalRasterOverlay.probe(src))!;
@@ -194,7 +227,14 @@ void main() {
 
       final root = await loadTree();
       final byName = {for (final n in root.children.whereType<ImageNode>()) n.name: n};
-      for (final name in ['ext_rgb_6674.tif', 'ext_gray_4326.tif', 'ext_png.png', 'ext_dem_6674.tif']) {
+      for (final name in [
+        'ext_rgb_6674.tif',
+        'ext_gray_4326.tif',
+        'ext_png.png',
+        'ext_dem_6674.tif',
+        'ext_pal_6674.tif',
+        'ext_gcp_6674.tif',
+      ]) {
         expect(byName[name], isA<ExternalOverlayImageNode>(), reason: name);
         expect((byName[name]! as OverlayImageNode).isReadOnly, isTrue);
       }
@@ -210,6 +250,24 @@ void main() {
       ext.overlayParams = ext.overlayParams.copyWith(centerLng: 0);
       await ext.saveOverlayParams();
       expect(File(at('ext_rgb_6674.tif')).readAsBytesSync(), before);
+    }, skip: skip);
+
+    test('削除: 元のファイル一式（.pgw・.aux.xml）と PNG キャッシュを消す', () async {
+      final root = await loadTree();
+      final node = root.children.whereType<ExternalOverlayImageNode>().firstWhere((n) => n.name == 'ext_png.png');
+      final files = (await node.sourceFiles()).map((f) => p.basename(f).toLowerCase()).toSet();
+      expect(files, containsAll(['ext_png.png', 'ext_png.pgw', 'ext_png.png.aux.xml']));
+      await node.ensureRendered();
+      final png = node.cachedPngPath!;
+      expect(File(png).existsSync(), isTrue);
+
+      await node.dispose();
+      for (final f in ['ext_png.png', 'ext_png.pgw', 'ext_png.png.aux.xml']) {
+        expect(File(at(f)).existsSync(), isFalse, reason: f);
+      }
+      expect(File(png).existsSync(), isFalse);
+      expect(File(p.setExtension(png, '.json')).existsSync(), isFalse);
+      expect(File(at('ext_rgb_6674.tif')).existsSync(), isTrue, reason: 'ほかのラスタは残る');
     }, skip: skip);
 
     test('.qgs: 元のファイル・座標系で書き、QGIS で消灯したものを読み戻す', () async {
@@ -232,7 +290,7 @@ void main() {
       File(qgs).writeAsStringSync(doc.toXmlString());
 
       final result = await const QgsImporter().import(qgs, root);
-      expect(result.overlayCount, 4);
+      expect(result.overlayCount, 6);
       expect(result.discarded, isEmpty);
       final nodes = {for (final n in root.children.whereType<ExternalOverlayImageNode>()) n.name: n};
       expect(nodes['ext_png.png']!.visible, isFalse);

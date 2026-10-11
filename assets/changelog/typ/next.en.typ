@@ -52,7 +52,7 @@
   [Attribute table CSV showed garbled Japanese in Excel; a UTF-8 BOM is now added],
   [Track extraction length and GNSS spread are now measured on the ellipsoid (same as QGIS)],
   [GeoPackages whose geometry column is not geom (GeoPandas geometry, ArcGIS Pro Shape) showed no features and could not be added to; a gpkg with an rtree was rewritten on close even when only viewed],
-  [A column named id showed the feature number (fid) and could not be edited, and a column named geometry did not appear; they now show and save their own values, and the primary key column is shown read-only]
+  [A column named id showed the feature number (fid) and could not be edited, a column named geometry did not appear, columns named latitude, longitude, vertex\_count and timestamp were hidden behind computed values in the info panel, and tables with a column named \_\_id gave no search results; they now show and save their own values, and the primary key column is shown read-only]
 )
 
 #fixes(

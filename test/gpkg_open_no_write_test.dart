@@ -3,6 +3,7 @@
 // 持ち主（QGIS 側）のファイルが変わってしまう（2026-10-12 の試験で見つけた）
 //
 // - 主キーの無い表: 以前は主キーを調べるだけで fid 列を足していた。QGIS（GDAL）と同じく rowid で読み書きする
+// - 定義の無い CRS: 以前は epsg.io に問い合わせて gpkg に書き戻していた。手元の表とメモリだけで解く
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -98,4 +99,35 @@ void main() {
     });
   });
 
+  group('定義の無い CRS', () {
+    for (final (srsId, name) in [
+      (4612, 'JGD2000'),
+      (2448, 'JGD2000 / Japan Plane Rectangular CS VI'),
+      (2456, 'JGD2000 / Japan Plane Rectangular CS XIV'),
+      (4301, 'Tokyo'),
+      (30166, 'Tokyo / Japan Plane Rectangular CS VI'),
+    ]) {
+      test('EPSG:$srsId（$name）は手元で解き、gpkg に書き戻さない', () async {
+        await build((db) async {
+          await db.execute(
+            'INSERT OR IGNORE INTO gpkg_spatial_ref_sys (srs_name, srs_id, organization, organization_coordsys_id, definition) '
+            "VALUES (?, ?, 'EPSG', ?, 'undefined')",
+            [name, srsId, srsId],
+          );
+          await db.execute('UPDATE gpkg_geometry_columns SET srs_id = ? WHERE table_name = ?', [srsId, 'pts']);
+        });
+        final before = digest();
+
+        final gpkg = open();
+        final crs = await GpkgCrsResolver.instance.resolveLayerCrs(await gpkg.getDatabase(), 'pts');
+        expect(crs.epsgCode, 'EPSG:$srsId');
+        expect(crs.isWgs84 || crs.projection != null, isTrue, reason: 'WGS84 に落ちていない');
+        expect(crs.srsId, srsId);
+        await gpkg.getFeaturesWithGeometry('pts');
+        await gpkg.dispose();
+
+        expect(digest(), before);
+      });
+    }
+  });
 }

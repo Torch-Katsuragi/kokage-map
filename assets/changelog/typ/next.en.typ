@@ -43,6 +43,7 @@
   [A layer set back to Single symbol in QGIS stayed categorized after reading back],
   [Deleting a feature right after editing it kept later attribute edits in that gpkg from being saved],
   [Opening a table without a primary key added an fid column; it is now read and edited by rowid, as in QGIS, without changes],
+  [Opening a gpkg whose CRS had no definition wrote a definition looked up online into it; JGD2000 and the Tokyo datum are now built in and nothing is written],
 )
 
 #fixes(

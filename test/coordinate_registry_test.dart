@@ -58,6 +58,28 @@ void main() {
       }
     });
 
+    // 定義の無い gpkg を epsg.io に問い合わせずに開けるように（2026-10-12）
+    test('JGD2000 と旧日本測地系の平面直角 I〜XIX 系は JGD2011 と同じ原点', () {
+      String params(String proj4) => proj4.replaceAll(RegExp(r' \+(ellps|towgs84)=\S+'), '');
+      for (var i = 0; i < 19; i++) {
+        final jgd2011 = params(registry.getByCode('EPSG:${6669 + i}')!.proj4String);
+        final jgd2000 = registry.getByCode('EPSG:${2443 + i}');
+        final tokyo = registry.getByCode('EPSG:${30161 + i}');
+        expect(params(jgd2000!.proj4String), jgd2011, reason: 'EPSG:${2443 + i}');
+        expect(jgd2000.proj4String, contains('+ellps=GRS80'));
+        expect(params(tokyo!.proj4String), jgd2011, reason: 'EPSG:${30161 + i}');
+        expect(tokyo.proj4String, contains('+ellps=bessel +towgs84=-146.414,507.337,680.507,0,0,0,0'));
+        expect(registry.needsAxisSwap(tokyo.code), isTrue);
+      }
+    });
+
+    test('JGD2000 地理座標系（4612）は変換しない。旧日本測地系（4301）は変換する', () {
+      expect(registry.getByCode('EPSG:4612')!.isWgs84, isTrue);
+      final tokyo = registry.getByCode('EPSG:4301')!;
+      expect(tokyo.isWgs84, isFalse);
+      expect(tokyo.proj4String, contains('+ellps=bessel +towgs84=-146.414,507.337,680.507'));
+    });
+
     test('プレフィックスなしでも解決できる', () {
       expect(registry.getByCode('6674')?.code, 'EPSG:6674');
     });

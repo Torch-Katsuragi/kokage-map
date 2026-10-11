@@ -49,6 +49,9 @@ class IconMarkdownBuilder extends MarkdownElementBuilder {
     'gps_fixed': Icons.gps_fixed,
     'transform': Icons.transform,
     'near_me': Icons.near_me,
+    'straighten': Icons.straighten,
+    'pentagon_outlined': Icons.pentagon_outlined,
+    'search': Icons.search,
 
     // 一般UI
     'settings': Icons.settings,

@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../tools/measure_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
 
@@ -30,10 +31,11 @@ class LeftBottomFab extends ConsumerWidget {
     final isActive = ref.watch(isFabActiveProvider);
     final currentTool = ref.watch(currentToolProvider);
 
-    // ペン: 消しゴム／選択: 複数選択。ほかのツールでは意味を持たない
+    // ペン: 消しゴム／選択: 複数選択／計測: 面積。ほかのツールでは意味を持たない
     final iconData = switch (currentTool) {
       PenTool() => Icons.auto_fix_normal,
       SelectTool() => Icons.library_add_check_outlined,
+      MeasureTool() => Icons.pentagon_outlined,
       _ => Icons.circle,
     };
 

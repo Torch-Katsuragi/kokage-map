@@ -17,10 +17,12 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../tools/gps_tool.dart';
 import '../tools/map_tool.dart';
+import '../tools/measure_tool.dart';
 import '../tools/overlay_transform_tool.dart';
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
+import 'ui_state_providers.dart';
 
 part 'tool_providers.g.dart';
 
@@ -35,6 +37,15 @@ SelectTool selectTool(Ref ref) => SelectTool(ref);
 
 @Riverpod(keepAlive: true)
 GpsTool gpsTool(Ref ref) => GpsTool(ref);
+
+/// 計測ツール。面にするかは左下のボタン（[isFabActiveProvider]）に従う
+@Riverpod(keepAlive: true)
+MeasureTool measureTool(Ref ref) {
+  final tool = MeasureTool(ref);
+  ref.listen<bool>(isFabActiveProvider, (_, on) => tool.session.closeRequested = on, fireImmediately: true);
+  ref.onDispose(tool.dispose);
+  return tool;
+}
 
 @Riverpod(keepAlive: true)
 OverlayTransformTool overlayTransformTool(Ref ref) => OverlayTransformTool(ref);

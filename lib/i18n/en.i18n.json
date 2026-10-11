@@ -690,6 +690,7 @@
       "pen": "Pen",
       "select": "Select",
       "gpsTool": "GPS Tool",
+      "measure": "Measure",
       "overlayTransform": "Overlay Transform",
       "overlayReadOnly": "Rasters made in QGIS etc. cannot be repositioned",
       "overlayReadOnlyDetail": "Their position comes from the file (GeoTIFF tags, world file, .aux.xml). Adjust it in QGIS."
@@ -715,7 +716,29 @@
       "driveStart": "Drive started",
       "driveStop": "Drive stopped",
       "eraser": "Eraser",
-      "multiSelect": "Multi-select"
+      "multiSelect": "Multi-select",
+      "measureDistance": "Measure distance",
+      "measureArea": "Measure area"
+    },
+    "measure": {
+      "title": "Measure",
+      "hint": "Tap the map to place points",
+      "closeHint": "Tap the first point or the lower-left button for area",
+      "segment": "Segment $i",
+      "total": "Total",
+      "perimeter": "Perimeter",
+      "area": "Area",
+      "undo": "Undo last point",
+      "clear": "Clear"
+    },
+    "search": {
+      "button": "Search attributes",
+      "title": "Search attributes",
+      "hint": "Compartment number, name, ...",
+      "scope": "Searches the attributes of visible layers",
+      "noHits": "No matches",
+      "truncated": "Too many matches; showing the first $n",
+      "noLayers": "No visible layers"
     }
   },
   "importExport": {
@@ -991,6 +1014,9 @@
     "noLocation": "No location",
     "dateLabel": "Date taken: ",
     "sizeLabel": "Size: ",
+    "lengthLabel": "Length: ",
+    "areaLabel": "Area: ",
+    "perimeterLabel": "Perimeter: ",
     "edit": "Edit",
     "copyGoogleMapsLink": "Copy Google Maps link (hold to open)",
     "googleMapsLinkCopied": "Google Maps link copied",
@@ -1532,6 +1558,8 @@
     "polygons": "Polygons",
     "photos": "Photos",
     "centroid": "Centroid of points",
+    "totalLength": "Total line length",
+    "totalArea": "Total area",
     "deleteAll": "Delete $n (hold)",
     "deleted": "Deleted $n"
   },

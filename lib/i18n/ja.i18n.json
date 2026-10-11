@@ -690,6 +690,7 @@
       "pen": "ペン",
       "select": "選択",
       "gpsTool": "GPSツール",
+      "measure": "計測",
       "overlayTransform": "オーバーレイ変換",
       "overlayReadOnly": "QGIS などで作ったラスタは位置合わせできません",
       "overlayReadOnlyDetail": "位置はファイル（GeoTIFF のタグ・ワールドファイル・.aux.xml）が正です。動かすときは QGIS で直してください"
@@ -715,7 +716,29 @@
       "driveStart": "ドライブ開始",
       "driveStop": "ドライブ終了",
       "eraser": "消しゴム",
-      "multiSelect": "複数選択"
+      "multiSelect": "複数選択",
+      "measureDistance": "距離を測る",
+      "measureArea": "面積を測る"
+    },
+    "measure": {
+      "title": "計測",
+      "hint": "地図をタップして点を置く",
+      "closeHint": "始点をタップするか左下のボタンで面積",
+      "segment": "区間 $i",
+      "total": "合計",
+      "perimeter": "周長",
+      "area": "面積",
+      "undo": "1 点戻す",
+      "clear": "消す"
+    },
+    "search": {
+      "button": "属性で探す",
+      "title": "属性で探す",
+      "hint": "林班番号・名前など",
+      "scope": "見えているレイヤの属性を探します",
+      "noHits": "見つかりません",
+      "truncated": "多いので先頭 $n 件だけ出しています",
+      "noLayers": "見えているレイヤがありません"
     }
   },
   "importExport": {
@@ -991,6 +1014,9 @@
     "noLocation": "位置情報なし",
     "dateLabel": "撮影日時: ",
     "sizeLabel": "サイズ: ",
+    "lengthLabel": "長さ: ",
+    "areaLabel": "面積: ",
+    "perimeterLabel": "周長: ",
     "edit": "編集",
     "copyGoogleMapsLink": "Google Maps のリンクをコピー（長押しで開く）",
     "googleMapsLinkCopied": "Google Maps のリンクをコピーしました",
@@ -1532,6 +1558,8 @@
     "polygons": "面",
     "photos": "写真",
     "centroid": "点の重心",
+    "totalLength": "線の長さの合計",
+    "totalArea": "面積の合計",
     "deleteAll": "$n 件を削除（長押し）",
     "deleted": "$n 件を削除しました"
   },

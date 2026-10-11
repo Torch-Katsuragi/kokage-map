@@ -37,6 +37,9 @@ class LayerDrawerTitleBar extends StatelessWidget {
   final void Function(AddAction action)? onAdd;
   final void Function()? onBack;
 
+  /// 虫眼鏡（見えているレイヤの属性を探す）。null なら出さない
+  final void Function()? onSearch;
+
   /// 道筋（上の階層の名前）を押したとき、その階層へ移る
   final void Function(LayerTreeNode node)? onNavigate;
 
@@ -51,6 +54,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
     required this.currentNode,
     this.onAdd,
     this.onBack,
+    this.onSearch,
     this.onNavigate,
     this.syncStatus,
     this.onCloudAction,
@@ -119,6 +123,13 @@ class LayerDrawerTitleBar extends StatelessWidget {
               ],
             ),
           ),
+          if (onSearch != null)
+            IconButton(
+              icon: const Icon(Icons.search, color: Colors.white),
+              tooltip: t.map.search.button,
+              onPressed: onSearch,
+              visualDensity: VisualDensity.compact,
+            ),
           if (currentNode is DriveFolderNode && onCloudAction != null)
             _buildCloudButton(),
           if (currentNode is FolderNode && onAdd != null) ...[

@@ -15,7 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 /// 毎木調査の置き場所（gpkg の2レイヤ）と読み書き
 ///
-/// - `tally_plots`（面）: 標準地。円形は中心と半径も列に持つ（面は 64 角形で近似、面積は πr² で出す）
+/// - `tally_plots`（面）: 標準地。円形は中心と半径も列に持つ（面は πr² と同じ面積の 64 角形。集計の面積は面の形から出す）
 /// - `tally_trees`（点）: 1本1行。`plot_id` で標準地に結ぶ
 /// 列の意味は docs/features/tree-tally.md
 library;
@@ -23,6 +23,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
+import 'package:turf/turf.dart' as turf;
 
 import '../../i18n/strings.g.dart';
 import '../../models/nodes/feature_node.dart';
@@ -204,11 +205,17 @@ class TreeTallyLayers {
     return 'P${n + 1}';
   }
 
-  /// 円形の標準地を作る
+  /// 円形の標準地の面の角の数
+  static const circleSegments = 64;
+
+  /// 円形の標準地を作る。面は半径 [radiusM] の円と同じ面積の正 64 角形
+  /// （内接にすると πr² より約 0.16% 小さく、集計が作ったときの面積とずれる）
   Future<TallyPlot?> createCirclePlot(String plotId, LatLng center, double radiusM) async {
-    const segments = 64;
+    const n = circleSegments;
+    // 正 n 角形の面積 n/2·R²·sin(2π/n) を πr² にそろえる外接半径 R
+    final vertexRadius = radiusM * math.sqrt(2 * math.pi / (n * math.sin(2 * math.pi / n)));
     final ring = [
-      for (var i = 0; i < segments; i++) const Distance().offset(center, radiusM, 360.0 * i / segments),
+      for (var i = 0; i < n; i++) const Distance().offset(center, vertexRadius, 360.0 * i / n),
     ];
     ring.add(ring.first);
     final f = await PolygonFeatureNode.createIn(plots, [ring], '', '');
@@ -297,7 +304,9 @@ class TallyPlot {
 
   const TallyPlot({required this.plotId, required this.areaM2, required this.center, this.radiusM});
 
-  /// 円形（radius_m あり）は πr²、ほかは楕円体の上の面積
+  /// 面積は面の形の楕円体の上の面積（QGIS の楕円体での `$area` と同じ。円形も同じ）。
+  /// `radius_m`・`center_*` の列は作ったときの値のまま（面を動かしても直さない。開いたときにも書き直さない）。
+  /// 中心は列の値を器械点に使う
   static TallyPlot fromFeature(PolygonFeatureNode f) {
     final p = f.turfFeature.properties ?? const {};
     final radius = (p['radius_m'] as num?)?.toDouble();
@@ -306,9 +315,16 @@ class TallyPlot {
     final id = '${p['plot_id'] ?? ''}'.trim();
     return TallyPlot(
       plotId: id.isEmpty ? '#${f.rowId}' : id,
-      areaM2: radius != null && radius > 0 ? circlePlotAreaM2(radius) : (Geodesic.areaOf(f.turfFeature.geometry) ?? 0),
+      areaM2: areaOf(f.turfFeature.geometry, radius),
       radiusM: radius,
       center: lon != null && lat != null ? LatLng(lat, lon) : f.centroid,
     );
+  }
+
+  /// 標準地の面積 [m²]: 面があればその楕円体の上の面積、面が無い（空の）ときだけ半径から πr²
+  static double areaOf(turf.GeometryObject? geometry, double? radiusM) {
+    final area = Geodesic.areaOf(geometry);
+    if (area != null && area > 0) return area;
+    return radiusM != null && radiusM > 0 ? circlePlotAreaM2(radiusM) : 0;
   }
 }

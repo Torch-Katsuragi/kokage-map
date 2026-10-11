@@ -43,8 +43,10 @@ QGIS でそのまま使えるよう、普通の点・面のレイヤにした。
 GNSS で記録した点には GPS ツールと同じ列（`accuracy`・`fix_type`・`satellite_count`・`hdop` など）が、TruPulse で置いた点には TruPulse ツールと同じ `survey_*` 列（器械点 = 標準地の中心）が足される（[[docs/devices/trupulse-360r#自動記録される属性]]）。
 
 `tally_plots`（面）: `plot_id`・`shape`（`circle` / `polygon`）・`radius_m`・`area_m2`（作ったときの値）・`center_lon`/`center_lat`・`note`・`created_at`。
-円形は 64 角形で近似して保存し、集計の面積は `radius_m` から πr² で出す（64 角形の面積は πr² より約 0.16% 小さい）。
-`radius_m` の無い面は楕円体の上の面積（`Geodesic.areaOf`）。いずれも水平面積で、傾斜補正はしない。
+円形は πr² と同じ面積の正 64 角形で保存する（角の中心からの距離は r の約 1.0008 倍。内接にすると約 0.16% 小さく、情報パネルの面積と集計がずれていた）。
+集計の面積は円形も多角形も面の形の楕円体の上の面積（`Geodesic.areaOf`。QGIS の楕円体での `$area` と同じ）で、面が空のときだけ `radius_m` から πr² に倒す。
+面を動かしたり頂点を直したりすると集計の面積はそれに付いていくが、`radius_m`・`area_m2`・`center_lon`/`center_lat` は作ったときの値のまま（開いたときにも書き直さない）。
+TruPulse で木を置く器械点は `center_*` の列なので、円形の標準地の面を動かしたときは列も直すこと。いずれも水平面積で、傾斜補正はしない。
 
 gpkg に同じ名前で形の違うレイヤ（面でない `tally_plots`・点でない `tally_trees`）や、地物でない同名の表があると、
 `TreeTallyLayers.ensure` は何も作らず・表も変えずに `TreeTallyLayerConflict` を投げ、シートは開かずに通知センターへ理由を出す

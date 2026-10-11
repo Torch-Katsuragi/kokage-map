@@ -46,6 +46,7 @@
   [Opening a gpkg whose CRS had no definition wrote a definition looked up online into it; JGD2000 and the Tokyo datum are now built in and nothing is written],
   [Adding a column differing from an existing one only in letter case failed with an unclear error; you are now told which column exists],
   [Replace in the attribute table could write text into numeric columns; such rows are now skipped and counted],
+  [Attribute changes that failed to save were not retried until the next edit; they are now retried with backoff and written when going to the background],
 )
 
 #fixes(

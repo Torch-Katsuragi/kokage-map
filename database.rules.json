@@ -65,6 +65,22 @@
           }
         },
 
+        "pins": {
+          "$pinId": {
+            ".write": "auth != null && $roomCode.matches(/^[2-9A-HJKMNP-Z]{8}$/) && $pinId.matches(/^[0-9A-Za-z_-]{8,32}$/) && newData.exists() && root.child('rooms/'+$roomCode+'/members/'+auth.uid).exists() && !root.child('rooms/'+$roomCode+'/banned/'+auth.uid).exists() && root.child('rooms/'+$roomCode+'/meta/active').val() === true && root.child('rooms/'+$roomCode+'/meta/expiresAt').val() > now && (data.exists() ? (data.child('author').val() === auth.uid || root.child('rooms/'+$roomCode+'/meta/hostUid').val() === auth.uid) : newData.child('author').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['author','type','lat','lon','createdAt','updatedAt','deleted'])",
+            "author":    { ".validate": "newData.isString() && (!data.exists() || newData.val() === data.val())" },
+            "type":      { ".validate": "newData.val() === 'meeting' || newData.val() === 'hazard' || newData.val() === 'work' || newData.val() === 'note'" },
+            "lat":       { ".validate": "newData.isNumber() && newData.val() >= -90  && newData.val() <= 90  && (!data.exists() || newData.val() === data.val())" },
+            "lon":       { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180 && (!data.exists() || newData.val() === data.val())" },
+            "text":      { ".validate": "newData.isString() && newData.val().length <= 140" },
+            "createdAt": { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() : (newData.val() <= now && newData.val() > now - 93600000))" },
+            "updatedAt": { ".validate": "newData.val() === now" },
+            "deleted":   { ".validate": "newData.isBoolean() && (data.val() !== true || newData.val() === true)" },
+            "$other":    { ".validate": false }
+          }
+        },
+
         "$other": { ".validate": false }
       }
     }

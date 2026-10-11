@@ -1546,7 +1546,26 @@
     "kick": "退出させる",
     "kickConfirm": "${name} をルームから退出させますか？",
     "kickedNotice": "ホストによってルームから退出しました",
-    "roomClosedNotice": "ルームが終了したか期限が切れたため退出しました"
+    "roomClosedNotice": "ルームが終了したか期限が切れたため退出しました",
+    "pins": {
+      "place": "ピンを立てる",
+      "editTitle": "ピンを書き換える",
+      "typeMeeting": "集合地点",
+      "typeHazard": "危険木",
+      "typeWork": "作業地点",
+      "typeNote": "メモ",
+      "textHint": "一言（なくてもよい）",
+      "placeButton": "立てる",
+      "saveButton": "保存",
+      "edit": "書き換える",
+      "delete": "消す",
+      "deleteConfirm": "このピンを消しますか？ ルームの全員の地図から消えます。",
+      "pending": "未送信（繋がったら送ります）",
+      "by": "$name が立てた",
+      "self": "自分",
+      "someone": "退出したメンバー",
+      "newNotice": "$name が「$type」のピンを立てました"
+    }
   },
   "qgis": {
     "baseMapsAdded": "QGIS のプロジェクトにあった背景地図を足しました: $names",

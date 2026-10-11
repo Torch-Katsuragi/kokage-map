@@ -436,6 +436,123 @@ describe('攻撃: 非メンバーの読み取り', () => {
   });
 });
 
+// ── 共有ピン ─────────────────────────────────────────────
+
+const PIN = 'pinAbc123XYZ_-0';
+
+/** RtdbPinSource.putPin（作成・書き換え・消すのどれも、ピン全体の set） */
+const appPutPin = (uid, {id = PIN, code = CODE, author = uid, type = 'meeting', text = '尾根の分岐で集合',
+  lat = 33.9312, lon = 135.9633, createdAt = Date.now() - 60000, deleted = false} = {}) =>
+  db(uid).ref(`rooms/${code}/pins/${id}`).set({author, type, lat, lon, text, createdAt, updatedAt: SERVER_TS, deleted});
+
+describe('共有ピン', () => {
+  test('メンバーは自分名義で立てられ、他のメンバーが読める。同じ内容の再送も通る（未送信キューの再送）', async () => {
+    await appCreateRoom('host');
+    await appJoin('guest');
+    const createdAt = Date.now() - 5000;
+    await assertSucceeds(appPutPin('guest', {createdAt}));
+    await assertSucceeds(appPutPin('guest', {createdAt}));
+    await assertSucceeds(db('host').ref(`rooms/${CODE}/pins/${PIN}`).get());
+    await assertSucceeds(appPutPin('host', {id: 'hostPin0001', type: 'hazard', text: ''}));
+  });
+
+  test('立てた本人とホストは書き換え・消すができる', async () => {
+    await appCreateRoom('host');
+    await appJoin('guest');
+    const createdAt = Date.now() - 5000;
+    await appPutPin('guest', {createdAt});
+    await assertSucceeds(appPutPin('guest', {createdAt, type: 'work', text: '書き換え'}));
+    await assertSucceeds(appPutPin('host', {author: 'guest', createdAt, type: 'note', text: 'ホストが直した'}));
+    await assertSucceeds(appPutPin('host', {author: 'guest', createdAt, text: '', deleted: true}));
+  });
+
+  test('他のゲストは書き換えも消すこともできない', async () => {
+    await appCreateRoom('host');
+    await appJoin('guest');
+    await appJoin('guest2');
+    const createdAt = Date.now() - 5000;
+    await appPutPin('guest', {createdAt});
+    await assertFails(appPutPin('guest2', {author: 'guest', createdAt, text: '乗っ取り'}));
+    await assertFails(appPutPin('guest2', {author: 'guest', createdAt, deleted: true}));
+    await assertFails(appPutPin('guest2', {author: 'guest2', createdAt}));
+  });
+
+  test('他人名義では立てられない', async () => {
+    await appCreateRoom('host');
+    await appJoin('guest');
+    await assertFails(appPutPin('guest', {author: 'host'}));
+  });
+
+  test('消したピンは戻せない（消すが勝つ）', async () => {
+    await appCreateRoom('host');
+    await appJoin('guest');
+    const createdAt = Date.now() - 5000;
+    await appPutPin('guest', {createdAt});
+    await appPutPin('host', {author: 'guest', createdAt, text: '', deleted: true});
+    await assertFails(appPutPin('guest', {createdAt, text: '遅れて届いた書き換え'}));
+  });
+
+  test('null での削除はできない（後始末は purge）', async () => {
+    await appCreateRoom('host');
+    await appJoin('guest');
+    await appPutPin('guest');
+    await assertFails(db('guest').ref(`rooms/${CODE}/pins/${PIN}`).remove());
+    await assertFails(db('host').ref(`rooms/${CODE}/pins`).remove());
+  });
+
+  test('場所・作成者・作成時刻は書き換えられない', async () => {
+    await appCreateRoom('host');
+    await appJoin('guest');
+    const createdAt = Date.now() - 5000;
+    await appPutPin('guest', {createdAt});
+    await assertFails(appPutPin('guest', {createdAt, lat: 34}));
+    await assertFails(appPutPin('guest', {createdAt, lon: 136}));
+    await assertFails(appPutPin('guest', {createdAt: createdAt - 1000}));
+    await assertFails(appPutPin('host', {author: 'host', createdAt}));
+  });
+
+  test('大きさ・種類・時刻の検証', async () => {
+    await appCreateRoom('host');
+    await appJoin('guest');
+    await assertSucceeds(appPutPin('guest', {id: 'len140text', text: 'あ'.repeat(140)}));
+    await assertFails(appPutPin('guest', {id: 'len141text', text: 'あ'.repeat(141)}));
+    await assertFails(appPutPin('guest', {id: 'badType001', type: 'party'}));
+    await assertFails(appPutPin('guest', {id: 'badLat0001', lat: 91}));
+    await assertFails(appPutPin('guest', {id: 'future0001', createdAt: Date.now() + HOUR}));
+    await assertFails(appPutPin('guest', {id: 'tooOld0001', createdAt: Date.now() - 27 * HOUR}));
+    await assertFails(db('guest').ref(`rooms/${CODE}/pins/fakeTs0001`).set({
+      author: 'guest', type: 'note', lat: 0, lon: 0, text: '', createdAt: Date.now() - 1000,
+      updatedAt: Date.now() - 1000, deleted: false,
+    }));
+    await assertFails(db('guest').ref(`rooms/${CODE}/pins/junk000001`).set({
+      author: 'guest', type: 'note', lat: 0, lon: 0, text: '', createdAt: Date.now() - 1000,
+      updatedAt: SERVER_TS, deleted: false, junk: 1,
+    }));
+    await assertFails(appPutPin('guest', {id: 'short'}));
+  });
+
+  test('非メンバー・BAN 済み・終了後・失効後は書けない', async () => {
+    await appCreateRoom('host');
+    await appJoin('guest');
+    await assertFails(appPutPin('stranger'));
+    await appKick('host', 'guest');
+    await assertFails(appPutPin('guest'));
+    await appEnd('host');
+    await assertFails(appPutPin('host', {id: 'afterEnd01'}));
+    await env.clearDatabase();
+    await seedExpiredRoom();
+    await assertFails(appPutPin('guest'));
+    await assertFails(appPutPin('host'));
+  });
+
+  test('非メンバーはピンを読めない', async () => {
+    await appCreateRoom('host');
+    await appPutPin('host');
+    await assertFails(db('stranger').ref(`rooms/${CODE}/pins`).get());
+    await assertFails(anon().ref(`rooms/${CODE}/pins/${PIN}`).get());
+  });
+});
+
 describe('定期purge（functions/purge.js）', () => {
   test('失効・終了・meta なしを拾い、生きている部屋は残す', async () => {
     const now = Date.now();

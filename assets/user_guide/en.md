@@ -269,6 +269,14 @@ Use this to walk to a boundary point or a plot center. It works without a networ
 While guiding, the map shows the distance, bearing (true north), elevation difference and an arrow, with a line from your position to the target. The arrow follows the device heading, or your direction of travel when no heading is available. The distance includes GPS error (± m). When you are within 5 m (or the GPS accuracy, if worse) you get a notification. Tap × to stop. Guidance is cleared when the app restarts.
 
 The device compass heading is corrected to true north using the magnetic declination (WMM2025) for your position and date.
+### Sharing Pins in a Room
+
+While you are in a room (location sharing), **long-press** the map and choose :icon-push_pin: "Drop a pin" to mark a meeting point, hazard tree, work site or note (with the Pan or Select tool). You can add a short note (up to 140 characters).
+
+- Pins appear on everyone's map in the room. When someone else drops one you get a notification, and its "Guide me here" takes you there.
+- Tap a pin to see who dropped it, when, its note and "Guide me here". The person who dropped it and the host can also edit or remove it.
+- Pins dropped without a connection are kept on the device and sent as soon as you reconnect (they look faded and the card says "Not sent yet"). They survive closing the app and are sent when you rejoin the same room.
+- Pins disappear when the room ends or expires. Draw features for places you want to keep.
 
 ### Connecting External GNSS Devices
 

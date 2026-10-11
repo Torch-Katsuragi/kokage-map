@@ -196,8 +196,9 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     final guidance = ref.read(guidanceProvider);
     final guideTo = guidance.target?.point;
     final guideFrom = guideTo == null ? null : (guidance.here ?? loc);
+    final pins = ref.read(roomPinsProvider).pins;
     final dynamicKey = <Object?>[
-      track.length, session, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview,
+      track.length, session, pins, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview,
       overlayFrameKey, tool is OverlayTransformTool ? tool.rotationHandlePosition : null,
       deviceLines.length, deviceStation, headingKey, tool.name, guideFrom, guideTo,
     ];
@@ -262,7 +263,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     // 動的な部分
     var dyn = _dynamicScenes[cacheKey];
     if (dyn == null || !_sameKey(dyn.key, dynamicKey)) {
-      dyn = _buildDynamic(dynamicKey, track, session, loc, dem, builder, clip,
+      dyn = _buildDynamic(dynamicKey, track, session, pins, loc, dem, builder, clip,
           selectedOverlays: selectedOverlays, tool: tool, deviceLines: deviceLines, deviceStation: deviceStation,
           headingDeg: headingDeg, guideFrom: guideFrom, guideTo: guideTo);
       _dynamicScenes[cacheKey] = dyn;
@@ -480,6 +481,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     List<Object?> key,
     List<LatLng> track,
     PartySessionState session,
+    List<RoomPinView> pins,
     LatLng? loc,
     DemGrid dem,
     _SceneBuilderFor builder,
@@ -555,6 +557,19 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
         clipRect: clip,
       ),
     );
+    // 2.3 ルームの共有ピン（種類の記号と色。まだ送れていないものは薄く）
+    for (final v in pins.reversed) {
+      if (at(LatLng(v.pin.lat, v.pin.lon)) case final o?) {
+        final c = RoomPinStyle.color(v.pin.type);
+        points.add(TerrainPoint(
+          x: o.dx,
+          y: o.dy,
+          color: v.pending ? c.withValues(alpha: 0.5) : c,
+          sizePx: 13,
+          icon: RoomPinStyle.icon(v.pin.type),
+        ));
+      }
+    }
     // 2.5 地点への誘導: 今の位置 → 目標の線（桃色）と目標の印（白い輪に桃色）
     if (guideTo != null) {
       if (guideFrom != null) {

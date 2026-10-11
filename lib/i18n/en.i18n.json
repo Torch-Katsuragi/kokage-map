@@ -1546,7 +1546,26 @@
     "kick": "Remove",
     "kickConfirm": "Remove ${name} from the room?",
     "kickedNotice": "You were removed from the room by the host",
-    "roomClosedNotice": "The room was closed by the host or has expired"
+    "roomClosedNotice": "The room was closed by the host or has expired",
+    "pins": {
+      "place": "Drop a pin",
+      "editTitle": "Edit pin",
+      "typeMeeting": "Meeting point",
+      "typeHazard": "Hazard tree",
+      "typeWork": "Work site",
+      "typeNote": "Note",
+      "textHint": "Short note (optional)",
+      "placeButton": "Drop",
+      "saveButton": "Save",
+      "edit": "Edit",
+      "delete": "Remove",
+      "deleteConfirm": "Remove this pin? It disappears from everyone's map in the room.",
+      "pending": "Not sent yet (will send when connected)",
+      "by": "Dropped by $name",
+      "self": "you",
+      "someone": "a former member",
+      "newNotice": "$name dropped a \"$type\" pin"
+    }
   },
   "qgis": {
     "baseMapsAdded": "Added the background maps from the QGIS project: $names",

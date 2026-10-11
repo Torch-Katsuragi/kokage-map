@@ -113,7 +113,7 @@ void main() {
     g().moveTarget(const LatLng(35.003, 135));
     expect(s().target!.peerUid, 'u1');
     expect(s().target!.point, const LatLng(35.003, 135));
-    expect(s().distance!, greaterThan(before));
+    expect(s().distance, greaterThan(before));
   });
 
   test('同じ位置の送り直しでは状態を変えない', () {

@@ -1,7 +1,7 @@
 // 地点への誘導の計算: 楕円体の距離・方位・相対角・到着・地物の目標点
 import 'package:flutter_test/flutter_test.dart';
-import 'package:root_maps/utils/navigation_math.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/navigation_math.dart';
 
 void main() {
   group('距離（Vincenty, WGS84）', () {

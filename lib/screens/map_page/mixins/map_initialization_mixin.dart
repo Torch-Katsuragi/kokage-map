@@ -327,6 +327,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
           if (next == currentLocation && movedToCurrentLocationOnce) return;
           final first = currentLocation == null;
           locationNotifier.value = next;
+          feedGuidance();
           // ページを組み立て直すのは、最初に位置が取れたとき（ボタンの状態が変わる）と、現在位置の詳細パネルが開いているときだけ
           if (first || showsCurrentLocationDetail) triggerSetState(() {});
           {

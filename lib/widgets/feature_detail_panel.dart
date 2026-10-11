@@ -37,6 +37,7 @@ import '../widgets/info_panel_card.dart';
 import '../widgets/long_press_delete_button.dart';
 import '../widgets/photo_viewer.dart';
 import 'external_layer_actions.dart';
+import 'guide_here_button.dart';
 
 class FeatureDetailPanel extends ConsumerWidget {
   final dynamic feature;
@@ -178,9 +179,11 @@ class FeatureDetailPanel extends ConsumerWidget {
             '${(photo.metadata.fileSize / (1024 * 1024)).toStringAsFixed(1)} MB',
             style: _small,
           ),
-          // 位置がある写真は点と同じく Google Maps のリンク（長押しで開く）
+          // 位置がある写真は点と同じく「ここへ案内」と Google Maps のリンク（長押しで開く）
           if (photo.hasLocation) ...[
             const SizedBox(height: 12),
+            GuideHereButton.point(point: photo.location!, label: photo.name),
+            const SizedBox(height: 8),
             _googleMapsButton(ref, photo.location!.latitude, photo.location!.longitude),
           ],
           // 削除ボタン
@@ -210,13 +213,19 @@ class FeatureDetailPanel extends ConsumerWidget {
           ),
       ];
 
+      // 「ここへ案内」（点・線・面）
+      children.addAll([
+        const SizedBox(height: 12),
+        GuideHereButton.feature(feature: node, label: _guidanceLabel(node)),
+      ]);
+
       // Point は Google Maps のリンクをコピー（長押しで開く。開くのは隠し機能扱い）
       if (feature is PointFeatureNode) {
         final point = (feature as PointFeatureNode).point;
         final lat = point.latitude;
         final lng = point.longitude;
         children.addAll([
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           _googleMapsButton(ref, lat, lng),
         ]);
       }
@@ -257,6 +266,18 @@ class FeatureDetailPanel extends ConsumerWidget {
   }
 
   static const _small = TextStyle(fontSize: 11);
+
+  /// 案内の見出し: 地物の名前（無ければ種類）
+  static String _guidanceLabel(FeatureNode node) {
+    final name = node.name;
+    if (name.trim().isNotEmpty && name != t.featureDetail.unnamed) return name;
+    return switch (node) {
+      PointFeatureNode() => t.featureDetail.typePoint,
+      LineFeatureNode() => t.featureDetail.typeLine,
+      PolygonFeatureNode() => t.featureDetail.typePolygon,
+      _ => t.featureDetail.typeFeature,
+    };
+  }
 
   /// 「名前: 値」の 1 行（値は折り返す）
   static Widget _labelRow(String label, String value, {TextStyle? style}) => Row(

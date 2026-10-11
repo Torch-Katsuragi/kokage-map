@@ -184,6 +184,16 @@ On PC, use the mouse wheel to zoom and middle-click drag to pan the map.
 
 While the GPS tool is active, tap the :icon-timeline: track extraction button in the bottom-left. Select a date and time range from GPS position history, then save it to a line layer.
 
+### Getting Guided to a Point
+
+Use this to walk to a boundary point or a plot center. It works without a network connection.
+
+- Tap :icon-near_me: "Guide me here" in a feature's info panel. For a line it picks the nearest spot; for a polygon choose "center" or "nearest vertex".
+- **Long-press** the map to be guided to that spot (with the Pan or Select tool).
+- Tap :icon-near_me: next to a room member to walk to them. The target follows them as they move.
+
+While guiding, the map shows the distance, bearing (true north), elevation difference and an arrow, with a line from your position to the target. The arrow follows the device heading, or your direction of travel when no heading is available. The distance includes GPS error (± m). When you are within 5 m (or the GPS accuracy, if worse) you get a notification. Tap × to stop. Guidance is cleared when the app restarts.
+
 ### Connecting External GNSS Devices
 
 1. Go to Settings → :icon-bluetooth_connected: "Devices".

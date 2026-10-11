@@ -6,6 +6,7 @@
 
 - Layers styled in QGIS as categorized, graduated or rule-based (such as compartments colored by species or stand age) are now drawn feature by feature in the same colors as QGIS, in 2D and 3D. A legend appears in the layer list and the style screen. Colors are still changed in QGIS
 - XYZ tiles not in the list (such as the Forestry Agency's forest planning maps or prefectural CS relief maps) and WMS can now be added as background maps by URL (Settings → Map & tiles → Add layer → "Add a background map from a URL…"). They work like the built-in maps for layering, bulk download and 3D, and their attribution is shown on the map while visible. You are responsible for following the tile source's terms (Google and Bing cannot be added). Those in a .qgs are added when read back too
+- Guidance to a point. Start it from "Guide me here" in a feature's info panel (nearest spot on a line; center or nearest vertex of a polygon), by long-pressing the map, or from the room member list. While guiding, the map shows distance, bearing, elevation difference and an arrow that turns with the device heading, plus a line from your position to the target. You are notified within 5 m (or the GPS accuracy, if worse). Works without a network connection
 
 ### Fixed
 

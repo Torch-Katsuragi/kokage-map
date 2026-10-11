@@ -10,6 +10,10 @@
 - In the attribute fields of the feature edit panel, full-width digits typed into numeric columns (such as "１２．５") were not converted to half-width. They are now saved as half-width numbers, as in the attribute form
 - The per-point records (accuracy, time and so on) of lines and polygons taken by GPS survey were thrown away instead of saved. When there is such a record, the layer now gets a `kmaps_metadata` column (JSON stored as text, which QGIS opens as is) to keep it. The column is not shown in the attribute table or the edit panel. Drawing with the pen alone does not add the column
 
+### Lighter
+
+- Each TruPulse measurement no longer rebuilds the whole map screen. Only the measurement lines and the status display are redrawn
+
 ## v0.12.0 — 2026/10/11
 
 ### Open files other than gpkg as they are

@@ -37,7 +37,6 @@ import '../../interfaces/map_state_interface.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/layer_node.dart';
-import '../../providers/device_tool_providers.dart';
 import '../../providers/notification_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
@@ -73,10 +72,9 @@ class TruPulseTool extends DeviceTool {
 
   PanTool get _panTool => _ref.read(panToolProvider);
 
-  void _notifyUI() {
-    notifyListeners();
-    _ref.read(deviceToolOverlayRefreshProvider.notifier).trigger();
-  }
+  /// 計測・基準点の変化を知らせる。聞くのはツールを直接購読している地形とステータスパネルだけ
+  /// （以前はプロバイダも進めて、計測のたびに地図ページ全体を組み直していた）
+  void _notifyUI() => notifyListeners();
 
   PointFeatureNode? _station;
   LatLng? get stationPosition => _station?.point;

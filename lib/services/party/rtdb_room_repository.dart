@@ -21,7 +21,7 @@
 ///     成否を決める。permission-denied = 無効/失効コード。
 ///   - コード衝突時は meta 書き込みが denied になるので、コード再生成でリトライ。
 ///
-/// Android/iOS 限定（firebase_auth / firebase_database は Windows 未対応）。
+/// Android と web のみ（`PlatformCapabilities.supportsPartySharing`）。
 library;
 
 import 'package:firebase_auth/firebase_auth.dart';

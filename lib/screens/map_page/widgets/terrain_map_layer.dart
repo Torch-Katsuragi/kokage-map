@@ -824,7 +824,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
                 onLongPressStart: _longPressGuides(toolName) && !_penLock ? _onLongPressStart : null,
                 child: ClipRect(
                   child: ColoredBox(
-                    // 最初に全面が揃うまでは透明にして下の 2D 地図を見せる（入った直後の白い一瞬を消す）
+                    // 最初に全面が揃うまでは透明にして後ろを見せる（入った直後の白い一瞬を消す）
                     color: _everCovered ? const Color(0xFFE6E6E6) : Colors.transparent,
                     child: Stack(
                       children: [

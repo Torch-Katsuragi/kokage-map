@@ -120,7 +120,7 @@ class GeoPackageFile {
   /// 閉じたあと、QGIS 用の rtree と範囲を実データに合わせる。
   ///
   /// ⚠ Android 本体の SQLite には rtree モジュールが無く、編集のたびの rtree 更新
-  /// （[SpatialIndexManager.updateRTreeIndex]）も範囲の更新も効かない。QGIS 製の gpkg を
+  /// （[SpatialIndexManager.indexRows]）も範囲の更新も効かない。QGIS 製の gpkg を
   /// Android で編集して戻すと、足した・動かした地物が QGIS の空間索引から漏れていた（2026-09-24 実機で確認）。
   /// [GpkgIndexRepair] は rtree を持つ SQLite（geodiff に入っているもの）で書くので、閉じたあとにだけ呼ぶ。
   /// 同じファイルを別の接続がまだ開いていれば、最後に閉じる側に任せる（別々の SQLite で同じファイルを開かない）。

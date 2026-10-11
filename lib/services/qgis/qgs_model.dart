@@ -257,7 +257,7 @@ class QgsCrs {
 
 /// QGIS のシンプルシンボルに落とせるぶんの見た目。
 ///
-/// こかげマップ のスタイルは maplibre 向けの値なので、そのままでは QGIS に渡らない
+/// こかげマップ のスタイルは画面ピクセル（px）の値なので、そのままでは QGIS に渡らない
 /// （単位が px と mm で違う）。変換は [[qgs_writer]] で行う。
 class QgsStyle {
   const QgsStyle({

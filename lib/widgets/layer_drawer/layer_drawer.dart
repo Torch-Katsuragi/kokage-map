@@ -188,7 +188,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     }
 
     try {
-      // Windows: GeoPackageのDB接続を閉じないとファイルロックで移動失敗する
+      // GeoPackageのDB接続を閉じてから動かす（開いた接続を残したまま動かさない。元は Windows のファイルロック対策）
       await _closeGeoPackageConnections(source);
       await _moveFileOrDir(sourcePath, newPath, isDir: source is FolderNode);
       await LayerDrawerService.notifySyncedPathChange(source, sourcePath, newPath);

@@ -95,7 +95,7 @@ class InternalGpsLocationStore {
       if (PlatformCapabilities.supportsForegroundGpsService) {
         await _startDelegated();
       } else {
-        // Windows等
+        // web など（フォアグラウンドサービスが無い）
         await _startDirect();
       }
       _isActive = true;
@@ -146,14 +146,14 @@ class InternalGpsLocationStore {
   }
 
   // ==============================
-  // directモード（Windows等）
+  // directモード（web など）
   // ==============================
 
   /// directモード開始（自前Geolocatorストリーム）
   Future<void> _startDirect() async {
     _isDelegated = false;
 
-    // 権限チェック（Windows・web以外。どちらもOS/ブラウザ側が面倒を見る）
+    // 権限チェック（web 以外。web はブラウザ側が面倒を見る）
     if (PlatformCapabilities.needsLocationPermissionCheck) {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {

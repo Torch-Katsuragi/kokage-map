@@ -16,7 +16,6 @@ void main() {
 
     setUpAll(() async {
       // ホストVM上のテストでは sqflite の実装が無いため FFI 版を差し込む
-      // （main.dart のデスクトップ分岐と同じ初期化）
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
 

@@ -16,7 +16,6 @@
 /// sqflite の実装をプラットフォームごとに選ぶ。
 ///
 /// - モバイル … 標準実装（何もしない）
-/// - デスクトップ … `sqflite_common_ffi`
 /// - web … `sqflite_common_ffi_web`（sqlite3 WASM）
 library;
 

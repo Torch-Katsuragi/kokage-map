@@ -20,7 +20,7 @@
 /// パーティ機能の入口（createRoom/joinRoom）でのみ完了を await する。これにより、
 /// オフライン時でもアプリは地図画面まで確実に到達できる（Firebase未使用なら無関係）。
 ///
-/// Android/iOS 限定（firebase_database / firebase_auth は Windows/desktop 未対応）。
+/// Android と web のみ（`PlatformCapabilities.supportsPartySharing`）。
 library;
 
 

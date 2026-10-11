@@ -20,8 +20,8 @@
 /// （[InternalGpsLocationStore]）を束ね、ルーム作成/参加/退出と、
 /// peers・接続状態・メンバーをUIへ公開する。
 ///
-/// Android/iOS 限定（Firebase未初期化のWindowsでは createRoom/joinRoom が
-/// 例外になり、UIはエラー表示する）。手書き NotifierProvider（コア層を
+/// Android と web のみ（`PlatformCapabilities.supportsPartySharing`。Firebase 未初期化では
+/// createRoom/joinRoom が例外になり、UIはエラー表示する）。手書き NotifierProvider（コア層を
 /// 直接保持するため codegen ではなくこちらを採用）。
 library;
 

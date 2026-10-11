@@ -39,6 +39,7 @@
 - Replace in the attribute table also counted values that differed only in letter case, or only resembled a search term containing % or _ (those values were not actually changed)
 - A layer switched back to "Single symbol" in QGIS after being categorized, graduated or rule-based still stayed QGIS-styled in Kokage Map after reading back (its colors could not be changed in the style screen)
 - Deleting a feature right after editing its attributes (within a second) kept later attribute edits in the same GeoPackage from being saved, and they were lost when the app closed
+- In the web version, reloading the page signed you out of Google Drive. Within about an hour of last connecting to Drive, reloading in the same tab now keeps you signed in. After that, the app reconnects the next time you use the screen (a small Google window opens and closes by itself)
 
 ### Lighter
 

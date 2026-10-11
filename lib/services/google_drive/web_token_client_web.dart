@@ -20,6 +20,8 @@ import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
+import 'web_token_client.dart' show WebTokenGrant;
+
 /// `google.accounts.oauth2`
 @JS('google.accounts.oauth2')
 external _GisOAuth2? get _oauth2;
@@ -37,9 +39,26 @@ extension type _TokenResponse._(JSObject _) implements JSObject {
   @JS('access_token')
   external String? get accessToken;
   external String? get error;
+  @JS('expires_in')
+  external JSAny? get expiresIn;
 }
 
-Future<String?> requestTokenSilently({
+/// `expires_in`（秒）。GIS は数値で返すが、念のため文字列も受ける
+Duration? _lifetime(JSAny? raw) {
+  final int? seconds;
+  if (raw == null) {
+    seconds = null;
+  } else if (raw.isA<JSNumber>()) {
+    seconds = (raw as JSNumber).toDartDouble.round();
+  } else if (raw.isA<JSString>()) {
+    seconds = int.tryParse((raw as JSString).toDart);
+  } else {
+    seconds = null;
+  }
+  return seconds == null || seconds <= 0 ? null : Duration(seconds: seconds);
+}
+
+Future<WebTokenGrant?> requestTokenSilently({
   required String clientId,
   required List<String> scopes,
   required String loginHint,
@@ -56,9 +75,9 @@ Future<String?> requestTokenSilently({
   }
   if (oauth2 == null) return null;
 
-  final completer = Completer<String?>();
-  void finish(String? token) {
-    if (!completer.isCompleted) completer.complete(token);
+  final completer = Completer<WebTokenGrant?>();
+  void finish(WebTokenGrant? grant) {
+    if (!completer.isCompleted) completer.complete(grant);
   }
 
   final config = JSObject();
@@ -68,7 +87,10 @@ Future<String?> requestTokenSilently({
   config['prompt'] = ''.toJS;
   config['login_hint'] = loginHint.toJS;
   config['callback'] = ((_TokenResponse res) {
-    finish(res.error == null ? res.accessToken : null);
+    final token = res.accessToken;
+    finish(res.error == null && token != null && token.isNotEmpty
+        ? (token: token, expiresIn: _lifetime(res.expiresIn))
+        : null);
   }).toJS;
   config['error_callback'] = ((JSAny? _) => finish(null)).toJS;
 

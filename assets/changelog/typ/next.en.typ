@@ -42,6 +42,7 @@
   [Replace in the attribute table counted values it did not change (such as a different letter case)],
   [A layer set back to Single symbol in QGIS stayed categorized after reading back],
   [Deleting a feature right after editing it kept later attribute edits in that gpkg from being saved],
+  [Web: reloading the page signed you out of Drive; within about an hour it now stays signed in in the same tab],
 )
 
 #fixes(

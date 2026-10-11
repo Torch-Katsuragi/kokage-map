@@ -55,8 +55,9 @@ tags: [technical, google-drive, setup]
 > `prompt` を `select_account` に固定する。**ライブラリが自分で無音化を潰している。**
 >
 > だから `lib/services/google_drive/web_token_client_web.dart` で GIS を直に叩く。
-> 必要なのは**メールアドレスを覚えておくこと**だけで、トークンは保存しない
-> （localStorageに置くとXSS一発でDrive全体が漏れる）。
+> 必要なのは**メールアドレスを覚えておくこと**で、これは localStorage（SharedPreferences）に置く。
+> トークンは localStorage に置かない（ブラウザを閉じても残り、全タブから読める）。
+> リロードをまたぐトークンは sessionStorage にだけ置く（→ 下の「リロードするとサインインが切れる件」）。
 >
 > ⚠ それでもポップアップ自体は開くので、**ユーザー操作の直後（Chromeで約5秒）**
 > にしか呼べない。`main.dart` の `Listener` で、アプリ内の操作に便乗して
@@ -64,31 +65,53 @@ tags: [technical, google-drive, setup]
 
 > ### リロードするとサインインが切れる件
 >
-> ⚠ **ブラウザのOAuthにリフレッシュトークンは無い。**
-> `google_sign_in_web` のトークンキャッシュはメモリ上の `Map` だけで、
-> 保存も更新もしない。ページを離れれば消える。
-> （ポップアップのURLに `response_type=token` が入っているのがその印）
+> **2026-10-12 に対処: タブの中だけトークンを持ち越す。**
 >
-> Google側の同意は残っているので `prompt=''` で聞き直せる。それになるのは
-> **ユーザーを渡さない** `GoogleSignIn.instance.authorizationClient` だけ。
-> `GoogleSignInAccount.authorizationClient` は `login_hint` を渡すため
-> ライブラリが `prompt=select_account` を付けてしまう
-> （`gis_client.dart`: `prompt: userHint == null ? '' : 'select_account'`）。
+> 何が消えていたか（`google_sign_in_web` 1.1.3 / GIS のソースで確認）:
+>
+> | もの | リロード後 |
+> | --- | --- |
+> | Drive のアクセストークン | **消える。** `GisSdkClient._lastClientAuthorizationByUser` はメモリ上の `Map` だけ。ブラウザの OAuth（`response_type=token`）にリフレッシュトークンは無い |
+> | Google アカウント（`GoogleSignInAccount`） | **消える。** GIS の id は One Tap / ボタンの credential が来るまで何も持たない。起動時に One Tap は投げていない（`attemptLightweightAuthentication` は Android で選択シートを出すので呼ばない） |
+> | Firebase Auth のユーザー | 残る（IndexedDB）。ただし位置共有の**匿名**サインインで、Google とも Drive とも無関係 |
+> | 前回のメールアドレス | 残る（SharedPreferences = localStorage の `drive_last_email`）。`login_hint` 用 |
+>
+> トークンを取り直すには GIS のポップアップが要り、ポップアップは**クリックの直下でしか開けない**
+> （起動時に呼ぶと `Failed to open popup window` で潰れる）。だから「リロード直後に無言で Drive が使える」は
+> トークンをどこかに持ち越さない限りできない。
+>
+> そこで:
+>
+> 1. **取れたトークンを失効時刻つきで `sessionStorage` に置く**（`lib/services/google_drive/web_session_token.dart`）。
+>    置くのは `restoreWebAuthorization` で取れたとき（GIS の `expires_in` を使う）と、`signIn` の初回同意
+>    （ライブラリ経由で寿命が返らないので仮に 55 分）。
+> 2. **起動時**は `restoreSessionSilently(userGesture: false)` がそれだけを見る（ポップアップは開かない）。
+>    残りが 2 分を切ったもの・壊れたものは捨てる。採用前に `about.get` を 1 回呼んで、死んでいれば捨てる。
+>    通ればクリック無しでサインイン済み（設定画面にアカウントが出る、Drive も使える）。
+> 3. 失効していた（最後に取ってから約 1 時間以上たった）ら、これまで通り**次のクリック**で
+>    `login_hint` つきの無音の取り直し（`main.dart` の `_restoreDriveOnce`）。ポップアップが一瞬開いて閉じる。
+> 4. `_dropApi`（サインアウト・アカウント切替・失効の検出）で `sessionStorage` からも消す。
+>
+> sessionStorage にした理由（localStorage でない理由）: タブを閉じれば消え、他のタブからは読めない。
+> 置くのはアクセストークン（1 時間で死ぬ）だけで、リフレッシュトークンは元から無い。
+> 同じオリジンで XSS が走れば、メモリ上のトークンも `fetch` を横取りすれば読めるので、
+> sessionStorage に置くことで増える危険は「同じタブ・1 時間以内」に限られる。
+> ⚠ `Content-Security-Policy` を強制にする（[[web-hosting#セキュリティヘッダ（2026-10-09）]]）のが本筋の XSS 対策。
+>
+> 同じクリックから復元を 2 本走らせないこと。`main.dart` の Listener（pointerdown）が先にポップアップを
+> 開くとクリックの権利（user activation）を使い切り、続くボタンからの 2 本目はブラウザに潰される。
+> `restoreWebAuthorization` は実行中のものがあればその結果を待つ（`_webRestoreInFlight`）。
 >
 > ⚠ **`prompt=''` でも「無言」とは限らない。** GISは常に別ウィンドウの
 > ポップアップを開く。同意済みかつアカウントが一意なら勝手に閉じるが、
-> そうでなければ選択画面で止まり、**`await` が返らない**。
-> 2026-08-27 に、これで同期が画面に何も出さないまま固まった。
-> 呼ぶときは必ず画面に「別ウィンドウを見てください」を出すこと。
+> そうでなければ選択画面で止まり、**`await` が返らない**（`requestTokenSilently` は 8 秒で打ち切る）。
+> 無言にするには `prompt=''` と `login_hint` を**両方**渡す（`web_token_client_web.dart`）。
+> ⚠ `GoogleSignInAccount.authorizationClient` は `login_hint` を渡すため
+> ライブラリが `prompt=select_account` を付けてしまう
+> （`gis_client.dart`: `prompt: userHint == null ? '' : 'select_account'`）。
 >
-> ⚠ 復元は**クリックの直下でしか呼べない**。起動時に呼ぶとポップアップが
-> 潰され、console に `Failed to open popup window` だけが残る。
->
-> 本当に無言にしたいなら `prompt=''` と `login_hint` を**両方**渡す必要があり、
-> それはライブラリを通さず `google.accounts.oauth2.initTokenClient` を
-> 直に叩くことになる。やるなら web 専用の interop を足す。
-> もう一段先は、バックエンドを立てて認可コードフローに移り
-> リフレッシュトークンを持つこと（サーバー要らずという前提を捨てる）。
+> もう一段先（クリック無しで 1 時間を超えて持たせる）は、バックエンドを立てて認可コードフローに移り
+> リフレッシュトークンをサーバー側で持つこと（サーバー要らずという前提を捨てる）。
 
 > [!TIP] リリースの web でログを見る
 > `--dart-define=K_LOG=true` を付けてビルドすると `AppLogger` が

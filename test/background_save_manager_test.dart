@@ -284,5 +284,23 @@ void main() {
       expect(await geoPackageFile.getFeatureAttribute('test_points', id, 'description'), 'v1');
       expect(saveManager.getPendingChangesStatus()[geoPackageFile] ?? 0, 0);
     });
+
+    // 書けなかった行はキューに戻すだけでタイマーを掛け直さず、次の編集か閉じるまで書かれなかった（2026-10-12）
+    test('書けなかった変更は間を空けて書き直す（次の編集を待たない）', () async {
+      const point = LatLng(35.6762, 139.6503);
+      final id = (await geoPackageFile.addPoint('test_points', point, name: 'a'))!;
+      final db = await geoPackageFile.getDatabase();
+      await db.execute(
+        "CREATE TRIGGER block_update BEFORE UPDATE ON test_points BEGIN SELECT RAISE(ABORT, 'locked'); END",
+      );
+      geoPackageFile.queueAttributeUpdate('test_points', id, 'description', 'later');
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      expect(saveManager.getPendingChangesStatus()[geoPackageFile], 1, reason: '1 回目は書けず戻す');
+
+      await db.execute('DROP TRIGGER block_update');
+      await Future<void>.delayed(const Duration(milliseconds: 3000));
+      expect(await geoPackageFile.getFeatureAttribute('test_points', id, 'description'), 'later');
+      expect(saveManager.getPendingChangesStatus()[geoPackageFile] ?? 0, 0);
+    });
   });
 }

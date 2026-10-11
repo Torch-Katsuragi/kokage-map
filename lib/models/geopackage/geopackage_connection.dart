@@ -670,7 +670,7 @@ class GpkgSchemaCache {
   /// テーブル名 → `PRAGMA table_info` の行
   final Map<String, List<Map<String, Object?>>> tableInfo = {};
 
-  /// テーブル名 → 主キーの列名（無ければ fid / id / rowid）
+  /// テーブル名 → 主キーの列名（無ければ rowid）
   final Map<String, String> primaryKey = {};
 
   void clear() {

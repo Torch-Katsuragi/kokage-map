@@ -53,6 +53,13 @@ class BackgroundSaveManager {
   /// 属性値の遅延保存間隔（ミリ秒）
   static const int _saveDelayMs = 1000;
 
+  /// 書けなかった変更を書き直すまでの間（2 秒から倍々、最長 1 分）
+  static const Duration _retryBase = Duration(seconds: 2);
+  static const Duration _retryMax = Duration(minutes: 1);
+
+  /// 続けて書けなかった回数（書けたら 0 に戻す）
+  int _failedRounds = 0;
+
   /// 単一の属性値の遅延更新をキューに追加
   void queueAttributeUpdate(
     GeoPackageFile geoPackageFile,
@@ -98,6 +105,19 @@ class BackgroundSaveManager {
     }
   }
 
+  /// 書けなかった変更の書き直しを予約する（間は倍々に延ばす）。
+  /// ⚠ 以前は戻すだけでタイマーを掛け直さず、次の編集か閉じるまで書かれなかった（2026-10-12）。
+  /// 新しい編集でタイマーが掛かっていればそれに任せる（書き直しのために編集の保存を遅らせない）
+  void _scheduleRetry() {
+    if (_pendingChanges.isEmpty) return;
+    _failedRounds++;
+    if (_saveTimer?.isActive ?? false) return;
+    final ms = _retryBase.inMilliseconds << (_failedRounds - 1).clamp(0, 10);
+    final delay = Duration(milliseconds: ms.clamp(0, _retryMax.inMilliseconds));
+    AppLogger.debug('[DEBUG] BackgroundSaveManager: 書けなかった変更を ${delay.inSeconds} 秒後に書き直す');
+    _saveTimer = Timer(delay, _saveChangesToDB);
+  }
+
   /// 変更をDBに保存
   Future<void> _saveChangesToDB() async {
     if (_pendingChanges.isEmpty) return;
@@ -115,22 +135,35 @@ class BackgroundSaveManager {
     final changesToSave = Map.of(_pendingChanges);
     _pendingChanges.clear();
 
+    var failed = false;
     for (final MapEntry(key: geoPackageFile, value: changes)
         in changesToSave.entries) {
-      try {
-        await _saveChangesForGeoPackage(geoPackageFile, changes);
-      } on _SaveFailure catch (e) {
-        AppLogger.debug('[ERROR] BackgroundSaveManager: $e');
-        _requeue(geoPackageFile, e.failed);
-      } catch (e) {
-        AppLogger.debug(
-          '[ERROR] BackgroundSaveManager: Failed to save changes for GeoPackage: $e',
-        );
-        _requeue(geoPackageFile, changes);
-      }
+      if (!await _save(geoPackageFile, changes)) failed = true;
     }
 
+    if (failed) {
+      _scheduleRetry();
+    } else {
+      _failedRounds = 0;
+    }
     AppLogger.debug('[DEBUG] BackgroundSaveManager: Background save completed');
+  }
+
+  /// [changes] を書く。書けなかった分はキューに戻して false
+  Future<bool> _save(GeoPackageFile geoPackageFile, Map<_CellKey, dynamic> changes) async {
+    try {
+      await _saveChangesForGeoPackage(geoPackageFile, changes);
+      return true;
+    } on _SaveFailure catch (e) {
+      AppLogger.debug('[ERROR] BackgroundSaveManager: $e');
+      _requeue(geoPackageFile, e.failed);
+    } catch (e) {
+      AppLogger.debug(
+        '[ERROR] BackgroundSaveManager: Failed to save changes for GeoPackage: $e',
+      );
+      _requeue(geoPackageFile, changes);
+    }
+    return false;
   }
 
   /// 特定のGeoPackageFileの変更を保存
@@ -194,20 +227,10 @@ class BackgroundSaveManager {
   Future<void> flushChanges(GeoPackageFile geoPackageFile) async {
     final changes = _pendingChanges.remove(geoPackageFile);
     if (changes == null || changes.isEmpty) return;
-    try {
-      await _saveChangesForGeoPackage(geoPackageFile, changes);
-    } on _SaveFailure catch (e) {
-      AppLogger.debug('[ERROR] BackgroundSaveManager: Failed to flush changes: $e');
-      _requeue(geoPackageFile, e.failed);
-    } catch (e) {
-      AppLogger.debug(
-        '[ERROR] BackgroundSaveManager: Failed to flush changes: $e',
-      );
-      _requeue(geoPackageFile, changes);
-    }
+    if (!await _save(geoPackageFile, changes)) _scheduleRetry();
   }
 
-  /// 全てのGeoPackageFileの変更を即座に保存
+  /// 全てのGeoPackageFileの変更を即座に保存（アプリを裏に回したとき。書き直しの予約も前倒しする）
   Future<void> flushAllChanges() async {
     _saveTimer?.cancel();
     await _saveChangesToDB();
@@ -233,6 +256,9 @@ class BackgroundSaveManager {
     _saveTimer?.cancel();
     _saveTimer = null;
     await _saveChangesToDB(); // ファイルごとの失敗は中で拾う
+    _saveTimer?.cancel(); // 書けなかった分の書き直しの予約も取り消す
+    _saveTimer = null;
+    _failedRounds = 0;
     _pendingChanges.clear(); // 保存できなかった分は捨てる
     AppLogger.debug('[DEBUG] BackgroundSaveManager: Disposed');
   }

@@ -49,7 +49,7 @@ void main() {
         {'name': '2林班-ろ'},
         {'name': '沢'},
       ]);
-      expect(await gpkg.replaceText('pts', 'name', '林班', 'りんぱん'), 2);
+      expect((await gpkg.replaceText('pts', 'name', '林班', 'りんぱん')).replaced, 2);
       expect(await value(ids[0], 'name'), '1りんぱん-い');
       expect(await value(ids[1], 'name'), '2りんぱん-ろ');
       expect(await value(ids[2], 'name'), '沢');
@@ -65,12 +65,12 @@ void main() {
         {'name': 'a_b'},
         {'name': 'axb'},
       ]);
-      expect(await gpkg.replaceText('pts', 'name', 'abc', 'x'), 1);
+      expect((await gpkg.replaceText('pts', 'name', 'abc', 'x')).replaced, 1);
       expect(await value(ids[1], 'name'), 'ABC');
-      expect(await gpkg.replaceText('pts', 'name', '50%', '60%'), 1);
+      expect((await gpkg.replaceText('pts', 'name', '50%', '60%')).replaced, 1);
       expect(await value(ids[2], 'name'), '60%off');
       expect(await value(ids[3], 'name'), '5000');
-      expect(await gpkg.replaceText('pts', 'name', 'a_b', 'c'), 1);
+      expect((await gpkg.replaceText('pts', 'name', 'a_b', 'c')).replaced, 1);
       expect(await value(ids[5], 'name'), 'axb');
     });
 
@@ -78,17 +78,54 @@ void main() {
       final ids = await addRows([
         {'h': 12.5, 'n': 105},
       ]);
-      expect(await gpkg.replaceText('pts', 'n', '05', '07'), 1);
+      expect((await gpkg.replaceText('pts', 'n', '05', '07')).replaced, 1);
       expect(await value(ids[0], 'n'), 107);
-      expect(await gpkg.replaceText('pts', 'h', '.5', '.75'), 1);
+      expect((await gpkg.replaceText('pts', 'h', '.5', '.75')).replaced, 1);
       expect(await value(ids[0], 'h'), 12.75);
+    });
+
+    // 数値の列に文字を書けていた（「abc」など。QGIS で読むと型が合わない。2026-10-12）
+    test('数値の列は数値にならない値を書かず、置き換えなかった行として数える', () async {
+      final ids = await addRows([
+        {'n': 12, 'h': 1.5},
+        {'n': 120, 'h': 12.5},
+        {'n': 3, 'h': 3.0},
+      ]);
+      final n = await gpkg.replaceText('pts', 'n', '12', 'abc');
+      expect((n.replaced, n.skipped), (0, 2));
+      expect(await value(ids[0], 'n'), 12);
+      expect(await value(ids[1], 'n'), 120);
+
+      final h = await gpkg.replaceText('pts', 'h', '.5', 'x');
+      expect((h.replaced, h.skipped), (0, 2));
+      expect(await value(ids[1], 'h'), 12.5);
+
+      // 整数の列に小数は書かない。実数の列は書く
+      final frac = await gpkg.replaceText('pts', 'n', '3', '3.5');
+      expect((frac.replaced, frac.skipped), (0, 1));
+      final real = await gpkg.replaceText('pts', 'h', '12.5', '12.25');
+      expect((real.replaced, real.skipped), (1, 0));
+      expect(await value(ids[1], 'h'), 12.25);
+    });
+
+    test('数値の列は全角の数字を半角にして書く。空になれば NULL', () async {
+      final ids = await addRows([
+        {'n': 105},
+        {'n': 7},
+      ]);
+      final r = await gpkg.replaceText('pts', 'n', '０５', '０８');
+      expect((r.replaced, r.skipped), (1, 0));
+      expect(await value(ids[0], 'n'), 108);
+      final e = await gpkg.replaceText('pts', 'n', '7', '');
+      expect((e.replaced, e.skipped), (1, 0));
+      expect(await value(ids[1], 'n'), isNull);
     });
 
     test('空の検索語は何もしない', () async {
       await addRows([
         {'name': 'a'},
       ]);
-      expect(await gpkg.replaceText('pts', 'name', '', 'x'), 0);
+      expect((await gpkg.replaceText('pts', 'name', '', 'x')).replaced, 0);
     });
   });
 
@@ -141,6 +178,16 @@ void main() {
       expect(names.where((c) => c == 'name'), hasLength(1));
     });
 
+    // SQLite の列名は英字の大小を区別しない。「Name」を足そうとすると ALTER が重複で落ちていた（2026-10-12）
+    test('英字の大小だけ違う名前の列は既にあるものとして足さない', () async {
+      await gpkg.addAttributeColumns('pts', {'Name': 'TEXT'});
+      final names = await gpkg.getTableColumns('pts');
+      expect(names.where((c) => c.toLowerCase() == 'name'), ['name']);
+      expect(await gpkg.findColumn('pts', 'NAME'), 'name');
+      expect(await gpkg.findColumn('pts', ' "h" '), 'h');
+      expect(await gpkg.findColumn('pts', 'height'), isNull);
+    });
+
     test('属性の列の情報は形の列を含めない', () async {
       final info = await gpkg.getAttributeColumnInfo('pts');
       final names = [for (final c in info) c['name']];
@@ -169,22 +216,22 @@ void main() {
       expect(await gpkg.getPrimaryKeyColumn('old'), 'id');
     });
 
-    test('主キーの無い表で fid 列があれば fid、id 列だけなら id', () async {
+    // GDAL と同じく、主キーが無ければ fid・id という名前の列があっても rowid を地物番号にする
+    test('主キーの無い表は fid・id 列があっても rowid', () async {
       await rawTable('CREATE TABLE f (fid INTEGER, geom BLOB)');
       await rawTable('CREATE TABLE i (id INTEGER, geom BLOB)');
-      expect(await gpkg.getPrimaryKeyColumn('f'), 'fid');
-      expect(await gpkg.getPrimaryKeyColumn('i'), 'id');
+      expect(await gpkg.getPrimaryKeyColumn('f'), 'rowid');
+      expect(await gpkg.getPrimaryKeyColumn('i'), 'rowid');
     });
 
-    test('主キーも fid も id も無い表は fid を足して行番号を写す', () async {
+    // 以前は fid 列を足して行番号を写していた（開いただけでファイルが変わる。2026-10-12）
+    test('主キーも fid も id も無い表は rowid を使い、列を足さない', () async {
       await rawTable('CREATE TABLE bare (geom BLOB, name TEXT)', [
         "INSERT INTO bare (name) VALUES ('a')",
         "INSERT INTO bare (name) VALUES ('b')",
       ]);
-      expect(await gpkg.getPrimaryKeyColumn('bare'), 'fid');
-      final rows = await (await gpkg.getDatabase()).rawQuery('SELECT fid, rowid AS r, name FROM bare ORDER BY rowid');
-      expect([for (final r in rows) r['fid']], [for (final r in rows) r['r']]);
-      expect(await gpkg.getTableColumns('bare'), contains('fid'));
+      expect(await gpkg.getPrimaryKeyColumn('bare'), 'rowid');
+      expect(await gpkg.getTableColumns('bare'), ['geom', 'name']);
     });
 
     test('主キーの列は属性表の列から外せる', () async {

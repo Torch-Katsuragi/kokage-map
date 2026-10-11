@@ -44,6 +44,11 @@
   [Deleting a feature right after editing it kept later attribute edits in that gpkg from being saved],
   [Web: reloading the page signed you out of Drive; within about an hour it now stays signed in in the same tab],
   [Track extraction could show and save the previous date's points after switching dates quickly],
+  [Opening a table without a primary key added an fid column; it is now read and edited by rowid, as in QGIS, without changes],
+  [Opening a gpkg whose CRS had no definition wrote a definition looked up online into it; JGD2000 and the Tokyo datum are now built in and nothing is written],
+  [Adding a column differing from an existing one only in letter case failed with an unclear error; you are now told which column exists],
+  [Replace in the attribute table could write text into numeric columns; such rows are now skipped and counted],
+  [Attribute changes that failed to save were not retried until the next edit; they are now retried with backoff and written when going to the background],
 )
 
 #fixes(

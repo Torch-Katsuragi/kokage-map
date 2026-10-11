@@ -41,6 +41,11 @@
 - Deleting a feature right after editing its attributes (within a second) kept later attribute edits in the same GeoPackage from being saved, and they were lost when the app closed
 - In the web version, reloading the page signed you out of Google Drive. Within about an hour of last connecting to Drive, reloading in the same tab now keeps you signed in. After that, the app reconnects the next time you use the screen (a small Google window opens and closes by itself)
 - In GPS track extraction, switching dates quickly could show the previous date's points or simplified line, and save them as is. It now always shows the track of the date selected
+- Opening a gpkg with a table that has no primary key (such as one made outside QGIS) added an `fid` column just by inspecting it, so viewing changed the file and Drive sync uploaded it. Such tables are now read and edited by row number (rowid), as QGIS does, without changing the table
+- Opening a gpkg whose CRS had no definition (such as JGD2000 geographic, EPSG:4612) looked the definition up online and wrote it into the gpkg, so viewing changed the file and Drive sync uploaded it. JGD2000 (geographic and plane rectangular I–XIX) and the Tokyo datum (geographic and plane rectangular I–XIX) are now built in, with no lookup and nothing written to the file
+- Adding a column whose name differs from an existing one only in letter case (such as "Name" when "name" exists) failed with an unclear error. Column names ignore letter case, so you are now told which column already exists (also when creating a new column in the field calculator)
+- Replace in the attribute table could write non-numeric values (such as "abc") into integer and real columns. Rows whose result would not be a number (or, in integer columns, a decimal) are now left unchanged and their count is reported. In numeric columns full-width digits become half-width, and an empty result becomes NULL
+- When an attribute change could not be saved for a moment, it was not retried until the next edit or until closing. It is now retried after a short wait (growing up to 1 minute). When the app goes to the background (or the tab is hidden on the web), pending attributes are written before the file is saved back
 
 ### Lighter
 

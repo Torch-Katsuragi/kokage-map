@@ -16,7 +16,8 @@
 // Root Maps: GeoPackage CRS 解決クラス
 // gpkg_spatial_ref_sys テーブルからCRS情報を解決し、
 // proj4dart Projectionオブジェクトを提供する。
-// 3段階フォールバック: ①GPKG内蔵WKT → ②EpsgRegistry → ③epsg.io HTTP
+// 3段階フォールバック: ①GPKG内蔵WKT → ②EpsgRegistry → ③epsg.io HTTP（メモリにだけ持つ）
+// ⚠ gpkg には書かない（開いただけで持ち主のファイルが変わり、Drive 同期で上がる）
 
 import 'package:http/http.dart' as http;
 import 'package:proj4dart/proj4dart.dart';
@@ -43,7 +44,7 @@ class GpkgCrsInfo {
   /// Proj4定義文字列
   final String? proj4String;
 
-  /// WGS84系で変換不要か（srsId: 4326, 0, -1, 6668）
+  /// WGS84系で変換不要か（srsId: 4326, 0, -1, 6668, 4612 など）
   final bool isWgs84;
 
   /// 軸入れ替えが必要か（JGD2011/JGD2000平面直角座標系）
@@ -85,6 +86,9 @@ class GpkgCrsResolver {
   /// テーブル名→CRSキャッシュ（DB+テーブルのペアでキー生成）
   final Map<String, GpkgCrsInfo> _cache = {};
 
+  /// epsg.io で取れた proj4 定義（コード番号 → 定義）。gpkg には書かない
+  final Map<String, String> _fetched = {};
+
   /// EpsgRegistryへの参照
   EpsgRegistry get _registry => EpsgRegistry.instance;
 
@@ -96,7 +100,10 @@ class GpkgCrsResolver {
   ///
   /// 1. gpkg_spatial_ref_sys.definition (WKT) を proj4dart でパース
   /// 2. EpsgRegistryのハードコードから取得
-  /// 3. epsg.io HTTP GET → 取得成功ならGPKGに書き戻し
+  /// 3. epsg.io HTTP GET（表に無いコードだけ。結果はメモリにだけ持つ）
+  ///
+  /// ⚠ gpkg には書き戻さない。以前は epsg.io の定義を gpkg_spatial_ref_sys に書いていて、
+  ///   見ただけのファイルが変わり Drive 同期でこちらの変更として上がっていた（2026-10-12）
   Future<GpkgCrsInfo> resolveLayerCrs(Database db, String tableName) async {
     // キャッシュチェック
     final key = _cacheKey(db, tableName);
@@ -179,16 +186,14 @@ class GpkgCrsResolver {
         }
       }
 
-      // ③ epsg.io HTTP GETで解決 → GPKGに書き戻し
+      // ③ epsg.io HTTP GETで解決（メモリにだけ持つ）
       final codeNumber = epsgCode.replaceFirst('EPSG:', '');
-      final httpResult = await _fetchFromEpsgIo(codeNumber);
+      final httpResult = _fetched[codeNumber] ?? await _fetchFromEpsgIo(codeNumber);
+      if (httpResult != null) _fetched[codeNumber] = httpResult;
       if (httpResult != null) {
         final projection = Projections.parse(httpResult);
         if (projection != null) {
           AppLogger.debug('[GpkgCrsResolver] epsg.io解決: $epsgCode ($tableName)');
-
-          // GPKGに書き戻し（キャッシュ化）
-          await _writeBackDefinition(db, srsId, httpResult);
 
           final info = GpkgCrsInfo(
             srsId: srsId,
@@ -286,27 +291,13 @@ class GpkgCrsResolver {
     }
   }
 
-  /// 取得した定義をGPKGに書き戻し（GPKGがキャッシュになる）
-  Future<void> _writeBackDefinition(Database db, int srsId, String proj4String) async {
-    try {
-      await db.update(
-        'gpkg_spatial_ref_sys',
-        {'definition': proj4String},
-        where: 'srs_id = ?',
-        whereArgs: [srsId],
-      );
-      AppLogger.debug('[GpkgCrsResolver] GPKGに定義を書き戻し完了: srs_id=$srsId');
-    } catch (e) {
-      AppLogger.debug('[GpkgCrsResolver] GPKG書き戻しエラー: $e');
-    }
-  }
-
   /// WGS84系のsrsIdか判定（変換不要）
   ///
+  /// JGD2000 の地理座標系（4612）も JGD2011（6668）と同じく WGS 84 との差を 0 とみなす（PROJ・QGIS も同じ）。
   /// 3 次元の地理座標系（WGS 84 の 4979、JGD2011 の 6667）も XY は同じなので含める。GDAL は Z 付きの GeoJSON を
   /// 4979 で書き、以前はオフラインでも epsg.io に問い合わせていた（2026-10-11）
   bool _isWgs84SrsId(int srsId) {
-    return const {4326, 0, -1, 6668, 4979, 6667}.contains(srsId);
+    return const {4326, 0, -1, 6668, 4612, 4979, 6667}.contains(srsId);
   }
 
   /// WGS84系のsrsIdに対応する名前
@@ -316,6 +307,8 @@ class GpkgCrsResolver {
         return 'WGS 84';
       case 6668:
         return 'JGD2011 地理座標系';
+      case 4612:
+        return 'JGD2000 地理座標系';
       case 4979:
         return 'WGS 84（3 次元）';
       case 6667:

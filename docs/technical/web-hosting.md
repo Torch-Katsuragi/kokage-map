@@ -60,7 +60,7 @@ CSP の出所（足すときは、ここにも書く）:
 | | `fonts.gstatic.com` | Flutter が日本語などの代替フォントを取る |
 | | `www.googleapis.com` `*.googleusercontent.com` | Drive API・プロフィール画像（CanvasKit の画像は fetch で取るので img-src でなく connect-src） |
 | | `identitytoolkit` `securetoken` `*.firebasedatabase.app`（https/wss） | 位置共有の匿名サインインと RTDB |
-| | `epsg.io` | 未知の EPSG の proj4 定義（`gpkg_crs_resolver.dart`） |
+| | `epsg.io` | 手元の表（`EpsgRegistry`）に無い EPSG の proj4 定義（`gpkg_crs_resolver.dart`。メモリにだけ持ち gpkg には書かない） |
 | style-src / font-src | `accounts.google.com/gsi/style`、`fonts.googleapis.com` / `fonts.gstatic.com` | GIS のボタン、`/beta/` の Noto Sans JP |
 
 > [!WARNING] Firebase のハッシュは firebase_core_web の版に縛られる

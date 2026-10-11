@@ -306,13 +306,17 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.detached) {
       _cleanupOnAppExit();
-    } else if (state == AppLifecycleState.paused) {
-      BackgroundSaveManager.instance.flushAllChanges();
-      GeoPackageConnection.flushPendingCheckIns();
-    } else if (state == AppLifecycleState.hidden) {
-      // web はタブを隠したときがこれ（閉じる前の最後の機会になりやすい）
-      GeoPackageConnection.flushPendingCheckIns();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      // web はタブを隠したとき hidden だけが来る（閉じる前の最後の機会になりやすい）
+      unawaited(_flushOnBackground());
     }
+  }
+
+  /// 裏に回るとき、保留中の属性（書き直し待ちも）を書いてから web の元ファイルへ書き戻す。
+  /// ⚠ 順番を守る。以前は並べて呼んでいて、属性を書く前に書き戻すことがあり、web は hidden で属性を書いていなかった
+  Future<void> _flushOnBackground() async {
+    await BackgroundSaveManager.instance.flushAllChanges();
+    await GeoPackageConnection.flushPendingCheckIns();
   }
 
   Future<void> _cleanupOnAppExit() async {

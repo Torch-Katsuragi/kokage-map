@@ -603,19 +603,19 @@ class AttributeTableController extends ChangeNotifier {
     );
   }
 
-  /// テキスト置換（指定カラム内）
-  Future<int> replaceText(String column, String search, String replace) async {
-    if (refuseReadOnlyEditBy(_ref.read, layer)) return 0;
-    final count = await layer.geoPackageFile.replaceText(
+  /// テキスト置換（指定カラム内）。置き換えた行の数と、数値の列で数値にならず置き換えなかった行の数
+  Future<({int replaced, int skipped})> replaceText(String column, String search, String replace) async {
+    if (refuseReadOnlyEditBy(_ref.read, layer)) return (replaced: 0, skipped: 0);
+    final result = await layer.geoPackageFile.replaceText(
       layer.layerName,
       column,
       search,
       replace,
     );
-    if (count > 0) {
+    if (result.replaced > 0) {
       await initialize();
     }
-    return count;
+    return result;
   }
 
   // ========== カラム構築 ==========

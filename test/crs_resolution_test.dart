@@ -100,6 +100,40 @@ void main() {
       });
     }
 
+    // 定義の無い日本の CRS は手元の表で解く（epsg.io に問い合わせず、gpkg にも書き戻さない → gpkg_open_no_write_test）
+    test('JGD2000 地理座標系（4612）は 6668 と同じく変換しない', () async {
+      final (raw, back) = await writeAndRead(await layerWithSrs(4612, 'undefined'));
+      expect(raw.x, 135.96);
+      expect(raw.y, 33.93);
+      expect(back, kitayama);
+    });
+
+    test('JGD2000 平面直角 VI 系（2448）は JGD2011 の VI 系と同じ値', () async {
+      final (raw, back) = await writeAndRead(await layerWithSrs(2448, 'undefined'));
+      expect(raw.x, closeTo(-3700, 1000));
+      expect(raw.y, closeTo(-230000, 10000));
+      expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
+      expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
+    });
+
+    // 期待値は PROJ 9（pyproj）で WGS 84 → Tokyo。PROJ が既定に選ぶ EPSG:15484（Tokyo to WGS 84 (108)）の
+    // 3 パラメータ（-146.414, 507.337, 680.507）。QGIS もグリッドが無ければこれを使う
+    test('旧日本測地系の地理座標系（4301）は測地系を変換する', () async {
+      final (raw, back) = await writeAndRead(await layerWithSrs(4301, 'undefined'));
+      expect(raw.x, closeTo(135.962844, 1e-5));
+      expect(raw.y, closeTo(33.926659, 1e-5));
+      expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
+      expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
+    });
+
+    test('旧日本測地系の平面直角 VI 系（30166）は測地系を変換し、x = 東で書く', () async {
+      final (raw, back) = await writeAndRead(await layerWithSrs(30166, 'undefined'));
+      expect(raw.x, closeTo(-3434.86, 1));
+      expect(raw.y, closeTo(-229968.39, 1));
+      expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
+      expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
+    });
+
     test('Web メルカトル（3857）はメートルで書き、同じ位置で読み戻す', () async {
       final (raw, back) = await writeAndRead(await layerWithSrs(3857, 'undefined'));
       expect(raw.x, closeTo(15134998, 1));

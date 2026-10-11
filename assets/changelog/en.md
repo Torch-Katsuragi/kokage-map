@@ -1,5 +1,13 @@
 # Changelog
 
+## Next release
+
+### Fixed
+
+- "Copy Table" in the attribute table copied only the first page shown. It now copies every row that matches the filter, in the order sorted by the column header (hidden columns are left out). Above 50,000 rows it asks first
+- The attribute table now has a rows-per-page selector (50, 100, 200, 500) below it. Sorting by a column header sorts all rows, not just the page shown
+- Reloading the attribute table with a filter still applied showed the toolbar as "not applied" and emptied the expression field. Fixed
+
 ## v0.12.0 — 2026/10/11
 
 ### Open files other than gpkg as they are

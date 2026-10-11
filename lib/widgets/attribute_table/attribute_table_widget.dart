@@ -119,13 +119,15 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       // dispose中のプロバイダ変更を遅延実行
       final oldController = _controller;
       Future.microtask(oldController.dispose);
-      _attachController();
+      _attachController(previous: oldController);
       _plutoGridKey = UniqueKey();
     }
   }
 
-  void _attachController() {
+  /// 同じレイヤの読み直しなら、前のフィルタとページの大きさを引き継ぐ
+  void _attachController({AttributeTableController? previous}) {
     _controller = AttributeTableController(widget.layer, ref);
+    if (previous != null) _controller.inheritFrom(previous);
     _controller.addListener(_onControllerChanged);
     _gridDisplayRevision = _controller.displayRevision;
     _loadedRevision = widget.layer.featuresRevision;
@@ -298,8 +300,14 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
           initialPage: 1,
           // ⚠ 最初の取得をしないと総ページ数が 0 のままで、先頭のページから先へ進めない（2026-10-07 に Fold で確認）
           initialFetch: true,
-          fetchWithSorting: false,
+          // 並べ替えは全件で（表に任せると今の 1 ページの中だけを並べていた）
+          fetchWithSorting: true,
           fetchWithFiltering: false,
+          // ページの大きさ。以前は既定（10）のまま渡し、取得側が 100 で決め打ちしていた
+          showPageSizeSelector: true,
+          pageSizes: AttributeTableController.pageSizes,
+          initialPageSize: _controller.pageSize,
+          onPageSizeChanged: _controller.setPageSize,
           fetch: _controller.fetchPage,
           stateManager: stateManager,
         );

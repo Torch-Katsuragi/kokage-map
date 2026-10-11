@@ -74,6 +74,7 @@ class AttributeTableController extends ChangeNotifier {
   AttributeTableSettings _settings = const AttributeTableSettings();
 
   // フィルタ状態
+  String _filterExpression = '';
   String _filterSql = '';
   Set<int> _filteredRowIds = {};
   bool _isFiltered = false;
@@ -85,8 +86,26 @@ class AttributeTableController extends ChangeNotifier {
   int displayRevision = 0;
   List<TrinaRow> _displayRows = [];
 
+  // 並べ替え（列の見出しを押したもの）。ページをまたいで全件を並べる。null なら読んだ順
+  String? _sortField;
+  bool _sortDescending = false;
+  List<FeatureNode>? _orderedCache;
+
   // ページング
-  static const int _pageSize = 100;
+  /// 1 ページの行数の選択肢
+  static const List<int> pageSizes = [50, 100, 200, 500];
+  int _pageSize = 100;
+
+  /// 1 ページの行数。表を作り直しても（フィルタを変えても）選んだ大きさのまま
+  int get pageSize => _pageSize;
+
+  /// 表のページの大きさの選択から呼ぶ（このあと表が 1 ページ目を取り直す）
+  void setPageSize(int size) {
+    if (size > 0) _pageSize = size;
+  }
+
+  /// 「表をコピー」でこれより多い行は確かめてからコピーする
+  static const int largeCopyRows = 50000;
 
   // エラー状態
   String? _lastError;
@@ -110,6 +129,9 @@ class AttributeTableController extends ChangeNotifier {
   bool get isPointLayer => layer is PointLayerNode;
   bool get isFiltered => _isFiltered;
   String get filterSql => _filterSql;
+
+  /// 適用中のフィルタの式（入力欄に入れたまま）。ツールバーを作り直したときに欄へ戻す
+  String get filterExpression => _filterExpression;
   int get totalCount => _features.length;
   int get filteredCount => _displayFeatures.length;
   String? get lastError => _lastError;
@@ -194,11 +216,16 @@ class AttributeTableController extends ChangeNotifier {
       // カラムを構築
       _columns = _createColumns();
 
-      // フィルタが有効ならフィルタ済みビュー、そうでなければ全件（複製しない）
+      // フィルタが有効ならフィルタ済みビュー、そうでなければ全件（複製しない）。
+      // 合う行は数え直す（置換・一括設定のあとは合う行が変わる）
       if (_isFiltered && _filterSql.isNotEmpty) {
+        _filteredRowIds = (await layer.geoPackageFile
+                .getFilteredFeatureIds(layer.layerName, _filterSql))
+            .toSet();
         _applyFilterToDisplay();
       } else {
         _displayFeatures = _features;
+        _orderedCache = null;
         _displayRows = _createRowsForRange(0, _pageSize);
       }
 
@@ -217,6 +244,18 @@ class AttributeTableController extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// 同じレイヤを読み直して作り直したコントローラに、前のフィルタとページの大きさを引き継ぐ。
+  /// [initialize] の前に呼ぶ
+  void inheritFrom(AttributeTableController previous) {
+    if (!identical(previous.layer, layer)) return;
+    _pageSize = previous._pageSize;
+    if (previous._isFiltered) {
+      _filterExpression = previous._filterExpression;
+      _filterSql = previous._filterSql;
+      _isFiltered = true;
     }
   }
 
@@ -276,6 +315,7 @@ class AttributeTableController extends ChangeNotifier {
 
     try {
       await feature.setAttributeValue(field, value);
+      if (field == _sortField) _orderedCache = null;
       AppLogger.debug('[AttributeTableController] 属性保存: $field = $value');
       _ref.read(tutorialProvider.notifier).report(AttributeSaved(layer));
       return null;
@@ -334,6 +374,7 @@ class AttributeTableController extends ChangeNotifier {
       return _filterError;
     }
 
+    _filterExpression = expression.trim();
     _filterSql = sql;
     _filteredRowIds = ids.toSet();
     _isFiltered = true;
@@ -351,6 +392,7 @@ class AttributeTableController extends ChangeNotifier {
       for (final f in _features)
         if (_filteredRowIds.contains(f.rowId)) f,
     ];
+    _orderedCache = null;
     _displayRows = _createRowsForRange(0, _pageSize);
 
     AppLogger.debug(
@@ -361,11 +403,13 @@ class AttributeTableController extends ChangeNotifier {
 
   /// フィルタを解除
   Future<void> clearFilter() async {
+    _filterExpression = '';
     _filterSql = '';
     _filteredRowIds = {};
     _isFiltered = false;
     _filterError = null;
     _displayFeatures = _features;
+    _orderedCache = null;
     _displayRows = _createRowsForRange(0, _pageSize);
     displayRevision++;
     notifyListeners();
@@ -634,66 +678,138 @@ class AttributeTableController extends ChangeNotifier {
   // ========== ページング ==========
 
   /// ページ取得（TrinaLazyPagination用）
+  /// 並べ替えは表の 1 ページの中でなく、ここで全件を並べてから切り出す（fetchWithSorting）。
+  /// ページの大きさは表の選択（[TrinaLazyPaginationRequest.pageSize]）に従う
   Future<TrinaLazyPaginationResponse> fetchPage(
     TrinaLazyPaginationRequest request,
   ) async {
-    final page = request.page;
-    const pageSize = _pageSize;
+    final sortColumn = request.sortColumn;
+    setSort(
+      sortColumn == null || sortColumn.sort.isNone ? null : sortColumn.field,
+      descending: sortColumn?.sort.isDescending ?? false,
+    );
+    if (request.pageSize > 0) _pageSize = request.pageSize;
+    final pageSize = _pageSize;
     final totalFeatures = _displayFeatures.length;
     final totalPages =
         (totalFeatures / pageSize).ceil().clamp(1, double.infinity).toInt();
-    final start = (page - 1) * pageSize;
+    final start = (request.page - 1) * pageSize;
 
     final rows = _createRowsForRange(start, pageSize);
 
-    return TrinaLazyPaginationResponse(totalPage: totalPages, rows: rows);
+    return TrinaLazyPaginationResponse(
+      totalPage: totalPages,
+      rows: rows,
+      totalRecords: totalFeatures,
+    );
+  }
+
+  /// 並べ替える列を決める（null で読んだ順に戻す）
+  void setSort(String? field, {bool descending = false}) {
+    if (field == _sortField && descending == _sortDescending) return;
+    _sortField = field;
+    _sortDescending = descending;
+    _orderedCache = null;
+  }
+
+  /// 表に出す順の地物（フィルタで絞り、並べ替えた全件）
+  List<FeatureNode> get orderedFeatures {
+    final field = _sortField;
+    if (field == null) return _displayFeatures;
+    return _orderedCache ??= () {
+      final keyed = [
+        for (var i = 0; i < _displayFeatures.length; i++)
+          (i, _displayFeatures[i], _cellValue(_displayFeatures[i], field)),
+      ];
+      keyed.sort((a, b) {
+        final c = _compareCellValues(a.$3, b.$3);
+        if (c != 0) return _sortDescending ? -c : c;
+        return a.$1.compareTo(b.$1); // 同じ値は読んだ順のまま
+      });
+      return [for (final k in keyed) k.$2];
+    }();
+  }
+
+  /// 並べ替えの比較。数どうしは数で、ほかは文字で比べる。空は小さい側
+  static int _compareCellValues(Object? a, Object? b) {
+    final aEmpty = a == null || a == '';
+    final bEmpty = b == null || b == '';
+    if (aEmpty || bEmpty) return aEmpty == bEmpty ? 0 : (aEmpty ? -1 : 1);
+    final an = a is num ? a : num.tryParse('$a');
+    final bn = b is num ? b : num.tryParse('$b');
+    if (an != null && bn != null) return an.compareTo(bn);
+    return '$a'.compareTo('$b');
   }
 
   // ========== 行データ構築 ==========
 
+  /// 1 マスの値（表・コピー・並べ替えで共通）。[index] は表の順の位置（0 始まり）
+  Object? _cellValue(FeatureNode feature, String field, [int index = 0]) {
+    switch (field) {
+      case '_row_num':
+        return index + 1;
+      case '_lat' || '_lon' || '_x' || '_y':
+        if (feature is! PointFeatureNode) return '';
+        final point = feature.point;
+        if (field == '_lat') return point.latitude.toStringAsFixed(6);
+        if (field == '_lon') return point.longitude.toStringAsFixed(6);
+        final epsg = _settings.additionalEpsg;
+        if (epsg == null) return '';
+        final xy = CoordinateService.instance.transformToXYFormatted(point, epsg);
+        return (field == '_x' ? xy['x'] : xy['y']) ?? '';
+      default:
+        return readAttribute(feature, field) ?? '';
+    }
+  }
+
   /// 指定範囲のフィーチャからTrinaRowを構築
   List<TrinaRow> _createRowsForRange(int start, int count) {
-    if (_displayFeatures.isEmpty) return [];
+    final ordered = orderedFeatures;
+    if (ordered.isEmpty) return [];
 
-    final end = (start + count).clamp(0, _displayFeatures.length);
+    final end = (start + count).clamp(0, ordered.length);
     if (start >= end) return [];
 
-    final tableRows = <TrinaRow>[];
-    final coordService = CoordinateService.instance;
+    return [
+      for (int i = start; i < end; i++)
+        TrinaRow(
+          cells: {
+            for (final column in _columns)
+              column.field: TrinaCell(value: _cellValue(ordered[i], column.field, i)),
+          },
+          data: ordered[i],
+        ),
+    ];
+  }
 
-    for (int i = start; i < end; i++) {
-      final feature = _displayFeatures[i];
-      final cells = <String, TrinaCell>{};
-
-      cells['_row_num'] = TrinaCell(value: i + 1);
-
-      for (final columnName in _columnNames) {
-        cells[columnName] =
-            TrinaCell(value: readAttribute(feature, columnName) ?? '');
+  /// 「表をコピー」の中身（TSV）。今のフィルタ・並べ替えの全件を、隠した列を除いて書く。
+  /// [chunkSize] 行ごとに一度手を離す（何万行でも画面を止めない）
+  Future<String> buildTableTsv({int chunkSize = 2000}) async {
+    final columns = [
+      for (final c in _columns)
+        if (!_hiddenColumns.contains(c.field)) c,
+    ];
+    final buffer = StringBuffer()
+      ..writeln(columns.map((c) => _escapeTsvValue(c.title)).join('\t'));
+    final ordered = orderedFeatures;
+    for (var i = 0; i < ordered.length; i++) {
+      if (i > 0 && i % chunkSize == 0) {
+        await Future<void>.delayed(Duration.zero);
       }
-
-      if (isPointLayer && feature is PointFeatureNode) {
-        final point = feature.point;
-
-        if (_settings.showWgs84) {
-          cells['_lat'] = TrinaCell(value: point.latitude.toStringAsFixed(6));
-          cells['_lon'] = TrinaCell(value: point.longitude.toStringAsFixed(6));
-        }
-
-        if (_settings.additionalEpsg != null) {
-          final xy = coordService.transformToXYFormatted(
-            point,
-            _settings.additionalEpsg!,
-          );
-          cells['_x'] = TrinaCell(value: xy['x'] ?? '');
-          cells['_y'] = TrinaCell(value: xy['y'] ?? '');
-        }
-      }
-
-      tableRows.add(TrinaRow(cells: cells, data: feature));
+      buffer.writeln(
+        columns
+            .map((c) => _escapeTsvValue(_cellValue(ordered[i], c.field, i)?.toString() ?? ''))
+            .join('\t'),
+      );
     }
+    return buffer.toString();
+  }
 
-    return tableRows;
+  static String _escapeTsvValue(String value) {
+    if (value.contains('\n') || value.contains('\t') || value.contains('"')) {
+      return '"${value.replaceAll('"', '""')}"';
+    }
+    return value;
   }
 
   // ========== 内部コールバック ==========

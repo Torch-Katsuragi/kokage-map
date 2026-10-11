@@ -798,6 +798,7 @@
     "showAll": "Show All",
     "copiedToClipboard": "$count rows copied to clipboard",
     "copyError": "Copy error: $error",
+    "copyLargeConfirm": "There are $count rows. Copying takes a while, and some apps may not handle a paste this large. Copy anyway?",
     "epsgHint": "EPSG (e.g. 6677, IX)",
     "openTable": "Open Attribute Table",
     "closeTable": "Close Attribute Table",

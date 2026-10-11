@@ -198,4 +198,24 @@ void main() {
       tableIds['森林簿'],
     ]);
   });
+
+  test('更新: 表を消すと、その表への結合も .qgs から落とす（宙に浮いた <join> を残さない）', () async {
+    await KMetaService.instance.setLayerJoins(proj, '計画図.gpkg/shoban', fixtureJoins);
+    final first = (await const QgsProjectBuilder().writeTo(await loadTree()))!;
+    final rinpanId = QgsProjectBuilder.tableLayerIdForPath('./林班表.csv');
+    expect(File(first.path).readAsStringSync(), contains('joinLayerId="$rinpanId"'));
+
+    File(p.join(proj, '林班表.csv')).deleteSync();
+    TableCache.clear();
+    final written = (await const QgsProjectBuilder().writeTo(await loadTree()))!;
+    final doc = XmlDocument.parse(File(written.path).readAsStringSync());
+    final ids = {for (final m in doc.findAllElements('maplayer')) m.getElement('id')!.innerText};
+    expect(ids, isNot(contains(rinpanId)));
+    final joins = doc
+        .findAllElements('maplayer')
+        .firstWhere((m) => m.getElement('layername')!.innerText == 'shoban')
+        .getElement('vectorjoins')!
+        .findElements('join');
+    expect([for (final j in joins) j.getAttribute('joinLayerId')], [QgsProjectBuilder.tableLayerIdForPath('./森林簿.csv')]);
+  });
 }

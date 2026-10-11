@@ -174,6 +174,9 @@ class QgsTableLayer extends QgsTreeNode {
     this.encoding = 'UTF-8',
   });
 
+  /// [id] の頭（`QgsProjectBuilder.tableLayerIdForPath`）。アプリが書いた表かどうかの目印
+  static const idPrefix = 'table_';
+
   /// 決定的な id（相対パスのハッシュ）
   final String id;
 

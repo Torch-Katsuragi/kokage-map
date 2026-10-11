@@ -603,6 +603,27 @@ class QgsDocument {
       if (existing.contains(table.id)) continue;
       container.children.add(_writer.tableMapLayerElement(table));
     }
+
+    // 外したアプリの表（id が `table_…`）を指したままの結合を落とす。[_patchJoins] はアプリの今の表への結合しか
+    // 差し替えないので、前に書いた表を消すと、その表への `<join>` が宙に浮いて残っていた。
+    // QGIS で足した結合（id がアプリの形でないもの）はこれまでどおり触らない
+    final present = {
+      for (final e in container.findElements('maplayer'))
+        if (e.getElement('id') != null) e.getElement('id')!.innerText,
+    };
+    bool danglingAppTable(XmlElement j) {
+      final id = j.getAttribute('joinLayerId');
+      return id != null && id.startsWith(QgsTableLayer.idPrefix) && !present.contains(id);
+    }
+
+    for (final e in container.findElements('maplayer')) {
+      e
+          .getElement('vectorjoins')
+          ?.childElements
+          .where((j) => j.name.local == 'join' && danglingAppTable(j))
+          .toList()
+          .forEach(detachNode);
+    }
   }
 
   /// 既存の `<maplayer>` を [layer] に合わせる。自分の管轄だけ触る

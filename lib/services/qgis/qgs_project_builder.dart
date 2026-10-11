@@ -329,7 +329,7 @@ class QgsProjectBuilder {
   static String tableLayerIdForPath(String relPath) {
     var rel = relPath.replaceAll(r'\', '/');
     if (!rel.startsWith('./')) rel = './$rel';
-    return 'table_${stableHashHex(rel)}';
+    return '${QgsTableLayer.idPrefix}${stableHashHex(rel)}';
   }
 
   /// [layer] の結合（フォルダ設定の [KMeta.joins]）を `.qgs` の形にする。表がプロジェクトの外・見つからなければ報告して外す

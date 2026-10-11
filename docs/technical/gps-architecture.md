@@ -98,6 +98,52 @@ tags: [technical, gps, architecture]
 - メインisolateのログ: 外部GNSS使用時のデータ取得状況
 - 属性テーブルでの確認: 外部GNSS使用時は`source_type = 'GNSS'`になっているか
 
+## GNSS の品質の記録と足切り
+
+造林補助の GNSS 竣工検査（和歌山県・石川県など）は、測位の種類・衛星数・DOP・平均化の回数の記録を求める。
+現場では悪い測位をその場で弾きたい。モデルは `lib/models/gnss_quality.dart`（2026-10-11）。
+
+### 読むもの（外部 GNSS）
+
+| NMEA | 使うもの |
+| --- | --- |
+| GGA | 品質番号 → `GnssFix`（0・6・7・8 → none、1 → gps、2・3・9 → dgps、5 → rtk_float、4 → rtk_fixed）、衛星数、HDOP |
+| GSA | PDOP・VDOP（HDOP も上書き） |
+| GST | 緯度・経度の標準偏差 → 精度 `√(σ緯度² + σ経度²)`。5 秒受けなければ品質番号 × HDOP の見積もりに戻す |
+
+精度の出どころは `accuracySource`（`gst`・`hdop`、端末の GPS は `device`）として測位ごとに残す。
+端末の GPS は測位の種類・衛星数が分からない。画面では「GNSS(端末)」、足切りでは単独測位（gps）とみなす。
+
+### 記録の形
+
+測量の記録（`drawing_points` の 1 件）の `quality` に入る。点も線・面の頂点と同じ形で `kmaps_metadata` に
+`{"drawing_points": [記録]}` として残す（点はこれまでどおり accuracy・hdop・satellite_count・fix_type・sample_count の列にも書く）。
+
+```json
+{"source": "GNSS", "device": "R1", "fix": "rtk_fixed", "sats": 12, "hdop": 0.6, "pdop": 1.1,
+ "hacc": 0.02, "hacc_src": "gst", "avg_n": 10, "avg_s": 10.2, "spread": 0.012,
+ "time": "2026-10-11T09:00:00.000", "rejected": 1, "warnings": ["..."]}
+```
+
+- 長押しの平均: 種類・衛星数は最も悪い回、DOP は最大、精度は各回の平均、`spread` は中心からの水平距離の二乗平均平方根（2 回以上）
+- `quality` の無い以前の記録は、残っている `usedGpsData` から組み立てて表示する（`GnssQuality.ofSurveyRecord`）
+- 情報パネル: 点は「RTK FIX・12 衛星・±0.02 m・平均 10 回」、線・面は「GNSS 測量 5/6 点・最悪 ±0.05 m・中央値 ±0.02 m・最低 RTK FLOAT」
+
+### 足切り
+
+設定 → GPS・測位 の「測位の品質（足切り）」（`GnssQualityGateSetting`、SharedPreferences の `gnss_quality_gate`）。
+精度の上限・測位の種類の下限・衛星数の下限。どれも指定しなければ何もしない（既定）。
+
+- 値が分からない測位は満たさないとする（検査に出せる値が無いので）。端末の GPS に衛星数の条件を付けると記録できない
+- 単発: 満たさなければ記録せず、通知センターに理由を出す。「記録しない」を切れば記録して警告し、`warnings` に残す
+- 長押し: 満たさない回を平均から外し（`rejected` に数）、全部外れたら記録しない。長押し中は測量ボタンの上に「8点・除外 2」
+
+### 書き出し
+
+書き出しのダイアログの「GNSS の品質を列に」で `gnss_fix`・`gnss_sats`・`gnss_hacc`・`gnss_avg_n` を足す
+（`ImportExportService.gnssQualityColumns`）。`-sql` で GPKG の SQLite の JSON 関数（`json_each`・`json_extract`）を使う。
+線・面は頂点の中で最も悪い値。壊れた JSON は NULL にして書き出しは止めない。列名は shp の 10 文字に収める。
+
 ## 関連ドキュメント
 
 - [[foreground-service]] - フォアグラウンドサービス・Bluetooth制約

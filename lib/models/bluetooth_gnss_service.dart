@@ -14,6 +14,7 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
@@ -27,7 +28,7 @@ import '../i18n/strings.g.dart';
 /// Bluetooth GNSS接続サービス
 ///
 /// SSP（Secure Simple Pairing）対応の外部GNSS受信機に接続し、
-/// NMEA（GGA・RMC・GSA・GSV）を読んで位置・DOP・補正の種類を持つ。
+/// NMEA（GGA・RMC・GSA・GSV・GST）を読んで位置・DOP・補正の種類・精度を持つ。
 /// 位置が更新されたら通知する（500ms に 1 回まで）。
 class BluetoothGnssService extends ChangeNotifier {
   static const String _logTag = 'BluetoothGNSS';
@@ -63,6 +64,14 @@ class BluetoothGnssService extends ChangeNotifier {
   final Set<int> _sbasInView = {}; // 視野内のSBAS衛星（GSVから検出）
   int? _sbasPrn; // 検出されたSBAS衛星のPRN番号
 
+  // GST（擬似距離の誤差統計）の緯度・経度の標準偏差（m）と受けた時刻
+  double? _gstLatSigma;
+  double? _gstLonSigma;
+  DateTime? _gstAt;
+
+  /// GST をこの時間受けなければ HDOP からの見積もりに戻す
+  static const _gstFreshFor = Duration(seconds: 5);
+
   // DGPS基準局情報（GGA文フィールド14から取得）
   String? _dgpsStationId; // 差分基準局ID（0000-1023）
 
@@ -80,7 +89,19 @@ class BluetoothGnssService extends ChangeNotifier {
   double? get latitude => _latitude;
   double? get longitude => _longitude;
   double? get altitude => _altitude;
-  double? get accuracy => _accuracy;
+  /// 水平精度（m）。受信機が GST を出していればその緯度・経度の標準偏差から、無ければ品質番号と HDOP から見積もる
+  double? get accuracy => _gstHorizontalSigma ?? _accuracy;
+
+  /// [accuracy] の出どころ（`gst` か `hdop`。GnssAccuracySource）
+  String get accuracySource => _gstHorizontalSigma != null ? 'gst' : 'hdop';
+
+  /// GST の水平の標準偏差（√(σ緯度² + σ経度²)）。新しいものが無ければ null
+  double? get _gstHorizontalSigma {
+    final lat = _gstLatSigma, lon = _gstLonSigma, at = _gstAt;
+    if (lat == null || lon == null || at == null) return null;
+    if (DateTime.now().difference(at) > _gstFreshFor) return null;
+    return math.sqrt(lat * lat + lon * lon);
+  }
   double? get speed => _speed;
   double? get bearing => _bearing;
   DateTime? get timestamp => _timestamp;
@@ -340,6 +361,8 @@ class BluetoothGnssService extends ChangeNotifier {
         _processRmcSentence(sentence);
       } else if (_isGpOrGn(sentence, 'GSA')) {
         _processGsaSentence(sentence);
+      } else if (_isGpOrGn(sentence, 'GST')) {
+        _processGstSentence(sentence);
       } else if (sentence.contains('GSV')) {
         _processGsvSentence(sentence);
       }
@@ -457,6 +480,19 @@ class BluetoothGnssService extends ChangeNotifier {
     if (parts[17].isNotEmpty) {
       _vdop = double.tryParse(parts[17].split('*').first);
     }
+  }
+
+  /// GST文の処理（測位の誤差の統計）
+  /// フォーマット: $GPGST,時刻,RMS,長半径σ,短半径σ,長半径の向き,緯度σ,経度σ,高さσ*CS（σ は m）
+  void _processGstSentence(String sentence) {
+    final List<String> parts = sentence.split(',');
+    if (parts.length < 9) return;
+    final lat = double.tryParse(parts[6]);
+    final lon = double.tryParse(parts[7]);
+    if (lat == null || lon == null) return;
+    _gstLatSigma = lat;
+    _gstLonSigma = lon;
+    _gstAt = DateTime.now();
   }
 
   /// GSV文の処理（視野内衛星情報）

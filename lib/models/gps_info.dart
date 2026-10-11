@@ -45,6 +45,7 @@ class GpsInfo {
     this.longitude,
     this.altitude,
     this.accuracy,
+    this.accuracySource,
     this.speed,
     this.bearing,
     this.timestamp,
@@ -71,6 +72,9 @@ class GpsInfo {
   final double? longitude;
   final double? altitude;
   final double? accuracy;
+
+  /// 外部 GNSS の [accuracy] の出どころ（`gst`・`hdop`。GnssAccuracySource）。端末の GPS は null
+  final String? accuracySource;
   final double? speed;
   final double? bearing;
   final DateTime? timestamp;
@@ -104,6 +108,7 @@ class GpsInfo {
       longitude == other.longitude &&
       altitude == other.altitude &&
       accuracy == other.accuracy &&
+      accuracySource == other.accuracySource &&
       speed == other.speed &&
       bearing == other.bearing &&
       isGpsActive == other.isGpsActive &&
@@ -125,6 +130,7 @@ class GpsInfo {
     'longitude': longitude,
     'altitude': altitude,
     'accuracy': accuracy,
+    'accuracySource': accuracySource,
     'speed': speed,
     'bearing': bearing,
     'timestamp': timestamp?.toIso8601String(),
@@ -169,6 +175,7 @@ class GpsSurveySample {
     'sourceName': info.sourceName,
     'selectedDevice': info.selectedDevice,
     'collectedAt': collectedAt.toIso8601String(),
+    'accuracySource': ?info.accuracySource,
     'satelliteCount': ?info.satelliteCount,
     'hdop': ?info.hdop,
     'pdop': ?info.pdop,

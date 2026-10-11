@@ -753,6 +753,8 @@
     "exportOptions": "Export options",
     "includeRowNumber": "Include Row Number",
     "includeRowNumberDesc": "Add ROW_NUM column (like # in attribute table)",
+    "includeGnssQuality": "Include GNSS quality",
+    "includeGnssQualityDesc": "GPS survey fix type, satellites, accuracy and averaging count (gnss_fix, gnss_sats, gnss_hacc, gnss_avg_n). Lines and polygons use the worst vertex",
     "crsTitle": "Coordinate Reference System (CRS)",
     "crsKeep": "unchanged",
     "crsWgs84Only": "$format is always written in WGS 84 (EPSG:4326), as the format requires",
@@ -1573,6 +1575,39 @@
     "totalArea": "Total area",
     "deleteAll": "Delete $n (hold)",
     "deleted": "Deleted $n"
+  },
+  "gnssQuality": {
+    "label": "GNSS quality",
+    "device": "GNSS (device)",
+    "satellites": "${count} sats",
+    "averaged": "avg of ${count}",
+    "single": "single",
+    "rejected": "${count} rejected",
+    "sep": " · ",
+    "unknown": "unknown",
+    "vertices": "GNSS ${count}/${total} vertices",
+    "worstAccuracy": "worst ±${value}",
+    "medianAccuracy": "median ±${value}",
+    "worstFix": "lowest ${fix}",
+    "reason": {
+      "accuracy": "accuracy ${value} (limit ${limit})",
+      "fix": "fix ${value} (needs ${limit} or better)",
+      "satellites": "satellites ${value} (needs ${limit} or more)"
+    },
+    "rejectedTitle": "Not recorded: the fix does not meet the quality thresholds",
+    "warnTitle": "Recorded a fix below the quality thresholds",
+    "partlyRejected": "Excluded ${count} fixes below the thresholds from the average",
+    "longPressCount": "${count} pts · ${rejected} rejected",
+    "settings": {
+      "title": "Fix quality (thresholds)",
+      "description": "Reject GPS survey fixes that do not meet these thresholds. Unset thresholds are ignored.",
+      "maxAccuracy": "Max accuracy",
+      "minFix": "Minimum fix type",
+      "minSatellites": "Minimum satellites",
+      "none": "Not set",
+      "strict": "Do not record fixes below thresholds",
+      "strictDesc": "Long-press averaging drops fixes below the thresholds. When off, fixes are recorded with a warning"
+    }
   },
   "gpsPanel": {
     "title": "Current location",

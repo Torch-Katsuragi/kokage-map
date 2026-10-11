@@ -33,6 +33,8 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
+import '../models/gnss_quality.dart';
+import '../providers/gps_providers.dart';
 import '../providers/notification_providers.dart';
 import '../services/gps_manager_service.dart';
 import '../utils/app_permissions.dart';
@@ -474,6 +476,9 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
 
           // 利用可能なGPSソース一覧
           _buildAvailableSourcesCard(),
+
+          // GPS 測量の足切り
+          _buildQualityGateCard(),
         ],
       ),
     );
@@ -612,5 +617,63 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       ],
     );
   }
-}
 
+  /// GPS 測量で条件を満たさない測位を弾く（既定は何もしない）
+  Widget _buildQualityGateCard() {
+    final gate = ref.watch(gnssQualityGateSettingProvider);
+    final g = t.gnssQuality.settings;
+    void set(GnssQualityGate value) => ref.read(gnssQualityGateSettingProvider.notifier).set(value);
+
+    Widget dropdown<T>(T? value, List<T> options, String Function(T) label, ValueChanged<T?> onChanged) =>
+        DropdownButton<T?>(
+          value: value,
+          onChanged: onChanged,
+          items: [
+            DropdownMenuItem<T?>(child: Text(g.none)),
+            for (final o in options) DropdownMenuItem<T?>(value: o, child: Text(label(o))),
+          ],
+        );
+
+    return SettingsSection(
+      title: g.title,
+      icon: Icons.verified_outlined,
+      iconColor: Colors.blue,
+      children: [
+        SettingsDescription(g.description),
+        SettingsTile(
+          title: g.maxAccuracy,
+          trailing: dropdown<double>(
+            gate.maxAccuracy,
+            const [0.02, 0.05, 0.1, 0.5, 1, 3, 5, 10],
+            (v) => '±${formatMeters(v)}',
+            (v) => set(gate.copyWith(maxAccuracy: () => v)),
+          ),
+        ),
+        SettingsTile(
+          title: g.minFix,
+          trailing: dropdown<GnssFix>(
+            gate.minFix,
+            const [GnssFix.gps, GnssFix.dgps, GnssFix.rtkFloat, GnssFix.rtkFixed],
+            (v) => v.label,
+            (v) => set(gate.copyWith(minFix: () => v)),
+          ),
+        ),
+        SettingsTile(
+          title: g.minSatellites,
+          trailing: dropdown<int>(
+            gate.minSatellites,
+            const [4, 5, 6, 8, 10, 12],
+            (v) => '$v',
+            (v) => set(gate.copyWith(minSatellites: () => v)),
+          ),
+        ),
+        SettingsSwitchTile(
+          title: g.strict,
+          subtitle: g.strictDesc,
+          value: gate.strict,
+          onChanged: gate.isActive ? (v) => set(gate.copyWith(strict: v)) : null,
+        ),
+      ],
+    );
+  }
+}

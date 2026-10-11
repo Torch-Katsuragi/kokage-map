@@ -28,6 +28,9 @@ class GpsSurveyButtons extends StatelessWidget {
   
   /// 長押しGPSカウント
   final int longPressGpsCount;
+
+  /// 長押し中に足切りの条件を満たさなかった点の数（設定 → GPS・測位）
+  final int longPressRejectedCount;
   
   /// GPS測量タップコールバック
   final VoidCallback onRecordGpsPosition;
@@ -45,6 +48,7 @@ class GpsSurveyButtons extends StatelessWidget {
     super.key,
     required this.isLongPressing,
     required this.longPressGpsCount,
+    this.longPressRejectedCount = 0,
     required this.onRecordGpsPosition,
     required this.onStartLongPressGpsSurvey,
     required this.onStopLongPressGpsSurvey,
@@ -82,7 +86,9 @@ class GpsSurveyButtons extends StatelessWidget {
                     ],
                   ),
                   child: Text(
-                    t.gps.longPressCount(count: longPressGpsCount),
+                    longPressRejectedCount > 0
+                        ? t.gnssQuality.longPressCount(count: longPressGpsCount, rejected: longPressRejectedCount)
+                        : t.gps.longPressCount(count: longPressGpsCount),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,

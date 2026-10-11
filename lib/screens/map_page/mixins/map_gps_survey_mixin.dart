@@ -63,11 +63,14 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       _notify(t.gps.acquiringGps, NotificationLevel.info);
       
       // GPS位置を記録
-      final success = await currentTool.recordCurrentGpsPosition();
-      if (success) {
+      final result = await currentTool.recordCurrentGpsPosition();
+      if (result.recorded) {
         ref.read(tutorialProvider.notifier).report(const GpsPointRecorded());
-        
+
         _notify(t.gps.gpsRecorded(count: '$_drawingPointCount'), NotificationLevel.success);
+        _notifyQuality(result);
+      } else if (result.isRejected) {
+        _notifyQuality(result);
       } else {
         _notify(t.gps.gpsUnavailable, NotificationLevel.error);
       }
@@ -114,15 +117,21 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       }
       
       AppLogger.debug('[MapGpsSurveyMixin] GPS長押し測量停止 - 平均化処理開始');
-      final success = await currentTool.stopLongPressGpsSurvey();
-      
-      if (!success) {
+      final result = await currentTool.stopLongPressGpsSurvey();
+      if (result.isRejected) {
+        triggerSetState(() => isLongPressing = false);
+        _notifyQuality(result);
+        return;
+      }
+
+      if (!result.recorded) {
         throw Exception(t.gps.insufficientData);
       }
-      
+
       triggerSetState(() => isLongPressing = false);
-      
+
       _notify(t.gps.longPressSurveyDone, NotificationLevel.success);
+      _notifyQuality(result);
     } catch (e) {
       AppLogger.debug('[MapGpsSurveyMixin] GPS長押し測量停止エラー: $e');
       triggerSetState(() => isLongPressing = false);
@@ -228,8 +237,25 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
   }
 
   /// 通知センターに出す（画面が閉じていたら出さない）
-  void _notify(String title, NotificationLevel level) {
-    if (mounted) ref.read(notificationCenterProvider.notifier).add(title: title, level: level);
+  void _notify(String title, NotificationLevel level, {String? detail}) {
+    if (mounted) {
+      ref.read(notificationCenterProvider.notifier).add(title: title, detail: detail, level: level);
+    }
+  }
+
+  /// 足切り（設定 → GPS・測位）で弾いた・外した・警告した理由を知らせる
+  void _notifyQuality(GpsSurveyResult result) {
+    if (result.isRejected) {
+      _notify(t.gnssQuality.rejectedTitle, NotificationLevel.warning, detail: result.rejectReasons.join('\n'));
+    } else if (result.warnings.isNotEmpty) {
+      _notify(t.gnssQuality.warnTitle, NotificationLevel.warning, detail: result.warnings.join('\n'));
+    } else if (result.excluded > 0) {
+      _notify(
+        t.gnssQuality.partlyRejected(count: result.excluded),
+        NotificationLevel.info,
+        detail: result.excludeReasons.join('\n'),
+      );
+    }
   }
 
   /// 描きかけの線・面に足した測量点の数

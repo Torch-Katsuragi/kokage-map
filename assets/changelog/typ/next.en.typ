@@ -16,6 +16,7 @@
   [Guidance to a point from the info panel, a map long-press or the member list: distance, bearing, elevation difference, arrow and line, with a notice on arrival],
   [Measure tool (distance and area), length/area/perimeter in the info panel, and attribute search from the layer list that jumps to the feature],
   [Attributes are entered with the QGIS attribute form settings (value maps, dates, aliases, defaults, required fields and more)],
+  [GPS survey records fix type, satellites, accuracy and averaging per point, and can reject fixes below thresholds (Settings → GPS & Positioning)],
 )
 
 #fixes(

@@ -21,6 +21,8 @@ import 'package:path/path.dart' as p;
 import '../../core/gdal/gdal_provider.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/geometry_type.dart';
+import '../../models/geopackage/feature_repository.dart' show metadataColumn;
+import '../../models/gnss_quality.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../utils/app_logger.dart';
 import '../coordinate/epsg_registry.dart';
@@ -53,15 +55,21 @@ class ImportExportService {
   /// `ogr2ogr` の引数（書き出し先・読み元のパスを除く）。
   ///
   /// 座標系はレイヤのまま（[targetCrs] を選んだときだけ `-t_srs`）。形式の決まりで WGS 84 しか書けない形式は 4326 にする。
-  /// [rowNumberPk] を渡すと、その主キーの順に ROW_NUM 列を足す（`-sql`）
+  /// [rowNumberPk] を渡すと、その主キーの順に ROW_NUM 列を足す（`-sql`）。
+  /// [gnssQuality] なら GPS 測量の品質を列に広げる（[gnssQualityColumns]。レイヤにメタデータの列があるときだけ渡す）
   static List<String> exportArgs({
     required FileFormat format,
     required String layerName,
     required GeometryType? geometryType,
     EpsgDefinition? targetCrs,
     String? rowNumberPk,
+    bool gnssQuality = false,
   }) {
     String quote(String name) => '"${name.replaceAll('"', '""')}"';
+    final extraColumns = [
+      if (rowNumberPk != null) 'ROW_NUMBER() OVER (ORDER BY ${quote(rowNumberPk)}) AS ROW_NUM',
+      if (gnssQuality) ...gnssQualityColumns,
+    ];
     return [
       '-f', format.driver,
       if (format.wgs84Only)
@@ -82,12 +90,29 @@ class ImportExportService {
       // アプリの点レイヤは MULTIPOINT と宣言して POINT を入れている。shp（MultiPoint の shp は古いソフトが読めないことがある）・
       // CSV の X/Y・GPX の waypoint は POINT しか受け付けないので、点として書く
       if (geometryType == GeometryType.point && _singlePointFormats.contains(format)) ...['-nlt', 'POINT'],
-      if (rowNumberPk != null && format != FileFormat.dxf) ...[
+      if (extraColumns.isNotEmpty && format != FileFormat.dxf) ...[
         '-sql',
-        'SELECT *, ROW_NUMBER() OVER (ORDER BY ${quote(rowNumberPk)}) AS ROW_NUM FROM ${quote(layerName)}',
+        'SELECT *, ${extraColumns.join(', ')} FROM ${quote(layerName)}',
         '-nln', layerName,
       ] else
         layerName,
+    ];
+  }
+
+  /// GPS 測量の品質を列に広げる SELECT の式（GPKG の SQLite の JSON 関数で kmaps_metadata の測量の記録を読む）。
+  /// 点はその 1 点、線・面は頂点の中で最も悪い値（種類・衛星数・平均回数は最小、精度は最大）。
+  /// 記録の無い地物（ペンで描いた・quality の無い以前の記録）は NULL。壊れた JSON も NULL（書き出しは止めない）
+  static List<String> get gnssQualityColumns {
+    const records = "FROM json_each(CASE WHEN json_valid($metadataColumn) THEN $metadataColumn END, '\$.drawing_points') "
+        "WHERE json_extract(value, '\$.quality') IS NOT NULL";
+    String agg(String fn, String key) => "(SELECT $fn(json_extract(value, '\$.quality.$key')) $records)";
+    final rank = [for (final f in GnssFix.values) "WHEN '${f.code}' THEN ${f.index}"].join(' ');
+    final label = [for (final f in GnssFix.values) "WHEN ${f.index} THEN '${f.label}'"].join(' ');
+    return [
+      "CASE (SELECT MIN(CASE json_extract(value, '\$.quality.fix') $rank END) $records) $label END AS gnss_fix",
+      '${agg('MIN', 'sats')} AS gnss_sats',
+      '${agg('MAX', 'hacc')} AS gnss_hacc',
+      '${agg('MIN', 'avg_n')} AS gnss_avg_n',
     ];
   }
 
@@ -124,6 +149,8 @@ class ImportExportService {
         geometryType: geometryType,
         targetCrs: options.targetCrs,
         rowNumberPk: options.includeRowNumber ? await gpkg.getPrimaryKeyColumn(layer.layerName) : null,
+        gnssQuality: options.includeGnssQuality &&
+            (await gpkg.getColumnNames(layer.layerName, getAll: true)).contains(metadataColumn),
       );
       AppLogger.debug('[ImportExportService] ogr2ogr ${args.join(' ')} $outputPath $src');
       await ExternalGdal.instance.vectorTranslate(src, outputPath, args: args);

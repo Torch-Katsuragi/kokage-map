@@ -35,6 +35,7 @@ import 'models/geopackage/geopackage_connection.dart';
 import 'models/nodes/feature_node.dart';
 import 'models/nodes/layer_tree_node.dart';
 import 'providers/drawing_provider.dart';
+import 'providers/gps_providers.dart';
 import 'providers/project_providers.dart';
 import 'providers/selection_providers.dart';
 import 'providers/service_providers.dart';
@@ -240,6 +241,7 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     // UIスケールを早期に読み込み
     await ref.read(uiScaleLevelProvider.notifier).load();
     await ref.read(mapLayoutPresetSettingProvider.notifier).load();
+    await ref.read(gnssQualityGateSettingProvider.notifier).load();
 
     // シングルトンサービスにRefを注入（プロバイダ初回読み込みでsetRef()が呼ばれる）
     ref.read(drawingStateProvider);

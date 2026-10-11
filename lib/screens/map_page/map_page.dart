@@ -553,6 +553,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                   builder: (_, _) => GpsSurveyButtons(
                     isLongPressing: isLongPressing,
                     longPressGpsCount: currentTool.longPressGpsCount,
+                    longPressRejectedCount: currentTool.longPressRejectedCount,
                     onRecordGpsPosition: recordGpsPosition,
                     onStartLongPressGpsSurvey: startLongPressGpsSurvey,
                     onStopLongPressGpsSurvey: stopLongPressGpsSurvey,

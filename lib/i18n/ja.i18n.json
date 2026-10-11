@@ -1551,10 +1551,11 @@
     "followLayerConfirm": "この View の設定を消して、レイヤの設定に従わせますか？",
     "followingLayer": "レイヤの設定に従っています。変えた項目だけがこの View の設定になります",
     "qgisStyle": "QGIS で設定されたスタイル（$kind）",
-    "qgisStyleHint": "アプリでは代表の色で描きます。色や太さは QGIS で変えてください（ここで変えても QGIS には届きません）。ラベルはここで変えられます",
+    "qgisStyleHint": "QGIS と同じ描き分けで地物ごとに色を付けます。色や太さは QGIS で変えてください（ここで変えても QGIS には届きません）。ラベルはここで変えられます",
     "qgisRendererCategorized": "分類",
     "qgisRendererGraduated": "段階",
-    "qgisRendererRule": "ルール"
+    "qgisRendererRule": "ルール",
+    "qgisLegendFallback": "QGIS の式を読めないので、代表の色 1 色で描いています"
   },
   "terrainSettings": {
     "title": "地形の見た目",

@@ -5,6 +5,9 @@
 ///   予約語のときしか囲まないので、識別子を渡す口では使わず rawXxx にこれを通す。
 String quoteIdent(String name) => '"${name.replaceAll('"', '""')}"';
 
+/// SQL の文字列リテラルにする（単引用符で囲み、中の `'` は重ねる）
+String quoteSqlString(String text) => "'${text.replaceAll("'", "''")}'";
+
 /// 主キー [pk] を SQL で指す式。`rowid`（主キーの無いテーブルの最後の手段）は囲まない。
 String pkRef(String pk) => pk == 'rowid' ? 'rowid' : quoteIdent(pk);
 

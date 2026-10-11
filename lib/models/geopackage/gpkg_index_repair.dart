@@ -147,10 +147,10 @@ abstract final class GpkgIndexRepair {
       }
       if (minX != null && maxX != null && minY != null && maxY != null) {
         statements.add('UPDATE gpkg_contents SET min_x = ${_num(minX)}, min_y = ${_num(minY)}, '
-            'max_x = ${_num(maxX)}, max_y = ${_num(maxY)} WHERE table_name = ${_s(table)}');
+            'max_x = ${_num(maxX)}, max_y = ${_num(maxY)} WHERE table_name = ${quoteSqlString(table)}');
       }
       if (hasOgr) {
-        statements.add('UPDATE gpkg_ogr_contents SET feature_count = ${rows.length} WHERE table_name = ${_s(table)}');
+        statements.add('UPDATE gpkg_ogr_contents SET feature_count = ${rows.length} WHERE table_name = ${quoteSqlString(table)}');
       }
       tables++;
     }
@@ -165,7 +165,6 @@ abstract final class GpkgIndexRepair {
     return null;
   }
 
-  static String _s(String text) => "'${text.replaceAll("'", "''")}'";
   static String _num(double v) => v.isFinite ? v.toString() : 'NULL';
 }
 

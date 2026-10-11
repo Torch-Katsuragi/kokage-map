@@ -8,6 +8,7 @@
 // 呼ぶ前にアプリの接続を閉じておくこと（3 つとも、この中で sqflite で開いて閉じる）。
 import 'package:sqflite/sqflite.dart';
 
+import '../../models/geopackage/sql_identifier.dart';
 import '../../utils/app_logger.dart';
 
 class _Col {
@@ -21,7 +22,7 @@ class _Col {
   bool sameAs(_Col o) => name == o.name && type.toUpperCase() == o.type.toUpperCase() && notNull == o.notNull && '$dflt' == '${o.dflt}' && pk == o.pk;
 
   String addColumnSql(String table) {
-    final b = StringBuffer('ALTER TABLE "${table.replaceAll('"', '""')}" ADD COLUMN "${name.replaceAll('"', '""')}"');
+    final b = StringBuffer('ALTER TABLE ${quoteIdent(table)} ADD COLUMN ${quoteIdent(name)}');
     if (type.isNotEmpty) b.write(' $type');
     if (dflt != null) b.write(' DEFAULT $dflt');
     if (notNull) b.write(' NOT NULL');
@@ -116,7 +117,7 @@ abstract final class GpkgSchemaAligner {
       final tables = await db.rawQuery("SELECT table_name FROM gpkg_contents WHERE data_type IN ('features', 'attributes')");
       for (final r in tables) {
         final t = r['table_name'] as String;
-        final info = await db.rawQuery('PRAGMA table_info("${t.replaceAll('"', '""')}")');
+        final info = await db.rawQuery('PRAGMA table_info(${quoteIdent(t)})');
         out[t] = [
           for (final c in info)
             _Col(c['name']! as String, (c['type'] as String?) ?? '', (c['notnull'] as int? ?? 0) == 1, c['dflt_value'], c['pk'] as int? ?? 0),

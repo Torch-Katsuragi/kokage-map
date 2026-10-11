@@ -317,6 +317,19 @@ class KMetaService {
     });
   }
 
+  /// アプリが作った写真の列を覚える（`.qgs` に写真の欄を書く印。[KMeta.photoFields]）
+  Future<bool> addPhotoField(String folderPath, String layerKey, String column) {
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final current = rawMeta.photoFields[layerKey] ?? const <String>[];
+      if (current.contains(column)) return true;
+      return saveMeta(
+        folderPath,
+        rawMeta.copyWith(photoFields: {...rawMeta.photoFields, layerKey: [...current, column]}),
+      );
+    });
+  }
+
   /// レイヤースタイルを更新
   /// [layerKey] はgpkgName/layerName形式（例: "survey.gpkg/points"）
   Future<bool> setLayerStyle(
@@ -399,6 +412,7 @@ class KMetaService {
         ),
         styles: KMetaStyles(defaultStyle: rawMeta.styles.defaultStyle, layers: moveAll(rawMeta.styles.layers)),
         views: moveAll(rawMeta.views),
+        photoFields: moveAll(rawMeta.photoFields),
         layout: KMetaLayout(sortOrder: newSortOrder, expanded: rawMeta.layout.expanded),
       );
       if (!changed) return true;

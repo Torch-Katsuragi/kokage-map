@@ -114,6 +114,7 @@ dependencies:
   photo_manager: ^3.12.0                 # 写真の選択をアプリ内で（位置情報の有り無しを選ぶ前に見せる。photo_picker_screen.dart）
   photo_manager_image_provider: ^2.2.0
   material_ui: ^1.2.0                     # flex_color_picker 4 が使う MaterialLocalizations（main.dart で delegate を登録）
+  image_picker: ^1.2.4                    # 地物に付ける写真を端末のカメラアプリで撮る（feature_photo_service.dart）。web はファイル入力
 
 
 # 手元コピーで差し替える依存（pub.dev 版が現行のビルド環境で壊れているもの）

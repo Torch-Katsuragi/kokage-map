@@ -74,7 +74,19 @@ class QgsLayer extends QgsTreeNode {
     this.visible = true,
     this.uriOptions,
     this.providerEncoding = 'UTF-8',
+    this.photoFields = const [],
   });
+
+  /// アプリが作った写真の列（`photo`・`photo_2`…）。`.qgs` ではこの列に ExternalResource（写真の欄）を書く。
+  /// 値は gpkg の dir からの相対パス（[[docs/features/feature-photos]]。書き方は `qgs_photo_widget.dart`）
+  final List<String> photoFields;
+
+  /// gpkg の dir（`.qgs` からの相対。同じ dir なら `.`）。写真のパスの起点
+  String get dataSourceDir {
+    final path = dataSourcePath.replaceAll(r'\', '/');
+    final i = path.lastIndexOf('/');
+    return i <= 0 ? '.' : path.substring(0, i);
+  }
 
   /// プロジェクト内で一意なID。`layer-tree-layer` と `maplayer` を結ぶ。
   ///

@@ -79,6 +79,9 @@ class TruPulseService extends ExternalDeviceService {
   Stream<double> get heightStream => _heightController.stream;
   double? get lastHeight => _lastHeight;
 
+  /// 毎木調査の画面が計測を受け取っている間 true。地図の TruPulse ツールは点を作らない
+  bool claimedByTally = false;
+
   @override
   Future<List<BluetoothDevice>> scanDevices() async {
     // ⚠ BLUETOOTH_CONNECT 無しの getBondedDevices はプラグインの権限要求の直後にネイティブで落ちる（bluetooth_gnss_service と同じ）

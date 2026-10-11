@@ -45,6 +45,8 @@ import '../../services/survey/survey_chain_resolver.dart';
 import '../../tools/pan_tool.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/geo_converter.dart';
+import '../../utils/true_heading.dart';
+import '../../utils/wmm_declination.dart';
 import '../../widgets/external_layer_actions.dart';
 import '../../widgets/radial_action_menu.dart';
 import '../base/device_tool.dart';
@@ -54,6 +56,14 @@ import 'trupulse_service.dart';
 import 'trupulse_status_panel.dart';
 
 class TruPulseTool extends DeviceTool {
+  /// TruPulse の方位角（磁北基準）を、[at] の偏角（WMM2025）で真北基準に直す
+  ///
+  /// 本体の偏角設定（dECLn）は 0 のまま使う前提（シリアルでは読めないので、本体側でも足すと二重になる）。
+  /// 属性 `survey_az` には本体の値（磁北基準）をそのまま残す。ライン化の偏角補正（既定 ON）はこの値に足す。
+  /// docs/devices/trupulse-360r.md「偏差（Declination）設定」
+  static double trueAzimuth(double magneticAz, LatLng at, [DateTime? date]) =>
+      magneticToTrue(magneticAz, WmmDeclination.calculate(at.latitude, at.longitude, date));
+
   final Ref _ref;
   final TruPulseService _service;
   StreamSubscription<TruPulseMeasurement>? _measurementSub;
@@ -126,7 +136,7 @@ class TruPulseTool extends DeviceTool {
       // 読み取り専用レイヤ（shp・GeoJSON など）の点を基準点にしていても書き込まない
       if (refuseReadOnlyEditBy(_ref.read, stn)) return;
       final stnPos = stn.point;
-      final target = const Distance().offset(stnPos, m.hd, m.az);
+      final target = const Distance().offset(stnPos, m.hd, trueAzimuth(m.az, stnPos));
 
       // --- バックサイト自動検出 ---
       if (await _tryBacksightCorrection(stn, m, target)) return;
@@ -222,7 +232,7 @@ class TruPulseTool extends DeviceTool {
     final correctedVd = correctedHd * _tanDeg(forwardInc);
 
     // 座標を再計算
-    final newPos = const Distance().offset(prevStnCoords, correctedHd, correctedAz);
+    final newPos = const Distance().offset(prevStnCoords, correctedHd, trueAzimuth(correctedAz, prevStnCoords));
 
     // 属性を上書き
     await stn.setAttributeValues({

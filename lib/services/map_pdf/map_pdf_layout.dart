@@ -108,7 +108,7 @@ class MapPdfScale {
   /// [denominator] 以上で一番小さい切りのよい分母（1:2,500・1:5,000 など）
   static double niceDenominator(double denominator) {
     if (denominator <= 0 || !denominator.isFinite) return 1000;
-    final p = math.pow(10, (math.log(denominator) / math.ln10).floor()).toDouble();
+    final p = math.pow(10, (math.log(denominator) / math.ln10 + 1e-9).floor()).toDouble();
     for (final s in _niceSteps) {
       if (s * p >= denominator * (1 - 1e-9)) return s * p;
     }
@@ -146,7 +146,7 @@ class MapPdfScale {
     final ground = const Distance().as(LengthUnit.Meter, west, east);
     final perMm = ground / maxLengthMm;
     final max = ground;
-    final p = math.pow(10, (math.log(max) / math.ln10).floor()).toDouble();
+    final p = math.pow(10, (math.log(max) / math.ln10 + 1e-9).floor()).toDouble();
     var meters = p;
     for (final s in const [5.0, 2.0, 1.0]) {
       if (s * p <= max) {

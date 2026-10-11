@@ -556,9 +556,10 @@ void _paintLegend(_PagePainter p, MapPdfRequest req, Rect area, {required bool c
   head.paint(p.canvas, area.topLeft);
   final top = area.top + head.height + p.mm(1.5);
   final rowH = p.mm(5);
-  final colW = columns ? math.max(p.mm(55), area.width / math.max(1, (area.width / p.mm(60)).floor())) : area.width;
+  // 段組み（縦向きの下の欄）: 1 段 52 mm 以上で詰める
+  final cols = columns ? math.max(1, (area.width / p.mm(52)).floor()) : 1;
+  final colW = area.width / cols;
   final rowsPerCol = math.max(1, ((area.bottom - top) / rowH).floor());
-  final cols = math.max(1, (area.width / colW).floor());
   final capacity = rowsPerCol * cols;
   final items = req.legend;
   final overflow = items.length > capacity;

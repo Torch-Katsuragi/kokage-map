@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../../models/geopackage/geopackage_file.dart';
+import '../../models/geopackage/sql_identifier.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
@@ -48,7 +49,7 @@ abstract final class ConflictRestorer {
         final db = await gpkg.getDatabase();
         final infoCache = <String, List<Map<String, Object?>>>{};
         for (final c in entry.value) {
-          final info = infoCache[c.table] ??= await db.rawQuery('PRAGMA table_info("${c.table.replaceAll('"', '""')}")');
+          final info = infoCache[c.table] ??= await db.rawQuery('PRAGMA table_info(${quoteIdent(c.table)})');
           final col = info.where((r) => r['cid'] == c.column).firstOrNull;
           final pk = info.where((r) => (r['pk'] as int? ?? 0) > 0).firstOrNull;
           if (col == null || pk == null) continue;

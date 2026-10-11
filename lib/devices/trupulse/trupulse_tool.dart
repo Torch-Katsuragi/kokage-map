@@ -206,7 +206,7 @@ class TruPulseTool extends DeviceTool {
     if (prevStnCoords == null) return false;
 
     // 前視HDを取得して閾値を算出
-    final forwardHd = _toDouble(props['survey_hd']);
+    final forwardHd = surveyNumber(props['survey_hd']);
     if (forwardHd <= 0) return false;
     final threshold = (forwardHd * 0.15).clamp(1.0, 5.0);
 
@@ -222,9 +222,9 @@ class TruPulseTool extends DeviceTool {
       '(threshold=${threshold.toStringAsFixed(1)}m)',
     );
 
-    final forwardAz = _toDouble(props['survey_az']);
-    final forwardSd = _toDouble(props['survey_sd']);
-    final forwardInc = _toDouble(props['survey_inc']);
+    final forwardAz = surveyNumber(props['survey_az']);
+    final forwardSd = surveyNumber(props['survey_sd']);
+    final forwardInc = surveyNumber(props['survey_inc']);
 
     // 後視AZを前視方向に変換して円周平均
     final backsightAzForward = (m.az + 180) % 360;
@@ -287,13 +287,6 @@ class TruPulseTool extends DeviceTool {
   }
 
   static double _tanDeg(double deg) => math.tan(deg * math.pi / 180);
-
-  static double _toDouble(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? 0;
-    return 0;
-  }
 
   // =========================================================
   // Tap → radial menu

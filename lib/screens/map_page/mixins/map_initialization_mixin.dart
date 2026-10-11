@@ -238,7 +238,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         if (!mounted || event.heading == null) return;
         // flutter_compass は磁北基準。地図・扇・案内の矢印は真北基準なので、ここで一度だけ偏角を足す
         final loc = currentLocation;
-        final h = _smoothHeading(
+        final h = _headingSmoother.add(
           _trueHeading.toTrue(event.heading!, lat: loc?.latitude, lon: loc?.longitude),
         );
         // 0.5° 未満の揺れは知らせない。平滑化は同じ値に落ち着かないので、そのままだとセンサーの速さ（15〜60Hz）で
@@ -277,33 +277,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     unawaited(initializeCompass());
   }
 
-  /// 指数移動平均（EMA）によるヘディング平滑化
-  ///
-  /// 角度は0°/360°の境界で不連続になるため、最短角度差分を用いる。
-  /// [alpha] が小さいほど滑らかだが追従が遅い（0.08 = 安定重視）。
-  static const double _compassAlpha = 0.08;
-
-  /// コンパスヘディングの前回スムーズ値（ローパスフィルタ用）
-  double? _lastSmoothedHeading;
-
-  double _smoothHeading(double rawHeading) {
-    final prev = _lastSmoothedHeading;
-    if (prev == null) {
-      _lastSmoothedHeading = rawHeading;
-      return rawHeading;
-    }
-
-    // 最短角度差分を計算（-180° ~ +180°）
-    double diff = rawHeading - prev;
-    if (diff > 180) diff -= 360;
-    if (diff < -180) diff += 360;
-
-    double smoothed = (prev + _compassAlpha * diff) % 360;
-    if (smoothed < 0) smoothed += 360;
-
-    _lastSmoothedHeading = smoothed;
-    return smoothed;
-  }
+  /// コンパスの向きの平滑化（EMA、0.08 = 安定重視）
+  final _headingSmoother = HeadingSmoother();
 
   /// GPS管理サービス初期化
   Future<void> initializeGpsManager() async {

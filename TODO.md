@@ -190,6 +190,20 @@ Pixel 9 で触ったフォルダを Drive から落として QGIS 4.2.2 で開�
   - [ ] `LiftedSegments`（等高線をラスタにした後の名残）がどこからも作られていない。gpu/ が参照しているので残した
   - [ ] web 版を `python -m http.server` で配ると練習用の gpkg が作れない（sqflite の WASM が初期化に失敗。今日の変更の前のビルドでも同じ。本番の配信では起きない）
 
+## 2026-10-12 夜の重複整理（n8/refactor-large）で見つけて直していないもの
+
+挙動が変わるので触っていない。同じ中身の複製だけ寄せた（git log の refactor:）。
+
+- [ ] `Geodesic.distance` の収束しないときの退避先が latlong2 の Vincenty（同じく収束せず `StateError`）。退避になっていない
+- [ ] `GeometryCalc.calcPolygonCentroid`（turf の `centroid`）はリングの最後の座標を必ず飛ばす。閉じていないリングだと実在の頂点が落ちる
+- [ ] rtree の名前を `rtree_<表>_geom` と決め打ち（`spatial_index_manager`・`qgis_interop`）。ジオメトリ列が `geom` 以外の gpkg は編集のたびの索引更新が効かない（`GpkgIndexRepair` は実際の列名を読む）
+- [ ] 2 点間の距離が 3 系統: Vincenty（`Geodesic`・`NavigationMath`）、turf の球（R=6371008.8、`GeometryCalc.calcDistance`）、
+      独自の haversine（R=6371000、軌跡の切り出しダイアログ）。度↔m の換算も 111320 / 111000 / 110574 が混在
+- [ ] 属性テーブルの CSV 書き出しは BOM 無し（毎木集計の CSV は BOM 付き。Excel で化ける）。ファイル名にレイヤ名をそのまま使う
+- [ ] 重複したまま残したもの（意味が少しずつ違う）: 全角→半角（検索・結合キー・数値欄の 3 種）、ファイル名の安全化（4 種）、
+      重複しない名前（`_2` 型と ` 2` 型）、`.qgs` の `<Option>` 読み（3 種）、QGIS の色の読み（`_readColor` は黒に倒す・reader は null）、
+      確認ダイアログ・文字入力ダイアログの手書き、通知センターへの `add` の手書き（約 30 箇所）
+
 ## 方針（守ること）
 
 - 上流（josxha/flutter-maplibre など）に issue / PR は出さない（AI が人間のコミュニティに投稿しない）。踏んだバグは手元の回避策で組む

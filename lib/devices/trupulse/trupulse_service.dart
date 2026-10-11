@@ -51,7 +51,6 @@ class TruPulseService extends ExternalDeviceService {
   TruPulseMeasurement? _lastMeasurement;
   int _measurementCount = 0;
   final _heightController = StreamController<double>.broadcast();
-  double? _lastHeight;
 
   // 計測以外のシリアル応答を待つ問い合わせ
   Completer<String>? _pendingQuery;
@@ -78,7 +77,6 @@ class TruPulseService extends ExternalDeviceService {
 
   /// 高さルーチン（本体の HT モード）の結果（m）。docs/devices/trupulse-360r.md「高さ（HT）」
   Stream<double> get heightStream => _heightController.stream;
-  double? get lastHeight => _lastHeight;
 
   /// 毎木調査の画面が計測を受け取っている間 true。地図の TruPulse ツールは点を作らない
   bool claimedByTally = false;
@@ -223,7 +221,6 @@ class TruPulseService extends ExternalDeviceService {
       return;
     }
     if (sentence is TruPulseHeight) {
-      _lastHeight = sentence.heightM;
       _heightController.add(sentence.heightM);
       notifyListeners();
       AppLogger.debug('$_tag: 高さ ${sentence.heightM.toStringAsFixed(2)} m');

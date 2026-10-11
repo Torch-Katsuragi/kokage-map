@@ -27,6 +27,13 @@ import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/layer_node.dart';
 
 /// 測量チェーン内の1点を表すデータクラス
+/// 測量の属性（survey_az など）の値を数にする。num と数として読める文字列のほかは 0
+double surveyNumber(Object? value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? 0;
+  return 0;
+}
+
 class TraversePoint {
   final PointFeatureNode node;
   final LatLng position;
@@ -189,11 +196,11 @@ class SurveyChainResolver {
       points.add(TraversePoint(
         node: next,
         position: next.point,
-        az: _toDouble(props['survey_az']),
-        hd: _toDouble(props['survey_hd']),
-        vd: _toDouble(props['survey_vd']),
-        sd: _toDouble(props['survey_sd']),
-        inc: _toDouble(props['survey_inc']),
+        az: surveyNumber(props['survey_az']),
+        hd: surveyNumber(props['survey_hd']),
+        vd: surveyNumber(props['survey_vd']),
+        sd: surveyNumber(props['survey_sd']),
+        inc: surveyNumber(props['survey_inc']),
         stationPosition: stnCoords,
       ));
 
@@ -201,14 +208,6 @@ class SurveyChainResolver {
     }
 
     return TraverseChain(origin: root, points: points);
-  }
-
-  /// dynamic値（num or String）をdoubleに変換する
-  static double _toDouble(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? 0;
-    return 0;
   }
 
   static bool _hasSurveyData(PointFeatureNode node) {

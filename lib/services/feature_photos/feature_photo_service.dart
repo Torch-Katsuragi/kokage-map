@@ -25,6 +25,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
+import '../../models/geopackage/sql_identifier.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../utils/app_logger.dart';
@@ -160,8 +161,8 @@ class FeaturePhotoService {
         final cols = (await gpkg.getColumnNames(layer, getAll: true)).where(FeaturePhotoPaths.isPhotoColumn).toList();
         if (cols.isEmpty) continue;
         final rows = await db.rawQuery(
-          'SELECT ${cols.map((c) => '"${c.replaceAll('"', '""')}"').join(', ')} FROM "${layer.replaceAll('"', '""')}" '
-          'WHERE ${cols.map((c) => '"${c.replaceAll('"', '""')}" IS NOT NULL').join(' OR ')}',
+          'SELECT ${cols.map(quoteIdent).join(', ')} FROM ${quoteIdent(layer)} '
+          'WHERE ${cols.map((c) => '${quoteIdent(c)} IS NOT NULL').join(' OR ')}',
         );
         for (final row in rows) {
           for (final v in row.values) {

@@ -26,7 +26,7 @@ import '../i18n/strings.g.dart';
 /// photo_viewパッケージを使用した高機能な画像表示
 /// - 縦長・横長どちらの画像も最適に表示
 /// - ピンチズーム、ダブルタップズーム、パン対応
-/// - 全プラットフォーム対応（Android, iOS, Web, Windows, macOS, Linux）
+/// - Android・web の両方で使う
 class PhotoViewer extends StatelessWidget {
   final String imagePath;
 

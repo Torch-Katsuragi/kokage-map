@@ -34,6 +34,7 @@ import '../../models/nodes/overlay_image_node.dart';
 import '../../providers/guidance_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../services/basemap_service.dart';
+import '../../services/geometry_conversion_service.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../services/gps_manager_service.dart';
 import '../../services/internal_gps_location_store.dart';
@@ -208,18 +209,7 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   }
 
   @override
-  List<LatLng> closeRing(List<LatLng> pts) {
-    if (pts.length < 3) return [];
-    final first = pts.first;
-    final last = pts.last;
-    final bool isClosed =
-        (first.latitude == last.latitude) &&
-        (first.longitude == last.longitude);
-    if (!isClosed) {
-      return List<LatLng>.from(pts)..add(first);
-    }
-    return pts;
-  }
+  List<LatLng> closeRing(List<LatLng> pts) => GeometryConversionService.closeRing(pts);
 
   // =============================================
   // 抽象メソッド（各Mixinで実装）

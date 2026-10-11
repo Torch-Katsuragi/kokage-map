@@ -14,7 +14,7 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-/// GPU 描画系の差し替え: Android / desktop は `package:flutter_gpu`（dart:ffi 依存）、web は WebGL2（`package:web`）。
+/// GPU 描画系の差し替え: Android は `package:flutter_gpu`（dart:ffi 依存）、web は WebGL2（`package:web`）。
 /// どちらも同じクラス名 `TerrainGpuWorldRenderer` と同じ API を持つ
 library;
 

@@ -186,7 +186,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
       await _ensureTracksLayer();
       await _ensureDetailsTable();
 
-      _currentDateKey = _buildDateKey(DateTime.now());
+      _currentDateKey = dateKey(DateTime.now());
       await _ensureRawLayer(_currentDateKey!);
 
       // 本日の既存Line → キャッシュ復元
@@ -360,7 +360,8 @@ class GpsHistoryRecorder extends ChangeNotifier {
   // 日付管理
   // ==============================
 
-  String _buildDateKey(DateTime date) {
+  /// 日付キー（`yyyy_MM_dd`）。生の記録・軌跡のレイヤ名に入る（gpkg に残るので書式は変えない）
+  static String dateKey(DateTime date) {
     final y = date.year.toString().padLeft(4, '0');
     final m = date.month.toString().padLeft(2, '0');
     final d = date.day.toString().padLeft(2, '0');
@@ -462,7 +463,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
   }
 
   Future<void> _checkAndRotateDay() async {
-    final newDateKey = _buildDateKey(DateTime.now());
+    final newDateKey = dateKey(DateTime.now());
     if (newDateKey == _currentDateKey) return;
 
     AppLogger.debug('$_logTag: 日付変更検出: $_currentDateKey → $newDateKey');
@@ -792,7 +793,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
     try {
       final now = DateTime.now();
       final threshold = now.subtract(const Duration(days: 2));
-      final thresholdKey = _buildDateKey(threshold);
+      final thresholdKey = dateKey(threshold);
 
       final layers = await _rawBufferFile!.getLayerNames();
       for (final layer in layers) {

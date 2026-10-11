@@ -26,7 +26,7 @@ class LaunchOptions {
   /// 起動時に自動で開くプロジェクトフォルダ。
   ///
   /// ```
-  /// flutter run -d windows --dart-define=PROJECT_DIR=C:\path\to\project
+  /// flutter run -d <端末> --dart-define=PROJECT_DIR=/path/to/project
   /// ```
   ///
   /// 指定が無ければ空文字。存在しないパスを渡した場合は無視して

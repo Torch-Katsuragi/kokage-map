@@ -25,7 +25,7 @@ tags: [features, pdf, export, print]
 
 ## 描き方
 
-- 地図の絵は地図面の窓口「スナップショット」（`TerrainProjection.snapshotTopDown`）。地形のテクスチャと同じ合成
+- 地図の絵は地図面の窓口「スナップショット」（`MapSurface.snapshotTopDown`）。地形のテクスチャと同じ合成
   （背景地図の層 → オーバーレイ画像 → 地物。`RasterTileComposer.composeLayers` + `paintFeatures`）で、紙の 1 px にタイルの 1 px が届く段のタイルを敷き詰める。
   回した枠の外接矩形を覆い、一辺 16 枚（4096 px）を超えるなら段を下げる。タイルの画像キャッシュは使わない（画面の絵を追い出さない）
 - ラベルは紙に合わせて立てて、絵の後に描く（重なりは先勝ちで間引く）

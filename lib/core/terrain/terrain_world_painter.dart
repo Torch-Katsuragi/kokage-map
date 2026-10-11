@@ -761,7 +761,7 @@ class TerrainWorldPainter extends CustomPainter {
   }
 
   /// 動的な点（現在位置・描画中の点など）。毎フレーム投影し、隠れ判定は視線なぞり。
-  /// 向きを持つ点（現在位置）はその手前に 60°・半径 30 px の扇（2D の `CompassFanPainter` と同じ見た目・画面座標）
+  /// 向きを持つ点（現在位置）はその手前に 60°・半径 30 px の扇（画面座標）
   void _paintDynamicPoints(Canvas canvas, TerrainTileDrawable t, Size size, Rect area, Paint pointPaint, Paint pointEdge) {
     for (final pt in t.dynamicPoints) {
       final wx = t.originX + pt.x;

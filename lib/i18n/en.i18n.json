@@ -476,7 +476,6 @@
     "editPromptCopy": "This layer is read-only. Copy it as gpkg to your folder to edit?",
     "editPromptCopyDetail": "\"$name\" is in a read-only shared folder, so the original files cannot be replaced.\nThe original files stay as they are, and a gpkg copy is written to the folder you choose. You can edit the copy.",
     "convertConfirm": "\"$name\" will be converted to $target in the same folder.\nAfter checking that the result matches the original, the original files ($files) will be deleted.",
-    "converting": "Converting \"$name\"…",
     "converted": "Converted \"$name\" to $target",
     "leftovers": "Some files could not be deleted: $files",
     "verifyFailed": "The converted gpkg did not match the original, so the conversion was cancelled (the original files are unchanged)",
@@ -1881,7 +1880,6 @@
     "readError": "Cannot read the table",
     "deleteTitle": "Delete table",
     "deleteConfirm": "Delete ${name}?",
-    "deleted": "Deleted ${name}",
-    "joinedColumn": "Joined table field (read-only)"
+    "deleted": "Deleted ${name}"
   }
 }

@@ -37,14 +37,6 @@ typedef PointsInRangeFetcher = Future<List<GpsTrackPoint>> Function(
   DateTime end,
 );
 
-/// 日付キー（`yyyy_MM_dd`、[GpsHistoryRecorder] の内部表現と一致させる）。
-String _dateKey(DateTime d) {
-  final y = d.year.toString().padLeft(4, '0');
-  final m = d.month.toString().padLeft(2, '0');
-  final day = d.day.toString().padLeft(2, '0');
-  return '${y}_${m}_$day';
-}
-
 /// 点列フェッチャから [GapProvider] を組み立てる（テスト用に依存を最小化）。
 ///
 /// [toleranceMeters] は Douglas-Peucker の許容誤差。
@@ -59,7 +51,7 @@ GapProvider makeGapProvider(
 
     try {
       // 圏外区間が日付をまたぐ場合に備え、両端の日付キーを対象にする。
-      final keys = <String>{_dateKey(from), _dateKey(to)};
+      final keys = <String>{GpsHistoryRecorder.dateKey(from), GpsHistoryRecorder.dateKey(to)};
       final points = <GpsTrackPoint>[];
       for (final key in keys) {
         points.addAll(await fetch(key, from, to));

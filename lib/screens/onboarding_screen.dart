@@ -42,7 +42,7 @@ class OnboardingScreen extends StatefulWidget {
   /// オンボーディングが必要かどうかを判定
   static Future<bool> shouldShow() async {
     if (!PlatformCapabilities.showsOnboarding) {
-      return false; // デスクトップ・web では不要
+      return false; // web では不要
     }
     final prefs = await SharedPreferences.getInstance();
     return !(prefs.getBool(kOnboardingCompletedKey) ?? false);

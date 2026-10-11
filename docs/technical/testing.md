@@ -90,8 +90,7 @@ pwsh tool/test_matrix.ps1 -Emulator Medium_Phone_API_36
 
 | フラグ | 意味 | 現状 |
 |---|---|---|
-| `hasMapBackend` | maplibre のプラットフォーム実装があるか | android / ios / web |
-| `hasFirebaseConfig` | `firebase_options.dart` に設定があるか | android / ios のみ |
+| `hasFirebaseConfig` | `firebase_options.dart` に設定があるか | android / ios / web |
 
 前提が変わったら、このファイルの1行を直せば対象テストが走り出す。
 
@@ -205,8 +204,7 @@ GeoPackage を作れる（GeoPackageは規約に沿ったSQLiteでしかない�
 - **`testWidgets` の `skip` は `bool` しか取れない。**
   理由つきスキップ（文字列）を使いたいときは `group` 側に置く。`test` は `Object?` を取るので問題ない。
 - **ホストVMのテストで sqflite を使うなら FFI 初期化が要る。**
-  `sqfliteFfiInit(); databaseFactory = databaseFactoryFfi;` を `setUpAll` で呼ぶ
-  （`main.dart` のデスクトップ分岐と同じ）。
+  `sqfliteFfiInit(); databaseFactory = databaseFactoryFfi;` を `setUpAll` で呼ぶ。
 - **`addLayer()` は `fid` と `geom` しか作らない**（QGIS互換の最小スキーマ）。
   属性を扱うテストは `addAttributeColumns()` で明示的にカラムを足す。
 - ⚠ **ワイヤレスデバッグ: `_adb-tls-connect._tcp` が広告されないことがある。**

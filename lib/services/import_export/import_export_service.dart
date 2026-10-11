@@ -22,6 +22,7 @@ import '../../core/gdal/gdal_provider.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/geometry_type.dart';
 import '../../models/geopackage/feature_repository.dart' show metadataColumn;
+import '../../models/geopackage/sql_identifier.dart';
 import '../../models/gnss_quality.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../utils/app_logger.dart';
@@ -69,19 +70,17 @@ class JoinedExport {
     return JoinedExport(pk: pk, columns: columns, rows: rows);
   }
 
-  static String _quote(String name) => '"${name.replaceAll('"', '""')}"';
-
   static String _literal(Object? v) => switch (v) {
         null => 'NULL',
         final int i => '$i',
         final double d when d.isFinite => '$d',
-        _ => "'${v.toString().replaceAll("'", "''")}'",
+        _ => quoteSqlString(v.toString()),
       };
 
   /// `ogr2ogr -sql` に渡す SELECT（[extraColumns] は行番号・GPS の品質の列）
   String selectSql(String layerName, List<String> extraColumns) {
     const j = '"__kokage_join"';
-    final head = ['"__kokage_fid"', for (final c in columns) _quote(c)].join(', ');
+    final head = ['"__kokage_fid"', for (final c in columns) quoteIdent(c)].join(', ');
     // 1 行目は型の手がかりにならない空の行（VALUES は空にできない）
     final values = [
       '(${List.filled(columns.length + 1, 'NULL').join(', ')})',
@@ -90,11 +89,11 @@ class JoinedExport {
     final select = [
       't.*',
       ...extraColumns,
-      for (final c in columns) '$j.${_quote(c)} AS ${_quote(c)}',
+      for (final c in columns) '$j.${quoteIdent(c)} AS ${quoteIdent(c)}',
     ];
     return 'WITH $j($head) AS (VALUES ${values.join(', ')}) '
-        'SELECT ${select.join(', ')} FROM ${_quote(layerName)} t '
-        'LEFT JOIN $j ON t.${_quote(pk)} = $j."__kokage_fid"';
+        'SELECT ${select.join(', ')} FROM ${quoteIdent(layerName)} t '
+        'LEFT JOIN $j ON t.${quoteIdent(pk)} = $j."__kokage_fid"';
   }
 }
 
@@ -133,9 +132,8 @@ class ImportExportService {
     bool gnssQuality = false,
     JoinedExport? joined,
   }) {
-    String quote(String name) => '"${name.replaceAll('"', '""')}"';
     final extraColumns = [
-      if (rowNumberPk != null) 'ROW_NUMBER() OVER (ORDER BY ${quote(rowNumberPk)}) AS ROW_NUM',
+      if (rowNumberPk != null) 'ROW_NUMBER() OVER (ORDER BY ${quoteIdent(rowNumberPk)}) AS ROW_NUM',
       if (gnssQuality) ...gnssQualityColumns,
     ];
     final useJoined = joined != null && joined.columns.isNotEmpty && format != FileFormat.dxf;
@@ -165,7 +163,7 @@ class ImportExportService {
         '-nln', layerName,
       ] else if (extraColumns.isNotEmpty && format != FileFormat.dxf) ...[
         '-sql',
-        'SELECT *, ${extraColumns.join(', ')} FROM ${quote(layerName)}',
+        'SELECT *, ${extraColumns.join(', ')} FROM ${quoteIdent(layerName)}',
         '-nln', layerName,
       ] else
         layerName,

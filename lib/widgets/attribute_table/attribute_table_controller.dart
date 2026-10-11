@@ -32,7 +32,7 @@ import '../../providers/ui_state_providers.dart';
 import '../../services/coordinate/index.dart';
 import '../../services/qgis_form_logic.dart';
 import '../../services/qgis_form_options.dart';
-import '../../services/table/csv_table.dart' show TableFieldType;
+import '../../services/table/csv_table.dart' show TableFieldType, csvField;
 import '../../tutorial/practice_project.dart';
 import '../../tutorial/tutorial.dart';
 import '../../utils/app_logger.dart';
@@ -565,7 +565,7 @@ class AttributeTableController extends ChangeNotifier {
     final buffer = StringBuffer();
 
     // ヘッダー行
-    final escapedHeaders = _columnNames.map(_escapeCsvField);
+    final escapedHeaders = _columnNames.map(csvField);
     buffer.writeln(escapedHeaders.join(','));
 
     // データ行
@@ -573,20 +573,12 @@ class AttributeTableController extends ChangeNotifier {
       buffer.writeln(
         _columnNames
             .map((col) =>
-                _escapeCsvField(_cellValue(feature, col)?.toString() ?? ''))
+                csvField(_cellValue(feature, col)?.toString() ?? ''))
             .join(','),
       );
     }
 
     return buffer.toString();
-  }
-
-  /// CSV用フィールドエスケープ
-  String _escapeCsvField(String field) {
-    if (field.contains(',') || field.contains('"') || field.contains('\n')) {
-      return '"${field.replaceAll('"', '""')}"';
-    }
-    return field;
   }
 
   // ========== 統計 ==========

@@ -51,7 +51,7 @@ String qgsFileNameFor(String dirName) => '$dirName.qgs';
 
 /// px → mm（QGISのシンボル単位はMM）。96dpi 相当。
 ///
-/// ⚠ こかげマップ のスタイル値は maplibre 向けの画面ピクセルなので、厳密な対応は無い。
+/// ⚠ こかげマップ のスタイル値は地図の画面ピクセルなので、厳密な対応は無い。
 /// **見た目が近くなるだけの近似**であって、往復しても同じ値には戻らない。
 const double _kPxToMm = 25.4 / 96;
 

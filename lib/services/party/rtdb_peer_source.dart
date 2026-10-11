@@ -16,7 +16,7 @@
 /// パーティ位置共有: [PeerSource] の Firebase Realtime Database 実装
 ///
 /// 1ルーム分の `/rooms/{roomCode}/live` と `/tracks` を担当する。
-/// Android/iOS 限定（firebase_database は Windows 未対応）。
+/// Android と web のみ（`PlatformCapabilities.supportsPartySharing`）。
 ///
 /// 接続検出は RTDB の `.info/connected` を権威とする。接続確立時に
 /// onDisconnect を仕掛け、切断時に自分の `connected` を false へ自動更新する。

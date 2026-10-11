@@ -372,7 +372,7 @@ class GoogleDriveService {
     try {
       // ⚠ web に `authenticate()` は無い（`google_sign_in_web` が
       // `UnimplementedError` を投げる）。ユーザーの取得は One Tap か
-      // [webSignInButton] の担当で、ここは**スコープ認可**を受け持つ。
+      // `googleRenderedSignInButton` の担当で、ここは**スコープ認可**を受け持つ。
       // この経路はボタンのクリック直下なので、ポップアップが開ける。
       if (PlatformCapabilities.isWeb) {
         // ⚠ アカウントの有無に関わらず、まず無音復元（login_hint 直叩き）。
@@ -476,7 +476,7 @@ class GoogleDriveService {
       await Future.delayed(const Duration(milliseconds: 300));
 
       // ⚠ web は `authenticate()` を持たない。切断だけして、選び直しは
-      // One Tap / [webSignInButton] に任せる。
+      // One Tap / `googleRenderedSignInButton` に任せる。
       if (PlatformCapabilities.isWeb) {
         authState.setUnauthenticated();
         return false;

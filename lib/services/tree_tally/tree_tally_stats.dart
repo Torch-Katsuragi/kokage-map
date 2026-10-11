@@ -25,6 +25,8 @@ library;
 
 import 'dart:math' as math;
 
+import '../table/csv_table.dart' show csvField;
+
 /// 集計に使う1本ぶん
 class TallyTree {
   final String species;
@@ -142,12 +144,11 @@ class PlotTally {
 /// 集計の CSV（UTF-8 BOM 付き、Excel でそのまま開ける）。樹種が [allLabel] の行が標準地全体
 String plotTallyCsv(Iterable<PlotTally> plots, {required String allLabel}) {
   String f(double? v, int digits) => v == null ? '' : v.toStringAsFixed(digits);
-  String q(String s) => (s.contains(',') || s.contains('"') || s.contains('\n')) ? '"${s.replaceAll('"', '""')}"' : s;
   final b = StringBuffer('﻿')
     ..writeln('plot_id,species,area_m2,count,stems_per_ha,basal_area_m2,basal_area_m2_per_ha,'
         'mean_dbh_cm,mean_height_m,top_height_m,dbh_n,height_n,volume_m3,volume_m3_per_ha,volume_n');
   void row(String plot, String sp, PlotSummary s) => b.writeln([
-        q(plot), q(sp), f(s.areaM2, 1), s.count, f(s.stemsPerHa, 0), f(s.basalAreaSumM2, 4),
+        csvField(plot), csvField(sp), f(s.areaM2, 1), s.count, f(s.stemsPerHa, 0), f(s.basalAreaSumM2, 4),
         f(s.basalAreaPerHa, 2), f(s.meanDbhCm, 1), f(s.meanHeightM, 1), f(s.topHeightM, 1),
         s.dbhCount, s.heightCount,
         f(s.volumeSumM3, 3), f(s.volumePerHa, 1), s.volumeSumM3 == null ? '' : s.volumeCount,

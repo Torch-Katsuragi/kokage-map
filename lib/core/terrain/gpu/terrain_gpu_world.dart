@@ -32,7 +32,7 @@ import 'frame_projection.dart';
 import 'gpu_geometry.dart';
 import 'part_cache.dart';
 
-/// 世界（複数タイル）を `package:flutter_gpu` で描く（Android / iOS / desktop。web は stub）
+/// 世界（複数タイル）を `package:flutter_gpu` で描く（Android。web は stub）
 ///
 /// スパイク `TerrainGpuRenderer` を「タイルの世界」に広げたもの。
 /// - 地形: タイルのビルダー（[TerrainMeshBuilder]）ごとに頂点・インデックスをデバイスバッファに一度だけ上げる。
@@ -397,7 +397,7 @@ class TerrainGpuWorldRenderer {
     final commandBuffer = gpu.gpuContext.createCommandBuffer();
     final target = _targets[_targetIndex];
     _targetIndex = (_targetIndex + 1) % _targetCount;
-    // 透視は地平線の上が空になるので空色で塗る（靄と同じ色）。正射影は透明（下の 2D 地図が透ける）
+    // 透視は地平線の上が空になるので空色で塗る（靄と同じ色）。正射影は透明（後ろの層が透ける）
     final clear = persp ? vm.Vector4(0.78, 0.86, 0.95, 1) : vm.Vector4(0, 0, 0, 0);
     final color = _msaa
         ? gpu.ColorAttachment(

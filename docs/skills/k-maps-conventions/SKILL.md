@@ -85,7 +85,7 @@ if (accuracy < threshold) return;
 
 ## 環境
 
-- **OS**: Windows/Android (クロスプラットフォーム)
+- **OS**: Android / web（開発は Windows）
 - **シェル**: PowerShell
 - **パッケージ管理**: pubspec.yaml
 
@@ -93,7 +93,6 @@ if (accuracy < threshold) return;
 
 プロジェクトで使用している主要パッケージ（新機能実装時に参照）：
 
-- `maplibre`: 地図表示（MapLibre GL）
 - `geolocator`: GPS位置情報
 - `sqflite`: SQLiteデータベース
 - `path_provider`: ファイルパス取得

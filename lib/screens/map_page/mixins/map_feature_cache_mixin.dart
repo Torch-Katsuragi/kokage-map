@@ -303,7 +303,8 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     if (!layerStyleSettings.resolveBool(labelEnabledDef, kmeta)) return null;
     return renderLabelTemplate(
       layerStyleSettings.resolveString(labelPropertyDef, kmeta),
-      f.turfFeature.properties,
+      // 結合した表の列（森林簿の樹種など）もラベルに使える
+      layer.effectiveProperties(f.turfFeature.properties),
     );
   }
 }

@@ -59,6 +59,8 @@ class NodePresenter {
         return Icons.location_on;
       case NodeType.image:
         return Icons.photo_camera;
+      case NodeType.table:
+        return Icons.table_chart_outlined;
     }
   }
   
@@ -108,6 +110,8 @@ class NodePresenter {
         return Colors.red;
       case NodeType.image:
         return Colors.purple;
+      case NodeType.table:
+        return Colors.brown;
     }
   }
   

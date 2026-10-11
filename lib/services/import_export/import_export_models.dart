@@ -103,9 +103,13 @@ class ExportOptions {
   /// 竣工検査などに出す用。線・面は頂点の中で最も悪い値
   final bool includeGnssQuality;
 
+  /// 結合した表の列（森林簿の樹種など）も書くか。既定は書く（QGIS の「名前を付けて保存」も結合の列を書く）
+  final bool includeJoinedFields;
+
   const ExportOptions({
     this.targetCrs,
     this.includeRowNumber = false,
     this.includeGnssQuality = false,
+    this.includeJoinedFields = true,
   });
 }

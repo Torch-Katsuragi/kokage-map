@@ -27,6 +27,7 @@ import '../geopackage/geopackage_file.dart';
 import 'folder_node.dart';
 import 'geopackage_node.dart';
 import 'layer_tree_node.dart';
+import 'table_node.dart';
 
 /// 外部形式のファイル 1 本（shp は付属一式）＝ 1 ノード。
 ///
@@ -167,7 +168,13 @@ class ExternalLayerNode extends GeoPackageNode {
     final nodes = <LayerTreeNode>[];
     for (final entry in files) {
       if (!ExternalSource.isCandidate(entry.path)) continue; // 速い足切り（中身は読まない）
-      if (!await ExternalSource.accepts(entry.path)) continue;
+      if (!await ExternalSource.accepts(entry.path)) {
+        // 座標の列が無い CSV は形の無い表（森林簿など。レイヤに結合して使う）
+        if (tableExtensions.contains(p.extension(entry.path).toLowerCase())) {
+          nodes.add(TableNode(entry.path, parent: parent));
+        }
+        continue;
+      }
       nodes.add(ExternalLayerNode(entry.path, parent: parent));
     }
     return nodes;

@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../core/fs/k_file_system.dart';
 import '../utils/app_logger.dart';
+import 'layer_join.dart';
 import 'qgis_form.dart';
 import 'qgis_renderer.dart';
 
@@ -749,6 +750,10 @@ class KMeta {
   /// `.qgs` の側には書き戻さない（QGIS の持ち物。[[docs/technical/qgis-interop#属性フォーム（編集ウィジェット・既定値・制約）]]）
   final Map<String, QgisForm> forms;
 
+  /// 表の結合（レイヤキー → 結合の並び）。`.qgs` の `<vectorjoins>` と往復する
+  /// （[[docs/technical/qgis-interop#表の結合（森林簿 CSV と計画図）]]）
+  final Map<String, List<LayerJoin>> joins;
+
   const KMeta({
     this.version = kMetaSchemaVersion,
     this.visibility = const KMetaVisibility(),
@@ -758,6 +763,7 @@ class KMeta {
     this.imageOverlays = const {},
     this.views = const {},
     this.forms = const {},
+    this.joins = const {},
   });
 
   /// 空のメタデータ
@@ -796,6 +802,12 @@ class KMeta {
         e.key: ?QgisForm.tryFromJson(e.value),
     };
 
+    final joinsJson = json['joins'] as Map<String, dynamic>?;
+    final joins = <String, List<LayerJoin>>{
+      for (final e in joinsJson?.entries ?? const <MapEntry<String, dynamic>>[])
+        if (e.value is List) e.key: [for (final j in e.value as List) ?LayerJoin.tryFromJson(j)],
+    }..removeWhere((_, v) => v.isEmpty);
+
     return KMeta(
       version: json['version'] as int? ?? kMetaSchemaVersion,
       visibility: KMetaVisibility.fromJson(
@@ -807,6 +819,7 @@ class KMeta {
       imageOverlays: overlays,
       views: views,
       forms: forms,
+      joins: joins,
     );
   }
 
@@ -828,6 +841,7 @@ class KMeta {
       );
     }
     if (forms.isNotEmpty) json['forms'] = forms.map((k, v) => MapEntry(k, v.toJson()));
+    if (joins.isNotEmpty) json['joins'] = joins.map((k, v) => MapEntry(k, [for (final j in v) j.toJson()]));
     return json;
   }
 
@@ -850,7 +864,7 @@ class KMeta {
   /// 空かどうか
   bool get isEmpty =>
       visibility.isEmpty && styles.isEmpty && layout.isEmpty && sync.isEmpty &&
-      imageOverlays.isEmpty && views.isEmpty && forms.isEmpty;
+      imageOverlays.isEmpty && views.isEmpty && forms.isEmpty && joins.isEmpty;
 
   /// レイヤのView定義。定義が無ければ空リスト（＝既定のView1枚とみなす側の責務）
   List<KMetaView> getViews(String layerKey) => views[layerKey] ?? const [];
@@ -882,6 +896,7 @@ class KMeta {
     Map<String, KMetaImageOverlay>? imageOverlays,
     Map<String, List<KMetaView>>? views,
     Map<String, QgisForm>? forms,
+    Map<String, List<LayerJoin>>? joins,
   }) {
     return KMeta(
       version: version ?? this.version,
@@ -892,6 +907,7 @@ class KMeta {
       imageOverlays: imageOverlays ?? this.imageOverlays,
       views: views ?? this.views,
       forms: forms ?? this.forms,
+      joins: joins ?? this.joins,
     );
   }
 }

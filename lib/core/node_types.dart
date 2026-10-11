@@ -40,7 +40,10 @@ enum NodeType {
   feature('feature'),
   
   /// 画像ノード（位置情報付き画像ファイルに対応）
-  image('image');
+  image('image'),
+
+  /// 表ノード（形の無い CSV。森林簿など。レイヤに結合して使う）
+  table('table');
 
   /// 文字列表現（後方互換性のため）
   final String value;
@@ -78,6 +81,8 @@ enum NodeType {
         return 'フィーチャ';
       case NodeType.image:
         return '画像';
+      case NodeType.table:
+        return '表';
     }
   }
   

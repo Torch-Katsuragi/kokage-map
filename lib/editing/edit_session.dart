@@ -32,6 +32,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/geopackage/feature_repository.dart' show metadataColumn;
 import '../models/nodes/feature_node.dart';
+import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../tools/map_tool.dart';
@@ -220,8 +221,20 @@ class FeatureEditor extends Notifier<EditState?> {
 
   /// 編集を始める。地図は 2D に固定され、左の列は編集の道具に替わる
   Future<void> start(FeatureNode f) async {
-    // 読み取り専用レイヤ（shp・GeoJSON など）は編集に入らず「gpkg に変換して編集」を知らせる
-    if (refuseReadOnlyEditBy(ref.read, f)) return;
+    // 読み取り専用レイヤ（shp・GeoJSON など）は編集に入らず「gpkg に変換して編集しますか？」を出す。
+    // 変換したら新しい gpkg の同じ地物を選び直して編集に入る（選択から外れた地物の編集は取り消される）
+    if (refuseReadOnlyEditBy(
+      ref.read,
+      f,
+      onConverted: (converted) async {
+        if (converted is! FeatureNode) return;
+        ref.read(selectedLayerNodeProvider.notifier).select(converted.parent);
+        ref.read(selectedFeaturesProvider.notifier).set([converted]);
+        await start(converted);
+      },
+    )) {
+      return;
+    }
     final (kind, shape) = switch (f) {
       final PointFeatureNode p => (EditKind.point, <List<LatLng>>[[p.point]]),
       final LineFeatureNode l => (EditKind.line, <List<LatLng>>[List.of(l.line)]),
@@ -247,7 +260,7 @@ class FeatureEditor extends Notifier<EditState?> {
   /// 編集する形が見やすい大きさ・位置へ寄せる。編集パネルが出て地図が縮んでから測るので、少し待ってから
   void _fitTo(FeatureNode f, List<List<LatLng>> shape) {
     Future<void>.delayed(const Duration(milliseconds: 300), () {
-      if (!identical(state?.feature, f)) return; // その間に終わった・別の地物に替わった
+      if (!ref.mounted || !identical(state?.feature, f)) return; // その間に終わった・別の地物に替わった
       ref.read(mapControllerHolderProvider)?.fitCoordinates(
         [for (final r in shape) ...r],
         padding: const EdgeInsets.all(48),

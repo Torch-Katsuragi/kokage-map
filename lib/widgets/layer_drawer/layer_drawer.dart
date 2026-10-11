@@ -139,8 +139,16 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
   /// 行の左スワイプ「移動」: 行き先を選ばせて動かす（フォルダ・gpkg・写真はフォルダへ、レイヤは別の gpkg へ移植）
   Future<void> _swipeMove(LayerTreeNode source) async {
     // 読み取り専用レイヤの中のレイヤは別の gpkg へ移せない（ファイルごとのフォルダ移動はできる）
+    // gpkg に変換したら、新しい gpkg の同じレイヤで移動を続ける
     if (source is LayerNode &&
-        refuseReadOnlyEdit(ref.read(notificationCenterProvider.notifier), source, onChanged: ref.refreshMap)) {
+        refuseReadOnlyEdit(
+          ref.read(notificationCenterProvider.notifier),
+          source,
+          onChanged: ref.refreshMap,
+          onConverted: (converted) {
+            if (converted is LayerNode && mounted) return _swipeMove(converted);
+          },
+        )) {
       return;
     }
     LayerTreeNode root = widget.currentNode!;

@@ -102,8 +102,16 @@ mixin MapDrawingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
   /// [feature] - 追記対象のFeatureNode
   void startAppendMode(FeatureNode feature) {
     AppLogger.debug('[MAP] 追記モード開始: ${feature.name} (${feature.runtimeType})');
-    // 読み取り専用レイヤの地物には追記できない
-    if (refuseReadOnlyEditBy(ref.read, feature)) return;
+    // 読み取り専用レイヤの地物には追記できない（gpkg に変換したら、新しい gpkg の同じ地物で追記を始める）
+    if (refuseReadOnlyEditBy(
+      ref.read,
+      feature,
+      onConverted: (converted) {
+        if (converted is FeatureNode && mounted) startAppendMode(converted);
+      },
+    )) {
+      return;
+    }
     
     // 1. ツールをPenToolに切り替え
     ref.read(currentToolProvider.notifier).set(ref.read(penToolProvider));

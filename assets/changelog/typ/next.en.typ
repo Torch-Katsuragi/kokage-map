@@ -19,7 +19,7 @@
   "Open files other than gpkg as they are",
   [Shapefile, GeoJSON, KML, CSV, GPX and more in a folder show up as layers (read-only, read with the same GDAL as QGIS)],
   [Rasters made in QGIS, such as GeoTIFF, show up as overlays],
-  [Editing offers "Convert to gpkg to edit"; the CRS is kept and the original is replaced after a check],
+  [Editing asks right away "Convert to gpkg to edit?" and carries on after converting; the CRS is kept and the original is replaced after a check],
   [In read-only shared folders: "Copy as gpkg to my folder"],
   [QGIS projects reference the original files, and edits are read back],
 )

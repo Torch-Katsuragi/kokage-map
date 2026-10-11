@@ -47,6 +47,7 @@ import 'services/party/party_firebase.dart';
 import 'services/qgis/qgs_auto_refresh.dart';
 import 'tutorial/tutorial.dart';
 import 'tutorial/tutorial_overlay.dart';
+import 'utils/app_navigator.dart';
 import 'utils/background_save_manager.dart';
 import 'widgets/debug_log_overlay.dart';
 
@@ -344,6 +345,8 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
+      // 道具・状態のクラスからダイアログを出す口（utils/app_navigator.dart）
+      navigatorKey: appNavigatorKey,
       // チュートリアル: いちばん上の画面を見張る（「戻る」を囲む・地図に戻ったかを知る）
       navigatorObservers: [tutorialRoutes],
       builder: (context, child) {

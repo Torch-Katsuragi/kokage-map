@@ -46,7 +46,7 @@ enum ExternalConvertOutcome {
 }
 
 class ExternalConvertResult {
-  const ExternalConvertResult(this.outcome, {this.gpkgPath, this.leftovers = const []});
+  const ExternalConvertResult(this.outcome, {this.gpkgPath, this.leftovers = const [], this.node});
 
   final ExternalConvertOutcome outcome;
 
@@ -55,6 +55,9 @@ class ExternalConvertResult {
 
   /// 消せずに残った付属ファイル（元の本体は消えている）
   final List<String> leftovers;
+
+  /// 書いた gpkg のノード（読み直したツリーの中。レイヤまで読んである）
+  final GeoPackageNode? node;
 }
 
 /// 書いた gpkg が元と食い違った（書いた gpkg は消してある）
@@ -122,8 +125,8 @@ class ExternalLayerConverter {
       }
     }
     await ExternalLayerCache.discard(node.geoPackageFile.getAbsolutePath()!);
-    if (folder is FolderNode) await _reloadWith(folder, target);
-    return ExternalConvertResult(ExternalConvertOutcome.converted, gpkgPath: target, leftovers: leftovers);
+    final written = folder is FolderNode ? await _reloadWith(folder, target) : null;
+    return ExternalConvertResult(ExternalConvertOutcome.converted, gpkgPath: target, leftovers: leftovers, node: written);
   }
 
   /// [node] を [targetFolder] に gpkg として複製する（元は残す。読み取り専用の場所から編集用に持ち出す）
@@ -132,22 +135,23 @@ class ExternalLayerConverter {
     if (dir == null) throw StateError('複製先のフォルダのパスが分かりません');
     final target = await uniqueGpkgPath(dir, p.basenameWithoutExtension(node.sourcePath));
     await _writeVerified(node, target);
-    await _reloadWith(targetFolder, target);
-    return ExternalConvertResult(ExternalConvertOutcome.copied, gpkgPath: target);
+    final written = await _reloadWith(targetFolder, target);
+    return ExternalConvertResult(ExternalConvertOutcome.copied, gpkgPath: target, node: written);
   }
 
-  /// [folder] を読み直し、書いた gpkg（[target]）の中のレイヤまで読む。
+  /// [folder] を読み直し、書いた gpkg（[target]）の中のレイヤまで読んで、そのノードを返す。
   ///
   /// レイヤが読まれていない gpkg は `.qgs` に載らない（`QgsProjectBuilder` はツリーの LayerNode から書く）。
   /// 読み直しで子の顔ぶれが変わるので、`.qgs` の自動更新はツリーの合図（`LayerTreeNode.onStructureChanged`）で立つ。
   /// ⚠ フォルダ設定の鍵の移し替えは、鍵を持たないレイヤでは何も書かないので合図にならない（2026-10-11）
-  static Future<void> _reloadWith(FolderNode folder, String target) async {
+  static Future<GeoPackageNode?> _reloadWith(FolderNode folder, String target) async {
     await folder.updateChildren();
     final written = folder.children
         .whereType<GeoPackageNode>()
         .where((n) => n is! ExternalLayerNode && p.equals(n.geoPackageFile.getAbsolutePath() ?? '', target))
         .firstOrNull;
     await written?.updateChildren();
+    return written;
   }
 
   /// キャッシュを [target] に複製して印の表を落とし、元と突き合わせる。食い違えば [target] を消して投げる

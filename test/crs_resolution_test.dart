@@ -85,5 +85,12 @@ void main() {
       expect(raw.y, 33.93);
       expect(back, kitayama);
     });
+
+    test('3 次元の地理座標系（WGS 84 の 4979）も変換しない（epsg.io に問い合わせない）', () async {
+      final (raw, back) = await writeAndRead(await layerWithSrs(4979, 'undefined'));
+      expect(raw.x, 135.96);
+      expect(raw.y, 33.93);
+      expect(back, kitayama);
+    });
   });
 }

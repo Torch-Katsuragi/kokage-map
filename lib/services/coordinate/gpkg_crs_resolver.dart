@@ -302,8 +302,11 @@ class GpkgCrsResolver {
   }
 
   /// WGS84系のsrsIdか判定（変換不要）
+  ///
+  /// 3 次元の地理座標系（WGS 84 の 4979、JGD2011 の 6667）も XY は同じなので含める。GDAL は Z 付きの GeoJSON を
+  /// 4979 で書き、以前はオフラインでも epsg.io に問い合わせていた（2026-10-11）
   bool _isWgs84SrsId(int srsId) {
-    return srsId == 4326 || srsId == 0 || srsId == -1 || srsId == 6668;
+    return const {4326, 0, -1, 6668, 4979, 6667}.contains(srsId);
   }
 
   /// WGS84系のsrsIdに対応する名前
@@ -313,6 +316,10 @@ class GpkgCrsResolver {
         return 'WGS 84';
       case 6668:
         return 'JGD2011 地理座標系';
+      case 4979:
+        return 'WGS 84（3 次元）';
+      case 6667:
+        return 'JGD2011 地理座標系（3 次元）';
       case 0:
         return 'Undefined geographic SRS';
       case -1:

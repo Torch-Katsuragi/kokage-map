@@ -270,6 +270,58 @@ LayerNode.refreshStyleGroups（地物の読み込み・スタイル変更のた�
 > [!NOTE] QGIS の `symbolsForFeature` は ELSE のルールを常に含める
 > 正解を作るときは `legendKeysForFeature`（当たったルールの key）を使う。色で比べると ELSE が全部に当たって見える。
 
+## 属性フォーム（編集ウィジェット・既定値・制約）（2026-10-11）
+
+QGIS のレイヤのプロパティ →「属性フォーム」で決めた入力の形を、アプリの属性の入力（属性テーブルのフォーム表示・編集パネル・
+属性テーブルのマス）にそのまま使う。**フォームの設計は QGIS でする**（アプリに設計の画面は作らない。QGIS のプラグインも要らない）。
+
+```
+.qgs <maplayer>（既定 View の maplayer、無ければそのレイヤを指す最初の maplayer）
+  <fieldConfiguration><field name><editWidget type><config><Option …>   編集ウィジェットと設定
+  <aliases> <defaults>（expression・applyOnUpdate） <constraints> <constraintExpressions> <editable>
+  <editorlayout>tablayout + <attributeEditorForm>                        ドラッグ&ドロップの配置
+  └ QgsFormReader.read（qgs_form_reader.dart） → QgisForm（models/qgis_form.dart）
+       └ KMeta.forms[レイヤキー] に入れてフォルダ設定（kokage/meta）に持つ
+入力の欄: QgisFieldInput（widgets/qgis_form/qgis_field_input.dart）。並びは qgisFormRows
+既定値・制約: qgis_form_logic.dart（evaluateQgisDefaults / validateQgisForm）
+選択肢: QgisFormOptions（UniqueValues はレイヤの既存の値、ValueRelation は参照先のレイヤ）
+```
+
+| QGIS の編集ウィジェット | アプリの欄 |
+|---|---|
+| ValueMap | ドロップダウン。表示名を見せて値を書く。選択肢に無い値も消さずに出す |
+| CheckBox | チェック。`CheckedState` / `UncheckedState` を書く（無ければ数の列は 1/0、他は true/false） |
+| DateTime | `display_format` で見せ、カレンダー（時刻があれば時計も）で選ぶ。DATE の列は `yyyy-MM-dd`、DATETIME の列は UTC の ISO 8601（`…T…Z`）、文字の列は `field_format` で書く |
+| Range | `Style` が Slider/Dial ならつまみ（Step に合わせる）、それ以外は数の欄（確定で Min〜Max に収める） |
+| TextEdit | `IsMultiline` なら複数行 |
+| UniqueValues | レイヤの既存の値。`Editable` なら打てる候補つきの欄、でなければドロップダウン |
+| Hidden | 出さない（既定値・更新時の既定値は書く） |
+| ValueRelation | 参照先のレイヤの Key・Value を `FilterExpression`（qgis_expression で評価）で絞る。`OrderByValue` で並べる。複数選択（AllowMulti）は単一として扱う |
+| その他（Color・ExternalResource・RelationReference など） | 文字の欄（種類と設定は持ち帰る） |
+
+- **別名**は欄の名前と属性テーブルの見出しに。必須（強制）の欄は名前に `*`
+- **既定値**は新しい地物（`FeatureNode._newAttributes`。どの道具で作っても通る）に入れる。名前・説明は道具が値を渡せばそちらを使う。
+  `applyOnUpdate` のものは、属性フォームで欄を直したとき・編集パネルで保存したときにも当て直す。式は qgis_expression で評価する
+  （`now()` / `$now` / `uuid()`・文字や数・列の参照・関数の部分集合）。読めない式（`@user_full_name` などの変数・知らない関数）はその列を飛ばしてログに 1 回
+- **制約**: NULL でない（空の文字も入っていない扱い）・一意（同じレイヤのほかの地物の値と比べる）・式。強制（QGIS の「強制する」）は保存しない
+  （通知と欄の下に理由。属性テーブルのマスは元の値に戻す）、強制しないものは保存して通知で知らせる。式の説明があれば説明を出す。
+  編集パネルは保存のときに出ている全部の欄を、警告は書き換えた欄だけを確かめる
+- **読み取り専用**（「編集可能」を外した列）は見せるだけ。属性テーブルのマスも編集させない
+- **配置**: ドラッグ&ドロップの配置ならその順で、タブ・グループは見出しにする（タブを切り替える UI にはしない）。配置に無い列は出さない（QGIS と同じ）。
+  自動生成の配置なら列の順
+- **属性テーブル**: ValueMap・ValueRelation・値の決まったチェックボックスは選択の列（マスには値、見せるのは表示名）
+- **持ち方**: QGIS では maplayer ごとに持つが、アプリはレイヤごと。同じレイヤを指す View が複数あれば既定 View のもの
+- **ValueRelation の参照先**は `.qgs` の maplayer の id なので、取り込みでツリーの gpkg とレイヤ（このフォルダからの相対パスとレイヤ名）に読み替えて
+  設定に入れる（`kokageTarget`）。読み替えられなければ取り込みの報告に出し、その列は文字の欄
+- **書き戻し**: `.qgs` のフォームの設定は触らない（QGIS の持ち物。`QgsDocument` が DOM ごと残す）。読み戻しのたびに差し替え、QGIS で設定を外したら外す
+- **古い取り込みの補完**: 自分が書いた `.qgs` は読み戻さないので、開いたときに `QgsImporter.backfillForms` が、フォームの設定を持たないレイヤにだけ足す
+  （`.qgs` にフォームを設定した跡があるときだけ読む）
+- **やらないこと**: 制約・既定値の式のうち地物の形や変数を使うもの、ウィジェットの見た目の細部（ラベルの位置・列数・色）、表示条件の式、
+  関係（RelationReference・子のフォーム）、ValueRelation の複数選択、ドラッグ&ドロップの HTML・QML・テキスト要素、`editforminit` の Python
+
+テストは `test/qgis_form_test.dart`（QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_forms.qgs` を読む・並び・式・既定値・制約・欄の出し分け。
+作り直しは `tool/qgis/write_form_fixture.py`）と `test/qgs_form_import_test.dart`（取り込み・値の関係の解決と選択肢・新しい地物の既定値・補完・往復で残る）。
+
 ## 1. SpatiaLiteトリガーの復元
 
 QGIS/GDAL 製の GeoPackage は RTree を自動更新するトリガーを持ち、

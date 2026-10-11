@@ -5,6 +5,7 @@
 ### New
 
 - Layers styled in QGIS as categorized, graduated or rule-based (such as compartments colored by species or stand age) are now drawn feature by feature in the same colors as QGIS, in 2D and 3D. A legend appears in the layer list and the style screen. Colors are still changed in QGIS
+- The attribute form settings of QGIS layers (value maps, checkboxes, dates, ranges, aliases, default values, constraints, tabs and groups) are now read, and the attribute form and edit panel inputs follow them. Value maps show descriptions and store values, and a feature is not saved while a required field is empty. Settings are still changed in QGIS
 
 ### Fixed
 

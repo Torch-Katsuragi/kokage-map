@@ -202,6 +202,8 @@ Tap the :icon-table_view: button in the AppBar to display the **attribute table 
 
 Tap any cell in the attribute table to edit its value directly. Text and numeric input are supported.
 
+If you set up a layer's attribute form in QGIS on your PC (Layer Properties → Attributes Form), the app's inputs follow it. Value maps become a list to choose from and dates are picked from a calendar. Aliases become field names, and default values are filled in for new features. A feature is not saved while it breaks a constraint such as "Not null" (constraints that are not enforced only show a warning). Change the settings in QGIS.
+
 ### Filtering, Search & Replace
 
 - **Filter**: Use QGIS-style filter expressions to narrow down data (e.g., `"area" > 100`).

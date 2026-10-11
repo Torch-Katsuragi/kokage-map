@@ -12,6 +12,7 @@
 #fixes(
   "New",
   [Layers styled in QGIS by category, graduated range or rule (stands by species or age) are drawn feature by feature in the same colors as QGIS],
+  [Attributes are entered with the QGIS attribute form settings (value maps, dates, aliases, defaults, required fields and more)],
 )
 
 #fixes(

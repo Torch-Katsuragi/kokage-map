@@ -190,6 +190,14 @@ While the GPS tool is active, tap the :icon-timeline: track extraction button in
 2. Select and connect a Bluetooth-capable high-precision GNSS receiver.
 3. Once connected, the external device's position data is automatically used for GPS surveys.
 
+### Recording fix quality and rejecting poor fixes
+
+Each point taken by GPS survey (each vertex of lines and polygons) records the fix type (RTK FIX, RTK FLOAT, DGPS, GPS; a phone's GPS is "GNSS (device)"), satellites, HDOP/PDOP, accuracy, averaging count and duration, time and device. The feature info panel shows it as "RTK FIX · 12 sats · ±0.02 m · avg of 10".
+
+Under Settings → "GPS & Positioning" → **Fix quality (thresholds)**, set a maximum accuracy, a minimum fix type and a minimum number of satellites. Fixes that do not meet them are not recorded and a notification says why (turn off "Do not record fixes below thresholds" to record them with a warning instead). Long-press averaging drops the fixes that do not meet them. A phone's GPS does not report satellites, so a satellite threshold blocks it.
+
+When exporting a layer, "Include GNSS quality" adds the columns gnss_fix, gnss_sats, gnss_hacc and gnss_avg_n (lines and polygons use the worst vertex).
+
 ---
 
 ## Attribute Table

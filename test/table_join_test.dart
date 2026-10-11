@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/core/gdal/gdal_ffi.dart';
@@ -20,6 +22,7 @@ import 'package:root_maps/services/import_export/import_export_service.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:root_maps/services/table/csv_table.dart';
 import 'package:root_maps/services/table/table_join.dart';
+import 'package:root_maps/widgets/attribute_table/attribute_table_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -173,6 +176,28 @@ void main() {
       expect(r.hits, hasLength(1));
       expect(r.hits.single.column, '森林簿_樹種');
       expect(r.hits.single.feature.turfFeature.properties!['key'], '14-1');
+    });
+
+    // 列の表示メニューに結合した列の改名・削除が出て、押すと ALTER TABLE が「列が無い」で失敗していた（2026-10-11）
+    testWidgets('属性表: 結合した列は改名・削除の対象にしない', (tester) async {
+      late LayerNode layer;
+      await tester.runAsync(() async {
+        await KMetaService.instance.setLayerJoins(proj, '計画図.gpkg/shoban', fixtureJoins);
+        (_, layer) = await open();
+      });
+      AttributeTableController? ctrl;
+      await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
+          home: Consumer(builder: (context, ref, _) {
+            ctrl ??= AttributeTableController(layer, ref);
+            return const SizedBox();
+          }),
+        ),
+      ));
+      await tester.runAsync(ctrl!.initialize);
+      expect(ctrl!.isJoinedColumn('森林簿_樹種'), isTrue);
+      expect(ctrl!.canAlterColumn('森林簿_樹種'), isFalse);
+      expect(ctrl!.canAlterColumn('shoban'), isTrue);
     });
 
     test('表が無い・列が無い結合は黙って外す（設定は残す）', () async {

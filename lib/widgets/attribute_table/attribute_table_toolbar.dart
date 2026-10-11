@@ -649,7 +649,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
               style: TextStyle(fontSize: 12, color: hidden ? Colors.grey : null),
             ),
           ),
-          if (onColumnAction != null) ...[
+          if (onColumnAction != null && widget.controller.canAlterColumn(col)) ...[
             InkWell(
               onTap: () {
                 Navigator.pop(context);

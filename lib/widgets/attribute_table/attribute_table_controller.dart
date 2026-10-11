@@ -148,6 +148,9 @@ class AttributeTableController extends ChangeNotifier {
 
   /// 結合した表の列か（読み取り専用。見出しに印）
   bool isJoinedColumn(String column) => _joinedColumns.contains(column);
+
+  /// 列そのものを改名・削除してよいか（結合した表の列は gpkg に無いので `ALTER TABLE` が失敗する）
+  bool canAlterColumn(String column) => !isReadOnlyColumn(column) && !isJoinedColumn(column);
   AttributeTableSettings get settings => _settings;
   bool get isPointLayer => layer is PointLayerNode;
   bool get isFiltered => _isFiltered;

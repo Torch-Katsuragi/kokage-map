@@ -423,8 +423,8 @@ void main() {
       addTearDown(() => QgsAutoRefresh.instance.rootGetter = null);
 
       expect((await ExternalLayerConverter.convert(node)).outcome, ExternalConvertOutcome.converted);
+      // できた gpkg のレイヤは変換が読み込む（読み込まれていないレイヤは .qgs に書かれず、抜け落ちていた）
       final gpkg = root.children.whereType<GeoPackageNode>().single;
-      await gpkg.updateChildren(); // アプリではツリーが読み込む（自動更新は 3 秒待つ）
       await QgsAutoRefresh.instance.flushNow();
       final qgs = File(p.join(proj, '${p.basename(proj)}.qgs')).readAsStringSync();
       expect(qgs, contains('./trees.gpkg'));

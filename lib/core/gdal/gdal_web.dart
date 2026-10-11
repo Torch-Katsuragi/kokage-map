@@ -99,15 +99,13 @@ class GdalWeb implements Gdal {
   // 受け渡し
   // =============================================
 
-  /// `/vsizip/<fs のパス>`（KMZ など）は、fs のパスと GDAL に付ける接頭辞に分ける
-  static (String vsi, String path) _splitVsi(String path) =>
-      path.startsWith('/vsizip/') ? ('/vsizip/', path.substring('/vsizip'.length)) : ('', path);
-
   Future<String> _info(String op, String rawPath, List<String> args) async {
-    final (vsi, path) = _splitVsi(rawPath);
+    // `/vsizip/<fs のパス>/doc.kml`（KMZ）は、fs のパス・接頭辞・zip の中のパスに分ける。worker は
+    // `<vsi><mount 先>/<main>` で開くので、zip の中のパスは main の後ろに付ける
+    final (vsi, path, inner) = splitVsiZip(rawPath);
     final result = await _call(op, {
       'vsi': vsi.toJS,
-      'main': p.basename(path).toJS,
+      'main': '${p.basename(path)}$inner'.toJS,
       'files': (await _siblings(path)).toJS,
       'args': _strings(args),
     });
@@ -115,12 +113,12 @@ class GdalWeb implements Gdal {
   }
 
   Future<void> _utility(String op, String rawSrc, String dst, List<String> args) async {
-    final (vsi, src) = _splitVsi(rawSrc);
+    final (vsi, src, inner) = splitVsiZip(rawSrc);
     // 書き出し先が既にあればその一式も渡す（gdal_translate は常に作り直すので要らない）
     final dstFiles = op != 'translate' && await fs.exists(dst) ? await _siblings(dst) : <web.File>[];
     final result = await _call(op, {
       'vsi': vsi.toJS,
-      'main': p.basename(src).toJS,
+      'main': '${p.basename(src)}$inner'.toJS,
       'files': (await _siblings(src)).toJS,
       'dstName': p.basename(dst).toJS,
       'dstFiles': dstFiles.toJS,

@@ -22,9 +22,15 @@
   - [ ] Drive: 本物のアプリが Google にサインインしていない（Pixel 9）。`/sdcard/FieldSurvey/flat_trial/Kitayama-2026/Kitayama-2026-demo`（Drive 連携）に
         sjis_cpg 一式・points.kml・IMG_TEST.JPG を置いてある。サインインしたら同期して gws で Drive 側を見る。`.kokage` が上がらないことも
   - [ ] 目で見る残り: nodata が透ける・DEM の濃淡・色表付きの色・アプリ製 GeoTIFF の位置合わせ（単体テストは通っている）・大きなオルソの初回 PNG 作成時間
-  - [ ] web（`tool/web/fetch_gdal_wasm.sh` の後）: 上の一式を OPFS と選んだフォルダで。`.kokage/cache/` が開き直しで作り直されない・KMZ（`/vsizip/`）・
-        .cpg の無い shp・「ファイルを追加」とドロップ・書き出し・本番の `.wasm` `.data` の `content-encoding`
   - [ ] アプリが書く GeoTIFF（オーバーレイ変換）を GDAL が「タグの並びが不正・タイル幅が規格外」と警告する（読めはする）。GDAL で書くように替える
+  - web（`tool/web/fetch_gdal_wasm.sh` の後、Chrome で確認）:
+    - 2026-10-11 OPFS（Chrome、127.0.0.1 配信）で済んだもの: shp（.cpg あり・なし）・GeoJSON・KML・CSV・GPX・KMZ（doc.kml 形式）が読み取り専用で件数どおり、
+      .cpg なしの属性表が日本語・EPSG:6674 → WGS84 の座標が合う／`.kokage/cache/external` ができ、開き直しで作り直さない（初回 約 10 秒・2 回目 約 2 秒、8 ファイル）／
+      外部ラスタ 6 枚／KML・GeoJSON →「gpkgに変換」で元が消え .qgs が gpkg に付け替わる／書き出し shp(zip, .cpg=UTF-8)・GeoJSON・CSV が保存の手前（ダウンロード）まで行き
+      `.kokage/tmp/` の中身は残らない（空の `tmp/` だけ残る）／「ファイルを追加」（file input を差し替えて 6 ファイル、名前の衝突は `points_1.csv`）。GDAL の初回読み込み 0.2〜0.4 秒。
+      直した: KMZ が開けない（2 件）・変換後の .qgs（2 件）・書き出しダイアログの型名
+    - [ ] 残り: 選んだフォルダ（File System Access）・ドロップ・本番の `content-encoding`。LIBKML 製の KMZ（doc.kml が NetworkLink だけ）は読めない（未対応のまま）
+    - ⚠ Claude の内蔵ブラウザ（Electron）では SharedWorker から fetch できず sqflite が全部落ちる（gpkg が一切開けない）。web の確認は Chrome で
 - [ ] Z 付きのレイヤを変換した gpkg をアプリで編集すると Z が落ちるはず（`createGpkgWkb` は XY だけ書く。gpkg の z=1 は「必須」）。
       QGIS 製の Z 付き gpkg も同じ。編集した地物の Z をどうするか（元の Z を保つ／0 で埋める）決めて直す
 

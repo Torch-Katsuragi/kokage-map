@@ -137,16 +137,8 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
             ),
             const SizedBox(height: 4),
             Text(
-              t.importExport.layerLabel(
-                name: widget.exportLayer.name,
-                // 以前はクラス名（PolygonLayerNode）をそのまま出していた（2026-10-11 Pixel 9 で発見）
-                type: switch (widget.exportLayer) {
-                  PointLayerNode() => t.styleScreen.point,
-                  LineLayerNode() => t.styleScreen.line,
-                  PolygonLayerNode() => t.styleScreen.polygon,
-                  _ => '-',
-                },
-              ),
+              // 型名（runtimeType）は出さない。web の release では `minified:i7` のように潰れて見えていた
+              t.importExport.layerLabel(name: widget.exportLayer.name),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

@@ -691,7 +691,7 @@
     "exportTitle": "Export Layer",
     "exporting": "Exporting...",
     "exportSource": "Export Source",
-    "layerLabel": "Layer: $name ($type)",
+    "layerLabel": "Layer: $name",
     "exportFormat": "Export Format:",
     "selectExportFormat": "Select Export Format",
     "exportOptions": "Export options",

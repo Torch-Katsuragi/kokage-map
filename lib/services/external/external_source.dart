@@ -21,6 +21,7 @@
 
 import 'dart:convert';
 
+import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
@@ -195,8 +196,30 @@ class ExternalSource {
     return !rel.replaceAll(r'\', '/').split('/').any((s) => s.startsWith('.') && s != '.' && s != '..');
   }
 
-  /// GDAL に渡すデータセット名（KMZ は `/vsizip/`。同梱の GDAL は LIBKML を持たず、KML ドライバは zip を開けない）
-  static String datasetName(String path) => p.extension(path).toLowerCase() == '.kmz' ? '/vsizip/$path' : path;
+  /// GDAL に渡すデータセット名（KMZ は `/vsizip/<パス>/<中の KML>`。同梱の GDAL は LIBKML を持たず、KML ドライバは zip を開けない）。
+  ///
+  /// `/vsizip/<パス>` だけで開けるのは zip の中身が 1 ファイルのときだけで、画像や `layers/` を同梱した KMZ は
+  /// 「Support only 1 file in archive」で開けない（2026-10-11 web で見つけた。Android も同じ）。中の KML を名指しする
+  static Future<String> datasetName(String path) async {
+    if (p.extension(path).toLowerCase() != '.kmz') return path;
+    String? inner;
+    try {
+      inner = kmzMainEntry(ZipDecoder().decodeBytes(await fs.readAsBytes(path)).files.where((f) => f.isFile).map((f) => f.name));
+    } catch (e) {
+      AppLogger.debug('[ExternalSource] KMZ の中身を引けない: $path - $e');
+    }
+    return inner == null ? '/vsizip/$path' : '/vsizip/$path/$inner';
+  }
+
+  /// KMZ の中で読む KML（Google Earth と同じく、根の `doc.kml`、無ければ根の最初の `.kml`、無ければどこかの最初の `.kml`）。
+  /// KML が無ければ null
+  static String? kmzMainEntry(Iterable<String> names) {
+    final kmls = [for (final n in names) n.replaceAll(r'\', '/')].where((n) => n.toLowerCase().endsWith('.kml')).toList();
+    bool atRoot(String n) => !n.contains('/');
+    return kmls.where((n) => atRoot(n) && n.toLowerCase() == 'doc.kml').firstOrNull ??
+        kmls.where(atRoot).firstOrNull ??
+        kmls.firstOrNull;
+  }
 
   /// [path] を開くときのオープンオプション（`-oo` を付けた引数）
   static Future<List<String>> openArgs(String path) async {
@@ -279,7 +302,7 @@ class ExternalSource {
   /// [path] を GDAL で読み、キャッシュに書くレイヤを決める。開けなければ投げる
   static Future<ExternalSourcePlan> plan(String path) async {
     final gdal = ExternalGdal.instance;
-    final ds = datasetName(path);
+    final ds = await datasetName(path);
     final oo = await openArgs(path);
     final info = await gdal.vectorInfo(ds, args: ['-so', ...oo]);
     final layers = ((info['layers'] as List?) ?? const []).cast<Map<String, dynamic>>();
@@ -336,7 +359,7 @@ class ExternalSource {
   /// [plan] どおりに [path] を [dst]（GPKG）へ書く。座標系は元のまま（`-t_srs` を付けない）
   static Future<void> translate(String path, String dst, ExternalSourcePlan plan) async {
     final gdal = ExternalGdal.instance;
-    final ds = datasetName(path);
+    final ds = await datasetName(path);
     final oo = await openArgs(path);
     var first = true;
     for (final layer in plan.layers) {

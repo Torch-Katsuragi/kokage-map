@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -20,6 +21,7 @@ import 'package:root_maps/models/nodes/feature_node.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
+import 'package:root_maps/models/nodes/layer_tree_node.dart';
 import 'package:root_maps/providers/notification_providers.dart';
 import 'package:root_maps/providers/selection_providers.dart';
 import 'package:root_maps/services/coordinate/gpkg_crs_resolver.dart';
@@ -29,6 +31,7 @@ import 'package:root_maps/services/external/external_source.dart';
 import 'package:root_maps/services/folder_file_adder.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:root_maps/services/layer_drawer_service.dart';
+import 'package:root_maps/services/qgis/qgs_auto_refresh.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -219,6 +222,25 @@ void main() {
       expect(await node.geoPackageFile.getGeometryType('作業道'), GeometryType.linestring);
       expect(node.sourcePlan!.sourceLayerCount, 2);
     }, skip: skip);
+
+    test('KMZ: 画像を同梱していても中の doc.kml を読む', () async {
+      // `/vsizip/<kmz>` だけだと中身が 1 ファイルの zip しか開けない（Support only 1 file in archive）
+      final kmz = Archive()
+        ..addFile(ArchiveFile.bytes('doc.kml', utf8.encode(_surveyKml)))
+        ..addFile(ArchiveFile.bytes('files/icon.png', [0x89, 0x50, 0x4e, 0x47]));
+      File(p.join(proj, 'survey.kmz')).writeAsBytesSync(ZipEncoder().encodeBytes(kmz));
+      final node = (await openRoot()).children.whereType<ExternalLayerNode>().single;
+      expect(node.loadError, isNull);
+      expect(node.children.whereType<LayerNode>().map((l) => l.layerName), unorderedEquals(['立木', '作業道']));
+      expect(await namesIn(node.geoPackageFile, '立木', column: 'Name'), ['スギ1', 'ヒノキ2']);
+    }, skip: skip);
+
+    test('KMZ の中で読む KML: 根の doc.kml → 根の最初の .kml → どこかの .kml', () {
+      expect(ExternalSource.kmzMainEntry(['files/a.png', 'a.kml', 'doc.kml']), 'doc.kml');
+      expect(ExternalSource.kmzMainEntry(['layers/x.kml', 'b.kml']), 'b.kml');
+      expect(ExternalSource.kmzMainEntry(['layers/x.kml', 'files/a.png']), 'layers/x.kml');
+      expect(ExternalSource.kmzMainEntry(['files/a.png']), isNull);
+    });
 
     test('CSV: 経度・緯度の列があれば点のレイヤ、無ければレイヤにしない', () async {
       File(p.join(proj, 'trees.csv')).writeAsStringSync('name,経度,緯度,dbh\nスギ1,135.96,33.93,32\nヒノキ2,135.961,33.931,28\n');
@@ -462,6 +484,27 @@ void main() {
       expect(meta.visibility.layers['trees.gpkg/trees'], isFalse);
       expect(meta.styles.layers['trees.gpkg/trees']?.pointSize, 7);
       expect(meta.views['trees.gpkg/trees']?.single.filter, 'H > 10');
+      await gpkg.geoPackageFile.dispose();
+    }, skip: skip);
+
+    test('変換の後、フォルダ設定に鍵が無くても .qgs が新しい gpkg を指す', () async {
+      await writePoints(p.join(proj, 'trees'), prj: 'EPSG:4326');
+      final (root, node) = await open('trees.shp');
+      QgsAutoRefresh.instance.rootGetter = () => root;
+      // アプリでは main.dart がツリーの合図を自動更新につなぐ（同じ配線をここでも張る）
+      LayerTreeNode.onStructureChanged = QgsAutoRefresh.instance.scheduleFor;
+      addTearDown(() {
+        QgsAutoRefresh.instance.rootGetter = null;
+        LayerTreeNode.onStructureChanged = null;
+      });
+
+      expect((await ExternalLayerConverter.convert(node)).outcome, ExternalConvertOutcome.converted);
+      // できた gpkg のレイヤは変換が読み込む（読み込まれていないレイヤは .qgs に書かれず、抜け落ちていた）
+      final gpkg = root.children.whereType<GeoPackageNode>().single;
+      await QgsAutoRefresh.instance.flushNow();
+      final qgs = File(p.join(proj, '${p.basename(proj)}.qgs')).readAsStringSync();
+      expect(qgs, contains('./trees.gpkg'));
+      expect(qgs, isNot(contains('./trees.shp')));
       await gpkg.geoPackageFile.dispose();
     }, skip: skip);
 

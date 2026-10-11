@@ -239,8 +239,9 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
       compassSubscription = compassStream.listen((event) {
         if (!mounted || event.heading == null) return;
-        // flutter_compass は磁北基準。地図・扇・案内の矢印は真北基準なので、ここで一度だけ偏角を足す
-        final loc = currentLocation;
+        // flutter_compass は磁北基準。地図・扇・案内の矢印は真北基準なので、ここで一度だけ偏角を足す。
+        // 偏角を引く位置は案内と同じく今の測位（外部 GNSS だけ先に測れて地図の現在位置がまだ無い間もある）、無ければ地図の現在位置
+        final loc = gpsManager.currentInfo.positionOr(currentLocation);
         final h = _headingSmoother.add(
           _trueHeading.toTrue(event.heading!, lat: loc?.latitude, lon: loc?.longitude),
         );

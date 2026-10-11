@@ -238,16 +238,9 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// GPS 管理サービスの位置（外部 GNSS も含む）を優先し、無ければ地図の現在位置
   void feedGuidance([GpsInfo? info]) {
     final gps = info ?? gpsManager.currentInfo;
-    final LatLng here;
-    double? accuracy;
-    if (gps.isActive) {
-      here = LatLng(gps.latitude!, gps.longitude!);
-      accuracy = gps.accuracy;
-    } else if (currentLocation case final loc?) {
-      here = loc;
-    } else {
-      return;
-    }
+    final here = gps.positionOr(currentLocation);
+    if (here == null) return;
+    final accuracy = gps.isActive ? gps.accuracy : null;
     // 進行方向は歩いているときだけ（止まっていると GPS の方位は当てにならない）
     final course = (gps.speed ?? 0) >= 0.5 ? gps.bearing : null;
     ref.read(guidanceProvider.notifier).updatePosition(here, accuracy: accuracy, courseDeg: course);

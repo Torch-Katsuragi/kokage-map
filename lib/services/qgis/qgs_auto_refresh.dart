@@ -13,7 +13,12 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// こかげマップ: メタデータが変わるたびに `<dir名>.qgs` を追従させる
+// こかげマップ: メタデータやツリーの顔ぶれが変わるたびに `<dir名>.qgs` を追従させる
+//
+// 合図は 2 つ。フォルダ設定の保存（`KMetaService.onSaved` → [QgsAutoRefresh.schedule]）と、
+// ツリーの子の増減（`LayerTreeNode.onStructureChanged` → [QgsAutoRefresh.scheduleFor]。変換・削除・改名・
+// 移動・ファイルの追加）。後者が無かった頃は、鍵を持たないレイヤを gpkg へ変換すると `.qgs` が
+// 元のファイルを指したまま開き直すまで残った（2026-10-11）。
 //
 // フォルダ設定そのもの（`kokage/meta`）は [QgsMetaStore] が保存のたびに書く。こちらは
 // その設定とレイヤツリーから、QGIS が読む部分（レイヤ・可視性・フィルタ・スタイル・並び）を
@@ -63,6 +68,21 @@ class QgsAutoRefresh {
     _timer?.cancel();
     _timer = Timer(debounce, _run);
   }
+
+  /// ツリーの顔ぶれが変わったときに呼ぶ（[LayerTreeNode.onStructureChanged] に配線する）。
+  ///
+  /// gpkg への変換・外部形式やオーバーレイの削除・改名・移動・ファイルの追加・移動で空になった gpkg の削除は
+  /// フォルダ設定を書かないことがある（鍵を持たないレイヤなど）ので、設定の保存とは別にここで拾う。
+  /// [node] は子が増減した親。いちばん近いフォルダの dir で [schedule] する
+  void scheduleFor(LayerTreeNode node) {
+    if (!enabled) return;
+    final folder = node is FolderNode ? node : node.ancestorOf<FolderNode>();
+    final path = folder?.getAbsoluteFilePath();
+    if (path != null) schedule(path);
+  }
+
+  /// デバウンス待ちの書き込みがあるか
+  bool get hasPending => _dirty;
 
   /// 待ちがあれば今すぐ書き切る（Drive push・書き出しの前）。
   Future<void> flushNow() async {

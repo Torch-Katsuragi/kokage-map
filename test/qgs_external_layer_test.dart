@@ -14,7 +14,10 @@ import 'package:root_maps/core/path_resolver.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/nodes/external_layer_node.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
+import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
+import 'package:root_maps/models/nodes/layer_tree_node.dart';
+import 'package:root_maps/services/external/external_layer_converter.dart';
 import 'package:root_maps/services/external/external_source.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:root_maps/services/qgis/qgs_auto_refresh.dart';
@@ -175,6 +178,41 @@ void main() {
     final mixed = root.children.whereType<ExternalLayerNode>().singleWhere((n) => n.name == 'mixed.geojson');
     final points = mixed.children.whereType<LayerNode>().singleWhere((l) => l.layerName == 'mixed_point');
     expect(points.views.map((v) => v.name), contains('点だけ'));
+  }, skip: skip);
+
+  test('gpkg に変換すると、設定の鍵が無くても自動更新が .qgs を gpkg に向け直す（2026-10-11）', () async {
+    final root = await loadTree();
+    final written = await const QgsProjectBuilder().writeTo(root);
+    expect(File(written!.path).readAsStringSync(), contains('<datasource>./林班.shp</datasource>'));
+
+    // アプリと同じ配線（main.dart）。フォルダ設定は何も持たない（鍵の移し替えは何も書かない）
+    final auto = QgsAutoRefresh.instance;
+    auto.enabled = true;
+    auto.rootGetter = () => root;
+    LayerTreeNode.onStructureChanged = auto.scheduleFor;
+    try {
+      await auto.flushNow();
+      expect(await KMetaService.instance.getRawMeta(proj), isNull, reason: '前提: 設定を持たない');
+
+      final shp = root.children.whereType<ExternalLayerNode>().singleWhere((n) => n.name == '林班.shp');
+      final result = await ExternalLayerConverter.convert(shp);
+      expect(result.outcome, ExternalConvertOutcome.converted);
+      expect(auto.hasPending, isTrue, reason: '変換で子の顔ぶれが変わったので待ちが立つ');
+
+      await auto.flushNow();
+      final sources = XmlDocument.parse(File(written.path).readAsStringSync())
+          .findAllElements('datasource')
+          .map((e) => e.innerText)
+          .toList();
+      expect(sources, contains('./林班.gpkg|layername=林班'));
+      expect(sources.where((s) => s.startsWith('./林班.shp')), isEmpty);
+      final gpkg = root.children.whereType<GeoPackageNode>().singleWhere((n) => n.name == '林班.gpkg');
+      await gpkg.geoPackageFile.dispose();
+    } finally {
+      LayerTreeNode.onStructureChanged = null;
+      auto.rootGetter = null;
+      auto.enabled = false;
+    }
   }, skip: skip);
 
   test('QgsDataSource は geometrytype を読む', () {

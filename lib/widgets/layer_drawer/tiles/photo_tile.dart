@@ -123,11 +123,13 @@ class PhotoTile extends ConsumerWidget {
     await confirmAndExecute(
       context,
       ref: ref,
-      title: t.layerDrawer.photo.deleteTitle,
+      title: self is ExternalOverlayImageNode ? t.externalLayer.deleteTitle : t.layerDrawer.photo.deleteTitle,
       content: Text(message),
       confirmLabel: t.common.delete,
       confirmColor: Colors.red,
-      successMessage: t.layerDrawer.photo.photoDeleted(name: node.name),
+      successMessage: self is ExternalOverlayImageNode
+          ? t.externalLayer.deleted(name: node.name)
+          : t.layerDrawer.photo.photoDeleted(name: node.name),
       execute: () async {
         ref.read(selectedFeaturesProvider.notifier).remove(node);
         await node.dispose();

@@ -455,7 +455,11 @@
     "copyTitle": "Copy \"$name\" to",
     "copied": "Copied \"$name\" to $target",
     "noWritableFolder": "No folder to copy into",
-    "deleteConfirm": "Delete $name?\nThe original files ($files) will be deleted."
+    "deleteConfirm": "Delete $name?\nThe original files ($files) will be deleted.",
+    "renameTitle": "Rename",
+    "deleteTitle": "Delete",
+    "renamed": "Renamed: $name",
+    "deleted": "Deleted $name"
   },
   "layerDrawer": {
     "openDrawer": "Open layer list",

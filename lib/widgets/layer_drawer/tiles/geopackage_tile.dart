@@ -163,7 +163,7 @@ class GeoPackageTile extends ConsumerWidget {
     await confirmAndExecute(
       context,
       ref: ref,
-      title: t.layerDrawer.geopackage.deleteTitle,
+      title: self is ExternalLayerNode ? t.externalLayer.deleteTitle : t.layerDrawer.geopackage.deleteTitle,
       content: Text(message),
       confirmLabel: t.layerDrawer.geopackage.deleteGpkg,
       successMessage: t.layerDrawer.geopackage.deleted(name: node.name),

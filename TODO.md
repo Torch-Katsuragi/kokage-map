@@ -11,19 +11,20 @@
     端末で作ったキャッシュで Shift_JIS が読めて EPSG:6674 のまま／点と 6674 の GeoTIFF が地図で同じ位置に重なる／外部ラスタ 6 枚がオーバーレイに（PNG 作成 20〜60ms）／
     KML →「gpkgに変換」で points.gpkg ができ元が消える。直した実機だけの不具合: GDAL の初回呼び出しが必ず落ちる・CSV のキャッシュが srs 99999・
     変換の照合が `android_metadata` 表で必ず止まる
-  - [ ] 残り（ベクタ）: KMZ・GPX・型の混ざった GeoJSON・Z 付きの shp・大きい shp の初回のキャッシュ作りの時間（UI が固まらない）・タップで選べる・
-        描こうとすると「gpkgに変換して編集」が出る・変換後の gpkg で CRS と Z が元のまま・スタイル/View が引き継がれる・
-        改名と左スワイプの移動で付属ファイルも動く・.qgs を QGIS で開いて元ファイルを指している（`|layername=` `|geometrytype=` CSV の `option:`・`encoding="CP932"`）
-  - [ ] 変換の直後、`.qgs` が古い元ファイル（points.kml）を指したまま 15 秒以上残った（開き直すと points.gpkg に付け替わる）。変換の後に自動更新を起こす
-  - [ ] 残り（ラスタ）: nodata が透ける・DEM の見え方・色表付きの見え方を目で・EXIF だけの写真は写真のまま・外部ラスタは位置合わせ不可で通知・
-        削除で .pgw/.aux.xml まで消える・アプリ製 GeoTIFF は従来どおり編集できる・大きなオルソの初回 PNG 作成時間と 2 回目のキャッシュ・.qgs の消灯の読み戻し
-  - [ ] APK の増分（release）
-  - [ ] ファイルの出し入れ: 「ファイルを追加」（SAF で .shp .dbf .shx を一緒に選べる・名前の衝突・.shp だけの警告）・移して空になった gpkg がツリーと .qgs から消える・
-        Drive で shp 一式・`IMG.JPG` が上がり下りし `.kokage` は上がらない
-  - [ ] レイヤの書き出し（GDAL）: 各形式を保存ダイアログまで（shp は zip に .cpg 入り）・編集直後の書き出しに直した値が入る・
-        平面直角の gpkg → shp が QGIS で 6674 に見える・DXF（GDAL_DATA の header.dxf）・web では `.kokage/tmp/` が残らない
-  - [ ] web（`tool/web/fetch_gdal3.sh` の後）: 上の一式を OPFS と選んだフォルダで。`.kokage/cache/` が開き直しで作り直されない・KMZ（`/vsizip/`）・
-        .cpg の無い shp（呼ぶ側で `-oo ENCODING=CP932`）・「ファイルを追加」とドロップ・本番の `.wasm` `.data` の `content-encoding`
+  - 2026-10-11 午後に済んだもの: KMZ・GPX・型の混ざった GeoJSON・Z 付きの shp・2 万面の shp（キャッシュ作り約 2.5 秒・UI 止まらず）・タップで選べる・
+    編集で「読み取り専用」の通知（変換ボタンは通知センター側）→ 変換 → 頂点を動かして保存・改名で付属ファイルが動く・削除でファイルとキャッシュが消える・
+    外部ラスタは位置合わせ不可で通知・外部ラスタの削除で .pgw/.aux.xml まで消える・位置の無い画像は写真のまま・
+    書き出し（shp の zip に UTF-8 の .cpg、.prj は JGD2011 VI 系のまま、一時ファイルが残らない）・「ファイルを追加」（SAF）・
+    移して空になった gpkg が消える・改名後に .qgs が 6 秒以内に追従・Pixel 9 で書いた .qgs を QGIS 4.2.2 で開いて全レイヤ valid・件数と CRS が合う。
+    release APK（3 ABI）183 MB（GDAL 前より約 +57 MB。Play の ABI 別配布では arm64 のダウンロード約 +10 MB）。
+    見つけて直した: Z が落ちる・GPX の空レイヤ・.cpg のある shp が QGIS で化ける（.qgs に UTF-8 と書いていた）・変換/改名/追加の後に .qgs とツリーが古い・
+    書き出し元にクラス名・改名/削除の題が「GeoPackage」
+  - [ ] Drive: 本物のアプリが Google にサインインしていない（Pixel 9）。`/sdcard/FieldSurvey/flat_trial/Kitayama-2026/Kitayama-2026-demo`（Drive 連携）に
+        sjis_cpg 一式・points.kml・IMG_TEST.JPG を置いてある。サインインしたら同期して gws で Drive 側を見る。`.kokage` が上がらないことも
+  - [ ] 目で見る残り: nodata が透ける・DEM の濃淡・色表付きの色・アプリ製 GeoTIFF の位置合わせ（単体テストは通っている）・大きなオルソの初回 PNG 作成時間
+  - [ ] web（`tool/web/fetch_gdal_wasm.sh` の後）: 上の一式を OPFS と選んだフォルダで。`.kokage/cache/` が開き直しで作り直されない・KMZ（`/vsizip/`）・
+        .cpg の無い shp・「ファイルを追加」とドロップ・書き出し・本番の `.wasm` `.data` の `content-encoding`
+  - [ ] アプリが書く GeoTIFF（オーバーレイ変換）を GDAL が「タグの並びが不正・タイル幅が規格外」と警告する（読めはする）。GDAL で書くように替える
 - [ ] Z 付きのレイヤを変換した gpkg をアプリで編集すると Z が落ちるはず（`createGpkgWkb` は XY だけ書く。gpkg の z=1 は「必須」）。
       QGIS 製の Z 付き gpkg も同じ。編集した地物の Z をどうするか（元の Z を保つ／0 で埋める）決めて直す
 

@@ -9,12 +9,16 @@ import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
+import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/models/nodes/feature_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/services/feature_photos/feature_photo_paths.dart';
 import 'package:root_maps/services/feature_photos/feature_photo_service.dart';
+import 'package:root_maps/services/google_drive/sync_file_operations.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'support/fake_google_drive.dart';
 
 void main() {
   group('置き場所と列の決まり', () {
@@ -146,5 +150,27 @@ void main() {
       expect(ph, 'photo');
       expect(f.turfFeature.properties?['photo'], 'photos/pts/x.jpg');
     });
+  });
+
+  test('アプリが作った写真の列はフォルダ設定に残る（.qgs に写真の欄を書く印）', () {
+    const meta = KMeta(photoFields: {'調査.gpkg/pts': ['photo', 'photo_2']});
+    final back = KMeta.fromJson(meta.toJson());
+    expect(back.photoFields, {'調査.gpkg/pts': ['photo', 'photo_2']});
+    expect(back.isEmpty, isFalse);
+    expect(const KMeta().toJson().containsKey('photoFields'), isFalse);
+  });
+
+  test('Drive 同期: photos/<レイヤ>/ の写真も上げる対象', () async {
+    final tmp = await Directory.systemTemp.createTemp('feature_photo_sync_');
+    try {
+      File(p.join(tmp.path, 'photos', 'pts', 'a.jpg'))
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([0xFF, 0xD8]);
+      final ops = SyncFileOperations(driveService: FakeGoogleDrive());
+      final rel = [for (final e in await ops.listLocalSyncFiles(tmp.path)) e.relativePath.replaceAll(r'\', '/')];
+      expect(rel, contains('photos/pts/a.jpg'));
+    } finally {
+      tmp.deleteSync(recursive: true);
+    }
   });
 }

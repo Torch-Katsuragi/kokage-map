@@ -61,6 +61,9 @@ class _CustomBaseMapDialogState extends State<_CustomBaseMapDialog> {
   TileProbeResult? _probe;
   var _probing = false;
 
+  /// 入力が変わるたびに進める。確かめている途中で URL などを変えたら、戻ってきた古い結果は捨てる
+  var _gen = 0;
+
   @override
   void dispose() {
     _name.dispose();
@@ -91,9 +94,14 @@ class _CustomBaseMapDialogState extends State<_CustomBaseMapDialog> {
 
   bool get _canSubmit => _url.text.trim().isNotEmpty && _urlError == null && !_probing;
 
-  void _changed() => setState(() => _probe = null);
+  void _changed() => setState(() {
+        _gen++;
+        _probe = null;
+        _probing = false;
+      });
 
   Future<void> _check() async {
+    final gen = ++_gen;
     setState(() => _probing = true);
     final p = _provider();
     final z = widget.zoom.clamp(p.minZoom, p.maxZoom);
@@ -102,7 +110,7 @@ class _CustomBaseMapDialogState extends State<_CustomBaseMapDialog> {
     final x = ((widget.center.longitude + 180) / 360 * n).floor().clamp(0, n - 1);
     final y = ((1 - math.log(math.tan(lat) + 1 / math.cos(lat)) / math.pi) / 2 * n).floor().clamp(0, n - 1);
     final r = await widget.service.probeTile(p, z, x, y);
-    if (!mounted) return;
+    if (!mounted || gen != _gen) return;
     setState(() {
       _probing = false;
       _probe = r;

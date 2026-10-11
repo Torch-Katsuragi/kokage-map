@@ -60,6 +60,9 @@ class _MapPdfDialogState extends ConsumerState<_MapPdfDialog> {
   /// 作っている最中なら進み具合（0〜1）
   double? _progress;
 
+  /// 作っている途中で取りやめた（戻る・キャンセル）。できた PDF は捨て、保存先も聞かない
+  bool _cancelled = false;
+
   @override
   void dispose() {
     _title.dispose();
@@ -77,9 +80,12 @@ class _MapPdfDialogState extends ConsumerState<_MapPdfDialog> {
       final bytes = await widget.build(
         (paper: _paper, landscape: _landscape, title: title, notes: _notes.text),
         (v) {
+          // 背景地図のタイルを 1 枚読むたびに来る。取りやめたら残りのタイルを読まずに止める
+          if (_cancelled) throw const _MapPdfCancelled();
           if (mounted) setState(() => _progress = v);
         },
       );
+      if (_cancelled) return;
       final d = DateTime.now();
       final stamp = '${d.year}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
       final base = (title.isEmpty ? 'map' : title).replaceAll(RegExp(r'[\\/:*?"<>|\s]+'), '_');
@@ -96,14 +102,34 @@ class _MapPdfDialogState extends ConsumerState<_MapPdfDialog> {
       Navigator.of(context).pop();
       if (saved != null) notify.add(title: t.mapPdf.saved(name: fileName), level: NotificationLevel.success);
     } catch (e) {
+      if (_cancelled) return;
       notify.add(title: t.mapPdf.failed(error: '$e'), level: NotificationLevel.error);
       if (mounted) setState(() => _progress = null);
     }
   }
 
+  /// 作っている途中で取りやめる。タイルを読んでいる間ならそこで止まり、そのあとの段なら出来上がりを捨てる
+  void _cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    ref.read(notificationCenterProvider.notifier).add(title: t.mapPdf.cancelled, level: NotificationLevel.info);
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final busy = _progress != null;
+    // 作っている途中の「戻る」は取りやめにする（以前は黙って閉じ、出来上がると保存先を聞いていた）
+    return PopScope(
+      canPop: !busy,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && busy) _cancel();
+      },
+      child: _dialog(context, busy),
+    );
+  }
+
+  Widget _dialog(BuildContext context, bool busy) {
     return AlertDialog(
       title: Text(t.mapPdf.dialogTitle),
       content: SingleChildScrollView(
@@ -165,9 +191,14 @@ class _MapPdfDialogState extends ConsumerState<_MapPdfDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: busy ? null : () => Navigator.of(context).pop(), child: Text(t.common.cancel)),
+        TextButton(onPressed: busy ? _cancel : () => Navigator.of(context).pop(), child: Text(t.common.cancel)),
         FilledButton(onPressed: busy ? null : _create, child: Text(t.mapPdf.create)),
       ],
     );
   }
+}
+
+/// 作っている途中で取りやめた（タイルの読み込みを止めるために投げる）
+class _MapPdfCancelled implements Exception {
+  const _MapPdfCancelled();
 }

@@ -710,13 +710,19 @@ class AttributeTableController extends ChangeNotifier {
       final i = j.fieldNames.indexOf(columnName);
       if (i < 0) continue;
       return switch (j.fieldTypes[i]) {
-        TableFieldType.integer => TrinaColumnType.number(),
-        TableFieldType.real => TrinaColumnType.number(format: '#,##0.######'),
+        TableFieldType.integer => _numberColumnType(),
+        TableFieldType.real => _numberColumnType(real: true),
         TableFieldType.text => TrinaColumnType.text(),
       };
     }
     return TrinaColumnType.text();
   }
+
+  /// 数の列。書式は最初に当てない（当てると NULL のマスが 0 になる）。見せ方は [_nullHighlightRenderer]、
+  /// 並べ替えは [orderedFeatures]、入力した値を数にするのは表（castValueByColumnType）がする
+  static TrinaColumnType _numberColumnType({bool real = false}) => real
+      ? TrinaColumnType.number(format: '#,##0.######', applyFormatOnInit: false)
+      : TrinaColumnType.number(applyFormatOnInit: false);
 
   static TrinaColumn _coordinateColumn(String field, double width) => TrinaColumn(
         title: field,
@@ -732,7 +738,13 @@ class AttributeTableController extends ChangeNotifier {
     // チュートリアル: 練習の測点の表では、色の付いた行の name のマスを案内先にする
     final guideName = columnName == 'name' && isPracticeLayer(layer, PracticeProject.pointsLayer);
     return (TrinaColumnRendererContext ctx) {
-      final value = ctx.cell.value;
+      var value = ctx.cell.value;
+      // 数の列: 値のあるマスだけ書式で丸めて見せる（以前の見え方。空は空のまま → (NULL)）
+      final type = ctx.column.type;
+      if (type is TrinaColumnTypeWithNumberFormat && value != null && value != '') {
+        final nf = type as TrinaColumnTypeWithNumberFormat;
+        if (nf.isNumeric(value)) value = nf.toNumber(nf.applyFormat(value));
+      }
       // ValueMap・日付などは QGIS の見せ方で（書いてある値はそのまま）
       final text = qf?.displayText(value) ?? value?.toString() ?? '';
       final isNull = text.isEmpty;
@@ -795,10 +807,8 @@ class AttributeTableController extends ChangeNotifier {
   /// SQLiteのカラム型からTrinaColumnTypeにマッピング
   TrinaColumnType _determineColumnType(String columnName) {
     final sqlType = columnSqlType(columnName);
-    if (isIntegerSqlType(sqlType)) return TrinaColumnType.number();
-    if (isNumericSqlType(sqlType)) {
-      return TrinaColumnType.number(format: '#,##0.######');
-    }
+    if (isIntegerSqlType(sqlType)) return _numberColumnType();
+    if (isNumericSqlType(sqlType)) return _numberColumnType(real: true);
     if (sqlType.contains('DATE') || sqlType.contains('TIMESTAMP')) {
       return TrinaColumnType.date();
     }

@@ -2,6 +2,7 @@
 // 読み直してもフィルタの表示（ツールバー）が「適用中」のまま
 //
 // 実物の GeoPackage を使う（view_hide_reload_test.dart と同じ作り）。
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -10,8 +11,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
+import 'package:root_maps/models/layer_join.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
+import 'package:root_maps/services/table/csv_table.dart';
+import 'package:root_maps/services/table/table_join.dart';
 import 'package:root_maps/widgets/attribute_table/attribute_table_controller.dart';
 import 'package:root_maps/widgets/attribute_table/attribute_table_toolbar.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -191,6 +195,46 @@ void main() {
     expect(next.filterExpression, '"h" >= 200');
     expect(next.filteredCount, 50);
     expect(next.pageSize, 200);
+  });
+
+  testWidgets('数の列の NULL は (NULL) と見せる（0 にしない）。結合した表の数の列も', (tester) async {
+    await tester.runAsync(() async {
+      await open();
+      await gpkg.addAttributeColumns('pts', {'n': 'INTEGER'});
+      final db = await gpkg.getDatabase();
+      await db.rawUpdate("UPDATE pts SET n = 7 WHERE name = 'p1'");
+      await db.rawUpdate("UPDATE pts SET h = NULL WHERE name = 'p0'");
+      layer = PointLayerNode(gpkg, 'pts', parent: GeoPackageNode(gpkg));
+      await layer.updateChildren();
+    });
+    addTearDown(() => tester.runAsync(close));
+    final table = CsvTable.parse(Uint8List.fromList(utf8.encode('name,age,vol\np0,,\np1,35,1.5\n')));
+    layer.debugJoins = [ResolvedJoin.build(const LayerJoin(table: 't.csv', joinField: 'name', targetField: 'name'), table)!];
+    final ctrl = await pumpController(tester);
+    await tester.runAsync(ctrl.initialize);
+    expect(ctrl.columnNames, ['name', 'h', 'n', 't_age', 't_vol']);
+
+    final page = await ctrl.fetchPage(TrinaLazyPaginationRequest(page: 1, pageSize: 50));
+    await tester.binding.setSurfaceSize(const Size(1200, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: TrinaGrid(columns: List.of(ctrl.columns), rows: page.rows.take(2).toList())),
+    ));
+    await tester.pumpAndSettle();
+
+    // p0: h・n・t_age・t_vol が NULL
+    expect(find.text('(NULL)'), findsNWidgets(4));
+    expect(find.text('0'), findsNothing);
+    // p1: 値のあるマスは数で
+    expect(find.text('248'), findsOneWidget);
+    expect(find.text('7'), findsOneWidget);
+    expect(find.text('35'), findsOneWidget);
+    expect(find.text('1.5'), findsOneWidget);
+
+    // 並べ替えは NULL を小さい側に（0 と同じに扱わない）
+    final hCol = ctrl.columns.firstWhere((c) => c.field == 'h')..sort = TrinaColumnSort.ascending;
+    final sorted = await ctrl.fetchPage(TrinaLazyPaginationRequest(page: 1, pageSize: 3, sortColumn: hCol));
+    expect(sorted.rows.map((r) => r.cells['name']!.value), ['p0', 'p249', 'p248']);
   });
 }
 

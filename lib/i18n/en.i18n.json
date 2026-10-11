@@ -1581,6 +1581,7 @@
     "rendering": "Rendering the map… $percent%",
     "saved": "Saved the PDF: $name",
     "failed": "Could not create the PDF: $error",
+    "cancelled": "Cancelled creating the PDF",
     "notReady": "The map is not ready yet. Wait a moment and try again",
     "legend": "Legend",
     "scale": "Scale",

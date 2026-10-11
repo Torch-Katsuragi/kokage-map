@@ -1581,6 +1581,7 @@
     "rendering": "地図を描いています… $percent%",
     "saved": "PDF を保存しました: $name",
     "failed": "PDF を作れませんでした: $error",
+    "cancelled": "PDF の作成を取りやめました",
     "notReady": "地図の用意ができていません。少し待ってからやり直してください",
     "legend": "凡例",
     "scale": "縮尺",

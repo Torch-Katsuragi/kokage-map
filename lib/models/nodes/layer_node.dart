@@ -20,6 +20,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
@@ -408,6 +409,10 @@ abstract class LayerNode extends LayerTreeNode {
   /// 結合した表（[loadJoins] が作る。表が見つからない・列が無い結合は入らない）
   List<ResolvedJoin> get joins => _joins;
   List<ResolvedJoin> _joins = const [];
+
+  /// テスト用: フォルダ設定を通さずに結合を置く
+  @visibleForTesting
+  set debugJoins(List<ResolvedJoin> joins) => _joins = List.unmodifiable(joins);
 
   /// 結合の設定（フォルダ設定の [KMeta.joins]。表が見つからないものも含む）
   List<LayerJoin> get joinDefs => _joinDefs;

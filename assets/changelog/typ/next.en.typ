@@ -34,7 +34,7 @@
   [First sync after reinstalling overwrote files present on both sides with older cloud copies; the newer side is now chosen, with a warning],
   [Sync uploaded to the top of Drive when the file's folder could not be found],
   [Attribute table copy covered only the first page; rows per page can be chosen and sorting covers all rows],
-  [Attribute table filter indicator, and full-width digits in the edit panel],
+  [Attribute table filter indicator and empty numeric cells shown as 0, and full-width digits in the edit panel],
   [Per-point records of GPS-surveyed lines and polygons were dropped],
   [KMZ whose doc.kml only links (NetworkLink) to other KML could not be opened; each linked KML inside becomes a layer],
 )

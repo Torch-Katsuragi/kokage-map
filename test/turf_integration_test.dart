@@ -4,6 +4,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/converters/turf_converter.dart';
+import 'package:root_maps/models/geopackage/feature_row.dart';
 import 'package:root_maps/utils/geo_converter.dart';
 import 'package:turf/turf.dart' as turf;
 
@@ -99,10 +100,10 @@ void main() {
     test('Feature creation from row data', () {
       // GeoPackageから取得したrowデータをシミュレート
       final rowData = {
-        'id': 1,
+        featureIdKey: 1,
         'name': 'Test Point',
         'description': 'テスト用ポイント',
-        'geometry': [const LatLng(35.6895, 139.6917)], // Point形式
+        featureGeometryKey: [const LatLng(35.6895, 139.6917)], // Point形式
         'rmaps_metadata': {'test': 'data'},
       };
 
@@ -119,6 +120,8 @@ void main() {
       final convertedRowData = TurfConverter.featureToRowData(feature);
       expect(convertedRowData, isNotNull);
       expect(convertedRowData!['name'], equals('Test Point'));
+      expect(convertedRowData.containsKey(featureGeometryKey), isFalse);
+      expect(convertedRowData.containsKey(featureIdKey), isFalse);
       expect(convertedRowData.containsKey('geometry'), isFalse);
       expect(convertedRowData.containsKey('geom'), isFalse);
 

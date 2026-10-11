@@ -55,3 +55,21 @@ enum CollidingColumnsGpkg {
     await db.close();
   }
 }
+
+/// 形の列が geom で、geometry というふつうの文字の列（g-a・g-b）を持つ gpkg を [path] に作る。表は [CollidingColumnsGpkg.table]。
+///
+/// 以前は読んだ行の geometry に解いた形を入れていて、この列は属性表・情報パネルに出なかった
+Future<void> writeGeometryAttributeGpkg(String path) async {
+  const table = CollidingColumnsGpkg.table;
+  final gpkg = GeoPackageFile(const ['colliding.gpkg'], absolutePath: path);
+  await gpkg.addLayer(table, GeometryType.point);
+  await gpkg.addAttributeColumns(table, {'name': 'TEXT', 'geometry': 'TEXT'});
+  await gpkg.addPointWithAttributes(table, const LatLng(33.93, 135.96), {'name': 'a'});
+  await gpkg.addPointWithAttributes(table, const LatLng(33.94, 135.97), {'name': 'b'});
+  await gpkg.flushChanges();
+  await gpkg.dispose();
+
+  final db = await openDatabase(path, singleInstance: false);
+  await db.execute("UPDATE $table SET geometry = 'g-' || name");
+  await db.close();
+}

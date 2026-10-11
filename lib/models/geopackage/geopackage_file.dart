@@ -395,7 +395,7 @@ class GeoPackageFile {
   // フィーチャの読み出し（FeatureRepositoryに委譲）
   // ============================================================
 
-  /// 単一フィーチャを取得（形は WGS84 に直して 'geometry' に入れる）
+  /// 単一フィーチャを取得（形は WGS84 に直して [featureGeometryKey] に入れる）
   Future<Map<String, dynamic>?> getFeature(String tableName, int rowId) async =>
       _features.getFeature(tableName, rowId, await _layers.getGeometryType(tableName));
 

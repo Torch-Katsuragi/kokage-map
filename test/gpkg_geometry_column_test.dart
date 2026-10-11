@@ -54,7 +54,7 @@ void main() {
         };
       }
 
-      LatLng pointOf(Map<String, dynamic> row) => (row['geometry'] as List<LatLng>).single;
+      LatLng pointOf(Map<String, dynamic> row) => (row[featureGeometryKey] as List<LatLng>).single;
 
       test('形の列を表から引く（表にある綴りのまま）', () async {
         expect(await gpkg.geometryColumn(table), kind.geomColumn);
@@ -69,7 +69,7 @@ void main() {
         expect(pointOf(rows.last).latitude, closeTo(33.94, 1e-9));
         expect([for (final r in rows) r['name']], ['a', 'b']);
         for (final r in rows) {
-          if (kind.geomColumn != 'geometry') expect(r.containsKey(kind.geomColumn), isFalse);
+          expect(r.containsKey(kind.geomColumn), isFalse);
         }
         // geom という名前のふつうの列は属性のまま
         if (hasGeomAttr) expect(rows.first['geom'], 'geom-a');
@@ -85,7 +85,7 @@ void main() {
         final row = (await gpkg.getFeature(table, 2))!;
         expect(row[featureIdKey], 2);
         expect(pointOf(row).longitude, closeTo(135.97, 1e-9));
-        expect(row.containsKey(kind.geomColumn) && kind.geomColumn != 'geometry', isFalse);
+        expect(row.containsKey(kind.geomColumn), isFalse);
       });
 
       test('属性表・情報の列: 本当の形の列だけを隠す', () async {

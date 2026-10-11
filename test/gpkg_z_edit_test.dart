@@ -112,7 +112,7 @@ void main() {
       ]);
       final (gpkg, id) = await zLayer('lines', GeometryType.linestring, line);
       final f = await gpkg.getFeature('lines', id);
-      final pts = List<LatLng>.of((f!['geometry'] as List).first as List<LatLng>);
+      final pts = List<LatLng>.of((f![featureGeometryKey] as List).first as List<LatLng>);
       pts[1] = const LatLng(33.915, 135.912); // 動かす
       pts.insert(2, const LatLng(33.918, 135.918)); // 足す
       expect(await gpkg.updateLine('lines', id, pts), isTrue);
@@ -174,7 +174,7 @@ void main() {
 
       gpkg = GeoPackageFile(const ['polys.gpkg'], absolutePath: path);
       final f = await gpkg.getFeature('polys', id!);
-      final rings = ((f!['geometry'] as List).first as List).cast<List<LatLng>>();
+      final rings = ((f![featureGeometryKey] as List).first as List).cast<List<LatLng>>();
       final outer = List<LatLng>.of(rings.first);
       outer[2] = const LatLng(33.925, 135.972); // 動かす
       outer.insert(3, const LatLng(33.91, 135.955)); // 足す
@@ -197,7 +197,7 @@ void main() {
       ]);
       final (gpkg, id) = await zLayer('zm', GeometryType.linestring, line, m: 1);
       final f = await gpkg.getFeature('zm', id);
-      final pts = List<LatLng>.of((f!['geometry'] as List).first as List<LatLng>)..add(const LatLng(33.92, 135.92));
+      final pts = List<LatLng>.of((f![featureGeometryKey] as List).first as List<LatLng>)..add(const LatLng(33.92, 135.92));
       await gpkg.updateLine('zm', id, pts);
       final blob = await blobOf(gpkg, 'zm', id);
       await gpkg.dispose();
@@ -310,7 +310,7 @@ void main() {
 
       final gpkg = GeoPackageFile(const ['road.gpkg'], absolutePath: path);
       final f = await gpkg.getFeature('road', 1);
-      final pts = List<LatLng>.of((f!['geometry'] as List).first as List<LatLng>);
+      final pts = List<LatLng>.of((f![featureGeometryKey] as List).first as List<LatLng>);
       expect(pts, hasLength(3));
       pts[1] = const LatLng(33.915, 135.912);
       pts.insert(2, const LatLng(33.918, 135.918));
@@ -353,7 +353,7 @@ void main() {
 
       final poly = GeoPackageFile(const ['stand.gpkg'], absolutePath: polyPath);
       final f = await poly.getFeature('stand', 1);
-      final outer = List<LatLng>.of(((f!['geometry'] as List).first as List).first as List<LatLng>);
+      final outer = List<LatLng>.of(((f![featureGeometryKey] as List).first as List).first as List<LatLng>);
       outer.insert(1, const LatLng(33.899, 135.96));
       await poly.updatePolygon('stand', 1, [outer]);
       await poly.flushChanges();

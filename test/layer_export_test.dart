@@ -336,4 +336,17 @@ void main() {
       expect(featureValues(info, 'name'), ['x', 'b']);
     }, skip: skip);
   }
+
+  // 形の列が geom の表の geometry というふつうの列は、直した値のまま属性として書き出す
+  test('geometry という列を直して GeoJSON に', () async {
+    await writeGeometryAttributeGpkg(p.join(proj, 'colliding.gpkg'));
+    final layer = (await openLayers())[CollidingColumnsGpkg.table]!;
+    await layer.updateChildren();
+    await layer.features.firstWhere((f) => f.rowId == 1).setAttributeValue('geometry', 'g-x');
+    final out = await export(layer, FileFormat.geojson);
+    final json = jsonDecode(File(out).readAsStringSync()) as Map<String, dynamic>;
+    final fs = [for (final f in json['features'] as List) f as Map<String, dynamic>];
+    expect([for (final f in fs) (f['properties'] as Map)['geometry']], ['g-x', 'g-b']);
+    expect((fs.first['geometry'] as Map)['coordinates'], [closeTo(135.96, 1e-6), closeTo(33.93, 1e-6)]);
+  }, skip: skip);
 }

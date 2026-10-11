@@ -109,7 +109,7 @@ List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
             needsAxisSwap: params.needsAxisSwap,
           );
         }
-        row['geometry'] = geobaseGeometryToLatLngs(geometry);
+        row[featureGeometryKey] = geobaseGeometryToLatLngs(geometry);
       }
     }
 
@@ -125,7 +125,7 @@ List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
 
 /// 行から形の列（[geomColumn]）の値を抜いて返す（GeoPackage のバイナリでなければ null）。
 ///
-/// 読んだ行は地物の属性になるので、形の列は残さない（名前は表ごとに違う。`geometry` なら解析した形で上書きされる）
+/// 読んだ行は地物の属性になるので、形の列は残さない（名前は表ごとに違う）。解いた形は [featureGeometryKey] に入れる
 Uint8List? takeGeometryBlob(Map<String, dynamic> row, String? geomColumn) {
   if (geomColumn == null) return null;
   final v = row.remove(geomColumn);
@@ -479,7 +479,7 @@ class FeatureRepository {
               needsAxisSwap: crs.needsAxisSwap,
             );
           }
-          row['geometry'] = geobaseGeometryToLatLngs(geometry);
+          row[featureGeometryKey] = geobaseGeometryToLatLngs(geometry);
         }
       }
 
@@ -596,7 +596,7 @@ class FeatureRepository {
                 needsAxisSwap: crs.needsAxisSwap,
               );
             }
-            row['geometry'] = geobaseGeometryToLatLngs(geometry);
+            row[featureGeometryKey] = geobaseGeometryToLatLngs(geometry);
           }
         }
         _parseMetadata(row);
@@ -802,12 +802,11 @@ class FeatureRepository {
       await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final geomCol = await _writeGeomColumn(tableName);
-      // 主キー・形の列と、読んだ行で解析した形を入れている geometry は属性として書かない。
-      // id・fid という名前のふつうの列（主キーでない）は書く
+      // 主キー・形の列は属性として書かない。
+      // id・fid・geometry という名前のふつうの列（主キー・形の列でない）は書く
       final reservedColumns = {
         (await schema.getPrimaryKeyColumn(tableName)).toLowerCase(),
         'rowid',
-        'geometry',
         geomCol.toLowerCase(),
         for (final r in reserved) r.toLowerCase(),
       };
@@ -1036,10 +1035,9 @@ class FeatureRepository {
     }
   }
 
-  /// 属性の一括更新で書かない列（読んだ行の解析した形 geometry・形の列 [geomColumn]・主キー）。
-  /// `id`・`fid` という名前でも主キーでなければふつうの列として書く
+  /// 属性の一括更新で書かない列（形の列 [geomColumn]・主キー）。
+  /// `id`・`fid`・`geometry` という名前でも主キー・形の列でなければふつうの列として書く
   bool _isReservedColumn(String key, String pkColumn, String? geomColumn) =>
-      key == 'geometry' ||
       (geomColumn != null && key.toLowerCase() == geomColumn.toLowerCase()) ||
       key.toLowerCase() == pkColumn.toLowerCase();
 

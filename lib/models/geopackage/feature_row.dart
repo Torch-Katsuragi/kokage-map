@@ -23,3 +23,9 @@
 /// 以前は `id` に入れていて、主キーが fid の表や主キーの無い表にある `id` というふつうの列
 /// （林業のデータでよくある）が地物番号で上書きされ、属性表・情報パネル・ラベルに地物番号が出ていた
 const featureIdKey = '\u0000fid';
+
+/// 形の列を解いた形（WGS84 の LatLng の入れ子。`geobaseGeometryToLatLngs` の戻り値）を入れる鍵。
+///
+/// 以前は `geometry` に入れていて、形の列が geom の表にある `geometry` というふつうの列が属性に出なかった。
+/// 形の列そのもの（geom・geometry・Shape など表ごとの名前）は読んだ行から抜いてある
+const featureGeometryKey = '\u0000geometry';

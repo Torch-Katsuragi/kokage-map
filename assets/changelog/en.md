@@ -30,7 +30,7 @@
 - "Copy Table" in the attribute table copied only the first page shown. It now copies every row that matches the filter, in the order sorted by the column header (hidden columns are left out). Above 50,000 rows it asks first
 - The attribute table now has a rows-per-page selector (50, 100, 200, 500) below it. Sorting by a column header sorts all rows, not just the page shown
 - Reloading the attribute table with a filter still applied showed the toolbar as "not applied" and emptied the expression field. Fixed
-- Empty (NULL) cells in numeric columns of the attribute table showed as 0. They now show (NULL) like other columns, joined numeric fields included
+- Empty (NULL) cells in numeric columns of the attribute table showed as 0. They now show (NULL) like other columns, joined numeric fields included. In date columns, values written like `2026/10/01` or text that is not a date showed as (NULL), and date-times entered in QGIS lost their time. The stored value is now shown as is, and sorting follows the date. A date picked in the table is written as `2026-10-01` in date columns and in the QGIS form (UTC ISO 8601) in date-time columns
 - In the attribute fields of the feature edit panel, full-width digits typed into numeric columns (such as "１２．５") were not converted to half-width. They are now saved as half-width numbers, as in the attribute form
 - The per-point records (accuracy, time and so on) of lines and polygons taken by GPS survey were thrown away instead of saved. When there is such a record, the layer now gets a `kmaps_metadata` column (JSON stored as text, which QGIS opens as is) to keep it. The column is not shown in the attribute table or the edit panel. Drawing with the pen alone does not add the column
 - KMZ files (such as those saved by Google Earth) whose doc.kml only holds links (NetworkLink) to other KML files could not be opened. Each linked KML inside the KMZ now becomes a layer, named after the linked file as in QGIS, and the file can be converted to gpkg. Links to URLs on the internet are not read
@@ -40,6 +40,7 @@
 - A layer switched back to "Single symbol" in QGIS after being categorized, graduated or rule-based still stayed QGIS-styled in Kokage Map after reading back (its colors could not be changed in the style screen)
 - Deleting a feature right after editing its attributes (within a second) kept later attribute edits in the same GeoPackage from being saved, and they were lost when the app closed
 - In the web version, reloading the page signed you out of Google Drive. Within about an hour of last connecting to Drive, reloading in the same tab now keeps you signed in. After that, the app reconnects the next time you use the screen (a small Google window opens and closes by itself)
+- In GPS track extraction, switching dates quickly could show the previous date's points or simplified line, and save them as is. It now always shows the track of the date selected
 
 ### Lighter
 

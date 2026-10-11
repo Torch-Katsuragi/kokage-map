@@ -53,9 +53,15 @@ class _GuidanceOverlayState extends ConsumerState<GuidanceOverlay> {
 
   LatLng? _targetElevAt;
   double? _targetElev;
+
+  /// [_targetElev] がどの行き先のものか（[_targetKey]）。行き先を替えた直後に前の行き先の標高を出さない
+  Object? _targetElevKey;
   LatLng? _hereElevAt;
   double? _hereElev;
   bool _sampling = false;
+
+  /// 行き先の見分け。メンバーへ向かうときはその人（動いても同じ行き先）、ほかは位置と名前
+  static Object _targetKey(GuidanceTarget t) => t.peerUid ?? (t.point, t.label);
 
   /// 目標と今の位置の標高を（変わったときだけ）引く
   void _sampleElevation(GuidanceState s) {
@@ -63,7 +69,8 @@ class _GuidanceOverlayState extends ConsumerState<GuidanceOverlay> {
     final target = s.target?.point;
     final here = s.here;
     if (lookup == null || target == null || _sampling) return;
-    final needTarget = target != _targetElevAt;
+    final key = _targetKey(s.target!);
+    final needTarget = key != _targetElevKey || target != _targetElevAt;
     final needHere = here != null &&
         (_hereElevAt == null || NavigationMath.distanceMeters(_hereElevAt!, here) >= _elevationResampleMeters);
     if (!needTarget && !needHere) return;
@@ -77,8 +84,14 @@ class _GuidanceOverlayState extends ConsumerState<GuidanceOverlay> {
       setState(() {
         var i = 0;
         if (needTarget) {
-          _targetElevAt = target;
-          _targetElev = v[i++];
+          final elev = v[i++];
+          // 引いている間に行き先を替えていたら捨てる（今の行き先は次の build で引き直す）
+          final now = ref.read(guidanceProvider).target;
+          if (now != null && _targetKey(now) == key) {
+            _targetElevAt = target;
+            _targetElev = elev;
+            _targetElevKey = key;
+          }
         }
         if (needHere) {
           _hereElevAt = here;
@@ -172,7 +185,7 @@ class _GuidanceOverlayState extends ConsumerState<GuidanceOverlay> {
                       ),
                       style: const TextStyle(fontSize: 12),
                     ),
-                    Text(_elevationText(), style: const TextStyle(fontSize: 12)),
+                    Text(_elevationText(target), style: const TextStyle(fontSize: 12)),
                   ],
                 ],
               ),
@@ -221,8 +234,9 @@ class _GuidanceOverlayState extends ConsumerState<GuidanceOverlay> {
     );
   }
 
-  String _elevationText() {
-    final a = _hereElev, b = _targetElev;
+  String _elevationText(GuidanceTarget target) {
+    final a = _hereElev;
+    final b = _targetElevKey == _targetKey(target) ? _targetElev : null;
     if (a == null || b == null) return t.guidance.elevationUnknown;
     final d = b - a;
     if (d.abs() < 1) return t.guidance.elevationLevel;

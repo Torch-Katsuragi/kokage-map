@@ -801,11 +801,44 @@ class AttributeTableController extends ChangeNotifier {
     final sqlType = columnSqlType(columnName);
     if (isIntegerSqlType(sqlType)) return _numberColumnType();
     if (isNumericSqlType(sqlType)) return _numberColumnType(real: true);
-    if (sqlType.contains('DATE') || sqlType.contains('TIMESTAMP')) {
-      return TrinaColumnType.date();
-    }
+    // 日付の列も書式は最初に当てない（当てると 2026/10/01 や自由な文字は (NULL)、
+    // QGIS が DATETIME に書いた時刻は日付だけになる）。マスは書いてある値をそのまま見せ、
+    // 選んだ日付は [storedValueFor] で列の形に直して書く
+    if (_isDateTimeSqlType(sqlType)) return TrinaColumnType.dateTime(applyFormatOnInit: false);
+    if (_isDateSqlType(sqlType)) return TrinaColumnType.date(applyFormatOnInit: false);
     return TrinaColumnType.text();
   }
+
+  static bool _isDateTimeSqlType(String sqlType) => sqlType.contains('DATETIME') || sqlType.contains('TIMESTAMP');
+  static bool _isDateSqlType(String sqlType) => sqlType.contains('DATE') || sqlType.contains('TIMESTAMP');
+
+  /// 表で入れた値を列に書く形にする。日付・日時の列は、表の日付選び（`yyyy-MM-dd` / `yyyy-MM-dd HH:mm`）の値を
+  /// DATE は `yyyy-MM-dd`、DATETIME は UTC の ISO 8601（Z つき）にする（QGIS・GeoPackage の決まり）。
+  /// 日付と読めない値・ほかの列はそのまま
+  Object? storedValueFor(String field, Object? value) {
+    final sqlType = columnSqlType(field);
+    if (value is! String || !_isDateSqlType(sqlType)) return value;
+    final d = parseLooseDate(value);
+    if (d == null) return value;
+    return storeDateValue(d, sqlType, _qgisForm?[field]);
+  }
+
+  /// 日付・日時の文字を読む（ISO 8601 のほか、`2026/10/01`・`2026.10.01 9:00` のような区切りも）。読めなければ null
+  static DateTime? parseLooseDate(String text) {
+    final s = text.trim();
+    if (s.isEmpty) return null;
+    final iso = DateTime.tryParse(s);
+    if (iso != null) return iso;
+    final m = _looseDate.firstMatch(s);
+    if (m == null) return null;
+    int? g(int i) => m.group(i) == null ? null : int.parse(m.group(i)!);
+    final (month, day) = (g(2)!, g(3)!);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return DateTime(g(1)!, month, day, g(4) ?? 0, g(5) ?? 0, g(6) ?? 0);
+  }
+
+  static final _looseDate =
+      RegExp(r'^(\d{4})[/.\-](\d{1,2})[/.\-](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$');
 
   double _getColumnWidth(String columnName) {
     final lowerName = columnName.toLowerCase();
@@ -858,12 +891,13 @@ class AttributeTableController extends ChangeNotifier {
     final field = _sortField;
     if (field == null) return _displayFeatures;
     return _orderedCache ??= () {
+      final isDate = _isDateSqlType(columnSqlType(field));
       final keyed = [
         for (var i = 0; i < _displayFeatures.length; i++)
           (i, _displayFeatures[i], _cellValue(_displayFeatures[i], field)),
       ];
       keyed.sort((a, b) {
-        final c = _compareCellValues(a.$3, b.$3);
+        final c = _compareCellValues(a.$3, b.$3, isDate: isDate);
         if (c != 0) return _sortDescending ? -c : c;
         return a.$1.compareTo(b.$1); // 同じ値は読んだ順のまま
       });
@@ -871,11 +905,16 @@ class AttributeTableController extends ChangeNotifier {
     }();
   }
 
-  /// 並べ替えの比較。数どうしは数で、ほかは文字で比べる。空は小さい側
-  static int _compareCellValues(Object? a, Object? b) {
+  /// 並べ替えの比較。数どうしは数で、日付の列で両方日付と読めれば日付で、ほかは文字で比べる。空は小さい側
+  static int _compareCellValues(Object? a, Object? b, {bool isDate = false}) {
     final aEmpty = a == null || a == '';
     final bEmpty = b == null || b == '';
     if (aEmpty || bEmpty) return aEmpty == bEmpty ? 0 : (aEmpty ? -1 : 1);
+    if (isDate) {
+      final ad = parseLooseDate('$a');
+      final bd = parseLooseDate('$b');
+      if (ad != null && bd != null) return ad.compareTo(bd);
+    }
     final an = a is num ? a : num.tryParse('$a');
     final bn = b is num ? b : num.tryParse('$b');
     if (an != null && bn != null) return an.compareTo(bn);

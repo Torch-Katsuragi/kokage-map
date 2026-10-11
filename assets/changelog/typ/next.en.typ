@@ -34,7 +34,7 @@
   [First sync after reinstalling overwrote files present on both sides with older cloud copies; the newer side is now chosen, with a warning],
   [Sync uploaded to the top of Drive when the file's folder could not be found],
   [Attribute table copy covered only the first page; rows per page can be chosen and sorting covers all rows],
-  [Attribute table filter indicator and empty numeric cells shown as 0, and full-width digits in the edit panel],
+  [Attribute table filter indicator, empty numeric cells shown as 0 and date values shown as (NULL) or date only, and full-width digits in the edit panel],
   [Per-point records of GPS-surveyed lines and polygons were dropped],
   [KMZ whose doc.kml only links (NetworkLink) to other KML could not be opened; each linked KML inside becomes a layer],
   [A file that failed to download from Drive was later overwritten in the cloud by the device's older copy],
@@ -43,6 +43,7 @@
   [A layer set back to Single symbol in QGIS stayed categorized after reading back],
   [Deleting a feature right after editing it kept later attribute edits in that gpkg from being saved],
   [Web: reloading the page signed you out of Drive; within about an hour it now stays signed in in the same tab],
+  [Track extraction could show and save the previous date's points after switching dates quickly],
 )
 
 #fixes(

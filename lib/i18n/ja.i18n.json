@@ -730,6 +730,8 @@
     "exportOptions": "書き出しの設定",
     "includeRowNumber": "行番号を含める",
     "includeRowNumberDesc": "ROW_NUM列を追加（属性テーブルの#と同じ）",
+    "includeGnssQuality": "GNSS の品質を列に",
+    "includeGnssQualityDesc": "GPS 測量の測位の種類・衛星数・精度・平均回数（gnss_fix・gnss_sats・gnss_hacc・gnss_avg_n）。線・面は頂点で最も悪い値",
     "crsTitle": "座標参照系 (CRS)",
     "crsKeep": "元のまま",
     "crsWgs84Only": "$format は形式の決まりで WGS 84（EPSG:4326）に変換して書き出します",

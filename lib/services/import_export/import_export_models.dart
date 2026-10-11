@@ -99,8 +99,13 @@ class ExportOptions {
   /// 行番号の列（ROW_NUM。属性テーブルの # と同じ、主キー順に 1 から）を足すか
   final bool includeRowNumber;
 
+  /// GPS 測量の品質（kmaps_metadata の記録）を列に広げるか（gnss_fix・gnss_sats・gnss_hacc・gnss_avg_n）。
+  /// 竣工検査などに出す用。線・面は頂点の中で最も悪い値
+  final bool includeGnssQuality;
+
   const ExportOptions({
     this.targetCrs,
     this.includeRowNumber = false,
+    this.includeGnssQuality = false,
   });
 }

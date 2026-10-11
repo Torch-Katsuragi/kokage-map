@@ -182,6 +182,60 @@ void main() {
     expect(firstLayer(info)['geometryFields'], isNotEmpty);
   }, skip: skip);
 
+  test('GNSS の品質: 測量の記録を列に広げる（線は頂点で最も悪い値、記録なし・壊れた JSON は空）', () async {
+    final path = p.join(proj, 'q.gpkg');
+    final g = GeoPackageFile([p.basename(path)], absolutePath: path);
+    String meta(List<Map<String, dynamic>?> qualities) => jsonEncode({
+          'drawing_points': [
+            for (final q in qualities) q == null ? {'data_source': 'pen_tool'} : {'quality': q},
+          ],
+        });
+    await g.addLayer('pts', GeometryType.point);
+    await g.addAttributeColumns('pts', {'name': 'TEXT', 'kmaps_metadata': 'TEXT'});
+    await g.addPointsBatch('pts', [
+      {
+        'point': const LatLng(33.91, 135.97),
+        'name': 'rtk',
+        'kmaps_metadata': meta([
+          {'source': 'GNSS', 'fix': 'rtk_fixed', 'sats': 12, 'hacc': 0.02, 'avg_n': 10},
+        ]),
+      },
+      {'point': const LatLng(33.92, 135.98), 'name': 'none'},
+      {'point': const LatLng(33.93, 135.99), 'name': 'broken', 'kmaps_metadata': '{not json'},
+    ]);
+    await g.addLayer('lns', GeometryType.linestring);
+    await g.addAttributeColumns('lns', {'name': 'TEXT', 'kmaps_metadata': 'TEXT'});
+    await g.addLinesBatch('lns', [
+      {
+        'line': const [LatLng(33.90, 135.90), LatLng(33.91, 135.91), LatLng(33.92, 135.92)],
+        'name': 'mixed',
+        'kmaps_metadata': meta([
+          {'source': 'GNSS', 'fix': 'rtk_fixed', 'sats': 12, 'hacc': 0.02, 'avg_n': 10},
+          {'source': 'GNSS', 'fix': 'rtk_float', 'sats': 9, 'hacc': 0.08, 'avg_n': 5},
+          null,
+        ]),
+      },
+    ]);
+    await g.flushChanges();
+    await g.dispose();
+    final layers = await openLayers();
+    const options = ExportOptions(includeGnssQuality: true, includeRowNumber: true);
+
+    final pts = await features(await export(layers['pts']!, FileFormat.shapefile, options: options));
+    expect(featureValues(pts, 'name'), ['rtk', 'none', 'broken']);
+    expect(featureValues(pts, 'gnss_fix'), ['RTK FIX', null, null]);
+    expect(featureValues(pts, 'gnss_sats'), [12, null, null]);
+    expect(featureValues(pts, 'gnss_hacc'), [0.02, null, null]);
+    expect(featureValues(pts, 'gnss_avg_n'), [10, null, null]);
+    expect(featureValues(pts, 'ROW_NUM'), [1, 2, 3]);
+
+    final lns = await features(await export(layers['lns']!, FileFormat.geojson, options: options));
+    expect(featureValues(lns, 'gnss_fix'), ['RTK FLOAT']);
+    expect(featureValues(lns, 'gnss_sats'), [9]);
+    expect(featureValues(lns, 'gnss_hacc'), [0.08]);
+    expect(featureValues(lns, 'gnss_avg_n'), [5]);
+  }, skip: skip);
+
   test('平面直角（EPSG:6674）の gpkg → shp は 6674 のまま（.prj）、GeoJSON は 4326', () async {
     // 36N, 136.01E の点 1 つ（x = 901.5 m 東, y = 0.05 m 北）。gpkg_axis_order_test と同じもの
     File('test/fixtures/qgis_6674_point.gpkg').copySync(p.join(proj, 'q.gpkg'));

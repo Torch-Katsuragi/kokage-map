@@ -70,6 +70,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   // エクスポート設定
   FileFormat _exportFormat = FileFormat.shapefile;
   bool _includeRowNumber = false; // 初期値はオフ
+  bool _includeGnssQuality = false; // GPS 測量の品質を列に（初期値はオフ）
   EpsgDefinition? _selectedCrs = _lastUsedCrs; // 最後に使用したCRSを初期値に
   String _crsSearchQuery = ''; // CRS検索クエリ
 
@@ -198,6 +199,15 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                   value: _includeRowNumber,
                   onChanged: (value) {
                     setState(() => _includeRowNumber = value ?? false);
+                  },
+                ),
+              if (_exportFormat != FileFormat.dxf)
+                CheckboxListTile(
+                  title: Text(t.importExport.includeGnssQuality),
+                  subtitle: Text(t.importExport.includeGnssQualityDesc),
+                  value: _includeGnssQuality,
+                  onChanged: (value) {
+                    setState(() => _includeGnssQuality = value ?? false);
                   },
                 ),
               if (_exportFormat.wgs84Only)
@@ -448,6 +458,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       final exportOptions = ExportOptions(
         targetCrs: _exportFormat.wgs84Only ? null : _selectedCrs,
         includeRowNumber: _includeRowNumber && _exportFormat != FileFormat.dxf,
+        includeGnssQuality: _includeGnssQuality && _exportFormat != FileFormat.dxf,
       );
 
       final ext = _exportFormat.extension.replaceFirst('.', '');

@@ -93,7 +93,7 @@ void main() {
 
     test('測量の記録の 1 件（GpsSurveySample）から読む', () {
       final map = GpsSurveySample(
-        GpsInfo(
+        const GpsInfo(
           sourceType: GpsSourceType.external,
           selectedDevice: 'R1',
           latitude: 34.1,

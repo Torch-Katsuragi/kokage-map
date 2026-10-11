@@ -730,6 +730,8 @@
     "exportOptions": "Export options",
     "includeRowNumber": "Include Row Number",
     "includeRowNumberDesc": "Add ROW_NUM column (like # in attribute table)",
+    "includeGnssQuality": "Include GNSS quality",
+    "includeGnssQualityDesc": "GPS survey fix type, satellites, accuracy and averaging count (gnss_fix, gnss_sats, gnss_hacc, gnss_avg_n). Lines and polygons use the worst vertex",
     "crsTitle": "Coordinate Reference System (CRS)",
     "crsKeep": "unchanged",
     "crsWgs84Only": "$format is always written in WGS 84 (EPSG:4326), as the format requires",

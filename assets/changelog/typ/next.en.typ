@@ -39,6 +39,7 @@
   [KMZ whose doc.kml only links (NetworkLink) to other KML could not be opened; the linked KML inside become layers],
   [a file that failed to download from Drive was later overwritten in the cloud by the device's older copy],
   [selecting another layer while drawing made the autosave overwrite a different feature],
+  [Replace in the attribute table counted values it did not change (such as a different letter case)],
 )
 
 #fixes(

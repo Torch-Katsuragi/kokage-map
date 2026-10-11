@@ -35,6 +35,7 @@
 - KMZ files (such as those saved by Google Earth) whose doc.kml only holds links (NetworkLink) to other KML files could not be opened. Each linked KML inside the KMZ now becomes a layer, named after the linked file as in QGIS, and the file can be converted to gpkg. Links to URLs on the internet are not read
 - When some files failed to download while pulling from Drive, their sync records were dropped, and the next sync overwrote the newer cloud copy with the device's older copy. Files that fail to download now keep their previous record and are pulled on the next sync
 - When another layer was selected while drawing a line or polygon with the pen or GPS survey, the next autosave (every minute) replaced the drawing with the last feature of that layer, and continuing to draw overwrote that feature. Drawing now continues on the autosaved feature
+- Replace in the attribute table also counted values that differed only in letter case, or only resembled a search term containing % or _ (those values were not actually changed)
 
 ### Lighter
 

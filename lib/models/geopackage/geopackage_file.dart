@@ -576,10 +576,11 @@ class GeoPackageFile {
     if (sanitized.isEmpty) {
       throw Exception(t.services.invalidColumnName(name: columnName));
     }
+    // REPLACE と同じく大小を区別し、% や _ も文字として探す（LIKE だと置き換わらない行まで数えていた）
     final result = await db.rawUpdate(
       'UPDATE ${quoteIdent(tableName)} SET ${quoteIdent(sanitized)} = REPLACE(CAST(${quoteIdent(sanitized)} AS TEXT), ?, ?) '
-      'WHERE CAST(${quoteIdent(sanitized)} AS TEXT) LIKE ?',
-      [searchText, replaceText, '%$searchText%'],
+      'WHERE instr(CAST(${quoteIdent(sanitized)} AS TEXT), ?) > 0',
+      [searchText, replaceText, searchText],
     );
     return result;
   }

@@ -148,6 +148,9 @@ class CsvTable {
   }
 }
 
+/// CSV の欄 1 つを書く形にする（`,` `"` 改行を含むときだけ `"` で囲み、中の `"` は重ねる）
+String csvField(String s) => (s.contains(',') || s.contains('"') || s.contains('\n')) ? '"${s.replaceAll('"', '""')}"' : s;
+
 /// RFC 4180 の CSV を行と欄に分ける（`"` で囲んだ欄の中の `,` `""` 改行も読む）。区切りは `,`
 List<List<String>> parseCsvRecords(String text) {
   final records = <List<String>>[];

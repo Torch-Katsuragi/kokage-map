@@ -105,6 +105,24 @@ Pixel 9 で触ったフォルダを Drive から落として QGIS 4.2.2 で開�
 - [ ] `tally_plots`・`tally_trees`、GNSS の品質を列にした書き出し（gnss_fix など）、`kmaps_metadata` の列が開ける
 - [ ] KMZ を変換・書いた `.qgs` を開いて同じレイヤ名・件数
 
+### 8. メモリ・大きさ（profile 版と DevTools。n9/size-mem）
+
+profile 版（`flutter run --profile`、debug と同じ鍵なので上書きでよい）で、龍神村の森林簿（1.5 万面）のプロジェクトを開く。
+比べる元は [[docs/technical/performance#結果]] の 2026-10-06 の数字（PSS 1.21GB・GL mtrack 520〜590MB・Dart ヒープ約 340MB）。
+直した中身は [[docs/technical/performance#2026-10-12 大きさとメモリ（n9/size-mem）]]。
+
+- [ ] 地図を開いて落ち着いたら `dumpsys meminfo com.k_root.k_maps` の TOTAL PSS・GL mtrack と、DevTools → Memory の Dart ヒープを控える（前と同じ操作で）
+- [ ] 同じ段のまま西（か南）へ 5 分ほどパンし続ける → DevTools → Memory → Profile で `TerrainTile` の数が 40＋α で頭打ち、
+      Dart ヒープが増え続けない（前は捨てたタイルが隣の参照で数珠つなぎに残っていた）
+- [ ] 地図 → ホームへ戻る → DevTools で GC → `TerrainTile`・`_MapPageState` が 0 になる。地図を開いて読み込み中（くるくる中）にすぐ戻る、でも同じ。
+      戻った後にコンパス・GPS が動き続けていない（logcat・通知）
+- [ ] `adb shell am send-trim-memory com.k_root.k_maps RUNNING_LOW` → logcat に `[Memory] pressure`、GL mtrack が数十 MB 減る。地図の絵はそのまま、次のパンでタイルが読み直される
+- [ ] ホームボタンで裏に回して戻る → 地図の絵がそのまま、パンで灰色が長く残らない（裏に回ったときもタイル画像の控えを手放す）
+- [ ] 写真の地物を何枚か選び替える（情報パネルに写真が薄く敷かれる）→ DevTools → Memory の画像（`ImageCache`）で 1 枚が数 MB 以下。
+      写真ビューアで原寸を開いて閉じ、GC → 原寸が残らない（imageCache の上限 40MB）
+- [ ] 更新履歴の図解を古い版まで開いて、字が欠けていない（SVG の id を短くした）
+- [ ] 次の release で AAB を作り、Play Console →「アプリのサイズ」の arm64 のダウンロードサイズを前の版と比べる（見込み 約 −1.9MB）
+
 ## 次にやる（実装）
 
 - [ ] ルームのピンの残り: 「地物として保存」（gpkg へ写す）・ルーム通知のミュート・ピンの一覧
@@ -158,6 +176,13 @@ Pixel 9 で触ったフォルダを Drive から落として QGIS 4.2.2 で開�
         持っている。turf をやめて 1 通りにできれば大きく減るが、turf はアプリ中で使っているので作り直しが大きい
   - [ ] GL の残り（profile で地図を開いて 520〜590MB）: flutter_gpu の分は 15MB ほどで、残りは Impeller が抱えている分。
         perfetto の GPU メモリで内訳を取ってから削る
+  - [ ] 地形タイルのテクスチャ: 40 枚まで持ち、画面密度 2 以上の細かい段は 1 枚 1024²（4MB）。最悪 160MB。
+        GL の内訳を取ってから、枚数でなくテクスチャのバイト数で上限を切るか決める（安い端末で効く見込みが一番大きい）
+  - [ ] タイル画像の LRU（256 枚 ≒ 64MB）: メモリ不足・裏に回ったときは手放すようにした。常時の上限を 128 枚に下げるかは、パンの読み直しの体感と合わせて実機で
+  - [ ] 表の結合で読んだ CSV（`TableCache`）がアプリを閉じるまで残る。プロジェクトを切り替えたら `TableCache.clear()`（数 MB 級の表を結ぶ人が出たら）
+  - [ ] web: 使われない Lucide の太さ違いフォント 6 本（約 2.8MB）が web でも配られている（Android は build.gradle.kts で外した）。
+        web は起動時に FontManifest の全フォントを取りに行くので、`build/web` から外す手を（デプロイ手順に）足すか決める
+  - [ ] proj.db（10.5MB、APK 内で圧縮 1.9MB、初回に端末へ書き出す）。使う CRS だけに削れるが、利用者の任意の CRS を読むので削らない方向
 - [ ] web の fps 計測（Chrome を前面に）・GPU の無い web の純 Dart 経路の透視（眺めモード）
 - [ ] 選択・頂点の見た目を View（スタイルグループ）別にできない（View の順に描くのは 2026-10-06 に済み）
 

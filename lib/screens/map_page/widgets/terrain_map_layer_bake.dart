@@ -234,7 +234,12 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
       _overlayLoading.add(n.filePath);
       _loadOverlayImage(n).then((im) {
         _overlayLoading.remove(n.filePath);
-        if (im == null || !mounted) return;
+        if (im == null) return;
+        // 読んでいる間に地図が閉じた（原寸の画像なので GC を待たずに手放す）
+        if (!mounted) {
+          im.dispose();
+          return;
+        }
         _overlayImages[n.filePath] = im;
         _scheduleRetexture();
       });

@@ -86,6 +86,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         await layerStyleSettings.load();
         await terrainSettings.load();
         syncTerrainAppearance();
+        // 読み込み中に地図の画面が閉じていたら、聞き手を付けない（dispose で外し終わっているので、付けると画面ごと残る）
+        if (!mounted) return;
         layerStyleSettings.addListener(onLayerStyleChanged);
         await initializeProjectTree();
       }(),
@@ -157,8 +159,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         AppLogger.debug('[Init] updateFeatures error: $e');
       }
 
-      // AutoSyncServiceを起動（WiFi時に自動同期、conflict時はサブタイトル通知）
-      if (PlatformCapabilities.supportsDriveSyncStatusCheck) {
+      // AutoSyncServiceを起動（WiFi時に自動同期、conflict時はサブタイトル通知）。読み込み中に画面が閉じていたら起動しない
+      if (mounted && PlatformCapabilities.supportsDriveSyncStatusCheck) {
         unawaited(AutoSyncService.instance.start(
           root: rootNode,
           onStatusChanged: () => triggerSetState(() {}),
@@ -232,7 +234,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
     try {
       final compassStream = FlutterCompass.events;
-      if (compassStream == null) return;
+      // 初期化の途中で画面が閉じていたら購読しない（dispose の後に付けると 15〜60Hz で届き続ける）
+      if (compassStream == null || !mounted) return;
 
       compassSubscription = compassStream.listen((event) {
         if (!mounted || event.heading == null) return;
@@ -293,6 +296,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         await gpsManager.initialize();
       }
 
+      if (!mounted) return; // 初期化の途中で画面が閉じた（dispose の後に聞き手を付けない）
       // GPS管理サービスの更新を監視
       gpsManager.addListener(onGpsManagerUpdate);
 
@@ -365,6 +369,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
       // GpsHistoryRecorder を初期化（ハイブリッド方式）
       await gpsHistoryRecorder.initialize(globalPath, supportDir.path);
+      if (!mounted) return; // 初期化の途中で画面が閉じた（次に開いた地図の画面が記録を始める）
 
       // 軌跡の記録の設定（間隔・距離・飛び）。変えたら次の測位から効く
       _trackSettingsSubscription?.close();
@@ -493,7 +498,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// 全サービスの破棄処理
   void disposeAllServices() {
-    AutoSyncService.instance.stop();
+    AutoSyncService.instance.detach();
     gpsManager.removeListener(onGpsManagerUpdate);
     layerStyleSettings.removeListener(onLayerStyleChanged);
     gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);

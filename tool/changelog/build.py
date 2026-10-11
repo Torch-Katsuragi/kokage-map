@@ -43,6 +43,30 @@ def _shrink(svg: bytes) -> bytes:
     return _LONG_FLOAT.sub(r, svg)
 
 
+_ID_DEF = re.compile(rb'id="([A-Za-z_][\w-]*)"')
+_ID_USE = re.compile(rb'(id="|#)([A-Za-z_][\w-]*)(?=["\)])')
+
+
+def _short_ids(svg: bytes) -> bytes:
+    """Typst の id（字形ごとの `g` + 32 桁の 16 進など）を短い名前に付け替える。字形は 1 枚に数百あって
+    `<use xlink:href="#…">` で何度も引くので、圧縮後でも図解全体で約 16% 減る。中身（形・座標）は変えない。
+    付け替えるのはファイル内で `id="…"` と定義された名前だけ（`#ffffff` などの色はそのまま）"""
+    names = {}
+    for m in _ID_DEF.finditer(svg):
+        k = m.group(1)
+        if k not in names:
+            n, t = len(names), ""
+            while True:
+                t = "abcdefghijklmnopqrstuvwxyz"[n % 26] + t
+                n //= 26
+                if n == 0:
+                    break
+            names[k] = ("_" + t).encode()  # Typst の名前（g・r・16 進）と重ならない
+    if not names:
+        return svg
+    return _ID_USE.sub(lambda m: m.group(1) + names.get(m.group(2), m.group(2)), svg)
+
+
 def hero_title(src: pathlib.Path) -> str:
     """`#hero(版, [大きな一言], ...)` の一言を文字だけにして返す。アプリは畳んだ版の見出しに使う"""
     text = src.read_text(encoding="utf-8")
@@ -64,7 +88,7 @@ def build(src: pathlib.Path, preview: pathlib.Path | None) -> None:
     pages = typst.compile(str(src), root=str(BASE), format="svg")
     if not isinstance(pages, list):
         pages = [pages]
-    pages = [_shrink(p) for p in pages]
+    pages = [_short_ids(_shrink(p)) for p in pages]
     for old in OUT.glob(f"{src.stem}.*.svg"):
         old.unlink()
     chunks = []
@@ -99,7 +123,12 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("names", nargs="*")
     ap.add_argument("--preview", type=pathlib.Path)
+    ap.add_argument("--short-ids", action="store_true", help="書き出し済みの SVG の id だけ付け替える（Typst を回さない）")
     args = ap.parse_args()
+    if args.short_ids:
+        for svg in sorted(OUT.glob("*.svg")):
+            svg.write_bytes(_short_ids(svg.read_bytes()))
+        return
     sources = [SRC / f"{n}.typ" for n in args.names] if args.names else sorted(p for p in SRC.glob("*.*.typ"))
     OUT.mkdir(parents=True, exist_ok=True)
     for src in sources:

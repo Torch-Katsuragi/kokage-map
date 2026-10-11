@@ -52,8 +52,14 @@ import 'utils/app_navigator.dart';
 import 'utils/background_save_manager.dart';
 import 'widgets/debug_log_overlay.dart';
 
+/// 使っていない画像を残しておく上限（Flutter の既定は 100MB）。
+/// 写真ビューアで開いた原寸の写真（1200 万画素で約 46MB）は、閉じたら残さずに捨てる大きさにする。
+/// 縮図・アイコンはこの中に収まる。表示中の画像はこの上限に関係なく残る
+const _imageCacheBytes = 40 << 20;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  PaintingBinding.instance.imageCache.maximumSizeBytes = _imageCacheBytes;
   // 起動ルート（`/map?project=...&lat=...`）と、起動中に届く要求の受け口
   LaunchRequest.init();
   _setupErrorHandlers();

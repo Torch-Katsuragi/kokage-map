@@ -217,18 +217,23 @@ class TerrainTile {
     );
   }
 
-  /// 隣の状態を反映する。縁が変わったら true（ビルダーを作り直す必要あり）
-  TerrainTile? _eastRef, _northRef, _northEastRef;
+  /// 縁を借りた隣（同じ物かを見るだけ）。弱い参照で持つ: 強く持つと、[TerrainWorld.trim] で捨てた隣が
+  /// その隣を、さらにその隣を…と数珠つなぎに残り、パンを続けるほど捨てたタイルの標高とメッシュが溜まっていた
+  WeakReference<TerrainTile>? _eastRef, _northRef, _northEastRef;
 
+  static bool _same(TerrainTile? t, WeakReference<TerrainTile>? ref) => identical(t, ref?.target);
+  static WeakReference<TerrainTile>? _weak(TerrainTile? t) => t == null ? null : WeakReference(t);
+
+  /// 隣の状態を反映する。縁が変わったら true（ビルダーを作り直す必要あり）
   bool updateBorder(TerrainTile? east, TerrainTile? north, TerrainTile? northEast) {
     final mask = (east != null ? 1 : 0) | (north != null ? 2 : 0) | (northEast != null ? 4 : 0);
     // 隣が同じ物なら何もしない。隣が近似 → 本物に差し替わったときは同じ mask でも縁を借り直す
-    if (mask == borderMask && identical(east, _eastRef) && identical(north, _northRef) && identical(northEast, _northEastRef)) {
+    if (mask == borderMask && _same(east, _eastRef) && _same(north, _northRef) && _same(northEast, _northEastRef)) {
       return false;
     }
-    _eastRef = east;
-    _northRef = north;
-    _northEastRef = northEast;
+    _eastRef = _weak(east);
+    _northRef = _weak(north);
+    _northEastRef = _weak(northEast);
     borderMask = mask;
     bordered = _makeBordered(east, north, northEast);
     builders.clear();
@@ -280,8 +285,12 @@ class TerrainTile {
     });
   }
 
+  /// 捨てるとき。絵に加えてメッシュ（1 段 数 MB）も手放す（どこかに参照が残っても抱えたままにしない）
   void dispose() {
     releaseImage();
+    builders.clear();
+    _building.clear();
+    _eastRef = _northRef = _northEastRef = null;
   }
 
   /// [tiles] の標高の範囲（タイルごとの最小・最大を畳む）。無ければ null
@@ -1092,6 +1101,14 @@ class TerrainWorld extends ChangeNotifier {
   /// ⚠ 以前は毎回 全タイルの全点を走査していて（50 枚で 340 万点）、タイル到着ごとの描き直しが
   /// 連鎖するとイベントループを数十秒独占した（Pixel 9 で実測）
   (double, double)? get heightRange => TerrainTile.heightRangeOf(_tiles.values);
+
+  /// 作り直せる控え（デコード済みタイル画像の LRU と DEM の LRU）を手放す。貼ってあるタイルはそのまま
+  /// （画面の絵は変わらない）。端末のメモリが足りないと OS に言われたとき・裏に回ったときに呼ぶ。
+  /// 次のパンで要るタイルはタイルキャッシュ（MBTiles）から読み直す
+  void releaseCaches() {
+    _imageCache.clear();
+    _demLru.clear();
+  }
 
   void clear() {
     for (final t in _tiles.values) {

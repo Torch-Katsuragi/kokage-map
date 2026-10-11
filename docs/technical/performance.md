@@ -86,6 +86,51 @@ tags: [technical, performance]
 - GPS: 長押し測量で点の一覧を毎回複製しない。水準器の 2 秒タイマーをやめ GPS の通知で組み直す
 - 位置共有: 他メンバーの位置が同じなら流さない（自分が送るたびに地図ページを組み直していた）
 
+## 2026-10-12 大きさとメモリ（n9/size-mem）
+
+PC だけで測れる分を直した。メモリは端末で測っていない（[[TODO#8. メモリ・大きさ（profile 版と DevTools。n9/size-mem）]]）。
+
+### APK の大きさ
+
+`flutter build apk --release --analyze-size --target-platform android-arm64` で測った（Play は AAB から ABI ごとに配るので、arm64 の分が利用者のダウンロード）。
+
+| 項目 | 前 | 後 |
+|---|---|---|
+| APK（この測り方。jniLibs の他 ABI の GDAL も入る） | 122,312,648 B | 120,368,746 B（−1.94MB） |
+| `flutter_assets`（圧縮後） | 約 7.2MB | 5.3MB |
+| 更新履歴の図解 SVG（270 枚・圧縮後） | 3.31MB | 2.75MB |
+
+arm64 の中身（圧縮後）: libgdal 20.1MB・libapp（Dart AOT）19.1MB・libflutter 11.7MB・libbarhopper（QR 読み取り）4.9MB・
+libgeodiff 2.8MB・libsqlite3 1.7MB・proj.db 1.9MB（元 10.5MB）・dex 2.3MB。.so は `Stored`（圧縮せず APK に置き、端末で展開しない）。
+
+- **使われないフォント**: trina_grid → shadcn_ui → lucide_icons_flutter が太さ違いの Lucide（`Lucide100`〜`600`、計 2.8MB・圧縮後 1.37MB）を
+  宣言している。アプリの Dart コードはこのファミリを引かない（libapp.so にファミリ名が無いのを確かめた）。アイコンの刈り込みは
+  使われたファミリだけを見るので、丸ごと入っていた。`android/app/build.gradle.kts` で `copyFlutterAssets*` から外し、
+  `FontManifest.json` からも消す。web には効いていない（TODO）
+- **図解の SVG の id**: Typst は字形ごとに `g` + 32 桁の 16 進の id を振り、`<use>` で何度も引く。`tool/changelog/build.py` の
+  `_short_ids` で短い名前に付け替える（形・座標は変えない。vector_graphics の符号化結果がバイト単位で同じなのを確かめた）。
+  既にある SVG は `python tool/changelog/build.py --short-ids` で付け替えた。参照切れはテスト（`changelog_figure_test`）で見る
+
+触らなかったもの:
+
+- ネイティブの .so はどれも strip 済み（`file` で確認）。GDAL の機能を削るのは別の話
+- proj.db: 利用者の任意の CRS を読むので削らない
+- x86_64: 一部の Chromebook が要る。Play は ABI ごとに配るので arm64 の利用者のダウンロードには乗らない
+- Geist（shadcn_ui のフォント、計 340KB）は AOT に名前があり、使われうるので残した
+- mlkit の QR モデル（860KB）・barhopper: QR の読み取りに要る
+
+### メモリ
+
+| 直したこと | 見込み |
+|---|---|
+| 地形タイルが縁を借りた隣を強く持っていた。`trim` で捨てたタイルが隣の参照で数珠つなぎに残り、同じ段でパンし続けるほど標高（約 0.5MB）とメッシュ（1 段 数 MB）が溜まっていた。弱い参照にし、`dispose` でメッシュも手放す | 長いパンで 1 枚 1〜5MB × 捨てた枚数（上限なし → 40 枚＋α） |
+| 地図の初期化（await の途中）で画面が閉じると、閉じた後に聞き手・コンパスの購読・GPS の開始・自動同期の起動が付き、画面ごと残っていた。各所で `mounted` を見る | 開きかけで戻るたびに地図の画面 1 つ分（数十〜数百 MB） |
+| 自動同期が閉じた地図の画面の呼び戻しを次に開くまで持っていた。画面を閉じたら `AutoSyncService.detach()` | 画面 1 つ分（次に開くまで） |
+| OS がメモリ不足を知らせたとき（`didHaveMemoryPressure`）・裏に回ったときに、タイル画像の LRU（最大 64MB）と DEM の LRU を手放す。貼ってあるタイルは残すので絵は変わらない | 最大 約 70MB（裏にいる間に落とされにくく） |
+| 情報パネルに薄く敷く写真を原寸でデコードしていた（1200 万画素で約 48MB、閉じた後も imageCache に残る）。パネルの長辺 × 画面密度（上限 2048px）に縮めてデコード | 1 枚 48MB → 数 MB |
+| Flutter の imageCache の上限を 100MB → 40MB（`main.dart` の `_imageCacheBytes`）。原寸の写真は閉じたら残さない。表示中の画像は上限に関係ない | 最大 60MB |
+| タイルのデコードのコーデック、読み込み中に地図が閉じたオーバーレイ画像を、GC を待たずに手放す | 小 |
+
 ## 残り
 
 TODO.md の「メモリ削減の残り」。Dart のヒープ（turf と geobase の二重持ち）と、Impeller が抱える GL の内訳。

@@ -85,3 +85,16 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// 使われないフォントを APK に入れない（約 2.8MB・圧縮後 1.4MB。docs/technical/performance.md「APK の大きさ」）。
+// trina_grid → shadcn_ui → lucide_icons_flutter が太さ違いの Lucide（Lucide100〜600）を 6 本宣言しているが、
+// アプリの Dart コードはこのファミリを 1 度も引かない（libapp.so に名前が無い）。アイコンの木の刈り込みは
+// 使われたファミリしか見ないので、丸ごと入っていた。ファイルを外し、FontManifest.json からも消す。
+// 使う日が来たら（LucideIcons の太さ違いを使ったら）ここを消す
+val unusedFontFamilies = Regex("""\{"family":"packages/lucide_icons_flutter/Lucide\d00","fonts":\[[^\]]*\]\},?""")
+tasks.withType<Copy>().matching { it.name.startsWith("copyFlutterAssets") }.configureEach {
+    exclude("**/packages/lucide_icons_flutter/assets/build_font/**")
+    filesMatching("**/FontManifest.json") {
+        filter { line -> line.replace(unusedFontFamilies, "").replace(",]", "]") }
+    }
+}

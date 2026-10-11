@@ -28,6 +28,7 @@ import '../models/nodes/folder_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/global_folder_node.dart';
 import '../models/nodes/image_node.dart';
+import '../models/nodes/layer_node.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/sys_node.dart';
 import '../services/google_drive/index.dart';
@@ -138,6 +139,7 @@ class LayerDrawerService {
     required String projectRootDir,
   }) async {
     final oldPath = node.getAbsoluteFilePath();
+    final oldName = node.name;
     final newFileName = await node.rename(
       newName,
       projectRootDir: projectRootDir,
@@ -149,8 +151,50 @@ class LayerDrawerService {
         p.join(p.dirname(oldPath), newFileName),
       );
     }
+    // フォルダ設定の鍵（可視性・スタイル・View・属性フォーム・写真の列・結合）を新しい名前へ移す。
+    // 移さないと改名で描き分けや結合が外れる
+    final folder = node.parent;
+    final folderPath = folder is FolderNode ? folder.getAbsoluteFilePath() : null;
+    if (folder is FolderNode && folderPath != null && oldName != newFileName) {
+      await KMetaService.instance.renameGeoPackageKeys(folderPath, oldName: oldName, newName: newFileName);
+      folder.invalidateMetaCache();
+    }
     await node.parent?.updateChildren();
     return newFileName;
+  }
+
+  // ---------- レイヤ ----------
+
+  /// gpkg の中のレイヤを改名し、フォルダ設定の鍵（`<gpkg>/<レイヤ>[/…]`）も新しい名前へ移す
+  static Future<void> renameLayer(LayerNode node, String newName) async {
+    final gpkgNode = node.geoPackageNode;
+    final gpkgName = gpkgNode.name;
+    final oldName = node.layerName;
+    final folder = node.folderNode;
+    await node.geoPackageFile.renameLayer(oldName, newName);
+    final folderPath = folder?.getAbsoluteFilePath();
+    if (folder != null && folderPath != null) {
+      await KMetaService.instance.renameGeoPackageKeys(
+        folderPath,
+        oldName: gpkgName,
+        newName: gpkgName,
+        layerNames: {oldName: newName},
+      );
+      folder.invalidateMetaCache();
+    }
+    await gpkgNode.updateChildren();
+  }
+
+  /// レイヤを消し（gpkg の表ごと）、フォルダ設定からそのレイヤの鍵を落とす
+  static Future<void> deleteLayer(LayerNode node) async {
+    final folder = node.folderNode;
+    final folderPath = folder?.getAbsoluteFilePath();
+    final layerKey = node.layerKey;
+    await node.dispose();
+    if (folder != null && folderPath != null) {
+      await KMetaService.instance.forgetLayer(folderPath, layerKey);
+      folder.invalidateMetaCache();
+    }
   }
 
   // ---------- 写真 ----------

@@ -416,9 +416,37 @@ class QgsProjectBuilder {
   }
 
   /// 読み取り専用レイヤの `<provider encoding>`。`.cpg` も DBF の LDID も無い shp はアプリと同じ CP932
-  /// （[[gdal#Android の実装で決めたこと（2026-10-09）]]）。ほかは GDAL が自分で決めるので UTF-8
-  static Future<String> externalProviderEncoding(ExternalLayerNode node) async =>
-      await ExternalSource.needsFallbackEncoding(node.sourcePath) ? shapefileFallbackEncoding : 'UTF-8';
+  /// （[[gdal#Android の実装で決めたこと（2026-10-09）]]）。ほかは UTF-8。
+  ///
+  /// ⚠ QGIS は `.qgs` の encoding を `.cpg` より優先する。`.cpg` が CP932 の shp に UTF-8 と書くと QGIS で化けた
+  /// （2026-10-11、QGIS 4.2.2 で確認）。`.cpg` があればその中身を、LDID が日本語（0x13）なら CP932 を書く
+  static Future<String> externalProviderEncoding(ExternalLayerNode node) async {
+    final path = node.sourcePath;
+    if (p.extension(path).toLowerCase() != '.shp') return 'UTF-8';
+    if (await ExternalSource.needsFallbackEncoding(path)) return shapefileFallbackEncoding;
+    final cpg = await ExternalSource.findSibling(path, '.cpg');
+    if (cpg != null) {
+      try {
+        final declared = (await fs.readAsString(cpg)).trim();
+        if (declared.isNotEmpty) return _qgisEncodingName(declared);
+      } catch (_) {}
+    }
+    final dbf = await ExternalSource.findSibling(path, '.dbf');
+    if (dbf != null) {
+      try {
+        final head = await fs.readAsBytes(dbf);
+        if (head.length > 29 && head[29] == 0x13) return shapefileFallbackEncoding;
+      } catch (_) {}
+    }
+    return 'UTF-8';
+  }
+
+  /// `.cpg` の書き方（`932` `SJIS` `UTF8` など）→ QGIS が受け付ける名前
+  static String _qgisEncodingName(String declared) => switch (declared.toUpperCase().replaceAll('-', '').replaceAll('_', '')) {
+    '932' || 'CP932' || 'SJIS' || 'SHIFTJIS' || 'WINDOWS31J' || 'MS932' => 'CP932',
+    'UTF8' || '65001' => 'UTF-8',
+    _ => declared,
+  };
 
   /// Layer は**グループ**になり、その下の View が QGIS のレイヤになる。
   Future<QgsTreeNode?> _convertLayer(

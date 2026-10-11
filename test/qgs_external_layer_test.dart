@@ -127,6 +127,20 @@ void main() {
     expect(xml, contains('encoding="CP932"'));
   }, skip: skip);
 
+  test('書く: .cpg のある shp は .cpg の文字コードを書く（QGIS は .qgs の encoding を .cpg より優先する）', () async {
+    await writePointShp(ExternalGdal.instance, p.join(proj, '小班'), [
+      (0.0, 0.0, {'name': 'スギ'}),
+    ], epsg: 'EPSG:6674');
+    await writePointShp(ExternalGdal.instance, p.join(proj, 'utf8'), [
+      (0.0, 0.0, {'name': 'スギ'}),
+    ], epsg: 'EPSG:6674', encoding: 'UTF-8');
+    final root = await loadTree();
+    final project = await const QgsProjectBuilder().build(root);
+    final byPath = {for (final l in project.layers) l.dataSourcePath: l.providerEncoding};
+    expect(byPath['./小班.shp'], 'CP932');
+    expect(byPath['./utf8.shp'], 'UTF-8');
+  }, skip: skip);
+
   test('読む: |layername= の無い shp・geometrytype の GeoJSON を読み取り専用レイヤに結びつける', () async {
     final root = await loadTree();
     final written = await const QgsProjectBuilder().writeTo(root);

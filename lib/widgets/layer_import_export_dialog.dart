@@ -139,7 +139,13 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
             Text(
               t.importExport.layerLabel(
                 name: widget.exportLayer.name,
-                type: '${widget.exportLayer.runtimeType}',
+                // 以前はクラス名（PolygonLayerNode）をそのまま出していた（2026-10-11 Pixel 9 で発見）
+                type: switch (widget.exportLayer) {
+                  PointLayerNode() => t.styleScreen.point,
+                  LineLayerNode() => t.styleScreen.line,
+                  PolygonLayerNode() => t.styleScreen.polygon,
+                  _ => '-',
+                },
               ),
               style: Theme.of(context).textTheme.bodySmall,
             ),

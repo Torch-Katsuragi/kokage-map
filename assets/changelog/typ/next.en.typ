@@ -19,6 +19,7 @@
 
 #fixes(
   "Fixed",
+  [Compass heading and TruPulse azimuths were magnetic, about 8° off; now corrected to true north (WMM2025)],
   [Overlay GeoTIFFs made by the app are now written with GDAL, the same library QGIS uses, so QGIS opens them without warnings],
   [First sync after reinstalling overwrote files present on both sides with older cloud copies; the newer side is now chosen, with a warning],
   [Sync uploaded to the top of Drive when the file's folder could not be found],

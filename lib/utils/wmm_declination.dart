@@ -15,12 +15,20 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 /// WMM2025 磁気偏角計算
 ///
-/// World Magnetic Model 2025 (有効期間: 2025-2029) の球面調和関数係数から
+/// World Magnetic Model 2025（有効期間 2025.0〜2030.0）の球面調和関数（12 次）から
 /// 磁気偏角を計算する。外部パッケージ依存なし (dart:math のみ)。
 ///
 /// 計算ロジックは geomagJS (public domain) / geomag Dart (MIT) をベースに、
 /// WMM2025 係数 (NOAA NCEI, public domain) をハードコードしたもの。
 /// ref: https://www.ncei.noaa.gov/products/world-magnetic-model
+///
+/// 係数の出典: https://www.ncei.noaa.gov/sites/default/files/2024-12/WMM2025COF.zip 内の WMM.COF
+/// （WMM-2025, 11/13/2024。SHA-256 dfa8597825af4e0b87ff4198a5b4fb661b3c49f4cd090cd0164e0259b075582f）。
+/// 下の表は 90 行すべてこのファイルと一致することを確かめてある（2026-10-11）。
+/// 計算は同梱の WMM2025_TestValues.txt で検算する（test/wmm_declination_test.dart）。
+///
+/// TODO(2030): WMM2025 は 2030.0 で期限が切れる。NOAA が 2029 年末ごろ出す WMM2030 の WMM.COF に差し替え、
+/// 係数表・[WmmDeclination.epoch]・[WmmDeclination.validUntil]・テスト値を更新する。docs/technical/gps-architecture.md
 library;
 
 import 'dart:math';
@@ -28,15 +36,30 @@ import 'dart:math';
 class WmmDeclination {
   static _WmmCalculator? _instance;
 
+  /// モデルの基準年（WMM.COF の 1 行目）
+  static const double epoch = _wmm2025Epoch;
+
+  /// モデルの有効期限（これを過ぎても計算はするが、誤差が増えていく）
+  static const double validUntil = 2030.0;
+
   /// 指定座標・日付の磁気偏角を計算する（度単位、東偏+/西偏-）
   ///
   /// [lat] 緯度 (-90 ~ +90)
   /// [lon] 経度 (-180 ~ +180)
   /// [date] 計算日（省略時は現在日時）
-  static double calculate(double lat, double lon, [DateTime? date]) {
+  static double calculate(double lat, double lon, [DateTime? date]) =>
+      atDecimalYear(lat, lon, decimalYear(date ?? DateTime.now()));
+
+  /// 小数年（例 2026.8）で指定して磁気偏角を計算する（度単位、東偏+/西偏-）
+  ///
+  /// [altitudeKm] は WGS84 楕円体からの高さ (km)
+  static double atDecimalYear(double lat, double lon, double year, {double altitudeKm = 0}) {
     _instance ??= _WmmCalculator(_wmm2025Coefficients);
-    return _instance!.calculate(lat, lon, 0, date);
+    return _instance!.calculate(lat, lon, altitudeKm, year);
   }
+
+  /// 日時を小数年にする（NOAA の計算機と同じく、年内の経過日数 ÷ その年の日数）
+  static double decimalYear(DateTime d) => _WmmCalculator._decimalDate(d);
 }
 
 // =========================================================
@@ -205,11 +228,10 @@ class _WmmCalculator {
     _k[1][1] = 0;
   }
 
-  double calculate(double glat, double glon, double altKm, DateTime? date) {
+  double calculate(double glat, double glon, double altKm, double time) {
     final fn = [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
     final fm = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
-    final time = _decimalDate(date ?? DateTime.now());
     final dt = time - _wmm2025Epoch;
 
     const a2 = _a * _a, b2 = _b * _b;

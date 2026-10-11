@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../core/fs/k_file_system.dart';
 import '../utils/app_logger.dart';
+import 'qgis_renderer.dart';
 
 /// 旧フォルダ設定のファイル名。2026-09-29 に `.qgs` へ移した。
 /// 残っていれば読んで `.qgs` に移す（[KMeta.loadFromFile]・QgsMetaStore.read）
@@ -53,6 +54,10 @@ class KMetaLayerStyle {
   /// スタイル画面はこのとき色・太さを編集させない（変えても QGIS に届かず、見た目が食い違うため）
   final String? qgisRenderer;
 
+  /// [qgisRenderer] の中身（分類の項目・段階の範囲・ルールとそれぞれのシンボル）。地物ごとの色はここから決める。
+  /// `.qgs` のレンダラを読んだ写しで、QGIS で保存し直されるたびに読み戻しが差し替える
+  final QgisRenderer? qgisRendererDef;
+
   const KMetaLayerStyle({
     this.pointSize,
     this.pointColor,
@@ -70,6 +75,7 @@ class KMetaLayerStyle {
     this.labelHaloColor,
     this.labelOpacity,
     this.qgisRenderer,
+    this.qgisRendererDef,
   });
 
   KMetaLayerStyle copyWith({
@@ -89,6 +95,7 @@ class KMetaLayerStyle {
     Color? labelHaloColor,
     double? labelOpacity,
     String? qgisRenderer,
+    QgisRenderer? qgisRendererDef,
   }) =>
       KMetaLayerStyle(
         pointSize: pointSize ?? this.pointSize,
@@ -107,6 +114,7 @@ class KMetaLayerStyle {
         labelHaloColor: labelHaloColor ?? this.labelHaloColor,
         labelOpacity: labelOpacity ?? this.labelOpacity,
         qgisRenderer: qgisRenderer ?? this.qgisRenderer,
+        qgisRendererDef: qgisRendererDef ?? this.qgisRendererDef,
       );
 
   /// JSONからパース
@@ -128,6 +136,7 @@ class KMetaLayerStyle {
       labelHaloColor: _parseColor(json['labelHaloColor']),
       labelOpacity: (json['labelOpacity'] as num?)?.toDouble(),
       qgisRenderer: json['qgisRenderer'] as String?,
+      qgisRendererDef: QgisRenderer.tryFromJson(json['qgisRendererDef']),
     );
   }
 
@@ -149,6 +158,7 @@ class KMetaLayerStyle {
     if (labelHaloColor != null) 'labelHaloColor': _colorToHex(labelHaloColor!),
     if (labelOpacity != null) 'labelOpacity': labelOpacity,
     if (qgisRenderer != null) 'qgisRenderer': qgisRenderer,
+    if (qgisRendererDef != null) 'qgisRendererDef': qgisRendererDef!.toJson(),
   };
 
   /// 親スタイルとマージ（子の設定が優先）
@@ -171,6 +181,8 @@ class KMetaLayerStyle {
       labelHaloColor: labelHaloColor ?? parent.labelHaloColor,
       labelOpacity: labelOpacity ?? parent.labelOpacity,
       qgisRenderer: qgisRenderer ?? parent.qgisRenderer,
+      // 印と中身は組で持つ（子が印を持つなら子の中身。親の別のレンダラの中身を混ぜない）
+      qgisRendererDef: qgisRenderer != null ? qgisRendererDef : parent.qgisRendererDef,
     );
   }
 
@@ -191,7 +203,16 @@ class KMetaLayerStyle {
       labelColor == null &&
       labelHaloColor == null &&
       labelOpacity == null &&
-      qgisRenderer == null;
+      qgisRenderer == null &&
+      qgisRendererDef == null;
+
+  /// 描き分けの印と中身を外したもの（QGIS で単一シンボルに戻されたとき）
+  KMetaLayerStyle withoutQgisRenderer() {
+    final json = toJson()
+      ..remove('qgisRenderer')
+      ..remove('qgisRendererDef');
+    return KMetaLayerStyle.fromJson(json);
+  }
 }
 
 /// 可視性設定

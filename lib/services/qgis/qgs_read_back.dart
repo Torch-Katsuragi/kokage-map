@@ -62,6 +62,12 @@ class QgsReadBack {
 
   static final _hasQgisRenderer = RegExp('type="(categorizedSymbol|graduatedSymbol|RuleRenderer)"');
 
+  /// QGIS で属性フォームを設定した跡（編集ウィジェット・別名・既定値・制約の式・読み取り専用・配置）
+  static final _hasQgisForm = RegExp(
+    '<editWidget type="[A-Za-z]|<alias [^>]*name="[^"]|<default [^>]*expression="[^"]|'
+    '<constraint [^>]*exp="[^"]|<field editable="0"|<editorlayout>tablayout',
+  );
+
   /// [root] の `<dir名>.qgs`（無ければ旧 `project.qgs`）を見て、QGIS 側で保存されていれば取り込む。
   ///
   /// ツリーの子（gpkg とレイヤ）が読み込まれてから呼ぶこと。
@@ -149,6 +155,14 @@ class QgsReadBack {
           await const QgsImporter().backfillRendererDefs(path, root);
         } on Object catch (e) {
           AppLogger.debug('[QgsReadBack] 描き分けの補完に失敗: $e');
+        }
+      }
+      // 属性フォームの設定を持たないレイヤだけ補う（[QgsImporter.backfillForms]）
+      if (_hasQgisForm.hasMatch(xml)) {
+        try {
+          await const QgsImporter().backfillForms(path, root);
+        } on Object catch (e) {
+          AppLogger.debug('[QgsReadBack] 属性フォームの補完に失敗: $e');
         }
       }
       return null;

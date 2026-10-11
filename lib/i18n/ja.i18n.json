@@ -909,6 +909,17 @@
     "polygonType": "ポリゴン",
     "unknownType": "不明"
   },
+  "qgisForm": {
+    "notNull": "「$field」は必須です",
+    "unique": "「$field」の「$value」は他の地物と重なっています",
+    "expression": "「$field」: $desc",
+    "expressionNoDesc": "「$field」が条件 $exp を満たしていません",
+    "saveBlocked": "保存しませんでした（$reasons）",
+    "softWarning": "保存しました。確認してください（$reasons）",
+    "noValue": "（なし）",
+    "pickDate": "日付を選ぶ",
+    "clear": "消す"
+  },
   "featureEdit": {
     "title": "$kindを編集",
     "shapeTab": "形",

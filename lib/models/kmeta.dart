@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../core/fs/k_file_system.dart';
 import '../utils/app_logger.dart';
+import 'qgis_form.dart';
 import 'qgis_renderer.dart';
 
 /// 旧フォルダ設定のファイル名。2026-09-29 に `.qgs` へ移した。
@@ -744,6 +745,10 @@ class KMeta {
   /// そのときアプリは「既定のView」を1つだけ暗黙に持つ（[LayerNode] 参照）。
   final Map<String, List<KMetaView>> views;
 
+  /// QGIS の属性フォームの設定（レイヤキー → 設定）。`.qgs` の `<fieldConfiguration>` などを読んだ写しで、
+  /// `.qgs` の側には書き戻さない（QGIS の持ち物。[[docs/technical/qgis-interop#属性フォーム（編集ウィジェット・既定値・制約）]]）
+  final Map<String, QgisForm> forms;
+
   const KMeta({
     this.version = kMetaSchemaVersion,
     this.visibility = const KMetaVisibility(),
@@ -752,6 +757,7 @@ class KMeta {
     this.sync = const KMetaSync(),
     this.imageOverlays = const {},
     this.views = const {},
+    this.forms = const {},
   });
 
   /// 空のメタデータ
@@ -784,6 +790,12 @@ class KMeta {
       }
     }
 
+    final formsJson = json['forms'] as Map<String, dynamic>?;
+    final forms = <String, QgisForm>{
+      for (final e in formsJson?.entries ?? const <MapEntry<String, dynamic>>[])
+        e.key: ?QgisForm.tryFromJson(e.value),
+    };
+
     return KMeta(
       version: json['version'] as int? ?? kMetaSchemaVersion,
       visibility: KMetaVisibility.fromJson(
@@ -794,6 +806,7 @@ class KMeta {
       sync: KMetaSync.fromJson(json['sync'] as Map<String, dynamic>?),
       imageOverlays: overlays,
       views: views,
+      forms: forms,
     );
   }
 
@@ -814,6 +827,7 @@ class KMeta {
         (k, v) => MapEntry(k, [for (final view in v) view.toJson()]),
       );
     }
+    if (forms.isNotEmpty) json['forms'] = forms.map((k, v) => MapEntry(k, v.toJson()));
     return json;
   }
 
@@ -836,7 +850,7 @@ class KMeta {
   /// 空かどうか
   bool get isEmpty =>
       visibility.isEmpty && styles.isEmpty && layout.isEmpty && sync.isEmpty &&
-      imageOverlays.isEmpty && views.isEmpty;
+      imageOverlays.isEmpty && views.isEmpty && forms.isEmpty;
 
   /// レイヤのView定義。定義が無ければ空リスト（＝既定のView1枚とみなす側の責務）
   List<KMetaView> getViews(String layerKey) => views[layerKey] ?? const [];
@@ -867,6 +881,7 @@ class KMeta {
     KMetaSync? sync,
     Map<String, KMetaImageOverlay>? imageOverlays,
     Map<String, List<KMetaView>>? views,
+    Map<String, QgisForm>? forms,
   }) {
     return KMeta(
       version: version ?? this.version,
@@ -876,6 +891,7 @@ class KMeta {
       sync: sync ?? this.sync,
       imageOverlays: imageOverlays ?? this.imageOverlays,
       views: views ?? this.views,
+      forms: forms ?? this.forms,
     );
   }
 }

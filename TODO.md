@@ -194,12 +194,15 @@ Pixel 9 で触ったフォルダを Drive から落として QGIS 4.2.2 で開�
 
 挙動が変わるので触っていない。同じ中身の複製だけ寄せた（git log の refactor:）。
 
-- [ ] `Geodesic.distance` の収束しないときの退避先が latlong2 の Vincenty（同じく収束せず `StateError`）。退避になっていない
-- [ ] `GeometryCalc.calcPolygonCentroid`（turf の `centroid`）はリングの最後の座標を必ず飛ばす。閉じていないリングだと実在の頂点が落ちる
-- [ ] rtree の名前を `rtree_<表>_geom` と決め打ち（`spatial_index_manager`・`qgis_interop`）。ジオメトリ列が `geom` 以外の gpkg は編集のたびの索引更新が効かない（`GpkgIndexRepair` は実際の列名を読む）
-- [ ] 2 点間の距離が 3 系統: Vincenty（`Geodesic`・`NavigationMath`）、turf の球（R=6371008.8、`GeometryCalc.calcDistance`）、
-      独自の haversine（R=6371000、軌跡の切り出しダイアログ）。度↔m の換算も 111320 / 111000 / 110574 が混在
-- [ ] 属性テーブルの CSV 書き出しは BOM 無し（毎木集計の CSV は BOM 付き。Excel で化ける）。ファイル名にレイヤ名をそのまま使う
+- [ ] 属性テーブルの CSV 書き出しのファイル名にレイヤ名をそのまま使う（ファイル名に使えない文字を落としていない）
+- [ ] 形の列が `geom` 以外（GeoPandas の `geometry`・`the_geom` など）の gpkg を読めない・足せない。`FeatureRepository` が
+      `geom` 列を決め打ちしていて、形が読まれず（地物が出ない）、追加は `no column named geom` で失敗する（2026-10-12 に確認）。
+      rtree の名前は実際の列名で引くように直した（`gpkgRtreeTable`）が、読み書き本体は未対応。直すなら `gpkg_geometry_columns` の列名を
+      レイヤごとに引いて SELECT・INSERT・UPDATE に通す（`AS geom` で読むのが安い）
+- [ ] 同じ gpkg を別の `GeoPackageFile` で開き直す最中に、前のものの `dispose`（await されない）が共有の Database を閉じると、
+      開き直した側の初期化が `database_closed` で落ちる（sqflite の singleInstance で同じパスは 1 つの Database）。
+      `gps_history_recorder_test` の「落ちて raw に残った点」がこの間合いに乗っていて、rtree の名前引きで問い合わせが増えたときに落ちた
+      （名前引きを rtree の無い gpkg では 1 回に戻して通した）。閉じる側が、同じパスの接続が残っていれば閉じないようにするのが筋
 - [ ] 重複したまま残したもの（意味が少しずつ違う）: 全角→半角（検索・結合キー・数値欄の 3 種）、ファイル名の安全化（4 種）、
       重複しない名前（`_2` 型と ` 2` 型）、`.qgs` の `<Option>` 読み（3 種）、QGIS の色の読み（`_readColor` は黒に倒す・reader は null）、
       確認ダイアログ・文字入力ダイアログの手書き、通知センターへの `add` の手書き（約 30 箇所）

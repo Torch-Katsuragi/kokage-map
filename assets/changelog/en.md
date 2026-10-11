@@ -34,6 +34,8 @@
 - In the attribute fields of the feature edit panel, full-width digits typed into numeric columns (such as "１２．５") were not converted to half-width. They are now saved as half-width numbers, as in the attribute form
 - The per-point records (accuracy, time and so on) of lines and polygons taken by GPS survey were thrown away instead of saved. When there is such a record, the layer now gets a `kmaps_metadata` column (JSON stored as text, which QGIS opens as is) to keep it. The column is not shown in the attribute table or the edit panel. Drawing with the pen alone does not add the column
 - KMZ files (such as those saved by Google Earth) whose doc.kml only holds links (NetworkLink) to other KML files could not be opened. Each linked KML inside the KMZ now becomes a layer, named after the linked file as in QGIS, and the file can be converted to gpkg. Links to URLs on the internet are not read
+- CSV files saved with "Export CSV" in the attribute table showed garbled Japanese in Excel on Japanese Windows. A UTF-8 BOM is now added, as in the tree tally summary CSV
+- The scale bar of map PDFs was off by a few percent at large scales such as 1:500. Fixed. The length on the track extraction screen and the spread of GNSS fixes are now also measured on the WGS84 ellipsoid, like the measure tool and the info panel (the same values as QGIS ellipsoidal lengths)
 
 ### Lighter
 

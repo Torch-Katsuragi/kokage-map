@@ -37,6 +37,8 @@
   [Attribute table filter indicator and empty numeric cells shown as 0, and full-width digits in the edit panel],
   [Per-point records of GPS-surveyed lines and polygons were dropped],
   [KMZ whose doc.kml only links (NetworkLink) to other KML could not be opened; each linked KML inside becomes a layer],
+  [Attribute table CSV showed garbled Japanese in Excel; a UTF-8 BOM is now added],
+  [The map PDF scale bar was a few percent off at large scales; track length and GNSS spread are now measured on the ellipsoid too (same as QGIS)],
 )
 
 #fixes(

@@ -70,6 +70,7 @@ import '../../widgets/resizable_side_panel.dart';
 import 'map_page_state_base.dart';
 import 'mixins/index.dart';
 // Widgets
+import 'widgets/guidance_overlay.dart';
 import 'widgets/index.dart';
 import 'widgets/map_menu_button.dart';
 import 'widgets/party_controls.dart';
@@ -272,6 +273,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   @override
   void updateCurrentGpsInfo() {
     final info = gpsManager.currentInfo;
+    feedGuidance(info);
     final before = currentGpsInfo;
     // 表示に関わる値が同じなら組み立て直さない（フォアグラウンドサービスは同じ位置を毎秒送り直してくるので、
     // そのたびに地図ページ全体を組み立て直していた。2026-10-06）
@@ -575,6 +577,20 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         EditOverlay(project: latLngToOffset, cameraTick: cameraTickNotifier),
         _buildDrawingPreviewInfo(),
         if (!editing) _buildOffscreenLocationIndicator(),
+        // 地点への誘導の札（案内している間だけ中身が出る）。右上のコンパスと左上の読み込み表示を避けて上の中央に
+        if (!editing)
+          Positioned(
+            top: 8,
+            left: 56,
+            right: 64,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 360),
+                child: GuidanceOverlay(heading: headingNotifier, mapBearing: mapBearingNotifier),
+              ),
+            ),
+          ),
         const ToolNameFlash(),
       ],
     );

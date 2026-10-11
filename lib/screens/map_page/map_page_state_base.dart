@@ -33,6 +33,7 @@ import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
+import '../../providers/guidance_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../services/basemap_service.dart';
 import '../../services/gps_history_recorder.dart';
@@ -263,6 +264,25 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   // =============================================
   // ヘルパーメソッド
   // =============================================
+
+  /// 地点への誘導に今の位置を流す（GPS の更新ごと。新しいタイマーやストリームは持たない）。
+  /// GPS 管理サービスの位置（外部 GNSS も含む）を優先し、無ければ地図の現在位置
+  void feedGuidance([GpsInfo? info]) {
+    final gps = info ?? gpsManager.currentInfo;
+    final LatLng here;
+    double? accuracy;
+    if (gps.isActive) {
+      here = LatLng(gps.latitude!, gps.longitude!);
+      accuracy = gps.accuracy;
+    } else if (currentLocation case final loc?) {
+      here = loc;
+    } else {
+      return;
+    }
+    // 進行方向は歩いているときだけ（止まっていると GPS の方位は当てにならない）
+    final course = (gps.speed ?? 0) >= 0.5 ? gps.bearing : null;
+    ref.read(guidanceProvider.notifier).updatePosition(here, accuracy: accuracy, courseDeg: course);
+  }
 
   /// setStateのラッパー（Mixinから呼び出し用）
   void triggerSetState(VoidCallback fn) {

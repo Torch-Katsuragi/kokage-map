@@ -192,10 +192,14 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     final deviceStation = tool is DeviceTool ? tool.overlayStation : null;
     final headingDeg = widget.heading?.value;
     final headingKey = headingDeg == null ? null : (headingDeg / 5).round();
+    // 地点への誘導: 今の位置（GPS 管理サービスのもの。無ければ地図の現在位置）→ 目標の線
+    final guidance = ref.read(guidanceProvider);
+    final guideTo = guidance.target?.point;
+    final guideFrom = guideTo == null ? null : (guidance.here ?? loc);
     final dynamicKey = <Object?>[
       track.length, session, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview,
       overlayFrameKey, tool is OverlayTransformTool ? tool.rotationHandlePosition : null,
-      deviceLines.length, deviceStation, headingKey, tool.name,
+      deviceLines.length, deviceStation, headingKey, tool.name, guideFrom, guideTo,
     ];
     final key = <Object?>[...staticKey, ...dynamicKey];
     final cached = _scenes[cacheKey];
@@ -260,7 +264,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     if (dyn == null || !_sameKey(dyn.key, dynamicKey)) {
       dyn = _buildDynamic(dynamicKey, track, session, loc, dem, builder, clip,
           selectedOverlays: selectedOverlays, tool: tool, deviceLines: deviceLines, deviceStation: deviceStation,
-          headingDeg: headingDeg);
+          headingDeg: headingDeg, guideFrom: guideFrom, guideTo: guideTo);
       _dynamicScenes[cacheKey] = dyn;
     }
     // 静的な線・面はそのまま（リストと束の同一性を保つ → 描画側の投影キャッシュが効く）。動的な方は別に持つ
@@ -485,6 +489,8 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     List<geo.Feature<geo.LineString>> deviceLines = const [],
     LatLng? deviceStation,
     double? headingDeg,
+    LatLng? guideFrom,
+    LatLng? guideTo,
   }) {
     final lines = <LiftedPolyline>[];
     final polygons = <LiftedPolygon>[];
@@ -549,6 +555,22 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
         clipRect: clip,
       ),
     );
+    // 2.5 地点への誘導: 今の位置 → 目標の線（桃色）と目標の印（白い輪に桃色）
+    if (guideTo != null) {
+      if (guideFrom != null) {
+        add(
+          builder(const {}, const TerrainFeatureStyle(
+            lineColor: Color(0xE6D81B60), lineWidth: 3, fillColor: Color(0x00000000),
+            outlineColor: Color(0x00000000), outlineWidth: 0, pointColor: Color(0xFFD81B60), pointSize: 8,
+          ), '__no_label__').build(lines: [_lineFeature([guideFrom, guideTo])], clipRect: clip),
+        );
+      }
+      if (at(guideTo) case final o?) {
+        points
+          ..add(TerrainPoint(x: o.dx, y: o.dy, color: Colors.white, sizePx: 16))
+          ..add(TerrainPoint(x: o.dx, y: o.dy, color: const Color(0xFFD81B60), sizePx: 10));
+      }
+    }
     // 3. 現在位置（青）と端末の向き（画面上の 60° の扇。2D と同じ。描くのは painter の `_paintHeadingFan`）
     if (loc != null) {
       if (at(loc) case final o?) {

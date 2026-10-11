@@ -48,6 +48,7 @@ class IconMarkdownBuilder extends MarkdownElementBuilder {
     'select_all': Icons.select_all,
     'gps_fixed': Icons.gps_fixed,
     'transform': Icons.transform,
+    'near_me': Icons.near_me,
 
     // 一般UI
     'settings': Icons.settings,

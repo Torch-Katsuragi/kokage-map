@@ -52,6 +52,7 @@ import '../../../models/map_style_group.dart';
 import '../../../models/nodes/external_overlay_image_node.dart';
 import '../../../models/nodes/overlay_image_node.dart';
 import '../../../models/party/party_room.dart';
+import '../../../providers/guidance_providers.dart';
 import '../../../providers/party_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
@@ -691,12 +692,45 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     ref.read(currentToolProvider).onTap(d, widget.mapState);
   }
 
+  /// 長押しで「ここへ案内」を出すツール（描く・測るツールは長押しを自分で使うか、指を止めることがあるので外す）
+  static bool _longPressGuides(String toolName) => toolName == 'Pan' || toolName == 'Select';
+
+  /// 地図の長押し: その地点への「ここへ案内」を出す
+  Future<void> _onLongPressStart(LongPressStartDetails d) async {
+    final p = unproject(d.localPosition);
+    final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
+    if (p == null || overlay is! RenderBox) return;
+    final ok = await showMenu<bool>(
+      context: context,
+      position: RelativeRect.fromRect(d.globalPosition & const Size(1, 1), Offset.zero & overlay.size),
+      items: [
+        PopupMenuItem(
+          value: true,
+          child: Row(
+            children: [
+              Icon(Icons.near_me, size: 18, color: Colors.pink.shade700),
+              const SizedBox(width: 8),
+              Text(t.guidance.action),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (ok != true || !mounted) return;
+    ref.read(guidanceProvider.notifier).start(GuidanceTarget(
+          point: p,
+          label: '${t.guidance.mapPoint} ${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}',
+        ));
+  }
+
   // ── UI ──────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     ref.listen(partySessionProvider, (_, _) => _scheduleRefresh());
     ref.listen(currentToolProvider, (_, next) => _onToolChanged(next.name));
+    // 地点への誘導: 行き先・今の位置が変わったら線を引き直す
+    ref.listen(guidanceProvider.select((g) => (g.target?.point, g.here)), (_, _) => _scheduleRefresh());
     // チュートリアル: 章に入るたびに 2D・北が上に戻す（1 章で 3D にすると、次の章も斜めの眺めで始まっていた）
     ref.listen(tutorialProvider, (prev, s) {
       if (s == null || s.menu || s.index != 0) return;
@@ -704,7 +738,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       _resetToFlatNorth();
     });
     final desktop = kIsWeb || (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS);
-    final editing = ref.watch(currentToolProvider).name == 'Edit';
+    final toolName = ref.watch(currentToolProvider).name;
+    final editing = toolName == 'Edit';
     final toolbarLeft = MapLayout.resolve(ref.watch(mapLayoutPresetSettingProvider), MediaQuery.sizeOf(context)).toolbarLeft;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -730,6 +765,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
                 onScaleUpdate: _onScaleUpdate,
                 onScaleEnd: _onScaleEnd,
                 onTapUp: _onTapUp,
+                onLongPressStart: _longPressGuides(toolName) && !_penLock ? _onLongPressStart : null,
                 child: ClipRect(
                   child: ColoredBox(
                     // 最初に全面が揃うまでは透明にして下の 2D 地図を見せる（入った直後の白い一瞬を消す）

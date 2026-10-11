@@ -1,6 +1,7 @@
 // 文例は LTI TruPulse 360 User's Manual 4th Edition, Section 8 p.43–45 の Examples から
 import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/devices/trupulse/trupulse_sentence.dart';
+import 'package:root_maps/devices/trupulse/trupulse_service.dart';
 
 void main() {
   group('HT（高さ）', () {
@@ -61,5 +62,17 @@ void main() {
   test(r'ID 応答や $OK は文として扱わない', () {
     expect(TruPulseSentence.parse(r'$PLTIT,ID,TP360 MAIN,2.42*74'), isNull);
     expect(TruPulseSentence.parse(r'$OK'), isNull);
+  });
+
+  test(r'読めない計測の文は $ID の問い合わせの応答にしない（応答は次の非計測の行）', () async {
+    final service = TruPulseService();
+    final answer = service.query('ID');
+    await Future<void>.delayed(const Duration(milliseconds: 150)); // sendCommand の待ちのあと
+    // 低品質ターゲットの HV（距離が空）とチェックサム違いの HT
+    service.debugReceiveLine(r'$PLTIT,HV,,,187.10,D,8.40,D,,*64');
+    service.debugReceiveLine(r'$PLTIT,HT,22.10,F*0D');
+    service.debugReceiveLine(r'$PLTIT,ID,TP360 MAIN,2.42*74');
+    expect(await answer, r'$PLTIT,ID,TP360 MAIN,2.42*74');
+    service.dispose();
   });
 }

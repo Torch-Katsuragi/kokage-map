@@ -64,6 +64,12 @@ sealed class TruPulseSentence {
     return null;
   }
 
+  /// 計測の文（HV / HT / ML）か。読めるかどうかは問わない（距離が空の HV・チェックサム違いも true）
+  static bool isMeasurementLine(String line) {
+    final s = line.trim();
+    return s.startsWith(r'$PLTIT,HV,') || s.startsWith(r'$PLTIT,HT,') || s.startsWith(r'$PLTIT,ML,');
+  }
+
   /// `$` と `*` の間の文字の XOR
   static int checksum(String body) {
     var c = 0;

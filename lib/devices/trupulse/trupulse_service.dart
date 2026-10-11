@@ -23,6 +23,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -229,6 +230,9 @@ class TruPulseService extends ExternalDeviceService {
       return;
     }
     if (sentence is TruPulseMissingLine) return;
+    // 読めなかった計測の文（低品質ターゲットで距離が空の HV・チェックサム違い）は問い合わせの応答ではない。
+    // 応答として渡すと `$ID` の問い合わせが計測の文を受け取ってしまう（ID の応答も `$PLTIT,ID,…` なので種類で見る）
+    if (TruPulseSentence.isMeasurementLine(line)) return;
 
     // 計測以外のレスポンス → pendingQuery
     AppLogger.debug('$_tag: response: $line');
@@ -255,6 +259,10 @@ class TruPulseService extends ExternalDeviceService {
   }
 
   void clearLog() => _log.clear();
+
+  /// テスト用: 受け取った 1 行を処理する
+  @visibleForTesting
+  void debugReceiveLine(String line) => _parseLine(line);
 
   @override
   void dispose() {

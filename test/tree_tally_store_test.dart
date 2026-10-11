@@ -95,4 +95,17 @@ void main() {
     expect(plot.radiusM, isNull);
     expect(plot.areaM2, closeTo(400, 1));
   });
+
+  test('立木の plot_id の前後の空白は標準地の番号とそろえる（集計・次の番号）', () async {
+    final layers = (await TreeTallyLayers.ensure(gpkgNode))!;
+    const center = LatLng(33.93, 135.97);
+    await layers.createCirclePlot('P1', center, circlePlotRadiusM(0.05));
+    await layers.addTreeAt(center, {'plot_id': 'P1', 'tree_no': 1, 'species': 'スギ', 'dbh_cm': 20.0});
+    await layers.addTreeAt(center, {'plot_id': ' P1 ', 'tree_no': 2, 'species': 'スギ', 'dbh_cm': 22.0});
+    expect(await layers.nextTreeNo('P1'), 3);
+    final tallies = await layers.summarize();
+    expect(tallies.map((p) => p.plotId), ['P1']);
+    expect(tallies.single.all.count, 2);
+    expect(tallies.single.all.stemsPerHa, closeTo(40, 1e-6));
+  });
 }

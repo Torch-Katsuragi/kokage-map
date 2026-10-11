@@ -174,11 +174,15 @@ class TreeTallyLayers {
     );
   }
 
+  /// 立木の plot_id。標準地の側（[TallyPlot.fromFeature]）と同じく前後の空白を落とす
+  /// （属性の編集で打ち直した「P1 」が標準地から外れ、面積 0 の別の行に数えられていた）
+  static String _plotIdOf(Map<String, dynamic> row) => '${row['plot_id'] ?? ''}'.trim();
+
   /// 標準地の次の立木番号
   Future<int> nextTreeNo(String plotId) async {
     var n = 0;
     for (final r in await _treeRows()) {
-      if ('${r['plot_id']}' == plotId) n = math.max(n, (r['tree_no'] as num?)?.toInt() ?? 0);
+      if (_plotIdOf(r) == plotId) n = math.max(n, (r['tree_no'] as num?)?.toInt() ?? 0);
     }
     return n + 1;
   }
@@ -207,7 +211,7 @@ class TreeTallyLayers {
     final plotList = await loadPlots();
     final byPlot = <String, List<TallyTree>>{};
     for (final r in await _treeRows()) {
-      byPlot.putIfAbsent('${r['plot_id'] ?? ''}', () => []).add(TallyTree(
+      byPlot.putIfAbsent(_plotIdOf(r), () => []).add(TallyTree(
             species: '${r['species'] ?? ''}'.trim(),
             dbhCm: (r['dbh_cm'] as num?)?.toDouble(),
             heightM: (r['height_m'] as num?)?.toDouble(),

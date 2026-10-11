@@ -46,6 +46,18 @@ void main() {
     }
   });
 
+  test('図解の SVG の参照（#id）はどれも同じファイルの中で定義されている', () {
+    // build.py は Typst の長い id を短い名前に付け替える（_short_ids）。付け替え漏れがあると字形が消える
+    final defs = RegExp('id="([^"]+)"');
+    final refs = RegExp(r'(?:href="#|url\(#)([^")]+)');
+    for (final f in Directory('assets/changelog/svg').listSync().whereType<File>().where((f) => f.path.endsWith('.svg'))) {
+      final s = f.readAsStringSync();
+      final defined = {for (final m in defs.allMatches(s)) m.group(1)};
+      final missing = {for (final m in refs.allMatches(s)) m.group(1)}.difference(defined);
+      expect(missing, isEmpty, reason: '${p.basename(f.path)} に定義の無い参照');
+    }
+  });
+
   testWidgets('全部の版を図の切れで並べる（文章は読み上げ用）', (tester) async {
     await LocaleSettings.setLocale(AppLocale.ja);
     SharedPreferences.setMockInitialValues({});

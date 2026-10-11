@@ -540,6 +540,7 @@ class RasterTileComposer {
             try {
               final codec = await ui.instantiateImageCodec(bytes);
               final frame = await codec.getNextFrame();
+              codec.dispose(); // 絵は frame が持つ。コーデックは GC の後始末を待たずに手放す
               image = frame.image;
             } catch (_) {
               continue; // 壊れたタイルは飛ばす

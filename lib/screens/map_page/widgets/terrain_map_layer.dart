@@ -144,7 +144,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         _TerrainGestures,
         _TerrainScenes,
         _TerrainBakes,
-        _TerrainCameraControl {
+        _TerrainCameraControl,
+        WidgetsBindingObserver {
   /// 入ったときの傾き。起動時は真上（ユーザー 2026-09-11 決定。2D と同じ絵で始まり、傾けたい人が傾ける）
   static const _defaultPitchDeg = 0.0;
 
@@ -152,7 +153,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// 寝かせるほど画面に掛かる地面が広がり、計画が段を下げて粗くなる（枚数は上限内に収まる）
   static const _maxPitchDeg = 75.0;
 
-  /// デコード済みタイル画像。3D を出入りしても使い回す（256 枚 ≒ 64MB 上限）
+  /// デコード済みタイル画像。3D を出入りしても使い回す（256 枚 ≒ 64MB 上限）。
+  /// OS からメモリが足りないと言われたとき・裏に回ったときは手放す（[didHaveMemoryPressure]）
   static final _tileImages = TileImageCache(capacity: 256); // 256² RGBA × 256 ≈ 64MB（細かい段は 1 タイル 16 枚 × 層）
 
   @override
@@ -289,6 +291,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     // web: 右ドラッグ = 回転なので、ブラウザのコンテキストメニューを地図の間だけ止める
     // （右ボタンを離すたびにメニューが出ていた。ユーザー 2026-09-12）
     if (kIsWeb) BrowserContextMenu.disableContextMenu();
+    WidgetsBinding.instance.addObserver(this);
     final cam = widget.controller.camera;
     final center = cam.center;
     _camera = TerrainCamera(
@@ -446,6 +449,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   @override
   void dispose() {
     if (kIsWeb) BrowserContextMenu.enableContextMenu();
+    WidgetsBinding.instance.removeObserver(this);
     _listenedDevice?.removeListener(_scheduleRefresh);
     widget.baseMapService.removeListener(_onBasemapChanged);
     widget.baseMapService.unregisterTileGenerator(BaseMapProvider.contourOverlay.id, _renderContourTile);
@@ -473,6 +477,20 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _gpu = null;
     _repaint.dispose();
     super.dispose();
+  }
+
+  /// Android の onTrimMemory など。作り直せる控え（タイル画像 最大約 64MB・DEM 約 6MB）を手放す。
+  /// 画面に貼ってあるタイルは残すので絵は変わらない（PaintingBinding の imageCache は Flutter が自分で空にする）
+  @override
+  void didHaveMemoryPressure() {
+    AppLogger.debug('[Memory] pressure: タイル画像と DEM の控えを手放す');
+    _world.releaseCaches();
+  }
+
+  /// 裏に回ったら同じく手放す（カメラなど別のアプリを使っている間に、OS に落とされにくくする）
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) _world.releaseCaches();
   }
 
   @override

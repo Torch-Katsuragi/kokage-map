@@ -120,6 +120,17 @@ class AutoSyncService {
     AppLogger.debug('[AutoSync] Stopped');
   }
 
+  /// 止めて、[start] で受け取った木と呼び戻しも手放す（地図の画面を閉じたとき）。
+  /// 呼び戻しは閉じた画面の State を抱えているので、残すと次に地図を開くまで画面ごと残る。
+  /// 設定で止めるだけ（[setEnabled]）のときは使わない（入れ直したらそのまま同期を再開する）
+  void detach() {
+    stop();
+    rootNode = null;
+    onSyncStatusChanged = null;
+    onTreeRefreshNeeded = null;
+    onMerged = null;
+  }
+
   /// 接続状態の監視
   void _listenConnectivity() {
     _connectivitySub?.cancel();

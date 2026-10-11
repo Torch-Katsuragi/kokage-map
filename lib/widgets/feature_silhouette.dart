@@ -51,12 +51,20 @@ class FeatureSilhouette extends StatelessWidget {
       return IgnorePointer(child: CustomPaint(painter: _ShapePainter(given, this.closed, color)));
     }
     if (f is PointFeatureNode) return _point(color);
-    // 写真は写真そのものを薄く敷く
+    // 写真は写真そのものを薄く敷く。パネルの幅に縮めてデコードする
+    // （1200 万画素をそのまま開くと 1 枚 約 48MB で、閉じた後も imageCache に残っていた）
     if (f is ImageNode && !kIsWeb) {
       return IgnorePointer(
         child: Opacity(
           opacity: 0.22,
-          child: Image.file(File(f.filePath), fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink()),
+          child: LayoutBuilder(
+            builder: (context, box) => Image.file(
+              File(f.filePath),
+              fit: BoxFit.cover,
+              cacheWidth: _decodeWidth(context, box),
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          ),
         ),
       );
     }
@@ -73,6 +81,14 @@ class FeatureSilhouette extends StatelessWidget {
     }
     if (parts.every((p) => p.length < 2)) return const SizedBox.shrink();
     return IgnorePointer(child: CustomPaint(painter: _ShapePainter(parts, closed, color)));
+  }
+
+  /// 写真をデコードする幅（物理 px）。cover で敷くので縦横の長い方に合わせる（縦長の写真でも足りる）。
+  /// 薄く敷くだけなので 2048 で頭打ち。幅が決まらない（無限）ときは縮めない
+  static int? _decodeWidth(BuildContext context, BoxConstraints box) {
+    final side = math.max(box.maxWidth, box.maxHeight);
+    if (!side.isFinite || side <= 0) return null;
+    return math.min(2048, (side * MediaQuery.devicePixelRatioOf(context)).ceil());
   }
 
   Widget _point(Color color) => IgnorePointer(

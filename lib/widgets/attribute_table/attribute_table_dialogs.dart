@@ -257,6 +257,7 @@ Future<void> showDuplicateFilteredDialog(
       for (final col in sourceColumns) {
         final name = col['name'] as String;
         final type = col['type'] as String;
+        // 元の形の列は getAttributeColumnInfo が除く。geom は新しいレイヤの形の列の名前なので足さない
         if (name.toLowerCase() != 'geom' &&
             name.toLowerCase() != 'fid' &&
             name.toLowerCase() != 'id') {

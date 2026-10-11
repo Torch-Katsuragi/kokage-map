@@ -225,9 +225,12 @@ class GeoPackageFile {
     skipPrimaryKey: skipPrimaryKey,
   );
 
-  /// テーブルのカラム名リストを取得
+  /// テーブルのカラム名リストを取得（形の列も含む）
   Future<List<String>> getTableColumns(String tableName) =>
       _schema.getTableColumns(tableName);
+
+  /// 形の列の名前（geom とは限らない。geometry・Shape など）。形の無い表は null
+  Future<String?> geometryColumn(String tableName) => _schema.geometryColumn(tableName);
 
   /// [name] と同じ列（英字の大小は区別しない）の表にある名前。無ければ null
   Future<String?> findColumn(String tableName, String name) => _schema.findColumn(tableName, name);
@@ -539,16 +542,10 @@ class GeoPackageFile {
     final patterns = [for (final f in forms) '%${f.replaceAllMapped(RegExp(r'[\\%_]'), (m) => '\\${m[0]}')}%'];
     final db = await _connection.getDatabase();
     final pk = await _schema.getPrimaryKeyColumn(tableName);
-    final geomCols = {
-      for (final r in await db.rawQuery(
-        'SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ? COLLATE NOCASE',
-        [tableName],
-      ))
-        (r['column_name'] as String).toLowerCase(),
-    };
+    final geomCol = (await _schema.geometryColumn(tableName))?.toLowerCase();
     final columns = [
       for (final c in await _schema.getTableColumns(tableName))
-        if (c != pk && !isSystemColumn(c) && !geomCols.contains(c.toLowerCase()) && c != 'geom') c,
+        if (c != pk && !isSystemColumn(c) && c.toLowerCase() != geomCol) c,
     ];
     if (columns.isEmpty) return [];
     final hay = columns.map((c) => "COALESCE(CAST(${quoteIdent(c)} AS TEXT), '')").join(' || char(31) || ');

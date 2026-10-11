@@ -111,6 +111,42 @@ class GeoPackageSchema {
     return 'rowid';
   }
 
+  /// 形の列の名前（表にある綴りのまま。`Shape` のように大文字を含むことがある）。形の無い表は null。
+  ///
+  /// 形の列は geom とは限らない。GDAL の既定と QGIS は geom だが、GeoPandas / Fiona は geometry、
+  /// ArcGIS Pro は Shape / SHAPE、PostGIS 由来は the_geom で書く。`gpkg_geometry_columns` から引く。
+  /// 登録の無い表は、以前と同じく geom という列があればそれを形の列とみなす
+  Future<String?> geometryColumn(String tableName) async {
+    final cache = _cache.geometryColumn;
+    if (cache.containsKey(tableName)) return cache[tableName];
+    final columns = await _columnNames(tableName);
+    if (columns.isEmpty) return null; // 表が無い（控えない）
+    String? registered;
+    try {
+      final db = await connection.getDatabase();
+      final rows = await db.rawQuery(
+        'SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ? COLLATE NOCASE',
+        [tableName],
+      );
+      if (rows.isNotEmpty) registered = rows.first['column_name'] as String?;
+    } catch (_) {
+      // gpkg_geometry_columns が無い
+    }
+    final want = (registered ?? 'geom').toLowerCase();
+    String? found;
+    for (final c in columns) {
+      if (c.toLowerCase() == want) {
+        found = c;
+        break;
+      }
+    }
+    return cache[tableName] = found ?? registered;
+  }
+
+  /// [column] が [tableName] の形の列か（大文字小文字は区別しない）
+  Future<bool> isGeometryColumn(String tableName, String column) async =>
+      (await geometryColumn(tableName))?.toLowerCase() == column.toLowerCase();
+
   /// 主キーで 1 行を選ぶ WHERE 句（値は `?`）
   Future<String> buildWhereClause(String tableName) async =>
       pkEquals(await getPrimaryKeyColumn(tableName));
@@ -123,9 +159,10 @@ class GeoPackageSchema {
     bool skipPrimaryKey = false,
   }) async {
     try {
-      // geom は属性データではないため常に除外
+      // 形の列は属性ではないので常に除く（名前は表ごと。geom という名前のふつうの列は残す）
+      final geomCol = (await geometryColumn(tableName))?.toLowerCase();
       var filteredColumns =
-          (await _columnNames(tableName)).where((c) => c != 'geom').toList();
+          (await _columnNames(tableName)).where((c) => c.toLowerCase() != geomCol).toList();
 
       // PRIMARY KEYをスキップ（属性テーブル表示用）
       if (skipPrimaryKey) {
@@ -231,10 +268,12 @@ class GeoPackageSchema {
     bool includeBuiltIn = false,
   }) async {
     try {
-      const builtInColumns = {'id', 'geom'};
+      // 組み込みの列: id と形の列（名前は表ごと）
+      final geomCol = (await geometryColumn(tableName))?.toLowerCase();
+      bool builtIn(String name) => name == 'id' || name.toLowerCase() == geomCol;
       return [
         for (final row in await tableInfo(tableName))
-          if (includeBuiltIn || !builtInColumns.contains(row['name']))
+          if (includeBuiltIn || !builtIn(row['name'] as String))
             {
               'name': row['name'] as String,
               'type': row['type'] as String,

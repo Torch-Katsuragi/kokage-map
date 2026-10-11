@@ -23,6 +23,7 @@ import 'package:root_maps/services/kmeta_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'support/foreign_geom_gpkg.dart';
 import 'support/gdal_host.dart';
 import 'support/gdal_scenarios.dart';
 
@@ -295,4 +296,27 @@ void main() {
     final info = await features(await export(layer, FileFormat.geojson));
     expect(featureValues(info, 'name').first, '直した杉');
   }, skip: skip);
+
+  // 形の列が geom 以外（GeoPandas の geometry・ArcGIS Pro の Shape）の gpkg も書き出せる。
+  // 行番号つき（-sql の SELECT *）でも形が形として出て、形の列が属性に混ざらない
+  for (final kind in ForeignGeomGpkg.all) {
+    test('形の列が ${kind.geomColumn} の gpkg を GeoJSON に（行番号つき・なし）', () async {
+      await kind.write(p.join(proj, 'foreign.gpkg'));
+      final layer = (await openLayers())[kind.table]!;
+      expect((await layer.geoPackageFile.getFeaturesWithGeometry(kind.table)), hasLength(2));
+      for (final options in const [ExportOptions(), ExportOptions(includeRowNumber: true)]) {
+        final out = await export(layer, FileFormat.geojson, options: options);
+        final json = jsonDecode(File(out).readAsStringSync()) as Map<String, dynamic>;
+        final fs = [for (final f in json['features'] as List) f as Map<String, dynamic>];
+        expect(fs, hasLength(2));
+        expect((fs.first['geometry'] as Map)['coordinates'], [closeTo(135.96, 1e-6), closeTo(33.93, 1e-6)]);
+        final props = fs.first['properties'] as Map<String, dynamic>;
+        expect(props['name'], 'a');
+        expect(props.keys, isNot(contains(kind.geomColumn)));
+        if (kind.extraColumns.containsKey('geom')) expect(props['geom'], 'geom-a');
+        if (options.includeRowNumber) expect(props['ROW_NUM'], 1);
+        await File(out).delete();
+      }
+    }, skip: skip);
+  }
 }

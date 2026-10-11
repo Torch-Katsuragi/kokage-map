@@ -662,7 +662,7 @@ class GeoPackageConnection {
   }
 }
 
-/// テーブルの構造の控え（`PRAGMA table_info` と主キー名）。
+/// テーブルの構造の控え（`PRAGMA table_info`・主キー名・形の列名）。
 ///
 /// 属性の保存やフィーチャの追加のたびに同じ PRAGMA を引いていたので控える。
 /// ⚠ 列やテーブルを変えたら必ず [clear] する（`GeoPackageSchema.invalidate`）。
@@ -673,8 +673,12 @@ class GpkgSchemaCache {
   /// テーブル名 → 主キーの列名（無ければ rowid）
   final Map<String, String> primaryKey = {};
 
+  /// テーブル名 → 形の列の名前（表にある綴り）。形の無い表は null
+  final Map<String, String?> geometryColumn = {};
+
   void clear() {
     tableInfo.clear();
     primaryKey.clear();
+    geometryColumn.clear();
   }
 }

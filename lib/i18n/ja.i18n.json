@@ -1535,6 +1535,39 @@
     "deleteAll": "$n 件を削除（長押し）",
     "deleted": "$n 件を削除しました"
   },
+  "gnssQuality": {
+    "label": "GNSS 品質",
+    "device": "GNSS(端末)",
+    "satellites": "${count} 衛星",
+    "averaged": "平均 ${count} 回",
+    "single": "単発",
+    "rejected": "除外 ${count} 回",
+    "sep": "・",
+    "unknown": "不明",
+    "vertices": "GNSS 測量 ${count}/${total} 点",
+    "worstAccuracy": "最悪 ±${value}",
+    "medianAccuracy": "中央値 ±${value}",
+    "worstFix": "最低 ${fix}",
+    "reason": {
+      "accuracy": "精度 ${value}（上限 ${limit}）",
+      "fix": "測位 ${value}（${limit} 以上が必要）",
+      "satellites": "衛星 ${value}（${limit} 以上が必要）"
+    },
+    "rejectedTitle": "条件を満たさない測位のため記録しませんでした",
+    "warnTitle": "条件を満たさない測位を記録しました",
+    "partlyRejected": "条件を満たさない ${count} 回を平均から外しました",
+    "longPressCount": "${count}点・除外 ${rejected}",
+    "settings": {
+      "title": "測位の品質（足切り）",
+      "description": "GPS 測量で、条件を満たさない測位を弾きます。指定しない条件は見ません。",
+      "maxAccuracy": "精度の上限",
+      "minFix": "測位の種類の下限",
+      "minSatellites": "衛星数の下限",
+      "none": "指定しない",
+      "strict": "満たさない測位は記録しない",
+      "strictDesc": "長押しの平均では満たさない回を外します。切ると記録して警告だけ出します"
+    }
+  },
   "gpsPanel": {
     "title": "現在位置",
     "status": "状態",

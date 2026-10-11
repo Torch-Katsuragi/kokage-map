@@ -438,6 +438,7 @@ class GpsManagerService extends ChangeNotifier {
       longitude: p?.longitude,
       altitude: p?.altitude,
       accuracy: p?.accuracy,
+      accuracySource: gnss?.accuracySource,
       speed: p?.speed,
       bearing: p?.bearing,
       timestamp: p?.timestamp,
@@ -538,6 +539,10 @@ class GpsManagerService extends ChangeNotifier {
   /// 測量していないときは 0（前の測量の点を数えない）
   int get continuousSurveyCount =>
       _isContinuousSurvey ? _continuousSurveyData.length : 0;
+
+  /// 連続測量でいちばん最近集めた点（測量していなければ null）
+  GpsSurveySample? get latestContinuousSample =>
+      _isContinuousSurvey ? _continuousSurveyData.lastOrNull : null;
 
   /// 連続測量の収集データ（測量の記録に書く形）
   List<Map<String, dynamic>> getContinuousSurveyData() =>

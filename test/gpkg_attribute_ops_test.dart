@@ -169,22 +169,22 @@ void main() {
       expect(await gpkg.getPrimaryKeyColumn('old'), 'id');
     });
 
-    test('主キーの無い表で fid 列があれば fid、id 列だけなら id', () async {
+    // GDAL と同じく、主キーが無ければ fid・id という名前の列があっても rowid を地物番号にする
+    test('主キーの無い表は fid・id 列があっても rowid', () async {
       await rawTable('CREATE TABLE f (fid INTEGER, geom BLOB)');
       await rawTable('CREATE TABLE i (id INTEGER, geom BLOB)');
-      expect(await gpkg.getPrimaryKeyColumn('f'), 'fid');
-      expect(await gpkg.getPrimaryKeyColumn('i'), 'id');
+      expect(await gpkg.getPrimaryKeyColumn('f'), 'rowid');
+      expect(await gpkg.getPrimaryKeyColumn('i'), 'rowid');
     });
 
-    test('主キーも fid も id も無い表は fid を足して行番号を写す', () async {
+    // 以前は fid 列を足して行番号を写していた（開いただけでファイルが変わる。2026-10-12）
+    test('主キーも fid も id も無い表は rowid を使い、列を足さない', () async {
       await rawTable('CREATE TABLE bare (geom BLOB, name TEXT)', [
         "INSERT INTO bare (name) VALUES ('a')",
         "INSERT INTO bare (name) VALUES ('b')",
       ]);
-      expect(await gpkg.getPrimaryKeyColumn('bare'), 'fid');
-      final rows = await (await gpkg.getDatabase()).rawQuery('SELECT fid, rowid AS r, name FROM bare ORDER BY rowid');
-      expect([for (final r in rows) r['fid']], [for (final r in rows) r['r']]);
-      expect(await gpkg.getTableColumns('bare'), contains('fid'));
+      expect(await gpkg.getPrimaryKeyColumn('bare'), 'rowid');
+      expect(await gpkg.getTableColumns('bare'), ['geom', 'name']);
     });
 
     test('主キーの列は属性表の列から外せる', () async {

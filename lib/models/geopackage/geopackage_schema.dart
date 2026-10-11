@@ -61,7 +61,7 @@ class GeoPackageSchema {
   ///
   /// Root Maps標準形式（新規作成）: fid INTEGER PRIMARY KEY AUTOINCREMENT（QGIS互換）
   /// 旧Root Maps形式: id INTEGER PRIMARY KEY AUTOINCREMENT（後方互換性のため対応）
-  /// PRIMARY KEYがない外部ファイル: fid を自動追加、または rowid フォールバック
+  /// PRIMARY KEYがない外部ファイル: rowid（表は変えない）
   Future<String> getPrimaryKeyColumn(String tableName) async {
     final cached = _cache.primaryKey[tableName];
     if (cached != null) return cached;
@@ -99,66 +99,16 @@ class GeoPackageSchema {
       return primaryKeyColumn;
     }
 
-    // PRIMARY KEYがない場合の処理
+    // PRIMARY KEYがない場合は rowid を使う（GDAL と同じ）。
+    // GDAL は「no integer primary key」として `_rowid_` を FID にし、fid・id という名前の列があっても
+    // ふつうの属性として扱う。QGIS で見える地物番号もこれと揃う。
+    // ⚠ ここで列を足したり値を書いたりしない。以前は fid 列を ALTER で足して rowid を写していたが、
+    //   開いただけで持ち主のファイルが変わり（Drive 同期ではこちらの変更として上がる）、
+    //   その後に足した行の fid は NULL のままだった（2026-10-12）
     AppLogger.debug(
-      '[GeoPackageSchema] ⚠️ 警告: テーブル "$tableName" にPRIMARY KEYが見つかりません！',
+      '[GeoPackageSchema] ℹ️ テーブル "$tableName" に主キーが無いので rowid を地物番号に使う（GDAL と同じ）',
     );
-    AppLogger.debug('[GeoPackageSchema] ⚠️ データが破損している可能性があります。');
-
-    final hasFidColumn = columns.any((col) => col['name'] == 'fid');
-    final hasIdColumn = columns.any((col) => col['name'] == 'id');
-    try {
-      final db = await connection.getDatabase();
-      // テーブルのレコード数をチェック
-      final countResult = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM ${quoteIdent(tableName)};',
-      );
-      final rowCount = countResult.first['count'] as int? ?? 0;
-
-      // QGIS互換性のため、fid カラムを優先的に使用・追加
-      if (!hasFidColumn && !hasIdColumn) {
-        if (rowCount > 10000) {
-          AppLogger.debug(
-            '[GeoPackageSchema] 🔧 fidカラムを自動追加します（$rowCount行のデータ、処理に時間がかかる場合があります）...',
-          );
-        } else {
-          AppLogger.debug(
-            '[GeoPackageSchema] 🔧 fidカラムを自動追加します（$rowCount行のデータ）...',
-          );
-        }
-
-        // fidカラムを追加（QGIS標準）
-        await db.execute('ALTER TABLE ${quoteIdent(tableName)} ADD COLUMN fid INTEGER;');
-        _cache.tableInfo.remove(tableName); // 列が増えた
-
-        // rowidから値をコピー
-        await db.execute('UPDATE ${quoteIdent(tableName)} SET fid = rowid;');
-
-        AppLogger.debug('[GeoPackageSchema] ✓ fidカラムを追加し、rowidから値をコピーしました。');
-        return 'fid';
-      } else if (hasFidColumn) {
-        AppLogger.debug(
-          '[GeoPackageSchema] ℹ️ fidカラムは存在しますが、PRIMARY KEYとして定義されていません。',
-        );
-        return 'fid';
-      } else {
-        AppLogger.debug(
-          '[GeoPackageSchema] ℹ️ idカラムは存在しますが、PRIMARY KEYとして定義されていません。',
-        );
-        return 'id';
-      }
-    } catch (e, stackTrace) {
-      AppLogger.debug('[GeoPackageSchema] ❌ エラー: PRIMARY KEY処理中に問題が発生しました: $e');
-      AppLogger.debug('[GeoPackageSchema] スタックトレース: $stackTrace');
-
-      // フォールバック: fid > id > rowid の優先順位
-      if (hasFidColumn) return 'fid';
-      if (hasIdColumn) return 'id';
-      AppLogger.debug(
-        '[GeoPackageSchema] ⚠️ 緊急フォールバック: rowidを使用します。このファイルは読み込み専用としてのみ使用してください。',
-      );
-      return 'rowid';
-    }
+    return 'rowid';
   }
 
   /// 主キーで 1 行を選ぶ WHERE 句（値は `?`）

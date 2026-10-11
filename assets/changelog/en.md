@@ -39,6 +39,7 @@
 - Replace in the attribute table also counted values that differed only in letter case, or only resembled a search term containing % or _ (those values were not actually changed)
 - A layer switched back to "Single symbol" in QGIS after being categorized, graduated or rule-based still stayed QGIS-styled in Kokage Map after reading back (its colors could not be changed in the style screen)
 - Deleting a feature right after editing its attributes (within a second) kept later attribute edits in the same GeoPackage from being saved, and they were lost when the app closed
+- Opening a gpkg with a table that has no primary key (such as one made outside QGIS) added an `fid` column just by inspecting it, so viewing changed the file and Drive sync uploaded it. Such tables are now read and edited by row number (rowid), as QGIS does, without changing the table
 
 ### Lighter
 

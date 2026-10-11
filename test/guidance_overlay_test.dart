@@ -1,10 +1,13 @@
-// 地点への誘導の札: 矢印の基準（端末の向き → 進行方向 → 地図の上）と、やめるボタン
+// 地点への誘導の札: 矢印の基準（端末の向き → 進行方向 → 地図の上）と、やめるボタン、行き先ごとの標高
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:root_maps/i18n/strings.g.dart';
+import 'package:root_maps/models/geopackage/vertex_z.dart';
 import 'package:root_maps/providers/guidance_providers.dart';
 import 'package:root_maps/screens/map_page/widgets/guidance_overlay.dart';
 
@@ -86,6 +89,58 @@ void main() {
     await tester.pump();
     expect(c.read(guidanceProvider).active, isFalse);
     expect(find.byIcon(Icons.navigation), findsNothing);
+  });
+
+  testWidgets('行き先を替えた直後に前の行き先の標高を出さない。引いている間に替えた結果も捨てる', (tester) async {
+    // 標高は呼ばれるたびに Completer を積み、テストが順に返す
+    final pending = <(List<(double, double)>, Completer<List<double?>>)>[];
+    VertexZ.elevationLookup = (points) {
+      final done = Completer<List<double?>>();
+      pending.add((points, done));
+      return done.future;
+    };
+    addTearDown(() => VertexZ.elevationLookup = null);
+    // 標高が返ってから setState → 描き直し まで回す
+    Future<void> settle() async {
+      await tester.pump();
+      await tester.pump();
+    }
+
+    const b = GuidanceTarget(point: LatLng(35, 135.002), label: '杭 13');
+    const cc = GuidanceTarget(point: LatLng(35, 135.003), label: '杭 14');
+    const d = GuidanceTarget(point: LatLng(35, 135.004), label: '杭 15');
+
+    c.read(guidanceProvider.notifier)
+      ..updatePosition(here)
+      ..start(east);
+    await pump(tester);
+    expect(pending, hasLength(1));
+    pending.removeAt(0).$2.complete([150, 100]); // 目標 150 m・今 100 m
+    await settle();
+    expect(find.text(t.guidance.elevationUp(m: '50')), findsOneWidget);
+
+    // 行き先を替える: 引けるまでは「不明」（前の 50 m 登りを出さない）
+    c.read(guidanceProvider.notifier).start(b);
+    await tester.pump();
+    expect(find.text(t.guidance.elevationUp(m: '50')), findsNothing);
+    expect(find.text(t.guidance.elevationUnknown), findsOneWidget);
+    expect(pending.single.$1, [(135.002, 35.0)]);
+    pending.removeAt(0).$2.complete([80]);
+    await settle();
+    expect(find.text(t.guidance.elevationDown(m: '20')), findsOneWidget);
+
+    // 杭 14 を引いている間に杭 15 へ替える: 杭 14 の標高は杭 15 に使わず、杭 15 を引き直す
+    c.read(guidanceProvider.notifier).start(cc);
+    await tester.pump();
+    c.read(guidanceProvider.notifier).start(d);
+    await tester.pump();
+    pending.removeAt(0).$2.complete([300]);
+    await settle();
+    expect(find.text(t.guidance.elevationUnknown), findsOneWidget);
+    expect(pending.single.$1, [(135.004, 35.0)]);
+    pending.removeAt(0).$2.complete([110]);
+    await settle();
+    expect(find.text(t.guidance.elevationUp(m: '10')), findsOneWidget);
   });
 
   test('距離の表示', () {

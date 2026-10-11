@@ -115,19 +115,65 @@ class FeaturePhotoService {
     final next = FeaturePhotoPaths.nextColumn(columns, f.turfFeature.properties);
     await f.setAttributeValues({next.column: rel});
     await f.flushChanges();
-    if (next.create) await _rememberCreatedColumn(f, next.column);
+    if (next.create) {
+      f.parent.clearColumnNamesCache(); // 列が増えた（属性表・結合の名前の衝突判定が古い一覧を使わないように）
+      await _rememberCreatedColumn(f, next.column);
+    }
     return next.column;
   }
 
-  /// 写真を外す（列を空にする）。[deleteFile] なら写真のファイルも消す
-  static Future<void> unlink(FeatureNode f, FeaturePhoto photo, {bool deleteFile = false}) async {
+  /// 写真を外す（列を空にする）。[deleteFile] なら写真のファイルも消す。
+  ///
+  /// ファイルを消すのは、gpkg の隣の `photos/` の中にあり、同じ gpkg のほかの地物（どのレイヤでも）が
+  /// 同じ写真を指していないときだけ。QGIS から来た絶対パス・`../` の写真や、レイヤを複製して共有している写真は
+  /// リンクだけ外して残す。消したら true
+  static Future<bool> unlink(FeatureNode f, FeaturePhoto photo, {bool deleteFile = false}) async {
+    final dir = gpkgDirOf(f);
     await f.setAttributeValue(photo.column, null);
     await f.flushChanges();
-    if (!deleteFile) return;
+    if (!deleteFile || dir == null) return false;
     try {
-      if (await fs.exists(photo.path)) await fs.delete(photo.path);
+      if (!p.isWithin(p.join(dir, FeaturePhotoPaths.dirName), photo.path)) {
+        AppLogger.debug('[FeaturePhoto] photos/ の外の写真は消さない: ${photo.path}');
+        return false;
+      }
+      if (await _isReferencedElsewhere(f, dir, photo.path)) {
+        AppLogger.debug('[FeaturePhoto] ほかの地物も指している写真は消さない: ${photo.path}');
+        return false;
+      }
+      if (!await fs.exists(photo.path)) return false;
+      await fs.delete(photo.path);
+      return true;
     } on Object catch (e) {
       AppLogger.debug('[FeaturePhoto] 写真のファイルを消せない: $e');
+      return false;
+    }
+  }
+
+  /// 同じ gpkg の写真の列に、[path] を指す値が残っているか（読めなければ残っている扱い）
+  static Future<bool> _isReferencedElsewhere(FeatureNode f, String dir, String path) async {
+    try {
+      final gpkg = f.geoPackageFile;
+      final db = await gpkg.getDatabase();
+      final target = p.normalize(path);
+      for (final layer in await gpkg.getLayerNames()) {
+        final cols = (await gpkg.getColumnNames(layer, getAll: true)).where(FeaturePhotoPaths.isPhotoColumn).toList();
+        if (cols.isEmpty) continue;
+        final rows = await db.rawQuery(
+          'SELECT ${cols.map((c) => '"${c.replaceAll('"', '""')}"').join(', ')} FROM "${layer.replaceAll('"', '""')}" '
+          'WHERE ${cols.map((c) => '"${c.replaceAll('"', '""')}" IS NOT NULL').join(' OR ')}',
+        );
+        for (final row in rows) {
+          for (final v in row.values) {
+            final s = '${v ?? ''}'.trim();
+            if (s.isNotEmpty && p.equals(FeaturePhotoPaths.resolve(dir, s), target)) return true;
+          }
+        }
+      }
+      return false;
+    } on Object catch (e) {
+      AppLogger.debug('[FeaturePhoto] 写真の参照を確かめられない（消さない）: $e');
+      return true;
     }
   }
 

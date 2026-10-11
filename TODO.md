@@ -154,6 +154,10 @@
 - [ ] 県点群の DTM（1 m 級）を焼いてプロジェクトの dir に入れる（アプリには入れない。配布先は GitHub Releases に決定済み）。
       地理院の DEM1A 配信とタイルキャッシュで足りているので、細かい地形が要る現場が出るまで保留
 - [ ] `proj4dart` 3（geobase 1.5.0 が ^2.0.0 を求めるので待ち）
+- [ ] 2026-10-12 の依存更新で上がらなかったもの（どれも上流待ち）:
+      `connectivity_plus` 7.3.2（nm 0.6 → dbus ^0.8 を要るが、`desktop_drop` 0.8.4＝最新が dbus ^0.7 で止める）／
+      `xml` 7.1.0（`flutter_svg` 経由の `vector_graphics_compiler` 最新が xml <=7.0.1）／
+      `build_runner` 2.16.2・`test` 1.33（analyzer 14 / test_api 0.7.15 が要り、Flutter SDK の flutter_test が test_api 0.7.12 に固定）
 - [ ] 更新履歴の v0.6.0 以前の節が開発ログ調のまま
 - [ ] ~~`layer_styles`~~（`.qgs` にレンダラを書くので冗長。gpkg 単体で渡す場合の保険のみ）
 - [x] QGIS で普通に作った GeoTIFF はオーバーレイとして開けない → GDAL で開くようにした（2026-10-10、`GdalRasterOverlay`、

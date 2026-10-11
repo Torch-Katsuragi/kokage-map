@@ -170,7 +170,7 @@ fixture は QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_raster_xyz.qgs`�
 
 | `.qgs` 側 | 扱い |
 |---|---|
-| dir 内の `.tif`、こかげマップの形（ModelTransformationTag・WGS84） | オーバーレイの可視性に読み戻す |
+| dir 内の `.tif`、こかげマップの形（WGS84 で目印 `TIFFTAG_SOFTWARE=kokage-map`、旧版は ModelTransformationTag。下の「アプリの GeoTIFF」） | オーバーレイの可視性に読み戻す |
 | dir 内のラスタ、GDAL で位置と座標系が読める（QGIS / GDAL の形、2026-10-10） | 読み取り専用のオーバーレイの可視性に読み戻す |
 | dir 内のラスタ、位置か座標系が読めない（ワールドファイルの無い PNG など） | 報告「位置か座標系を読めません」（写真として並ぶ） |
 | ファイルが無い | 報告「見つかりません」 |
@@ -214,7 +214,7 @@ QGIS / GDAL で作ったラスタは **GDAL で開いて読み取り専用のオ
 テストは `test/gdal_raster_overlay_test.dart`（fixture は `test/fixtures/gdal/make_raster_fixtures.sh` で QGIS の GDAL に作らせる）。
 純 Dart で GeoTIFF を解く試み（`feat/ext-geotiff`）は捨てた。
 
-- **判定**（`ImageNode.loadNodes`・グローバルフォルダ）: `.tif` はまずこかげマップの形（ModelTransformationTag）を見て、
+- **判定**（`ImageNode.loadNodes`・グローバルフォルダ）: `.tif` はまずこかげマップの形（下の「アプリの GeoTIFF」の判定）を見て、
   そうなら従来どおり編集できるオーバーレイ。違えば `gdalinfo -json -proj4` を呼び、`geoTransform`・座標系・`wgs84Extent` が
   揃えば外のオーバーレイ。`.jp2` `.vrt` も同じ（位置が無ければ写真としても出さない）。
   `.png` `.jpg` は **ワールドファイル（`.pgw` `.pngw` `.jgw` `.jpgw` `.wld`）か `<名前>.aux.xml` があるときだけ** GDAL に聞く
@@ -241,6 +241,32 @@ QGIS / GDAL で作ったラスタは **GDAL で開いて読み取り専用のオ
 - **削除**: 元のファイル一式（`GDALGetFileList`。`.pgw` `.aux.xml` `.ovr` `.tfw` …）と PNG キャッシュを消す（読み取り専用の
   ベクタレイヤと同じ）。確認ダイアログに消えるファイルを並べる
 - 未対応（TODO）: 判定でこかげマップの形かを見るために `.tif` を丸ごと読む
+
+### アプリの GeoTIFF（GDAL で書く、2026-10-11）
+
+「オーバーレイに変換」で作る GeoTIFF と、位置合わせ（移動・拡大縮小・回転）での書き直しは **GDAL の `gdal_translate`** で書く
+（`lib/services/geotiff_service.dart`、Android は FFI・web は WASM）。以前は `package:image` の TIFF にタグを足していて、
+QGIS 4.2.2（GDAL）が「タグの並びが昇順でない」「タイル幅 1080 / 高さ 2424 が規格外」「Photometric と ExtraSamples の数が合わない」と
+警告していた（読めはした）。QGIS との互換が最優先（ユーザー決定）なので GDAL に替えた。テストは `test/geotiff_gdal_write_test.dart`
+（ホストの `gdalinfo` の stderr に警告が無いことまで見る）。
+
+- **形**: `-of GTiff -a_srs EPSG:4326 -a_gt <6 つ> -mo TIFFTAG_SOFTWARE=kokage-map -co TILED=NO -co COMPRESS=DEFLATE -co PHOTOMETRIC=RGB -co ALPHA=YES`
+  - 8bit RGBA。4 バンド目は ExtraSamples = 結合されていないアルファ（QGIS は透明として描く）
+  - **ストリップ・予測子なし**: Android の PNG キャッシュと web の 3D は `.tif` を `package:image` で解く。`package:image` 4.10 は
+    圧縮したタイルの右端（幅に満たないタイル）を崩し、DEFLATE の予測子も戻さない
+  - オーバービューは付けない（`package:image` は全部の IFD を解くので重くなる。写真の大きさなら QGIS でも困らない）
+- **位置**: geoTransform（`GeoTiffService.geoTransform`、中心・m/px・回転から。4x4 行列と同じ変換）。
+  回転があれば GDAL は ModelTransformationTag、無ければ ModelTiepointTag + ModelPixelScaleTag で書く
+- **作り方**: 元の写真を `package:image` で解いて画像処理（透明化のモード）→ 8bit RGBA の PNG を作業フォルダに置き
+  （Android はアプリの一時フォルダ、web はプロジェクトの `.kokage/tmp`）→ `gdal_translate` → PNG を消す。解く・PNG 化は作業用 isolate
+- **位置合わせ**: 10 秒のデバウンスのあと `gdal_translate -a_gt` で `<名前>.tif.kokage-tmp` に書き、元と置き換える（画素は変えない）。
+  gdal_edit のように開いたまま geoTransform だけ変える方が軽いが、web の WASM に `GDALSetGeoTransform` を入れていない
+  （足すと焼き直しと Release の上げ直しが要る）ので、作り直しにした。`Gdal` の窓口は増やしていない
+- **判定（アプリの GeoTIFF か）**: `GeoTiffService.readGeoTiffParams`。GeoKey の GeographicTypeGeoKey が 4326 で、
+  目印（`TIFFTAG_SOFTWARE=kokage-map`）があるか、旧版の形（ModelTransformationTag）。それ以外は外のラスタ（読み取り専用）。
+  EPSG:4326 でない ModelTransformationTag の GeoTIFF は以前アプリの形と誤認していたが、今は外のラスタになる
+- **旧版の形**（v0.12.0 まで）: そのまま読めて編集できる。位置合わせで書き直すときに `package:image` で解いて GDAL の形に移す。
+  書き手はテスト用に `test/support/legacy_geotiff.dart` に残した
 
 ### ファイルをフォルダに入れる経路
 

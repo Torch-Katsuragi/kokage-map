@@ -27,6 +27,8 @@ tags: [technical, gdal, qgis, interop]
   [[external-formats#ラスタのオーバーレイ（GDAL、2026-10-10）]]）
 - **レイヤの書き出し**: レイヤの gpkg → `ogr2ogr -f <ドライバ>`（Shapefile・GeoJSON・KML・CSV・GPX・FlatGeobuf・DXF・GeoPackage。
   2026-10-10、[[import-export]]）。純 Dart の書き出し・取り込みはこのとき消した
+- **アプリの GeoTIFF の書き出し**: 「オーバーレイに変換」と位置合わせの書き直しは `gdal_translate -of GTiff -a_gt … -a_srs EPSG:4326`
+  （2026-10-11。QGIS で警告が出ない形に。[[external-formats#アプリの GeoTIFF（GDAL で書く、2026-10-11）]]）
 - 範囲は「読む・変換する」だけ。gpkg の編集はこれまでどおり sqflite（同期のマージは geodiff）
 
 ## 実装の選び方

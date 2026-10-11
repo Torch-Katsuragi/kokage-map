@@ -1159,9 +1159,16 @@
       "basalArea": "BA m²/ha",
       "meanDbh": "Mean DBH cm",
       "meanHeight": "Mean height m",
-      "topHeight": "Top height m"
+      "topHeight": "Top height m",
+      "volume": "Volume m³/ha"
     },
-    "topHeightNote": "Top height: mean height of the 100 largest-DBH trees per ha. Volume is not calculated",
+    "topHeightNote": "Top height: mean height of the 100 largest-DBH trees per ha",
+    "volumeRegion": "Volume equation",
+    "volumeRegionNone": "None",
+    "volumeRegions": {
+      "kinkiChugoku": "Kinki, Chugoku, Ishikawa, Fukui (West Japan tables)"
+    },
+    "volumeNote": "Volume: Forestry Agency stem volume tables (West Japan), sugi and hinoki equations (coefficients from Hosoda et al. 2010). Other species and trees without height are left out (* = only some trees)",
     "column": {
       "plotId": "Plot",
       "treeNo": "No.",

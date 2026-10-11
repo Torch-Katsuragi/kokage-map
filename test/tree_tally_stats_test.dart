@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:root_maps/services/tree_tally/stem_volume.dart';
 import 'package:root_maps/services/tree_tally/tree_tally_stats.dart';
 import 'package:root_maps/utils/geodesic.dart';
 
@@ -81,6 +82,34 @@ void main() {
     final lines = csv.trim().split('\n');
     expect(lines, hasLength(4));
     expect(lines[1], startsWith('P1,全体,500.0,3,60,'));
+  });
+
+  test('材積: 出せた木だけ足し、ha あたりと CSV の列に出す', () {
+    double? vol(TallyTree t) =>
+        stemVolumeM3(VolumeRegion.kinkiChugoku, t.species, t.dbhCm, t.heightM);
+    const trees = [
+      TallyTree(species: 'スギ', dbhCm: 30, heightM: 20),
+      TallyTree(species: 'ヒノキ', dbhCm: 24, heightM: 18),
+      TallyTree(species: 'スギ', dbhCm: 28), // 樹高なし → 入らない
+      TallyTree(species: 'コナラ', dbhCm: 20, heightM: 15), // 式が無い → 入らない
+    ];
+    final p = PlotTally.of('P1', trees, 500, volume: vol);
+    final v1 = vol(trees[0])!, v2 = vol(trees[1])!;
+    expect(p.all.volumeCount, 2);
+    expect(p.all.volumeSumM3, closeTo(v1 + v2, 1e-12));
+    expect(p.all.volumePerHa, closeTo((v1 + v2) * 20, 1e-9));
+    expect(p.bySpecies['スギ']!.volumeCount, 1);
+    expect(p.bySpecies['コナラ']!.volumeSumM3, 0);
+    expect(p.bySpecies['コナラ']!.volumeCount, 0);
+
+    final csv = plotTallyCsv([p], allLabel: '全体').trim().split('\n');
+    expect(csv[0], endsWith(',volume_m3,volume_m3_per_ha,volume_n'));
+    expect(csv[1], endsWith(',${(v1 + v2).toStringAsFixed(3)},${((v1 + v2) * 20).toStringAsFixed(1)},2'));
+
+    // 材積を出さないときは空欄
+    final none = plotTallyCsv([PlotTally.of('P1', trees, 500)], allLabel: '全体').trim().split('\n');
+    expect(none[1], endsWith(',,,'));
+    expect(PlotSummary.of(trees, 500).volumePerHa, isNull);
   });
 
   test('面積 0 なら ha あたりは出さない', () {

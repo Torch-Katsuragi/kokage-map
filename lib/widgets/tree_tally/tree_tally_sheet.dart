@@ -28,6 +28,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../devices/trupulse/trupulse_measurement.dart';
 import '../../devices/trupulse/trupulse_providers.dart';
@@ -40,6 +41,7 @@ import '../../providers/notification_providers.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/tool_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../services/tree_tally/stem_volume.dart';
 import '../../services/tree_tally/tree_tally_stats.dart';
 import '../../services/tree_tally/tree_tally_store.dart';
 import '../../utils/app_navigator.dart';
@@ -465,67 +467,155 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
 
 /// 標準地ごとの集計を出す（CSV に保存できる）
 Future<void> showTreeTallySummary(BuildContext context, WidgetRef ref, TreeTallyLayers layers) async {
-  final tallies = await layers.summarize();
+  final region = await _loadVolumeRegion();
   if (!context.mounted) return;
-  String f(double? v, int d) => v == null ? '–' : v.toStringAsFixed(d);
   await showDialog<void>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => _TallySummaryDialog(layers: layers, region: region, onSave: (tallies) => _saveCsv(ref, tallies)),
+  );
+}
+
+// 材積式の地域（全体の設定。gpkg ごとではない）
+const _volumeRegionKey = 'tree_tally_volume_region';
+
+Future<VolumeRegion?> _loadVolumeRegion() async {
+  try {
+    final name = (await SharedPreferences.getInstance()).getString(_volumeRegionKey);
+    return VolumeRegion.values.where((r) => r.name == name).firstOrNull;
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<void> _saveVolumeRegion(VolumeRegion? r) async {
+  final prefs = await SharedPreferences.getInstance();
+  if (r == null) {
+    await prefs.remove(_volumeRegionKey);
+  } else {
+    await prefs.setString(_volumeRegionKey, r.name);
+  }
+}
+
+String _volumeRegionLabel(VolumeRegion r) => switch (r) {
+      VolumeRegion.kinkiChugoku => t.treeTally.volumeRegions.kinkiChugoku,
+    };
+
+class _TallySummaryDialog extends StatefulWidget {
+  final TreeTallyLayers layers;
+  final VolumeRegion? region;
+  final void Function(List<PlotTally>) onSave;
+  const _TallySummaryDialog({required this.layers, required this.region, required this.onSave});
+
+  @override
+  State<_TallySummaryDialog> createState() => _TallySummaryDialogState();
+}
+
+class _TallySummaryDialogState extends State<_TallySummaryDialog> {
+  late VolumeRegion? _region = widget.region;
+  List<PlotTally>? _tallies;
+
+  @override
+  void initState() {
+    super.initState();
+    _summarize();
+  }
+
+  Future<void> _summarize() async {
+    final region = _region;
+    final tallies = await widget.layers.summarize(
+      volume: region == null ? null : (tr) => stemVolumeM3(region, tr.species, tr.dbhCm, tr.heightM),
+    );
+    if (mounted) setState(() => _tallies = tallies);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tallies = _tallies;
+    String f(double? v, int d) => v == null ? '–' : v.toStringAsFixed(d);
+    // 一部の木だけの材積には * を付ける
+    String vol(PlotSummary s) =>
+        s.volumeSumM3 == null ? '–' : '${f(s.volumePerHa, 1)}${s.volumeCount < s.count ? '*' : ''}';
+    const note = TextStyle(fontSize: 12, color: Colors.black54);
+    return AlertDialog(
       title: Text(t.treeTally.summary),
       content: SizedBox(
         width: double.maxFinite,
-        child: tallies.every((p) => p.all.count == 0)
-            ? Text(t.treeTally.noTrees)
-            : SingleChildScrollView(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      columnSpacing: 12,
-                      headingRowHeight: 36,
-                      dataRowMinHeight: 28,
-                      dataRowMaxHeight: 32,
-                      columns: [
-                        DataColumn(label: Text(t.treeTally.plot)),
-                        DataColumn(label: Text(t.treeTally.species)),
-                        DataColumn(label: Text(t.treeTally.stat.count), numeric: true),
-                        DataColumn(label: Text(t.treeTally.stat.perHa), numeric: true),
-                        DataColumn(label: Text(t.treeTally.stat.basalArea), numeric: true),
-                        DataColumn(label: Text(t.treeTally.stat.meanDbh), numeric: true),
-                        DataColumn(label: Text(t.treeTally.stat.meanHeight), numeric: true),
-                        DataColumn(label: Text(t.treeTally.stat.topHeight), numeric: true),
-                      ],
-                      rows: [
-                        for (final p in tallies)
-                          for (final (sp, s) in [(t.treeTally.all, p.all), for (final e in p.bySpecies.entries) (e.key, e.value)])
-                            DataRow(cells: [
-                              DataCell(Text(sp == t.treeTally.all ? p.plotId : '')),
-                              DataCell(Text(sp, style: TextStyle(fontWeight: sp == t.treeTally.all ? FontWeight.bold : null))),
-                              DataCell(Text('${s.count}')),
-                              DataCell(Text(s.areaM2 > 0 ? f(s.stemsPerHa, 0) : t.treeTally.unknownArea)),
-                              DataCell(Text(f(s.basalAreaPerHa, 1))),
-                              DataCell(Text(f(s.meanDbhCm, 1))),
-                              DataCell(Text(f(s.meanHeightM, 1))),
-                              DataCell(Text(f(s.topHeightM, 1))),
-                            ]),
-                      ],
-                    ),
+        child: tallies == null
+            ? const Center(child: CircularProgressIndicator())
+            : tallies.every((p) => p.all.count == 0)
+                ? Text(t.treeTally.noTrees)
+                : SingleChildScrollView(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Text('${t.treeTally.volumeRegion}: '),
+                        Expanded(
+                          child: DropdownButton<VolumeRegion?>(
+                            isExpanded: true,
+                            value: _region,
+                            items: [
+                              DropdownMenuItem(value: null, child: Text(t.treeTally.volumeRegionNone)),
+                              for (final r in VolumeRegion.values)
+                                DropdownMenuItem(value: r, child: Text(_volumeRegionLabel(r))),
+                            ],
+                            onChanged: (r) {
+                              setState(() => _region = r);
+                              _saveVolumeRegion(r);
+                              _summarize();
+                            },
+                          ),
+                        ),
+                      ]),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: DataTable(
+                          columnSpacing: 12,
+                          headingRowHeight: 36,
+                          dataRowMinHeight: 28,
+                          dataRowMaxHeight: 32,
+                          columns: [
+                            DataColumn(label: Text(t.treeTally.plot)),
+                            DataColumn(label: Text(t.treeTally.species)),
+                            DataColumn(label: Text(t.treeTally.stat.count), numeric: true),
+                            DataColumn(label: Text(t.treeTally.stat.perHa), numeric: true),
+                            DataColumn(label: Text(t.treeTally.stat.basalArea), numeric: true),
+                            DataColumn(label: Text(t.treeTally.stat.meanDbh), numeric: true),
+                            DataColumn(label: Text(t.treeTally.stat.meanHeight), numeric: true),
+                            DataColumn(label: Text(t.treeTally.stat.topHeight), numeric: true),
+                            if (_region != null) DataColumn(label: Text(t.treeTally.stat.volume), numeric: true),
+                          ],
+                          rows: [
+                            for (final p in tallies)
+                              for (final (sp, s) in [(t.treeTally.all, p.all), for (final e in p.bySpecies.entries) (e.key, e.value)])
+                                DataRow(cells: [
+                                  DataCell(Text(sp == t.treeTally.all ? p.plotId : '')),
+                                  DataCell(Text(sp, style: TextStyle(fontWeight: sp == t.treeTally.all ? FontWeight.bold : null))),
+                                  DataCell(Text('${s.count}')),
+                                  DataCell(Text(s.areaM2 > 0 ? f(s.stemsPerHa, 0) : t.treeTally.unknownArea)),
+                                  DataCell(Text(f(s.basalAreaPerHa, 1))),
+                                  DataCell(Text(f(s.meanDbhCm, 1))),
+                                  DataCell(Text(f(s.meanHeightM, 1))),
+                                  DataCell(Text(f(s.topHeightM, 1))),
+                                  if (_region != null) DataCell(Text(vol(s))),
+                                ]),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(t.treeTally.topHeightNote, style: note),
+                      if (_region != null) Text(t.treeTally.volumeNote, style: note),
+                    ]),
                   ),
-                  const SizedBox(height: 8),
-                  Text(t.treeTally.topHeightNote, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                ]),
-              ),
       ),
       actions: [
         TextButton.icon(
           icon: const Icon(Icons.save_alt),
           label: Text(t.treeTally.saveCsv),
-          onPressed: () => _saveCsv(ref, tallies),
+          onPressed: tallies == null ? null : () => widget.onSave(tallies),
         ),
-        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(t.common.close)),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(t.common.close)),
       ],
-    ),
-  );
+    );
+  }
 }
 
 Future<void> _saveCsv(WidgetRef ref, List<PlotTally> tallies) async {

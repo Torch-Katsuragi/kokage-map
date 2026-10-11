@@ -202,7 +202,8 @@ class TreeTallyLayers {
   }
 
   /// 標準地ごとの集計（標準地のない立木の plot_id は面積 0 で並べる）
-  Future<List<PlotTally>> summarize() async {
+  /// [volume] は1本の幹材積（PlotSummary.of）。省くと材積は出さない
+  Future<List<PlotTally>> summarize({double? Function(TallyTree)? volume}) async {
     final plotList = await loadPlots();
     final byPlot = <String, List<TallyTree>>{};
     for (final r in await _treeRows()) {
@@ -213,9 +214,9 @@ class TreeTallyLayers {
           ));
     }
     final result = <PlotTally>[
-      for (final p in plotList) PlotTally.of(p.plotId, byPlot.remove(p.plotId) ?? const [], p.areaM2),
+      for (final p in plotList) PlotTally.of(p.plotId, byPlot.remove(p.plotId) ?? const [], p.areaM2, volume: volume),
     ];
-    byPlot.forEach((id, trees) => result.add(PlotTally.of(id, trees, 0)));
+    byPlot.forEach((id, trees) => result.add(PlotTally.of(id, trees, 0, volume: volume)));
     return result;
   }
 }

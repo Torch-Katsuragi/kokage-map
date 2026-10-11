@@ -19,7 +19,8 @@
 /// - ha あたり = 標準地の値 ÷ 標準地の水平面積[ha]
 /// - 上層高 = 胸高直径の大きい順に ha あたり 100 本ぶん（標準地では 面積[ha]×100 本、最低1本）の平均樹高。
 ///   樹高のない木は平均から外す
-/// 材積は出さない（出典つきの材積式を入れるまで。docs/features/tree-tally.md）
+/// - 材積 = 1本ずつの幹材積（[volume] で渡す。stem_volume.dart）の合計。式の無い木・樹高の無い木は足さず、
+///   その本数は count − volumeCount で分かる
 library;
 
 import 'dart:math' as math;
@@ -56,6 +57,12 @@ class PlotSummary {
   final double? meanHeightM;
   final double? topHeightM;
 
+  /// 幹材積の合計 [m³]（標準地の中）。材積を出さないときは null
+  final double? volumeSumM3;
+
+  /// 材積を出せた本数
+  final int volumeCount;
+
   const PlotSummary({
     required this.areaM2,
     required this.count,
@@ -65,6 +72,8 @@ class PlotSummary {
     this.meanDbhCm,
     this.meanHeightM,
     this.topHeightM,
+    this.volumeSumM3,
+    this.volumeCount = 0,
   });
 
   double get areaHa => areaM2 / 10000;
@@ -75,8 +84,13 @@ class PlotSummary {
   /// ha あたり胸高断面積合計 [m²/ha]
   double? get basalAreaPerHa => areaM2 > 0 ? basalAreaSumM2 / areaHa : null;
 
-  static PlotSummary of(Iterable<TallyTree> trees, double areaM2) {
+  /// ha あたり幹材積 [m³/ha]
+  double? get volumePerHa => areaM2 > 0 && volumeSumM3 != null ? volumeSumM3! / areaHa : null;
+
+  /// [volume] は1本の幹材積 [m³]（出せない木は null）。省くと材積は出さない
+  static PlotSummary of(Iterable<TallyTree> trees, double areaM2, {double? Function(TallyTree)? volume}) {
     final list = trees.toList();
+    final volumes = volume == null ? null : [for (final t in list) ?volume(t)];
     final dbhs = [for (final t in list) if (t.dbhCm != null && t.dbhCm! > 0) t.dbhCm!];
     final heights = [for (final t in list) if (t.heightM != null && t.heightM! > 0) t.heightM!];
     return PlotSummary(
@@ -88,6 +102,8 @@ class PlotSummary {
       meanDbhCm: _mean(dbhs),
       meanHeightM: _mean(heights),
       topHeightM: _topHeight(list, areaM2),
+      volumeSumM3: volumes?.fold<double>(0.0, (s, v) => s + v),
+      volumeCount: volumes?.length ?? 0,
     );
   }
 
@@ -110,15 +126,15 @@ class PlotTally {
   final Map<String, PlotSummary> bySpecies;
   const PlotTally(this.plotId, this.all, this.bySpecies);
 
-  static PlotTally of(String plotId, Iterable<TallyTree> trees, double areaM2) {
+  static PlotTally of(String plotId, Iterable<TallyTree> trees, double areaM2, {double? Function(TallyTree)? volume}) {
     final list = trees.toList();
     final groups = <String, List<TallyTree>>{};
     for (final t in list) {
       groups.putIfAbsent(t.species, () => []).add(t);
     }
     final keys = groups.keys.toList()..sort((a, b) => groups[b]!.length.compareTo(groups[a]!.length));
-    return PlotTally(plotId, PlotSummary.of(list, areaM2), {
-      for (final k in keys) k: PlotSummary.of(groups[k]!, areaM2),
+    return PlotTally(plotId, PlotSummary.of(list, areaM2, volume: volume), {
+      for (final k in keys) k: PlotSummary.of(groups[k]!, areaM2, volume: volume),
     });
   }
 }
@@ -129,11 +145,12 @@ String plotTallyCsv(Iterable<PlotTally> plots, {required String allLabel}) {
   String q(String s) => (s.contains(',') || s.contains('"') || s.contains('\n')) ? '"${s.replaceAll('"', '""')}"' : s;
   final b = StringBuffer('﻿')
     ..writeln('plot_id,species,area_m2,count,stems_per_ha,basal_area_m2,basal_area_m2_per_ha,'
-        'mean_dbh_cm,mean_height_m,top_height_m,dbh_n,height_n');
+        'mean_dbh_cm,mean_height_m,top_height_m,dbh_n,height_n,volume_m3,volume_m3_per_ha,volume_n');
   void row(String plot, String sp, PlotSummary s) => b.writeln([
         q(plot), q(sp), f(s.areaM2, 1), s.count, f(s.stemsPerHa, 0), f(s.basalAreaSumM2, 4),
         f(s.basalAreaPerHa, 2), f(s.meanDbhCm, 1), f(s.meanHeightM, 1), f(s.topHeightM, 1),
         s.dbhCount, s.heightCount,
+        f(s.volumeSumM3, 3), f(s.volumePerHa, 1), s.volumeSumM3 == null ? '' : s.volumeCount,
       ].join(','));
   for (final p in plots) {
     row(p.plotId, allLabel, p.all);

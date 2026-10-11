@@ -31,9 +31,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:root_maps/utils/app_logger.dart';
 
+import '../core/platform_capabilities.dart';
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
 import '../models/gnss_quality.dart';
+import '../models/track_recording_settings.dart';
 import '../providers/gps_providers.dart';
 import '../providers/notification_providers.dart';
 import '../services/gps_manager_service.dart';
@@ -479,6 +481,9 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
 
           // GPS 測量の足切り
           _buildQualityGateCard(),
+
+          // 軌跡の記録（記録するのはモバイルだけ）
+          if (PlatformCapabilities.supportsGpsTracking) _buildTrackRecordingCard(),
         ],
       ),
     );
@@ -672,6 +677,73 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
           subtitle: g.strictDesc,
           value: gate.strict,
           onChanged: gate.isActive ? (v) => set(gate.copyWith(strict: v)) : null,
+        ),
+      ],
+    );
+  }
+
+  /// 軌跡の記録の間引き（間隔・距離・精度・飛び）。測位の頻度は変えず、届いた測位を間引くだけ
+  Widget _buildTrackRecordingCard() {
+    final settings = ref.watch(trackRecordingSettingProvider);
+    final g = t.trackRecording;
+    void set(TrackRecordingSettings value) => ref.read(trackRecordingSettingProvider.notifier).set(value);
+
+    Widget dropdown<V>(V value, List<V> options, String Function(V) label, ValueChanged<V> onChanged) =>
+        DropdownButton<V>(
+          value: value,
+          onChanged: (v) {
+            if (v is V) onChanged(v);
+          },
+          // 選択肢に無い値（手で書き換えた設定など）も出す（無いと DropdownButton が落ちる）
+          items: [
+            for (final o in options.contains(value) ? options : [...options, value])
+              DropdownMenuItem<V>(value: o, child: Text(label(o))),
+          ],
+        );
+
+    return SettingsSection(
+      title: g.title,
+      icon: Icons.timeline,
+      iconColor: Colors.green,
+      children: [
+        SettingsDescription(g.description),
+        SettingsTile(
+          title: g.interval,
+          trailing: dropdown<int>(
+            settings.intervalSeconds,
+            TrackRecordingSettings.intervalOptions,
+            (v) => g.seconds(n: '$v'),
+            (v) => set(settings.copyWith(intervalSeconds: v)),
+          ),
+        ),
+        SettingsTile(
+          title: g.minDistance,
+          subtitle: g.minDistanceDesc,
+          trailing: dropdown<double>(
+            settings.minDistance,
+            TrackRecordingSettings.minDistanceOptions,
+            (v) => v == 0 ? g.off : '${v.round()} m',
+            (v) => set(settings.copyWith(minDistance: v)),
+          ),
+        ),
+        SettingsTile(
+          title: g.maxAccuracy,
+          trailing: dropdown<double?>(
+            settings.maxAccuracy,
+            [null, ...TrackRecordingSettings.maxAccuracyOptions],
+            (v) => v == null ? g.off : '±${v.round()} m',
+            (v) => set(settings.copyWith(maxAccuracy: () => v)),
+          ),
+        ),
+        SettingsTile(
+          title: g.maxSpeed,
+          subtitle: g.maxSpeedDesc,
+          trailing: dropdown<double?>(
+            settings.maxSpeedKmh,
+            [null, ...TrackRecordingSettings.maxSpeedOptions],
+            (v) => v == null ? g.off : '${v.round()} km/h',
+            (v) => set(settings.copyWith(maxSpeedKmh: () => v)),
+          ),
         ),
       ],
     );

@@ -19,6 +19,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/gnss_quality.dart';
+import '../models/track_recording_settings.dart';
 
 part 'gps_providers.g.dart';
 
@@ -57,6 +58,31 @@ class GnssQualityGateSetting extends _$GnssQualityGateSetting {
   }
 
   Future<void> set(GnssQualityGate value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(value.toJson()));
+  }
+}
+
+/// GPS 軌跡の記録の設定（設定 → GPS・測位 →「軌跡の記録」）。SharedPreferences に JSON で永続化
+@Riverpod(keepAlive: true)
+class TrackRecordingSetting extends _$TrackRecordingSetting {
+  static const _key = 'track_recording_settings';
+
+  @override
+  TrackRecordingSettings build() => TrackRecordingSettings.defaults;
+
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key);
+      if (raw != null) state = TrackRecordingSettings.fromJson(jsonDecode(raw) as Map);
+    } catch (_) {
+      state = TrackRecordingSettings.defaults;
+    }
+  }
+
+  Future<void> set(TrackRecordingSettings value) async {
     state = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(value.toJson()));

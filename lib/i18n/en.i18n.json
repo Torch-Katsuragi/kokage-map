@@ -906,7 +906,23 @@
     "trackDesc": "Extracted from $total points, simplified to $simplified points",
     "hours": "$h hours $m min",
     "minutes": "$m min $s sec",
-    "secondsOnly": "$s sec"
+    "secondsOnly": "$s sec",
+    "exportGpx": "Export GPX",
+    "gpxExported": "Exported ${count} points to ${name}",
+    "gpxExportFailed": "Failed to export GPX: $error",
+    "extractMenu": "Extract track / export GPX"
+  },
+  "trackRecording": {
+    "title": "Track recording",
+    "description": "Thins out the points kept in the always-on GPS track. The location update rate does not change; points are picked from the fixes already received, so battery use does not increase. Changes apply from the next fix.",
+    "interval": "Recording interval",
+    "seconds": "${n} s",
+    "minDistance": "Minimum distance between points",
+    "minDistanceDesc": "Skip fixes that moved less than this. One point is still kept every 5 minutes while standing still",
+    "maxAccuracy": "Accuracy limit",
+    "maxSpeed": "Jump rejection (speed)",
+    "maxSpeedDesc": "Drop a fix that implies moving faster than this since the previous point. Accepted after 3 in a row",
+    "off": "Off"
   },
   "simplification": {
     "tolerance": "Tolerance: ",

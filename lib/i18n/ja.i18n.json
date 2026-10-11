@@ -906,7 +906,23 @@
     "trackDesc": "${total}点から抽出、${simplified}点に簡略化",
     "hours": "${h}時間${m}分",
     "minutes": "${m}分${s}秒",
-    "secondsOnly": "${s}秒"
+    "secondsOnly": "${s}秒",
+    "exportGpx": "GPXで書き出す",
+    "gpxExported": "${name} に ${count} 点を書き出しました",
+    "gpxExportFailed": "GPX の書き出しに失敗しました: $error",
+    "extractMenu": "軌跡を抽出・GPXで書き出す"
+  },
+  "trackRecording": {
+    "title": "軌跡の記録",
+    "description": "常時記録している GPS 軌跡に入れる点を間引きます。測位の頻度は変わらず、届いた測位から選ぶだけなので電池の減りは増えません。変更は次の測位から効きます。",
+    "interval": "記録の間隔",
+    "seconds": "${n} 秒",
+    "minDistance": "点の最小間隔（距離）",
+    "minDistanceDesc": "これより動いていなければ記録しない。止まっていても 5 分に 1 点は残す",
+    "maxAccuracy": "精度の上限",
+    "maxSpeed": "飛びの除外（速さ）",
+    "maxSpeedDesc": "前の点からこの速さを超えて動いたことになる点を捨てる。3 回続いたら受け入れる",
+    "off": "なし"
   },
   "simplification": {
     "tolerance": "許容誤差: ",

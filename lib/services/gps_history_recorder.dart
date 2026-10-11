@@ -35,6 +35,7 @@ import '../models/geometry_type.dart';
 import '../models/geopackage/geopackage_file.dart';
 import '../models/gps_position_record.dart';
 import '../models/gps_track.dart';
+import '../models/track_recording_settings.dart';
 import '../utils/app_logger.dart';
 
 /// GPS履歴レコーダー（シングルトン、ChangeNotifier）
@@ -70,6 +71,9 @@ class GpsHistoryRecorder extends ChangeNotifier {
   /// これ以上記録が空いたら新しい区間（フィーチャ）にする。
   /// 暦日だけで区切ると、アプリを閉じて別の場所で開いたときに前の末尾から直線で繋がる
   static const Duration segmentGap = Duration(minutes: 10);
+
+  /// 届いた測位を軌跡に入れるかの判定（設定は地図ページが [TrackRecordingSettings] を流し込む）
+  final TrackPointFilter filter = TrackPointFilter();
 
   // GeoPackageファイル
   GeoPackageFile? _historyFile;
@@ -285,16 +289,19 @@ class GpsHistoryRecorder extends ChangeNotifier {
   Future<void> _onPositionReceived(GpsPositionRecord record) async {
     if (!_isInitialized || _rawBufferFile == null) return;
 
-    // 最低1秒間隔フィルタ
-    if (_lastRecordedTime != null &&
-        record.timestamp.difference(_lastRecordedTime!).inMilliseconds <
-            1000) {
-      return;
-    }
-
-    // 空間的重複フィルタ（直前と完全一致なら記録しない）
+    // 間隔・距離・精度・飛びで間引く（設定 → GPS・測位 →「軌跡の記録」）。
+    // 区間の切れ目では前の点と比べない（閉じていた間に動いた分を飛びとみなさない）
     final position = LatLng(record.latitude, record.longitude);
-    if (position == _lastRecordedPosition) return;
+    final gap = _lastRecordedTime == null ? null : record.timestamp.difference(_lastRecordedTime!);
+    final verdict = filter.judge(
+      position: position,
+      time: record.timestamp,
+      accuracy: record.accuracy,
+      lastTime: _lastRecordedTime,
+      lastPosition: _lastRecordedPosition,
+      newSegment: gap != null && gap >= segmentGap,
+    );
+    if (verdict != TrackFixVerdict.accept) return;
 
     try {
       await _checkAndRotateDay();
@@ -832,6 +839,11 @@ class GpsHistoryRecorder extends ChangeNotifier {
       return [];
     }
   }
+
+  /// 軌跡のレイヤ（グローバルフォルダの gps_history.gpkg の gps_tracks）か。
+  /// レイヤの長押しメニューに「軌跡を抽出・GPX で書き出す」を出すのに使う
+  static bool isHistoryLayer(String layerName, String? gpkgPath) =>
+      layerName == _tracksLayerName && gpkgPath != null && p.basename(gpkgPath) == _historyGpkgFileName;
 
   /// 日付キーを表示用にフォーマット
   /// 例: '2026_02_06' → '2026/02/06'

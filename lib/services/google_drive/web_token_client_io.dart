@@ -16,7 +16,9 @@
 /// native 側。GISのトークンクライアントは web にしか無い。
 library;
 
-Future<String?> requestTokenSilently({
+import 'web_token_client.dart' show WebTokenGrant;
+
+Future<WebTokenGrant?> requestTokenSilently({
   required String clientId,
   required List<String> scopes,
   required String loginHint,

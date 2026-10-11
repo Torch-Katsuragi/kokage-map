@@ -33,6 +33,7 @@ import '../../core/shared_link.dart';
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
 import 'drive_auth_state.dart';
+import 'web_session_token.dart';
 import 'web_token_client.dart';
 
 /// Driveファイルのメタデータ
@@ -86,10 +87,21 @@ class GoogleDriveService {
 
   /// 前回サインインしたメールアドレスを覚えておくキー。
   ///
-  /// ⚠ **トークンは保存しない。** 保存するのはメールアドレスだけで、これは
-  /// `login_hint` に渡すためだけに使う。トークンをlocalStorageに置くと、
-  /// XSS一発でDrive全体が漏れる。
+  /// `login_hint` に渡すためだけに使う。⚠ **トークンを localStorage（SharedPreferences）に置かないこと。**
+  /// ブラウザを閉じても残り、全タブから読める。リロードをまたぐトークンは [_webSessionTokens]
+  /// （`sessionStorage`・タブ限り・失効時刻まで）だけが持つ
   static const String _kLastEmailKey = 'drive_last_email';
+
+  /// web のリロードをまたいで、いまのアクセストークンをタブの中だけ持ち越す（native は空振り）。
+  /// 置き方・消し方の理由は `web_session_token.dart`
+  final WebSessionTokenStore _webSessionTokens = WebSessionTokenStore.platform();
+
+  /// [restoreWebAuthorization] の実行中のもの。
+  ///
+  /// ⚠ 同じクリックから 2 本走らせないこと。`main.dart` の Listener（pointerdown）が先に
+  /// ポップアップを開くとクリックの権利（user activation）を使い切り、続くボタンの
+  /// `ensureDriveAuthenticated` の 2 本目はブラウザに潰される。2 本目は 1 本目の結果を待つ
+  Future<bool>? _webRestoreInFlight;
 
   /// Googleアカウントが取れているか（スコープの認可は別）。
   ///
@@ -167,7 +179,13 @@ class GoogleDriveService {
   ///
   /// 同意がまだ／ブラウザにGoogleのセッションが無ければ失敗する。そのときは
   /// 通常のサインインUIに任せる。
-  Future<bool> restoreWebAuthorization() async {
+  Future<bool> restoreWebAuthorization() =>
+      _webRestoreInFlight ??= _restoreWebAuthorization().whenComplete(() => _webRestoreInFlight = null);
+
+  Future<bool> _restoreWebAuthorization() async {
+    // リロード前のトークンがタブに残っていれば、ポップアップを開かずに済む
+    if (await _restoreWebSessionToken()) return true;
+
     // ⚠ hint はこの2択。**ライブラリの authorizeScopes に落とさないこと。**
     // あちらは `prompt=select_account` を抱き合わせるので、同意済みでも
     // 毎回アカウント選択が出る（2026-08-28、本番で毎回クリックさせていた）。
@@ -180,9 +198,9 @@ class GoogleDriveService {
     }
 
     AppLogger.debug('[GoogleDriveService] 認可を無音で復元: ${AppLogger.maskEmail(hint)}');
-    String? token;
+    WebTokenGrant? grant;
     try {
-      token = await requestTokenSilently(
+      grant = await requestTokenSilently(
         clientId: PlatformCapabilities.kWebOAuthClientId,
         scopes: _scopes,
         loginHint: hint,
@@ -191,18 +209,37 @@ class GoogleDriveService {
       AppLogger.debug('[GoogleDriveService] トークン要求で例外: $e');
       return false;
     }
-    if (token == null) {
+    if (grant == null) {
       AppLogger.debug('[GoogleDriveService] 無音の復元は不可');
       return false;
     }
 
     try {
-      final granted = token;
+      final granted = grant.token;
       final email = await _adopt(granted, () => _BearerClient(granted), fallbackEmail: hint);
+      _webSessionTokens.save(granted, expiresIn: grant.expiresIn);
       AppLogger.debug('[GoogleDriveService] 復元できた: ${AppLogger.maskEmail(email)}');
       return true;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] 復元したトークンが使えない: $e');
+      return false;
+    }
+  }
+
+  /// web: リロード前にこのタブで取ったトークンが残っていて、まだ使えるなら採用する。**ポップアップは開かない**
+  ///
+  /// 起動直後（クリックの無い文脈）でも呼べる。使えなかったトークンは消す
+  Future<bool> _restoreWebSessionToken() async {
+    if (!PlatformCapabilities.isWeb) return false;
+    final token = _webSessionTokens.load();
+    if (token == null) return false;
+    try {
+      final email = await _adopt(token, () => _BearerClient(token));
+      AppLogger.debug('[GoogleDriveService] タブに残っていたトークンで復元: ${AppLogger.maskEmail(email)}');
+      return true;
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] タブに残っていたトークンは使えない: $e');
+      _webSessionTokens.clear();
       return false;
     }
   }
@@ -254,9 +291,14 @@ class GoogleDriveService {
   /// 取り直して API を組み立てる（アカウントの選択も同意も要求しない）。
   /// 無ければ未サインインのまま。最初の Drive 操作で [signIn] が
   /// ボタン直下から選択画面を出す。FolderSync 等と同じ振る舞い。
-  Future<bool> restoreSessionSilently() async {
+  ///
+  /// web で [userGesture] が false（起動時など、クリックの直下でない）なら、タブに残った
+  /// トークンだけを見てポップアップは開かない（開いてもブラウザに潰される）。native は見ない
+  Future<bool> restoreSessionSilently({bool userGesture = true}) async {
     if (!_isInitialized) await initialize();
-    if (PlatformCapabilities.isWeb) return restoreWebAuthorization();
+    if (PlatformCapabilities.isWeb) {
+      return userGesture ? restoreWebAuthorization() : _restoreWebSessionToken();
+    }
     try {
       final authorization = await GoogleSignIn.instance.authorizationClient
           .authorizationForScopes(_scopes);
@@ -389,6 +431,9 @@ class GoogleDriveService {
         // hint があったのに無音で通らなかった＝同意がまだ（本当の初回）。
         // ここで出る同意画面は正当。ただしライブラリ経由なので選択画面も付く
         await _initializeDriveApi(user);
+        // ライブラリ経由は寿命が返らないので仮の寿命で置く（採用前に実呼び出しで確かめる）
+        final token = _apiToken;
+        if (token != null) _webSessionTokens.save(token);
         authState.setAuthenticated(DriveUser.fromGoogleAccount(user));
         await _rememberEmail(user.email);
         return true;
@@ -539,13 +584,15 @@ class GoogleDriveService {
     }
   }
 
-  /// API を手放し、http クライアントをすぐ閉じる（サインアウト・アカウント切替・失効）
+  /// API を手放し、http クライアントをすぐ閉じる（サインアウト・アカウント切替・失効）。
+  /// タブに残した web のトークンも消す（次のリロードで死んだ／前のアカウントのトークンを拾わない）
   void _dropApi() {
     final old = _apiClient;
     _apiClient = null;
     _apiToken = null;
     _driveApi = null;
     old?.close();
+    _webSessionTokens.clear();
   }
 
   /// テスト用: [token] の API を使う（[_useToken] と同じ）

@@ -265,19 +265,19 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     });
     // Drive のサインインを起動時に仕込んでおく。
     //
-    // web はここで One Tap（Chromeがアドレスバー下に出すログイン提案）が走る。
-    // Driveダイアログを開いてから呼ぶと、提案が出るころには画面が出揃っていて
-    // 気づかれない。**先に済ませておくと、ダイアログはスコープ認可だけになる。**
-    //
-    // ⚠ One Tap は出ないことがある（FedCMのクールダウン、Chromeの
-    // 「サイト間のログイン」オフ、シークレットウィンドウ等）。
-    // 出ない前提でボタン側の経路を残しておくこと。
+    // ⚠ web で One Tap（attemptLightweightAuthentication）は投げていない。投げても
+    // FedCM のクールダウン、Chrome の「サイト間のログイン」オフ、シークレットウィンドウ等で
+    // 出ないことがある。Googleが描画するボタン（DriveSignInPrompt）の経路は消さないこと。
+    // リロード後の復元は、タブに残したトークン（ここ）→ 次のクリックで無音の取り直し
+    // （_restoreDriveOnce）の順。[[docs/technical/google-drive-setup#リロードするとサインインが切れる件]]
     if (PlatformCapabilities.supportsDriveSync) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
           // 無音で復元できるときだけサインイン済みにする。
-          // アカウント選択を出すのは Drive 操作のボタン直下だけ
-          await GoogleDriveService().restoreSessionSilently();
+          // アカウント選択を出すのは Drive 操作のボタン直下だけ。
+          // web はここがクリックの直下でないので、ポップアップを開かず
+          // リロード前にこのタブで取ったトークン（sessionStorage）だけを見る
+          await GoogleDriveService().restoreSessionSilently(userGesture: false);
         } catch (e) {
           AppLogger.debug('[Root Maps] Drive初期化エラー: $e');
         }

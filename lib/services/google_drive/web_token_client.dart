@@ -36,11 +36,14 @@ library;
 import 'web_token_client_io.dart'
     if (dart.library.js_interop) 'web_token_client_web.dart' as impl;
 
+/// GIS が返したアクセストークンと、その寿命（`expires_in`。返らなければ null）
+typedef WebTokenGrant = ({String token, Duration? expiresIn});
+
 /// 無音でアクセストークンを取り直す。取れなければ null
 ///
 /// [loginHint] は前回サインインしたメールアドレス。**これが要**で、
 /// 無いと画面が出るので、呼び出し側は null なら呼ばないこと。
-Future<String?> requestTokenSilently({
+Future<WebTokenGrant?> requestTokenSilently({
   required String clientId,
   required List<String> scopes,
   required String loginHint,

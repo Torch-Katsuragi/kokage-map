@@ -37,6 +37,7 @@
   [Attribute table filter indicator and empty numeric cells shown as 0, and full-width digits in the edit panel],
   [Per-point records of GPS-surveyed lines and polygons were dropped],
   [KMZ whose doc.kml only links (NetworkLink) to other KML could not be opened; each linked KML inside becomes a layer],
+  [Web: reloading the page signed you out of Drive; within about an hour it now stays signed in in the same tab],
 )
 
 #fixes(

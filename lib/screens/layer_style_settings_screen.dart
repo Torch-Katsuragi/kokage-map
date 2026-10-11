@@ -31,6 +31,7 @@ import '../models/kmeta.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/view_node.dart';
+import '../models/qgis_renderer.dart';
 import '../services/kmeta_service.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
@@ -38,6 +39,7 @@ import '../utils/attribute_columns.dart';
 import '../utils/label_expression.dart';
 import '../utils/label_template.dart';
 import '../widgets/label_composer_dialog.dart';
+import '../widgets/qgis_renderer_legend.dart';
 import '../widgets/settings_widgets.dart';
 
 // ============================================================
@@ -462,6 +464,9 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
   /// このとき色・太さの節は出さない（変えても QGIS に届かず、見た目が食い違う）
   String? _qgisRenderer;
 
+  /// [_qgisRenderer] の中身（凡例に出す。保存のときも消さずに持ち回る）
+  QgisRenderer? _qgisRendererDef;
+
   @override
   void initState() {
     super.initState();
@@ -498,23 +503,28 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     if (widget.isViewMode) {
       final meta = await KMetaService.instance.getMeta(widget.folderPath!);
       _layerStyle = meta.getLayerStyle(widget.targetLayer!.layerKey);
-      _setQgisRenderer(widget.targetView!.style?.qgisRenderer ?? _layerStyle?.qgisRenderer);
+      final viewStyle = widget.targetView!.style;
+      _setQgisRenderer(
+        viewStyle?.qgisRenderer ?? _layerStyle?.qgisRenderer,
+        viewStyle?.qgisRenderer != null ? viewStyle?.qgisRendererDef : _layerStyle?.qgisRendererDef,
+      );
       // View に指定が無い項目はレイヤの値を見せる
       final view = widget.targetView!.style;
       layerStyleSettings.loadOverlay(view == null ? _layerStyle : view.mergeWith(_layerStyle));
     } else if (widget.isLayerMode) {
       final meta = await KMetaService.instance.getMeta(widget.folderPath!);
       final style = meta.getLayerStyle(widget.targetLayer!.layerKey);
-      _setQgisRenderer(style?.qgisRenderer);
+      _setQgisRenderer(style?.qgisRenderer, style?.qgisRendererDef);
       layerStyleSettings.loadOverlay(style);
     } else {
       layerStyleSettings.clearOverlay();
     }
   }
 
-  void _setQgisRenderer(String? type) {
-    if (type == _qgisRenderer) return;
+  void _setQgisRenderer(String? type, QgisRenderer? def) {
+    if (type == _qgisRenderer && identical(def, _qgisRendererDef)) return;
     _qgisRenderer = type;
+    _qgisRendererDef = def;
     if (mounted) setState(() {});
   }
 
@@ -548,6 +558,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
         labelOpacity: layerStyleSettings.getDouble(labelOpacityDef),
         // QGIS 側の描き分けの印は、ラベルを変えても消さない
         qgisRenderer: widget.isViewMode ? null : _qgisRenderer,
+        qgisRendererDef: widget.isViewMode ? null : _qgisRendererDef,
       );
 
   /// [full] のうち [base] と同じ項目を null にする（View はレイヤと違う項目だけ持つ）
@@ -580,7 +591,9 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       var diff = _diff(style, _layerStyle);
       // View 自身が持っていた描き分けの印は残す
       final viewRenderer = widget.targetView!.style?.qgisRenderer;
-      if (viewRenderer != null) diff = diff.copyWith(qgisRenderer: viewRenderer);
+      if (viewRenderer != null) {
+        diff = diff.copyWith(qgisRenderer: viewRenderer, qgisRendererDef: widget.targetView!.style?.qgisRendererDef);
+      }
       widget.targetView!.style = diff.isEmpty ? null : diff;
       await widget.targetLayer!.persistViews();
       widget.targetLayer!.folderNode?.invalidateMetaCache();
@@ -641,7 +654,8 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       updatedLayers.remove(widget.targetLayer!.layerKey);
       // QGIS 側の描き分けの印は残す（戻しても `.qgs` のレンダラは QGIS のまま）
       if (_qgisRenderer != null) {
-        updatedLayers[widget.targetLayer!.layerKey] = KMetaLayerStyle(qgisRenderer: _qgisRenderer);
+        updatedLayers[widget.targetLayer!.layerKey] =
+            KMetaLayerStyle(qgisRenderer: _qgisRenderer, qgisRendererDef: _qgisRendererDef);
       }
       final updatedStyles = KMetaStyles(
         defaultStyle: rawMeta.styles.defaultStyle,
@@ -683,6 +697,11 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
               leading: const Icon(Icons.info_outline),
               title: Text(t.styleScreen.qgisStyle(kind: _qgisRendererLabel(_qgisRenderer!))),
               subtitle: Text(t.styleScreen.qgisStyleHint),
+            ),
+          if (_qgisRendererDef != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: QgisRendererLegend(renderer: _qgisRendererDef!),
             ),
           if (widget.isViewMode)
             Padding(

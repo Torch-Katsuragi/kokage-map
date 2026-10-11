@@ -31,6 +31,7 @@ import '../geometry_type.dart';
 import '../geopackage/feature_repository.dart' show toGeoMultiLine, toGeoMultiPolygon, toGeoPoint;
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
+import '../qgis_renderer.dart';
 import 'feature_node.dart';
 import 'folder_node.dart';
 import 'geopackage_node.dart';
@@ -203,13 +204,25 @@ abstract class LayerNode extends LayerTreeNode {
   /// > [!IMPORTANT] スタイル指定が1つも無ければ何もしない
   /// > `styleGroups` が空のままなら描画経路は View 導入前と完全に同じになる。
   /// > 既存プロジェクトの見え方を変えないための保険。
+  ///
+  /// QGIS の描き分け（[KMetaLayerStyle.qgisRendererDef]）を持つ View は、シンボルごとにグループ
+  /// （`<View のキー>#<添字>`）を作り、地物の属性で振り分ける。どのシンボルにも当たらない地物
+  /// （チェックを外した分類・範囲外・どのルールにも当たらない）は描かない（[rendererHiddenRowIds]）。
+  /// 振り分けはここ（地物の読み込み・スタイルの変更のたび）で一度だけ。描画のたびには評価しない
   Future<void> refreshStyleGroups() async {
     styleKeyByRowId.clear();
     styleGroups.clear();
+    _styleGroupRank.clear();
+    _renderers.clear();
+    rendererHiddenRowIds.clear();
+    _hiddenRowViewKey.clear();
     _restStyleKey = null;
 
     if (views.isEmpty) return;
     final layerStyle = await getKmetaStyle();
+    // どの View にも描かれない候補（後の View が描くなら描く。QGIS では別のレイヤなので）
+    final hiddenBy = <int, String>{};
+    var rank = 0;
 
     for (final view in views) {
       if (!view.visible) continue;
@@ -222,13 +235,29 @@ abstract class LayerNode extends LayerTreeNode {
       // （2026-09-30、Pixel 9 で Kitayama-2026 とその下の Kitayama-2026-demo）。gpkg のパスを添える
       final key = '${geoPackageFile.getAbsolutePath() ?? ''}|${view.viewKey}';
       styleGroups[key] = style;
+      _styleGroupRank[key] = rank;
+      final renderer = _ViewRenderer.of(key, style, styleGroups, _styleGroupRank, rank);
+      if (renderer != null) _renderers[key] = renderer;
+      rank++;
+
+      void assign(int rowId) {
+        if (styleKeyByRowId.containsKey(rowId)) return;
+        if (renderer == null) {
+          styleKeyByRowId[rowId] = key;
+          return;
+        }
+        final k = renderer.keyFor(_featureMap[rowId]?.properties);
+        if (k == null) {
+          hiddenBy.putIfAbsent(rowId, () => key);
+        } else {
+          styleKeyByRowId[rowId] = k;
+        }
+      }
 
       if (!view.hasFilter) {
         // フィルタ無しの View は残り全部を受け持つ（あとから足した地物も）
         _restStyleKey ??= key;
-        for (final rowId in _featureMap.keys) {
-          styleKeyByRowId.putIfAbsent(rowId, () => key);
-        }
+        _featureMap.keys.forEach(assign);
         continue;
       }
 
@@ -236,9 +265,13 @@ abstract class LayerNode extends LayerTreeNode {
         layerName,
         where: view.filter,
       );
-      for (final rowId in ids) {
-        styleKeyByRowId.putIfAbsent(rowId, () => key);
-      }
+      ids.forEach(assign);
+    }
+
+    for (final MapEntry(key: rowId, value: key) in hiddenBy.entries) {
+      if (styleKeyByRowId.containsKey(rowId)) continue;
+      rendererHiddenRowIds.add(rowId);
+      _hiddenRowViewKey[rowId] = key;
     }
 
     // どの View にも当たらなかったフィーチャは既定スタイル。
@@ -246,6 +279,42 @@ abstract class LayerNode extends LayerTreeNode {
     if (styleGroups.isEmpty) {
       styleKeyByRowId.clear();
       _restStyleKey = null;
+    }
+  }
+
+  /// View のキー → その View の描き分け（[refreshStyleGroups] が作る）
+  final Map<String, _ViewRenderer> _renderers = {};
+
+  /// スタイルグループのキー → View の順位（上の View ほど小さい）。描き分けのシンボルは View と同じ順位
+  final Map<String, int> _styleGroupRank = {};
+
+  /// QGIS の描き分けで描かない地物（どのシンボルにも当たらない）。地図にもヒットテストにも出さない
+  final Set<int> rendererHiddenRowIds = {};
+  final Map<int, String> _hiddenRowViewKey = {};
+
+  /// [key] のスタイルグループの、View の順位（z順）。知らないキーなら null
+  int? styleGroupRank(String key) => _styleGroupRank[key];
+
+  /// View の順位の数（描き分けのシンボルは数えない。地図で View の順に積むときの段の数）
+  int get styleGroupRankCount => _styleGroupRank.isEmpty ? 0 : _styleGroupRank.values.reduce((a, b) => a > b ? a : b) + 1;
+
+  /// 1 件の属性が変わったので、描き分けのシンボルを選び直す（全件は振り分け直さない）
+  void _restyleRow(int rowId) {
+    if (_renderers.isEmpty) return;
+    final current = styleKeyByRowId[rowId] ?? _hiddenRowViewKey[rowId];
+    if (current == null) return;
+    final viewKey = _renderers.keys.where((k) => current == k || current.startsWith('$k#')).firstOrNull;
+    final renderer = viewKey == null ? null : _renderers[viewKey];
+    if (renderer == null) return;
+    final k = renderer.keyFor(_featureMap[rowId]?.properties);
+    if (k == null) {
+      styleKeyByRowId.remove(rowId);
+      rendererHiddenRowIds.add(rowId);
+      _hiddenRowViewKey[rowId] = viewKey!;
+    } else {
+      styleKeyByRowId[rowId] = k;
+      rendererHiddenRowIds.remove(rowId);
+      _hiddenRowViewKey.remove(rowId);
     }
   }
 
@@ -379,6 +448,7 @@ abstract class LayerNode extends LayerTreeNode {
 
     feature.properties ??= {};
     feature.properties![key] = value;
+    _restyleRow(rowId);
     return true;
   }
 
@@ -897,4 +967,45 @@ class PolygonLayerNode extends LayerNode {
         GeometryType.polygon,
         (file, name, parent) => PolygonLayerNode(file, name, parent: parent),
       );
+}
+
+/// View 1 枚ぶんの QGIS の描き分け。シンボルごとのスタイルグループのキーを持つ
+class _ViewRenderer {
+  _ViewRenderer(this.evaluator, this.classKeys);
+
+  final QgisRendererEvaluator evaluator;
+
+  /// シンボルの添字 → スタイルグループのキー
+  final List<String> classKeys;
+
+  /// 描き分けがあれば、シンボルごとのグループを [groups] に足して返す。式が読めなければ null（代表の色で描く）
+  static _ViewRenderer? of(
+    String key,
+    KMetaLayerStyle style,
+    Map<String, KMetaLayerStyle> groups,
+    Map<String, int> ranks,
+    int rank,
+  ) {
+    final def = style.qgisRendererDef;
+    final evaluator = def?.evaluator;
+    if (def == null || evaluator == null) return null;
+    final classKeys = <String>[];
+    for (var i = 0; i < def.classes.length; i++) {
+      final symbol = def.classes[i].style;
+      if (symbol == null) {
+        classKeys.add(key);
+        continue;
+      }
+      final k = '$key#$i';
+      groups[k] = symbol.mergeWith(style);
+      ranks[k] = rank;
+      classKeys.add(k);
+    }
+    return _ViewRenderer(evaluator, classKeys);
+  }
+
+  String? keyFor(Map<String, Object?>? props) {
+    final i = evaluator.classFor(props);
+    return i == null ? null : classKeys[i];
+  }
 }

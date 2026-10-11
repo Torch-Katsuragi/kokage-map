@@ -221,12 +221,54 @@ QGIS で足したラスタが同じ `.tif` を指していれば、書き戻し�
 > [!NOTE] 読み取りは寛容に
 > - シンボルのプロパティは QGIS 3.x の `<Option name= value=>` と、
 >   それ以前の `<prop k= v=>` の**両方**を読む。他人のファイルは古い形式で来る
-> - 拾うのは単一シンボルの1レイヤ目だけ。重ね合わせや分類分けの完全再現は狙わない。
+> - 単一シンボルは1レイヤ目だけ拾う。重ね合わせの完全再現は狙わない。
 >   狙うと「開けるファイルを選り好みする」方向に行く（コンセプトと逆）
+> - 分類・段階・ルールは地物ごとの色まで再現する（下の「描き分けの再現」）
 > - `subset` は `|` で切らずに**最後まで丸ごと**取る（SQLの `||` で壊れるため）
 
 読み込み口はファイル選択ダイアログではなく「**このフォルダの中の `.qgs`**」。
 共有の単位が dir なので、それで足りる。複数あれば `project.qgs` を優先。
+
+## 描き分け（分類・段階・ルール）の再現（2026-10-11）
+
+QGIS で `categorizedSymbol` / `graduatedSymbol` / `RuleRenderer` にしたレイヤ（樹種で分類した小班など）を、
+それまでの「代表の 1 色」ではなく地物ごとに QGIS と同じシンボルで描く。2D・3D・引いた段の焼き込みのどれも同じ経路。
+
+```
+.qgs <renderer-v2>
+  └ QgsRendererReader.read（qgs_renderer_reader.dart）  → QgisRenderer（models/qgis_renderer.dart）
+       └ KMetaLayerStyle.qgisRendererDef に入れてフォルダ設定（kokage/meta）に持つ。印 qgisRenderer と組
+LayerNode.refreshStyleGroups（地物の読み込み・スタイル変更のたびに 1 回）
+  └ シンボルごとにスタイルグループ `<View のキー>#<添字>` を作り、地物の属性で振り分ける（styleKeyByRowId）
+  └ どのシンボルにも当たらない地物は rendererHiddenRowIds（地図にも選択にも出さない）
+地図面は k-style でグループの色を引く（既存の View ごとのスタイルと同じ仕組み）
+```
+
+- **読むもの**: 分類は列か式・値（複数値の項目も）・「その他の値すべて」（値が空か NULL の項目）・チェックを外した項目。
+  段階は列か式・範囲（並び順で最初に `lower <= v <= upper` のもの。QGIS の `rangeForValue` と同じ）。ルールは入れ子・ELSE・
+  チェックを外したルール。複数のルールに当たったら **最後に当たったもの**（QGIS でいちばん上に描かれる）の色
+- **シンボル**: 面は SimpleFill（塗り・輪郭の色と太さ、`style=no` / `outline_style=no`）、無ければ輪郭だけの SimpleLine。
+  線は SimpleLine（色・太さ）、点は SimpleMarker（色・大きさ）。シンボルの `alpha` とレイヤの `<layerOpacity>` は面の塗りと輪郭の不透明度に掛ける
+- **式**: `lib/utils/qgis_expression.dart`（QGIS の式の部分集合。比較・AND/OR/NOT・IN・LIKE/ILIKE・IS [NOT] NULL・BETWEEN・
+  CASE・四則と `||`・lower/upper/coalesce/if など）。NULL は三値でフィルタでは偽。ラベルの式（`label_expression.dart`）とは別の木。
+  **読めない式が 1 つでもあれば、そのレンダラは代表の色で全部描く**（ログに 1 回だけ出す。スタイル画面の凡例に注記）
+- **速さ**: 1 万件の振り分けは分類 8ms・ルール 30ms 程度、`refreshStyleGroups` 全体で 15ms 程度（テストの実測）。描画のたびには評価しない。
+  属性を直した地物は `LayerNode.updateFeatureAttribute` でその 1 件だけ選び直す
+- **並び**: 同じ View の中はシンボルで並べ替えない（QGIS もシンボルレベルを使わなければデータの順）
+- **書き戻し**: `.qgs` のレンダラは触らない（不変条件4、`QgsDocument`）。読み戻しのたびに中身を差し替え、QGIS で単一シンボルに
+  戻されたら印と中身を一緒に外す（`KMetaLayerStyle.withoutQgisRenderer`）
+- **古い取り込みの補完**: 中身を持つ前に取り込んだプロジェクトは印だけを持つ。自分が書いた `.qgs` は読み戻さないので、
+  開いたときに `QgsImporter.backfillRendererDefs` が印だけのスタイル・View にレンダラの中身を足す（他の設定には触らない）
+- **凡例**: スタイル画面（色・太さは引き続き編集させない）と、レイヤ一覧の行の下（8 件を超えたら「… +N」）
+- **やらないこと**: 縮尺による切り替え（ルールの min/max scale は無視して常に当てる）・破線・点の形・線と点の不透明度・
+  シンボルの重ね合わせ・データ定義の上書き・`$area` など地物の形を使う式
+
+テストは `test/qgis_renderer_test.dart`（QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_renderers.qgs` と、QGIS が地物ごとに選んだ
+シンボルの `_expected.json` を突き合わせる。作り直しは `tool/qgis/write_renderer_fixture.py`）、`test/view_style_test.dart`
+（振り分けと 3D の点の色）、`test/qgs_renderer_backfill_test.dart`（取り込みと補完）。
+
+> [!NOTE] QGIS の `symbolsForFeature` は ELSE のルールを常に含める
+> 正解を作るときは `legendKeysForFeature`（当たったルールの key）を使う。色で比べると ELSE が全部に当たって見える。
 
 ## 1. SpatiaLiteトリガーの復元
 

@@ -10,6 +10,11 @@
 )
 
 #fixes(
+  "New",
+  [Layers styled in QGIS by category, graduated range or rule (stands by species or age) are drawn feature by feature in the same colors as QGIS],
+)
+
+#fixes(
   "Fixed",
   [Overlay GeoTIFFs made by the app are now written with GDAL, the same library QGIS uses, so QGIS opens them without warnings],
   [First sync after reinstalling overwrote files present on both sides with older cloud copies; the newer side is now chosen, with a warning],

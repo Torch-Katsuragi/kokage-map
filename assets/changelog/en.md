@@ -2,6 +2,10 @@
 
 ## Next release
 
+### New
+
+- Layers styled in QGIS as categorized, graduated or rule-based (such as compartments colored by species or stand age) are now drawn feature by feature in the same colors as QGIS, in 2D and 3D. A legend appears in the layer list and the style screen. Colors are still changed in QGIS
+
 ### Fixed
 
 - GeoTIFFs made with "Convert to overlay" from a photo, and those rewritten when repositioning an overlay, are now written with GDAL, the same library QGIS uses. QGIS no longer warns about them (such as "tags are not sorted"). GeoTIFFs made earlier keep working and are rewritten in the new form when repositioned

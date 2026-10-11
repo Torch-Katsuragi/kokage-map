@@ -55,10 +55,8 @@ import '../gdal_raster_overlay.dart';
 import '../kmeta_service.dart';
 import 'qgs_project_builder.dart' show QgsProjectBuilder;
 import 'qgs_raster_source.dart';
+import 'qgs_renderer_reader.dart';
 import 'qgs_xml.dart';
-
-/// px ⇄ mm（QGISのシンボル単位はMM）。96dpi 相当。[[qgs_writer]] の逆。
-const double _kMmToPx = 96 / 25.4;
 
 /// 取り込んだ結果。
 class QgsImportResult {
@@ -271,6 +269,63 @@ class QgsImporter {
     );
   }
 
+  /// 描き分けの印（[KMetaLayerStyle.qgisRenderer]）だけを持ち、中身（[KMetaLayerStyle.qgisRendererDef]）が
+  /// 無いスタイルに、`.qgs` のレンダラの中身を足す。足した数を返す。
+  ///
+  /// 中身を持つようになった版（2026-10-11）より前に取り込んだプロジェクトは印だけを持つ。自分が書いた
+  /// `.qgs` は読み戻さないので、QGIS で保存し直すまで代表の 1 色のままになる。それを埋めるだけで、
+  /// View・可視性・他のスタイルには触らない（全部を取り込み直すとアプリだけが持つ設定を巻き戻しうる）
+  Future<int> backfillRendererDefs(String qgsPath, FolderNode root) async {
+    final XmlDocument doc;
+    try {
+      doc = XmlDocument.parse(await readQgsText(qgsPath));
+    } on Object catch (e) {
+      AppLogger.debug('[QgsImporter] 描き分けの補完: 読めない $e');
+      return 0;
+    }
+    final rootPath = root.getAbsoluteFilePath();
+    final sources = _SourceResolver(
+      p.dirname(p.normalize(qgsPath)),
+      rootPath,
+      _indexGeoPackages(root),
+      _indexImages(root),
+    );
+    var filled = 0;
+    final projectLayers = doc.rootElement.findElements('projectlayers').firstOrNull;
+    for (final maplayer in projectLayers?.findElements('maplayer') ?? const <XmlElement>[]) {
+      final def = QgsRendererReader.read(maplayer);
+      if (def == null) continue;
+      final target = sources.resolve(maplayer, <String>[]);
+      if (target == null) continue;
+      final (:name, :source, :layer, gpkg: _) = target;
+      final folder = layer.folderNode;
+      final folderPath = folder?.getAbsoluteFilePath();
+      if (folder == null || folderPath == null) continue;
+
+      final isDefault = name == layer.layerName && (source.subset == null || source.subset!.isEmpty);
+      if (isDefault) {
+        final existing = (await KMetaService.instance.getMeta(folderPath)).styles.layers[layer.layerKey];
+        if (existing?.qgisRenderer != def.kind.qgisType || existing?.qgisRendererDef != null) continue;
+        await KMetaService.instance.setLayerStyle(folderPath, layer.layerKey, existing!.copyWith(qgisRendererDef: def));
+        folder.invalidateMetaCache();
+        layer.invalidateKmetaStyleCache();
+        filled++;
+        continue;
+      }
+      if (layer.views.isEmpty) await layer.loadViews();
+      final view = layer.views.where((v) => v.name == name).firstOrNull;
+      final style = view?.style;
+      if (view == null || style == null || style.qgisRenderer != def.kind.qgisType || style.qgisRendererDef != null) {
+        continue;
+      }
+      view.style = style.copyWith(qgisRendererDef: def);
+      await layer.persistViews();
+      filled++;
+    }
+    if (filled > 0) AppLogger.debug('[QgsImporter] 描き分けの中身を $filled 件補った（${p.basename(qgsPath)}）');
+    return filled;
+  }
+
   // =============================================
   // 部品
   // =============================================
@@ -312,7 +367,7 @@ class QgsImporter {
     final existing = (await KMetaService.instance.getMeta(folderPath)).styles.layers[layer.layerKey];
     var merged = imported.mergeWith(existing);
     if (imported.qgisRenderer == null && merged.qgisRenderer != null) {
-      merged = KMetaLayerStyle.fromJson(merged.toJson()..remove('qgisRenderer'));
+      merged = merged.withoutQgisRenderer();
     }
     await KMetaService.instance.setLayerStyle(folderPath, layer.layerKey, merged);
     folder.invalidateMetaCache();
@@ -438,15 +493,20 @@ class QgsImporter {
   /// `renderer-v2` から見た目を拾う。読めない形なら null（＝スタイル無し）。
   ///
   /// > [!NOTE] 拾うのは単一シンボルの1レイヤ目だけ
-  /// > QGISのシンボルは重ね合わせも段階分けもできるが、こかげマップ 側に受け皿が無い。
-  /// > 分類分け（categorizedSymbol 等）は最初のシンボルの色を採るだけ。
+  /// > QGISのシンボルは重ね合わせもできるが、こかげマップ 側に受け皿が無い。
   /// > **完全再現は狙わない。** 狙うと「開けるファイルを選り好みする」方向に行く。
+  ///
+  /// 描き分け（分類・段階・ルール）は、最初のシンボルの色を代表の色にし、中身を
+  /// [KMetaLayerStyle.qgisRendererDef] に読む（地物ごとの色はそこから決める。2026-10-11）
   KMetaLayerStyle? readStyle(XmlElement maplayer) {
     final style = _readSymbolStyle(maplayer);
     final type = maplayer.findElements('renderer-v2').firstOrNull?.getAttribute('type');
     // 単一シンボル以外は、代表の色で描きつつ「QGIS で設定されたスタイル」として印を付ける
     if (type == null || type == 'singleSymbol') return style;
-    return (style ?? const KMetaLayerStyle()).copyWith(qgisRenderer: type);
+    return (style ?? const KMetaLayerStyle()).copyWith(
+      qgisRenderer: type,
+      qgisRendererDef: QgsRendererReader.read(maplayer),
+    );
   }
 
   KMetaLayerStyle? _readSymbolStyle(XmlElement maplayer) {
@@ -454,104 +514,10 @@ class QgsImporter {
     if (renderer == null) return null;
     final symbol = renderer.findAllElements('symbol').firstOrNull;
     if (symbol == null) return null;
-    final symbolLayer = symbol.findElements('layer').firstOrNull;
-    if (symbolLayer == null) return null;
-
-    final props = _readProps(symbolLayer);
-    if (props.isEmpty) return null;
-
-    switch (symbol.getAttribute('type')) {
-      case 'marker':
-        return KMetaLayerStyle(
-          pointColor: _color(props['color']),
-          // QGIS の size は直径(MM)。こかげマップ は半径感覚の px
-          pointSize: _px(props['size'], divideBy: 2),
-        );
-      case 'line':
-        return KMetaLayerStyle(
-          lineColor: _color(props['line_color'] ?? props['color']),
-          lineWidth: _px(props['line_width'] ?? props['width']),
-        );
-      case 'fill':
-        final fill = _color(props['color']);
-        final stroke = _color(props['outline_color'] ?? props['border_color']);
-        return KMetaLayerStyle(
-          polygonFillColor: fill,
-          polygonFillOpacity: _alpha(props['color']),
-          polygonBorderColor: stroke,
-          polygonBorderOpacity: _alpha(
-            props['outline_color'] ?? props['border_color'],
-          ),
-          polygonBorderWidth: _px(
-            props['outline_width'] ?? props['border_width'],
-          ),
-        );
-      default:
-        return null;
-    }
+    return QgsSymbolReader.read(symbol);
   }
 
-  /// シンボルレイヤのプロパティを読む。
-  ///
-  /// ⚠ QGIS 3.x は `<Option name= value=>`、それ以前は `<prop k= v=>`。
-  /// **両方読む。** 他人のファイルは古い形式で来る。
-  Map<String, String> _readProps(XmlElement symbolLayer) {
-    final props = <String, String>{};
-
-    // 旧形式（QGIS 3.x より前）。`<layer>` の直下に並ぶ
-    for (final prop in symbolLayer.findElements('prop')) {
-      final k = prop.getAttribute('k');
-      final v = prop.getAttribute('v');
-      if (k != null && v != null) props[k] = v;
-    }
-
-    // 新形式。`<layer>` の**直下の** `<Option type="Map">` の子だけを見る。
-    //
-    // ⚠ 再帰で拾ってはいけない。QGIS は `<layer>` の中に
-    //   `<data_defined_properties>` も書き、そこにも `name="name"` などの
-    //   `<Option>` が入っている。まとめて読むと本物の値を上書きしてしまう
-    //   （QGIS 3.44 の実出力で確認）。
-    for (final map in symbolLayer.findElements('Option')) {
-      if (map.getAttribute('type') != 'Map') continue;
-      for (final option in map.findElements('Option')) {
-        final name = option.getAttribute('name');
-        final value = option.getAttribute('value');
-        if (name != null && value != null) props[name] = value;
-      }
-    }
-    return props;
-  }
-
-  /// QGIS の `R,G,B,A`（各0-255）
-  ///
-  /// ⚠ QGIS 3.44 は後ろに浮動小数表記を足してくる:
-  /// `30,144,255,255,rgb:0.1176471,0.5647059,1,1`。先頭4つだけ見ればよい。
-  Color? _color(String? value) {
-    if (value == null) return null;
-    final parts = value.split(',');
-    if (parts.length < 3) return null;
-    final rgb = [
-      for (final part in parts.take(3)) int.tryParse(part.trim()) ?? 0,
-    ];
-    // アルファは別途 opacity として持つので、色は不透明にしておく
-    return Color.fromARGB(255, rgb[0], rgb[1], rgb[2]);
-  }
-
-  /// `R,G,B,A` のAを 0..1 で返す
-  double? _alpha(String? value) {
-    if (value == null) return null;
-    final parts = value.split(',');
-    if (parts.length < 4) return null;
-    final a = int.tryParse(parts[3].trim());
-    return a == null ? null : a / 255;
-  }
-
-  double? _px(String? mm, {double divideBy = 1}) {
-    if (mm == null) return null;
-    final value = double.tryParse(mm.trim());
-    if (value == null) return null;
-    return value * _kMmToPx / divideBy;
-  }
+  Color? _color(String? value) => QgsSymbolReader.color(value);
 }
 
 /// `<maplayer>` のデータソースを、ツリーの GeoPackage レイヤに結びつける

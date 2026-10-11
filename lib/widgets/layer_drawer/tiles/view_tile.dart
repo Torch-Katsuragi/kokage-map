@@ -106,7 +106,15 @@ class ViewTile extends ConsumerWidget {
       },
     );
     if (guiding) row = KeyedSubtree(key: TutorialTargets.newViewMenu, child: row);
-    return row;
+    // QGIS の描き分けなら、行の下に小さな凡例（View が印を持てば View の、無ければレイヤの）
+    final own = node.style;
+    final def = own?.qgisRenderer != null ? own!.qgisRendererDef : _layer.kmetaStyleIfLoaded?.qgisRendererDef;
+    if (def == null) return row;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [row, DrawerLegend(renderer: def, depth: depth, dimmed: dimmed)],
+    );
   }
 
   /// チュートリアルの案内先: 練習のエリアに足した View（いちばん上の、既定でない View）

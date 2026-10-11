@@ -106,7 +106,16 @@ class LayerTile extends ConsumerWidget {
     // 既定 View の見え方はレイヤのスタイルそのもので、レイヤの長押し →「スタイル」で変える。
     // View を足すと、既定と足した View が並ぶ
     final views = node.views;
-    if (views.isEmpty || (views.length == 1 && views.first.isDefaultView)) return row;
+    if (views.isEmpty || (views.length == 1 && views.first.isDefaultView)) {
+      // QGIS の描き分けなら、行の下に小さな凡例
+      final def = node.kmetaStyleIfLoaded?.qgisRendererDef;
+      if (def == null) return row;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [row, DrawerLegend(renderer: def, depth: depth, dimmed: dimmed)],
+      );
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,

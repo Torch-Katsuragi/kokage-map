@@ -100,9 +100,11 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     final newPolygonFeatures = <PolygonFeatureNode>[];
 
     for (final layer in layers) {
+      // QGIS の描き分けで描かない地物（チェックを外した分類など）は、地図にも選択にも出さない
+      final hidden = layer.rendererHiddenRowIds;
       final activeFeatures = layer.children
           .whereType<FeatureNode>()
-          .where((f) => !f.isDisposed);
+          .where((f) => !f.isDisposed && (hidden.isEmpty || !hidden.contains(f.rowId)));
 
       if (layer is PointLayerNode) {
         newPointFeatures.addAll(activeFeatures.whereType<PointFeatureNode>());
@@ -275,16 +277,16 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     }
     final out = <F>[];
     for (final MapEntry(key: layer, value: list) in byLayer.entries) {
-      final keys = layer.styleGroups.keys.toList();
-      if (keys.length < 2) {
+      // 順位は View の順（QGIS の描き分けのシンボルは同じ View の中なので、並べ替えずデータの順のまま。QGIS と同じ）
+      final count = layer.styleGroupRankCount;
+      if (count < 2) {
         out.addAll(list);
         continue;
       }
-      final rank = {for (var i = 0; i < keys.length; i++) keys[i]: i};
       // 順位ごとに振り分けて下から積む（同じ View の中は元の順のまま）
-      final buckets = List.generate(keys.length + 1, (_) => <F>[]);
+      final buckets = List.generate(count + 1, (_) => <F>[]);
       for (final f in list) {
-        buckets[rank[layer.styleKeyOf(f.rowId)] ?? keys.length].add(f);
+        buckets[layer.styleGroupRank(layer.styleKeyOf(f.rowId)) ?? count].add(f);
       }
       for (final b in buckets.reversed) {
         out.addAll(b);

@@ -24,12 +24,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../i18n/strings.g.dart';
+import '../../models/qgis_renderer.dart';
+import '../qgis_renderer_legend.dart';
 
 /// 行の高さ（詰めた行。以前は ListTile の 68px で、スマホでは数行しか入らなかった）
 const double kDrawerRowHeight = 48;
 
 /// 1 段ぶんの字下げ
 const double kDrawerIndent = 20;
+
+/// 行の下に出す QGIS の描き分けの小さな凡例（名前の位置にそろえる。多ければ畳む）
+class DrawerLegend extends StatelessWidget {
+  const DrawerLegend({super.key, required this.renderer, this.depth = 0, this.dimmed = false});
+
+  final QgisRenderer renderer;
+  final int depth;
+  final bool dimmed;
+
+  @override
+  Widget build(BuildContext context) => Opacity(
+        opacity: dimmed ? 0.4 : 1,
+        child: Padding(
+          padding: EdgeInsets.only(left: 12 + depth * kDrawerIndent + 38, right: 12, bottom: 6),
+          child: QgisRendererLegend(renderer: renderer, dense: true, maxItems: 8),
+        ),
+      );
+}
 
 /// 長押しメニューの 1 項目
 class RowMenuItem {

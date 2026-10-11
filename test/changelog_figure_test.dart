@@ -57,6 +57,13 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: ChangelogScreen()));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
     await tester.pumpAndSettle();
+    // 図をまだ作っていない「次のリリース」（md のまま）がいちばん上にあるときは、その下の図の版を開いて見る
+    final headings = File('assets/changelog/ja.md').readAsLinesSync().where((l) => l.startsWith('## ')).toList();
+    if (headings.first == '## 次のリリース' && !File('assets/changelog/svg/next.ja.json').existsSync()) {
+      await tester.tap(find.text(headings[1].substring(3)));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
+      await tester.pumpAndSettle();
+    }
 
     expect(find.byType(SvgPicture), findsWidgets);
     // 図の版の本文は画面に文字として出さないが、読み上げでは読める

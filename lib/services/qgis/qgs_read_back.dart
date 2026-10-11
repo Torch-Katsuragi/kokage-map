@@ -60,6 +60,8 @@ class QgsReadBackResult {
 class QgsReadBack {
   const QgsReadBack();
 
+  static final _hasQgisRenderer = RegExp('type="(categorizedSymbol|graduatedSymbol|RuleRenderer)"');
+
   /// [root] の `<dir名>.qgs`（無ければ旧 `project.qgs`）を見て、QGIS 側で保存されていれば取り込む。
   ///
   /// ツリーの子（gpkg とレイヤ）が読み込まれてから呼ぶこと。
@@ -141,6 +143,14 @@ class QgsReadBack {
 
     if (doc.lastWrittenByKokage) {
       AppLogger.debug('[QgsReadBack] ${p.basename(path)} は自分が書いたもの。読み戻し不要');
+      // 描き分けの中身を持たない古い取り込みだけ補う（[QgsImporter.backfillRendererDefs]）
+      if (_hasQgisRenderer.hasMatch(xml)) {
+        try {
+          await const QgsImporter().backfillRendererDefs(path, root);
+        } on Object catch (e) {
+          AppLogger.debug('[QgsReadBack] 描き分けの補完に失敗: $e');
+        }
+      }
       return null;
     }
 

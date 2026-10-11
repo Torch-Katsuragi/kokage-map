@@ -297,6 +297,10 @@ class GlobalDrawingState extends ChangeNotifier {
     AppLogger.debug('[GlobalDrawingState] 自動保存タイマー停止');
   }
 
+  /// 自動保存をすぐに走らせる（テスト用。タイマーの 1 分を待たない）
+  @visibleForTesting
+  Future<void> autoSaveNow() => _performAutoSave();
+
   /// 自動保存処理を実行
   Future<void> _performAutoSave() async {
     if (!isDrawing) {
@@ -345,8 +349,15 @@ class GlobalDrawingState extends ChangeNotifier {
         clearAfterConfirm: false,
       );
 
-      // 作成されたフィーチャを取得
-      final savedFeature = success ? selectedLayer.features.lastOrNull : null;
+      // 書いた地物。追記したならその地物（選んでいるレイヤの最後の地物とは限らない。
+      // 追記中にレイヤを選び替えると、替えた先の最後の地物に描きかけが差し替わっていた）
+      final editing = _editingFeature;
+      final appended = editing != null && (isLine ? editing is LineFeatureNode : editing is PolygonFeatureNode);
+      final savedFeature = !success
+          ? null
+          : appended
+              ? editing
+              : selectedLayer.features.lastOrNull;
       if (savedFeature != null) {
         // 自動保存成功後、追記モードで描画を継続し、タイマーを再開する
         AppLogger.debug('[GlobalDrawingState] 自動保存成功 - 追記モードで継続開始: ${savedFeature.name}');

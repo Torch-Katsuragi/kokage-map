@@ -41,6 +41,7 @@
   [selecting another layer while drawing made the autosave overwrite a different feature],
   [Replace in the attribute table counted values it did not change (such as a different letter case)],
   [a layer set back to Single symbol in QGIS stayed categorized after reading back],
+  [deleting a feature right after editing it kept later attribute edits in that gpkg from being saved],
 )
 
 #fixes(

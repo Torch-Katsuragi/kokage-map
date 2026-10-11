@@ -37,6 +37,7 @@
 - When another layer was selected while drawing a line or polygon with the pen or GPS survey, the next autosave (every minute) replaced the drawing with the last feature of that layer, and continuing to draw overwrote that feature. Drawing now continues on the autosaved feature
 - Replace in the attribute table also counted values that differed only in letter case, or only resembled a search term containing % or _ (those values were not actually changed)
 - A layer switched back to "Single symbol" in QGIS after being categorized, graduated or rule-based still stayed QGIS-styled in Kokage Map after reading back (its colors could not be changed in the style screen)
+- Deleting a feature right after editing its attributes (within a second) kept later attribute edits in the same GeoPackage from being saved, and they were lost when the app closed
 
 ### Lighter
 

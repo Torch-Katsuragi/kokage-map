@@ -12,7 +12,7 @@ Pixel 9 の debug 版（本物のアプリ。`.gdaltest` では Google にサイ
 
 ### 0. 準備（PC）
 
-- [ ] ⚠ `database.rules.json`（`pins` を足した）を配信する。配信前に立てたピンは拒まれてキューから消える
+- [x] `database.rules.json`（`pins` を足した）を配信した（2026-10-12）
 - [ ] QGIS 4.2.2 で確認用の `.qgs` を作り Drive 連携フォルダへ: 小班を樹種で分類（9 件以上）・林齢で段階・ルール、属性フォーム（ValueMap・チェックボックス・日付・範囲・複数行・一意・値の関係・Hidden・別名・既定値 uuid()/now()・必須・タブ/グループ）、
       森林簿 CSV（UTF-8 と CP932 の 2 本、「髙」「﨑」入り）を「結合」、XYZ（森林計画図など）と WMS のレイヤ。Google Earth 製の KMZ（NetworkLink だけ）も置く
 

@@ -22,6 +22,7 @@
 import 'package:geobase/geobase.dart' as geo;
 
 import '../../utils/app_logger.dart';
+import '../../utils/wkb_utils.dart' show geometryPositions;
 
 /// （経度, 緯度）の並び → 標高（m）。引けない点は null
 typedef ElevationLookup = Future<List<double?>> Function(List<(double lon, double lat)> points);
@@ -40,7 +41,7 @@ class LayerDims {
   bool get hasZ => z == 1 || z == 2;
 
   /// M を書くか。任意（2）は元の形に M があったときだけ
-  bool hasMFor(geo.Geometry? original) => m == 1 || (m == 2 && original != null && _positions(original).any((p) => p.isMeasured));
+  bool hasMFor(geo.Geometry? original) => m == 1 || (m == 2 && original != null && geometryPositions(original).any((p) => p.isMeasured));
 
   bool get isXY => !hasZ && m == 0;
 }
@@ -69,8 +70,8 @@ class VertexZ {
     final hasM = dims.hasMFor(original);
     if (!hasZ && !hasM) return geom;
 
-    final index = original == null ? null : _PositionIndex(_positions(original).toList());
-    final src = _positions(geom).toList();
+    final index = original == null ? null : _PositionIndex(geometryPositions(original).toList());
+    final src = geometryPositions(geom).toList();
     final zs = List<double?>.filled(src.length, null);
     final ms = List<double?>.filled(src.length, null);
     final needDem = <int>[];
@@ -146,32 +147,7 @@ class _PositionIndex {
   }
 }
 
-/// 全頂点（並びは [_mapPositions] と同じ）
-Iterable<geo.Position> _positions(geo.Geometry geom) sync* {
-  if (geom is geo.Point) {
-    yield geom.position;
-  } else if (geom is geo.MultiPoint) {
-    yield* geom.positions;
-  } else if (geom is geo.LineString) {
-    yield* geom.chain.positions;
-  } else if (geom is geo.MultiLineString) {
-    for (final c in geom.chains) {
-      yield* c.positions;
-    }
-  } else if (geom is geo.Polygon) {
-    for (final r in geom.rings) {
-      yield* r.positions;
-    }
-  } else if (geom is geo.MultiPolygon) {
-    for (final poly in geom.polygons) {
-      for (final r in poly.rings) {
-        yield* r.positions;
-      }
-    }
-  }
-}
-
-/// 形はそのままで頂点だけ [f] で置き換える（[_positions] の順に呼ぶ）
+/// 形はそのままで頂点だけ [f] で置き換える（[geometryPositions] の順に呼ぶ）
 geo.Geometry _mapPositions(geo.Geometry geom, geo.Position Function(geo.Position) f) {
   geo.PositionSeries series(geo.PositionSeries s) => geo.PositionSeries.from([for (final p in s.positions) f(p)]);
   if (geom is geo.Point) return geo.Point(f(geom.position));

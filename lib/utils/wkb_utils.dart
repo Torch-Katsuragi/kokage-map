@@ -111,7 +111,7 @@ Uint8List createGpkgWkb(geo.Geometry geom, {int srsId = 4326}) {
     maxY = (maxY == null || lat > maxY!) ? lat : maxY;
   }
 
-  for (final pos in _allPositions(geom)) {
+  for (final pos in geometryPositions(geom)) {
     expand(pos.x, pos.y);
   }
 
@@ -152,8 +152,8 @@ dynamic geobaseGeometryToLatLngs(geo.Geometry geom) {
   return null;
 }
 
-/// geobase Geometry の全 Position を列挙する内部ヘルパー
-Iterable<geo.Position> _allPositions(geo.Geometry geom) sync* {
+/// geobase Geometry の全頂点（点・線・面の順に、リングは外周から）
+Iterable<geo.Position> geometryPositions(geo.Geometry geom) sync* {
   if (geom is geo.Point) {
     yield geom.position;
   } else if (geom is geo.MultiPoint) {
@@ -200,7 +200,7 @@ Iterable<geo.Position> _allPositions(geo.Geometry geom) sync* {
   final geom = parseGpkgGeometry(blob);
   if (geom == null) return null;
   double? minX, maxX, minY, maxY;
-  for (final pos in _allPositions(geom)) {
+  for (final pos in geometryPositions(geom)) {
     final x = pos.x;
     final y = pos.y;
     if (x.isNaN || y.isNaN) continue;

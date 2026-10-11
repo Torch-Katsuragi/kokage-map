@@ -7,7 +7,8 @@
 
 ## プロジェクト概要
 
-Flutter製の地図アプリ（RootMap GIS）。**Android と web** の2プラットフォーム。
+Flutter製の地図アプリ「こかげマップ」（Dart のパッケージ名は `root_maps`）。**Android と web** の2プラットフォーム。
+概要・対応形式・ビルド手順は [README](README.md)。gpkg 以外の形式は同梱の GDAL で読む（[[docs/technical/gdal]]）。
 
 > [!IMPORTANT] デスクトップ版（Windows / macOS / Linux）は 2026-08-25 に撤去した
 > 事務所側の役割は web版が引き継いでいる。経緯は [[docs/features/concept#プラットフォームの役割分担]]。

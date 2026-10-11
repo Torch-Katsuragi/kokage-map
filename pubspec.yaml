@@ -114,6 +114,9 @@ dependencies:
   photo_manager: ^3.12.0                 # 写真の選択をアプリ内で（位置情報の有り無しを選ぶ前に見せる。photo_picker_screen.dart）
   photo_manager_image_provider: ^2.2.0
   material_ui: ^1.2.0                     # flex_color_picker 4 が使う MaterialLocalizations（main.dart で delegate を登録）
+
+
+# 手元コピーで差し替える依存（pub.dev 版が現行のビルド環境で壊れているもの）
 dependency_overrides:
   # 0.4.0 の android/build.gradle が jcenter() と AGP 4.1 の buildscript を持ち、Gradle 9 で評価に失敗する。
   # third_party/ の写しは build.gradle だけ書き直し（namespace・compileSdk 35・mavenCentral）。ソースは同じ

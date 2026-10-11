@@ -37,6 +37,7 @@
   [Attribute table filter indicator, empty numeric cells shown as 0 and date values shown as (NULL) or date only, and full-width digits in the edit panel],
   [Per-point records of GPS-surveyed lines and polygons were dropped],
   [KMZ whose doc.kml only links (NetworkLink) to other KML could not be opened; each linked KML inside becomes a layer],
+  [Track extraction could show and save the previous date's points after switching dates quickly],
 )
 
 #fixes(

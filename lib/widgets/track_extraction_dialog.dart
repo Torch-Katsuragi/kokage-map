@@ -118,7 +118,8 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
     setState(() => _isLoading = true);
 
     final points = await widget.recorder.getPointsForDate(layerName);
-    if (!mounted) return;
+    // 読んでいる間に別の日へ替えていたら捨てる（前の日の点で今の日の表示・保存を上書きしない）
+    if (!mounted || layerName != _selectedDate) return;
 
     setState(() {
       _allPoints = points;

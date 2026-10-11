@@ -37,6 +37,7 @@
   [Attribute table filter indicator, and full-width digits in the edit panel],
   [Per-point records of GPS-surveyed lines and polygons were dropped],
   [KMZ whose doc.kml only links (NetworkLink) to other KML could not be opened; the linked KML inside become layers],
+  [a file that failed to download from Drive was later overwritten in the cloud by the device's older copy],
 )
 
 #fixes(

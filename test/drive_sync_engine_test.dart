@@ -447,6 +447,29 @@ void main() {
       expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.synced);
     });
 
+    // 途中で落とせなかったファイルの記録を帳簿から消すと、次の push が Drive の新しい版を
+    // 手元の古い版で上書きしていた（2026-10-12）
+    test('pull で落とせなかったものは前の記録を残し、次の push で Drive の新しい版を上書きしない', () async {
+      await shared();
+      drive.touch(drive.fileAt(rootId, 'keep.jpg')!.id, jpg(10));
+      drive.touch(drive.fileAt(rootId, 'mod.jpg')!.id, jpg(20));
+      await tick();
+      drive.failDownloadFor.add(drive.fileAt(rootId, 'keep.jpg')!.id);
+
+      final r = await engine.pull(rootId, a);
+      expect(r.success, isTrue, reason: '1 つは落とせた');
+      expect(local('mod.jpg').readAsBytesSync(), jpg(20));
+      expect(local('keep.jpg').readAsBytesSync(), jpg(1));
+
+      drive.failDownloadFor.clear();
+      expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.remoteChanges);
+      final keep = (await mergeEntries())['keep.jpg']!;
+      expect((keep.localChange, keep.remoteChange), (MergeChangeType.none, MergeChangeType.modified));
+
+      expect((await engine.push(a, driveFolder: rootId)).success, isTrue);
+      expect(drive.fileAt(rootId, 'keep.jpg')!.bytes, jpg(10));
+    });
+
     // Drive の名前は `/` や `..` を含められる（2026-10-09）。手元の外へ書かず、`.sync` も Drive から取らない
     test('pull は手元に置けない名前を飛ばし、フォルダの外へ書かない', () async {
       await drive.uploadBytes(jpg(1), 'ok 写真.jpg', rootId);

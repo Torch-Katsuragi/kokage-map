@@ -196,9 +196,13 @@ class FakeGoogleDrive implements GoogleDriveService {
     return uploadBytes(bytes, p.basename(localPath), parentId);
   }
 
+  /// テスト用: このファイルは落とせない（途中で電波が切れた等）
+  final Set<String> failDownloadFor = {};
+
   @override
   Future<bool> downloadFile(String fileId, String localPath) async {
     _count('downloadFile');
+    if (failDownloadFor.contains(fileId)) return false;
     final f = items[fileId];
     if (f == null || f.isFolder || f.trashed) return false;
     await File(localPath).parent.create(recursive: true);

@@ -2,6 +2,10 @@
 
 ## Next release
 
+### New
+
+- Guidance to a point. Start it from "Guide me here" in a feature's info panel (nearest spot on a line; center or nearest vertex of a polygon), by long-pressing the map, or from the room member list. While guiding, the map shows distance, bearing, elevation difference and an arrow that turns with the device heading, plus a line from your position to the target. You are notified within 5 m (or the GPS accuracy, if worse). Works without a network connection
+
 ### Fixed
 
 - GeoTIFFs made with "Convert to overlay" from a photo, and those rewritten when repositioning an overlay, are now written with GDAL, the same library QGIS uses. QGIS no longer warns about them (such as "tags are not sorted"). GeoTIFFs made earlier keep working and are rewritten in the new form when repositioned

@@ -10,6 +10,11 @@
 )
 
 #fixes(
+  "New",
+  [Guidance to a point from the info panel, a map long-press or the member list: distance, bearing, elevation difference, arrow and line, with a notice on arrival],
+)
+
+#fixes(
   "Fixed",
   [Overlay GeoTIFFs made by the app are now written with GDAL, the same library QGIS uses, so QGIS opens them without warnings],
   [First sync after reinstalling overwrote files present on both sides with older cloud copies; the newer side is now chosen, with a warning],

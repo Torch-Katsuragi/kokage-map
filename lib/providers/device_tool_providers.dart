@@ -26,19 +26,6 @@ import '../devices/trupulse/trupulse_providers.dart';
 
 part 'device_tool_providers.g.dart';
 
-/// DeviceTool のオーバーレイ再描画トリガー
-///
-/// featureRefreshTriggerProvider と同パターン。
-/// DeviceTool 内部状態が変わった際に trigger() を呼び、
-/// map_page 側の ref.listen で triggerSetState を発火する。
-@Riverpod(keepAlive: true)
-class DeviceToolOverlayRefresh extends _$DeviceToolOverlayRefresh {
-  @override
-  int build() => 0;
-
-  void trigger() => state++;
-}
-
 /// 接続済みで利用可能なDeviceToolのリストを返す
 ///
 /// 各サービスの ChangeNotifier を addListener で購読し、

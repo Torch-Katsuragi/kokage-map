@@ -7,11 +7,17 @@
 - GeoTIFFs made with "Convert to overlay" from a photo, and those rewritten when repositioning an overlay, are now written with GDAL, the same library QGIS uses. QGIS no longer warns about them (such as "tags are not sorted"). GeoTIFFs made earlier keep working and are rewritten in the new form when repositioned
 - On a device whose app data had been cleared or reinstalled, syncing a Drive-linked folder listed files that exist on both the device and the cloud with the cloud side checked, and syncing as shown overwrote newer files on the device with older cloud copies. Files with identical contents are now left alone; differing ones are shown as a single row with the more recently modified side selected and the note "On both sides — check which is newer". Auto-sync leaves these files for you to decide
 - When "Keep device" was chosen in sync and the file's folder could not be found on Drive, the file was uploaded to the top of the Drive folder. It is now not uploaded, and a notification tells you
+- "Copy Table" in the attribute table copied only the first page shown. It now copies every row that matches the filter, in the order sorted by the column header (hidden columns are left out). Above 50,000 rows it asks first
+- The attribute table now has a rows-per-page selector (50, 100, 200, 500) below it. Sorting by a column header sorts all rows, not just the page shown
+- Reloading the attribute table with a filter still applied showed the toolbar as "not applied" and emptied the expression field. Fixed
+- In the attribute fields of the feature edit panel, full-width digits typed into numeric columns (such as "１２．５") were not converted to half-width. They are now saved as half-width numbers, as in the attribute form
+- The per-point records (accuracy, time and so on) of lines and polygons taken by GPS survey were thrown away instead of saved. When there is such a record, the layer now gets a `kmaps_metadata` column (JSON stored as text, which QGIS opens as is) to keep it. The column is not shown in the attribute table or the edit panel. Drawing with the pen alone does not add the column
 
 ### Lighter
 
 - Downloading from Drive no longer re-downloads every file each time; only changed files are downloaded. A file that another device re-uploaded with the same contents no longer counts as changed
 - Auto-sync no longer rebuilds its Drive connection every cycle, and no longer reloads map layers when nothing changed
+- Each TruPulse measurement no longer rebuilds the whole map screen. Only the measurement lines and the status display are redrawn
 
 ## v0.12.0 — 2026/10/11
 

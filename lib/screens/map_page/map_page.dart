@@ -39,7 +39,6 @@ import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
-import '../../providers/device_tool_providers.dart';
 import '../../providers/notification_providers.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/selection_providers.dart';
@@ -401,12 +400,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       }
     });
 
-    // DeviceTool の内部状態変更で地図オーバーレイを再描画
-    ref.listen<int>(deviceToolOverlayRefreshProvider, (prev, next) {
-      if (prev != null && prev != next) {
-        triggerSetState(() {});
-      }
-    });
+    // 外部機器ツール（TruPulse）の計測では地図ページを組み直さない。
+    // 基準点・計測線は地形（TerrainMapLayer）が、ステータスパネルは ListenableBuilder が、それぞれツールを直接聞いている
 
     ref.listen<List<LayerTreeNode>>(selectedFeaturesProvider, (_, sel) {
       // 選択状態の変更でフィーチャソースを再同期

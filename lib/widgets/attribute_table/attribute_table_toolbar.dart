@@ -74,9 +74,13 @@ class AttributeTableToolbar extends ConsumerStatefulWidget {
 }
 
 class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
-  final _filterController = TextEditingController();
-  bool _isFilterApplied = false;
-  bool _showFilter = false;
+  /// 入力欄は今のフィルタの式から始める（読み直すとツールバーごと作り直す）
+  late final _filterController =
+      TextEditingController(text: widget.controller.filterExpression);
+
+  /// 適用中かはコントローラが正（以前はここで覚えていて、読み直すと「未適用」に戻っていた）
+  bool get _isFilterApplied => widget.controller.isFiltered;
+  late bool _showFilter = widget.controller.isFiltered;
 
   // 検索・置換
   bool _showSearchReplace = false;
@@ -100,7 +104,8 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
       return;
     }
     final error = await widget.controller.applyFilter(expression);
-    setState(() => _isFilterApplied = error == null);
+    if (!mounted) return;
+    setState(() {});
     if (error != null) {
       ref
           .read(notificationCenterProvider.notifier)
@@ -111,7 +116,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
   Future<void> _clearFilter() async {
     _filterController.clear();
     await widget.controller.clearFilter();
-    setState(() => _isFilterApplied = false);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -816,38 +821,44 @@ class _EpsgAutocomplete extends StatelessWidget {
   }
 }
 
-/// テーブルをTSV形式でクリップボードにコピー
+/// テーブルをTSV形式でクリップボードにコピー。
+/// 今のフィルタ・並べ替えの全件（表に出ている 1 ページだけでなく）。多いときは確かめてから
 Future<void> copyTableToClipboard(
   BuildContext context,
   AttributeTableController controller, {
   WidgetRef? ref,
 }) async {
   try {
-    final buffer = StringBuffer();
-
-    // ヘッダー行
-    final headerNames =
-        controller.columns.map((c) => _escapeTsvValue(c.title)).toList();
-    buffer.writeln(headerNames.join('\t'));
-
-    // データ行
-    for (final row in controller.rows) {
-      final rowValues = <String>[];
-      for (final column in controller.columns) {
-        final cell = row.cells[column.field];
-        final value = cell?.value?.toString() ?? '';
-        rowValues.add(_escapeTsvValue(value));
-      }
-      buffer.writeln(rowValues.join('\t'));
+    final count = controller.filteredCount;
+    if (count > AttributeTableController.largeCopyRows) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(t.attributeTable.copyTable),
+          content: Text(t.attributeTable.copyLargeConfirm(count: '$count')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(t.common.cancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(t.attributeTable.copyTable),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
     }
 
-    await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    final text = await controller.buildTableTsv();
+    await Clipboard.setData(ClipboardData(text: text));
 
     if (ref != null) {
       ref
           .read(notificationCenterProvider.notifier)
           .add(
-            title: t.attributeTable.copiedToClipboard(count: '${controller.rows.length}'),
+            title: t.attributeTable.copiedToClipboard(count: '$count'),
             level: NotificationLevel.success,
           );
     }
@@ -859,11 +870,4 @@ Future<void> copyTableToClipboard(
           .add(title: t.attributeTable.copyError(error: '$e'), level: NotificationLevel.error);
     }
   }
-}
-
-String _escapeTsvValue(String value) {
-  if (value.contains('\n') || value.contains('\t') || value.contains('"')) {
-    return '"${value.replaceAll('"', '""')}"';
-  }
-  return value;
 }

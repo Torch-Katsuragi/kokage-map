@@ -95,7 +95,7 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
     }
   }
 
-  Future<void> _saveField(String field, String value) async {
+  Future<void> _saveField(String field, Object? value) async {
     if (_currentIndex >= ctrl.features.length) return;
     final feature = ctrl.features[_currentIndex];
     final error = await ctrl.saveAttributeChange(feature, field, value);
@@ -111,9 +111,7 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
   void _commit(String col) {
     final text = _fieldControllers[col]?.text;
     if (text == null || text == _loaded[col]) return;
-    final value = isNumericSqlType(ctrl.columnSqlType(col))
-        ? toHalfWidthNumber(text)
-        : text;
+    final value = normalizeAttributeInput(ctrl.columnSqlType(col), text);
     _loaded[col] = text;
     unawaited(_saveField(col, value));
   }

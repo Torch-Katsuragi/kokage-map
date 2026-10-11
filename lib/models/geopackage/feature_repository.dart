@@ -32,8 +32,24 @@ import 'spatial_index_manager.dart';
 import 'sql_identifier.dart';
 import 'vertex_z.dart';
 
-/// 地物ごとのメタデータ（JSON）を入れる列。アプリは列を作らない（古いファイルにだけある）
+/// 地物ごとのメタデータ（JSON の TEXT）を入れる列。線・面の GPS 測量の点ごとの記録（`drawing_points`）など。
+/// 残す値が出たときに初めて作る（[FeatureRepository.ensureMetadataColumn]）。QGIS からはただの文字の列に見える。
+/// 属性表・編集パネルには出さない（[isSystemColumn]）
 const metadataColumn = 'kmaps_metadata';
+
+/// 列を作ってまで残す中身のあるメタデータか。
+/// ペンで描いた点だけ（`drawing_points` が全部 `pen_tool`）なら座標と時刻しかないので残さない
+bool metadataWorthStoring(Map<String, dynamic>? metadata) {
+  if (metadata == null || metadata.isEmpty) return false;
+  for (final MapEntry(:key, :value) in metadata.entries) {
+    if (key != 'drawing_points') return true;
+    if (value is! List) return true;
+    for (final p in value) {
+      if (p is! Map || p['data_source'] != 'pen_tool') return true;
+    }
+  }
+  return false;
+}
 
 /// 点（WGS84）を geobase の形に
 geo.Point toGeoPoint(LatLng pt) =>
@@ -171,10 +187,27 @@ class FeatureRepository {
     if (columnNames.contains('description')) {
       attributes['description'] = description;
     }
-    if (columnNames.contains(metadataColumn) && metadata != null) {
+    if (metadata != null &&
+        (columnNames.contains(metadataColumn) ||
+            await ensureMetadataColumn(tableName, metadata))) {
       attributes[metadataColumn] = jsonEncode(metadata);
     }
     return attributes;
+  }
+
+  /// [metadata] を書ける列があるか。無くて残す中身があれば（[metadataWorthStoring]）列（TEXT）を作る
+  Future<bool> ensureMetadataColumn(
+    String tableName,
+    Map<String, dynamic>? metadata,
+  ) async {
+    if (metadata == null) return false;
+    if ((await schema.getTableColumns(tableName)).contains(metadataColumn)) {
+      return true;
+    }
+    if (!metadataWorthStoring(metadata)) return false;
+    await schema.addAttributeColumn(tableName, metadataColumn, 'TEXT');
+    AppLogger.debug('[FeatureRepository] $tableName に $metadataColumn 列を作った');
+    return true;
   }
 
   Future<bool> _updateFeatureGeometry(

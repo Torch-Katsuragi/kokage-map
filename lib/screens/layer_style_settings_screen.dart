@@ -34,6 +34,7 @@ import '../models/nodes/view_node.dart';
 import '../services/kmeta_service.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
+import '../utils/attribute_columns.dart';
 import '../utils/label_expression.dart';
 import '../utils/label_template.dart';
 import '../widgets/label_composer_dialog.dart';
@@ -370,7 +371,7 @@ Widget _buildLabelExpressionTile(BuildContext context, SettingsStore store, Void
     Map<String, double>? rates;
     if (layer != null) {
       columns = (await layer.geoPackageFile.getColumnNames(layer.layerName, getAll: true))
-          .where((c) => !c.startsWith('_'))
+          .where((c) => !isInternalColumn(c) && !isSystemColumn(c))
           .toList();
       final rows = layer.children
           .whereType<FeatureNode>()

@@ -289,6 +289,10 @@ class GeoPackageFile {
   // フィーチャの追加・更新（形を作って FeatureRepository へ）
   // ============================================================
 
+  /// メタデータ（[metadataColumn]）を書ける列があるか。無くて残す中身があれば列を作る
+  Future<bool> ensureMetadataColumn(String tableName, Map<String, dynamic>? metadata) =>
+      _features.ensureMetadataColumn(tableName, metadata);
+
   /// 辞書ベースの点フィーチャ追加
   Future<int?> addPointWithAttributes(String tableName, LatLng point, Map<String, dynamic> attributes) =>
       _features.addGeometry(tableName, toGeoPoint(point), attributes);

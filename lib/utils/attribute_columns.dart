@@ -15,10 +15,18 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // 属性の列の決まり（属性表・属性フォーム・地物の編集で共通）
 
+import '../models/geopackage/feature_repository.dart' show metadataColumn;
 import '../models/nodes/feature_node.dart';
 
 /// 内部用の列（`_` で始まる）。統計・検索置換・ラベルの列の候補から外す
 bool isInternalColumn(String name) => name.startsWith('_');
+
+/// アプリが中身を持つ列（地物のメタデータの JSON）。属性表・編集パネルには出さない。
+/// 大文字小文字は区別しない
+bool isSystemColumn(String name) {
+  final n = name.toLowerCase();
+  return n == metadataColumn || n == 'rmaps_metadata'; // 旧名
+}
 
 /// 書き換えない列（番号・形・内部用）。大文字小文字は区別しない
 bool isReadOnlyColumn(String name) {
@@ -61,6 +69,11 @@ String toHalfWidthNumber(String text) {
   }
   return b.toString().trim();
 }
+
+/// 入力欄で打った値を列に書く形にする（属性フォーム・編集パネルで共通）。
+/// 数値の列（[sqlType]）なら全角の数字・小数点・符号を半角に。ほかの列・文字でない値はそのまま
+Object? normalizeAttributeInput(String sqlType, Object? value) =>
+    value is String && isNumericSqlType(sqlType) ? toHalfWidthNumber(value) : value;
 
 /// 地物の属性の値（同期で読む）。消した地物・読めない地物は null。
 /// [FeatureNode.getAttributeValue] と同じ値を返す（あちらは 1 マスごとに await が挟まる）

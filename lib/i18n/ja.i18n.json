@@ -799,6 +799,7 @@
     "showAll": "全て表示",
     "copiedToClipboard": "${count}行をクリップボードにコピーしました",
     "copyError": "コピーエラー: $error",
+    "copyLargeConfirm": "${count}行あります。コピーに時間がかかり、貼り付け先によっては扱いきれないことがあります。コピーしますか？",
     "epsgHint": "EPSG (例: 6677, IX系)",
     "openTable": "属性テーブルを開く",
     "closeTable": "属性テーブルを閉じる",

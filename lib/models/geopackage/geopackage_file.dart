@@ -539,11 +539,13 @@ class GeoPackageFile {
   }
 
   /// 属性の横断検索（地図の検索）。どれかの列が [forms]（同じ語の表記ゆれ）のどれかを含む行を
-  /// 主キー（`__id`）と属性列の値で返す。形の列・`kmaps_metadata` は見ない。
+  /// 主キーの値（`id`）と属性列の値（`values`）で返す。形の列・`kmaps_metadata` は見ない。
+  ///
+  /// 主キーはどの列とも重ならない別名で読む（以前は `__id` と決め打ちで、`__id` という列があると地物が引けなかった）。
   ///
   /// 列はつないで 1 本の文字列にして LIKE する（列 × 表記ゆれの数だけ LIKE を並べない）。
   /// 値がそのまま一致する行を先に並べてから [limit] で切る（大きなレイヤで一致が上限の外に落ちないように）
-  Future<List<Map<String, Object?>>> searchAttributeRows(
+  Future<List<({int id, Map<String, Object?> values})>> searchAttributeRows(
     String tableName,
     List<String> forms, {
     int limit = 200,
@@ -560,18 +562,30 @@ class GeoPackageFile {
     if (columns.isEmpty) return [];
     final hay = columns.map((c) => "COALESCE(CAST(${quoteIdent(c)} AS TEXT), '')").join(' || char(31) || ');
     final where = List.filled(patterns.length, "($hay) LIKE ? ESCAPE '\\'").join(' OR ');
-    final select = 'SELECT ${quoteIdent(pk)} AS __id, ${columns.map(quoteIdent).join(', ')} '
+    // 主キーの別名: 表のどの列とも重ならない名前（列の名前は大文字小文字を区別しない）
+    final taken = {for (final c in await _schema.getTableColumns(tableName)) c.toLowerCase()};
+    var idAlias = '__id';
+    while (taken.contains(idAlias)) {
+      idAlias += '_';
+    }
+    final select = 'SELECT ${quoteIdent(pk)} AS ${quoteIdent(idAlias)}, ${columns.map(quoteIdent).join(', ')} '
         'FROM ${quoteIdent(tableName)} WHERE $where ';
+    final List<Map<String, Object?>> rows;
     // 古い SQLite は引数が 999 個まで。列が多すぎるときは一致を先に並べるのを諦める
     if (columns.length * forms.length + patterns.length >= 990) {
-      return db.rawQuery('$select LIMIT ?', [...patterns, limit]);
+      rows = await db.rawQuery('$select LIMIT ?', [...patterns, limit]);
+    } else {
+      final marks = List.filled(forms.length, '?').join(', ');
+      final exact = columns.map((c) => 'CAST(${quoteIdent(c)} AS TEXT) IN ($marks)').join(' OR ');
+      rows = await db.rawQuery(
+        '${select}ORDER BY CASE WHEN $exact THEN 0 ELSE 1 END, ${quoteIdent(pk)} LIMIT ?',
+        [...patterns, for (final _ in columns) ...forms, limit],
+      );
     }
-    final marks = List.filled(forms.length, '?').join(', ');
-    final exact = columns.map((c) => 'CAST(${quoteIdent(c)} AS TEXT) IN ($marks)').join(' OR ');
-    return db.rawQuery(
-      '${select}ORDER BY CASE WHEN $exact THEN 0 ELSE 1 END, ${quoteIdent(pk)} LIMIT ?',
-      [...patterns, for (final _ in columns) ...forms, limit],
-    );
+    return [
+      for (final row in rows)
+        if (row[idAlias] case final int id) (id: id, values: {for (final c in columns) c: row[c]}),
+    ];
   }
 
   /// テキスト置換（指定カラム内）。置き換えた行の数と、数値の列で数値にならず置き換えなかった行の数を返す。

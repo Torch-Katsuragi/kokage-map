@@ -899,6 +899,10 @@ class AttributeTableController extends ChangeNotifier {
     }
   }
 
+  /// 地物の列の値（結合した表の列なら表を引いた値）。フォーム表示が読む
+  Object? valueOf(FeatureNode feature, String column) =>
+      isJoinedColumn(column) ? _joinedValue(feature, column) : readAttribute(feature, column);
+
   /// 結合した表の列の値（地物の結合の列で表を引く）
   Object? _joinedValue(FeatureNode feature, String field) {
     if (feature.isDisposed) return null;

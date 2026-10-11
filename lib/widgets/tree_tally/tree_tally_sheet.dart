@@ -322,7 +322,7 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
               Text(t.treeTally.title, style: theme.textTheme.titleLarge),
               const Spacer(),
               TextButton.icon(
-                icon: const Icon(Icons.table_chart_outlined),
+                icon: const Icon(Icons.table_chart),
                 label: Text(t.treeTally.summary),
                 onPressed: () => showTreeTallySummary(context, ref, _layers),
               ),
@@ -388,7 +388,7 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
       ),
       IconButton(
         tooltip: t.treeTally.newCirclePlot,
-        icon: const Icon(Icons.add_location_alt_outlined),
+        icon: const Icon(Icons.add_location),
         onPressed: _busy ? null : _createCirclePlot,
       ),
     ]);

@@ -83,7 +83,7 @@ class GeoPackageTile extends ConsumerWidget {
       eye: nodeVisibilityEye(ref, node),
       menu: () => [
         if (external == null) RowMenuItem('add_layer', t.layerDrawer.layer.addLayer, icon: Icons.add),
-        if (external == null) RowMenuItem('tree_tally', t.treeTally.menu, icon: Icons.park_outlined),
+        if (external == null) RowMenuItem('tree_tally', t.treeTally.menu, icon: Icons.park),
         if (external != null) ...[
           RowMenuItem('convert', t.externalLayer.convertAction, icon: Icons.transform),
           RowMenuItem('copy', t.externalLayer.copyAction, icon: Icons.copy),

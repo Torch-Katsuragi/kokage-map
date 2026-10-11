@@ -91,6 +91,7 @@ class IconMarkdownBuilder extends MarkdownElementBuilder {
     'file_upload': Icons.file_upload,
     'file_download': Icons.file_download,
     'table_chart': Icons.table_chart,
+    'park': Icons.park,
     'import_export': Icons.import_export,
 
     // 設定

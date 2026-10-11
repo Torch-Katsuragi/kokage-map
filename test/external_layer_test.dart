@@ -27,6 +27,7 @@ import 'package:root_maps/services/external/external_layer_cache.dart';
 import 'package:root_maps/services/external/external_layer_converter.dart';
 import 'package:root_maps/services/external/external_source.dart';
 import 'package:root_maps/services/kmeta_service.dart';
+import 'package:root_maps/services/qgis/qgs_auto_refresh.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -412,6 +413,22 @@ void main() {
       expect(meta.visibility.layers['trees.gpkg/trees'], isFalse);
       expect(meta.styles.layers['trees.gpkg/trees']?.pointSize, 7);
       expect(meta.views['trees.gpkg/trees']?.single.filter, 'H > 10');
+      await gpkg.geoPackageFile.dispose();
+    }, skip: skip);
+
+    test('変換の後、フォルダ設定に鍵が無くても .qgs が新しい gpkg を指す', () async {
+      await writePoints(p.join(proj, 'trees'), prj: 'EPSG:4326');
+      final (root, node) = await open('trees.shp');
+      QgsAutoRefresh.instance.rootGetter = () => root;
+      addTearDown(() => QgsAutoRefresh.instance.rootGetter = null);
+
+      expect((await ExternalLayerConverter.convert(node)).outcome, ExternalConvertOutcome.converted);
+      final gpkg = root.children.whereType<GeoPackageNode>().single;
+      await gpkg.updateChildren(); // アプリではツリーが読み込む（自動更新は 3 秒待つ）
+      await QgsAutoRefresh.instance.flushNow();
+      final qgs = File(p.join(proj, '${p.basename(proj)}.qgs')).readAsStringSync();
+      expect(qgs, contains('./trees.gpkg'));
+      expect(qgs, isNot(contains('./trees.shp')));
       await gpkg.geoPackageFile.dispose();
     }, skip: skip);
 

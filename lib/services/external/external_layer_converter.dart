@@ -26,6 +26,7 @@ import '../../models/nodes/folder_node.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import '../layer_drawer_service.dart';
+import '../qgis/qgs_auto_refresh.dart';
 import 'external_layer_cache.dart';
 import 'external_source.dart';
 
@@ -122,6 +123,7 @@ class ExternalLayerConverter {
     }
     await ExternalLayerCache.discard(node.geoPackageFile.getAbsolutePath()!);
     if (folder is FolderNode) await folder.updateChildren();
+    _refreshQgs(p.dirname(target));
     return ExternalConvertResult(ExternalConvertOutcome.converted, gpkgPath: target, leftovers: leftovers);
   }
 
@@ -132,8 +134,13 @@ class ExternalLayerConverter {
     final target = await uniqueGpkgPath(dir, p.basenameWithoutExtension(node.sourcePath));
     await _writeVerified(node, target);
     await targetFolder.updateChildren();
+    _refreshQgs(dir);
     return ExternalConvertResult(ExternalConvertOutcome.copied, gpkgPath: target);
   }
+
+  /// `.qgs` をツリーに合わせる。フォルダ設定に移す鍵が無ければ設定の保存が起きず、`.qgs` は次に何かを保存するまで
+  /// 消した元ファイル（`./points.kml`）を指したままだった（2026-10-11 Pixel 9・web で確認）
+  static void _refreshQgs(String folderPath) => QgsAutoRefresh.instance.schedule(folderPath);
 
   /// キャッシュを [target] に複製して印の表を落とし、元と突き合わせる。食い違えば [target] を消して投げる
   static Future<void> _writeVerified(ExternalLayerNode node, String target) async {

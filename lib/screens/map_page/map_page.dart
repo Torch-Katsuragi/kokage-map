@@ -32,7 +32,7 @@ import '../../editing/edit_panel.dart';
 import '../../editing/edit_session.dart';
 import '../../editing/edit_toolbar.dart';
 import '../../i18n/strings.g.dart';
-import '../../interfaces/terrain_projection.dart';
+import '../../interfaces/map_surface.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/folder_node.dart';
@@ -157,30 +157,29 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       movedToCurrentLocationOnce = true;
       initialViewDecided = true;
     }
-    final p = terrainProjection;
-    if (p == null) {
-      _pendingLaunchCamera = req; // attach 時（_onProjectionChanged）に流す
+    if (!mapController.isAttached) {
+      _pendingLaunchCamera = req; // attach 時（_onSurfaceChanged）に流す
       return;
     }
-    _lookAtLaunch(p, req);
+    _lookAtLaunch(mapController.lookAt, req);
   }
 
-  void _lookAtLaunch(TerrainProjection p, LaunchRequest req) => unawaited(
-      p.lookAt(center: req.center, zoom: req.zoom, bearingDeg: req.bearing, pitchDeg: req.pitch, animate: false));
+  /// [lookAt] は [MapSurfaceController.lookAt] か、attach 直前の [MapSurface.lookAt]
+  void _lookAtLaunch(
+    Future<void> Function({LatLng? center, double? zoom, double? bearingDeg, double? pitchDeg, bool animate}) lookAt,
+    LaunchRequest req,
+  ) =>
+      unawaited(lookAt(center: req.center, zoom: req.zoom, bearingDeg: req.bearing, pitchDeg: req.pitch, animate: false));
 
-  /// 3D の地図面が組み上がった（null なら外れた）。保留していたカメラ指定を流し、
-  /// レイヤのダブルタップなど、ホルダー経由の「寄せる」「移動」も 3D に流す
-  /// （fit → jump の順。jumpOverride を置いた瞬間に組み上がる前の保留分が流れる）
-  void _onProjectionChanged(TerrainProjection? p) {
-    terrainProjection = p;
+  /// 3D の地図面が組み上がった（null なら外れた）。保留していたカメラ指定を流してから、
+  /// 地図面を attach する（attach した瞬間に、組み上がる前に保留したホルダー経由の「寄せる」「移動」が流れる）
+  void _onSurfaceChanged(MapSurface? surface) {
     final pendingLaunch = _pendingLaunchCamera;
-    if (p != null && pendingLaunch != null) {
+    if (surface != null && pendingLaunch != null) {
       _pendingLaunchCamera = null;
-      _lookAtLaunch(p, pendingLaunch);
+      _lookAtLaunch(surface.lookAt, pendingLaunch);
     }
-    mapController.fitOverride = p == null ? null : (c, pad) => p.fitCoordinates(c, padding: pad);
-    mapController.jumpOverride =
-        p == null ? null : (c, z, _, {required animate}) => unawaited(p.jumpTo(c, z, animate: animate));
+    mapController.attach(surface);
   }
 
   /// チュートリアルの決まった配置: 地図だけが前に出ていて、レイヤ一覧・表は閉じ、パン・何も選んでいない
@@ -587,7 +586,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
               styleGroups: () => styleGroups,
               location: locationNotifier,
               gpsTrack: () => gpsHistoryRecorder.todayPoints,
-              onProjectionChanged: _onProjectionChanged,
+              controller: mapController,
+              onSurfaceChanged: _onSurfaceChanged,
               mapBearingNotifier: mapBearingNotifier,
               cameraTickNotifier: cameraTickNotifier,
               heading: headingNotifier,
@@ -772,7 +772,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         valueListenable: locationNotifier,
         builder: (context, loc, _) => OffscreenLocationIndicator(
         location: loc,
-        project: (l) => terrainProjection?.project(l),
+        project: mapController.toScreenLocation,
         repaint: cameraTickNotifier,
         obscured: EdgeInsets.only(
           right: _effectiveDrawerWidth,

@@ -22,9 +22,8 @@ import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../core/r_map_controller.dart';
+import '../../core/map_surface_handle.dart';
 import '../../interfaces/map_state_interface.dart';
-import '../../interfaces/terrain_projection.dart';
 import '../../models/gps_position_record.dart';
 import '../../models/map_style_group.dart';
 import '../../models/nodes/current_location_node.dart';
@@ -82,9 +81,9 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 決まっていない間だけ、GPS の初回フィックスで現在位置へ飛ぶ（フィーチャが無いプロジェクト＝東京から始まる場合）
   bool initialViewDecided = false;
 
-  /// 地図コントローラー（旧 flutter_map 互換ラッパー）
+  /// 地図面の窓口。地図面（`TerrainMapLayer`）が組み上がると attach される
   @override
-  final RMapController mapController = RMapController();
+  final MapSurfaceHandle mapController = MapSurfaceHandle();
 
   // =============================================
   // コンパス関連
@@ -200,9 +199,6 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
     return true;
   }
 
-  /// 地図面の投影。null なら地図面がまだ組み上がっていない（`TerrainMapLayer` が登録 / 解除する）
-  TerrainProjection? terrainProjection;
-
   /// 地図に流す GeoJSON が更新されたら増える（3D 地図面がシーンを組み直す合図）
   final ValueNotifier<int> terrainSceneRevision = ValueNotifier<int>(0);
 
@@ -211,22 +207,15 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   // =============================================
 
   @override
-  LatLng offsetToLatLng(Offset offset) {
-    final terrain = terrainProjection;
-    if (terrain != null) {
-      final p = terrain.unproject(offset);
-      if (p != null) return p;
-    }
-    return mapController.camera.center;
-  }
+  LatLng offsetToLatLng(Offset offset) => mapController.toLatLng(offset) ?? mapController.camera.center;
 
   @override
-  LatLng? tryOffsetToLatLng(Offset offset) => terrainProjection?.unproject(offset);
+  LatLng? tryOffsetToLatLng(Offset offset) => mapController.toLatLng(offset);
 
   @override
   Offset latLngToOffset(LatLng latlng) {
-    final terrain = terrainProjection;
-    if (terrain != null) return terrain.project(latlng);
+    final p = mapController.toScreenLocation(latlng);
+    if (p != null) return p;
     final size = MediaQuery.of(context).size;
     return Offset(size.width / 2, size.height / 2);
   }

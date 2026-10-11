@@ -5,13 +5,14 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart' show Color;
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/models/qgis_renderer.dart';
 import 'package:root_maps/services/qgis/qgs_importer.dart';
 import 'package:root_maps/services/qgis/qgs_renderer_reader.dart';
 import 'package:root_maps/utils/qgis_expression.dart';
+import 'package:root_maps/widgets/qgis_renderer_legend.dart';
 import 'package:xml/xml.dart';
 
 void main() {
@@ -179,6 +180,16 @@ void main() {
       );
       expect(spaced.evaluator!.classFor({'tree type': 'a'}), 0, reason: '空白入りの列名は列として読む');
     });
+  });
+
+  testWidgets('凡例: ラベルを並べ、多ければ畳む', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: QgisRendererLegend(renderer: renderer('樹種で分類'), dense: true, maxItems: 2)),
+    ));
+    expect(find.text('スギ'), findsOneWidget);
+    expect(find.text('ヒノキ'), findsOneWidget);
+    expect(find.text('マツ'), findsNothing);
+    expect(find.text('… +2'), findsOneWidget);
   });
 
   test('1 万件の振り分けが十分速い', () {

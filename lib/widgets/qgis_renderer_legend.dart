@@ -23,12 +23,15 @@ import '../models/qgis_renderer.dart';
 
 /// 分類・段階・ルールの凡例。描かない項目（QGIS でチェックを外したもの）は薄く打ち消し線で出す
 class QgisRendererLegend extends StatelessWidget {
-  const QgisRendererLegend({super.key, required this.renderer, this.dense = false});
+  const QgisRendererLegend({super.key, required this.renderer, this.dense = false, this.maxItems});
 
   final QgisRenderer renderer;
 
   /// レイヤ一覧の行の下に出す小さい版
   final bool dense;
+
+  /// これより多い項目は「…ほか N 件」に畳む（レイヤ一覧が凡例で埋まらないように）
+  final int? maxItems;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +47,7 @@ class QgisRendererLegend extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 4),
             child: Text(t.styleScreen.qgisLegendFallback, style: textStyle.copyWith(color: theme.colorScheme.error)),
           ),
-        for (final c in renderer.classes)
+        for (final c in renderer.classes.take(_shown))
           Padding(
             padding: EdgeInsets.symmetric(vertical: dense ? 1 : 2),
             child: Row(
@@ -71,8 +74,17 @@ class QgisRendererLegend extends StatelessWidget {
               ],
             ),
           ),
+        if (_shown < renderer.classes.length)
+          Text('… +${renderer.classes.length - _shown}', style: textStyle.copyWith(color: theme.hintColor)),
       ],
     );
+  }
+
+  int get _shown {
+    final max = maxItems;
+    final n = renderer.classes.length;
+    // 1 件だけ畳むなら畳まずに出す
+    return max == null || n <= max + 1 ? n : max;
   }
 }
 

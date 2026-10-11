@@ -200,6 +200,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     ];
   }
 
+  @override
+  Size get viewportSize => _size;
+
+  @override
+  Future<ui.Image> snapshotTopDown(TileRange range, {double strokeScale = 1, TileProgress? onProgress}) =>
+      _snapshotTopDown(range, _layerFetchers(), strokeScale: strokeScale, onProgress: onProgress);
+
   /// 等高線タイルを作る（`contour_tiles.dart`）。テクスチャの段 z の 1 段下の DEM タイルの、該当する 1/4 を描く。
   /// DEM の段が足りなければ（z > 18）さらに上の段から
   Future<Uint8List?> _renderContourTile(int z, int x, int y) async {

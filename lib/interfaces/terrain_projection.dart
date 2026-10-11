@@ -18,6 +18,8 @@ import 'dart:ui';
 import 'package:flutter/widgets.dart' show EdgeInsets;
 import 'package:latlong2/latlong.dart';
 
+import '../core/terrain/dem_tiles.dart' show TileProgress, TileRange;
+
 /// 3D 地形モード中の投影（地図面の窓口のうち「投影・逆投影」）
 ///
 /// `IMapState.offsetToLatLng` / `latLngToOffset` が 3D 中はこれを通る。
@@ -38,4 +40,12 @@ abstract class TerrainProjection {
   /// 外からの指示でカメラを合わせる（`LaunchRequest`）。null の項目は今のまま。
   /// [bearingDeg] は北が 0・時計回り、[pitchDeg] は 0 が真上
   Future<void> lookAt({LatLng? center, double? zoom, double? bearingDeg, double? pitchDeg, bool animate = true});
+
+  /// 地図面の大きさ（論理 px）
+  Size get viewportSize;
+
+  /// 窓口「スナップショット」: [range]（タイルの範囲）を真上から見た絵。北が上で、幅は `range.width × 256` px。
+  /// 背景地図の層・オーバーレイ画像・地物（面・線・点）を描く。傾き・方位・選択・ラベルは入らない
+  /// （ラベルは向きに合わせて呼び出し側が描く）。[strokeScale] は線の太さ・点の大きさの倍率（印刷の解像度に合わせる）
+  Future<Image> snapshotTopDown(TileRange range, {double strokeScale = 1, TileProgress? onProgress});
 }

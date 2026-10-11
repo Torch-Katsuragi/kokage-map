@@ -55,7 +55,7 @@ class QgisRendererLegend extends StatelessWidget {
                 SizedBox(
                   width: swatch,
                   height: swatch,
-                  child: CustomPaint(painter: _SwatchPainter(c.style, enabled: c.render)),
+                  child: CustomPaint(painter: QgisSwatchPainter(c.style, enabled: c.render)),
                 ),
                 SizedBox(width: dense ? 6 : 8),
                 Expanded(
@@ -88,8 +88,9 @@ class QgisRendererLegend extends StatelessWidget {
   }
 }
 
-class _SwatchPainter extends CustomPainter {
-  _SwatchPainter(this.style, {required this.enabled});
+/// 色見本（面 → 線 → 点の順に、埋まっている項目で種類を決める）。PDF の凡例も同じものを使う
+class QgisSwatchPainter extends CustomPainter {
+  QgisSwatchPainter(this.style, {this.enabled = true});
 
   final KMetaLayerStyle? style;
   final bool enabled;
@@ -136,5 +137,5 @@ class _SwatchPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SwatchPainter old) => old.style != style || old.enabled != enabled;
+  bool shouldRepaint(QgisSwatchPainter old) => old.style != style || old.enabled != enabled;
 }

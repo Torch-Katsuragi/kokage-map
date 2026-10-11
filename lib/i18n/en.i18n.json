@@ -1491,6 +1491,27 @@
     "threshold": "Threshold",
     "convert": "Convert"
   },
+  "mapPdf": {
+    "menu": "Map to PDF",
+    "dialogTitle": "Map to PDF",
+    "paper": "Paper",
+    "orientation": "Orientation",
+    "landscape": "Landscape",
+    "portrait": "Portrait",
+    "docTitle": "Title",
+    "notes": "Notes",
+    "notesHint": "Optional. Printed below the legend (to its right in portrait)",
+    "about": "Prints a top-down map at a scale that fits the current screen (even if the 3D view is tilted), with title, date, scale, north arrow, legend and map credits",
+    "create": "Create",
+    "rendering": "Rendering the map… $percent%",
+    "saved": "Saved the PDF: $name",
+    "failed": "Could not create the PDF: $error",
+    "notReady": "The map is not ready yet. Wait a moment and try again",
+    "legend": "Legend",
+    "scale": "Scale",
+    "source": "Source",
+    "more": "$n more"
+  },
   "level": {
     "title": "Spirit Level",
     "tilt": "Tilt",

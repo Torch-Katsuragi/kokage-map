@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-/// 地図画面AppBarの「≡」メニュー: パーティ・水準器（コンパス）・設定を集約。
+/// 地図画面AppBarの「≡」メニュー: パーティ・読み直し・地図を PDF に・水準器（コンパス）・設定を集約。
 library;
 
 import 'package:flutter/material.dart';
@@ -32,13 +32,17 @@ import 'party_controls.dart';
 /// パーティが参加中のときは ≡ アイコンに接続状態色のバッジ（人数）を出し、
 /// 大きなFABを置かずに状態を一目で分かるようにする。
 class MapMenuButton extends ConsumerWidget {
-  const MapMenuButton({super.key, this.onReload});
+  const MapMenuButton({super.key, this.onReload, this.onExportPdf});
 
   /// プロジェクトをディスクから読み直す（QGIS や AI が書き換えたあとに）
   final Future<void> Function()? onReload;
 
+  /// 「地図を PDF に」（`map_pdf_export.dart`）
+  final VoidCallback? onExportPdf;
+
   static const String _party = 'party';
   static const String _reload = 'reload';
+  static const String _pdf = 'pdf';
   static const String _level = 'level';
   static const String _settings = 'settings';
 
@@ -69,6 +73,8 @@ class MapMenuButton extends ConsumerWidget {
             showPartyEntry(context, ref);
           case _reload:
             onReload?.call();
+          case _pdf:
+            onExportPdf?.call();
           case _level:
             _push(context, const LevelScreen());
           case _settings:
@@ -94,6 +100,11 @@ class MapMenuButton extends ConsumerWidget {
           PopupMenuItem<String>(
             value: _reload,
             child: _MenuRow(icon: Icons.refresh, label: t.map.reload),
+          ),
+        if (onExportPdf != null)
+          PopupMenuItem<String>(
+            value: _pdf,
+            child: _MenuRow(icon: Icons.picture_as_pdf, label: t.mapPdf.menu),
           ),
         PopupMenuItem<String>(
           value: _level,

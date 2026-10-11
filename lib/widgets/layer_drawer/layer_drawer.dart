@@ -52,6 +52,7 @@ import '../../tutorial/tutorial.dart';
 import '../dialogs/add_folder_type_dialog.dart';
 import '../dialogs/drive_url_input_dialog.dart';
 import '../external_layer_actions.dart';
+import '../feature_search_dialog.dart';
 import 'add_files_action.dart';
 import 'common_dialogs.dart';
 import 'layer_drawer_drive_sync.dart';
@@ -69,9 +70,13 @@ class LayerDrawer extends ConsumerStatefulWidget {
   final void Function(LatLng latLng)? onJumpTo;
   final void Function(FeatureNode feature)? onStartAppendMode;
 
+  /// 属性の検索で地物を選んだ（選んで、そこへ飛ぶ）
+  final void Function(FeatureNode feature)? onFeatureFound;
+
   const LayerDrawer({
     super.key,
     required this.currentNode,
+    this.onFeatureFound,
     required this.onDirChanged,
     this.onJumpTo,
     this.onStartAppendMode,
@@ -276,6 +281,12 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
               }
           : null,
       onBack: parent != null ? () => widget.onDirChanged(parent) : null,
+      onSearch: widget.onFeatureFound == null
+          ? null
+          : () async {
+              final f = await showFeatureSearchDialog(context, ref);
+              if (f != null && !f.isDisposed) widget.onFeatureFound!(f);
+            },
       onNavigate: widget.onDirChanged,
       syncStatus: driveRoot?.syncStatus,
       isReadOnly: driveRoot?.isReadOnly ?? false,

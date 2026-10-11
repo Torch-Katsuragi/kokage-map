@@ -1,13 +1,16 @@
 // 地図の検索: 表記ゆれの正規化・LIKE の形・実物の GeoPackage（1 万件）での横断検索
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
+import 'package:root_maps/models/nodes/feature_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/services/feature_search.dart';
+import 'package:root_maps/widgets/feature_search_dialog.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -130,6 +133,39 @@ void main() {
     test('% や _ は文字として探す', () async {
       expect((await FeatureSearch.search([layer], '%')).hits, isEmpty);
       expect((await FeatureSearch.search([layer], '_')).hits, isEmpty);
+    });
+
+    testWidgets('検索の窓: 打つと一覧が出て、押すとその地物を返す', (tester) async {
+      FeatureNode? picked;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async => picked = await showDialog<FeatureNode>(
+              context: context,
+              builder: (_) => FeatureSearchDialog(layers: [layer]),
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '９９９９');
+      // 手が止まってから探す（250 ms）
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.runAsync(() async {
+        // 問い合わせ（sqflite の ffi）が返るまで待つ
+        for (var i = 0; i < 50 && find.byType(ListTile).evaluate().isEmpty; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump();
+        }
+      });
+      await tester.pump();
+      expect(find.byType(ListTile), findsWidgets);
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pumpAndSettle();
+      expect(picked, isNotNull);
+      expect(picked!.parent, same(layer));
     });
 
     test('当たらなければ空', () async {

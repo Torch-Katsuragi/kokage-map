@@ -331,6 +331,23 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     AppLogger.debug('[MAP] 属性テーブル表示終了');
   }
 
+  /// 属性の検索（レイヤ一覧の虫眼鏡）で選んだ地物: 選んで、形が見える範囲に収まるよう寄せる。
+  /// 点は今のズームのまま寄せる（遠すぎれば 17 まで寄る）
+  void _onSearchHit(FeatureNode feature) {
+    ref.read(selectedFeaturesProvider.notifier).set([feature]);
+    triggerSetState(() {});
+    final coords = switch (feature) {
+      LineFeatureNode() => feature.line,
+      PolygonFeatureNode() => feature.polygon.firstOrNull ?? const <LatLng>[],
+      _ => const <LatLng>[],
+    };
+    if (coords.length > 1) {
+      mapController.fitCoordinates(coords, padding: EdgeInsets.fromLTRB(60, 60, 60 + _effectiveDrawerWidth, 60));
+    } else {
+      jumpTo(feature.centroid, zoom: math.max(mapController.camera.zoom, 17));
+    }
+  }
+
   /// 属性テーブルでフィーチャが選択されたときの処理
   void _onAttributeTableFeatureSelected(FeatureNode feature) {
     try {
@@ -863,6 +880,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           },
           onJumpTo: jumpTo,
           onStartAppendMode: startAppendMode,
+          onFeatureFound: _onSearchHit,
         ),
       ),
     );

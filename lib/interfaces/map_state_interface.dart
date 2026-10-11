@@ -34,6 +34,9 @@ abstract class IMapState {
   /// 画面座標を地図座標（緯度経度）に変換
   LatLng offsetToLatLng(Offset offset);
 
+  /// 画面座標を地図座標に。地形に当たらない（空・地図の外）なら null（[offsetToLatLng] は地図の中心で代える）
+  LatLng? tryOffsetToLatLng(Offset offset);
+
   /// 地図座標（緯度経度）を画面座標に変換
   Offset latLngToOffset(LatLng latlng);
 

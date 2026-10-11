@@ -64,13 +64,14 @@ class _ToolNameFlashState extends ConsumerState<ToolNameFlash>
     super.dispose();
   }
 
-  /// 今のモードの名前。ツールと左下ボタンの組で決まる（ペン＋ボタン = 消しゴム、選択＋ボタン = 複数選択）。
+  /// 今のモードの名前。ツールと左下ボタンの組で決まる（ペン＋ボタン = 消しゴム、選択＋ボタン = 複数選択、計測＋ボタン = 面積）。
   /// ボタンごとに文言を決めず、この名前が変わったときに出す
   static String _modeOf(MapTool tool, bool fab) => switch (tool.name) {
     'Pan' => t.map.toolbar.pan,
     'Pen' => fab ? t.map.flash.eraser : t.map.toolbar.pen,
     'Select' => fab ? t.map.flash.multiSelect : t.map.toolbar.select,
     'GPS' => t.map.toolbar.gpsTool,
+    'Measure' => fab ? t.map.flash.measureArea : t.map.flash.measureDistance,
     'Overlay Transform' => t.map.toolbar.overlayTransform,
     'Compass' => t.trupulse.toolName,
     _ => tool.name,

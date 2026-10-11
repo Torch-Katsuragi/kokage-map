@@ -48,6 +48,7 @@ import '../../services/kmeta_service.dart';
 import '../../services/party/party_invite.dart';
 import '../../tools/gps_tool.dart';
 import '../../tools/map_tool.dart';
+import '../../tools/measure_tool.dart';
 import '../../tools/pen_tool.dart';
 import '../../tutorial/practice_project.dart';
 import '../../tutorial/tutorial.dart';
@@ -72,6 +73,7 @@ import 'mixins/index.dart';
 // Widgets
 import 'widgets/index.dart';
 import 'widgets/map_menu_button.dart';
+import 'widgets/measure_overlay.dart';
 import 'widgets/party_controls.dart';
 import 'widgets/terrain_map_layer.dart';
 import 'widgets/tool_name_flash.dart';
@@ -497,7 +499,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         Positioned.fill(
           left: layout.toolbarLeft ? 44 : 0,
           right: layout.toolbarLeft ? 0 : 44,
-          child: _buildMapSurface(editing: editing),
+          child: _buildMapSurface(currentTool, editing: editing),
         ),
         // Layer Drawer Panel（右サイド — 属性テーブルとは独立）
         if (drawerOpen) _buildLayerDrawerPanel(),
@@ -548,7 +550,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   }
 
   /// 地図本体: ジェスチャ・3D の地図面・編集の重ね絵・描きかけの寸法・画面外の現在位置
-  Widget _buildMapSurface({required bool editing}) {
+  Widget _buildMapSurface(MapTool currentTool, {required bool editing}) {
     return Stack(
       children: [
         // 地図面は TerrainMapLayer（3D）。MapLibre は 2026-09-11 に地図ページから、2026-10-04 に依存ごと撤去
@@ -573,6 +575,11 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           ),
         // 編集中の形と取っ手（地図の場面には焼かず、カメラが動くたびに描き直す）
         EditOverlay(project: latLngToOffset, cameraTick: cameraTickNotifier),
+        // 計測ツールの線・点と値のパネル（地物は作らない）
+        if (currentTool is MeasureTool) ...[
+          MeasureOverlay(session: currentTool.session, project: latLngToOffset, cameraTick: cameraTickNotifier),
+          Positioned(left: 8, top: 8, child: MeasurePanel(session: currentTool.session)),
+        ],
         _buildDrawingPreviewInfo(),
         if (!editing) _buildOffscreenLocationIndicator(),
         const ToolNameFlash(),

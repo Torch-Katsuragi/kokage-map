@@ -29,7 +29,7 @@ import '../tutorial/tutorial.dart';
 
 /// 地図画面左側のツールバー
 ///
-/// 固定ツール（Pan, Pen, Select, GPS）に加え、
+/// 固定ツール（Pan, Pen, Select, GPS, Measure）に加え、
 /// 接続中の外部機器ツール（[DeviceTool]）を動的に表示する。
 /// OverlayImageNode選択中はOverlay Transformツールも表示する。
 class MapToolbar extends ConsumerWidget {
@@ -97,6 +97,14 @@ class MapToolbar extends ConsumerWidget {
                       t.map.toolbar.gpsTool,
                       'GPS',
                       () => ref.read(gpsToolProvider),
+                    ),
+                    // 計測（距離・面積。地物は作らない）
+                    (
+                      null,
+                      Icons.straighten,
+                      t.map.toolbar.measure,
+                      'Measure',
+                      () => ref.read(measureToolProvider),
                     ),
                   ]) ...[
                 const SizedBox(height: 8),

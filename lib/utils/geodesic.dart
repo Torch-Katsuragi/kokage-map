@@ -176,6 +176,10 @@ class Geodesic {
     return m >= 1000 ? '$meters（${(m / 1000).toStringAsFixed(3)} km）' : meters;
   }
 
+  /// 長さの短い形（地図の上の札）: 1 km 未満は m、それ以上は km だけ
+  static String formatLengthShort(double m) =>
+      m >= 1000 ? '${(m / 1000).toStringAsFixed(2)} km' : '${m.toStringAsFixed(1)} m';
+
   /// 面積: m² と ha を並べる（例 `12,345.6 m²（1.2346 ha）`）
   static String formatArea(double m2) => '${_grouped(m2, 1)} m²（${(m2 / 10000).toStringAsFixed(4)} ha）';
 

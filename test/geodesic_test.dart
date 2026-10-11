@@ -62,6 +62,8 @@ void main() {
     expect(Geodesic.formatLength(12.34), '12.3 m');
     expect(Geodesic.formatLength(1234.6), '1,234.6 m（1.235 km）');
     expect(Geodesic.formatArea(12345.6), '12,345.6 m²（1.2346 ha）');
+    expect(Geodesic.formatLengthShort(12.34), '12.3 m');
+    expect(Geodesic.formatLengthShort(1234.6), '1.23 km');
     expect(Geodesic.formatArea(5), '5.0 m²（0.0005 ha）');
   });
 }

@@ -220,6 +220,9 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   }
 
   @override
+  LatLng? tryOffsetToLatLng(Offset offset) => terrainProjection?.unproject(offset);
+
+  @override
   Offset latLngToOffset(LatLng latlng) {
     final terrain = terrainProjection;
     if (terrain != null) return terrain.project(latlng);

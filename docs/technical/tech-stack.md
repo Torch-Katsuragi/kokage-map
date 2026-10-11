@@ -5,38 +5,45 @@ tags: [technical, stack, flutter]
 
 # 技術スタック
 
+> [!NOTE] 2026-10-11 に今の作りに合わせて書き直した
+> 依存の一覧と版の正は `pubspec.yaml`。ここは役割ごとの要約。
+
 ## フロントエンド
 
-- **Flutter (Dart)**
-  - クロスプラットフォーム対応 (iOS, Android)
-  - 豊富なUIライブラリと描画API
+- **Flutter (Dart)**。対象は **Android と web**（デスクトップ版は 2026-08-25 に撤去、[[../features/concept#プラットフォームの役割分担]]）
+- 文言は slang（`lib/i18n/*.i18n.json`、日本語と英語）
 
 ## 状態管理
 
-- Riverpod, Provider, BLoC/Cubitなど (Flutterでの標準的な選択肢)
+- Riverpod（v3、`@riverpod` のコード生成）
 
-## GeoPackage操作ライブラリ (Dart)
+## GeoPackage
 
-- `geopackage_dart`: (もし存在すれば。なければSQLiteライブラリとGeoPackage仕様に基づき自作または既存のものを探す)
-- `sqlite3` / `drift`: GeoPackageの実体はSQLiteデータベースなので、これらのライブラリで直接操作も可能。
+- 読み書きは `sqflite`（Android）/ `sqflite_common_ffi_web`（web、sqlite3 の WASM）で SQLite として直接扱う
+- Drive 同期の行単位マージは geodiff（FFI、[[drive-geodiff-sync]]）
+- gpkg 以外の形式の読み取り・変換・書き出し、ラスタのワープは GDAL（Android は FFI、web は WASM。[[gdal]]）
+- QGIS のプロジェクト（`.qgs` / `.qgz`）は `xml` / `archive` で読み書き（[[qgis-interop]]）
 
 ## 地図表示
 
-- `maplibre`: MapLibre GL の Flutter バインディング。Android はネイティブSDK、web は maplibre-gl-js が直接動く。
-  2026-03 に `flutter_map` から移行した（GPU描画のため）。
+- 自前の地図面 `TerrainMapLayer`（`lib/core/terrain/`）。2D は真上から見た 3D で、2D と 3D が同じ描画系（[[terrain-3d]]）
+- 地形と大量の面は `flutter_gpu`（web は WebGL2 版）、それ以外は Canvas
+- MapLibre は 2026-09-11 に地図ページから外し、その後依存ごと削除した（経緯は [[scene-model]]）
+- 背景タイルのキャッシュは MBTiles（Android のみ。web は端末内キャッシュなし）
 
-## GPS
+## GPS・センサー
 
-- `geolocator`, `location` などのFlutterプラグイン。
+- `geolocator`（端末の GPS）、外部 GNSS は Bluetooth の NMEA（`flutter_bluetooth_serial` を手元で直した版、`third_party/`）
+- 常時記録は `flutter_background_service`（[[foreground-service]]）
+- コンパスは `flutter_compass`、水準器は `sensors_plus`
 
 ## Google Drive連携
 
-- `googleapis` パッケージ (Google Drive API v3)
-- `google_sign_in` プラグイン
+- `googleapis`（Drive API v3）＋ `google_sign_in`。web は `GOOGLE_WEB_CLIENT_ID` を渡したビルドだけ（[[google-drive-setup]]）
 
-## バックエンド (オプション)
+## 位置共有
 
-- もし高度な共有機能やユーザー管理が必要な場合は、Firebase (Firestore, Authentication, Storage) などを検討。
+- Firebase（Realtime Database・匿名 Auth・App Check、[[location-sharing]]）
 
 ## 地図操作ツール管理
 
@@ -66,7 +73,7 @@ tags: [technical, stack, flutter]
 ## 座標管理
 
 - 描画中の座標は一時的なリスト（例: `List<Offset>`）に保持する。
-- 地図のズームレベルや表示範囲の変更に対応するため、画面座標と地理座標（緯度経度）の相互変換が必要 (`RMapController` 経由で maplibre に投げる)。
+- 地図のズームレベルや表示範囲の変更に対応するため、画面座標と地理座標（緯度経度）の相互変換が必要 (`RMapController` 経由で地図面のカメラに投げる)。
 
 ## 線の平滑化 (オプション)
 
@@ -87,5 +94,6 @@ tags: [technical, stack, flutter]
 ## 関連ドキュメント
 
 - [[../features/drawing-editing]] - 描画・編集機能
-- [[import-export]] - Import/Exportアーキテクチャ
+- [[import-export]] - レイヤの書き出し（GDAL）
+- [[gdal]] - GDAL（Android と web）
 

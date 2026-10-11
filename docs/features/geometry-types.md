@@ -30,5 +30,5 @@ Root Mapsで新規作成・選択できるレイヤのジオメトリタイプ�
 ## 関連ドキュメント
 
 - [[drawing-editing]] - 描画・編集機能
-- [[../technical/import-export]] - Import/Exportアーキテクチャ
+- [[../technical/import-export]] - レイヤの書き出し（GDAL）
 

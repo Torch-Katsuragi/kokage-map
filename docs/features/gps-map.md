@@ -28,7 +28,7 @@ tags: [features, gps, map]
 
 ## 背景地図
 
-- `maplibre` を利用 (OpenStreetMapなど各種タイルソースに対応)
+- 自前の地図面（`TerrainMapLayer`、[[../technical/terrain-3d]]）で、地理院タイル・OpenStreetMap などを重ねて描く。URL で XYZ / WMS を足せる
 - オフラインタイルマップ (MBTiles。⚠ Android のみ — web には端末内タイルキャッシュが無い)
 
 ## 地図操作

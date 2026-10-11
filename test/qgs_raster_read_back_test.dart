@@ -14,7 +14,6 @@ import 'package:root_maps/models/basemap_provider.dart';
 import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/overlay_image_node.dart';
-import 'package:root_maps/services/geotiff_service.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:root_maps/services/qgis/qgs_base_map_import.dart';
 import 'package:root_maps/services/qgis/qgs_document.dart';
@@ -26,14 +25,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:xml/xml.dart';
 
+import 'support/legacy_geotiff.dart';
+
 const _fixture = 'test/fixtures/qgis_4_2_raster_xyz.qgs';
 
-/// こかげマップが書く形の GeoTIFF（ModelTransformationTag）。[geo] が false なら位置タグの無い TIFF
+/// こかげマップの GeoTIFF（旧版の形。ModelTransformationTag。GDAL を要さない）。[geo] が false なら位置タグの無い TIFF
 Future<void> _tiff(String path, {bool geo = true}) async {
-  File(path).writeAsBytesSync(img.encodeTiff(img.Image(width: 4, height: 3)));
-  if (!geo) return;
-  await GeoTiffService.updateGeoTiffTags(
+  final image = img.Image(width: 4, height: 3);
+  if (!geo) {
+    File(path).writeAsBytesSync(img.encodeTiff(image));
+    return;
+  }
+  writeLegacyGeoTiff(
     path,
+    image,
     const KMetaImageOverlay(centerLng: 135.97, centerLat: 33.94, scale: 2, imageWidth: 4, imageHeight: 3),
   );
 }

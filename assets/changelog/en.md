@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- GeoTIFFs made with "Convert to overlay" from a photo, and those rewritten when repositioning an overlay, are now written with GDAL, the same library QGIS uses. QGIS no longer warns about them (such as "tags are not sorted"). GeoTIFFs made earlier keep working and are rewritten in the new form when repositioned
 - On a device whose app data had been cleared or reinstalled, syncing a Drive-linked folder listed files that exist on both the device and the cloud with the cloud side checked, and syncing as shown overwrote newer files on the device with older cloud copies. Files with identical contents are now left alone; differing ones are shown as a single row with the more recently modified side selected and the note "On both sides — check which is newer". Auto-sync leaves these files for you to decide
 - When "Keep device" was chosen in sync and the file's folder could not be found on Drive, the file was uploaded to the top of the Drive folder. It is now not uploaded, and a notification tells you
 

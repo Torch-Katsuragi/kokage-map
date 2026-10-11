@@ -21,6 +21,7 @@ tags: [index, navigation]
 | [[features/google-drive]] | Google Drive連携（同期、共有） |
 | [[features/ui-ux]] | UI/UXの方向性（ツールバー、レイヤーパネル、ジェスチャー） |
 | [[features/feature-photos]] | 地物の写真（カメラで撮って付ける・QGIS の ExternalResource） |
+| [[features/tree-tally]] | 毎木調査（標準地の立木の記録・TruPulse の樹高・ha あたりの集計と CSV） |
 | [[features/geometry-types]] | レイヤジオメトリタイプ仕様（OGC Simple Features準拠） |
 
 ---

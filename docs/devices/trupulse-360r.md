@@ -59,15 +59,31 @@ LTI (Laser Technology, Inc.) 製レーザー距離計。Bluetooth SPP (38400 bau
 | 5 | AZ (Azimuth) | 方位角（0°–360°） |
 | 6 | ML (Missing Line) | ミッシングライン。2点間距離を2ショットで算出 |
 
-### 計測データフォーマット（HV Download Message）
+### 計測データフォーマット（Download Message）
 
-```
-$PLTIT,HV,<HD>,M,<AZ>,DEG,<INC>,DEG,<SD>,M
-```
+出典: TruPulse 360 User's Manual 4th Edition（part 0144801）Section 8「Download Message Formats」p.43–45
+（[PDF](https://lasertech.com/wp-content/uploads/LTI-TruPulse-360.4.pdf)）。NMEA 0183 の独自文の形。
+解釈は `lib/devices/trupulse/trupulse_sentence.dart`。
 
-- カンマ区切り、9+ フィールド
-- HD=[2], AZ=[4], INC=[6], SD=[8] (0-indexed)
+| 文 | 形 | 例（マニュアル） |
+|----|----|----|
+| HV（1ショット） | `$PLTIT,HV,HD,単位,AZ,D,INC,D,SD,単位*csum` | `$PLTIT,HV,7.01,M,0.00,D,3.00,D,7.01,M*64` |
+| HT（高さルーチンの結果） | `$PLTIT,HT,HT,単位,*csum` | `$PLTIT,HT,22.10,F*0C` |
+| ML（2点間の連結ベクトル） | `$PLTIT,ML,HD,単位,AZ,D,INC,D,SD,単位*csum` | `$PLTIT,ML,8.10,Y,316.90,D,3.20,D,8.10,Y*74` |
+
+- 単位は F=フィート・Y=ヤード・M=メートル（M は国際版のみ）。接続時に `$DU,0` を送るが、F/Y が来てもメートルに換算する
+- チェックサムは `$` と `*` の間の全文字の XOR（16進2桁）。合わない文は捨てる（マニュアルの例はすべて合うことを確かめた）
+- 低品質ターゲット・方位のみの HV は距離が空（`$PLTIT,HV,,,187.10,D,8.40,D,,*64`）。計測として扱わない
 - VD は HD×tan(INC) で算出
+- HV だけを計測（点の生成）に流す。HT は `heightStream`（毎木調査の樹高、[[docs/features/tree-tally]]）。
+  ML は器械点からの位置ではないので点を作らない（2026-10-11 まで、ML も HV と同じ位置で読んで点を作っていた）
+
+### 高さルーチン（HT モード）
+
+本体で HT モード（または `$MM,4`）にすると、3ショットで高さを出す（Section 5 p.34–36）:
+HD（対象の面までの水平距離。レーザー）→ Ang_1（根元か梢の傾斜角）→ Ang_2（もう一方の傾斜角）。
+Ang_1・Ang_2 はレーザーを出さず傾斜計だけ。結果が表示されたとき HT 文が出る。
+1発目の HD のときに HV 文も出るかはマニュアルに書いていない（実機で確かめる）。
 
 ### 応答
 
@@ -220,4 +236,5 @@ target = Distance().offset(station, HD, AZ)
 | `lib/devices/trupulse/trupulse_calibration_guide.dart` | キャリブレーション手順ガイド |
 | `lib/devices/trupulse/trupulse_status_panel.dart` | ステータスパネル（計測値・Station表示） |
 | `lib/devices/trupulse/trupulse_measurement.dart` | 計測データモデル |
+| `lib/devices/trupulse/trupulse_sentence.dart` | `$PLTIT` 文（HV/HT/ML）の解釈・チェックサム・単位換算 |
 | `lib/screens/device_settings_screen.dart` | 接続設定画面 |

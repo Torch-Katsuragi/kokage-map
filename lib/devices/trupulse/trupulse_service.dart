@@ -21,7 +21,6 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
@@ -31,6 +30,7 @@ import '../../utils/app_logger.dart';
 import '../base/device_service.dart';
 import '../base/serial_line_buffer.dart';
 import 'trupulse_measurement.dart';
+import 'trupulse_sentence.dart';
 
 class TruPulseService extends ExternalDeviceService {
   static const String _tag = 'TruPulse';
@@ -49,6 +49,8 @@ class TruPulseService extends ExternalDeviceService {
       StreamController<TruPulseMeasurement>.broadcast();
   TruPulseMeasurement? _lastMeasurement;
   int _measurementCount = 0;
+  final _heightController = StreamController<double>.broadcast();
+  double? _lastHeight;
 
   // 計測以外のシリアル応答を待つ問い合わせ
   Completer<String>? _pendingQuery;
@@ -72,6 +74,13 @@ class TruPulseService extends ExternalDeviceService {
   int get measurementCount => _measurementCount;
   Stream<TruPulseMeasurement> get measurementStream =>
       _measurementController.stream;
+
+  /// 高さルーチン（本体の HT モード）の結果（m）。docs/devices/trupulse-360r.md「高さ（HT）」
+  Stream<double> get heightStream => _heightController.stream;
+  double? get lastHeight => _lastHeight;
+
+  /// 毎木調査の画面が計測を受け取っている間 true。地図の TruPulse ツールは点を作らない
+  bool claimedByTally = false;
 
   @override
   Future<List<BluetoothDevice>> scanDevices() async {
@@ -192,40 +201,34 @@ class TruPulseService extends ExternalDeviceService {
     }
   }
 
-  /// TruPulseの出力行をパース
+  /// TruPulseの出力行をパース（文の形は [TruPulseSentence]）
   ///
-  /// フォーマット: カンマ区切りで label,value ペアが並ぶ
-  /// 例: `$OK` (応答) または計測データ行
-  /// HD=[2], AZ=[4], INC=[6], SD=[8] (0-indexed)
+  /// HV は計測、HT は高さルーチンの結果として流す。ML（2点間の連結ベクトル）は器械点からの位置ではないので流さない
   void _parseLine(String line) {
     _addLog(SerialDirection.rx, line);
     if (line.startsWith('\$OK')) return;
 
-    final parts = line.split(',');
-
-    // 計測データ: $PLTIT,HV,... (9+ fields)
-    if (parts.length >= 9) {
-      try {
-        final hd = double.tryParse(parts[2]);
-        final az = double.tryParse(parts[4]);
-        final inc = double.tryParse(parts[6]);
-        final sd = double.tryParse(parts[8]);
-
-        if (hd != null && az != null && inc != null && sd != null) {
-          final vd = hd * _tanDeg(inc);
-          final measurement = TruPulseMeasurement(
-            hd: hd, sd: sd, vd: vd, az: az, inc: inc,
-            timestamp: DateTime.now(),
-          );
-          _lastMeasurement = measurement;
-          _measurementCount++;
-          _measurementController.add(measurement);
-          notifyListeners();
-          AppLogger.debug('$_tag: 計測 #$_measurementCount: $measurement');
-          return;
-        }
-      } catch (_) {}
+    final sentence = TruPulseSentence.parse(line);
+    if (sentence is TruPulseVector) {
+      final measurement = TruPulseMeasurement(
+        hd: sentence.hd, sd: sentence.sd, vd: sentence.vd, az: sentence.az, inc: sentence.inc,
+        timestamp: DateTime.now(),
+      );
+      _lastMeasurement = measurement;
+      _measurementCount++;
+      _measurementController.add(measurement);
+      notifyListeners();
+      AppLogger.debug('$_tag: 計測 #$_measurementCount: $measurement');
+      return;
     }
+    if (sentence is TruPulseHeight) {
+      _lastHeight = sentence.heightM;
+      _heightController.add(sentence.heightM);
+      notifyListeners();
+      AppLogger.debug('$_tag: 高さ ${sentence.heightM.toStringAsFixed(2)} m');
+      return;
+    }
+    if (sentence is TruPulseMissingLine) return;
 
     // 計測以外のレスポンス → pendingQuery
     AppLogger.debug('$_tag: response: $line');
@@ -245,9 +248,6 @@ class TruPulseService extends ExternalDeviceService {
   Future<void> remoteFire() => sendCommand('GO');
   Future<void> stopMeasurement() => sendCommand('ST');
 
-  static double _tanDeg(double degrees) =>
-      math.tan(degrees * math.pi / 180.0);
-
   void _addLog(SerialDirection dir, String text) {
     _log.add(SerialLogEntry(dir, text, DateTime.now()));
     if (_log.length > maxLogEntries) _log.removeAt(0);
@@ -260,6 +260,7 @@ class TruPulseService extends ExternalDeviceService {
   void dispose() {
     disconnect();
     _measurementController.close();
+    _heightController.close();
     _logNotifier.close();
     super.dispose();
   }

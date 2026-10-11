@@ -11,6 +11,7 @@
 
 #fixes(
   "New",
+  [Tree tally: record species, DBH and height in circular or polygon plots, then summarize trees/ha, basal area and mean height and save as CSV (height also from TruPulse HT)],
   [Attach photos to features: the camera app saves them in photos/ next to the data and the photo column holds the path (shown in QGIS forms)],
   [Join a stand-register CSV to a forest-plan layer (QGIS join); joined fields in the attribute table, labels, styling, search and export; round-trips with .qgs],
   [Layers styled in QGIS by category, graduated range or rule (stands by species or age) are drawn feature by feature in the same colors as QGIS],

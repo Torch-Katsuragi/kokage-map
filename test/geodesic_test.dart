@@ -43,6 +43,26 @@ void main() {
     expect(Geodesic.distance(const LatLng(34, 136), const LatLng(34, 136)), 0);
   });
 
+  test('距離は QGIS（GeographicLib の Karney 法）と 1 mm 以内。対蹠点の近くでも落ちない', () {
+    // 参照値は pyproj の Geod(ellps='WGS84').inv。上の 5 組は Vincenty が収束しない
+    const cases = <(LatLng, LatLng, double)>[
+      (LatLng(0, 0), LatLng(0, 179.8), 20000239.43772467),
+      (LatLng(10, 0), LatLng(-10.2, 179.7), 19975668.089064833),
+      (LatLng(34, 136), LatLng(-34, -44.3), 19995624.889961265),
+      (LatLng(0, 0), LatLng(0.1, 179.9), 19992082.10791384),
+      (LatLng(-30, 10), LatLng(29.9, -170.1), 19992090.302326925),
+      (LatLng(0, 0), LatLng(0, 180), 20003931.458625447),
+      (LatLng(90, 0), LatLng(-90, 0), 20003931.458625447),
+      (LatLng(0, 0), LatLng(0, 90), 10018754.171394622),
+      (LatLng(33, 135), LatLng(34.5, 136), 190433.47423649824),
+      (LatLng(34, 136), LatLng(34, 136.00001), 0.9238478613472365),
+    ];
+    for (final (p1, p2, expected) in cases) {
+      expect(Geodesic.distance(p1, p2), closeTo(expected, 0.001), reason: '$p1 → $p2');
+      expect(Geodesic.distance(p2, p1), closeTo(expected, 0.001), reason: '$p2 → $p1');
+    }
+  });
+
   test('turf の形（Multi は合計）', () {
     turf.Position pos(LatLng p) => turf.Position(p.longitude, p.latitude);
     final poly = turf.Polygon(coordinates: [

@@ -17,7 +17,7 @@
 //
 // turf は半径 6378137 m の球で測るので、北山村あたり（北緯 34°）で面積が 0.3% ほど大きく出る。
 // 地物の情報パネルと計測ツールはこちらを使う。
-// - 長さ: Vincenty の逆解法（収束しない対蹠点の近くだけ球で代える）
+// - 長さ: Karney の逆解法（GeographicLib。QGIS の楕円体の長さと同じ → karney_inverse.dart）
 // - 面積: 等積の写像（正積緯度）で楕円体を球に移し、球面多角形の面積を測る。辺は球の大円で結ぶので、
 //   林班の大きさ（数 km）なら楕円体の測地線との差は無視できる
 // 座標は表示用の WGS84（投影座標系のレイヤも読み込み時に WGS84 へ直してある）
@@ -27,12 +27,13 @@ import 'dart:math' as math;
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 
+import 'karney_inverse.dart';
+
 class Geodesic {
   Geodesic._();
 
   static const double _a = 6378137.0;
   static const double _f = 1 / 298.257223563;
-  static const double _b = _a * (1 - _f);
   static const double _e2 = _f * (2 - _f);
   static final double _e = math.sqrt(_e2);
 
@@ -47,42 +48,10 @@ class Geodesic {
 
   static double _rad(double deg) => deg * math.pi / 180;
 
-  /// 2 点間の測地線長 [m]
+  /// 2 点間の測地線長 [m]（Karney の逆解法。QGIS の楕円体の長さと同じ値で、対蹠点の近くでも収束する）
   static double distance(LatLng p1, LatLng p2) {
     if (p1.latitude == p2.latitude && p1.longitude == p2.longitude) return 0;
-    final l = _rad(p2.longitude - p1.longitude);
-    final u1 = math.atan((1 - _f) * math.tan(_rad(p1.latitude)));
-    final u2 = math.atan((1 - _f) * math.tan(_rad(p2.latitude)));
-    final sinU1 = math.sin(u1), cosU1 = math.cos(u1);
-    final sinU2 = math.sin(u2), cosU2 = math.cos(u2);
-    var lambda = l;
-    for (var i = 0; i < 200; i++) {
-      final sinL = math.sin(lambda), cosL = math.cos(lambda);
-      final t1 = cosU2 * sinL;
-      final t2 = cosU1 * sinU2 - sinU1 * cosU2 * cosL;
-      final sinSigma = math.sqrt(t1 * t1 + t2 * t2);
-      if (sinSigma == 0) return 0;
-      final cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosL;
-      final sigma = math.atan2(sinSigma, cosSigma);
-      final sinAlpha = cosU1 * cosU2 * sinL / sinSigma;
-      final cos2Alpha = 1 - sinAlpha * sinAlpha;
-      final cos2SigmaM = cos2Alpha == 0 ? 0.0 : cosSigma - 2 * sinU1 * sinU2 / cos2Alpha;
-      final c = _f / 16 * cos2Alpha * (4 + _f * (4 - 3 * cos2Alpha));
-      final prev = lambda;
-      lambda = l + (1 - c) * _f * sinAlpha * (sigma + c * sinSigma * (cos2SigmaM + c * cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM)));
-      if ((lambda - prev).abs() < 1e-12) {
-        final uSq = cos2Alpha * (_a * _a - _b * _b) / (_b * _b);
-        final aa = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
-        final bb = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
-        final dSigma = bb *
-            sinSigma *
-            (cos2SigmaM +
-                bb / 4 * (cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM) - bb / 6 * cos2SigmaM * (-3 + 4 * sinSigma * sinSigma) * (-3 + 4 * cos2SigmaM * cos2SigmaM)));
-        return _b * aa * (sigma - dSigma);
-      }
-    }
-    // 対蹠点の近くで収束しない。球で代える
-    return const Distance(roundResult: false).as(LengthUnit.Meter, p1, p2);
+    return karneyDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
   }
 
   /// 折れ線の長さ [m]

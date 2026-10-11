@@ -19,6 +19,8 @@
     release APK（3 ABI）183 MB（GDAL 前より約 +57 MB。Play の ABI 別配布では arm64 のダウンロード約 +10 MB）。
     見つけて直した: Z が落ちる・GPX の空レイヤ・.cpg のある shp が QGIS で化ける（.qgs に UTF-8 と書いていた）・変換/改名/追加の後に .qgs とツリーが古い・
     書き出し元にクラス名・改名/削除の題が「GeoPackage」
+  - 2026-10-11 夕方: 読み取り専用の編集で確認ダイアログが直接出て、変換後そのまま移動の編集に入る・移動した点の Z が DEM（136.4 m）・
+    変換で Z の値が落ちていた（宣言だけ 3 次元）のを直し、端末のキャッシュで 400/410/420 が残るのを確認
   - [ ] Drive: 本物のアプリが Google にサインインしていない（Pixel 9）。`/sdcard/FieldSurvey/flat_trial/Kitayama-2026/Kitayama-2026-demo`（Drive 連携）に
         sjis_cpg 一式・points.kml・IMG_TEST.JPG を置いてある。サインインしたら同期して gws で Drive 側を見る。`.kokage` が上がらないことも
   - [ ] 編集しようとしたときの確認ダイアログ（2026-10-11 に通知から変更）: 編集ボタン →「gpkg に変換して編集しますか？」→ 変換 → 同じ地物の編集に入る／

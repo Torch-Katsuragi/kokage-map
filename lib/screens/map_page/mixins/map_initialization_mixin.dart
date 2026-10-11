@@ -323,6 +323,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
       // GPS位置情報取得を開始（InternalGpsLocationStore経由）
       await gpsManager.startGps();
+      // 権限の確認中に地図の画面が閉じたら、ここで止める（案内の provider を読む・購読を張り残すのを避ける）
+      if (!mounted) return;
 
       // 初期GPS情報を取得
       updateCurrentGpsInfo();

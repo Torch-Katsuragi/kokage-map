@@ -34,6 +34,7 @@ import '../models/nodes/feature_node.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../services/feature_photos/feature_photo_paths.dart';
 import '../tools/map_tool.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
@@ -290,6 +291,8 @@ class FeatureEditor extends Notifier<EditState?> {
   /// メタデータと、頂点ごとの記録 sub_table（形と一緒に扱う）も除く）
   static bool _editable(String name) {
     if (isReadOnlyColumn(name) || isSystemColumn(name)) return false;
+    // 写真の列は写真の欄（FeaturePhotoStrip）で付け外しする。文字で直させない
+    if (FeaturePhotoPaths.isPhotoColumn(name)) return false;
     return name.toLowerCase() != 'sub_table';
   }
 

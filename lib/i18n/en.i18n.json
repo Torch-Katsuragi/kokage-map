@@ -1037,6 +1037,22 @@
     "create": "Create",
     "next": "Next"
   },
+  "featurePhotos": {
+    "title": "Photos",
+    "take": "Take photo",
+    "pick": "Choose photo",
+    "attached": "Attached $count photo(s)",
+    "attachFailed": "Couldn't attach the photo",
+    "cameraFailed": "Couldn't open the camera",
+    "missing": "File not found",
+    "removeTitle": "Remove this photo?",
+    "removeBody": "It is removed from the feature's attributes. You can also delete the photo file.",
+    "unlinkOnly": "Remove only",
+    "unlinkAndDelete": "Also delete file",
+    "cancel": "Cancel",
+    "removed": "Photo removed",
+    "remove": "Remove"
+  },
   "photoViewer": {
     "loadError": "Cannot load image",
     "close": "Close",

@@ -286,6 +286,16 @@ Files are imported into a GeoPackage in the layer panel. For GeoJSON files, laye
 
 Photos can be converted to overlays to display them on the map. Select "Convert to Overlay" from the photo's menu in the layer panel. Overlays can be moved, rotated, and scaled using the :icon-transform: transform tool.
 
+### Attaching Photos to a Feature
+
+1. Select a point, line or polygon on the map and tap :icon-photo_camera: **Take photo** under "Photos" in the info panel (while editing, the same row is on the "Attributes" tab).
+2. The device's camera app opens. Take and confirm the shot to attach it. To attach a photo you already have, use the "Choose photo" button next to it.
+3. Attached photos appear as thumbnails. Tap one to view it full screen; long-press to remove it (you can also delete the file).
+
+- Photos are saved in `photos/<layer name>/` next to the GeoPackage, and the location is written to the feature's `photo` attribute (`photo_2`, … from the second one). In QGIS the attribute form shows the photo.
+- Even if the camera app's location setting is off, the current GPS position is written into the photo.
+- The `photos` folder also appears in the layer panel and is synced along with a Drive-linked folder.
+
 ---
 
 ## Google Drive Integration (Android)

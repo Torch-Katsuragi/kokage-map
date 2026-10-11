@@ -144,6 +144,9 @@ msiexec /a .temp\QGIS-LTR.msi /qn TARGETDIR=C:\Users\<user>\qgis-extract
 落ちることがある。そのときは上のように直接MSIを取る。
 ⚠ `msiexec /i` は `Error 1925`（管理者権限が無い）で失敗する。`/a` なら通る。
 
+アプリが作った写真の列（`photo`・`photo_N`）には `<fieldConfiguration>` の `ExternalResource` を書く（2026-10-11）。
+ユーザーが QGIS で設定した欄は触らない。形と理由は [[../features/feature-photos#`.qgs` に写真の欄を書く]]。
+
 書かないもの（`QgsProject.skipped` に入り、通知に出る）:
 
 - 写真（`ImageNode`。QGIS には写真の概念が無い）

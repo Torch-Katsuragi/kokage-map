@@ -32,12 +32,14 @@ import '../providers/notification_providers.dart';
 import '../providers/project_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../services/feature_photos/feature_photo_paths.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/geodesic.dart';
 import '../widgets/info_panel_card.dart';
 import '../widgets/long_press_delete_button.dart';
 import '../widgets/photo_viewer.dart';
 import 'external_layer_actions.dart';
+import 'feature_photo_strip.dart';
 import 'guide_here_button.dart';
 
 class FeatureDetailPanel extends ConsumerWidget {
@@ -203,7 +205,9 @@ class FeatureDetailPanel extends ConsumerWidget {
           infoMap.entries
               .where((entry) =>
                   !entry.key.toLowerCase().contains('metadata') &&
-                  !hiddenKeys.contains(entry.key))
+                  !hiddenKeys.contains(entry.key) &&
+                  // 写真の列は下の縮図で出す
+                  !FeaturePhotoPaths.isPhotoColumn(entry.key))
               .toList();
 
       // 長さ・面積・周長（WGS84 楕円体の上で測る。投影座標系のレイヤも読み込み時に WGS84 へ直してある）
@@ -228,6 +232,12 @@ class FeatureDetailPanel extends ConsumerWidget {
             child: _labelRow('${entry.key}: ', entry.value),
           ),
       ];
+
+      // 付けた写真（撮る・選ぶ・大きく見る・外す）
+      children.addAll([
+        const SizedBox(height: 8),
+        FeaturePhotoStrip(key: ValueKey(node), feature: node),
+      ]);
 
       // 「ここへ案内」（点・線・面）
       children.addAll([

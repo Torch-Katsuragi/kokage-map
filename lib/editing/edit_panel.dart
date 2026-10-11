@@ -24,6 +24,7 @@ import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/geodesic.dart';
+import '../widgets/feature_photo_strip.dart';
 import '../widgets/feature_silhouette.dart';
 import 'edit_session.dart';
 import 'edit_toolbar.dart';
@@ -212,13 +213,15 @@ class _EditPanelState extends ConsumerState<EditPanel> {
   }
 
   Widget _attrs(EditState s, ThemeData theme) {
-    if (s.columns.isEmpty) {
-      return Text(t.featureEdit.noAttrs, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline));
-    }
     return ListView(
       // 欄の名前は枠の上にはみ出して出るので、上に少し空ける
       padding: const EdgeInsets.only(top: 8),
       children: [
+        // 写真はその場で付け外しする（保存・取消を待たない）
+        FeaturePhotoStrip(key: ValueKey(s.feature), feature: s.feature),
+        const SizedBox(height: 8),
+        if (s.columns.isEmpty)
+          Text(t.featureEdit.noAttrs, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
         for (final c in s.columns)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),

@@ -381,7 +381,8 @@ class GeoTiffService {
   /// | 0  0  0  1 |   | 1 |   |  1  |
   /// ```
   static Float64List buildModelTransformationMatrix(KMetaImageOverlay params) {
-    // メートル→度の変換係数
+    // メートル→度の変換係数（画像オーバーレイの scale［m/px］と度の換算は 111,320 m/° に固定した約束。書き出し・読み込み・描画で同じ値を使う。
+    //  楕円体の値に変えると、scale を m で持っている既存のオーバーレイの大きさが変わるので変えない）
     final cosLat = math.cos(params.centerLat * math.pi / 180.0);
     final degPerMeterLng = 1.0 / (111320.0 * cosLat);
     const degPerMeterLat = 1.0 / 111320.0;

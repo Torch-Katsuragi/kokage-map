@@ -22,7 +22,6 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -41,6 +40,7 @@ import '../../providers/notification_providers.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/tool_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../services/table/csv_table.dart' show csvBytesForExcel;
 import '../../services/tree_tally/stem_volume.dart';
 import '../../services/tree_tally/tree_tally_stats.dart';
 import '../../services/tree_tally/tree_tally_store.dart';
@@ -650,7 +650,7 @@ Future<void> _saveCsv(WidgetRef ref, List<PlotTally> tallies) async {
   final notifications = ref.read(notificationCenterProvider.notifier); // 保存先を選ぶ間に画面が閉じても通知できるよう先に
   final saved = await FilePicker.saveFile(
     fileName: name,
-    bytes: Uint8List.fromList(utf8.encode(plotTallyCsv(tallies, allLabel: t.treeTally.all))),
+    bytes: csvBytesForExcel(plotTallyCsv(tallies, allLabel: t.treeTally.all)),
     type: FileType.custom,
     allowedExtensions: ['csv'],
   );

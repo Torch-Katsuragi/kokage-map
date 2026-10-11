@@ -46,6 +46,8 @@
 - Adding a column whose name differs from an existing one only in letter case (such as "Name" when "name" exists) failed with an unclear error. Column names ignore letter case, so you are now told which column already exists (also when creating a new column in the field calculator)
 - Replace in the attribute table could write non-numeric values (such as "abc") into integer and real columns. Rows whose result would not be a number (or, in integer columns, a decimal) are now left unchanged and their count is reported. In numeric columns full-width digits become half-width, and an empty result becomes NULL
 - When an attribute change could not be saved for a moment, it was not retried until the next edit or until closing. It is now retried after a short wait (growing up to 1 minute). When the app goes to the background (or the tab is hidden on the web), pending attributes are written before the file is saved back
+- CSV files saved with "Export CSV" in the attribute table showed garbled Japanese in Excel on Japanese Windows. A UTF-8 BOM is now added, as in the tree tally summary CSV
+- The scale bar of map PDFs was off by a few percent at large scales such as 1:500. Fixed. The length on the track extraction screen and the spread of GNSS fixes are now also measured on the WGS84 ellipsoid, like the measure tool and the info panel (the same values as QGIS ellipsoidal lengths)
 
 ### Lighter
 

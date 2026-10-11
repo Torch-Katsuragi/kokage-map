@@ -45,6 +45,7 @@ import '../../services/survey/survey_chain_resolver.dart';
 import '../../tools/pan_tool.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/geo_converter.dart';
+import '../../utils/geodesic.dart';
 import '../../utils/true_heading.dart';
 import '../../utils/wmm_declination.dart';
 import '../../widgets/external_layer_actions.dart';
@@ -211,8 +212,7 @@ class TruPulseTool extends DeviceTool {
     final threshold = (forwardHd * 0.15).clamp(1.0, 5.0);
 
     // ターゲットと前測点の距離を比較
-    final distToPrev = const Distance(roundResult: false)
-        .as(LengthUnit.Meter, target, prevStnCoords);
+    final distToPrev = Geodesic.distance(target, prevStnCoords);
 
     if (distToPrev > threshold) return false;
 

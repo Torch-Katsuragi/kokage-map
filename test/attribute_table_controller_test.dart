@@ -115,6 +115,25 @@ void main() {
     expect(hs, [for (var i = 0; i < _count; i++) i.toDouble()]);
   });
 
+  testWidgets('CSV 書き出しは UTF-8 の BOM 付き（日本語の Excel で化けない）', (tester) async {
+    await tester.runAsync(() async {
+      await open();
+      final db = await gpkg.getDatabase();
+      await db.update('pts', {'name': '杉・髙﨑'}, where: 'name = ?', whereArgs: ['p0']);
+      await layer.updateChildren();
+    });
+    addTearDown(() => tester.runAsync(close));
+    final ctrl = await pumpController(tester);
+    await tester.runAsync(ctrl.initialize);
+
+    final bytes = (await tester.runAsync(ctrl.exportCsvBytes))!;
+    expect(bytes.take(3), [0xEF, 0xBB, 0xBF]);
+    expect(bytes[3], isNot(0xEF)); // BOM は 1 つだけ
+    final text = utf8.decode(bytes.sublist(3));
+    expect(text.split('\n').first, 'name,h');
+    expect(text, contains('杉・髙﨑'));
+  });
+
   testWidgets('メタデータの列（kmaps_metadata）は表に出さない', (tester) async {
     await tester.runAsync(() async {
       await open();

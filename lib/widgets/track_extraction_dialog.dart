@@ -22,7 +22,6 @@
 library;
 
 import 'dart:convert';
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -41,6 +40,7 @@ import '../providers/notification_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/gps_history_recorder.dart';
 import '../utils/app_logger.dart';
+import '../utils/geodesic.dart';
 import '../utils/gpx_writer.dart';
 import 'feature_editor/shared/line_preview_painter.dart';
 import 'feature_editor/shared/simplification_controls.dart';
@@ -152,31 +152,9 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
       (end + 1).clamp(0, _allPoints.length),
     );
     _selectedLine = [for (final p in _selectedPoints) p.toLatLng()];
-    _selectedDistanceKm = _calculateDistance(_selectedLine) / 1000;
+    _selectedDistanceKm = Geodesic.lineLength(_selectedLine) / 1000;
 
     setState(() {});
-  }
-
-  /// 距離を計算（メートル）
-  double _calculateDistance(List<LatLng> points) {
-    if (points.length < 2) return 0;
-    double total = 0;
-    for (int i = 1; i < points.length; i++) {
-      total += _haversineDistance(points[i - 1], points[i]);
-    }
-    return total;
-  }
-
-  double _haversineDistance(LatLng p1, LatLng p2) {
-    const R = 6371000.0;
-    final dLat = (p2.latitude - p1.latitude) * math.pi / 180;
-    final dLon = (p2.longitude - p1.longitude) * math.pi / 180;
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(p1.latitude * math.pi / 180) *
-            math.cos(p2.latitude * math.pi / 180) *
-            math.sin(dLon / 2) *
-            math.sin(dLon / 2);
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
   /// 時間を表示用にフォーマット

@@ -78,7 +78,7 @@ void main() {
     expect(t.bySpecies.keys.toList(), ['スギ', 'ヒノキ']);
     expect(t.bySpecies['スギ']!.stemsPerHa, closeTo(40, 1e-9));
     final csv = plotTallyCsv([t], allLabel: '全体');
-    expect(csv, startsWith('﻿plot_id,species,'));
+    expect(csv, startsWith('plot_id,species,'));
     final lines = csv.trim().split('\n');
     expect(lines, hasLength(4));
     expect(lines[1], startsWith('P1,全体,500.0,3,60,'));

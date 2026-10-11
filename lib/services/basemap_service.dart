@@ -846,8 +846,8 @@ class BaseMapService extends ChangeNotifier {
     int minZoom,
     int maxZoom,
   ) {
-    // 半径を緯度経度の差分に変換（概算）
-    // 緯度1度 ≒ 111km, 経度1度 ≒ 111km * cos(lat)
+    // 半径を緯度経度の差分に変換（概算）。ダウンロードするタイルの範囲を決めるだけで距離は見せないので、
+    // 緯度1度 ≒ 111km, 経度1度 ≒ 111km * cos(lat) で足りる（楕円体との差は 1% 未満、タイル 1 枚より小さい）
     final latDiff = radiusMeters / 111000.0;
     final lonDiff = radiusMeters / (111000.0 * math.cos(center.latitude * math.pi / 180.0));
 

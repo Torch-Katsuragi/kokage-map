@@ -20,6 +20,7 @@ import 'dart:typed_data';
 import '../../utils/app_logger.dart';
 import '../../utils/wkb_utils.dart';
 import 'geopackage_connection.dart';
+import 'gpkg_rtree.dart';
 import 'qgis_interop.dart';
 import 'sql_identifier.dart';
 
@@ -59,18 +60,19 @@ class SpatialIndexManager {
     if (geoms.isEmpty) return;
     try {
       final db = await connection.getDatabase();
-      final rtreeTable = 'rtree_${tableName}_geom';
-      final hasRtree = (await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-        [rtreeTable],
-      )).isNotEmpty;
+      // 形の列が geom とは限らない（rtree_<表>_<列>）
+      final rtreeTable = await gpkgRtreeTable(db, tableName);
 
       double? minX, minY, maxX, maxY;
       final batch = db.batch();
       for (final MapEntry(key: id, value: blob) in geoms.entries) {
         final env = gpkgEnvelope(blob);
-        if (env == null) continue;
-        if (hasRtree) {
+        if (env == null) {
+          // 空の形は索引に載せない（GDAL の更新トリガーと同じく、前の範囲を消す）
+          if (rtreeTable != null) batch.execute('DELETE FROM ${quoteIdent(rtreeTable)} WHERE id = ?', [id]);
+          continue;
+        }
+        if (rtreeTable != null) {
           batch.execute(
             'INSERT OR REPLACE INTO ${quoteIdent(rtreeTable)} (id, minx, maxx, miny, maxy) VALUES (?, ?, ?, ?, ?)',
             [id, env.minX, env.maxX, env.minY, env.maxY],
@@ -81,7 +83,10 @@ class SpatialIndexManager {
         maxX = maxX == null || env.maxX > maxX ? env.maxX : maxX;
         maxY = maxY == null || env.maxY > maxY ? env.maxY : maxY;
       }
-      if (minX == null) return;
+      if (minX == null) {
+        await batch.commit(noResult: true);
+        return;
+      }
       // レイヤの範囲は広げるだけ（縮めるのは GpkgIndexRepair）
       batch.execute(
         'UPDATE gpkg_contents SET '
@@ -101,15 +106,8 @@ class SpatialIndexManager {
   Future<void> removeFromRTreeIndex(String tableName, int rowId) async {
     try {
       final db = await connection.getDatabase();
-      final rtreeTable = 'rtree_${tableName}_geom';
-
-      // R-Treeテーブルが存在するか確認
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-        [rtreeTable],
-      );
-
-      if (tables.isNotEmpty) {
+      final rtreeTable = await gpkgRtreeTable(db, tableName);
+      if (rtreeTable != null) {
         await db.execute('DELETE FROM ${quoteIdent(rtreeTable)} WHERE id = ?', [rowId]);
       }
     } catch (e) {

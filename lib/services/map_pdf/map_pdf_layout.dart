@@ -21,6 +21,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../core/terrain/dem_tiles.dart';
 import '../../core/terrain/web_mercator.dart';
+import '../../utils/geodesic.dart';
 
 /// 用紙
 enum MapPdfPaper {
@@ -132,7 +133,7 @@ class MapPdfScale {
   static double mercatorMetersPerMm(double denominator, double latDeg) =>
       denominator / 1000 / math.cos(latDeg * math.pi / 180);
 
-  /// 縮尺記号: [center] を通る東西の線で、紙の [maxLengthMm] ぶんの地上の距離を測地線（Vincenty）で測り、
+  /// 縮尺記号: [center] を通る東西の線で、紙の [maxLengthMm] ぶんの地上の距離を測地線（[Geodesic]）で測り、
   /// その中に収まる切りのよい距離（1・2・5 × 10^k m）のバーにする
   static ScaleBarSpec scaleBar({
     required LatLng center,
@@ -143,7 +144,8 @@ class MapPdfScale {
     final half = maxLengthMm / 2 * mercatorMetersPerMm;
     final west = LatLng(center.latitude, WebMercator.lonFromX(cx - half));
     final east = LatLng(center.latitude, WebMercator.lonFromX(cx + half));
-    final ground = const Distance().as(LengthUnit.Meter, west, east);
+    // ⚠ latlong2 の const Distance() は 1 m に丸める。大縮尺（地上 10 m ほど）でバーが数 % ずれていた
+    final ground = Geodesic.distance(west, east);
     final perMm = ground / maxLengthMm;
     final max = ground;
     final p = math.pow(10, (math.log(max) / math.ln10 + 1e-9).floor()).toDouble();

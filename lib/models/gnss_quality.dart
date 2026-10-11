@@ -26,6 +26,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../i18n/strings.g.dart';
+import '../utils/geodesic.dart';
 
 /// 測位の種類（悪い順）。GGA の品質番号から決める
 enum GnssFix {
@@ -225,8 +226,8 @@ class GnssQuality {
     final n = samples.length;
     final lat0 = samples.map((s) => s.latitude).reduce((a, b) => a + b) / n;
     final lon0 = samples.map((s) => s.longitude).reduce((a, b) => a + b) / n;
-    const mPerDegLat = 110574.0;
-    final mPerDegLon = 111320.0 * math.cos(lat0 * math.pi / 180);
+    final mPerDegLat = Geodesic.metersPerDegreeLat(lat0);
+    final mPerDegLon = Geodesic.metersPerDegreeLon(lat0);
     var sum = 0.0;
     for (final s in samples) {
       final dy = (s.latitude - lat0) * mPerDegLat;

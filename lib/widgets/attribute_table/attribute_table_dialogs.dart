@@ -69,6 +69,15 @@ Future<void> _changeColumn(
   }
 }
 
+/// [name] の列が既にあれば知らせて true。SQLite の列名は英字の大小を区別しないので、
+/// 「name」がある表に「Name」は足せない（足すと ALTER が重複で落ちる）
+Future<bool> _columnExists(LayerNode layer, String name, WidgetRef? ref) async {
+  final existing = await layer.geoPackageFile.findColumn(layer.layerName, name);
+  if (existing == null) return false;
+  _notify(ref, t.attributeTable.columnExists(name: name, existing: existing), NotificationLevel.warning);
+  return true;
+}
+
 /// カラム追加ダイアログを表示
 Future<void> showAddColumnDialog(
   BuildContext context,
@@ -125,12 +134,14 @@ Future<void> showAddColumnDialog(
             actions: [
               _cancelButton(dialogContext),
               ElevatedButton.icon(
-                onPressed: () {
+                onPressed: () async {
                   final columnName = columnNameController.text.trim();
                   if (columnName.isEmpty) {
                     _notify(ref, t.attributeTable.enterColumnName, NotificationLevel.warning);
                     return;
                   }
+                  if (await _columnExists(layer, columnName, ref)) return;
+                  if (!dialogContext.mounted) return;
                   Navigator.of(
                     dialogContext,
                   ).pop({'name': columnName, 'type': selectedType});
@@ -393,7 +404,7 @@ Future<void> showFieldCalculatorDialog(
             actions: [
               _cancelButton(dialogContext),
               ElevatedButton.icon(
-                onPressed: () {
+                onPressed: () async {
                   final expr = expressionController.text.trim();
                   if (expr.isEmpty) return;
 
@@ -402,6 +413,8 @@ Future<void> showFieldCalculatorDialog(
                           ? newColumnController.text.trim()
                           : selectedColumn;
                   if (target == null || target.isEmpty) return;
+                  if (createNew && await _columnExists(layer, target, ref)) return;
+                  if (!dialogContext.mounted) return;
 
                   Navigator.of(dialogContext).pop({
                     'target': target,

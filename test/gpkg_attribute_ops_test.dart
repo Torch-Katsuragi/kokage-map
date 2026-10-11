@@ -141,6 +141,16 @@ void main() {
       expect(names.where((c) => c == 'name'), hasLength(1));
     });
 
+    // SQLite の列名は英字の大小を区別しない。「Name」を足そうとすると ALTER が重複で落ちていた（2026-10-12）
+    test('英字の大小だけ違う名前の列は既にあるものとして足さない', () async {
+      await gpkg.addAttributeColumns('pts', {'Name': 'TEXT'});
+      final names = await gpkg.getTableColumns('pts');
+      expect(names.where((c) => c.toLowerCase() == 'name'), ['name']);
+      expect(await gpkg.findColumn('pts', 'NAME'), 'name');
+      expect(await gpkg.findColumn('pts', ' "h" '), 'h');
+      expect(await gpkg.findColumn('pts', 'height'), isNull);
+    });
+
     test('属性の列の情報は形の列を含めない', () async {
       final info = await gpkg.getAttributeColumnInfo('pts');
       final names = [for (final c in info) c['name']];

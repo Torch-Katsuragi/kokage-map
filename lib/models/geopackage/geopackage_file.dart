@@ -228,7 +228,10 @@ class GeoPackageFile {
   Future<List<String>> getTableColumns(String tableName) =>
       _schema.getTableColumns(tableName);
 
-  /// 属性カラムを動的に追加
+  /// [name] と同じ列（英字の大小は区別しない）の表にある名前。無ければ null
+  Future<String?> findColumn(String tableName, String name) => _schema.findColumn(tableName, name);
+
+  /// 属性カラムを動的に追加（同じ名前の列が既にあれば何もしない）
   Future<void> addAttributeColumn(
     String tableName,
     String columnName,

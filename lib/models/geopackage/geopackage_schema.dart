@@ -151,7 +151,18 @@ class GeoPackageSchema {
     }
   }
 
-  /// 属性カラムを動的に追加
+  /// [name]（[sanitizeColumnName] を通した名前）と同じ列の、表にある名前。無ければ null。
+  /// SQLite の列名は英字の大小を区別しないので、大小だけ違う列も同じ列とみなす
+  Future<String?> findColumn(String tableName, String name) async {
+    final key = sanitizeColumnName(name).toLowerCase();
+    if (key.isEmpty) return null;
+    for (final c in await _columnNames(tableName)) {
+      if (c.toLowerCase() == key) return c;
+    }
+    return null;
+  }
+
+  /// 属性カラムを動的に追加（同じ名前の列が既にあれば何もしない。大小だけ違う名前も同じ）
   Future<void> addAttributeColumn(
     String tableName,
     String columnName,
@@ -164,8 +175,8 @@ class GeoPackageSchema {
         throw Exception(t.services.invalidColumnName(name: columnName));
       }
 
-      // 既存カラムのチェック
-      if (!(await _columnNames(tableName)).contains(sanitizedName)) {
+      // 既存カラムのチェック。SQLite の列名は英字の大小を区別しない（「Name」は「name」と重複で ALTER が落ちる）
+      if (await findColumn(tableName, sanitizedName) == null) {
         final db = await connection.getDatabase();
         await db.execute(
           'ALTER TABLE ${quoteIdent(tableName)} ADD COLUMN ${quoteIdent(sanitizedName)} $columnType;',

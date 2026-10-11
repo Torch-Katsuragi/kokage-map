@@ -798,6 +798,7 @@
     "enterColumnName": "Please enter a column name",
     "columnAdded": "Column \"$name\" added",
     "columnAddError": "Failed to add column: $error",
+    "columnExists": "Cannot add \"$name\": column \"$existing\" already exists (column names ignore letter case)",
     "duplicateFiltered": "Duplicate Filtered Results",
     "featuresCopyCount": "$count features will be copied to a new layer.",
     "filter": "Filter: $sql",

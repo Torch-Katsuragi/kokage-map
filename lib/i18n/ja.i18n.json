@@ -798,6 +798,7 @@
     "enterColumnName": "カラム名を入力してください",
     "columnAdded": "カラム「$name」を追加しました",
     "columnAddError": "カラム追加に失敗しました: $error",
+    "columnExists": "列「$existing」が既にあるので「$name」は足せません（列名は英字の大文字・小文字を区別しません）",
     "duplicateFiltered": "フィルタ結果を複製",
     "featuresCopyCount": "${count}件のフィーチャを新しいレイヤにコピーします。",
     "filter": "フィルタ: $sql",

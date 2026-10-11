@@ -417,6 +417,8 @@ class SyncConflictResolver {
       // geodiff は rtree_* / gpkg_* を触らない。QGIS が読む索引と範囲を実データに合わせる
       final repaired = await GpkgIndexRepair.rebuildFile(localFilePath);
       AppLogger.debug('  索引の焼き直し: $repaired テーブル');
+      // 焼き直したので、合わせる前の編集の印は済んだ（残すと見ただけの接続を閉じるときにもう一度書き直す）
+      GeoPackageConnection.clearWrites(localFilePath);
       return [for (final c in r.conflicts) c.withFile(localFilePath)];
     });
     if (merged == null) {

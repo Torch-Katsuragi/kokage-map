@@ -687,7 +687,7 @@
     "exportTitle": "レイヤーをエクスポート",
     "exporting": "エクスポート中...",
     "exportSource": "エクスポート元",
-    "layerLabel": "レイヤー: $name ($type)",
+    "layerLabel": "レイヤー: $name",
     "exportFormat": "エクスポート形式:",
     "selectExportFormat": "エクスポート形式を選択",
     "exportOptions": "書き出しの設定",

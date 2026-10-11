@@ -137,10 +137,8 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
             ),
             const SizedBox(height: 4),
             Text(
-              t.importExport.layerLabel(
-                name: widget.exportLayer.name,
-                type: '${widget.exportLayer.runtimeType}',
-              ),
+              // 型名（runtimeType）は出さない。web の release では `minified:i7` のように潰れて見えていた
+              t.importExport.layerLabel(name: widget.exportLayer.name),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

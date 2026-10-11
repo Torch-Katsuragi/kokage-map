@@ -1170,6 +1170,10 @@
     "all": "All",
     "noTrees": "No trees recorded yet",
     "unknownArea": "Area unknown",
+    "cannotOpen": "Cannot open tree tally",
+    "conflictNotPolygon": "\"${layer}\" in this gpkg is not a polygon layer. Tree tally uses a polygon layer with this name. Rename it or start in another gpkg (the table was not changed)",
+    "conflictNotPoint": "\"${layer}\" in this gpkg is not a point layer. Tree tally uses a point layer with this name. Rename it or start in another gpkg (the table was not changed)",
+    "conflictColumns": "Could not add the tree tally columns to \"${layer}\" (read-only?)",
     "stat": {
       "count": "Trees",
       "perHa": "Trees/ha",

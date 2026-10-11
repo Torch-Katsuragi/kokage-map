@@ -1170,6 +1170,10 @@
     "all": "全体",
     "noTrees": "まだ記録がありません",
     "unknownArea": "面積不明",
+    "cannotOpen": "毎木調査を開けません",
+    "conflictNotPolygon": "この gpkg の「${layer}」が面のレイヤではありません。毎木調査はこの名前の面のレイヤを使います。名前を変えるか別の gpkg で始めてください（表は変えていません）",
+    "conflictNotPoint": "この gpkg の「${layer}」が点のレイヤではありません。毎木調査はこの名前の点のレイヤを使います。名前を変えるか別の gpkg で始めてください（表は変えていません）",
+    "conflictColumns": "「${layer}」に毎木調査の列を足せませんでした（読み取り専用など）",
     "stat": {
       "count": "本数",
       "perHa": "本/ha",

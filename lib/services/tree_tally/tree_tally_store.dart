@@ -67,27 +67,88 @@ class TreeTallySchema {
   static const defaultSpecies = ['スギ', 'ヒノキ', 'アカマツ', 'カラマツ', 'モミ', 'ツガ', '広葉樹'];
 }
 
+/// 毎木調査のレイヤ名がほかの用途の表とぶつかっている（形が違う・地物の表でない・列を足せない）
+class TreeTallyLayerConflict implements Exception {
+  final String layerName;
+
+  /// 求める形（true: 面、false: 点）
+  final bool expectPolygon;
+
+  /// 形は合うが、足りない列を足せなかった
+  final bool columnsMissing;
+
+  const TreeTallyLayerConflict(this.layerName, {required this.expectPolygon, this.columnsMissing = false});
+
+  /// 通知に出す文
+  String get message => columnsMissing
+      ? t.treeTally.conflictColumns(layer: layerName)
+      : expectPolygon
+          ? t.treeTally.conflictNotPolygon(layer: layerName)
+          : t.treeTally.conflictNotPoint(layer: layerName);
+
+  @override
+  String toString() => 'TreeTallyLayerConflict($layerName)';
+}
+
 /// 1つの gpkg の毎木調査レイヤ
 class TreeTallyLayers {
   final PolygonLayerNode plots;
   final PointLayerNode trees;
   const TreeTallyLayers(this.plots, this.trees);
 
-  /// [gpkg] の中の2レイヤを返す。無ければ作り、足りない列を足す。属性フォーム（別名・樹種の選択肢）も付ける
+  /// [gpkg] の中の2レイヤを返す。無ければ作り、足りない列を足す。属性フォーム（別名・樹種の選択肢）も付ける。
+  /// 同じ名前で形の違うレイヤ（面でない `tally_plots`・点でない `tally_trees`）や地物でない表があれば、
+  /// 何も作らず・変えずに [TreeTallyLayerConflict] を投げる（利用者の表を勝手に直さない）
   static Future<TreeTallyLayers?> ensure(GeoPackageNode gpkg) async {
-    LayerNode? find(String name) =>
-        gpkg.children.whereType<LayerNode>().where((l) => l.layerName == name).firstOrNull;
-    final plots = find(TreeTallySchema.plotsLayer) as PolygonLayerNode? ??
-        await PolygonLayerNode.createIn(gpkg, TreeTallySchema.plotsLayer);
-    final trees = find(TreeTallySchema.treesLayer) as PointLayerNode? ??
-        await PointLayerNode.createIn(gpkg, TreeTallySchema.treesLayer);
+    final layers = gpkg.children.whereType<LayerNode>();
+    LayerNode? find(String name) => layers.where((l) => l.layerName == name).firstOrNull;
+    final foundPlots = find(TreeTallySchema.plotsLayer);
+    final foundTrees = find(TreeTallySchema.treesLayer);
+    if (foundPlots != null && foundPlots is! PolygonLayerNode) {
+      throw const TreeTallyLayerConflict(TreeTallySchema.plotsLayer, expectPolygon: true);
+    }
+    if (foundTrees != null && foundTrees is! PointLayerNode) {
+      throw const TreeTallyLayerConflict(TreeTallySchema.treesLayer, expectPolygon: false);
+    }
+    // レイヤとして見えていない同名の表（属性だけの表・ラスタなど）。作ると「tally_plots_2」ができてしまう
+    final tables = await _tableNames(gpkg);
+    if (foundPlots == null && tables.contains(TreeTallySchema.plotsLayer.toLowerCase())) {
+      throw const TreeTallyLayerConflict(TreeTallySchema.plotsLayer, expectPolygon: true);
+    }
+    if (foundTrees == null && tables.contains(TreeTallySchema.treesLayer.toLowerCase())) {
+      throw const TreeTallyLayerConflict(TreeTallySchema.treesLayer, expectPolygon: false);
+    }
+    final plots = foundPlots as PolygonLayerNode? ?? await PolygonLayerNode.createIn(gpkg, TreeTallySchema.plotsLayer);
+    final trees = foundTrees as PointLayerNode? ?? await PointLayerNode.createIn(gpkg, TreeTallySchema.treesLayer);
     if (plots == null || trees == null) return null;
-    await gpkg.geoPackageFile.addAttributeColumns(plots.layerName, TreeTallySchema.plotColumns);
-    await gpkg.geoPackageFile.addAttributeColumns(trees.layerName, TreeTallySchema.treeColumns);
+    // 形の合うレイヤに足りない列（前の版で作った表など）は足す。足せなければ（読み取り専用など）開かずに知らせる
+    for (final (layer, columns, polygon) in [
+      (plots, TreeTallySchema.plotColumns, true),
+      (trees, TreeTallySchema.treeColumns, false),
+    ]) {
+      try {
+        await gpkg.geoPackageFile.addAttributeColumns(layer.layerName, columns);
+      } on Object catch (e) {
+        AppLogger.debug('[TreeTally] ${layer.layerName} に列を足せない: $e');
+        throw TreeTallyLayerConflict(layer.layerName, expectPolygon: polygon, columnsMissing: true);
+      }
+    }
     plots.clearColumnNamesCache();
     trees.clearColumnNamesCache();
     await _attachForms(plots, trees);
     return TreeTallyLayers(plots, trees);
+  }
+
+  /// gpkg にある表の名前（小文字。SQLite の表名は大小を区別しない）
+  static Future<Set<String>> _tableNames(GeoPackageNode gpkg) async {
+    try {
+      final db = await gpkg.geoPackageFile.getDatabase();
+      final rows = await db.rawQuery("SELECT name FROM sqlite_master WHERE type IN ('table', 'view')");
+      return {for (final r in rows) '${r['name']}'.toLowerCase()};
+    } on Object catch (e) {
+      AppLogger.debug('[TreeTally] 表の一覧を読めない: $e');
+      return const {};
+    }
   }
 
   /// アプリの編集パネル用の属性フォーム（別名と、樹種は「一覧から選ぶ・新しい値も打てる」）

@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/nodes/feature_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
+import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/services/tree_tally/tree_tally_stats.dart';
 import 'package:root_maps/services/tree_tally/tree_tally_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -45,6 +46,28 @@ void main() {
     final again = (await TreeTallyLayers.ensure(gpkgNode))!;
     expect(again.trees, same(layers.trees));
     expect((await gpkg.getLayerNames()).where((n) => n.startsWith('tally_')), hasLength(2));
+  });
+
+  test('同じ名前で形の違うレイヤがあると開かずに知らせる（表は変えない）', () async {
+    final wrong = (await PointLayerNode.createIn(gpkgNode, TreeTallySchema.plotsLayer))!;
+    final before = await gpkg.getAttributeColumnInfo(wrong.layerName);
+    await expectLater(
+      TreeTallyLayers.ensure(gpkgNode),
+      throwsA(isA<TreeTallyLayerConflict>().having((e) => e.layerName, 'layerName', TreeTallySchema.plotsLayer)),
+    );
+    expect(await gpkg.getAttributeColumnInfo(wrong.layerName), before);
+    expect((await gpkg.getLayerNames()).where((n) => n.startsWith('tally_')), [TreeTallySchema.plotsLayer]);
+  });
+
+  test('同じ名前の地物でない表があっても別名のレイヤを作らずに知らせる', () async {
+    final db = await gpkg.getDatabase();
+    await db.execute('CREATE TABLE tally_trees (x TEXT)');
+    await expectLater(
+      TreeTallyLayers.ensure(gpkgNode),
+      throwsA(isA<TreeTallyLayerConflict>().having((e) => e.layerName, 'layerName', TreeTallySchema.treesLayer)),
+    );
+    final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'tally_%'");
+    expect(tables.map((r) => r['name']), ['tally_trees']);
   });
 
   test('円形標準地（0.05 ha）と、立木を足して集計する', () async {

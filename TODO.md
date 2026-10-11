@@ -92,6 +92,12 @@ Pixel 9 の debug 版（本物のアプリ。`.gdaltest` では Google にサイ
   - [ ] サインアウト → キーが消える。F5 しても未サインインのまま
   - [ ] 未サインインで ⋮ →「同期」: 復元のポップアップが 1 回だけ開き（2 回開いて 2 回目が潰れない）、ダイアログが出ずに同期へ進む
   - [ ] 初めてのブラウザ（覚えたアドレス無し）: Googleが描画するボタン → 「アクセスを許可」→ 同意 → F5 でもサインインしたまま
+- [ ] CSP を強制にした（2026-10-12、[[docs/technical/web-hosting#CSP の考え方（script-src は絞り、通信と画像は https を丸ごと通す）|考え方]]）。本番で devtools の Console を開いたまま、`Refused to` / `Content Security Policy` が 1 件も出ないこと
+  - [ ] GIS でサインイン（ボタンの表示・ポップアップ・戻ってきた後）→ Drive の一覧・同期
+  - [ ] 利用者の背景地図（XYZ と WMS を 1 本ずつ URL から追加）のタイルが出る
+  - [ ] GDAL 形式を OPFS / 選んだフォルダから開く（worker と WASM）
+  - [ ] ルームに入って位置共有（匿名サインイン・RTDB・App Check の reCAPTCHA）。もう 1 台の位置が出る
+  - [ ] QR 読み取り（実カメラ。BarcodeDetector の無いブラウザでは zxing-wasm）
 
 ### 7. QGIS（PC）で往復
 
@@ -131,7 +137,6 @@ Pixel 9 で触ったフォルダを Drive から落として QGIS 4.2.2 で開�
 
 - [ ] debug ビルドの App Check デバッグトークン（logcat に出る）を Firebase コンソールに登録（Pixel 9 は 2026-10-09 登録済み。Fold・メインPC側の端末が残り）
 - [ ] App Check の指標で web・Android とも検証済みの要求が来ているのを確かめてから、RTDB を「強制」に
-- [ ] 本番でログインして Drive 一覧・同期・App Check に CSP 違反が出ないのを確かめてから、`Content-Security-Policy-Report-Only` を強制に（ハッシュの作り直しは [[docs/technical/web-hosting]]）
 - [ ] release で外部インテントの `route` が効かないこと・共有リンクの確認ダイアログを実機で確認
 - [ ] プライバシーポリシーの「App Check で保護」は強制に切り替えるまで実態と食い違う。強制と同時に見直す
 

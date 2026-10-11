@@ -38,11 +38,31 @@ firebase deploy --only hosting:kokage-map --project nemurigi-kobo
 
 | ヘッダ | 値の要点 |
 | --- | --- |
-| `Content-Security-Policy-Report-Only` | 下表。**いまは Report-Only**（違反はコンソールに出るだけで止めない）。`/beta/` `/open/` `/privacy/` `/about/` も同じ 1 本で通る（`/open/` はインラインスクリプトを外して meta refresh だけにした） |
-| `X-Frame-Options` | `DENY`。Report-Only の間は CSP の `frame-ancestors` が効かないので、埋め込み除けはこちらで持つ |
+| `Content-Security-Policy` | 下表。**2026-10-12 に強制にした**（それまでは Report-Only）。`/beta/` `/open/` `/privacy/` `/about/` も同じ 1 本で通る（`/open/` はインラインスクリプトを外して meta refresh だけにした） |
+| `X-Frame-Options` | `DENY`。CSP の `frame-ancestors 'none'` と同じ意味。古いブラウザ向けに残している |
 | `Cross-Origin-Opener-Policy` | `same-origin-allow-popups`。`same-origin` にすると Google ログイン（GIS）のポップアップが親へ結果を返せない |
 | `Permissions-Policy` | 使うものだけ `self`: geolocation（現在地）、camera（QR読み取り）、accelerometer / gyroscope / magnetometer（コンパス・水準器）。他は空 |
 | `X-Content-Type-Options` / `Referrer-Policy` | `nosniff` / `strict-origin-when-cross-origin` |
+
+### CSP の考え方（script-src は絞り、通信と画像は https を丸ごと通す）
+
+利用者が背景地図に任意の XYZ / WMS の URL を足せる（`basemap_service.dart`、設定の「URL から追加」）。
+接続先のホストを列挙する CSP だとこれが全部止まるので、**画像と通信（img-src・connect-src）は `https:` なら何処でも通す**。
+代わりに **script-src は自前・ハッシュ・名指しの数か所だけ**にして、`'unsafe-inline'` も `'unsafe-eval'` も入れない。
+
+- sessionStorage の Drive トークン（下の注意）を盗むには、まずこのページの上で攻撃者のスクリプトが動く必要がある。
+  それを止めるのが script-src。インラインの `<script>`・`onclick=` 属性・`javascript:` URL・`eval` は全部止まる
+- connect-src が `https:` だと、**スクリプトが既に動いてしまった後**なら盗んだものを好きな所へ送れる。
+  ただ、そこまで来ていればトークンはどの経路でも持ち出せる（画像の URL、`location` の書き換えなど）ので、
+  connect-src を絞っても守りはほとんど増えない。背景地図が使えなくなる損の方が大きいと判断した
+- `http:` は通さない（https のページからは混在コンテンツでどのみち止まる）。`wss:` は RTDB の `*.firebasedatabase.app` だけ
+- style-src の `'unsafe-inline'` は残す。Flutter の engine と GIS のボタンが `<style>` と style 属性を差し込む。
+  CSS ではスクリプトは動かない
+- `'wasm-unsafe-eval'` は WASM のコンパイル（CanvasKit・GDAL・sqflite・zxing）を許すだけで、JS の `eval` は通さない
+- script-src で一番緩いのは `https://*.firebasedatabase.app`（RTDB の long-polling の JSONP。誰でも自分の DB を作れるホスト）。
+  WebSocket が通らない網でも位置共有を動かすために残している。CanvasKit（`www.gstatic.com/flutter-canvaskit/`）は
+  `flutter build web` の既定どおり CDN から取っている（`build/web/canvaskit/` にも入っているが使われない）
+- Trusted Types（`require-trusted-types-for 'script'`）はまだ掛けていない。Flutter の engine と各プラグインが通るか確かめていない
 
 CSP の出所（足すときは、ここにも書く）:
 
@@ -56,18 +76,18 @@ CSP の出所（足すときは、ここにも書く）:
 | | `*.firebasedatabase.app` | RTDB の long-polling（JSONP）に落ちたとき |
 | | `cdn.jsdelivr.net/npm/zxing-wasm@3.1.3/` | mobile_scanner の web 版（BarcodeDetector の無いブラウザ）。⚠ mobile_scanner を上げたら版を合わせる |
 | | `www.google.com/recaptcha/` `www.gstatic.com/recaptcha/` | App Check（reCAPTCHA Enterprise）。frame-src・connect-src にも対応分あり |
-| connect-src | `cyberjapandata.gsi.go.jp` `s3.amazonaws.com` `tile.openstreetmap.org` | 背景地図・DEM のタイル（`basemap_provider.dart` `dem_tiles.dart`） |
-| | `fonts.gstatic.com` | Flutter が日本語などの代替フォントを取る |
-| | `www.googleapis.com` `*.googleusercontent.com` | Drive API・プロフィール画像（CanvasKit の画像は fetch で取るので img-src でなく connect-src） |
-| | `identitytoolkit` `securetoken` `*.firebasedatabase.app`（https/wss） | 位置共有の匿名サインインと RTDB |
-| | `epsg.io` | 未知の EPSG の proj4 定義（`gpkg_crs_resolver.dart`） |
+| connect-src | `https:`（全部） | 利用者の背景地図（任意の XYZ / WMS）があるので絞らない（上の「考え方」）。実際に繋ぐのは、背景地図・DEM のタイル（`cyberjapandata.gsi.go.jp` `s3.amazonaws.com` `tile.openstreetmap.org`、`basemap_provider.dart` `dem_tiles.dart`）、Flutter の代替フォント（`fonts.gstatic.com`）、Drive API・プロフィール画像（`www.googleapis.com` `*.googleusercontent.com`。CanvasKit の画像は fetch で取るので img-src でなく connect-src）、位置共有の匿名サインインと RTDB（`identitytoolkit` `securetoken` `*.firebasedatabase.app`）、App Check（`firebaseappcheck.googleapis.com` `www.google.com/recaptcha/`）、未知の EPSG の proj4 定義（`epsg.io`、`gpkg_crs_resolver.dart`）、zxing-wasm（`cdn.jsdelivr.net` `fastly.jsdelivr.net`） |
+| | `wss://*.firebasedatabase.app` | RTDB の WebSocket（名前空間のホストから `s-…` のシャードへ回されることがあるのでワイルドカード） |
+| img-src | `https:` `data:` `blob:` | connect-src と同じ理由。`<img>` で描くのは GIS のボタンのアイコンと静的ページくらい |
 | style-src / font-src | `accounts.google.com/gsi/style`、`fonts.googleapis.com` / `fonts.gstatic.com` | GIS のボタン、`/beta/` の Noto Sans JP |
 
 > [!WARNING] Firebase のハッシュは firebase_core_web の版に縛られる
 > 差し込むスクリプトの本文に JS SDK の URL（`firebasejs/12.19.0/...`）が入るので、
-> `flutter pub upgrade` で firebase_core_web が上がるとハッシュが変わる。強制（`Content-Security-Policy`）に
-> 切り替えた後にこれを忘れると、**web の位置共有が黙って動かなくなる**。上げたら必ず違反が出ないか見ること。
-> 値は `firebase_core_web/lib/src/firebase_core_web.dart` の `injectSrcScript` の 2 つのテンプレートに、
+> `flutter pub upgrade` で firebase_core_web が上がるとハッシュが変わる。CSP は強制なので、これを忘れると
+> **web の位置共有が黙って動かなくなる**。上げたら `python tool/web/firebase_csp_hashes.py` で出し直し、
+> `firebase.json` の 8 個と見比べる（入っている firebase_core_web のテンプレートから計算する。
+> テンプレート自体が変わっていたら止まる）。
+> 中身は `firebase_core_web/lib/src/firebase_core_web.dart` の `injectSrcScript` の 2 つのテンプレートに、
 > `$windowVar`（`firebase_core` など）と `$stringUrl` を埋めた文字列の SHA-256（base64）。
 > `'''` 直後の改行は Dart が落とすので含めない。
 
@@ -76,15 +96,23 @@ CSP の出所（足すときは、ここにも書く）:
 > 同じオリジンの XSS から読めるので、CSP を強制にする意味がここでも増える。
 > 設計は [[google-drive-setup#リロードするとサインインが切れる件]]。
 
-強制に切り替えるとき（`-Report-Only` を外す）の前に確かめていないもの（2026-10-09 時点）:
-Google ログインのポップアップから戻った後の Drive 一覧・同期、QR 読み取りでの実カメラ、App Check（reCAPTCHA Enterprise）。
-地図・DEM・3D・背景地図の全種・チュートリアル・等高線・位置共有（匿名サインインと RTDB）・EPSG・GIS ボタンの表示と
-ポップアップが開くところ・zxing-wasm の読み込み・静的ページ・GDAL（worker と WASM。確認は gdal3.js のとき）は、違反 0 を確認済み。
+確かめたこと:
+
+- 2026-10-09（Report-Only の値を手元で強制にして）: 地図・DEM・3D・背景地図の全種・チュートリアル・等高線・位置共有（匿名サインインと RTDB）・EPSG・
+  GIS ボタンの表示とポップアップが開くところ・zxing-wasm の読み込み・静的ページ・GDAL（worker と WASM。gdal3.js のとき）で違反 0
+- 2026-10-12（強制に切り替えたとき）: `tool/web/serve_csp.py --report` で配り、Chrome で起動・Firebase の SDK 4 つの読み込み（ハッシュ）・
+  既存プロジェクトを開いて地図・利用者の背景地図（`server.arcgisonline.com` の XYZ を URL から追加 →「確かめる」→ 地図に出る）・
+  GDAL 3.13.3-1 の worker 起動（init と version）・`/beta/` `/privacy/` `/about/` で違反 0。
+  インラインの `<script>` を差し込むと止まって報告が届くことも確かめた（コレクタが生きている確認）
+
+本番でしか確かめられないもの（[[TODO]]「次の実機確認」6 に置いた）: GIS のサインインから戻った後の Drive 一覧・同期、
+WMS の背景地図、OPFS / 選んだフォルダからの GDAL 形式、ルームの位置共有と App Check（reCAPTCHA Enterprise）、QR の実カメラ。
 
 > [!WARNING] Windows の `firebase serve` / hosting エミュレータでは headers が効かない
 > firebase-tools 14.1.0 の superstatic がヘッダの `source` を `\**` に変えてしまい、どのパスにも当たらない（2026-10-09）。
-> 手元で確かめるときは、`firebase.json` の headers を読んで付ける小さな静的サーバを使うか、WSL / CI の Linux で回す。
-> CSP に `report-uri` を一時的に足して違反を手元のサーバに集めると、コンソールを読むより取りこぼしが無い。
+> 手元では `python tool/web/serve_csp.py`（`firebase.json` の `source: "**"` のヘッダを付けて `build/web` を配る。既定 `http://localhost:8099/`、OAuth の開発用生成元と同じ）。
+> `--report` で CSP に `report-uri` を足し、違反を標準出力と `.temp/csp_reports.jsonl` に集める（worker の中の違反も拾える）。
+> 内蔵ブラウザ（Claude のブラウザペイン）は sqflite が動かずプロジェクトが開けないので、確認は Chrome で。
 
 ## キャッシュ
 

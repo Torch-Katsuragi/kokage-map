@@ -70,6 +70,17 @@ class GoogleDriveService {
   /// Drive APIクライアント
   drive.DriveApi? _driveApi;
 
+  /// [_driveApi] が使っている http クライアントと、そのアクセストークン。
+  ///
+  /// 以前は自動同期の周期ごとに DriveApi（と http クライアント）を作り直し、古いものを閉じていなかった。
+  /// 同じトークンなら使い回し、変わったときだけ作り直して古いクライアントを閉じる（[_useToken]）
+  http.Client? _apiClient;
+  String? _apiToken;
+
+  /// 差し替えた古いクライアントを閉じるまでの猶予（その上でまだ走っているダウンロードなどを切らない）
+  @visibleForTesting
+  static Duration clientCloseGrace = const Duration(minutes: 2);
+
   /// 認証状態
   final DriveAuthState authState = DriveAuthState();
 
@@ -186,7 +197,8 @@ class GoogleDriveService {
     }
 
     try {
-      final email = await _adopt(drive.DriveApi(_BearerClient(token)), fallbackEmail: hint);
+      final granted = token;
+      final email = await _adopt(granted, () => _BearerClient(granted), fallbackEmail: hint);
       AppLogger.debug('[GoogleDriveService] 復元できた: ${AppLogger.maskEmail(email)}');
       return true;
     } catch (e) {
@@ -195,12 +207,23 @@ class GoogleDriveService {
     }
   }
 
-  /// [api] を使う API として採用し、サインイン済みにする。Drive が返したメールアドレスを返す。
+  /// [token] の API を使う API として採用し、サインイン済みにする。Drive が返したメールアドレスを返す。
   ///
-  /// 誰のトークンかはトークン自体に入っていないので、Driveに聞く（使えないトークンならここで投げる）
-  Future<String?> _adopt(drive.DriveApi api, {String fallbackEmail = ''}) async {
-    final user = (await api.about.get($fields: 'user')).user;
-    _driveApi = api;
+  /// 誰のトークンかはトークン自体に入っていないので、Driveに聞く（使えないトークンならここで投げる）。
+  /// いま使っているのと同じトークンなら、聞き直さず作り直さない（自動同期が周期ごとに呼ぶ）
+  Future<String?> _adopt(String token, http.Client Function() create, {String fallbackEmail = ''}) async {
+    if (_driveApi != null && _apiToken == token && authState.isAuthenticated) {
+      return authState.user?.email;
+    }
+    final client = create();
+    final drive.User? user;
+    try {
+      user = (await drive.DriveApi(client).about.get($fields: 'user')).user;
+    } catch (_) {
+      client.close();
+      rethrow;
+    }
+    _useClient(token, client);
     final email = user?.emailAddress ?? fallbackEmail;
     authState.setAuthenticated(
       DriveUser(
@@ -242,7 +265,7 @@ class GoogleDriveService {
         authState.setUnauthenticated();
         return false;
       }
-      final email = await _adopt(drive.DriveApi(authorization.authClient(scopes: _scopes)));
+      final email = await _adopt(authorization.accessToken, () => authorization.authClient(scopes: _scopes));
       AppLogger.debug('[GoogleDriveService] 無音復元できた: ${AppLogger.maskEmail(email)}');
       return true;
     } catch (e) {
@@ -286,7 +309,7 @@ class GoogleDriveService {
         }
       case GoogleSignInAuthenticationEventSignOut():
         _currentUser = null;
-        _driveApi = null;
+        _dropApi();
         authState.setUnauthenticated();
         AppLogger.debug('[GoogleDriveService] サインアウトイベント受信');
     }
@@ -431,6 +454,9 @@ class GoogleDriveService {
       AppLogger.debug('[GoogleDriveService] サインアウト完了');
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] サインアウトエラー: $e');
+    } finally {
+      // 前のアカウントのトークンを持ったクライアントを残さない（イベントが来なくても）
+      _dropApi();
     }
   }
 
@@ -444,7 +470,7 @@ class GoogleDriveService {
       // Credential Manager との紐付けを解除
       await GoogleSignIn.instance.disconnect();
       _currentUser = null;
-      _driveApi = null;
+      _dropApi();
 
       // 少し待ってからアカウント選択画面を表示
       await Future.delayed(const Duration(milliseconds: 300));
@@ -477,7 +503,7 @@ class GoogleDriveService {
         .authorizationForScopes(_scopes);
 
     if (authorization != null) {
-      _driveApi = drive.DriveApi(authorization.authClient(scopes: _scopes));
+      _useToken(authorization.accessToken, () => authorization.authClient(scopes: _scopes));
       return true;
     }
 
@@ -485,9 +511,46 @@ class GoogleDriveService {
 
     // スコープがまだ認可されていない場合、認可を要求
     final granted = await account.authorizationClient.authorizeScopes(_scopes);
-    _driveApi = drive.DriveApi(granted.authClient(scopes: _scopes));
+    _useToken(granted.accessToken, () => granted.authClient(scopes: _scopes));
     return true;
   }
+
+  /// [token] の API を使う。いまと同じトークンならそのまま（作り直さない）。
+  /// 違えば [create] で作り直し、前の http クライアントは [clientCloseGrace] のあとに閉じる。作り直したら true
+  bool _useToken(String token, http.Client Function() create) {
+    if (_driveApi != null && _apiToken == token) return false;
+    _useClient(token, create());
+    return true;
+  }
+
+  void _useClient(String token, http.Client client) {
+    final old = _apiClient;
+    _apiClient = client;
+    _apiToken = token;
+    _driveApi = drive.DriveApi(client);
+    if (old != null && !identical(old, client)) _closeLater(old);
+  }
+
+  static void _closeLater(http.Client client) {
+    if (clientCloseGrace == Duration.zero) {
+      client.close();
+    } else {
+      Timer(clientCloseGrace, client.close);
+    }
+  }
+
+  /// API を手放し、http クライアントをすぐ閉じる（サインアウト・アカウント切替・失効）
+  void _dropApi() {
+    final old = _apiClient;
+    _apiClient = null;
+    _apiToken = null;
+    _driveApi = null;
+    old?.close();
+  }
+
+  /// テスト用: [token] の API を使う（[_useToken] と同じ）
+  @visibleForTesting
+  bool useTokenForTest(String token, http.Client Function() create) => _useToken(token, create);
 
   /// いまの API が実際に使えるか確かめ、死んでいれば取り直す
   ///
@@ -506,7 +569,7 @@ class GoogleDriveService {
       return true;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] APIが失効している: $e');
-      _driveApi = null;
+      _dropApi();
       if (PlatformCapabilities.isWeb) return restoreWebAuthorization();
       return refreshToken();
     }
@@ -520,7 +583,7 @@ class GoogleDriveService {
     // ⚠ web の復元セッション（無音復元）には GoogleSignInAccount が無く、
     // 下の native 向けの経路では立て直せない。復元をやり直す。
     if (PlatformCapabilities.isWeb) {
-      _driveApi = null;
+      _dropApi();
       return restoreWebAuthorization();
     }
 
@@ -548,7 +611,7 @@ class GoogleDriveService {
 
   /// 上げたときに返してもらう項目。
   /// 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
-  static const String _uploadedFields = 'id, name, modifiedTime, size, parents';
+  static const String _uploadedFields = 'id, name, modifiedTime, size, md5Checksum, parents';
 
   /// API を掴んでいれば [body] を呼ぶ。掴んでいなければ、または失敗したら [fallback]（失敗は [what] を添えてログに残す）
   Future<T> _call<T>(String what, T fallback, Future<T> Function(drive.DriveApi api) body) async {
@@ -787,7 +850,8 @@ class GoogleDriveService {
     return listAllPages(
       api,
       '${inParents(parentId)} and trashed = false',
-      fields: 'files(id, name, mimeType, modifiedTime, size, parents)',
+      // md5Checksum: 中身が同じなら落とさない・変更と見ない（同期の帳簿の remoteMd5 と比べる）
+      fields: 'files(id, name, mimeType, modifiedTime, size, md5Checksum, parents)',
     );
   }
 

@@ -520,6 +520,48 @@ class GeoPackageFile {
     return result.map((r) => r[pkColumn] as int).toList();
   }
 
+  /// 属性の横断検索（地図の検索）。どれかの列が [forms]（同じ語の表記ゆれ）のどれかを含む行を
+  /// 主キー（`__id`）と属性列の値で返す。形の列・`kmaps_metadata` は見ない。
+  ///
+  /// 列はつないで 1 本の文字列にして LIKE する（列 × 表記ゆれの数だけ LIKE を並べない）。
+  /// 値がそのまま一致する行を先に並べてから [limit] で切る（大きなレイヤで一致が上限の外に落ちないように）
+  Future<List<Map<String, Object?>>> searchAttributeRows(
+    String tableName,
+    List<String> forms, {
+    int limit = 200,
+  }) async {
+    if (forms.isEmpty) return [];
+    final patterns = [for (final f in forms) '%${f.replaceAllMapped(RegExp(r'[\\%_]'), (m) => '\\${m[0]}')}%'];
+    final db = await _connection.getDatabase();
+    final pk = await _schema.getPrimaryKeyColumn(tableName);
+    final geomCols = {
+      for (final r in await db.rawQuery(
+        'SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ? COLLATE NOCASE',
+        [tableName],
+      ))
+        (r['column_name'] as String).toLowerCase(),
+    };
+    final columns = [
+      for (final c in await _schema.getTableColumns(tableName))
+        if (c != pk && c != metadataColumn && !geomCols.contains(c.toLowerCase()) && c != 'geom') c,
+    ];
+    if (columns.isEmpty) return [];
+    final hay = columns.map((c) => "COALESCE(CAST(${quoteIdent(c)} AS TEXT), '')").join(' || char(31) || ');
+    final where = List.filled(patterns.length, "($hay) LIKE ? ESCAPE '\\'").join(' OR ');
+    final select = 'SELECT ${quoteIdent(pk)} AS __id, ${columns.map(quoteIdent).join(', ')} '
+        'FROM ${quoteIdent(tableName)} WHERE $where ';
+    // 古い SQLite は引数が 999 個まで。列が多すぎるときは一致を先に並べるのを諦める
+    if (columns.length * forms.length + patterns.length >= 990) {
+      return db.rawQuery('$select LIMIT ?', [...patterns, limit]);
+    }
+    final marks = List.filled(forms.length, '?').join(', ');
+    final exact = columns.map((c) => 'CAST(${quoteIdent(c)} AS TEXT) IN ($marks)').join(' OR ');
+    return db.rawQuery(
+      '${select}ORDER BY CASE WHEN $exact THEN 0 ELSE 1 END, ${quoteIdent(pk)} LIMIT ?',
+      [...patterns, for (final _ in columns) ...forms, limit],
+    );
+  }
+
   /// テキスト置換（指定カラム内）
   Future<int> replaceText(
     String tableName,

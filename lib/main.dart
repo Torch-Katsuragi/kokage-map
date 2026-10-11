@@ -33,6 +33,7 @@ import 'core/platform_capabilities.dart';
 import 'i18n/strings.g.dart';
 import 'models/geopackage/geopackage_connection.dart';
 import 'models/nodes/feature_node.dart';
+import 'models/nodes/layer_tree_node.dart';
 import 'providers/drawing_provider.dart';
 import 'providers/project_providers.dart';
 import 'providers/selection_providers.dart';
@@ -198,6 +199,8 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     // メタデータが変わるたびに root の `<dir名>.qgs` を追従させる
     QgsAutoRefresh.instance.rootGetter = () => ref.read(folderTreeProvider);
     KMetaService.instance.onSaved = QgsAutoRefresh.instance.schedule;
+    // 変換・削除・改名・移動・ファイルの追加で子の顔ぶれが変わったときも（設定を書かないことがある）
+    LayerTreeNode.onStructureChanged = QgsAutoRefresh.instance.scheduleFor;
     FeatureNode.setOnDisposeCallback((node) {
       final features = ref.read(selectedFeaturesProvider);
       if (features.contains(node)) {

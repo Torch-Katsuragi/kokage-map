@@ -89,8 +89,27 @@ abstract class LayerTreeNode {
   /// ノードのリソース解放・削除処理（サブクラスで必ずsuper.dispose()を呼ぶこと）
   @mustCallSuper
   Future<void> dispose() async {
-    parent?.children.remove(this);
+    final from = parent;
+    from?.children.remove(this);
     parent = null;
+    if (from != null) from._structureChanged(this);
+  }
+
+  /// ツリーの顔ぶれ（フォルダ・gpkg・外部形式・画像・レイヤ）が変わったときに呼ばれる。
+  /// 引数は子が増えた／減った親。アプリ起動時に配線する（`.qgs` の自動更新。[[qgis-interop]]）
+  ///
+  /// > [!IMPORTANT] 変換・削除・改名・移動・ファイルの追加はどれもここを通る
+  /// > フォルダ設定の保存（`KMetaService.onSaved`）だけを合図にしていた頃は、鍵を持たない
+  /// > レイヤの変換・削除で `.qgs` が古いファイルを指したまま残った（2026-10-11）。
+  /// > 子の付け外しは [addChild] / [removeChild] / [dispose] / [syncChildren] で行い、
+  /// > `children` を直接いじらないこと（ここが呼ばれない）
+  static void Function(LayerTreeNode parent)? onStructureChanged;
+
+  /// `.qgs` に出る種類の子が増減したら [onStructureChanged] を呼ぶ。
+  /// 地物（頻繁に増減する）と View（フォルダ設定の保存で合図が出る）は数えない
+  void _structureChanged(LayerTreeNode child) {
+    if (child.nodeType == NodeType.feature || child.nodeType == NodeType.view) return;
+    onStructureChanged?.call(this);
   }
 
   /// [pathResolver] のルートからの相対パスセグメント
@@ -142,12 +161,14 @@ abstract class LayerTreeNode {
   void addChild(LayerTreeNode child) {
     children.add(child);
     child.parent = this;
+    _structureChanged(child);
   }
 
   /// 子ノードを削除
   void removeChild(LayerTreeNode child) {
-    children.remove(child);
+    final removed = children.remove(child);
     child.parent = null;
+    if (removed) _structureChanged(child);
   }
 
   /// 同名・同型の子ノードが存在しない場合のみ追加
@@ -162,6 +183,7 @@ abstract class LayerTreeNode {
           children[index] = newChild;
           newChild.parent = this;
           existing.parent = null;
+          _structureChanged(newChild);
           return newChild;
         }
       }
@@ -183,12 +205,15 @@ abstract class LayerTreeNode {
     bool Function(LayerTreeNode child)? keep,
   }) {
     final names = {for (final node in current) node.name};
+    final removed = <LayerTreeNode>[];
     children.removeWhere((child) {
       if (keep != null && keep(child)) return false;
       if (names.contains(child.name)) return false;
       child.parent = null;
+      removed.add(child);
       return true;
     });
+    removed.forEach(_structureChanged);
     for (final node in current) {
       addChildIfNotExists(node);
     }

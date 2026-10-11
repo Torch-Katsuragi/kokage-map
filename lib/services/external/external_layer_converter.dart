@@ -23,6 +23,7 @@ import '../../models/geopackage/geopackage_connection.dart';
 import '../../models/geopackage/geopackage_file.dart';
 import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/folder_node.dart';
+import '../../models/nodes/geopackage_node.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import '../layer_drawer_service.dart';
@@ -121,7 +122,7 @@ class ExternalLayerConverter {
       }
     }
     await ExternalLayerCache.discard(node.geoPackageFile.getAbsolutePath()!);
-    if (folder is FolderNode) await folder.updateChildren();
+    if (folder is FolderNode) await _reloadWith(folder, target);
     return ExternalConvertResult(ExternalConvertOutcome.converted, gpkgPath: target, leftovers: leftovers);
   }
 
@@ -131,8 +132,22 @@ class ExternalLayerConverter {
     if (dir == null) throw StateError('複製先のフォルダのパスが分かりません');
     final target = await uniqueGpkgPath(dir, p.basenameWithoutExtension(node.sourcePath));
     await _writeVerified(node, target);
-    await targetFolder.updateChildren();
+    await _reloadWith(targetFolder, target);
     return ExternalConvertResult(ExternalConvertOutcome.copied, gpkgPath: target);
+  }
+
+  /// [folder] を読み直し、書いた gpkg（[target]）の中のレイヤまで読む。
+  ///
+  /// レイヤが読まれていない gpkg は `.qgs` に載らない（`QgsProjectBuilder` はツリーの LayerNode から書く）。
+  /// 読み直しで子の顔ぶれが変わるので、`.qgs` の自動更新はツリーの合図（`LayerTreeNode.onStructureChanged`）で立つ。
+  /// ⚠ フォルダ設定の鍵の移し替えは、鍵を持たないレイヤでは何も書かないので合図にならない（2026-10-11）
+  static Future<void> _reloadWith(FolderNode folder, String target) async {
+    await folder.updateChildren();
+    final written = folder.children
+        .whereType<GeoPackageNode>()
+        .where((n) => n is! ExternalLayerNode && p.equals(n.geoPackageFile.getAbsolutePath() ?? '', target))
+        .firstOrNull;
+    await written?.updateChildren();
   }
 
   /// キャッシュを [target] に複製して印の表を落とし、元と突き合わせる。食い違えば [target] を消して投げる

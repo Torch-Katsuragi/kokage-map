@@ -16,6 +16,11 @@ tags: [technical, geopackage, qgis, interop]
 
 - フォルダ設定が保存されるたび（可視性・スタイル・View・並び順の変更。設定そのものは `kokage/meta` に即座に書く）、3秒のデバウンス後に
   root の `<dir名>.qgs` を `QgsAutoRefresh` が DOM 保持型で更新する
+- ツリーの子の顔ぶれ（フォルダ・gpkg・外部形式・画像・レイヤ）が変わったときも同じデバウンスで更新する
+  （`LayerTreeNode.onStructureChanged` → `QgsAutoRefresh.scheduleFor`、2026-10-11）。gpkg への変換・削除・改名・
+  移動・ファイルの追加・移動で空になった gpkg の削除が該当。合図は `addChild` / `removeChild` / `dispose` /
+  `syncChildren` で出るので、子を付け外しするときは `children` を直接いじらない。地物と View の増減は数えない。
+  ⚠ 以前は設定の保存だけが合図で、鍵を持たないレイヤを変換すると `.qgs` が元のファイルを指したまま開き直すまで残った
 - Drive push の直前に `flushNow()` で待ちを消化する
 - プロジェクトを開いたら一度書き直す（中身が同じなら書かない。無ければ最初の1本、`.kmeta.json` から移した直後なら QGIS の部分がそろう）
 - 手動の「QGISプロジェクトを書き出す／取り込む」メニューは 2026-09-06 に撤去した（自動追従と読み戻しで不要）

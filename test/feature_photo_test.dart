@@ -8,8 +8,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/kmeta.dart';
+import 'package:root_maps/models/nodes/external_layer_node.dart';
 import 'package:root_maps/models/nodes/feature_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
@@ -121,6 +123,28 @@ void main() {
       final reloaded = layer.children.whereType<PointFeatureNode>().single;
       expect(reloaded.turfFeature.properties?['photo'], first.value);
       expect(reloaded.turfFeature.properties?['photo_2'], second.value);
+    });
+
+    // 写真（新しく）× 読み取り専用レイヤ（shp など。中身は .kokage/cache の下のキャッシュ gpkg で読む）。
+    // 写真の相対パスは元のファイルの dir から解く（QGIS と同じ）。キャッシュの dir から解くと写真が出ない
+    test('読み取り専用レイヤの写真は元のファイルの dir から解く', () async {
+      final source = p.join(tmp.path, 'survey', '立木.shp');
+      final external = ExternalLayerNode(source);
+      final cache = external.geoPackageFile;
+      final layer = PointLayerNode(cache, 'pts', parent: external);
+      external.children.add(layer);
+      final cachePath = cache.getAbsolutePath()!;
+      expect(p.dirname(cachePath), isNot(p.dirname(source)), reason: 'キャッシュは .kokage/cache の下');
+      await cache.addLayer('pts', GeometryType.point);
+      await cache.addAttributeColumns('pts', {'photo': 'TEXT'});
+      await cache.addPointWithAttributes('pts', fix, {'photo': 'photos/pts/a.jpg'});
+      await cache.flushChanges();
+      await layer.updateChildren();
+      final f = layer.children.whereType<PointFeatureNode>().single;
+
+      expect(FeaturePhotoService.gpkgDirOf(f), p.join(tmp.path, 'survey'));
+      expect(FeaturePhotoService.photosOf(f).single.path, p.join(tmp.path, 'survey', 'photos', 'pts', 'a.jpg'));
+      await cache.dispose();
     });
 
     test('外す: 列を空にする。ファイルも消すを選べば消す。次の写真は空いた列に入る', () async {

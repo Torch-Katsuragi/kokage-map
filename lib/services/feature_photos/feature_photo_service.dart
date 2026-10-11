@@ -26,6 +26,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
 import '../../models/geopackage/sql_identifier.dart';
+import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../utils/app_logger.dart';
@@ -50,8 +51,11 @@ class FeaturePhoto {
 class FeaturePhotoService {
   FeaturePhotoService._();
 
-  /// gpkg の dir。写真の置き場所と相対パスの起点
+  /// gpkg の dir。写真の置き場所と相対パスの起点。
+  /// 読み取り専用レイヤ（shp など）は元のファイルの dir（読んでいるキャッシュ gpkg は `.kokage/cache` の下にある）
   static String? gpkgDirOf(FeatureNode f) {
+    final external = f.ancestorOf<ExternalLayerNode>();
+    if (external != null) return p.dirname(external.sourcePath);
     final abs = f.geoPackageFile.getAbsolutePath();
     return abs == null ? null : p.dirname(abs);
   }

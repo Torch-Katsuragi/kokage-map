@@ -103,6 +103,7 @@ class ExternalSourceLayer {
     required this.geometryType,
     required this.featureCount,
     this.split = false,
+    this.dim = 'XY',
   });
 
   /// キャッシュ・変換後の gpkg でのレイヤ名（GDAL のレイヤ名。分けたら `<名前>_point` など）
@@ -119,6 +120,10 @@ class ExternalSourceLayer {
   /// 型の混ざったレイヤから分けたもの（QGIS では `|geometrytype=`）
   final bool split;
 
+  /// 座標の次元（`ogr2ogr -dim` の値: `XY` `XYZ` `XYM` `XYZM`）。`-nlt` で型を決めると `-dim layer_dim` は効かず
+  /// 高さが落ちる（2026-10-11 Pixel 9）ので、元のレイヤの型から決めて渡す
+  final String dim;
+
   /// `ogr2ogr -where`（分けたときだけ）
   String? get where => split
       ? "OGR_GEOMETRY IN (${_familyGeometryNames[geometryType]!.map((n) => "'$n'").join(',')})"
@@ -133,6 +138,7 @@ class ExternalSourceLayer {
     'geometryType': geometryType.name,
     'featureCount': featureCount,
     'split': split,
+    'dim': dim,
   };
 
   static ExternalSourceLayer fromJson(Map<String, Object?> json) => ExternalSourceLayer(
@@ -141,6 +147,7 @@ class ExternalSourceLayer {
     geometryType: GeometryType.values.byName(json['geometryType']! as String),
     featureCount: (json['featureCount'] as num?)?.toInt() ?? 0,
     split: json['split'] == true,
+    dim: json['dim'] as String? ?? 'XY',
   );
 }
 
@@ -243,7 +250,10 @@ class ExternalSource {
     final fields = (layer['geometryFields'] as List?) ?? const [];
     if (fields.isEmpty) return null;
     final raw = ((fields.first as Map)['type'] as String? ?? '').toLowerCase();
-    final flat = raw.replaceAll(RegExp(r'3d|measured|25d|multi|\s|\(.*\)'), '');
+    // GDAL の JSON は `PointZ` `MultiPolygonZM` `3D Point` などと書く。次元と multi を落として種類だけ見る
+    final flat = raw
+        .replaceAll(RegExp(r'3d|measured|25d|multi|\s|\(.*\)'), '')
+        .replaceAll(RegExp(r'(zm|z|m)$'), '');
     return switch (flat) {
       'point' => GeometryType.point,
       'linestring' || 'circularstring' || 'compoundcurve' || 'curve' => GeometryType.linestring,
@@ -254,6 +264,17 @@ class ExternalSource {
   }
 
   static const _mixed = 'mixed';
+
+  /// `ogrinfo -json` の形の型（`3D Point` `Measured Point` `3D Measured Polygon` など）→ `ogr2ogr -dim` の値
+  static String _dimOf(Map<String, dynamic> layer) {
+    final fields = (layer['geometryFields'] as List?) ?? const [];
+    if (fields.isEmpty) return 'XY';
+    final raw = ((fields.first as Map)['type'] as String? ?? '').toLowerCase();
+    final compact = raw.replaceAll(RegExp(r'\s|\(.*\)'), '');
+    final z = raw.contains('3d') || raw.contains('25d') || RegExp(r'zm?$').hasMatch(compact);
+    final m = raw.contains('measured') || compact.endsWith('m');
+    return 'XY${z ? 'Z' : ''}${m ? 'M' : ''}';
+  }
 
   /// [path] を GDAL で読み、キャッシュに書くレイヤを決める。開けなければ投げる
   static Future<ExternalSourcePlan> plan(String path) async {
@@ -269,7 +290,13 @@ class ExternalSource {
       final family = _familyOf(layer);
       if (family == null) continue;
       if (family is GeometryType) {
-        out.add(ExternalSourceLayer(name: name, sourceLayer: name, geometryType: family, featureCount: count));
+        out.add(ExternalSourceLayer(
+          name: name,
+          sourceLayer: name,
+          geometryType: family,
+          featureCount: count,
+          dim: _dimOf(layer),
+        ));
         continue;
       }
       // 型が混ざっている（GeoJSON・KML・DXF など）: 点・線・面ごとに数え、2 種以上なら分ける
@@ -300,7 +327,10 @@ class ExternalSource {
         }
       }
     }
-    return ExternalSourcePlan(layers: out, sourceLayerCount: layers.length);
+    // 空のレイヤは、ほかに中身のあるレイヤがあれば出さない（GPX は waypoints だけでも routes・tracks・
+    // route_points・track_points の空の 4 枚が並ぶ。2026-10-11 Pixel 9）。全部空なら残す（空の shp も 1 枚のレイヤ）
+    final filled = out.where((l) => l.featureCount > 0).toList();
+    return ExternalSourcePlan(layers: filled.isEmpty ? out : filled, sourceLayerCount: layers.length);
   }
 
   /// [plan] どおりに [path] を [dst]（GPKG）へ書く。座標系は元のまま（`-t_srs` を付けない）
@@ -317,7 +347,7 @@ class ExternalSource {
         // 形の型はアプリの 3 種（MULTI 系）に揃える。Z・M は元のまま（変換した gpkg で高さを失わないため。
         // 表示とヒットテストは XY だけ見る）
         '-nlt', layer.geometryType.value,
-        '-dim', 'layer_dim',
+        '-dim', layer.dim,
         // CSV は座標系を持たない（GDAL は未定義の srs 99999 で書く）。経度・緯度の列だけ受けるので WGS84 と決める
         // （2026-10-11 Pixel 9 で見つけた）
         if (p.extension(path).toLowerCase() == '.csv') ...['-a_srs', 'EPSG:4326'],

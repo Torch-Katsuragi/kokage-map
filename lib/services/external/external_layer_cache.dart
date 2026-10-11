@@ -41,7 +41,7 @@ class ExternalLayerCache {
 
   /// 読み方を変えたら上げる（古い読み方で作ったキャッシュを作り直させる）。
   /// 2: GDAL（ogr2ogr）で書く。座標系は元のまま
-  static const formatVersion = 2;
+  static const formatVersion = 3;
 
   /// キャッシュの置き場（プロジェクトルートの `.kokage/cache/external`）。
   /// ルートが決まっていなければ元ファイルと同じ dir の `.kokage` の下

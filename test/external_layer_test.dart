@@ -233,6 +233,38 @@ void main() {
       final srs = await db.rawQuery("SELECT srs_id FROM gpkg_geometry_columns WHERE table_name = 'trees'");
       expect(srs.first['srs_id'], 4326, reason: 'CSV は座標系を持たないので WGS84 と決める（未定義の 99999 にしない）');
     }, skip: skip);
+
+    test('Z 付きの shp はキャッシュでも高さを保つ（-nlt で型を決めても -dim で次元を渡す）', () async {
+      final src = p.join(proj, 'z.geojson.tmp');
+      writeGeoJson(src, [
+        for (var i = 0; i < 3; i++)
+          feature({
+            'type': 'Point',
+            'coordinates': [135.96 + i * 0.001, 33.93, 400 + i * 10],
+          }, {'name': '標高点$i'}),
+      ]);
+      await ExternalGdal.instance.vectorTranslate(src, p.join(proj, 'z_points.shp'),
+          args: const ['-f', 'ESRI Shapefile', '-lco', 'ENCODING=UTF-8', '-a_srs', 'EPSG:4326']);
+      File(src).deleteSync();
+      final root = await openRoot();
+      final node = root.children.whereType<ExternalLayerNode>().single;
+      final db = await node.geoPackageFile.getDatabase();
+      final g = await db.rawQuery("SELECT z FROM gpkg_geometry_columns WHERE table_name = 'z_points'");
+      expect(g.first['z'], isNot(0), reason: 'Z が落ちていない');
+    }, skip: skip);
+
+    test('GPX: 中身のあるレイヤだけ出す（空の routes・tracks などを並べない）', () async {
+      final src = p.join(proj, 'wpt.geojson.tmp');
+      writeGeoJson(src, [
+        feature({'type': 'Point', 'coordinates': [135.96, 33.93]}, {'name': 'A'}),
+        feature({'type': 'Point', 'coordinates': [135.961, 33.931]}, {'name': 'B'}),
+      ]);
+      await ExternalGdal.instance.vectorTranslate(src, p.join(proj, 'walk.gpx'), args: const ['-f', 'GPX', '-nln', 'waypoints']);
+      File(src).deleteSync();
+      final root = await openRoot();
+      final node = root.children.whereType<ExternalLayerNode>().single;
+      expect(await node.geoPackageFile.getLayerNames(), ['waypoints']);
+    }, skip: skip);
   });
 
   group('ノードとキャッシュ', () {

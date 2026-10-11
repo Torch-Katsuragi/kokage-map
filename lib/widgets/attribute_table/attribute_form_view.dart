@@ -23,8 +23,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
+import '../../models/nodes/feature_node.dart';
+import '../../models/qgis_form.dart';
 import '../../providers/notification_providers.dart';
 import '../../utils/attribute_columns.dart';
+import '../qgis_form/qgis_field_input.dart';
 import 'attribute_table_controller.dart';
 
 /// 個別フィーチャの属性をフォーム形式で表示
@@ -39,85 +42,86 @@ class AttributeFormView extends ConsumerStatefulWidget {
 
 class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
   int _currentIndex = 0;
-  final Map<String, TextEditingController> _fieldControllers = {};
 
-  /// 読み込んだときの値。欄を離れたとき、これと違えば保存する
-  final Map<String, String> _loaded = {};
+  /// 欄の今の値（打っている途中も含む）
+  final Map<String, Object?> _values = {};
+
+  /// 読み込んだとき（または最後に保存したとき）の値。確定したとき、これと違えば保存する
+  final Map<String, Object?> _loaded = {};
+
+  /// 保存しなかった欄の理由（QGIS の必須の制約など）
+  final Map<String, String> _errors = {};
 
   AttributeTableController get ctrl => widget.controller;
 
   @override
   void initState() {
     super.initState();
-    _initFieldControllers();
+    _loadCurrentFeature();
   }
 
   @override
   void didUpdateWidget(AttributeFormView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      _disposeControllers();
-      _initFieldControllers();
-    }
-  }
-
-  void _initFieldControllers() {
-    _fieldControllers.clear();
-    for (final col in ctrl.columnNames) {
-      _fieldControllers[col] = TextEditingController();
-    }
-    _loadCurrentFeature();
-  }
-
-  void _disposeControllers() {
-    for (final c in _fieldControllers.values) {
-      c.dispose();
-    }
-    _fieldControllers.clear();
+    if (oldWidget.controller != widget.controller) _loadCurrentFeature();
   }
 
   @override
   void dispose() {
     _commitAll(); // 閉じる前の入力を捨てない
-    _disposeControllers();
     super.dispose();
   }
 
   void _loadCurrentFeature() {
+    _values.clear();
+    _loaded.clear();
+    _errors.clear();
     if (ctrl.features.isEmpty) return;
     _currentIndex = _currentIndex.clamp(0, ctrl.features.length - 1);
     final feature = ctrl.features[_currentIndex];
-
     for (final col in ctrl.columnNames) {
-      final text = readAttribute(feature, col)?.toString() ?? '';
-      _fieldControllers[col]?.text = text;
-      _loaded[col] = _fieldControllers[col]?.text ?? '';
+      _values[col] = _loaded[col] = readAttribute(feature, col);
     }
   }
 
-  Future<void> _saveField(String field, Object? value) async {
-    if (_currentIndex >= ctrl.features.length) return;
-    final feature = ctrl.features[_currentIndex];
-    final error = await ctrl.saveAttributeChange(feature, field, value);
-    if (error != null) {
-      ref
-          .read(notificationCenterProvider.notifier)
-          .add(title: error, level: NotificationLevel.error);
-    }
-  }
+  static String _key(Object? v) => v?.toString() ?? '';
 
   /// 変わっていれば保存する。以前は Enter を押したときしか保存せず、
   /// 欄を離れたりレコードを移ったりすると入力が捨てられていた（2026-09-24、Fold で気づいた）
   void _commit(String col) {
-    final text = _fieldControllers[col]?.text;
-    if (text == null || text == _loaded[col]) return;
-    final value = normalizeAttributeInput(ctrl.columnSqlType(col), text);
-    _loaded[col] = text;
-    unawaited(_saveField(col, value));
+    if (!_values.containsKey(col) || _key(_values[col]) == _key(_loaded[col])) return;
+    if (_currentIndex >= ctrl.features.length) return;
+    final feature = ctrl.features[_currentIndex];
+    final value = normalizeAttributeInput(ctrl.columnSqlType(col), _values[col]);
+    _loaded[col] = value;
+    unawaited(_save(feature, col, value));
+  }
+
+  Future<void> _save(FeatureNode feature, String col, Object? value) async {
+    final error = await ctrl.saveAttributeChange(feature, col, value);
+    if (error != null) {
+      ref.read(notificationCenterProvider.notifier).add(title: error, level: NotificationLevel.error);
+      // 書かなかった。次に同じ値で確定したときも確かめ直す
+      _loaded[col] = readAttribute(feature, col);
+    }
+    if (!mounted || ctrl.features.indexOf(feature) != _currentIndex) return;
+    setState(() {
+      if (error == null) {
+        _errors.remove(col);
+      } else {
+        _errors[col] = error;
+      }
+      // 更新のときに当て直す既定値（最終更新日時など）が入った列を読み直す
+      for (final f in ctrl.qgisForm?.fields.values ?? const <QgisFieldForm>[]) {
+        if (f.applyDefaultOnUpdate && f.name != col && _values.containsKey(f.name)) {
+          _values[f.name] = _loaded[f.name] = readAttribute(feature, f.name);
+        }
+      }
+    });
   }
 
   void _commitAll() {
-    for (final col in _fieldControllers.keys) {
+    for (final col in _values.keys.toList()) {
       _commit(col);
     }
   }
@@ -202,57 +206,36 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
           ),
         ),
 
-        // フォームフィールド
+        // フォームフィールド（QGIS の配置・編集ウィジェットがあればそれに合わせる）
         Expanded(
-          child: ListView.builder(
+          child: ListView(
             padding: const EdgeInsets.all(8),
-            itemCount: ctrl.columnNames.length,
-            itemBuilder: (context, index) {
-              final col = ctrl.columnNames[index];
-              final isEditable = !ctrl.readOnly && !isReadOnlyColumn(col);
-              final sqlType = ctrl.columnSqlType(col);
-              final numeric = isNumericSqlType(sqlType);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Focus(
-                  onFocusChange: (focused) {
-                    if (!focused && isEditable) _commit(col);
-                  },
-                  child: TextField(
-                    controller: _fieldControllers[col],
-                    readOnly: !isEditable,
-                    keyboardType: numeric
-                        ? TextInputType.numberWithOptions(
-                            signed: true,
-                            decimal: !isIntegerSqlType(sqlType),
-                          )
-                        : null,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isEditable ? null : Colors.grey.shade600,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: col,
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: isEditable ? Colors.blue.shade700 : Colors.grey,
+            children: [
+              for (final row in qgisFormRows(ctrl.qgisForm, ctrl.columnNames))
+                switch (row) {
+                  QgisFormHeader() => QgisFormHeaderView(row),
+                  QgisFormFieldRow(:final column, :final depth) => Padding(
+                      padding: EdgeInsets.only(bottom: 8, left: depth * 8.0),
+                      child: QgisFieldInput(
+                        key: ValueKey('$featureId/$column'),
+                        column: column,
+                        field: ctrl.qgisForm?[column],
+                        sqlType: ctrl.columnSqlType(column),
+                        value: _values[column],
+                        enabled: ctrl.canEdit(column),
+                        options: ctrl.formOptions[column],
+                        errorText: _errors[column],
+                        onChanged: (v, {required commit}) {
+                          _values[column] = v;
+                          if (commit) {
+                            _commit(column);
+                            setState(() {});
+                          }
+                        },
                       ),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 8,
-                      ),
-                      suffixIcon: !isEditable
-                          ? const Icon(Icons.lock, size: 14, color: Colors.grey)
-                          : null,
                     ),
-                    onSubmitted: isEditable ? (_) => _commit(col) : null,
-                  ),
-                ),
-              );
-            },
+                },
+            ],
           ),
         ),
       ],

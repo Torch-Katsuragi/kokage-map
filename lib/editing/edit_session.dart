@@ -30,10 +30,16 @@ import 'package:flutter/widgets.dart' show EdgeInsets;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../i18n/strings.g.dart';
+import '../models/app_notification.dart';
 import '../models/nodes/feature_node.dart';
+import '../models/qgis_form.dart';
+import '../providers/notification_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../services/qgis_form_logic.dart';
+import '../services/qgis_form_options.dart';
 import '../tools/map_tool.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
@@ -41,6 +47,7 @@ import '../utils/attribute_columns.dart';
 import '../utils/feature_calc_utils.dart';
 import '../widgets/external_layer_actions.dart';
 import '../widgets/feature_editor/shared/sub_table_helper.dart';
+import '../widgets/qgis_form/qgis_field_input.dart' show QgisFormFieldRow, qgisFormRows;
 import 'edit_tool.dart';
 
 enum EditKind { point, line, polygon }
@@ -111,7 +118,22 @@ class EditState {
     this.tolerance = 0,
     this.trimRange,
     this.attrsTab = false,
+    this.form,
+    this.options = const {},
+    this.errors = const {},
   });
+
+  /// QGIS の属性フォームの設定（別名・編集ウィジェット・既定値・制約）。無ければ null
+  final QgisForm? form;
+
+  /// UniqueValues・ValueRelation の列の選択肢
+  final Map<String, List<QgisValueOption>> options;
+
+  /// 保存しなかった欄の理由（QGIS の必須の制約）
+  final Map<String, String> errors;
+
+  /// 書き換えてよい列か（QGIS で編集可能を外した列は見せるだけ）
+  bool canEdit(String column) => form?.editable(column) ?? true;
 
   /// パネルで属性を出しているか（このときパネルは上までせり上がる）
   final bool attrsTab;
@@ -162,6 +184,9 @@ class EditState {
     double? tolerance,
     (int, int)? Function()? trimRange,
     bool? attrsTab,
+    QgisForm? form,
+    Map<String, List<QgisValueOption>>? options,
+    Map<String, String>? errors,
   }) =>
       EditState(
         feature: feature,
@@ -180,6 +205,9 @@ class EditState {
         tolerance: tolerance ?? this.tolerance,
         trimRange: trimRange != null ? trimRange() : this.trimRange,
         attrsTab: attrsTab ?? this.attrsTab,
+        form: form ?? this.form,
+        options: options ?? this.options,
+        errors: errors ?? this.errors,
       );
 }
 
@@ -279,11 +307,27 @@ class FeatureEditor extends Notifier<EditState?> {
         for (final c in info)
           if (c['name'] is String) c['name'] as String: '${c['type'] ?? ''}',
       };
-      final values = <String, Object?>{for (final c in cols) c: f.turfFeature.properties?[c]};
+      _writable = cols;
+      final form = await f.parent.getQgisForm();
+      final options = form == null ? const <String, List<QgisValueOption>>{} : await QgisFormOptions.load(f.parent, form);
+      // 出す列（QGIS の Hidden と、ドラッグ&ドロップの配置に無い列は出さない。並びは配置の順）
+      final shown = [
+        for (final r in qgisFormRows(form, cols))
+          if (r is QgisFormFieldRow) r.column,
+      ];
+      final values = <String, Object?>{for (final c in shown) c: f.turfFeature.properties?[c]};
       final s = state;
       if (s == null || !identical(s.feature, f)) return;
-      state = s.copyWith(columns: cols, attrs: Map.of(values), originalAttrs: values);
-    } catch (_) {}
+      state = s.copyWith(
+        columns: shown,
+        attrs: Map.of(values),
+        originalAttrs: values,
+        form: form,
+        options: options,
+      );
+    } catch (e) {
+      AppLogger.debug('[FeatureEditor] 属性を読めない: $e');
+    }
   }
 
   /// 書き換えてよい列（番号・形・内部用は除く。属性テーブルと同じ決まり [isReadOnlyColumn]。
@@ -493,21 +537,78 @@ class FeatureEditor extends Notifier<EditState?> {
   /// 編集中の地物のレイヤの列の型（SQLite の型名）。数値の列の入力を半角にするのに使う
   Map<String, String> _columnTypes = const {};
 
+  /// 列の型（SQLite の型名）。分からなければ空
+  String columnType(String col) => _columnTypes[col] ?? '';
+
+  /// 書き換えてよい列（隠した列も含む。更新のときの既定値を書く先）
+  List<String> _writable = const [];
+
+  /// 直前の保存を QGIS の必須の制約で止めたか（理由は通知に出してある）
+  bool lastSaveBlocked = false;
+
   /// 属性の欄に打った値。数値の列は全角の数字を半角にする（属性フォームと同じ [normalizeAttributeInput]）
   void setAttr(String col, Object? value) {
     final s = state;
     final v = normalizeAttributeInput(_columnTypes[col] ?? '', value);
-    if (s != null) state = s.copyWith(attrs: {...s.attrs, col: v});
+    if (s != null) {
+      state = s.copyWith(
+        attrs: {...s.attrs, col: v},
+        errors: s.errors.containsKey(col) ? ({...s.errors}..remove(col)) : null,
+      );
+    }
     _tutorial(AttrEdited(col));
   }
 
   /// 書き込んで終える
   Future<bool> save() async {
     final s = state;
+    lastSaveBlocked = false;
     if (s == null || s.saving) return false;
-    state = s.copyWith(saving: true);
-    var ok = true;
     final f = s.feature;
+    // QGIS の制約。必須の強さは全部の欄を、警告は書き換えた欄だけ確かめる（毎回同じ警告を出さない）
+    final form = s.form;
+    var attrs = {for (final c in s.columns.where(s.attrChanged)) c: s.attrs[c]};
+    if (form != null) {
+      final props = {...?f.turfFeature.properties, ...s.attrs};
+      final vs = validateQgisForm(
+        form,
+        props,
+        only: s.columns,
+        otherValues: (c) => [for (final o in f.parent.features) if (!identical(o, f)) readAttribute(o, c)],
+      );
+      final hard = [for (final v in vs) if (v.hard) v];
+      if (hard.isNotEmpty) {
+        lastSaveBlocked = true;
+        state = s.copyWith(errors: {for (final v in hard) v.field: v.message});
+        ref.read(notificationCenterProvider.notifier).add(
+              title: t.qgisForm.saveBlocked(reasons: describeViolations(hard)),
+              level: NotificationLevel.error,
+            );
+        return false;
+      }
+      final soft = [for (final v in vs) if (!v.hard && s.attrChanged(v.field)) v];
+      if (soft.isNotEmpty) {
+        ref.read(notificationCenterProvider.notifier).add(
+              title: t.qgisForm.softWarning(reasons: describeViolations(soft)),
+              level: NotificationLevel.warning,
+            );
+      }
+      // 更新のときも当て直す既定値（QGIS の applyOnUpdate。最終更新日時など）
+      if (s.dirty) {
+        attrs = {
+          ...attrs,
+          ...evaluateQgisDefaults(
+            form,
+            props,
+            _columnTypes,
+            columns: _writable.where((c) => form.editable(c) && !attrs.containsKey(c)),
+            onUpdate: true,
+          ),
+        };
+      }
+    }
+    state = s.copyWith(saving: true, errors: const {});
+    var ok = true;
     if (s.shapeChanged) {
       ok = switch (f) {
         final PointFeatureNode p => await p.updateLocation(s.geom.first.first),
@@ -518,8 +619,8 @@ class FeatureEditor extends Notifier<EditState?> {
       if (ok && s.kind != EditKind.point) await _syncSubTable(s);
     }
     if (ok) {
-      for (final c in s.columns.where(s.attrChanged)) {
-        await f.setAttributeValue(c, s.attrs[c]);
+      for (final MapEntry(key: c, :value) in attrs.entries) {
+        await f.setAttributeValue(c, value);
       }
     }
     if (!ok) {

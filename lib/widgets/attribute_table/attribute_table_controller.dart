@@ -21,12 +21,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trina_grid/trina_grid.dart';
 
 import '../../i18n/strings.g.dart';
+import '../../models/app_notification.dart';
 import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/layer_node.dart';
+import '../../models/qgis_form.dart';
+import '../../providers/notification_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../services/coordinate/index.dart';
+import '../../services/qgis_form_logic.dart';
+import '../../services/qgis_form_options.dart';
 import '../../tutorial/practice_project.dart';
 import '../../tutorial/tutorial.dart';
 import '../../utils/app_logger.dart';
@@ -71,6 +76,10 @@ class AttributeTableController extends ChangeNotifier {
   Map<String, String> _columnTypeMap = {};
   List<FeatureNode> _features = [];
   bool _isLoading = true;
+
+  /// QGIS の属性フォームの設定（別名・編集ウィジェット・既定値・制約）。無ければ null
+  QgisForm? _qgisForm;
+  Map<String, List<QgisValueOption>> _formOptions = const {};
   AttributeTableSettings _settings = const AttributeTableSettings();
 
   // フィルタ状態
@@ -125,6 +134,15 @@ class AttributeTableController extends ChangeNotifier {
   List<String> get writableColumnNames => _writableColumnNames;
   List<FeatureNode> get features => _displayFeatures;
   bool get isLoading => _isLoading;
+  QgisForm? get qgisForm => _qgisForm;
+  TrinaGridStateManager? get stateManager => _stateManager;
+
+  /// UniqueValues・ValueRelation の列の選択肢
+  Map<String, List<QgisValueOption>> get formOptions => _formOptions;
+
+  /// 書き換えてよい列か（番号・形・内部用の列と、QGIS で編集可能を外した列は書かない）
+  bool canEdit(String column) =>
+      !readOnly && !isReadOnlyColumn(column) && (_qgisForm?.editable(column) ?? true);
   AttributeTableSettings get settings => _settings;
   bool get isPointLayer => layer is PointLayerNode;
   bool get isFiltered => _isFiltered;
@@ -211,6 +229,11 @@ class AttributeTableController extends ChangeNotifier {
         for (final info in columnInfo)
           info['name'] as String: (info['type'] as String).toUpperCase(),
       };
+
+      // QGIS の属性フォームの設定と、その選択肢
+      _qgisForm = await layer.getQgisForm();
+      final form = _qgisForm;
+      _formOptions = form == null ? const {} : await QgisFormOptions.load(layer, form);
 
       // フィーチャを取得
       _features = layer.features;
@@ -315,9 +338,43 @@ class AttributeTableController extends ChangeNotifier {
   ) async {
     if (isReadOnlyColumn(field)) return null;
     if (refuseReadOnlyEditBy(_ref.read, layer)) return null;
+    final form = _qgisForm;
+    if (form != null && !form.editable(field)) return null;
+
+    // QGIS の制約（必須・一意・式）。必須の強さなら書かない、警告なら書いて知らせる
+    String? warning;
+    Map<String, Object?> props = {...?feature.turfFeature.properties, field: value};
+    if (form != null) {
+      final violations = validateQgisForm(
+        form,
+        props,
+        only: [field],
+        otherValues: (c) => [for (final f in _features) if (!identical(f, feature)) readAttribute(f, c)],
+      );
+      final hard = violations.where((v) => v.hard);
+      if (hard.isNotEmpty) return t.qgisForm.saveBlocked(reasons: describeViolations(hard));
+      if (violations.isNotEmpty) warning = t.qgisForm.softWarning(reasons: describeViolations(violations));
+    }
 
     try {
       await feature.setAttributeValue(field, value);
+      // 更新のときも当て直す既定値（QGIS の applyOnUpdate。最終更新日時など）
+      if (form != null) {
+        final updates = evaluateQgisDefaults(
+          form,
+          props,
+          _columnTypeMap,
+          columns: _writableColumnNames.where((c) => c != field && form.editable(c)),
+          onUpdate: true,
+        );
+        for (final MapEntry(:key, :value) in updates.entries) {
+          await feature.setAttributeValue(key, value);
+        }
+        props = {...props, ...updates};
+      }
+      if (warning != null) {
+        _ref.read(notificationCenterProvider.notifier).add(title: warning, level: NotificationLevel.warning);
+      }
       if (field == _sortField) _orderedCache = null;
       AppLogger.debug('[AttributeTableController] 属性保存: $field = $value');
       _ref.read(tutorialProvider.notifier).report(AttributeSaved(layer));
@@ -587,12 +644,13 @@ class AttributeTableController extends ChangeNotifier {
 
     // 属性カラム（ソート・ドラッグ有効、NULLハイライト付き）
     for (final columnName in _columnNames) {
+      final qf = _qgisForm?[columnName];
       tableColumns.add(
         TrinaColumn(
-          title: columnName,
+          title: qf?.alias ?? columnName,
           field: columnName,
-          type: _determineColumnType(columnName),
-          enableEditingMode: !readOnly && !isReadOnlyColumn(columnName),
+          type: _qgisColumnType(qf) ?? _determineColumnType(columnName),
+          enableEditingMode: canEdit(columnName),
           enableSorting: true, // Phase 3: カラムヘッダーでソート
           enableColumnDrag: true, // Phase 3: ドラッグで並替え
           enableContextMenu: true, // Phase 3: 右クリックメニュー
@@ -615,11 +673,13 @@ class AttributeTableController extends ChangeNotifier {
 
   /// Phase 3: NULL/空値ハイライト用セルレンダラー
   TrinaColumnRenderer _nullHighlightRenderer(String columnName) {
+    final qf = _qgisForm?[columnName];
     // チュートリアル: 練習の測点の表では、色の付いた行の name のマスを案内先にする
     final guideName = columnName == 'name' && isPracticeLayer(layer, PracticeProject.pointsLayer);
     return (TrinaColumnRendererContext ctx) {
       final value = ctx.cell.value;
-      final text = value?.toString() ?? '';
+      // ValueMap・日付などは QGIS の見せ方で（書いてある値はそのまま）
+      final text = qf?.displayText(value) ?? value?.toString() ?? '';
       final isNull = text.isEmpty;
       final key = guideName &&
               _ref.read(tutorialProvider) != null &&
@@ -655,6 +715,27 @@ class AttributeTableController extends ChangeNotifier {
 
   /// 列の SQLite の型（大文字）。分からなければ空文字
   String columnSqlType(String columnName) => _columnTypeMap[columnName] ?? '';
+
+  /// QGIS の編集ウィジェットで選ぶ列（ValueMap・ValueRelation・チェックボックス）は選択の列にする。
+  /// マスには値を書き、見せるのは表示名（[_nullHighlightRenderer]）
+  TrinaColumnType? _qgisColumnType(QgisFieldForm? qf) {
+    if (qf == null) return null;
+    final List<QgisValueOption>? options = switch (qf.kind) {
+      QgisWidgetKind.valueMap => qf.valueMapOptions.where((o) => o.value.isNotEmpty).toList(),
+      QgisWidgetKind.valueRelation => _formOptions[qf.name],
+      QgisWidgetKind.checkBox when qf.checkedState != null && qf.uncheckedState != null => [
+          QgisValueOption(qf.checkedState!, qf.checkedState!),
+          QgisValueOption(qf.uncheckedState!, qf.uncheckedState!),
+        ],
+      _ => null,
+    };
+    if (options == null || options.isEmpty) return null;
+    final labels = {for (final o in options) o.value: o.label};
+    return TrinaColumnType.select<String>(
+      [for (final o in options) o.value],
+      itemToString: (v) => labels[v] ?? v,
+    );
+  }
 
   /// SQLiteのカラム型からTrinaColumnTypeにマッピング
   TrinaColumnType _determineColumnType(String columnName) {

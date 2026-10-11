@@ -476,7 +476,6 @@
     "editPromptCopy": "読み取り専用です。自分のフォルダに gpkg として複製して編集しますか？",
     "editPromptCopyDetail": "「$name」は読み取り専用の共有フォルダにあるので、元のファイルを置き換えられません。\n元のファイルは残したまま、選んだフォルダに gpkg として複製します。複製した gpkg は編集できます。",
     "convertConfirm": "「$name」を同じフォルダの $target に変換します。\n書いた内容が元と一致することを確かめてから、元のファイル一式（$files）を削除します。",
-    "converting": "「$name」を変換しています…",
     "converted": "「$name」を $target に変換しました",
     "leftovers": "削除できなかったファイルがあります: $files",
     "verifyFailed": "変換した gpkg が元と一致しないため、変換をやめました（元のファイルはそのままです）",
@@ -1880,7 +1879,6 @@
     "readError": "表を読めません",
     "deleteTitle": "表を削除",
     "deleteConfirm": "${name} を削除しますか？",
-    "deleted": "${name} を削除しました",
-    "joinedColumn": "結合した表の列（読み取り専用）"
+    "deleted": "${name} を削除しました"
   }
 }

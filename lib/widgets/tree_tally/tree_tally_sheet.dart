@@ -521,6 +521,12 @@ class _TallySummaryDialogState extends State<_TallySummaryDialog> {
   late VolumeRegion? _region = widget.region;
   List<PlotTally>? _tallies;
 
+  /// 集計を頼んだ回数。地域を続けて切り替えると、先に頼んだ遅い集計が新しい集計を上書きしないよう、最後の回の結果だけ使う
+  int _requested = 0;
+
+  /// [_tallies] が何回目の集計か。[_requested] と違えば、今の地域の集計を待っている（CSV に保存させない）
+  int _shown = 0;
+
   @override
   void initState() {
     super.initState();
@@ -529,10 +535,15 @@ class _TallySummaryDialogState extends State<_TallySummaryDialog> {
 
   Future<void> _summarize() async {
     final region = _region;
+    final gen = ++_requested;
     final tallies = await widget.layers.summarize(
       volume: region == null ? null : (tr) => stemVolumeM3(region, tr.species, tr.dbhCm, tr.heightM),
     );
-    if (mounted) setState(() => _tallies = tallies);
+    if (!mounted || gen != _requested) return;
+    setState(() {
+      _tallies = tallies;
+      _shown = gen;
+    });
   }
 
   @override
@@ -617,7 +628,7 @@ class _TallySummaryDialogState extends State<_TallySummaryDialog> {
         TextButton.icon(
           icon: const Icon(Icons.save_alt),
           label: Text(t.treeTally.saveCsv),
-          onPressed: tallies == null ? null : () => widget.onSave(tallies),
+          onPressed: tallies == null || _shown != _requested ? null : () => widget.onSave(tallies),
         ),
         TextButton(onPressed: () => Navigator.pop(context), child: Text(t.common.close)),
       ],

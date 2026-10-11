@@ -71,7 +71,14 @@ class QgisInterop {
     if (_removedTriggers.isEmpty) return;
 
     var restored = 0;
+    // 同じ定義のトリガーが既にあれば書かない（Drive から落として置き換えたファイルは元から持っている。
+    // 落として作り直すと中身は同じでもファイルが変わり、次の同期で上がる）
+    final existing = <String, String?>{
+      for (final r in await db.rawQuery("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'"))
+        '${r['name']}': r['sql'] as String?,
+    };
     for (final entry in _removedTriggers.entries) {
+      if (existing[entry.key] == entry.value) continue;
       try {
         // 同名が既にある場合に備えて落としてから作る
         await db.execute('DROP TRIGGER IF EXISTS ${quoteIdent(entry.key)}');

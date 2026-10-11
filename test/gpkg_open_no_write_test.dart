@@ -10,8 +10,10 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/geometry_type.dart';
+import 'package:root_maps/models/geopackage/geopackage_connection.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/services/coordinate/index.dart';
+import 'package:root_maps/services/google_drive/sync_base_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'support/foreign_geom_gpkg.dart';
@@ -118,6 +120,30 @@ void main() {
         expect(digest(), before);
       });
     }
+  });
+
+  // 見ただけの gpkg を閉じるときに書き直さない（2fa11fbf）× Drive の上書きダウンロード（closeAllFor で閉じる）。
+  // 置き換える前に書いていると「書いた」印が残り、落としたファイルを見ただけで閉じるときに範囲と rtree を書き直していた
+  test('書いたあと Drive から落として置き換えたファイルは、見ただけなら閉じても変えない', () async {
+    const kind = ForeignGeomGpkg.arcgis; // rtree つき
+    await kind.write(path);
+    final edited = open();
+    await edited.addPointWithAttributes(kind.table, const LatLng(33.95, 135.98), {'name': 'c'});
+    await edited.flushChanges();
+
+    await SyncBaseStore.releaseBeforeOverwrite(path);
+    File(path).deleteSync();
+    await kind.write(path); // 落とした中身
+    await SyncBaseStore.settleAfterDownload(path);
+    final before = digest();
+
+    final viewer = open();
+    expect(await viewer.getFeaturesWithGeometry(kind.table), hasLength(2));
+    await viewer.dispose();
+    expect(digest(), before);
+    await edited.dispose(); // 置き換える前の接続も、閉じるだけ
+    expect(digest(), before);
+    expect(GeoPackageConnection.openCountFor(path), 0);
   });
 
   group('定義の無い CRS', () {

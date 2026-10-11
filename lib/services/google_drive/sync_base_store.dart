@@ -113,6 +113,9 @@ abstract final class SyncBaseStore {
   /// 最初にレイヤを開いた時点で更新時刻が進み、地物は同じなのに次の同期で 1 回アップロードしていた。
   /// 記録の前に足させておけば、更新時刻は記録より前になる。Android 以外では何もしない。
   static Future<void> settleAfterDownload(String absPath) async {
+    // 落とした中身はこの端末の編集を含まない。置き換える前（closeAllFor）に残った「書いた」印を消す。
+    // 残すと、見ただけの接続を閉じるときに範囲と rtree を書き直し、落としたばかりのファイルが変わって上がっていた
+    if (isGpkg(absPath)) GeoPackageConnection.clearWrites(absPath);
     if (defaultTargetPlatform != TargetPlatform.android || !fs.hasRealPaths || !isGpkg(absPath)) return;
     try {
       final db = await openDatabase(absPath, singleInstance: false);

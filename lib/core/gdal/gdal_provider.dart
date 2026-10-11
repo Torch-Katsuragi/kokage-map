@@ -2,7 +2,7 @@
 //
 // 各実装ファイルは同じ名前のトップレベル関数 `Gdal createGdal()` を持つこと:
 //   - gdal_ffi.dart  … Android / ホスト VM（libgdal.so ／ QGIS の gdal*.dll ／ apt の libgdal）
-//   - gdal_web.dart  … web（gdal3.js）
+//   - gdal_web.dart  … web（GDAL の WebAssembly）
 //   - gdal_stub.dart … どちらでもない環境（呼ぶと UnsupportedError）
 // 設計: docs/technical/gdal.md
 export 'gdal.dart';

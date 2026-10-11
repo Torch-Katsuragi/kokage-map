@@ -71,5 +71,5 @@ test_results.txt
 # geodiff の Linux 版（CI で third_party/geodiff/build_linux.sh が焼く）
 third_party/geodiff/linux/
 
-# gdal3.js（web 版の GDAL）。40 MB あるので取得スクリプトで置く: bash tool/web/fetch_gdal3.sh
+# web 版の GDAL（GDAL 3.13 の WASM）。40 MB ほどあるので取得スクリプトで置く: bash tool/web/fetch_gdal_wasm.sh
 /web/gdal3/*/

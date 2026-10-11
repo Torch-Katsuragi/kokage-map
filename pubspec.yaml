@@ -165,7 +165,7 @@ flutter:
     - assets/user_guide/
     - build/shaderbundles/terrain.shaderbundle # hook/build.dart が作る（flutter_gpu）
     - assets/licenses/ # 同梱のネイティブライブラリのライセンス本文（lib/core/native_licenses.dart）
-    # GDAL の proj.db と GDAL_DATA（third_party/gdal/build_android.sh が作る）。web は gdal3.js が自前で持つので Android だけ
+    # GDAL の proj.db と GDAL_DATA（third_party/gdal/build_android.sh が作る）。web は gdal.data に入れて配る（third_party/gdal/build_web.sh）ので Android だけ
     - path: assets/gdal/
       platforms: [android]
 

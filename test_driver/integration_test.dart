@@ -6,7 +6,7 @@
 //
 //   chromedriver --port=4444
 //   flutter drive --driver=test_driver/integration_test.dart \
-//     --target=integration_test/map_contract_test.dart \
+//     --target=integration_test/party_ui_test.dart \
 //     -d web-server --browser-name=chrome
 //
 // Windows / Android は従来どおり `flutter test <file> -d <device>` で回す

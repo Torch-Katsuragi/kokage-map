@@ -111,7 +111,7 @@ web だけは `flutter drive` 経由になり、chromedriver（Chrome と同じ�
 
 ```powershell
 chromedriver --port=4444
-flutter drive --driver=test_driver/integration_test.dart --target=integration_test/map_contract_test.dart -d web-server --browser-name=chrome
+flutter drive --driver=test_driver/integration_test.dart --target=integration_test/party_ui_test.dart -d web-server --browser-name=chrome
 ```
 
 `tool/test_matrix.ps1` の `e2e:web` 段が chromedriver の起動・停止まで面倒を見るので、

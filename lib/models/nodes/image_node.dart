@@ -96,7 +96,7 @@ class ImageNode extends LayerTreeNode {
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) return nodes;
 
-    const supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.jp2', '.vrt'};
+    const supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.vrt'};
 
     final all = entries ?? await fs.list(absPath);
     final siblingNames = {for (final e in all) if (!e.isDirectory) e.name.toLowerCase()};
@@ -135,7 +135,7 @@ class ImageNode extends LayerTreeNode {
         final external = await ExternalOverlayImageNode.tryCreate(entity.path, siblingNames, parent: parent);
         if (external != null) {
           nodes.add(external);
-        } else if (ext == '.jp2' || ext == '.vrt') {
+        } else if (ext == '.vrt') {
           // 位置の無い JPEG2000 / VRT は写真としても見せない
         } else {
           // 通常画像

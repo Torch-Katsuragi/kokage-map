@@ -110,7 +110,7 @@ pwsh tool/test_matrix.ps1 -Only analyze,unit   # 端末の要らない段だけ
 - 商用利用・個人利用・配布・改変ができます
 - 改変したものを配布するときは、全体のソースコードを同じ GPL で公開する必要があります
 
-同梱しているネイティブライブラリは、それぞれのライセンスに従います。GDAL・PROJ・expat・libiconv の本文は、アプリの「アプリ情報 → オープンソースライセンス」でも読めます。
+同梱しているネイティブライブラリは、それぞれのライセンスに従います。GDAL・PROJ・expat・libiconv・geodiff・libgpkg の本文は、アプリの「アプリ情報 → オープンソースライセンス」でも読めます。
 
 | もの | ライセンス | 本文 |
 |---|---|---|
@@ -119,7 +119,8 @@ pwsh tool/test_matrix.ps1 -Only analyze,unit   # 端末の要らない段だけ
 | expat 2.9.0 | MIT | [assets/licenses/expat.txt](assets/licenses/expat.txt) |
 | GNU libiconv 1.18 | LGPL-2.1-or-later | [assets/licenses/libiconv.txt](assets/licenses/libiconv.txt) |
 | SQLite | パブリックドメイン | — |
-| geodiff 2.3.1（libgpkg を含む） | MIT ほか | [third_party/geodiff](third_party/geodiff/README.md) |
+| geodiff 2.3.1 | MIT | [assets/licenses/geodiff.txt](assets/licenses/geodiff.txt) |
+| libgpkg（geodiff に静的に入る） | Apache-2.0 | [assets/licenses/libgpkg.txt](assets/licenses/libgpkg.txt) |
 | flutter_bluetooth_serial（手元で直した版） | MIT | [third_party/flutter_bluetooth_serial/LICENSE](third_party/flutter_bluetooth_serial/LICENSE) |
 
 Dart / Flutter のパッケージのライセンスは、同じ画面に一覧が出ます。

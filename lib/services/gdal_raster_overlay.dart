@@ -108,7 +108,7 @@ abstract final class GdalRasterOverlay {
   static const maxLongSide = 4096;
 
   /// GDAL で開いてみる拡張子（PNG/JPEG はワールドファイルか .aux.xml があるときだけ）
-  static const rasterExtensions = {'.tif', '.tiff', '.jp2', '.vrt', '.png', '.jpg', '.jpeg'};
+  static const rasterExtensions = {'.tif', '.tiff', '.vrt', '.png', '.jpg', '.jpeg'};
 
   static const _worldFileExtensions = {
     '.png': ['.pgw', '.pngw', '.wld'],

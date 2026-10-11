@@ -27,6 +27,9 @@ const _entries = <(List<String>, String)>[
   (['PROJ'], 'assets/licenses/proj.txt'),
   (['Expat'], 'assets/licenses/expat.txt'),
   (['GNU libiconv'], 'assets/licenses/libiconv.txt'),
+  // Drive 同期の行単位マージ（third_party/geodiff）。libgpkg は geodiff が静的に取り込む（コミット固定の取得元の LICENSE）
+  (['geodiff'], 'assets/licenses/geodiff.txt'),
+  (['libgpkg'], 'assets/licenses/libgpkg.txt'),
 ];
 
 /// main() で 1 回呼ぶ。本文は画面を開いたときに読む

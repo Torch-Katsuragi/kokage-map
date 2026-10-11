@@ -30,7 +30,7 @@ tags: [technical, geopackage, qgis, interop, import]
 拡張子で候補にし（`externalVectorExtensions`）、`.json` `.csv` だけは GDAL で開いて形のあるレイヤがあるときだけレイヤにする
 （結果は更新時刻と大きさで控える）。`.gpkg` は従来の経路。隠しファイル・隠しフォルダ（`.kokage` など）の中は外す。
 
-ラスタ（GeoTIFF・JPEG2000・ワールドファイル付き PNG/JPEG・VRT、`.tif` `.tiff` `.jp2` `.png` `.jpg` `.vrt`）は GDAL でオーバーレイにする（読み取り専用。下の「ラスタのオーバーレイ」）。
+ラスタ（GeoTIFF・ワールドファイル付き PNG/JPEG・VRT、`.tif` `.tiff` `.png` `.jpg` `.vrt`。⚠ JPEG2000 は GDAL に OpenJPEG を入れていないので読めない。2026-10-12 に一覧から外した）は GDAL でオーバーレイにする（読み取り専用。下の「ラスタのオーバーレイ」）。
 
 | 形式 | 拡張子 | 備考 |
 |---|---|---|
@@ -223,7 +223,7 @@ QGIS / GDAL で作ったラスタは **GDAL で開いて読み取り専用のオ
 
 - **判定**（`ImageNode.loadNodes`・グローバルフォルダ）: `.tif` はまずこかげマップの形（下の「アプリの GeoTIFF」の判定）を見て、
   そうなら従来どおり編集できるオーバーレイ。違えば `gdalinfo -json -proj4` を呼び、`geoTransform`・座標系・`wgs84Extent` が
-  揃えば外のオーバーレイ。`.jp2` `.vrt` も同じ（位置が無ければ写真としても出さない）。
+  揃えば外のオーバーレイ。`.vrt` も同じ（位置が無ければ写真としても出さない）。
   `.png` `.jpg` は **ワールドファイル（`.pgw` `.pngw` `.jgw` `.jpgw` `.wld`）か `<名前>.aux.xml` があるときだけ** GDAL に聞く
   （写真のたびに GDAL を呼ばない。web で gdal3.js の読み込みを起こさない）。結果は大きさ・更新時刻で控える
 - **表示**: `gdalwarp -t_srs EPSG:4326 -ts W H -r bilinear -dstalpha -of GTiff` → `gdal_translate -of PNG`。

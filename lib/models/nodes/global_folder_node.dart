@@ -104,7 +104,7 @@ mixin _GlobalChildren on FolderNode {
   @override
   Future<List<LayerTreeNode>> loadImageNodes(List<KFileEntry> entries) async {
     final nodes = <LayerTreeNode>[];
-    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.jp2', '.vrt'];
+    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.vrt'];
     final siblingNames = {for (final e in entries) if (!e.isDirectory) e.name.toLowerCase()};
     final imageFiles = entries
         .where((e) =>
@@ -134,7 +134,7 @@ mixin _GlobalChildren on FolderNode {
       final external = await ExternalOverlayImageNode.tryCreate(entity.path, siblingNames, parent: this);
       if (external != null) {
         nodes.add(external);
-      } else if (ext != '.jp2' && ext != '.vrt') {
+      } else if (ext != '.vrt') {
         final node = await GlobalImageNode.fromPath(entity.path, parent: this);
         if (node != null) nodes.add(node);
       }

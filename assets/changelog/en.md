@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- JPEG2000 (.jp2) is removed from the supported formats; it could not actually be read (the decoder is not bundled)
 - The device compass heading (the heading fan, the guidance arrow, the level screen) and TruPulse azimuths were used as magnetic bearings against the true-north map, off by about 8° in the Kii Peninsula. They are now corrected to true north with the magnetic declination (WMM2025) for your position and date. Leave the TruPulse declination setting at 0
 - GeoTIFFs made with "Convert to overlay" from a photo, and those rewritten when repositioning an overlay, are now written with GDAL, the same library QGIS uses. QGIS no longer warns about them (such as "tags are not sorted"). GeoTIFFs made earlier keep working and are rewritten in the new form when repositioned
 - On a device whose app data had been cleared or reinstalled, syncing a Drive-linked folder listed files that exist on both the device and the cloud with the cloud side checked, and syncing as shown overwrote newer files on the device with older cloud copies. Files with identical contents are now left alone; differing ones are shown as a single row with the more recently modified side selected and the note "On both sides — check which is newer". Auto-sync leaves these files for you to decide

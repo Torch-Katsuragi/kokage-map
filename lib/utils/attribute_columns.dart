@@ -62,6 +62,11 @@ String toHalfWidthNumber(String text) {
   return b.toString().trim();
 }
 
+/// 入力欄で打った値を列に書く形にする（属性フォーム・編集パネルで共通）。
+/// 数値の列（[sqlType]）なら全角の数字・小数点・符号を半角に。ほかの列・文字でない値はそのまま
+Object? normalizeAttributeInput(String sqlType, Object? value) =>
+    value is String && isNumericSqlType(sqlType) ? toHalfWidthNumber(value) : value;
+
 /// 地物の属性の値（同期で読む）。消した地物・読めない地物は null。
 /// [FeatureNode.getAttributeValue] と同じ値を返す（あちらは 1 マスごとに await が挟まる）
 Object? readAttribute(FeatureNode feature, String column) {

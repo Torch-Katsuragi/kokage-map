@@ -276,6 +276,10 @@ class FeatureEditor extends Notifier<EditState?> {
           if (c['name'] is String && _editable(c['name'] as String))
             c['name'] as String,
       ];
+      _columnTypes = {
+        for (final c in info)
+          if (c['name'] is String) c['name'] as String: '${c['type'] ?? ''}',
+      };
       final values = <String, Object?>{for (final c in cols) c: f.turfFeature.properties?[c]};
       final s = state;
       if (s == null || !identical(s.feature, f)) return;
@@ -490,9 +494,14 @@ class FeatureEditor extends Notifier<EditState?> {
   /// 切り落とすつまみの最大（道具に入ったときの頂点の数 - 1）
   int get trimMax => ((_toolBase ?? state?.snap)?.$1.first.length ?? 1) - 1;
 
+  /// 編集中の地物のレイヤの列の型（SQLite の型名）。数値の列の入力を半角にするのに使う
+  Map<String, String> _columnTypes = const {};
+
+  /// 属性の欄に打った値。数値の列は全角の数字を半角にする（属性フォームと同じ [normalizeAttributeInput]）
   void setAttr(String col, Object? value) {
     final s = state;
-    if (s != null) state = s.copyWith(attrs: {...s.attrs, col: value});
+    final v = normalizeAttributeInput(_columnTypes[col] ?? '', value);
+    if (s != null) state = s.copyWith(attrs: {...s.attrs, col: v});
     _tutorial(AttrEdited(col));
   }
 

@@ -749,6 +749,12 @@ class KMeta {
   /// `.qgs` の側には書き戻さない（QGIS の持ち物。[[docs/technical/qgis-interop#属性フォーム（編集ウィジェット・既定値・制約）]]）
   final Map<String, QgisForm> forms;
 
+  /// アプリが作った写真の列（レイヤキー `gpkgName/layerName` → 列名の並び）。
+  ///
+  /// `.qgs` に ExternalResource（写真を出す欄）を書くのはここにある列だけ。
+  /// ユーザーが QGIS で作った同名の列の設定には触らない（[[docs/features/feature-photos]]）
+  final Map<String, List<String>> photoFields;
+
   const KMeta({
     this.version = kMetaSchemaVersion,
     this.visibility = const KMetaVisibility(),
@@ -758,6 +764,7 @@ class KMeta {
     this.imageOverlays = const {},
     this.views = const {},
     this.forms = const {},
+    this.photoFields = const {},
   });
 
   /// 空のメタデータ
@@ -807,6 +814,10 @@ class KMeta {
       imageOverlays: overlays,
       views: views,
       forms: forms,
+      photoFields: {
+        for (final e in (json['photoFields'] as Map<String, dynamic>? ?? const {}).entries)
+          if (e.value is List) e.key: [for (final c in e.value as List) if (c is String) c],
+      },
     );
   }
 
@@ -828,6 +839,7 @@ class KMeta {
       );
     }
     if (forms.isNotEmpty) json['forms'] = forms.map((k, v) => MapEntry(k, v.toJson()));
+    if (photoFields.isNotEmpty) json['photoFields'] = photoFields;
     return json;
   }
 
@@ -850,7 +862,7 @@ class KMeta {
   /// 空かどうか
   bool get isEmpty =>
       visibility.isEmpty && styles.isEmpty && layout.isEmpty && sync.isEmpty &&
-      imageOverlays.isEmpty && views.isEmpty && forms.isEmpty;
+      imageOverlays.isEmpty && views.isEmpty && forms.isEmpty && photoFields.isEmpty;
 
   /// レイヤのView定義。定義が無ければ空リスト（＝既定のView1枚とみなす側の責務）
   List<KMetaView> getViews(String layerKey) => views[layerKey] ?? const [];
@@ -882,6 +894,7 @@ class KMeta {
     Map<String, KMetaImageOverlay>? imageOverlays,
     Map<String, List<KMetaView>>? views,
     Map<String, QgisForm>? forms,
+    Map<String, List<String>>? photoFields,
   }) {
     return KMeta(
       version: version ?? this.version,
@@ -892,6 +905,7 @@ class KMeta {
       imageOverlays: imageOverlays ?? this.imageOverlays,
       views: views ?? this.views,
       forms: forms ?? this.forms,
+      photoFields: photoFields ?? this.photoFields,
     );
   }
 }

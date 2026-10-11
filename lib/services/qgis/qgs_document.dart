@@ -33,6 +33,7 @@ import 'package:flutter/painting.dart' show Color;
 import 'package:xml/xml.dart';
 
 import 'qgs_model.dart';
+import 'qgs_photo_widget.dart';
 import 'qgs_writer.dart';
 import 'qgs_xml.dart';
 
@@ -490,7 +491,9 @@ class QgsDocument {
     };
     for (final layer in layers) {
       if (existing.contains(layer.id)) continue;
-      container.children.add(_writer.mapLayerElement(layer));
+      final element = _writer.mapLayerElement(layer);
+      applyPhotoWidgets(element, layer);
+      container.children.add(element);
     }
     for (final raster in rasters) {
       if (existing.contains(raster.id)) continue;
@@ -500,6 +503,7 @@ class QgsDocument {
 
   /// 既存の `<maplayer>` を [layer] に合わせる。自分の管轄だけ触る
   void _patchMapLayer(XmlElement e, QgsLayer layer, QgsApplyReport report) {
+    applyPhotoWidgets(e, layer);
     setChildText(e, 'datasource', layer.dataSourceUri);
     setChildText(e, 'layername', layer.name);
     e.setAttribute('geometry', qgsGeometryName(layer.geometryType));

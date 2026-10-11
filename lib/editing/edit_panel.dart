@@ -24,6 +24,7 @@ import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/geodesic.dart';
+import '../widgets/feature_photo_strip.dart';
 import '../widgets/feature_silhouette.dart';
 import '../widgets/qgis_form/qgis_field_input.dart';
 import 'edit_session.dart';
@@ -202,9 +203,6 @@ class _EditPanelState extends ConsumerState<EditPanel> {
   }
 
   Widget _attrs(EditState s, ThemeData theme) {
-    if (s.columns.isEmpty) {
-      return Text(t.featureEdit.noAttrs, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline));
-    }
     final ed = ref.read(featureEditorProvider.notifier);
     final form = s.form;
     // QGIS のドラッグ&ドロップの配置があれば、タブ・グループを見出しにして並べる
@@ -215,6 +213,11 @@ class _EditPanelState extends ConsumerState<EditPanel> {
       // 欄の名前は枠の上にはみ出して出るので、上に少し空ける
       padding: const EdgeInsets.only(top: 8),
       children: [
+        // 写真はその場で付け外しする（保存・取消を待たない）
+        FeaturePhotoStrip(key: ValueKey(s.feature), feature: s.feature),
+        const SizedBox(height: 8),
+        if (s.columns.isEmpty)
+          Text(t.featureEdit.noAttrs, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
         for (final row in rows)
           switch (row) {
             QgisFormHeader() => QgisFormHeaderView(row),

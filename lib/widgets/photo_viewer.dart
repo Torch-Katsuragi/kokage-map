@@ -15,6 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // フルスクリーン写真ビューワー
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
@@ -29,9 +30,13 @@ import '../i18n/strings.g.dart';
 class PhotoViewer extends StatelessWidget {
   final String imagePath;
 
+  /// 中身を先に読んであればこちらを出す（web はファイルのパスから読めない）
+  final Uint8List? bytes;
+
   const PhotoViewer({
     super.key,
     required this.imagePath,
+    this.bytes,
   });
 
   @override
@@ -42,7 +47,7 @@ class PhotoViewer extends StatelessWidget {
         children: [
           // 画像表示エリア（photo_viewで自動的にアスペクト比最適化）
           PhotoView(
-            imageProvider: FileImage(File(imagePath)),
+            imageProvider: bytes != null ? MemoryImage(bytes!) : FileImage(File(imagePath)),
             // 初期スケール: 画像全体が画面に収まるように表示
             minScale: PhotoViewComputedScale.contained,
             // 最大スケール: 画像サイズの3倍まで拡大可能
@@ -136,12 +141,14 @@ class PhotoViewer extends StatelessWidget {
 void showPhotoViewer(
   BuildContext context, {
   required String imagePath,
+  Uint8List? bytes,
 }) {
   Navigator.of(context).push(
     MaterialPageRoute(
       fullscreenDialog: true,
       builder: (context) => PhotoViewer(
         imagePath: imagePath,
+        bytes: bytes,
       ),
     ),
   );

@@ -71,7 +71,7 @@ class GalleryImporter {
     FolderNode targetFolder, {
     WidgetRef? ref,
   }) async {
-    await _ensureMediaLocationPermission();
+    await ensureMediaLocationPermission();
 
     // Android はアプリ内のギャラリーで選ぶ（位置の有り無しが選ぶ前に見える）。開けなければ OS のピッカー
     if (PlatformCapabilities.supportsNativeGalleryCopy && context.mounted) {
@@ -194,7 +194,7 @@ class GalleryImporter {
   /// READ_MEDIA_IMAGES + ACCESS_MEDIA_LOCATION を求め、ネイティブ側の
   /// `MediaStore.setRequireOriginal` 経路を通せるようにする。
   /// ACCESS_MEDIA_LOCATION 自体はダイアログ無しで付く。
-  static Future<void> _ensureMediaLocationPermission() async {
+  static Future<void> ensureMediaLocationPermission() async {
     if (!PlatformCapabilities.supportsNativeGalleryCopy) return;
     try {
       if (await Permission.manageExternalStorage.isGranted) return;

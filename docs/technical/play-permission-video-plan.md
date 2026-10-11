@@ -15,6 +15,7 @@ AndroidManifest から確定した、説明が要る権限:
 | `FOREGROUND_SERVICE_LOCATION` / `FOREGROUND_SERVICE_DATA_SYNC` | GPS軌跡の継続記録・位置共有中の前景サービス | ★★ | 前景サービス宣言フォーム＋動作提示 |
 | `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` | 現在地取得・測量・位置共有 | ★ | アプリ内 Prominent Disclosure（実装済）＋デモ |
 | `READ_MEDIA_IMAGES` | 写真の閲覧/添付 | ー | Data safety 記載のみ（動画不要） |
+| `CAMERA`（`mobile_scanner` が宣言） | QR の読み取り・地物に付ける写真の撮影（端末のカメラアプリ。2026-10-11〜、[[../features/feature-photos]]） | ー | Data safety に写真の収集を記載（端末内とユーザーの Drive に保存。こちらへは送らない） |
 | `BLUETOOTH_SCAN` / `_CONNECT` | 外部GNSS受信機との接続 | ー | 近くのデバイス用途を記載（動画は任意） |
 | `POST_NOTIFICATIONS` | 前景サービス通知 | ー | 記載のみ |
 

@@ -269,6 +269,63 @@ class QgsImporter {
     );
   }
 
+  /// 描き分けの印（[KMetaLayerStyle.qgisRenderer]）だけを持ち、中身（[KMetaLayerStyle.qgisRendererDef]）が
+  /// 無いスタイルに、`.qgs` のレンダラの中身を足す。足した数を返す。
+  ///
+  /// 中身を持つようになった版（2026-10-11）より前に取り込んだプロジェクトは印だけを持つ。自分が書いた
+  /// `.qgs` は読み戻さないので、QGIS で保存し直すまで代表の 1 色のままになる。それを埋めるだけで、
+  /// View・可視性・他のスタイルには触らない（全部を取り込み直すとアプリだけが持つ設定を巻き戻しうる）
+  Future<int> backfillRendererDefs(String qgsPath, FolderNode root) async {
+    final XmlDocument doc;
+    try {
+      doc = XmlDocument.parse(await readQgsText(qgsPath));
+    } on Object catch (e) {
+      AppLogger.debug('[QgsImporter] 描き分けの補完: 読めない $e');
+      return 0;
+    }
+    final rootPath = root.getAbsoluteFilePath();
+    final sources = _SourceResolver(
+      p.dirname(p.normalize(qgsPath)),
+      rootPath,
+      _indexGeoPackages(root),
+      _indexImages(root),
+    );
+    var filled = 0;
+    final projectLayers = doc.rootElement.findElements('projectlayers').firstOrNull;
+    for (final maplayer in projectLayers?.findElements('maplayer') ?? const <XmlElement>[]) {
+      final def = QgsRendererReader.read(maplayer);
+      if (def == null) continue;
+      final target = sources.resolve(maplayer, <String>[]);
+      if (target == null) continue;
+      final (:name, :source, :layer, gpkg: _) = target;
+      final folder = layer.folderNode;
+      final folderPath = folder?.getAbsoluteFilePath();
+      if (folder == null || folderPath == null) continue;
+
+      final isDefault = name == layer.layerName && (source.subset == null || source.subset!.isEmpty);
+      if (isDefault) {
+        final existing = (await KMetaService.instance.getMeta(folderPath)).styles.layers[layer.layerKey];
+        if (existing?.qgisRenderer != def.kind.qgisType || existing?.qgisRendererDef != null) continue;
+        await KMetaService.instance.setLayerStyle(folderPath, layer.layerKey, existing!.copyWith(qgisRendererDef: def));
+        folder.invalidateMetaCache();
+        layer.invalidateKmetaStyleCache();
+        filled++;
+        continue;
+      }
+      if (layer.views.isEmpty) await layer.loadViews();
+      final view = layer.views.where((v) => v.name == name).firstOrNull;
+      final style = view?.style;
+      if (view == null || style == null || style.qgisRenderer != def.kind.qgisType || style.qgisRendererDef != null) {
+        continue;
+      }
+      view.style = style.copyWith(qgisRendererDef: def);
+      await layer.persistViews();
+      filled++;
+    }
+    if (filled > 0) AppLogger.debug('[QgsImporter] 描き分けの中身を $filled 件補った（${p.basename(qgsPath)}）');
+    return filled;
+  }
+
   // =============================================
   // 部品
   // =============================================

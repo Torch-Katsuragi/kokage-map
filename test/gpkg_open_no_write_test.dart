@@ -3,6 +3,7 @@
 // 持ち主（QGIS 側）のファイルが変わってしまう（2026-10-12 の試験で見つけた）
 //
 // - 主キーの無い表: 以前は主キーを調べるだけで fid 列を足していた。QGIS（GDAL）と同じく rowid で読み書きする
+// - id・fid という名前のふつうの列: 読んだ行の地物番号は別の鍵（featureIdKey）。列の値はそのまま
 // - 定義の無い CRS: 以前は epsg.io に問い合わせて gpkg に書き戻していた。手元の表とメモリだけで解く
 import 'dart:io';
 
@@ -14,6 +15,7 @@ import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/services/coordinate/index.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'support/colliding_columns_gpkg.dart';
 import 'support/foreign_geom_gpkg.dart';
 
 void main() {
@@ -75,7 +77,7 @@ void main() {
       expect(await gpkg.getPrimaryKeyColumn('pts'), 'rowid');
       final features = await gpkg.getFeaturesWithGeometry('pts');
       expect(features, hasLength(2));
-      final ids = [for (final f in features) f['id']];
+      final ids = [for (final f in features) f[featureIdKey]];
       expect(ids, [1, 2]);
       expect(await gpkg.getFeatureAttribute('pts', 2, 'name'), 'b');
       await gpkg.dispose();
@@ -94,11 +96,30 @@ void main() {
       await gpkg.flushChanges();
       expect(await gpkg.getFeatureAttribute('pts', 1, 'name'), 'A');
       expect(await gpkg.removeFeature('pts', 2), isTrue);
-      final ids = [for (final f in await gpkg.getFeaturesWithGeometry('pts')) f['id']];
+      final ids = [for (final f in await gpkg.getFeaturesWithGeometry('pts')) f[featureIdKey]];
       expect(ids, [1, 3]);
       await gpkg.dispose();
       expect(await columns(), ['geom', 'name']);
     });
+  });
+
+  group('id・fid という名前のふつうの列', () {
+    for (final kind in CollidingColumnsGpkg.values) {
+      test('${kind.label}: 読むだけならファイルを変えず、列の値は地物番号に化けない', () async {
+        await kind.write(path);
+        final before = digest();
+
+        final gpkg = open();
+        final rows = await gpkg.getFeaturesWithGeometry(CollidingColumnsGpkg.table);
+        expect([for (final r in rows) r[featureIdKey]], CollidingColumnsGpkg.featureIds);
+        expect([for (final r in rows) r['id']], CollidingColumnsGpkg.idValues);
+        expect([for (final r in rows) r['fid']], kind.fidValues);
+        await gpkg.getAttributeColumnInfo(CollidingColumnsGpkg.table);
+        await gpkg.dispose();
+
+        expect(digest(), before);
+      });
+    }
   });
 
   group('形の列が geom 以外', () {

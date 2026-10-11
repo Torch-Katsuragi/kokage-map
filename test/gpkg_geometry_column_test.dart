@@ -83,7 +83,7 @@ void main() {
 
       test('地物を選ぶ（1 件読む）', () async {
         final row = (await gpkg.getFeature(table, 2))!;
-        expect(row['id'], 2);
+        expect(row[featureIdKey], 2);
         expect(pointOf(row).longitude, closeTo(135.97, 1e-9));
         expect(row.containsKey(kind.geomColumn) && kind.geomColumn != 'geometry', isFalse);
       });
@@ -146,7 +146,7 @@ void main() {
 
       test('消す: 行も rtree も消える', () async {
         expect(await gpkg.removeFeature(table, 1), isTrue);
-        expect([for (final r in await gpkg.getFeaturesWithGeometry(table)) r['id']], [2]);
+        expect([for (final r in await gpkg.getFeaturesWithGeometry(table)) r[featureIdKey]], [2]);
         expect((await rtree()).keys, [2]);
       });
 

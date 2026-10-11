@@ -130,7 +130,7 @@ void main() {
     expect(bytes.take(3), [0xEF, 0xBB, 0xBF]);
     expect(bytes[3], isNot(0xEF)); // BOM は 1 つだけ
     final text = utf8.decode(bytes.sublist(3));
-    expect(text.split('\n').first, 'name,h');
+    expect(text.split('\n').first, 'fid,name,h', reason: '主キーの列も QGIS と同じく出す');
     expect(text, contains('杉・髙﨑'));
   });
 
@@ -142,7 +142,7 @@ void main() {
     addTearDown(() => tester.runAsync(close));
     final ctrl = await pumpController(tester);
     await tester.runAsync(ctrl.initialize);
-    expect(ctrl.columnNames, ['name', 'h']);
+    expect(ctrl.columnNames, ['fid', 'name', 'h']);
   });
 
   testWidgets('ページの大きさ: 選んだ行数で切り、総ページ数もそれで数える', (tester) async {
@@ -231,7 +231,7 @@ void main() {
     layer.debugJoins = [ResolvedJoin.build(const LayerJoin(table: 't.csv', joinField: 'name', targetField: 'name'), table)!];
     final ctrl = await pumpController(tester);
     await tester.runAsync(ctrl.initialize);
-    expect(ctrl.columnNames, ['name', 'h', 'n', 't_age', 't_vol']);
+    expect(ctrl.columnNames, ['fid', 'name', 'h', 'n', 't_age', 't_vol']);
 
     final page = await ctrl.fetchPage(TrinaLazyPaginationRequest(page: 1, pageSize: 50));
     await tester.binding.setSurfaceSize(const Size(1200, 600));
@@ -273,7 +273,7 @@ void main() {
     addTearDown(() => tester.runAsync(close));
     final ctrl = await pumpController(tester);
     await tester.runAsync(ctrl.initialize);
-    expect(ctrl.columnNames, ['name', 'h', 'd', 'dt']);
+    expect(ctrl.columnNames, ['fid', 'name', 'h', 'd', 'dt']);
 
     final page = await ctrl.fetchPage(TrinaLazyPaginationRequest(page: 1, pageSize: 50));
     await tester.binding.setSurfaceSize(const Size(1400, 600));

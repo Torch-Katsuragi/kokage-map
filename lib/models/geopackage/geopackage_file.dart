@@ -35,14 +35,16 @@ import 'qgis_interop.dart';
 import 'spatial_index_manager.dart';
 import 'sql_identifier.dart';
 
+export 'feature_row.dart';
+
 /// GeoPackageファイルを管理するファサードクラス
 ///
 /// 責務: 既存APIの維持、内部サービスへの委譲
 ///
 /// PRIMARY KEY戦略:
 /// - 新規作成: fid INTEGER PRIMARY KEY AUTOINCREMENT（QGIS互換）
-/// - 読み込み: 動的検出（fid, id, rowid等）して内部的に'id'として正規化
-/// - FeatureNode互換性: row['id']で常にPRIMARY KEYにアクセス可能
+/// - 読み込み: 動的検出（fid, id, rowid等）。読んだ行の地物番号は [featureIdKey]（列の名前と重ならない）
+/// - 列の値は書き換えない（主キーの列も、id・fid というふつうの列もそのまま）
 class GeoPackageFile {
   /// ルートからのパスリスト
   final List<String> pathList;

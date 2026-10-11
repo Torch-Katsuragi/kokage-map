@@ -23,6 +23,7 @@ import 'package:root_maps/services/kmeta_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'support/colliding_columns_gpkg.dart';
 import 'support/foreign_geom_gpkg.dart';
 import 'support/gdal_host.dart';
 import 'support/gdal_scenarios.dart';
@@ -317,6 +318,22 @@ void main() {
         if (options.includeRowNumber) expect(props['ROW_NUM'], 1);
         await File(out).delete();
       }
+    }, skip: skip);
+  }
+
+  // 主キーが fid の表・主キーの無い表の id というふつうの列は、直した値のまま書き出す
+  // （以前は地物番号が id に入っていて、id の列を直しても書かれなかった）
+  for (final kind in CollidingColumnsGpkg.values) {
+    test('${kind.label}: id の列を直して GeoJSON に', () async {
+      await kind.write(p.join(proj, 'colliding.gpkg'));
+      final layer = (await openLayers())[CollidingColumnsGpkg.table]!;
+      await layer.updateChildren();
+      final f = layer.features.firstWhere((f) => f.rowId == CollidingColumnsGpkg.featureIds.first);
+      await f.setAttributeValue('id', 555);
+      f.name = 'x';
+      final info = await features(await export(layer, FileFormat.geojson));
+      expect(featureValues(info, 'id'), [555, CollidingColumnsGpkg.idValues.last]);
+      expect(featureValues(info, 'name'), ['x', 'b']);
     }, skip: skip);
   }
 }

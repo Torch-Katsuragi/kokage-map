@@ -28,14 +28,17 @@ bool isSystemColumn(String name) {
   return n == metadataColumn || n == 'rmaps_metadata'; // 旧名
 }
 
-/// 書き換えない列（番号・内部用と、読んだ行で解析した形を入れる geometry）。大文字小文字は区別しない。
+/// 書き換えない列（主キー [primaryKey]・内部用と、読んだ行で解析した形を入れる geometry）。大文字小文字は区別しない。
+///
+/// 主キーは表ごと（fid・旧形式の id・OBJECTID など。主キーの無い表は rowid で、列には出ない）。
+/// QGIS と同じく、`id`・`fid` という名前でも主キーでなければふつうの列として書ける
+/// （以前は名前で弾いていて、主キーが fid の表の id の列を直せなかった）。
 ///
 /// 形の列（geom・Shape など表ごとの名前）は列の一覧（`GeoPackageSchema.getColumnNames`）から外してある。
 /// ここで geom を名前で弾くと、形の列が geometry の表の geom というふつうの列が書けなくなる
-bool isReadOnlyColumn(String name) {
+bool isReadOnlyColumn(String name, {String? primaryKey}) {
   final n = name.toLowerCase();
-  return n == 'id' ||
-      n == 'fid' ||
+  return (primaryKey != null && n == primaryKey.toLowerCase()) ||
       n == 'geometry' ||
       n.startsWith('_');
 }

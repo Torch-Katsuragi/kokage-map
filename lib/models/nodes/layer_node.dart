@@ -931,7 +931,7 @@ abstract class LayerNode extends LayerTreeNode {
       for (final row in sourceFeatures) {
         final geometry = _toGeoGeometry(row['geometry'], geometryType);
         if (geometry == null) {
-          AppLogger.debug('[LayerNode] ジオメトリ抽出失敗 ID=${row['id']}, type=$geometryType');
+          AppLogger.debug('[LayerNode] ジオメトリ抽出失敗 ID=${row[featureIdKey]}, type=$geometryType');
           skippedCount++;
           continue;
         }
@@ -940,7 +940,7 @@ abstract class LayerNode extends LayerTreeNode {
           geometry,
           {
             for (final MapEntry(:key, :value) in row.entries)
-              if (key != 'geometry') key: value is Map ? jsonEncode(value) : value,
+              if (key != 'geometry' && key != featureIdKey) key: value is Map ? jsonEncode(value) : value,
           },
         ));
         if (batch.length >= batchSize) await flush();

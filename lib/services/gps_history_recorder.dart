@@ -682,7 +682,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
       for (final feature in features) {
         final index = segmentIndexOf(feature['name']?.toString(), _currentDateKey!);
         if (index == null || index <= latestIndex) continue;
-        final id = feature['id'];
+        final id = feature[featureIdKey];
         if (id == null) continue;
         latestIndex = index;
         latestId = id is int ? id : int.tryParse(id.toString()) ?? 0;
@@ -742,7 +742,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
       int recovered = 0;
       for (final feature in rawFeatures) {
-        final id = feature['id'];
+        final id = feature[featureIdKey];
         if (id == null) continue;
 
         final featureId =

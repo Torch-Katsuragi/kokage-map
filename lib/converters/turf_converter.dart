@@ -16,6 +16,7 @@
 import 'dart:convert';
 
 import 'package:latlong2/latlong.dart';
+import 'package:root_maps/models/geopackage/feature_row.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:root_maps/utils/geo_converter.dart';
 import 'package:root_maps/utils/geodesic.dart';
@@ -90,7 +91,10 @@ class TurfConverter {
 
       // 形の列（geom・Shape など表ごとの名前）は読むときに抜いてある（FeatureRepository）。
       // geom という名前のふつうの列（形の列が geometry の表）は属性として残す
-      final properties = Map<String, dynamic>.from(rowData)..remove('geometry');
+      // 地物番号（[featureIdKey]）は列ではないので属性に入れない（FeatureNode が持つ）
+      final properties = Map<String, dynamic>.from(rowData)
+        ..remove('geometry')
+        ..remove(featureIdKey);
 
       turf.GeometryObject? geometry;
       final type = geometryType.toLowerCase();

@@ -257,10 +257,9 @@ Future<void> showDuplicateFilteredDialog(
       for (final col in sourceColumns) {
         final name = col['name'] as String;
         final type = col['type'] as String;
-        // 元の形の列は getAttributeColumnInfo が除く。geom は新しいレイヤの形の列の名前なので足さない
-        if (name.toLowerCase() != 'geom' &&
-            name.toLowerCase() != 'fid' &&
-            name.toLowerCase() != 'id') {
+        // 元の形の列と旧形式の主キー id は getAttributeColumnInfo が除く。geom・fid は新しいレイヤの形の列・主キーの名前なので
+        // 足さない。主キーでない id というふつうの列は足す
+        if (name.toLowerCase() != 'geom' && name.toLowerCase() != 'fid') {
           await gpkgFile.addAttributeColumn(result, name, type);
         }
       }

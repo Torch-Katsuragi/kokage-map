@@ -29,10 +29,14 @@ class QgsBaseMap {
     required this.layerName,
     required this.visible,
     required this.opacity,
+    this.custom,
   });
 
-  /// 当たった [BaseMapProvider.id]
+  /// 当たった [BaseMapProvider.id]（一覧に無い URL なら [custom] の id）
   final String providerId;
+
+  /// 一覧に無い URL の XYZ / WMS から作った利用者の地図の定義。足すときに端末の利用者の地図にも入れる
+  final BaseMapProvider? custom;
 
   /// QGIS 上のレイヤ名（報告用）
   final String layerName;
@@ -72,6 +76,51 @@ abstract final class QgsRasterSource {
     if (params['type']?.toLowerCase() != 'xyz') return null;
     final url = params['url'];
     return url == null || url.isEmpty ? null : url;
+  }
+
+  /// 本物の WMS（`type=xyz` でも WMTS でもない）を、EPSG:3857 のタイルとして引く GetMap の URL テンプレートにする。
+  /// 扱えなければ null（WMTS・`url` か `layers` が無い）。
+  ///
+  /// ⚠ `.qgs` の `crs` に関係なく EPSG:3857 で頼む（地図は Web メルカトルのタイルで描くので）。
+  /// サーバーが 3857 を出さなければ白いまま（設定画面の「タイルを 1 枚取ってみる」で分かる）
+  static String? wmsGetMapTemplate(String uri) {
+    final layers = <String>[];
+    final styles = <String>[];
+    String? url;
+    String? format;
+    var wmts = false;
+    for (final part in uri.split('&')) {
+      final eq = part.indexOf('=');
+      final key = (eq < 0 ? part : part.substring(0, eq)).trim().toLowerCase();
+      final raw = eq < 0 ? '' : part.substring(eq + 1);
+      String value;
+      try {
+        value = Uri.decodeComponent(raw);
+      } on ArgumentError {
+        value = raw;
+      }
+      switch (key) {
+        case 'url':
+          url ??= value;
+        case 'layers':
+          layers.add(value);
+        case 'styles':
+          styles.add(value);
+        case 'format':
+          format ??= value;
+        case 'tilematrixset':
+          wmts = true;
+        case 'type':
+          if (value.toLowerCase() != 'wms') wmts = true; // xyz / wmts / mbtiles など
+      }
+    }
+    if (wmts || url == null || url.isEmpty || layers.isEmpty || layers.every((l) => l.isEmpty)) return null;
+    String enc(Iterable<String> v) => v.map(Uri.encodeQueryComponent).join(',');
+    final sep = url.contains('?') ? (url.endsWith('?') || url.endsWith('&') ? '' : '&') : '?';
+    return '$url${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap'
+        '&LAYERS=${enc(layers)}&STYLES=${enc(styles.length == layers.length ? styles : layers.map((_) => ''))}'
+        '&FORMAT=${Uri.encodeQueryComponent(format ?? 'image/png')}&TRANSPARENT=TRUE'
+        '&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}';
   }
 
   /// ファイルとして持ち歩けないデータソース（`/vsicurl/`、`https://`、`GPKG:…:table` のようなドライバ指定）

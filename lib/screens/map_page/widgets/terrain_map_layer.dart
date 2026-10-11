@@ -220,10 +220,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   /// 地図面に出す出典。普段は出さず（出典は設定の「地図・タイル」にまとめた。ユーザー 2026-09-13）、
   /// OpenStreetMap が見えているときだけ出す（OSM の表示ガイドラインは対話型地図では地図上のクレジットを求める。
-  /// 地理院タイルと Terrain Tiles は「出典を明示」で、置き場所は問わない）
+  /// 地理院タイルと Terrain Tiles は「出典を明示」で、置き場所は問わない）。
+  /// 利用者が足した地図も、規約が分からないので見えているときは出す（出典が空なら地図の名前）
   String _osmAttribution() => {
         for (final (p, _) in widget.baseMapService.activeLayers)
-          if (p.type == BaseMapType.openStreetMap) p.attribution,
+          if (p.type == BaseMapType.openStreetMap)
+            p.attribution
+          else if (p.isCustom)
+            p.attribution.isNotEmpty ? p.attribution : p.name,
       }.join(' / ');
 
   /// 基図の設定が変わった（地形のテクスチャを貼り直す）

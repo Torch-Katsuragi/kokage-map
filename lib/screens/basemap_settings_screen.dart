@@ -34,6 +34,7 @@ import '../providers/ui_state_providers.dart';
 import '../services/basemap_service.dart';
 import '../tutorial/tutorial.dart';
 import '../widgets/basemap_preview.dart';
+import '../widgets/custom_basemap_dialog.dart';
 import '../widgets/settings_widgets.dart';
 
 class BaseMapSettingsScreen extends ConsumerStatefulWidget {
@@ -54,9 +55,21 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
   double _cacheSizeMB = 0.0;
   bool _isLoading = true;
 
+  /// web で利用者の地図が取れない（CORS）と分かったら注意を出し直す
+  void _onServiceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _baseMapService.removeListener(_onServiceChanged);
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    _baseMapService.addListener(_onServiceChanged);
     _loadCacheInfo();
     // チュートリアル: 開いたことと、赤色立体図がもう重なっているか（入っていればその手順は済み）
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -441,6 +454,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
               layer: layer,
               provider: provider,
               isBottom: i == layers.length - 1,
+              webBlocked: svc.webFetchFailed(layer.providerId),
               blendLabel: _blendLabel,
               onChanged: (l) async {
                 final opacityChanged = l.opacity != layer.opacity;
@@ -511,7 +525,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(t.basemap.layers.addTitle, style: Theme.of(context).textTheme.titleMedium),
             ),
-            for (final p in BaseMapProvider.availableProviders)
+            for (final p in BaseMapProvider.allProviders)
               ListTile(
                 key: p.id == reliefProviderId ? TutorialTargets.reliefOption : null,
                 leading: Icon(p.icon, color: have.contains(p.id) ? Colors.grey : Colors.blue),
@@ -520,23 +534,81 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
                   p.description,
                   if ((_cacheStats[p.cacheId] ?? 0) > 0) t.basemap.cacheCount(count: _cacheStats[p.cacheId].toString()),
                 ].join('\n')),
-                trailing: have.contains(p.id) ? Text(t.basemap.layers.alreadyAdded, style: const TextStyle(color: Colors.grey)) : null,
+                trailing: p.isCustom
+                    ? IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        tooltip: t.basemap.custom.delete,
+                        onPressed: () async {
+                          Navigator.of(context).pop();
+                          await _deleteCustom(p);
+                        },
+                      )
+                    : have.contains(p.id)
+                        ? Text(t.basemap.layers.alreadyAdded, style: const TextStyle(color: Colors.grey))
+                        : null,
                 enabled: !have.contains(p.id),
                 onTap: () => Navigator.of(context).pop(p),
               ),
+            // 任意の XYZ / WMS の URL（林野庁の森林計画図・県の CS 立体図など）
+            ListTile(
+              leading: const Icon(Icons.add_link, color: Colors.blue),
+              title: Text(t.basemap.custom.addEntry),
+              onTap: () => Navigator.of(context).pop(_addFromUrl),
+            ),
           ],
         ),
       ),
     );
     if (picked == null) return;
+    if (identical(picked, _addFromUrl)) {
+      await _showCustomDialog();
+      return;
+    }
     // 等高線のように「重ねる前提」の地図は乗算で足す（白地に線だけなので、通常でもほぼ同じ）
     await _editLayers(() => svc.addLayer(picked.id, blend: picked.type == BaseMapType.generated ? BaseMapBlend.multiply : BaseMapBlend.normal));
     ref.read(tutorialProvider.notifier).report(BasemapLayerAdded(picked.id));
   }
 
+  /// 追加シートの「URL から追加」の印（シートはプロバイダを返すので、その中の目印として使う）
+  static final _addFromUrl = BaseMapProvider.custom(name: '', urlTemplate: 'https://add-from-url.invalid/{z}/{x}/{y}');
+
+  /// 利用者の地図を足すダイアログ。足したら一番上のレイヤに
+  Future<void> _showCustomDialog() async {
+    final added = await showCustomBaseMapDialog(
+      context,
+      service: _baseMapService,
+      center: _mapCenter,
+      zoom: _previewZoom,
+    );
+    if (added == null) return;
+    await _editLayers(() => _baseMapService.addLayer(added.id));
+    _notify(t.basemap.custom.added(name: added.name), NotificationLevel.success);
+  }
+
+  /// 利用者の地図を消す（レイヤからも外し、キャッシュも消す）
+  Future<void> _deleteCustom(BaseMapProvider p) async {
+    final ok = await showSettingsConfirmDialog(
+      context,
+      title: t.basemap.custom.delete,
+      message: t.basemap.custom.deleteConfirm(name: p.name),
+      confirmLabel: t.common.delete,
+      confirmStyle: TextButton.styleFrom(foregroundColor: Colors.red),
+    );
+    if (!ok) return;
+    // 最後の 1 枚なら既定の地図を先に足す（背景地図が 0 枚にならないように）
+    if (_baseMapService.layers.length == 1 && _baseMapService.layers.single.providerId == p.id) {
+      await _baseMapService.addLayer(BaseMapProvider.defaultProvider.id);
+    }
+    await _editLayers(() => _baseMapService.removeCustomProvider(p.id));
+    await _loadCacheInfo();
+  }
+
   /// 出典（地図面に出すのをやめてここにまとめた。ユーザー 2026-09-13。OSM だけは地図面にも出す）
   Widget _buildSourcesSection() {
-    final basemaps = {for (final (p, _) in _baseMapService.activeLayers) if (p.attribution.isNotEmpty) p.attribution};
+    final basemaps = {
+      for (final (p, _) in _baseMapService.activeLayers)
+        if (p.attribution.isNotEmpty) p.attribution else if (p.isCustom) p.name,
+    };
     final dems = {for (final s in DemTileSource.defaultCascade) s.attribution};
     return SettingsSection(
       title: t.basemap.sources.title,
@@ -931,6 +1003,7 @@ class _LayerRow extends StatelessWidget {
     required this.layer,
     required this.provider,
     required this.isBottom,
+    this.webBlocked = false,
     required this.blendLabel,
     required this.onChanged,
     required this.onRemove,
@@ -942,6 +1015,9 @@ class _LayerRow extends StatelessWidget {
 
   /// 一番下の層（合成モードは効かない）
   final bool isBottom;
+
+  /// web でタイルが取れていない利用者の地図（CORS の見込み）
+  final bool webBlocked;
   final String Function(BaseMapBlend) blendLabel;
   final ValueChanged<BaseMapLayer> onChanged;
   final VoidCallback? onRemove;
@@ -980,6 +1056,11 @@ class _LayerRow extends StatelessWidget {
               ),
             ],
           ),
+          if (webBlocked)
+            Padding(
+              padding: const EdgeInsets.only(left: 48, right: 8),
+              child: Text(t.basemap.custom.webBlocked, style: TextStyle(fontSize: 12, color: Colors.red[700])),
+            ),
           // 合成モード・不透明度
           Row(
             children: [

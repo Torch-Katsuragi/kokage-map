@@ -45,6 +45,9 @@ enum BaseMapType {
   gsiRelief,
   gsiRedRelief,
   gsiBlank,
+
+  /// 利用者が足した XYZ タイル（任意の URL。設定画面か `.qgs` の読み戻しで足す。端末の prefs に持つ）
+  custom,
 }
 
 /// 背景地図プロバイダーの情報を格納するクラス
@@ -74,11 +77,138 @@ class BaseMapProvider {
     required this.type,
     required this.icon,
     String? cacheId,
+    this.tms = false,
   }) : cacheId = cacheId ?? id;
 
-  /// タイルの URL（[urlTemplate] の `{z}` `{x}` `{y}` を埋める）
-  String tileUrl(int z, int x, int y) =>
-      urlTemplate.replaceAll('{z}', '$z').replaceAll('{x}', '$x').replaceAll('{y}', '$y');
+  /// `{y}` を TMS の向き（南が 0）で数えるか。テンプレートに `{-y}` を書いた場合はこれに関係なくそこだけ南から数える
+  final bool tms;
+
+  /// 利用者が足した地図か（[BaseMapType.custom]）
+  bool get isCustom => type == BaseMapType.custom;
+
+  /// タイルの URL（[urlTemplate] の `{z}` `{x}` `{y}` `{-y}` `{bbox-epsg-3857}` を埋める）
+  String tileUrl(int z, int x, int y) => expandTileUrl(urlTemplate, z, x, y, tms: tms);
+
+  /// URL テンプレートを埋める。
+  ///
+  /// - `{-y}`: TMS の y（QGIS の XYZ と同じ書き方）
+  /// - `{bbox-epsg-3857}`: タイルの範囲（Web メルカトルの m、`minx,miny,maxx,maxy`）。WMS の GetMap をタイルとして引くとき用
+  ///   （MapLibre と同じ書き方）
+  static String expandTileUrl(String template, int z, int x, int y, {bool tms = false}) {
+    final n = 1 << z;
+    final flipped = n - 1 - y;
+    var s = template
+        .replaceAll('{z}', '$z')
+        .replaceAll('{x}', '$x')
+        .replaceAll('{-y}', '$flipped')
+        .replaceAll('{y}', '${tms ? flipped : y}');
+    if (s.contains('{bbox-epsg-3857}')) {
+      const half = 20037508.342789244; // 赤道の半周（m）
+      final size = 2 * half / n;
+      String f(double v) => v.toStringAsFixed(3);
+      final minX = -half + x * size;
+      final maxY = half - y * size;
+      s = s.replaceAll('{bbox-epsg-3857}', '${f(minX)},${f(maxY - size)},${f(minX + size)},${f(maxY)}');
+    }
+    return s;
+  }
+
+  /// URL テンプレートとして使えるか（http(s) で、`{z}` `{x}` と `{y}`/`{-y}`、または `{bbox-epsg-3857}` を持つ）
+  static bool isValidTemplate(String url) {
+    final u = url.trim();
+    if (!RegExp('^https?://[^/]+', caseSensitive: false).hasMatch(u)) return false;
+    if (u.contains('{bbox-epsg-3857}')) return true;
+    return u.contains('{z}') && u.contains('{x}') && (u.contains('{y}') || u.contains('{-y}'));
+  }
+
+  /// 配布アプリからの利用を規約で禁じているタイル（QGIS でよく敷かれる Google・Bing の航空写真など）か。
+  /// 利用者が足すのも `.qgs` から持ち込むのも断る
+  static bool isForbiddenTileHost(String url) {
+    final host = Uri.tryParse(url.trim())?.host.toLowerCase() ?? '';
+    return RegExp(r'(^|\.)(google\.[a-z.]+|googleapis\.com|gstatic\.com|virtualearth\.net|bing\.com)$').hasMatch(host);
+  }
+
+  /// 利用者が足す地図を作る。id は URL から決める（同じ URL は同じ id。キャッシュも同じものを引く）
+  static BaseMapProvider custom({
+    required String name,
+    required String urlTemplate,
+    int minZoom = 0,
+    int maxZoom = 18,
+    String attribution = '',
+    bool tms = false,
+  }) {
+    final url = urlTemplate.trim();
+    final lo = minZoom.clamp(0, 24);
+    return BaseMapProvider(
+      id: customIdFor(url, tms: tms),
+      name: name.trim().isEmpty ? (Uri.tryParse(url)?.host ?? url) : name.trim(),
+      description: Uri.tryParse(url)?.host ?? url,
+      urlTemplate: url,
+      minZoom: lo,
+      maxZoom: maxZoom.clamp(lo, 24),
+      attribution: attribution.trim(),
+      type: BaseMapType.custom,
+      icon: Icons.add_photo_alternate_outlined,
+      tms: tms,
+    );
+  }
+
+  /// 利用者の地図の id: `custom_` + URL（[_tileUrlKey] で揃えたもの）の FNV-1a。端末をまたいでも同じになる。
+  /// ⚠ web の数は double なので、素数（2^24 + 0x193）との掛け算を 2^53 を超えない形に割って掛ける
+  static String customIdFor(String url, {bool tms = false}) {
+    var h = 0x811c9dc5;
+    for (final c in '${_tileUrlKey(url)}${tms ? '|tms' : ''}'.codeUnits) {
+      h = (h ^ c) & 0xffffffff;
+      h = ((((h & 0xff) << 24) & 0xffffffff) + h * 0x193) & 0xffffffff;
+    }
+    return 'custom_${h.toRadixString(16).padLeft(8, '0')}';
+  }
+
+  /// prefs に書く形（利用者の地図だけ）
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'url': urlTemplate,
+        'minZoom': minZoom,
+        'maxZoom': maxZoom,
+        'attribution': attribution,
+        if (tms) 'tms': true,
+      };
+
+  static BaseMapProvider? fromJson(Map<String, Object?> j) {
+    final url = j['url'];
+    if (url is! String || !isValidTemplate(url)) return null;
+    return custom(
+      name: j['name'] as String? ?? '',
+      urlTemplate: url,
+      minZoom: (j['minZoom'] as num? ?? 0).toInt(),
+      maxZoom: (j['maxZoom'] as num? ?? 18).toInt(),
+      attribution: j['attribution'] as String? ?? '',
+      tms: j['tms'] == true,
+    );
+  }
+
+  // --- 利用者の地図の一覧（`BaseMapService` が prefs から読んで入れる）---
+  static List<BaseMapProvider> _customProviders = const [];
+
+  /// 利用者が足した地図（足した順）
+  static List<BaseMapProvider> get customProviders => _customProviders;
+
+  /// 利用者の地図を差し替える（`BaseMapService` から。テストからも）
+  static set customProviders(List<BaseMapProvider> list) => _customProviders = List.unmodifiable(list);
+
+  /// 組み込みと利用者の地図
+  static List<BaseMapProvider> get allProviders => [...availableProviders, ..._customProviders];
+
+  /// 組み込み → 利用者の地図の順に探す（タイルごとに呼ばれるので一覧を作らない）
+  static BaseMapProvider? _find(bool Function(BaseMapProvider) test) {
+    for (final p in availableProviders) {
+      if (test(p)) return p;
+    }
+    for (final p in _customProviders) {
+      if (test(p)) return p;
+    }
+    return null;
+  }
 
   /// 等高線（生成プロバイダ）。生成器の登録先
   static BaseMapProvider get contourOverlay => availableProviders.firstWhere((p) => p.id == 'contours');
@@ -191,33 +321,19 @@ class BaseMapProvider {
   ];
 
   /// タイルキャッシュの名前（[cacheId]）から。キャッシュ一覧の表示用。版の古い生成プロバイダのキャッシュは null
-  static BaseMapProvider? getProviderByCacheId(String cacheId) {
-    for (final p in availableProviders) {
-      if (p.cacheId == cacheId) return p;
-    }
-    return null;
-  }
+  static BaseMapProvider? getProviderByCacheId(String cacheId) => _find((p) => p.cacheId == cacheId);
 
   /// IDから背景地図プロバイダーを取得
-  static BaseMapProvider? getProviderById(String id) {
-    for (final p in availableProviders) {
-      if (p.id == id) return p;
-    }
-    return null;
-  }
+  static BaseMapProvider? getProviderById(String id) => _find((p) => p.id == id);
 
-  /// XYZ タイルの URL テンプレートから（QGIS の XYZ レイヤの読み戻し）。一覧に無ければ null。
+  /// XYZ タイルの URL テンプレートから（QGIS の XYZ レイヤの読み戻し・利用者の地図の重複の判定）。
+  /// 組み込みにも利用者の地図にも無ければ null。
   ///
-  /// 突き合わせは http/https、ホスト名の大小、OSM の `a.` `{s}.` などのサブドメインを無視する。
-  /// 一覧に無い URL を勝手に足さないのは、利用規約で配布アプリからの利用を禁じているタイル
-  /// （QGIS でよく敷かれる Google の航空写真など）を持ち込まないため
+  /// 突き合わせは http/https、ホスト名の大小、OSM の `a.` `{s}.` などのサブドメインを無視する
   static BaseMapProvider? findByTileUrl(String url) {
     final key = _tileUrlKey(url);
     if (key.isEmpty) return null;
-    for (final p in availableProviders) {
-      if (p.urlTemplate.isNotEmpty && _tileUrlKey(p.urlTemplate) == key) return p;
-    }
-    return null;
+    return _find((p) => p.urlTemplate.isNotEmpty && _tileUrlKey(p.urlTemplate) == key);
   }
 
   static String _tileUrlKey(String url) {

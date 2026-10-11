@@ -94,50 +94,46 @@ class SimplificationControlsState extends State<SimplificationControls> {
     }
   }
 
+  /// 簡略化の回の番号。前の線・前の許容誤差の回の結果が後から届いても使わない
+  /// （別の日の軌跡に切り替えた直後に、前の日の簡略化で上書きしていた）
+  int _run = 0;
+
   Future<void> _runSimplification() async {
     if (!mounted) return;
-    if (widget.originalLine.length < 2) {
-      _simplified = List.of(widget.originalLine);
+    final run = ++_run;
+    final line = widget.originalLine;
+    final tolerance = _tolerance;
+    if (line.length < 2) {
+      _simplified = List.of(line);
       _stats = null;
-      if (mounted) {
-        setState(() {});
-        widget.onChanged(_simplified);
-      }
+      setState(() => _isComputing = false);
+      widget.onChanged(_simplified);
       return;
     }
 
-    if (widget.originalLine.length > _isolateThreshold) {
-      await _runInIsolate();
+    final List<LatLng> simplified;
+    if (line.length > _isolateThreshold) {
+      setState(() => _isComputing = true);
+      simplified = await _simplifyInBackground(line, tolerance);
+      if (!mounted || run != _run) return;
     } else {
-      _simplified = LineSimplification.simplifyLineDouglasPeucker(
-        widget.originalLine,
-        _tolerance,
-      );
+      simplified = LineSimplification.simplifyLineDouglasPeucker(line, tolerance);
     }
 
-    _stats = LineSimplification.getSimplificationStats(
-      widget.originalLine,
-      _simplified,
-    );
-    if (mounted) {
-      setState(() {});
-      widget.onChanged(_simplified);
-    }
+    _simplified = simplified;
+    _stats = LineSimplification.getSimplificationStats(line, simplified);
+    setState(() => _isComputing = false);
+    widget.onChanged(_simplified);
   }
 
-  Future<void> _runInIsolate() async {
-    setState(() => _isComputing = true);
-    final args = <double>[_tolerance];
-    for (final p in widget.originalLine) {
+  static Future<List<LatLng>> _simplifyInBackground(List<LatLng> line, double tolerance) async {
+    final args = <double>[tolerance];
+    for (final p in line) {
       args.add(p.latitude);
       args.add(p.longitude);
     }
     final result = await compute(_simplifyInIsolate, args);
-    _simplified = <LatLng>[];
-    for (int i = 0; i < result.length; i += 2) {
-      _simplified.add(LatLng(result[i], result[i + 1]));
-    }
-    if (mounted) setState(() => _isComputing = false);
+    return [for (int i = 0; i < result.length; i += 2) LatLng(result[i], result[i + 1])];
   }
 
   @override

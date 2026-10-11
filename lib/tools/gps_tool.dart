@@ -22,8 +22,10 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../i18n/strings.g.dart';
 import '../interfaces/map_state_interface.dart';
+import '../models/gnss_quality.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
+import '../providers/gps_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
@@ -32,6 +34,42 @@ import '../utils/global_drawing_state.dart';
 import '../widgets/external_layer_actions.dart';
 import 'map_tool.dart';
 import 'pan_tool.dart';
+
+/// GPS 測量 1 回の結果
+class GpsSurveyResult {
+  const GpsSurveyResult._({
+    required this.recorded,
+    this.rejectReasons = const [],
+    this.warnings = const [],
+    this.excluded = 0,
+    this.excludeReasons = const [],
+  });
+
+  /// 位置が取れなかった・保存できなかった
+  static const failed = GpsSurveyResult._(recorded: false);
+
+  const GpsSurveyResult.rejected(List<String> reasons) : this._(recorded: false, rejectReasons: reasons);
+
+  const GpsSurveyResult.recorded({
+    List<String> warnings = const [],
+    int excluded = 0,
+    List<String> excludeReasons = const [],
+  }) : this._(recorded: true, warnings: warnings, excluded: excluded, excludeReasons: excludeReasons);
+
+  final bool recorded;
+
+  /// 足切りで記録しなかった理由（記録しなかったときだけ）
+  final List<String> rejectReasons;
+
+  /// 足切りを警告だけにしていて満たさなかった条件
+  final List<String> warnings;
+
+  /// 長押しの平均から外した回数とその理由
+  final int excluded;
+  final List<String> excludeReasons;
+
+  bool get isRejected => rejectReasons.isNotEmpty;
+}
 
 /// GPS関連機能を扱うツール
 ///
@@ -72,6 +110,13 @@ class GpsTool extends MapTool with PanDelegation {
   /// 長押し中に集めた点の数（増えると通知する）
   int get longPressGpsCount =>
       _isLongPressing ? _gpsManager.continuousSurveyCount : _longPressGpsData.length;
+
+  /// 長押し中に足切りの条件を満たさなかった点の数
+  int get longPressRejectedCount => _isLongPressing ? _liveRejected : 0;
+  int _liveRejected = 0;
+
+  /// 足切りの条件（設定 → GPS・測位）
+  GnssQualityGate get _gate => _ref.read(gnssQualityGateSettingProvider);
 
   @override
   void onActivate() => _initializeGpsFeatures();
@@ -125,6 +170,7 @@ class GpsTool extends MapTool with PanDelegation {
     _isLongPressing = true;
     _longPressStartTime = DateTime.now();
     _longPressGpsData.clear();
+    _liveRejected = 0;
 
     // GPS測量専用開始
     _gpsManager.startGpsSurveyWithWait().then((_) {
@@ -135,8 +181,9 @@ class GpsTool extends MapTool with PanDelegation {
     });
   }
 
-  /// 長押しGPS測量停止と平均化処理（位置更新ベース）
-  Future<bool> stopLongPressGpsSurvey() async {
+  /// 長押しGPS測量停止と平均化処理（位置更新ベース）。
+  /// 足切りの条件があれば、満たさない点を平均から外す（警告だけにしていれば外さずに警告する）
+  Future<GpsSurveyResult> stopLongPressGpsSurvey() async {
     AppLogger.debug('[GpsTool] 長押しGPS測量停止 - GPS平均化処理開始（位置更新ベース）');
 
     _isLongPressing = false;
@@ -147,43 +194,75 @@ class GpsTool extends MapTool with PanDelegation {
     // 最終的なデータを取得
     final finalData = _gpsManager.getContinuousSurveyData();
     _longPressGpsData.clear();
-    _longPressGpsData.addAll(finalData);
 
     AppLogger.debug('[GpsTool] 位置更新ベース連続測量を停止しました');
 
-    if (_longPressGpsData.isEmpty) {
+    if (finalData.isEmpty) {
       AppLogger.debug('[GpsTool] 長押し中にGPSデータが取得できませんでした');
-      return false;
+      return GpsSurveyResult.failed;
     }
 
     try {
+      // 足切り
+      final gate = _gate;
+      final samples = <GnssSample, Map<String, dynamic>>{
+        for (final m in finalData) ?GnssSample.fromMap(m): m,
+      };
+      final gated = applyGate(gate, samples.keys.toList());
+      if (gated.isRejected) {
+        _longPressStartTime = null;
+        _gpsManager.clearContinuousSurveyData();
+        return GpsSurveyResult.rejected(gated.reasons);
+      }
+      _longPressGpsData.addAll([for (final s in gated.accepted) samples[s]!]);
+
       // GPS平均化計算
       final averagedResult = _calculateAveragedGpsPosition(_longPressGpsData);
       final position = LatLng(
         averagedResult['latitude'],
         averagedResult['longitude'],
       );
+      final warnings = gate.strict ? const <String>[] : gated.reasons;
+      final quality = GnssQuality.aggregate(
+        gated.accepted,
+        seconds: _elapsedSeconds(),
+        rejected: gated.rejected,
+        warnings: warnings,
+      );
 
       // 最適化されたdescription辞書構造を作成
       final optimizedGpsData = _createOptimizedGpsDescription(
         averagedResult,
         _longPressGpsData,
+        quality: quality,
       );
 
-      AppLogger.debug('[GpsTool] 長押し測量 optimizedGpsData: $optimizedGpsData');
+      AppLogger.debug('[GpsTool] 長押し測量 quality: ${quality.toJson()}');
+
+      final result = GpsSurveyResult.recorded(
+        warnings: warnings,
+        excluded: gated.rejected,
+        excludeReasons: gate.strict ? gated.reasons : const [],
+      );
 
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = _ref.read(selectedLayerNodeProvider);
       // 読み取り専用レイヤ（shp・GeoJSON など）には記録しない
-      if (refuseReadOnlyEditBy(_ref.read, selected)) return false;
+      if (refuseReadOnlyEditBy(_ref.read, selected)) return GpsSurveyResult.failed;
       if (selected is PointLayerNode) {
-        return await _recordPoint(selected, position, {
-          'altitude': averagedResult['altitude'],
-          'accuracy': averagedResult['accuracy'],
-          ..._gpsAttributes(_longPressGpsData.first),
-          'nmea': _longPressGpsData.last['nmea'],
-          'sample_count': averagedResult['sampleCount'],
-        });
+        final ok = await _recordPoint(
+          selected,
+          position,
+          {
+            'altitude': averagedResult['altitude'],
+            'accuracy': averagedResult['accuracy'],
+            ..._gpsAttributes(_longPressGpsData.first),
+            'nmea': _longPressGpsData.last['nmea'],
+            'sample_count': averagedResult['sampleCount'],
+          },
+          optimizedGpsData,
+        );
+        return ok ? result : GpsSurveyResult.failed;
       }
       _addToDrawing(selected, position, optimizedGpsData);
 
@@ -192,19 +271,25 @@ class GpsTool extends MapTool with PanDelegation {
       _longPressStartTime = null;
       _gpsManager.clearContinuousSurveyData();
 
-      return true;
+      return result;
     } catch (e) {
       AppLogger.debug('[GpsTool] 長押しGPS測量エラー: $e');
-      return false;
+      return GpsSurveyResult.failed;
     }
   }
 
-  /// 現在のGPS位置を記録（単発版・互換性維持）
-  Future<bool> recordCurrentGpsPosition() async {
+  /// 長押しを始めてからの秒数
+  double _elapsedSeconds() {
+    final start = _longPressStartTime;
+    return start == null ? 0 : DateTime.now().difference(start).inMilliseconds / 1000.0;
+  }
+
+  /// 現在のGPS位置を記録（単発）。足切りの条件を満たさなければ記録しない（警告だけにしていれば記録して警告）
+  Future<GpsSurveyResult> recordCurrentGpsPosition() async {
     // 長押し中の場合は何もしない
     if (_isLongPressing) {
       AppLogger.debug('[GpsTool] 長押し中のため単発GPS記録をスキップ');
-      return false;
+      return GpsSurveyResult.failed;
     }
 
     try {
@@ -214,7 +299,7 @@ class GpsTool extends MapTool with PanDelegation {
 
       if (gpsInfo == null || gpsInfo['isActive'] != true) {
         AppLogger.debug('[GpsTool] GPS位置情報が利用できません。位置情報の許可が必要です。');
-        return false;
+        return GpsSurveyResult.failed;
       }
 
       final latitude = gpsInfo['latitude'] as double;
@@ -227,6 +312,7 @@ class GpsTool extends MapTool with PanDelegation {
         'longitude': longitude,
         'altitude': gpsInfo['altitude'],
         'accuracy': gpsInfo['accuracy'],
+        'accuracySource': gpsInfo['accuracySource'],
         'speed': gpsInfo['speed'],
         'bearing': gpsInfo['bearing'],
         'timestamp': gpsInfo['timestamp'],
@@ -245,6 +331,14 @@ class GpsTool extends MapTool with PanDelegation {
       };
       AppLogger.debug('[GpsTool] 単発測量 singleGpsData: $singleGpsData');
 
+      // 足切り
+      final gate = _gate;
+      final sample = GnssSample.fromMap(singleGpsData)!;
+      final gated = applyGate(gate, [sample]);
+      if (gated.isRejected) return GpsSurveyResult.rejected(gated.reasons);
+      final warnings = gate.strict ? const <String>[] : gated.reasons;
+      final quality = GnssQuality.aggregate([sample], seconds: 0, warnings: warnings);
+
       // 1つの点から平均を計算（実質的には同じ値）
       final averagedResult = _calculateAveragedGpsPosition([singleGpsData]);
       AppLogger.debug('[GpsTool] 単発測量 averagedResult: $averagedResult');
@@ -253,6 +347,7 @@ class GpsTool extends MapTool with PanDelegation {
       final optimizedGpsData = _createOptimizedGpsDescription(
         averagedResult,
         [singleGpsData],
+        quality: quality,
         isSingleTap: true, // 通常測量フラグ
       );
 
@@ -261,15 +356,21 @@ class GpsTool extends MapTool with PanDelegation {
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = _ref.read(selectedLayerNodeProvider);
       // 読み取り専用レイヤ（shp・GeoJSON など）には記録しない
-      if (refuseReadOnlyEditBy(_ref.read, selected)) return false;
+      if (refuseReadOnlyEditBy(_ref.read, selected)) return GpsSurveyResult.failed;
       if (selected is PointLayerNode) {
-        return await _recordPoint(selected, position, {
-          'altitude': gpsInfo['altitude'],
-          'accuracy': gpsInfo['accuracy'],
-          ..._gpsAttributes(gpsInfo),
-          'nmea': gpsInfo['nmea'],
-          'sample_count': 1, // 単発測量なので1
-        });
+        final ok = await _recordPoint(
+          selected,
+          position,
+          {
+            'altitude': gpsInfo['altitude'],
+            'accuracy': gpsInfo['accuracy'],
+            ..._gpsAttributes(gpsInfo),
+            'nmea': gpsInfo['nmea'],
+            'sample_count': 1, // 単発測量なので1
+          },
+          optimizedGpsData,
+        );
+        return ok ? GpsSurveyResult.recorded(warnings: warnings) : GpsSurveyResult.failed;
       }
       _addToDrawing(selected, position, optimizedGpsData);
 
@@ -279,10 +380,10 @@ class GpsTool extends MapTool with PanDelegation {
         'Accuracy ${(gpsInfo['accuracy'] as num?)?.toStringAsFixed(1) ?? 'N/A'}m',
       );
 
-      return true;
+      return GpsSurveyResult.recorded(warnings: warnings);
     } catch (e) {
       AppLogger.debug('[GpsTool] GPS位置記録エラー: $e');
-      return false;
+      return GpsSurveyResult.failed;
     }
   }
 
@@ -304,14 +405,22 @@ class GpsTool extends MapTool with PanDelegation {
   };
 
   /// GPS 測量の点を作り、属性を個別カラムに書いて GPS 測量を止める。
-  /// 値が null の属性は書かない
+  /// 値が null の属性は書かない。測量の記録 [surveyRecord] は線・面の頂点と同じ形でメタデータの列に残す
   Future<bool> _recordPoint(
     PointLayerNode layer,
     LatLng position,
     Map<String, dynamic> attributes,
+    Map<String, dynamic> surveyRecord,
   ) async {
-    final pointFeature =
-        await PointFeatureNode.createIn(layer, position, '', '');
+    final pointFeature = await PointFeatureNode.createIn(
+      layer,
+      position,
+      '',
+      '',
+      metadata: {
+        'drawing_points': [surveyRecord],
+      },
+    );
     if (pointFeature == null) {
       AppLogger.debug('[ERROR] GPS測量ポイントフィーチャの作成に失敗しました');
       return false;
@@ -386,6 +495,7 @@ class GpsTool extends MapTool with PanDelegation {
   Map<String, dynamic> _createOptimizedGpsDescription(
     Map<String, dynamic> averagedResult,
     List<Map<String, dynamic>> rawGpsDataList, {
+    required GnssQuality quality,
     bool isSingleTap = false,
   }) {
     // デバッグ出力
@@ -414,6 +524,7 @@ class GpsTool extends MapTool with PanDelegation {
       'averagingDuration':
           isSingleTap ? t.gps.instantMeasurement : t.gps.durationSeconds(duration: duration.toStringAsFixed(1)),
       'recordedAt': DateTime.now().toIso8601String(),
+      'quality': quality.toJson(),
     };
 
     // AppLogger.debug('[GpsTool] _createOptimizedGpsDescription 結果: $result');
@@ -439,6 +550,12 @@ class GpsTool extends MapTool with PanDelegation {
   /// 連続測量位置更新コールバック
   /// 点は GPS Manager Service が持つ（止めたときに受け取る。点が届くたびに一覧を写さない）
   void _onContinuousSurveyUpdate() {
+    final gate = _gate;
+    final latest = _gpsManager.latestContinuousSample;
+    if (gate.isActive && latest != null) {
+      final sample = GnssSample.fromMap(latest.toMap());
+      if (sample != null && gate.check(sample).isNotEmpty) _liveRejected++;
+    }
     notifyListeners(); // 長押し中の点数の表示
   }
 }

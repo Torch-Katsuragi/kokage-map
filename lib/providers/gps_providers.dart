@@ -13,7 +13,12 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+import 'dart:convert';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/gnss_quality.dart';
 
 part 'gps_providers.g.dart';
 
@@ -31,4 +36,29 @@ class SelectedGnssDeviceAddress extends _$SelectedGnssDeviceAddress {
   String? build() => null;
 
   void set(String? value) => state = value;
+}
+
+/// GPS 測量の足切りの条件（設定 → GPS・測位）。既定は何もしない。SharedPreferences に JSON で永続化
+@Riverpod(keepAlive: true)
+class GnssQualityGateSetting extends _$GnssQualityGateSetting {
+  static const _key = 'gnss_quality_gate';
+
+  @override
+  GnssQualityGate build() => GnssQualityGate.off;
+
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key);
+      if (raw != null) state = GnssQualityGate.fromJson(jsonDecode(raw) as Map);
+    } catch (_) {
+      state = GnssQualityGate.off;
+    }
+  }
+
+  Future<void> set(GnssQualityGate value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(value.toJson()));
+  }
 }

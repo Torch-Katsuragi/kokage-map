@@ -23,6 +23,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../editing/edit_session.dart';
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
+import '../models/gnss_quality.dart';
 import '../models/nodes/current_location_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
@@ -207,6 +208,13 @@ class FeatureDetailPanel extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 4.0),
             child: _labelRow('${entry.key}: ', entry.value),
+          ),
+        // GPS 測量の品質（kmaps_metadata の測量の記録から）
+        if (summarizeFeatureQuality(node.metadata, isPoint: node is PointFeatureNode)
+            case final quality?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4.0),
+            child: _labelRow('${t.gnssQuality.label}: ', quality),
           ),
       ];
 

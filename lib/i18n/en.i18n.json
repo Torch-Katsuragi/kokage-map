@@ -841,6 +841,7 @@
     "noResults": "No results found",
     "specifySearchAndColumn": "Please specify search text and target column",
     "replacedCount": "$count items replaced",
+    "replacedCountSkipped": "$count items replaced. $skipped items were not replaced because the result is not a number",
     "replaceError": "Replace error: $error",
     "actionsMenu": "Actions Menu",
     "refresh": "Refresh",

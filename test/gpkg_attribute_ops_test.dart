@@ -49,7 +49,7 @@ void main() {
         {'name': '2林班-ろ'},
         {'name': '沢'},
       ]);
-      expect(await gpkg.replaceText('pts', 'name', '林班', 'りんぱん'), 2);
+      expect((await gpkg.replaceText('pts', 'name', '林班', 'りんぱん')).replaced, 2);
       expect(await value(ids[0], 'name'), '1りんぱん-い');
       expect(await value(ids[1], 'name'), '2りんぱん-ろ');
       expect(await value(ids[2], 'name'), '沢');
@@ -65,12 +65,12 @@ void main() {
         {'name': 'a_b'},
         {'name': 'axb'},
       ]);
-      expect(await gpkg.replaceText('pts', 'name', 'abc', 'x'), 1);
+      expect((await gpkg.replaceText('pts', 'name', 'abc', 'x')).replaced, 1);
       expect(await value(ids[1], 'name'), 'ABC');
-      expect(await gpkg.replaceText('pts', 'name', '50%', '60%'), 1);
+      expect((await gpkg.replaceText('pts', 'name', '50%', '60%')).replaced, 1);
       expect(await value(ids[2], 'name'), '60%off');
       expect(await value(ids[3], 'name'), '5000');
-      expect(await gpkg.replaceText('pts', 'name', 'a_b', 'c'), 1);
+      expect((await gpkg.replaceText('pts', 'name', 'a_b', 'c')).replaced, 1);
       expect(await value(ids[5], 'name'), 'axb');
     });
 
@@ -78,17 +78,54 @@ void main() {
       final ids = await addRows([
         {'h': 12.5, 'n': 105},
       ]);
-      expect(await gpkg.replaceText('pts', 'n', '05', '07'), 1);
+      expect((await gpkg.replaceText('pts', 'n', '05', '07')).replaced, 1);
       expect(await value(ids[0], 'n'), 107);
-      expect(await gpkg.replaceText('pts', 'h', '.5', '.75'), 1);
+      expect((await gpkg.replaceText('pts', 'h', '.5', '.75')).replaced, 1);
       expect(await value(ids[0], 'h'), 12.75);
+    });
+
+    // 数値の列に文字を書けていた（「abc」など。QGIS で読むと型が合わない。2026-10-12）
+    test('数値の列は数値にならない値を書かず、置き換えなかった行として数える', () async {
+      final ids = await addRows([
+        {'n': 12, 'h': 1.5},
+        {'n': 120, 'h': 12.5},
+        {'n': 3, 'h': 3.0},
+      ]);
+      final n = await gpkg.replaceText('pts', 'n', '12', 'abc');
+      expect((n.replaced, n.skipped), (0, 2));
+      expect(await value(ids[0], 'n'), 12);
+      expect(await value(ids[1], 'n'), 120);
+
+      final h = await gpkg.replaceText('pts', 'h', '.5', 'x');
+      expect((h.replaced, h.skipped), (0, 2));
+      expect(await value(ids[1], 'h'), 12.5);
+
+      // 整数の列に小数は書かない。実数の列は書く
+      final frac = await gpkg.replaceText('pts', 'n', '3', '3.5');
+      expect((frac.replaced, frac.skipped), (0, 1));
+      final real = await gpkg.replaceText('pts', 'h', '12.5', '12.25');
+      expect((real.replaced, real.skipped), (1, 0));
+      expect(await value(ids[1], 'h'), 12.25);
+    });
+
+    test('数値の列は全角の数字を半角にして書く。空になれば NULL', () async {
+      final ids = await addRows([
+        {'n': 105},
+        {'n': 7},
+      ]);
+      final r = await gpkg.replaceText('pts', 'n', '０５', '０８');
+      expect((r.replaced, r.skipped), (1, 0));
+      expect(await value(ids[0], 'n'), 108);
+      final e = await gpkg.replaceText('pts', 'n', '7', '');
+      expect((e.replaced, e.skipped), (1, 0));
+      expect(await value(ids[1], 'n'), isNull);
     });
 
     test('空の検索語は何もしない', () async {
       await addRows([
         {'name': 'a'},
       ]);
-      expect(await gpkg.replaceText('pts', 'name', '', 'x'), 0);
+      expect((await gpkg.replaceText('pts', 'name', '', 'x')).replaced, 0);
     });
   });
 

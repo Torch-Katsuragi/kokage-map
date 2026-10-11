@@ -432,7 +432,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
       return;
     }
     try {
-      final count = await widget.controller.replaceText(
+      final (:replaced, :skipped) = await widget.controller.replaceText(
         column,
         search,
         replace,
@@ -440,7 +440,12 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
       setState(() => _searchResultCount = 0);
       ref
           .read(notificationCenterProvider.notifier)
-          .add(title: t.attributeTable.replacedCount(count: '$count'), level: NotificationLevel.success);
+          .add(
+            title: skipped > 0
+                ? t.attributeTable.replacedCountSkipped(count: '$replaced', skipped: '$skipped')
+                : t.attributeTable.replacedCount(count: '$replaced'),
+            level: skipped > 0 ? NotificationLevel.warning : NotificationLevel.success,
+          );
       widget.onRefresh?.call();
     } catch (e) {
       ref

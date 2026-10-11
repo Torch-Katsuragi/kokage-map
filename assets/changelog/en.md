@@ -42,6 +42,7 @@
 - Opening a gpkg with a table that has no primary key (such as one made outside QGIS) added an `fid` column just by inspecting it, so viewing changed the file and Drive sync uploaded it. Such tables are now read and edited by row number (rowid), as QGIS does, without changing the table
 - Opening a gpkg whose CRS had no definition (such as JGD2000 geographic, EPSG:4612) looked the definition up online and wrote it into the gpkg, so viewing changed the file and Drive sync uploaded it. JGD2000 (geographic and plane rectangular I–XIX) and the Tokyo datum (geographic and plane rectangular I–XIX) are now built in, with no lookup and nothing written to the file
 - Adding a column whose name differs from an existing one only in letter case (such as "Name" when "name" exists) failed with an unclear error. Column names ignore letter case, so you are now told which column already exists (also when creating a new column in the field calculator)
+- Replace in the attribute table could write non-numeric values (such as "abc") into integer and real columns. Rows whose result would not be a number (or, in integer columns, a decimal) are now left unchanged and their count is reported. In numeric columns full-width digits become half-width, and an empty result becomes NULL
 
 ### Lighter
 

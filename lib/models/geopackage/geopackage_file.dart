@@ -22,7 +22,8 @@ import 'package:sqflite/sqflite.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
-import '../../utils/attribute_columns.dart' show isSystemColumn;
+import '../../utils/attribute_columns.dart'
+    show isIntegerSqlType, isNumericSqlType, isSystemColumn, normalizeAttributeInput;
 import '../../utils/background_save_manager.dart';
 import '../geometry_type.dart';
 import 'feature_repository.dart';
@@ -566,25 +567,78 @@ class GeoPackageFile {
     );
   }
 
-  /// テキスト置換（指定カラム内）
-  Future<int> replaceText(
+  /// テキスト置換（指定カラム内）。置き換えた行の数と、数値の列で数値にならず置き換えなかった行の数を返す。
+  ///
+  /// 数値の列（整数・実数）は 1 行ずつ置き換えた結果を確かめ、数値にならない値（「abc」、整数の列の小数）は書かない。
+  /// 以前は SQL の REPLACE で文字のまま書いていて、QGIS で読むと型が合わなかった（2026-10-12）。
+  /// 数値の列では検索語・置換語・置き換えた結果の全角の数字を半角にし（[normalizeAttributeInput]）、空になれば NULL を書く
+  Future<({int replaced, int skipped})> replaceText(
     String tableName,
     String columnName,
     String searchText,
     String replaceText,
   ) async {
-    if (searchText.isEmpty) return 0;
+    const none = (replaced: 0, skipped: 0);
+    if (searchText.isEmpty) return none;
     final db = await _connection.getDatabase();
     final sanitized = _schema.sanitizeColumnName(columnName);
     if (sanitized.isEmpty) {
       throw Exception(t.services.invalidColumnName(name: columnName));
     }
-    // REPLACE と同じく大小を区別し、% や _ も文字として探す（LIKE だと置き換わらない行まで数えていた）
-    final result = await db.rawUpdate(
-      'UPDATE ${quoteIdent(tableName)} SET ${quoteIdent(sanitized)} = REPLACE(CAST(${quoteIdent(sanitized)} AS TEXT), ?, ?) '
-      'WHERE instr(CAST(${quoteIdent(sanitized)} AS TEXT), ?) > 0',
-      [searchText, replaceText, searchText],
+    final column = quoteIdent(sanitized);
+    final table = quoteIdent(tableName);
+    final sqlType = await _columnSqlType(tableName, sanitized);
+    if (!isNumericSqlType(sqlType)) {
+      // REPLACE と同じく大小を区別し、% や _ も文字として探す（LIKE だと置き換わらない行まで数えていた）
+      final result = await db.rawUpdate(
+        'UPDATE $table SET $column = REPLACE(CAST($column AS TEXT), ?, ?) '
+        'WHERE instr(CAST($column AS TEXT), ?) > 0',
+        [searchText, replaceText, searchText],
+      );
+      return (replaced: result, skipped: 0);
+    }
+
+    final search = normalizeAttributeInput(sqlType, searchText)! as String;
+    final replacement = normalizeAttributeInput(sqlType, replaceText)! as String;
+    if (search.isEmpty) return none;
+    final pk = pkRef(await _schema.getPrimaryKeyColumn(tableName));
+    final rows = await db.rawQuery(
+      'SELECT $pk AS k, CAST($column AS TEXT) AS v FROM $table WHERE instr(CAST($column AS TEXT), ?) > 0',
+      [search],
     );
-    return result;
+    final updates = <(Object?, num?)>[];
+    var skipped = 0;
+    for (final r in rows) {
+      final text = (r['v']! as String).replaceAll(search, replacement).trim();
+      if (text.isEmpty) {
+        updates.add((r['k'], null));
+        continue;
+      }
+      final num? n = isIntegerSqlType(sqlType) ? int.tryParse(text) : double.tryParse(text);
+      if (n == null || !n.isFinite) {
+        skipped++;
+      } else {
+        updates.add((r['k'], n));
+      }
+    }
+    if (updates.isNotEmpty) {
+      await db.transaction((txn) async {
+        final batch = txn.batch();
+        for (final (k, v) in updates) {
+          batch.rawUpdate('UPDATE $table SET $column = ? WHERE $pk = ?', [v, k]);
+        }
+        await batch.commit(noResult: true);
+      });
+    }
+    return (replaced: updates.length, skipped: skipped);
+  }
+
+  /// 列の SQLite の型名（英字の大小を区別せずに探す）。無ければ空
+  Future<String> _columnSqlType(String tableName, String columnName) async {
+    final key = columnName.toLowerCase();
+    for (final row in await _schema.tableInfo(tableName)) {
+      if ((row['name'] as String).toLowerCase() == key) return (row['type'] as String?) ?? '';
+    }
+    return '';
   }
 }

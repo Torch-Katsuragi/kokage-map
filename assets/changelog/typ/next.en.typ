@@ -45,6 +45,7 @@
   [Opening a table without a primary key added an fid column; it is now read and edited by rowid, as in QGIS, without changes],
   [Opening a gpkg whose CRS had no definition wrote a definition looked up online into it; JGD2000 and the Tokyo datum are now built in and nothing is written],
   [Adding a column differing from an existing one only in letter case failed with an unclear error; you are now told which column exists],
+  [Replace in the attribute table could write text into numeric columns; such rows are now skipped and counted],
 )
 
 #fixes(

@@ -841,6 +841,7 @@
     "noResults": "該当なし",
     "specifySearchAndColumn": "検索テキストと対象カラムを指定してください",
     "replacedCount": "${count}件を置換しました",
+    "replacedCountSkipped": "${count}件を置換しました。数値にならない ${skipped}件は置換していません",
     "replaceError": "置換エラー: $error",
     "actionsMenu": "操作メニュー",
     "refresh": "更新",

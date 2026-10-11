@@ -81,7 +81,7 @@ void main() {
     const others = RoomPin(id: 'other00001', author: 'x', type: RoomPinType.note, lat: 0, lon: 0, createdAtMs: 1);
     expect(s.canEdit(mine), isTrue);
     expect(s.canEdit(others), isFalse);
-    session.set(PartySessionState(roomCode: 'AB23CD45', selfUid: 'host', hostUid: 'host', role: PartyRole.host));
+    session.set(const PartySessionState(roomCode: 'AB23CD45', selfUid: 'host', hostUid: 'host', role: PartyRole.host));
     await pumpEventQueue();
     expect(container.read(roomPinsProvider).canEdit(others), isTrue);
   });

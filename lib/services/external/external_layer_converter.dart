@@ -167,6 +167,9 @@ class ExternalLayerConverter {
         l['name'] as String: (l['featureCount'] as num?)?.toInt() ?? -1,
     };
     counts.remove(ExternalLayerCache.markerTable);
+    // Android の SQLite は開いた DB に `android_metadata` 表を足し、GDAL はそれも表として並べる（2026-10-11 Pixel 9 で
+    // 変換が必ず照合で止まっていた）。アプリが開けばまた足されるので、消さずに数えないだけにする
+    counts.remove('android_metadata');
     final expected = [for (final l in plan.layers) l.name];
     if (counts.length != expected.length || !counts.keys.toSet().containsAll(expected)) {
       throw ExternalConvertVerifyException('レイヤが違う: ${counts.keys.toList()} ≠ $expected');

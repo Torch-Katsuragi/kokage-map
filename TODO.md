@@ -6,15 +6,18 @@
 ## 次にやる（実装）
 
 - [ ] **GDAL 統合のまとめての実機確認**（2026-10-09〜10 に入れたもの。途中では確かめず最後に 1 回。Pixel 9 で、Fold は使わない）
-  - [ ] GDAL の土台: `integration_test/device/gdal_smoke_test.dart`（`flutter test` は終わるとアプリを消す → applicationId を一時的に変えて並べて入れる）。
-        APK の増分・初回の proj.db / GDAL_DATA 書き出し
-  - [ ] 読み取り専用ベクタ（[[docs/technical/external-formats]]）: Shift_JIS の shp（.cpg なし）が文字化けしない・平面直角座標系の shp が正しい位置に出てタップで選べる・
-        KML（フォルダ 2 つ）・KMZ・CSV（経度/緯度）・GPX・型の混ざった GeoJSON・Z 付きの shp・大きい shp の初回のキャッシュ作りの時間（UI が固まらない）・
-        描こうとすると「gpkgに変換して編集」・変換で元一式が消えて gpkg が出て CRS と Z が元のまま・スタイル/View が引き継がれる・
+  - 2026-10-11 Pixel 9 で済んだもの（テスト用アプリ `com.k_root.k_maps.gdaltest` を並べて入れ、`/sdcard/FieldSurvey/GdalCheck` に test/fixtures/gdal を置いた）:
+    gdal_smoke_test 全通過（初回 172ms・12 ドライバ往復・Shift_JIS・ラスタ）／shp（.cpg あり・なし）・GeoJSON・KML・CSV が読み取り専用で出て件数が合い、
+    端末で作ったキャッシュで Shift_JIS が読めて EPSG:6674 のまま／点と 6674 の GeoTIFF が地図で同じ位置に重なる／外部ラスタ 6 枚がオーバーレイに（PNG 作成 20〜60ms）／
+    KML →「gpkgに変換」で points.gpkg ができ元が消える。直した実機だけの不具合: GDAL の初回呼び出しが必ず落ちる・CSV のキャッシュが srs 99999・
+    変換の照合が `android_metadata` 表で必ず止まる
+  - [ ] 残り（ベクタ）: KMZ・GPX・型の混ざった GeoJSON・Z 付きの shp・大きい shp の初回のキャッシュ作りの時間（UI が固まらない）・タップで選べる・
+        描こうとすると「gpkgに変換して編集」が出る・変換後の gpkg で CRS と Z が元のまま・スタイル/View が引き継がれる・
         改名と左スワイプの移動で付属ファイルも動く・.qgs を QGIS で開いて元ファイルを指している（`|layername=` `|geometrytype=` CSV の `option:`・`encoding="CP932"`）
-  - [ ] ラスタのオーバーレイ: QGIS の LZW GeoTIFF（平面直角）が正しい位置に出る・nodata が透ける・DEM が灰色・色表付き・PNG+.pgw・GCP だけのもの・
-        EXIF だけの写真は写真のまま・外部ラスタは位置合わせ不可で通知・削除で .pgw/.aux.xml まで消える・アプリ製 GeoTIFF は従来どおり編集できる・
-        大きなオルソの初回 PNG 作成時間と 2 回目のキャッシュ・.qgs の消灯の読み戻し
+  - [ ] 変換の直後、`.qgs` が古い元ファイル（points.kml）を指したまま 15 秒以上残った（開き直すと points.gpkg に付け替わる）。変換の後に自動更新を起こす
+  - [ ] 残り（ラスタ）: nodata が透ける・DEM の見え方・色表付きの見え方を目で・EXIF だけの写真は写真のまま・外部ラスタは位置合わせ不可で通知・
+        削除で .pgw/.aux.xml まで消える・アプリ製 GeoTIFF は従来どおり編集できる・大きなオルソの初回 PNG 作成時間と 2 回目のキャッシュ・.qgs の消灯の読み戻し
+  - [ ] APK の増分（release）
   - [ ] ファイルの出し入れ: 「ファイルを追加」（SAF で .shp .dbf .shx を一緒に選べる・名前の衝突・.shp だけの警告）・移して空になった gpkg がツリーと .qgs から消える・
         Drive で shp 一式・`IMG.JPG` が上がり下りし `.kokage` は上がらない
   - [ ] レイヤの書き出し（GDAL）: 各形式を保存ダイアログまで（shp は zip に .cpg 入り）・編集直後の書き出しに直した値が入る・

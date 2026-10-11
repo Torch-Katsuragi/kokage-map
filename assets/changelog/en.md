@@ -2,6 +2,12 @@
 
 ## Next release
 
+### New
+
+- The feature info panel now shows the length of lines and the area (m² and ha) and perimeter of polygons, measured on the WGS84 ellipsoid (layers in projected CRSs too). The multi-selection card shows the total line length and total area
+- New Measure tool (the ruler in the left toolbar). Tap the map to place points and see each segment's distance and the total. Turn on the lower-left button or tap the first point to close it into an area and see area and perimeter. Undo and clear are on the panel. It creates no features and works in 3D
+- The magnifier in the layer list title bar searches the attributes of visible layers, ignoring full-/half-width and hiragana/katakana differences ("12" also finds compartment "１２"). Tap a match to select that feature and move the map to it
+
 ### Fixed
 
 - GeoTIFFs made with "Convert to overlay" from a photo, and those rewritten when repositioning an overlay, are now written with GDAL, the same library QGIS uses. QGIS no longer warns about them (such as "tags are not sorted"). GeoTIFFs made earlier keep working and are rewritten in the new form when repositioned

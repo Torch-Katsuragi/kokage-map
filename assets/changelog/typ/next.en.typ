@@ -10,6 +10,11 @@
 )
 
 #fixes(
+  "New",
+  [Measure tool (distance and area), length/area/perimeter in the info panel, and attribute search from the layer list that jumps to the feature],
+)
+
+#fixes(
   "Fixed",
   [Overlay GeoTIFFs made by the app are now written with GDAL, the same library QGIS uses, so QGIS opens them without warnings],
   [First sync after reinstalling overwrote files present on both sides with older cloud copies; the newer side is now chosen, with a warning],

@@ -120,6 +120,7 @@ Switch between tools using the toolbar on the **left edge** of the map screen:
 | Pen | :icon-edit: | Draw points, lines, and polygons |
 | Select | :icon-select_all: | Select and edit features |
 | GPS Survey | :icon-gps_fixed: | Create points, lines, and polygons using GPS |
+| Measure | :icon-straighten: | Measure distance and area (creates no features) |
 
 When an external device (TruPulse, etc.) is connected, additional tool buttons appear dynamically. When an overlay image is selected, a :icon-transform: transform tool also appears.
 
@@ -153,6 +154,21 @@ While the :icon-edit: Pen tool is active, press the :icon-delete: eraser FAB but
 1. Select the :icon-select_all: Select tool.
 2. Tap a feature on the map to select it. Tap the same location repeatedly to **cycle through overlapping features** in priority order (Point > Line > Polygon).
 3. **Drag** to use lasso selection — all features within the drawn area will be selected.
+
+The info panel of a selected feature shows the length of a line, or the area (m² and ha) and perimeter of a polygon, measured on the WGS84 ellipsoid (layers in projected CRSs too). With several features selected, it shows the total line length and total area.
+
+### Measuring Distance and Area
+
+1. Select the :icon-straighten: Measure tool.
+2. Tap the map to place points. Each segment's distance and the total appear in the panel at the top left.
+3. Press the :icon-pentagon_outlined: button at the bottom left, or tap the first point, to close the shape and see its area and perimeter. Press the button again to go back to distance.
+4. Use :icon-undo: on the panel to remove the last point and :icon-delete: to clear.
+
+Pan and zoom work as usual, including in 3D. Measurements are not saved as features and disappear when you switch tools.
+
+### Searching Attributes
+
+The :icon-search: magnifier in the layer panel's title bar searches the attributes of visible layers. Type a compartment number or name; tap a match to select that feature and move the map to it. Full-/half-width, upper/lower case and hiragana/katakana differences are ignored ("12" also finds "１２"). Exact matches are listed first.
 
 ### Stylus and Touch Input
 

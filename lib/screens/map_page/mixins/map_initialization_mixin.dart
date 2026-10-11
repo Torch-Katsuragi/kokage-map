@@ -40,6 +40,7 @@ import '../../../services/dem_elevation.dart';
 import '../../../services/google_drive/index.dart';
 import '../../../services/qgis/qgs_read_back.dart';
 import '../../../utils/app_logger.dart';
+import '../../../utils/true_heading.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
 import '../../terrain_settings_screen.dart';
 import '../map_page_state_base.dart';
@@ -230,7 +231,11 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
       compassSubscription = compassStream.listen((event) {
         if (!mounted || event.heading == null) return;
-        final h = _smoothHeading(event.heading!);
+        // flutter_compass は磁北基準。地図・扇・案内の矢印は真北基準なので、ここで一度だけ偏角を足す
+        final loc = currentLocation;
+        final h = _smoothHeading(
+          _trueHeading.toTrue(event.heading!, lat: loc?.latitude, lon: loc?.longitude),
+        );
         // 0.5° 未満の揺れは知らせない。平滑化は同じ値に落ち着かないので、そのままだとセンサーの速さ（15〜60Hz）で
         // 聞き手（地図・詳細パネル）が動き続けていた（2026-10-06、置いたままの Fold で CPU 50〜110%）
         final prev = headingNotifier.value;
@@ -243,6 +248,9 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       AppLogger.debug('[ERROR] Compass: 初期化エラー: $e');
     }
   }
+
+  /// コンパスの磁北基準の値を真北基準に直す（偏角は位置と日付で出し直す）
+  final _trueHeading = TrueHeadingConverter();
 
   /// 裏に回ってコンパスを止めているか
   bool _compassStopped = false;

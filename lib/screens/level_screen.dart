@@ -34,6 +34,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 
 import '../i18n/strings.g.dart';
 import '../services/gps_manager_service.dart';
+import '../utils/true_heading.dart';
 
 /// 水準器画面
 class LevelScreen extends StatefulWidget {
@@ -54,6 +55,7 @@ class _LevelScreenState extends State<LevelScreen> {
 
   // コンパス
   double? _heading;
+  final _trueHeading = TrueHeadingConverter();
   double _compassAccuracy = -1; // 15=高精度, 30=中, 45=低, -1=不明
 
   // GPS
@@ -109,8 +111,11 @@ class _LevelScreenState extends State<LevelScreen> {
 
     // コンパスストリーム（マップと同じEMA平滑化ロジック alpha=0.08）
     _compassSubscription = FlutterCompass.events?.listen((event) {
-      final heading = event.heading;
-      if (heading != null) {
+      final magnetic = event.heading;
+      if (magnetic != null) {
+        // 磁北基準 → 真北基準（隣に出す GPS 方位と同じ基準にそろえる）
+        final gps = _gpsManager.currentInfo;
+        final heading = _trueHeading.toTrue(magnetic, lat: gps.latitude, lon: gps.longitude);
         setState(() {
           _heading = _smoothHeading(heading);
           _compassAccuracy = event.accuracy ?? -1;

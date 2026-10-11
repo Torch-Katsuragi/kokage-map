@@ -1,5 +1,9 @@
 # Changelog
 
+## Next release
+
+- GeoTIFFs made with "Convert to overlay" from a photo, and those rewritten when repositioning an overlay, are now written with GDAL, the same library QGIS uses. QGIS no longer warns about them (such as "tags are not sorted"). GeoTIFFs made earlier keep working and are rewritten in the new form when repositioned
+
 ## v0.12.0 — 2026/10/11
 
 ### Open files other than gpkg as they are

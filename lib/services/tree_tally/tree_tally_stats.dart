@@ -141,10 +141,10 @@ class PlotTally {
   }
 }
 
-/// 集計の CSV（UTF-8 BOM 付き、Excel でそのまま開ける）。樹種が [allLabel] の行が標準地全体
+/// 集計の CSV（書くときは [csvBytesForExcel] で BOM を付ける）。樹種が [allLabel] の行が標準地全体
 String plotTallyCsv(Iterable<PlotTally> plots, {required String allLabel}) {
   String f(double? v, int digits) => v == null ? '' : v.toStringAsFixed(digits);
-  final b = StringBuffer('﻿')
+  final b = StringBuffer()
     ..writeln('plot_id,species,area_m2,count,stems_per_ha,basal_area_m2,basal_area_m2_per_ha,'
         'mean_dbh_cm,mean_height_m,top_height_m,dbh_n,height_n,volume_m3,volume_m3_per_ha,volume_n');
   void row(String plot, String sp, PlotSummary s) => b.writeln([

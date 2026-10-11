@@ -16,6 +16,8 @@
 // Root Maps: 属性テーブルコントローラ
 // TrinaGridの状態管理、フィーチャ操作、属性編集を担当
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trina_grid/trina_grid.dart';
@@ -32,7 +34,7 @@ import '../../providers/ui_state_providers.dart';
 import '../../services/coordinate/index.dart';
 import '../../services/qgis_form_logic.dart';
 import '../../services/qgis_form_options.dart';
-import '../../services/table/csv_table.dart' show TableFieldType, csvField;
+import '../../services/table/csv_table.dart' show TableFieldType, csvBytesForExcel, csvField;
 import '../../tutorial/practice_project.dart';
 import '../../tutorial/tutorial.dart';
 import '../../utils/app_logger.dart';
@@ -560,8 +562,8 @@ class AttributeTableController extends ChangeNotifier {
   }
 
 
-  /// CSVエクスポート用のデータを非同期で生成
-  Future<String> exportToCsvAsync() async {
+  /// CSV 書き出しのバイト列（UTF-8 の BOM 付き → [csvBytesForExcel]）
+  Future<Uint8List> exportCsvBytes() async {
     final buffer = StringBuffer();
 
     // ヘッダー行
@@ -578,7 +580,7 @@ class AttributeTableController extends ChangeNotifier {
       );
     }
 
-    return buffer.toString();
+    return csvBytesForExcel(buffer.toString());
   }
 
   // ========== 統計 ==========

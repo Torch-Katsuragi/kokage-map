@@ -16,8 +16,6 @@
 // Root Maps: 属性テーブルウィジェット（リファクタリング版）
 // TrinaGridを使用した属性テーブル表示・編集
 
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -408,7 +406,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   /// Phase 3: CSVエクスポート
   Future<void> _handleCsvExport() async {
     try {
-      final csv = await _controller.exportToCsvAsync();
+      final bytes = await _controller.exportCsvBytes();
       final layerName = widget.layer.layerName;
       final timestamp = DateTime.now()
           .toIso8601String()
@@ -419,7 +417,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       // 保存先を選んでもらう（以前は相対パスに書いていて、Android・web では書けなかった）
       final saved = await FilePicker.saveFile(
         fileName: fileName,
-        bytes: Uint8List.fromList(utf8.encode(csv)),
+        bytes: bytes,
         type: FileType.custom,
         allowedExtensions: ['csv'],
       );

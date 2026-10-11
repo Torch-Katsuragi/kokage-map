@@ -151,6 +151,11 @@ class CsvTable {
 /// CSV の欄 1 つを書く形にする（`,` `"` 改行を含むときだけ `"` で囲み、中の `"` は重ねる）
 String csvField(String s) => (s.contains(',') || s.contains('"') || s.contains('\n')) ? '"${s.replaceAll('"', '""')}"' : s;
 
+/// 書き出す CSV のバイト列: UTF-8 の BOM 付き。BOM が無いと日本語の Windows の Excel が CP932 と見て化ける。
+/// [csv] の先頭に BOM があっても二重にしない
+Uint8List csvBytesForExcel(String csv) =>
+    Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode(csv.startsWith('﻿') ? csv.substring(1) : csv)]);
+
 /// RFC 4180 の CSV を行と欄に分ける（`"` で囲んだ欄の中の `,` `""` 改行も読む）。区切りは `,`
 List<List<String>> parseCsvRecords(String text) {
   final records = <List<String>>[];

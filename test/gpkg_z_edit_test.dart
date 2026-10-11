@@ -134,7 +134,7 @@ void main() {
       expect(_positions(await blobOf(gpkg, 'pts', id)).single.optZ, _dem);
       final added = await gpkg.addPoint('pts', const LatLng(33.8, 135.8));
       final batch = await gpkg.addPointsBatch('pts', [
-        {'point': const LatLng(33.7, 135.7)},
+        (const LatLng(33.7, 135.7), {}),
       ]);
       expect(_positions(await blobOf(gpkg, 'pts', added!)).single.optZ, _dem);
       expect(_positions(await blobOf(gpkg, 'pts', batch.single)).single.optZ, _dem);

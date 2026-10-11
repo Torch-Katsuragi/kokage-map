@@ -368,17 +368,20 @@ class GeoPackageFile {
     Map<String, dynamic>? metadata,
   }) => _features.updateGeometry(tableName, id, toGeoMultiPolygon(rings), name: name, description: description, metadata: metadata);
 
-  /// バッチ処理でポイントを高速追加（形は各要素の 'point'）
-  Future<List<int>> addPointsBatch(String tableName, List<Map<String, dynamic>> pointData) =>
-      _features.addGeometryBatch<LatLng>(tableName, pointData, 'point', toGeoPoint);
+  // 一度に足す（形と属性の組）。形は属性と別に渡す。
+  // 以前は形を属性と同じ表の point・line・rings に入れていて、同名の列が書けなかった
 
-  /// バッチ処理でラインを高速追加（形は各要素の 'line'）
-  Future<List<int>> addLinesBatch(String tableName, List<Map<String, dynamic>> lineData) =>
-      _features.addGeometryBatch<List<LatLng>>(tableName, lineData, 'line', toGeoMultiLine);
+  /// 点を一度に足す
+  Future<List<int>> addPointsBatch(String tableName, List<(LatLng, Map<String, dynamic>)> items) =>
+      _features.addGeometries(tableName, [for (final (p, attrs) in items) (toGeoPoint(p), attrs)]);
 
-  /// バッチ処理でポリゴンを高速追加（形は各要素の 'rings'）
-  Future<List<int>> addPolygonsBatch(String tableName, List<Map<String, dynamic>> polygonData) =>
-      _features.addGeometryBatch<List<List<LatLng>>>(tableName, polygonData, 'rings', toGeoMultiPolygon);
+  /// 線を一度に足す
+  Future<List<int>> addLinesBatch(String tableName, List<(List<LatLng>, Map<String, dynamic>)> items) =>
+      _features.addGeometries(tableName, [for (final (l, attrs) in items) (toGeoMultiLine(l), attrs)]);
+
+  /// 面（外環＋穴）を一度に足す
+  Future<List<int>> addPolygonsBatch(String tableName, List<(List<List<LatLng>>, Map<String, dynamic>)> items) =>
+      _features.addGeometries(tableName, [for (final (rings, attrs) in items) (toGeoMultiPolygon(rings), attrs)]);
 
   /// 形（WGS84）と属性の組を一度に足す（形の種類を問わない。レイヤの移植で使う）
   Future<List<int>> addGeometries(String tableName, List<(geo.Geometry, Map<String, dynamic>)> items) =>

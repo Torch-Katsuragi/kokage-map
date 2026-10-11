@@ -114,7 +114,7 @@ void main() {
         expect((await rtree())[3]!.$1, closeTo(136.0, 1e-6));
 
         final ids = await gpkg.addPointsBatch(table, [
-          {'point': const LatLng(34.1, 136.1), 'name': 'd', if (hasGeomAttr) 'geom': 'geom-d'},
+          (const LatLng(34.1, 136.1), {'name': 'd', if (hasGeomAttr) 'geom': 'geom-d'}),
         ]);
         expect(ids, [4]);
         final d = (await gpkg.getFeature(table, 4))!;

@@ -108,42 +108,38 @@ void main() {
     await g.addLayer('pts', GeometryType.point);
     await g.addAttributeColumns('pts', attrs);
     await g.addPointsBatch('pts', [
-      {'point': const LatLng(33.91, 135.97), 'name': '杉', 'description': '樹高 "高い", 太い', 'h': 21.5, 'n': 3},
-      {'point': const LatLng(33.92, 135.98), 'name': 'hinoki', 'h': null, 'n': 7},
-      {'point': const LatLng(33.93, 135.99), 'name': null, 'description': 'line\nbreak', 'h': 0.125},
+      (const LatLng(33.91, 135.97), {'name': '杉', 'description': '樹高 "高い", 太い', 'h': 21.5, 'n': 3}),
+      (const LatLng(33.92, 135.98), {'name': 'hinoki', 'h': null, 'n': 7}),
+      (const LatLng(33.93, 135.99), {'name': null, 'description': 'line\nbreak', 'h': 0.125}),
     ]);
     await g.addLayer('lns', GeometryType.linestring);
     await g.addAttributeColumns('lns', attrs);
     await g.addLinesBatch('lns', [
-      {
-        'line': const [LatLng(33.90, 135.90), LatLng(33.91, 135.91), LatLng(33.905, 135.93)],
+      (const [LatLng(33.90, 135.90), LatLng(33.91, 135.91), LatLng(33.905, 135.93)], {
         'name': '林道 A',
         'h': 3.0,
-      },
-      {
-        'line': const [LatLng(33.80, 135.80), LatLng(33.81, 135.82)],
+      }),
+      (const [LatLng(33.80, 135.80), LatLng(33.81, 135.82)], {
         'name': 'path',
         'n': 1,
-      },
+      }),
     ]);
     await g.addLayer('pls', GeometryType.polygon);
     await g.addAttributeColumns('pls', attrs);
     await g.addPolygonsBatch('pls', [
-      {
-        'rings': const [
+      (const [
           [LatLng(33.0, 135.0), LatLng(33.0, 135.1), LatLng(33.1, 135.1), LatLng(33.1, 135.0)],
           [LatLng(33.02, 135.02), LatLng(33.08, 135.02), LatLng(33.08, 135.08), LatLng(33.02, 135.08), LatLng(33.02, 135.02)],
-        ],
+        ], {
         'name': '小班 1-い',
         'h': 12.25,
         'n': 10,
-      },
-      {
-        'rings': const [
+      }),
+      (const [
           [LatLng(34.0, 136.0), LatLng(34.1, 136.0), LatLng(34.1, 136.1), LatLng(34.0, 136.0)],
-        ],
+        ], {
         'name': 'b',
-      },
+      }),
     ]);
     await g.flushChanges();
     await g.dispose();

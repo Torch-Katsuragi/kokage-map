@@ -46,7 +46,7 @@ void main() {
     const origin = LatLng(36, 136);
     await gpkg.addPointWithAttributes('pts', origin, {});
     await gpkg.addPointsBatch('pts', [
-      {'point': origin},
+      (origin, {}),
     ]);
     // 1 件目を東へ動かす（VI 系の原点から経度方向に少し）
     final moved = await gpkg.addPointWithAttributes('pts', origin, {});

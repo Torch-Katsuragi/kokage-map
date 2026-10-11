@@ -127,6 +127,7 @@ OFFLINE ────────────────────────
       battery?, connected }
     └ onDisconnect → connected:false に自動セット
   tracks/{uid}/{pushId}/  { pts(encoded polyline), from, to }   # 間引き済み圏外区間
+  pins/{pinId}/   { author, type, lat, lon, text, createdAt, updatedAt, deleted }   # 共有ピン（§11）
 ```
 
 ## 7. セキュリティ（3層）
@@ -222,3 +223,50 @@ Android実機×webのクロスプラットフォームで通し確認済み（�
 > （`tool/rules_test` の「旧版」の節で確認）。ただし旧版のホストのキックは banned を書かないので
 > 再参加を防げず、旧版のゲストは meta を見ないので、終了・失効後も地図に居残って
 > 位置送信の失敗（ログだけ）を繰り返す。旧版の星表示は members の role を信じる。
+
+## 11. 共有ピン（2026-10-11）
+
+ルームのメンバーが地図に立てる、全員に見えるピン。種類は 集合地点（meeting）・危険木（hazard）・
+作業地点（work）・メモ（note）。地図の長押しメニュー（パン・選択ツール。「ここへ案内」と同じ所）に
+「ピンを立てる」が出る。ピンをタップするとカード（立てた人・時刻・一言・「ここへ案内」・書き換える・消す）。
+他のメンバーが立てたピンは通知センターに出し、通知から「ここへ案内」できる（ルーム通知のミュートは今のところ無い）。
+
+| 概念 | ファイル |
+|---|---|
+| モデル・id | `lib/models/party/room_pin.dart`（`RoomPin` / `RoomPinId`） |
+| 送受信の境界・RTDB 実装 | `lib/services/party/pin_source.dart` / `rtdb_pin_source.dart` |
+| 未送信キュー（端末に保存） | `lib/services/party/pin_outbox.dart`（SharedPreferences `party_pin_outbox_v1`） |
+| マージ・復帰時の送信 | `lib/services/party/room_pin_store.dart` |
+| 状態・通知・案内 | `lib/providers/room_pin_providers.dart`（`roomPinsProvider`） |
+| 描画・タップ・長押し | `terrain_map_layer_scene.dart`（2.3）/ `terrain_map_layer.dart` / `room_pin_ui.dart` |
+
+**オフライン（gap backfill と同じ考え）**
+
+- 立てる・書き換える・消すは、まず未送信キューに入れる（1 ピン 1 件。同じ id の後の操作が前を上書き）。
+  `online` のときだけ送り、`online` に戻った瞬間に溜めた分をまとめて送る。
+- キューは端末に保存するので、アプリを落としても残る。いまはルームへの自動再参加が無いので、
+  **同じルームに入り直したとき**に送る。キューは uid とルームコードで分け、26 時間を過ぎたものは捨てる。
+- 地図には「届いたピン」に「まだ送れていない自分の操作」を重ねて見せる（薄く描き、カードに「未送信」）。
+- **冪等**: id は端末で作る（push キーと同じ文字で 20 文字、先頭 8 文字が時刻）。送るのはピン全体の `set` なので、
+  届いたのに返事を受け取る前に落ちても、再送は同じ中身の上書きで終わる。
+- `createdAt` は送った時刻ではなく**立てた時刻**（`.info/serverTimeOffset` でサーバー時刻に寄せ、1 秒手前にする）。
+  圏外で立てたピンが「いま立てた」に見えないようにするため。`updatedAt` はサーバー時刻（`ServerValue.timestamp`）。
+- **競合**: 後勝ち（サーバーに届いた順）。ただし消したピンはルールが戻させないので**消すが勝つ**。
+  拒まれた操作（終了・失効・BAN・消されたピンの書き換え）は送り直しても通らないのでキューから外す。
+  一時的な失敗は残して次の復帰で送る。
+
+**ルール（`database.rules.json` の `pins`）**
+
+- 読めるのはメンバーだけ（room の `.read` を継承）。
+- 書けるのは `members` にいて BAN されておらず、ルームが `active` かつ未失効のときだけ（live/tracks と同じ）。
+- 作成は `author === auth.uid` のときだけ。既存のピンを書けるのは `author` 本人かホスト。
+- `author`・`lat`・`lon`・`createdAt` は以後不変。`createdAt` は作成時「いま以前・26 時間以内」（端末の時計で未来に置けない）。
+- `updatedAt === now`（サーバー時刻を強制）。`type` は 4 種だけ、`text` は 140 文字まで（UTF-16。Dart の `length` と同じ数え方）。
+- `deleted` は一度 true にしたら false に戻せない。null の書き込み（物理削除）は拒む。
+- `$pinId` は `^[0-9A-Za-z_-]{8,32}$`。各ピン `$other: false`。
+- 本数の上限はルールでは掛けられない（RTDB は子の数を数えられない）。App Check と部屋の寿命で抑え、
+  受け側は新しい方から 300 本までしか描かない。
+- purge は部屋ごと消すので、ピンも一緒に消える（purge 側の変更は無い）。
+- エミュレータのテストは `tool/rules_test/rules.test.js` の「共有ピン」の節。
+
+**残り**: ピンを地物（gpkg のレイヤ）として保存する「地物として保存」、ルーム通知のミュート、ピンの一覧パネル。

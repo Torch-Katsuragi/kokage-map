@@ -13,10 +13,11 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-/// web の [Gdal]（gdal3.js）。設計は docs/technical/gdal.md「web」
+/// web の [Gdal]（GDAL 3.13 + PROJ 9.9 の WebAssembly）。設計は docs/technical/gdal.md「web」
 ///
-/// gdal3.js は自前の worker（`web/gdal3/worker.js`）の中で動かす。最初に呼ばれたときに worker を起こし、
-/// WASM（約 28 MB）とデータ（約 12 MB）を取る。gpkg しか開かない利用者には何も読み込まない。
+/// Android の libgdal.so と同じ版・同じドライバの組を emscripten で焼いたもの（`third_party/gdal/build_web.sh`）を、
+/// 自前の worker（`web/gdal3/worker.js`）の中で動かす。最初に呼ばれたときに worker を起こし、
+/// WASM とデータ（GDAL_DATA・proj.db）を取る。gpkg しか開かない利用者には何も読み込まない。
 ///
 /// ファイルの受け渡し:
 /// - 入力: [path] と同じフォルダの「同じ名前.何か」（shp の付属一式、`.aux.xml` `.ovr` `.tfw` …）を
@@ -43,11 +44,9 @@ import '../fs/k_file_system.dart';
 import '../fs/k_file_system_web.dart';
 import 'gdal.dart';
 
-/// 置いている gdal3.js の版（`web/gdal3/<版>/`、`tool/web/fetch_gdal3.sh` の VERSION と揃える）
-const kGdal3Version = '2.8.1';
-
-/// gdal3.js 2.8.1 に入っている GDAL の版。`GDALVersionInfo` が WASM から書き出されていないので、版と一緒に持つ
-const _gdalRelease = '3.8.4';
+/// 置いている WASM の組（`web/gdal3/<組>/`）。`third_party/gdal/build_web.sh` の BUILD・
+/// `tool/web/fetch_gdal_wasm.sh` の BUILD と揃える。GDAL の版そのものは [version] が WASM から引く
+const kGdalWasmBuild = '3.13.3-1';
 
 Gdal createGdal() => GdalWeb.instance;
 
@@ -65,10 +64,7 @@ class GdalWeb implements Gdal {
   Duration? loadTime;
 
   @override
-  Future<String> version() async {
-    await _ensure();
-    return _gdalRelease;
-  }
+  Future<String> version() async => ((await _call('version', const {})) as JSString).toDart;
 
   @override
   Future<Map<String, dynamic>> rasterInfo(String path, {List<String> args = const []}) async =>
@@ -185,17 +181,17 @@ class GdalWeb implements Gdal {
     worker.onmessage = ((web.MessageEvent e) => _onMessage(e.data as JSObject)).toJS;
     worker.onerror = ((web.Event e) {
       final message = e.isA<web.ErrorEvent>() ? (e as web.ErrorEvent).message : 'worker の読み込みに失敗';
-      _fail('gdal3.js: $message（web/gdal3/ が配られているか。tool/web/fetch_gdal3.sh）');
+      _fail('GDAL: $message（web/gdal3/ が配られているか。tool/web/fetch_gdal_wasm.sh）');
     }).toJS;
     _worker = worker;
     try {
-      await _post('init', {'base': base.resolve('gdal3/$kGdal3Version/').toString().toJS});
+      await _post('init', {'base': base.resolve('gdal3/$kGdalWasmBuild/').toString().toJS});
     } catch (e) {
       _reset();
       rethrow;
     }
     loadTime = sw.elapsed;
-    AppLogger.debug('[Gdal] gdal3.js $kGdal3Version（GDAL $_gdalRelease）を読み込んだ: ${sw.elapsedMilliseconds} ms');
+    AppLogger.debug('[Gdal] GDAL（web/gdal3/$kGdalWasmBuild）を読み込んだ: ${sw.elapsedMilliseconds} ms');
   }
 
   Future<JSAny?> _call(String op, Map<String, JSAny?> params) async {
@@ -210,7 +206,7 @@ class GdalWeb implements Gdal {
 
   Future<JSAny?> _post(String op, Map<String, JSAny?> params) async {
     final worker = _worker;
-    if (worker == null) throw GdalException('gdal3.js が動いていない');
+    if (worker == null) throw GdalException('GDAL の worker が動いていない');
     final id = _nextId++;
     final msg = JSObject()
       ..['id'] = id.toJS
@@ -228,7 +224,7 @@ class GdalWeb implements Gdal {
     final error = (reply['error'] as JSString?)?.toDart ?? '不明なエラー';
     if ((reply['fatal'] as JSBoolean?)?.toDart ?? false) {
       // WASM が abort した（メモリ不足など）。待っている呼び出しも落とし、次の呼び出しで読み込み直す
-      _fail('gdal3.js が停止した: $error');
+      _fail('GDAL が停止した: $error');
     }
     throw GdalException(error);
   }

@@ -13,10 +13,10 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// GDAL の窓口。Android は FFI（libgdal.so）、web は gdal3.js。
+// GDAL の窓口。Android は FFI（libgdal.so）、web は同じ GDAL を WebAssembly に焼いたもの。
 // 設計は docs/technical/gdal.md
 //
-// QGIS と同じ部品で読むために、GDAL のコマンドラインユーティリティ（gdal_utils.h の C API／gdal3.js の同名関数）を
+// QGIS と同じ部品で読むために、GDAL のコマンドラインユーティリティ（gdal_utils.h の C API、web も同じ関数を WASM から）を
 // 引数の文字列でそのまま呼ぶ形にしている。引数は ogr2ogr / gdalwarp などのコマンドと同じ書き方。
 // パスは KFileSystem（`fs`）のパス。web の実装は OPFS とのあいだで中身を受け渡す。
 
@@ -29,7 +29,7 @@ class GdalException implements Exception {
 }
 
 abstract class Gdal {
-  /// GDAL の版（`GDALVersionInfo("RELEASE_NAME")`）。初回は読み込みを待つ（web は gdal3.js の取得）
+  /// GDAL の版（`GDALVersionInfo("RELEASE_NAME")`）。初回は読み込みを待つ（web は WASM の取得）
   Future<String> version();
 
   /// `gdalinfo -json <args> <path>` の JSON

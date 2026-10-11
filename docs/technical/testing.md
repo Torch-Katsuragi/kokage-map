@@ -157,8 +157,8 @@ dart run sqflite_common_ffi_web:setup
 
 ### web の GDAL に必要なファイル
 
-gdal3.js（40 MB）はリポジトリに入れていない。GDAL を使う確認の前に `bash tool/web/fetch_gdal3.sh` を回してからビルドする
-（[[gdal#web（gdal3.js）]]。コンソールから呼ぶ口 `window.kokageGdal` は `--dart-define=K_LOG=true` のビルドに出る）。
+web の GDAL（WASM、24 MB）はリポジトリに入れていない。GDAL を使う確認の前に `bash tool/web/fetch_gdal_wasm.sh` を回すか、`third_party/gdal/build_web.sh` で焼いてからビルドする
+（[[gdal#web（WASM）]]。コンソールから呼ぶ口 `window.kokageGdal` は `--dart-define=K_LOG=true` のビルドに出る）。
 
 ### フォルダを開く経路を、OSのダイアログ無しで試す
 

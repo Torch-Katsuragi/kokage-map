@@ -44,7 +44,7 @@
 
 - [ ] debug ビルドの App Check デバッグトークン（logcat に出る）を Firebase コンソールに登録（Pixel 9 は 2026-10-09 登録済み。Fold・メインPC側の端末が残り）
 - [ ] App Check の指標で web・Android とも検証済みの要求が来ているのを確かめてから、RTDB を「強制」に
-- [ ] GDAL（web）を載せて最初のデプロイの後: `/gdal3/2.8.1/gdal3WebAssembly.{wasm,data}` が圧縮（`content-encoding`）されて返るか、
+- [ ] GDAL（web）を載せて最初のデプロイの後: `/gdal3/3.13.3-1/gdal.{wasm,data}` が圧縮（`content-encoding`）されて返るか、
       `Cache-Control: immutable` が付くかを見る。`.data` が素の 11.6 MB なら対策を考える（[[docs/technical/gdal#未決・見張り]]）
 - [ ] 本番でログインして Drive 一覧・同期・App Check に CSP 違反が出ないのを確かめてから、`Content-Security-Policy-Report-Only` を強制に（ハッシュの作り直しは [[docs/technical/web-hosting]]）
 - [ ] release で外部インテントの `route` が効かないこと・共有リンクの確認ダイアログを実機で確認

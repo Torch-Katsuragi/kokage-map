@@ -348,7 +348,7 @@ class WebFileSystem implements KFileSystem {
   }
 
   /// [path] のファイルを `File` のまま渡す（中身を読まない）。無ければ null。
-  /// GDAL（gdal3.js の worker）へ渡すとき、中身をコピーせずに済ませるため
+  /// GDAL（web/gdal3/worker.js）へ渡すとき、中身をコピーせずに済ませるため
   Future<web.File?> fileObject(String path) => _file(path);
 
   /// [path] のファイルの中身（`File`）。無ければ null

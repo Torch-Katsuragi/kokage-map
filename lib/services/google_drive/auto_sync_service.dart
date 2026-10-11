@@ -242,9 +242,11 @@ class AutoSyncService {
               : SyncStatus.error;
           if (result.success) {
             AppLogger.debug(
-              '[AutoSync] ${node.name}: pulled ${result.downloadedCount} file(s)',
+              '[AutoSync] ${node.name}: pulled ${result.downloadedCount} file(s) '
+              '(unchanged ${result.skippedCount})',
             );
-            await onTreeRefreshNeeded?.call(node);
+            // 手元が何も変わらなければツリーを読み直さない（読み込み済みレイヤのフィーチャを全部読み直すので重い）
+            if (result.changedLocal) await onTreeRefreshNeeded?.call(node);
           } else {
             AppLogger.debug(
               '[AutoSync] ${node.name}: pull failed - ${result.errorMessage}',
@@ -345,7 +347,11 @@ class AutoSyncService {
         if (result.conflicts.isNotEmpty) {
           AppLogger.debug('[AutoSync] ${node.name}: 行の衝突 ${result.conflicts.length} 件（この端末の値を残した）: ${result.conflicts}');
         }
-        if (result.mergedCount > 0 || result.failedMerges.isNotEmpty) onMerged?.call(node, result);
+        if (result.mergedCount > 0 || result.failedMerges.isNotEmpty || result.failedUploads.isNotEmpty) {
+          onMerged?.call(node, result);
+        }
+        // 置き場所が見つからず上げられなかったものは、次の周期でもう一度（状態は衝突として人の目に入れる）
+        if (result.failedUploads.isNotEmpty) hasRealConflict = true;
         if (result.failedMerges.isNotEmpty) {
           hasRealConflict = true;
           for (final path in result.failedMerges) {
@@ -354,7 +360,7 @@ class AutoSyncService {
           }
           AppLogger.debug('[AutoSync] ${node.name}: 行単位で合わせられなかった ${result.failedMerges}');
         }
-        if (needsTreeRefresh) await onTreeRefreshNeeded?.call(node);
+        if (needsTreeRefresh && result.changedLocal) await onTreeRefreshNeeded?.call(node);
       } else {
         AppLogger.debug('[AutoSync] ${node.name}: auto-merge failed - ${result.errorMessage}');
       }

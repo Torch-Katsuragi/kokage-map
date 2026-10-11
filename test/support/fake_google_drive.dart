@@ -6,6 +6,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 import 'package:root_maps/services/google_drive/google_drive_service.dart';
@@ -37,8 +38,12 @@ class FakeDriveItem {
         mimeType: isFolder ? _folderMime : 'application/octet-stream',
         modifiedTime: modifiedTime,
         size: isFolder ? null : '${bytes.length}',
+        md5Checksum: isFolder || !withMd5 ? null : md5.convert(bytes).toString(),
         parents: parentId == null ? null : [parentId!],
       );
+
+  /// false にすると md5Checksum を返さない（Google ドキュメントなど指紋の無いもの・古い応答を模す）
+  static bool withMd5 = true;
 }
 
 class FakeGoogleDrive implements GoogleDriveService {
@@ -131,9 +136,13 @@ class FakeGoogleDrive implements GoogleDriveService {
     return childrenOf(parentId).map((i) => i.toFile()).toList();
   }
 
+  /// テスト用: この名前のサブフォルダは見つけることも作ることもできない（権限・電波など）
+  final Set<String> failFolderNames = {};
+
   @override
   Future<drive.File?> getOrCreateSubFolder(String parentId, String folderName) async {
     _count('getOrCreateSubFolder');
+    if (failFolderNames.contains(folderName)) return null;
     final existing = findByName(parentId, folderName);
     if (existing != null && existing.isFolder) return existing.toFile();
     final id = _newId();

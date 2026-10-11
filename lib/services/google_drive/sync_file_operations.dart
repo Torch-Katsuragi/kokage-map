@@ -16,6 +16,8 @@
 // Root Maps: 同期ファイル操作ヘルパー
 // 手元と Drive のファイルの列挙、パスの変換、Drive フォルダの解決、ダウンロード、並列実行を担当
 
+import 'package:crypto/crypto.dart';
+import 'package:googleapis/drive/v3.dart' as gdrive;
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
@@ -165,6 +167,23 @@ class SyncFileOperations {
       localFiles[entry.relativePath] = modified;
     }
     return localFiles;
+  }
+
+  /// 手元の [localFilePath] が Drive の [remote] と同じ中身か。
+  ///
+  /// 大きさを先に比べ、同じときだけ md5 を取る（Drive が md5 を返さないもの・手元に無いものは false）。
+  /// 中身を丸ごと読むので、帳簿で判定できないときだけ使う
+  static Future<bool> sameContentAsDrive(String localFilePath, gdrive.File remote) async {
+    final remoteMd5 = remote.md5Checksum;
+    final remoteSize = int.tryParse(remote.size ?? '');
+    if (remoteMd5 == null || remoteSize == null) return false;
+    try {
+      if (await fs.length(localFilePath) != remoteSize) return false;
+      return md5.convert(await fs.readAsBytes(localFilePath)).toString() == remoteMd5;
+    } on Object catch (e) {
+      AppLogger.debug('[SyncEngine] 手元の指紋を取れない: $localFilePath $e');
+      return false;
+    }
   }
 
   /// Drive にあるフォルダ（[folderPaths]）のうち、手元に無いものを作る。作った数を返す

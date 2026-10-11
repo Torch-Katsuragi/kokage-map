@@ -70,7 +70,7 @@ class SyncPullHandler {
 
       // Driveに存在する全サブフォルダをローカルに作成（空フォルダ含む）。
       // ファイルの置き場所はどれもこのどれか（か根）なので、並列DL中にフォルダを作り合わない
-      await _fileOps.ensureLocalDirs(localPath, tree.folderPaths);
+      final createdFolders = await _fileOps.ensureLocalDirs(localPath, tree.folderPaths);
 
       if (filesToDownload.isEmpty) {
         await _kmetaService.setDriveSync(
@@ -79,7 +79,7 @@ class SyncPullHandler {
           driveFolderName: folderInfo.name,
           lastSynced: DateTime.now(),
         );
-        return SyncResult.success(downloadedCount: 0);
+        return SyncResult.success(downloadedCount: 0, createdFolderCount: createdFolders);
       }
 
       AppLogger.debug(
@@ -87,13 +87,24 @@ class SyncPullHandler {
       );
 
       int downloadedCount = 0;
-      int skippedCount = 0;
+      int skippedCount = 0; // 変わっていないので落とさなかった数
+      int failedCount = 0; // 落とそうとして落とせなかった数
       final syncedFiles = <String, KMetaSyncFile>{};
+      final previous = reuse?.meta.sync.files ?? (await _kmetaService.getMeta(localPath)).sync.files;
 
       await SyncFileOperations.runParallel(
         filesToDownload.map((driveEntry) => () async {
           final driveFile = driveEntry.file;
           final localFilePath = _fileOps.relativePathToLocalPath(localPath, driveEntry.relativePath);
+
+          final unchanged = await _unchangedSince(driveEntry, localFilePath, previous[driveEntry.relativePath]);
+          if (unchanged != null) {
+            skippedCount++;
+            syncedFiles[driveEntry.relativePath] = unchanged.record;
+            // 帳簿で判定できず中身で同じと分かったもの：この時点を base にする（次から行単位で合わせられる）
+            if (unchanged.byContent) await SyncBaseStore.saveBase(localPath, driveEntry.relativePath);
+            return;
+          }
 
           if (await _fileOps.downloadReplacing(driveFile.id!, localFilePath)) {
             downloadedCount++;
@@ -101,10 +112,11 @@ class SyncPullHandler {
               driveFileId: driveFile.id!,
               lastSyncedTime: DateTime.now(),
               remoteModifiedTime: driveFile.modifiedTime,
+              remoteMd5: driveFile.md5Checksum,
             );
             await SyncBaseStore.saveBase(localPath, driveEntry.relativePath);
           } else {
-            skippedCount++;
+            failedCount++;
           }
         }),
         maxConcurrency: _downloadConcurrency,
@@ -124,12 +136,14 @@ class SyncPullHandler {
       await _fileOps.removeEmptyLocalDirs(localPath, tree.folderPaths.toSet());
 
       AppLogger.debug(
-        '[SyncEngine] Pull完了: $downloadedCount downloaded, $deletedCount deleted, $skippedCount skipped',
+        '[SyncEngine] Pull完了: $downloadedCount downloaded, $deletedCount deleted, '
+        '$skippedCount unchanged, $failedCount failed',
       );
 
-      if (downloadedCount == 0 && filesToDownload.isNotEmpty) {
+      // 落とそうとして 1 つも落ちなかったときだけ失敗（変わっていないものしか無い pull は成功）
+      if (downloadedCount == 0 && failedCount > 0) {
         return SyncResult.failure(
-          t.services.downloadFailed(count: skippedCount.toString()),
+          t.services.downloadFailed(count: failedCount.toString()),
         );
       }
 
@@ -145,11 +159,50 @@ class SyncPullHandler {
         downloadedCount: downloadedCount,
         skippedCount: skippedCount,
         deletedCount: deletedCount,
+        createdFolderCount: createdFolders,
       );
     } catch (e, stack) {
       AppLogger.debug('[SyncEngine] Pullエラー: $e\n$stack');
       return SyncResult.failure(t.services.downloadError(error: e.toString()));
     }
+  }
+
+  /// 手元がもう Drive と同じなら、帳簿に書く記録を返す（落とさない）。落とすなら null。
+  ///
+  /// 以前は pull のたびに Drive の全ファイルを落とし直していた（1 つ変わっただけでも全部）。
+  /// 1. 帳簿に同じ ID の記録があり、Drive がその後変わっておらず（時刻か md5）、手元もその後触っていない
+  /// 2. 帳簿が無い・合わなくても、大きさと md5 が Drive と同じ（帳簿を失くした端末・別経路で置いたもの）
+  static Future<({KMetaSyncFile record, bool byContent})?> _unchangedSince(
+    DriveFileEntry entry,
+    String localFilePath,
+    KMetaSyncFile? synced,
+  ) async {
+    final file = entry.file;
+    final local = await fs.lastModified(localFilePath);
+    if (local == null) return null; // 手元に無い
+    final at = synced?.lastSyncedTime;
+    if (synced != null &&
+        at != null &&
+        synced.driveFileId == file.id &&
+        !local.isAfter(at) &&
+        (file.modifiedTime == null || !synced.isRemoteNewer(file.modifiedTime!, md5: file.md5Checksum))) {
+      return (
+        record: synced.withoutMove().copyWith(remoteModifiedTime: file.modifiedTime, remoteMd5: file.md5Checksum),
+        byContent: false,
+      );
+    }
+    if (await SyncFileOperations.sameContentAsDrive(localFilePath, file)) {
+      return (
+        record: KMetaSyncFile(
+          driveFileId: file.id!,
+          lastSyncedTime: DateTime.now(),
+          remoteModifiedTime: file.modifiedTime,
+          remoteMd5: file.md5Checksum,
+        ),
+        byContent: true,
+      );
+    }
+    return null;
   }
 
   /// Driveフォルダをローカルにクローン

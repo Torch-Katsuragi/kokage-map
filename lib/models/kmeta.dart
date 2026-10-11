@@ -397,24 +397,36 @@ class KMetaSyncFile {
   /// 以前は自動同期がリモートの移動と見て、手元の改名を元に戻していた（2026-09-29）
   final String? movedFrom;
 
+  /// 最後に同期したときの Drive 側の `md5Checksum`（中身の指紋）。
+  /// Drive の時刻が進んでいても指紋が同じなら中身は変わっていない（同じ中身の上げ直し）。古い帳簿には無い
+  final String? remoteMd5;
+
   const KMetaSyncFile({
     required this.driveFileId,
     this.lastSyncedTime,
     this.remoteModifiedTime,
     this.movedFrom,
+    this.remoteMd5,
   });
 
   /// [movedFrom] を外したもの（移動が Drive に届いたあと）
   KMetaSyncFile withoutMove() => movedFrom == null
       ? this
-      : KMetaSyncFile(driveFileId: driveFileId, lastSyncedTime: lastSyncedTime, remoteModifiedTime: remoteModifiedTime);
+      : KMetaSyncFile(
+          driveFileId: driveFileId,
+          lastSyncedTime: lastSyncedTime,
+          remoteModifiedTime: remoteModifiedTime,
+          remoteMd5: remoteMd5,
+        );
 
   /// Drive 上のパス [drivePath] が、この端末で動かす前の場所か（＝ローカルの移動がまだ Drive に届いていない）
   bool isPendingLocalMoveFrom(String drivePath) => movedFrom != null && movedFrom == drivePath;
 
   /// 最後の同期より後に Drive 側が変わったか（Drive の時刻どうしで比べる）。
-  /// [remoteModifiedTime] の無い古い帳簿は、以前どおり [lastSyncedTime] と比べる
-  bool isRemoteNewer(DateTime driveModified) {
+  /// [remoteModifiedTime] の無い古い帳簿は、以前どおり [lastSyncedTime] と比べる。
+  /// Drive の指紋 [md5] と帳簿の [remoteMd5] がそろって同じなら、時刻が進んでいても変わっていない
+  bool isRemoteNewer(DateTime driveModified, {String? md5}) {
+    if (md5 != null && remoteMd5 != null && md5 == remoteMd5) return false;
     final r = remoteModifiedTime;
     if (r != null) return driveModified.isAfter(r);
     final l = lastSyncedTime;
@@ -438,6 +450,7 @@ class KMetaSyncFile {
           ? DateTime.tryParse(json['remoteModifiedTime'] as String)
           : null,
       movedFrom: json['movedFrom'] as String?,
+      remoteMd5: json['remoteMd5'] as String?,
     );
   }
 
@@ -451,6 +464,7 @@ class KMetaSyncFile {
       json['remoteModifiedTime'] = remoteModifiedTime!.toUtc().toIso8601String();
     }
     if (movedFrom != null) json['movedFrom'] = movedFrom;
+    if (remoteMd5 != null) json['remoteMd5'] = remoteMd5;
     return json;
   }
 
@@ -460,12 +474,14 @@ class KMetaSyncFile {
     DateTime? lastSyncedTime,
     DateTime? remoteModifiedTime,
     String? movedFrom,
+    String? remoteMd5,
   }) {
     return KMetaSyncFile(
       driveFileId: driveFileId ?? this.driveFileId,
       lastSyncedTime: lastSyncedTime ?? this.lastSyncedTime,
       remoteModifiedTime: remoteModifiedTime ?? this.remoteModifiedTime,
       movedFrom: movedFrom ?? this.movedFrom,
+      remoteMd5: remoteMd5 ?? this.remoteMd5,
     );
   }
 }

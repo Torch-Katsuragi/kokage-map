@@ -84,10 +84,11 @@ class SyncSnapshot {
       AppLogger.debug('[SyncSnapshot] Driveのフォルダを取れない: $driveId');
       return (snapshot: null, failure: FolderSyncStatus.error);
     }
+    final adopted = await _adoptIdentical(localPath, meta, tree, localFiles, kmetaService: kmetaService, fileOps: fileOps);
     return (
       snapshot: SyncSnapshot._(
         localPath: localPath,
-        meta: meta,
+        meta: adopted,
         driveId: driveId,
         folderInfo: folderInfo,
         drive: tree,
@@ -97,16 +98,55 @@ class SyncSnapshot {
     );
   }
 
+  /// 帳簿に無いのに手元と Drive の同じパスにあり、中身（大きさと md5）も同じものを、同期済みとして帳簿に書く。
+  /// 書いたあとのフォルダ設定を返す（無ければ [meta] のまま）。
+  ///
+  /// 帳簿は端末の私有領域にあるので、アプリのデータを消す・入れ直すと失くなる。フォルダは共有領域に残るので、
+  /// 次の同期では全部が「両方にある」になる。同じ中身のものは何もせずに同期済みにする（2026-10-11）
+  static Future<KMeta> _adoptIdentical(
+    String localPath,
+    KMeta meta,
+    DriveTree tree,
+    Map<String, DateTime> localFiles, {
+    required KMetaService kmetaService,
+    required SyncFileOperations fileOps,
+  }) async {
+    final ledger = meta.sync.files;
+    final ledgerIds = {for (final f in ledger.values) f.driveFileId};
+    final adopted = <String, KMetaSyncFile>{};
+    for (final e in tree.files) {
+      final path = e.relativePath;
+      if (!localFiles.containsKey(path) || ledger.containsKey(path) || ledgerIds.contains(e.file.id)) continue;
+      if (e.file.id == null) continue;
+      if (!await SyncFileOperations.sameContentAsDrive(fileOps.relativePathToLocalPath(localPath, path), e.file)) {
+        continue;
+      }
+      adopted[path] = KMetaSyncFile(
+        driveFileId: e.file.id!,
+        lastSyncedTime: DateTime.now(),
+        remoteModifiedTime: e.file.modifiedTime,
+        remoteMd5: e.file.md5Checksum,
+      );
+      await SyncBaseStore.saveBase(localPath, path);
+    }
+    if (adopted.isEmpty) return meta;
+    AppLogger.debug('[SyncSnapshot] 帳簿に無いが中身が同じもの ${adopted.length} 件を同期済みにした: ${adopted.keys.toList()}');
+    await kmetaService.setDriveSync(localPath, files: {...ledger, ...adopted});
+    return kmetaService.getMeta(localPath);
+  }
+
   // ========== 突き合わせ ==========
 
   late final _Diff _diff = _Diff.of(_ledger, drive, localFiles);
 
   /// 同期状態の詳細
   Future<FolderSyncStatusDetail> toStatusDetail(SyncFileOperations fileOps) async {
-    final localAdded = _diff.localOnly.keys.toList();
+    // 両方にあるもの（帳簿に無く中身が違う）は、両側の追加として数える（＝衝突。自動同期は決めずに人に委ねる）
+    final onBoth = [for (final b in _diff.onBoth) b.onDrive.relativePath];
+    final localAdded = [..._diff.localOnly.keys, ...onBoth];
     final localDeleted = <String>[];
     final localModified = <String>[];
-    final remoteAdded = [for (final e in _diff.driveOnly) e.relativePath];
+    final remoteAdded = [for (final e in _diff.driveOnly) e.relativePath, ...onBoth];
     final remoteDeleted = <String>[];
     final remoteModified = <String>[];
     final remoteMoved = <FileChangeInfo>[];
@@ -149,7 +189,12 @@ class SyncSnapshot {
     final hasLocal = localAdded.isNotEmpty || localDeleted.isNotEmpty || localModified.isNotEmpty;
     final hasRemote =
         remoteAdded.isNotEmpty || remoteDeleted.isNotEmpty || remoteModified.isNotEmpty || remoteMoved.isNotEmpty;
-    final status = neverSynced
+    // 一度も同期していない連携先は Drive から取り込む。ただし手元にあるもの（Drive に無いもの・中身の違うもの）が
+    // 残っていれば、取り込み（pull）は手元を消す・上書きするので、ふつうに判定する（両側にあれば衝突）。
+    // 帳簿を失くした端末でこうなる（2026-10-11）
+    // 手元にだけある `.qgs` はリンクしたときに書いたもの（Drive から落とすと置き換わる）なので数えない
+    final keepsLocal = onBoth.isNotEmpty || _diff.localOnly.keys.any((x) => !SyncBaseStore.isQgs(x));
+    final status = neverSynced && !keepsLocal
         ? FolderSyncStatus.remoteChanges
         : hasLocal && hasRemote
             ? FolderSyncStatus.conflict
@@ -240,6 +285,7 @@ class SyncSnapshot {
           remoteModifiedTime: item.onDrive?.file.modifiedTime,
           moveInfo: moveInfo,
           driveFileId: item.synced.driveFileId,
+          remoteMd5: item.onDrive?.file.md5Checksum,
           mergeable: mergeable,
         ));
       }
@@ -253,6 +299,19 @@ class SyncSnapshot {
         ));
       }
 
+      for (final b in _diff.onBoth) {
+        entries.add(MergeFileEntry(
+          relativePath: b.onDrive.relativePath,
+          localChange: MergeChangeType.added,
+          remoteChange: MergeChangeType.added,
+          localModifiedTime: b.localModified,
+          remoteModifiedTime: b.onDrive.file.modifiedTime,
+          driveFileId: b.onDrive.file.id,
+          remoteMd5: b.onDrive.file.md5Checksum,
+          onBothWithoutLedger: true,
+        ));
+      }
+
       for (final driveEntry in _diff.driveOnly) {
         AppLogger.debug('  リモート追加検出: ${driveEntry.relativePath} (id: ${driveEntry.file.id})');
         entries.add(MergeFileEntry(
@@ -261,6 +320,7 @@ class SyncSnapshot {
           remoteChange: MergeChangeType.added,
           remoteModifiedTime: driveEntry.file.modifiedTime,
           driveFileId: driveEntry.file.id,
+          remoteMd5: driveEntry.file.md5Checksum,
         ));
       }
     } catch (e) {
@@ -303,16 +363,16 @@ class _LedgerItem {
   /// 移動として扱うので、手元の変更は見ない
   final bool consumedByMove;
 
-  /// 最後の同期より後に Drive 側が変わったか
+  /// 最後の同期より後に Drive 側が変わったか（時刻が進んでいても md5 が帳簿と同じなら変わっていない）
   bool get remoteNewer {
     final t = onDrive?.file.modifiedTime;
-    return t != null && synced.isRemoteNewer(t);
+    return t != null && synced.isRemoteNewer(t, md5: onDrive?.file.md5Checksum);
   }
 }
 
 /// 帳簿・Drive・手元の突き合わせ
 class _Diff {
-  _Diff(this.ledger, this.localOnly, this.driveOnly);
+  _Diff(this.ledger, this.localOnly, this.driveOnly, this.onBoth);
 
   /// 帳簿にあるもの（旧版の `.kmeta.json` の記録は除く）
   final List<_LedgerItem> ledger;
@@ -322,6 +382,10 @@ class _Diff {
 
   /// Drive にだけあるもの（帳簿に無い）
   final List<DriveFileEntry> driveOnly;
+
+  /// 帳簿に無いのに手元と Drive の同じパスにあるもの（中身が違う。同じものは [SyncSnapshot._adoptIdentical] が帳簿に入れた）。
+  /// どちらが新しいかは分からない
+  final List<({DriveFileEntry onDrive, DateTime localModified})> onBoth;
 
   factory _Diff.of(Map<String, KMetaSyncFile> ledger, DriveTree tree, Map<String, DateTime> localFiles) {
     final onDriveById = tree.byId();
@@ -354,15 +418,26 @@ class _Diff {
       ));
     }
 
-    final driveOnly = [
-      for (final e in tree.files)
-        // 移動したものの行き先・帳簿に ID かパスがあるものは除く
-        if (!movedDrivePaths.contains(e.relativePath) &&
-            !movedIds.contains(e.file.id) &&
-            !ledgerIds.contains(e.file.id) &&
-            !ledger.containsKey(e.relativePath))
-          e,
-    ];
-    return _Diff(items, local, driveOnly);
+    final driveOnly = <DriveFileEntry>[];
+    final onBoth = <({DriveFileEntry onDrive, DateTime localModified})>[];
+    for (final e in tree.files) {
+      // 移動したものの行き先・帳簿に ID かパスがあるものは除く
+      if (movedDrivePaths.contains(e.relativePath) ||
+          movedIds.contains(e.file.id) ||
+          ledgerIds.contains(e.file.id) ||
+          ledger.containsKey(e.relativePath)) {
+        continue;
+      }
+      // 手元の同じパスにもある → 1 件の「両方にある」にまとめる。
+      // 以前は「手元の追加」と「Drive の追加」の 2 件に分かれ、ダイアログの選択がパスで 1 つに潰れて
+      // 既定がクラウドになり、手元を消してから落としていた（2026-10-11、Pixel 9 で新しい gpkg 3 つと .qgs を古い版で上書き）
+      final localModified = local.remove(e.relativePath);
+      if (localModified != null) {
+        onBoth.add((onDrive: e, localModified: localModified));
+      } else {
+        driveOnly.add(e);
+      }
+    }
+    return _Diff(items, local, driveOnly, onBoth);
   }
 }

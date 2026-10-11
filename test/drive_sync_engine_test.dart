@@ -102,11 +102,22 @@ void main() {
     });
 
     test('連携しただけで一度も同期していなければ remoteChanges', () async {
-      put('x.jpg', 1);
+      await drive.uploadBytes(jpg(1), 'r.jpg', rootId);
       await KMetaService.instance.setDriveSync(a, driveId: rootId);
       final d = await engine.checkSyncStatusDetail(a);
       expect(d.status, FolderSyncStatus.remoteChanges);
+      expect(d.remoteAddedFiles, contains('r.jpg'));
+    });
+
+    // 帳簿を失くした端末で、取り込み（pull）が手元にだけあるものを消さないように（2026-10-11）
+    test('一度も同期していなくても、手元にだけあるものがあれば取り込みにしない', () async {
+      put('x.jpg', 1);
+      await drive.uploadBytes(jpg(2), 'r.jpg', rootId);
+      await KMetaService.instance.setDriveSync(a, driveId: rootId);
+      final d = await engine.checkSyncStatusDetail(a);
+      expect(d.status, FolderSyncStatus.conflict);
       expect(d.localAddedFiles, contains('x.jpg'));
+      expect(d.remoteAddedFiles, contains('r.jpg'));
     });
 
     test('この端末の追加・変更・削除', () async {

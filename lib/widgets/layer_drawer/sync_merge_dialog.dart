@@ -78,6 +78,12 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
         _choices[entry.relativePath] = MergeChoice.merge;
         continue;
       }
+      if (entry.onBothWithoutLedger) {
+        // 帳簿に無く両方にあって中身が違う: モードに関わらず更新日時が新しい側（分からなければ端末）。
+        // 黙ってクラウドにしない（2026-10-11、新しい gpkg を古いクラウドの版で上書きした）
+        _choices[entry.relativePath] = entry.newerSide;
+        continue;
+      }
       // モードに応じて初期値を設定
       // アップロード: ローカル変更があればローカル、なければリモート
       // ダウンロード: リモート変更があればリモート、なければローカル
@@ -216,6 +222,34 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
         ],
       ),
     );
+    if (entry.onBothWithoutLedger) {
+      // 目に付くように、どちらが新しいか確かめてほしい旨を行の下に出す
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          row,
+          Padding(
+            padding: const EdgeInsets.only(left: 18, bottom: 6),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber, size: 14, color: Colors.amber),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    t.layerDrawer.folder.onBothNoLedger(
+                      side: entry.newerSide == MergeChoice.remote
+                          ? t.layerDrawer.folder.cloudLabel
+                          : t.layerDrawer.folder.localLabel,
+                    ),
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
     if (!entry.mergeable) return row;
 
     // 両方が変えた gpkg: 行単位で合わせる選択肢（既定）

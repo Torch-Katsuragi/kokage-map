@@ -239,6 +239,7 @@ class SyncPushHandler {
               driveFileId: result.id!,
               lastSyncedTime: DateTime.now(),
               remoteModifiedTime: result.modifiedTime,
+              remoteMd5: result.md5Checksum,
             );
             await SyncBaseStore.saveBase(projectPath, relativePath);
           },

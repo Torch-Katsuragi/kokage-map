@@ -65,6 +65,17 @@ class SyncResult {
   /// `.qgs` のフォルダ設定を合わせたとき、両方が別の値にしていた項目。この端末の値が残っている
   final List<QgsSettingConflict> settingConflicts;
 
+  /// 「端末を採用」で上げようとして、Drive の置き場所（サブフォルダ）を見つけられず上げなかったファイル。
+  /// 以前は Drive のルート直下に上げていた
+  final List<String> failedUploads;
+
+  /// 手元に作ったフォルダの数（pull が Drive のフォルダ構成を写したとき）
+  final int createdFolderCount;
+
+  /// 手元が変わったか（ツリーを読み直す必要があるか）
+  bool get changedLocal =>
+      downloadedCount > 0 || deletedCount > 0 || movedCount > 0 || mergedCount > 0 || createdFolderCount > 0;
+
   const SyncResult({
     required this.success,
     this.errorMessage,
@@ -77,6 +88,8 @@ class SyncResult {
     this.conflicts = const [],
     this.failedMerges = const [],
     this.settingConflicts = const [],
+    this.failedUploads = const [],
+    this.createdFolderCount = 0,
   });
 
   factory SyncResult.success({
@@ -89,6 +102,8 @@ class SyncResult {
     List<GpkgConflict> conflicts = const [],
     List<String> failedMerges = const [],
     List<QgsSettingConflict> settingConflicts = const [],
+    List<String> failedUploads = const [],
+    int createdFolderCount = 0,
   }) {
     return SyncResult(
       success: true,
@@ -101,6 +116,8 @@ class SyncResult {
       conflicts: conflicts,
       failedMerges: failedMerges,
       settingConflicts: settingConflicts,
+      failedUploads: failedUploads,
+      createdFolderCount: createdFolderCount,
     );
   }
 
@@ -374,8 +391,15 @@ class MergeFileEntry {
   /// DriveファイルID（既存ファイルの場合）
   final String? driveFileId;
 
+  /// Drive 側の md5（判定した時点。帳簿に控える）
+  final String? remoteMd5;
+
   /// 行単位で合わせられるか（両方 modified の gpkg で、この端末に base があるとき）
   final bool mergeable;
+
+  /// 帳簿に無いのに手元と Drive の両方にあり、中身が違う（帳簿を失くした端末など）。
+  /// 最後に同期した時点が分からないので、どちらが新しいかは更新時刻でしか推せない
+  final bool onBothWithoutLedger;
 
   const MergeFileEntry({
     required this.relativePath,
@@ -385,8 +409,19 @@ class MergeFileEntry {
     this.remoteModifiedTime,
     this.moveInfo,
     this.driveFileId,
+    this.remoteMd5,
     this.mergeable = false,
+    this.onBothWithoutLedger = false,
   });
+
+  /// 更新時刻が新しい側。クラウドがはっきり新しいときだけクラウド、分からなければ端末
+  /// （黙ってクラウドを選ばない。端末を選べば Drive には版が残るので戻せる）
+  MergeChoice get newerSide {
+    final local = localModifiedTime;
+    final remote = remoteModifiedTime;
+    if (local != null && remote != null && remote.isAfter(local)) return MergeChoice.remote;
+    return MergeChoice.local;
+  }
 
   /// 変更があるか（どちらか一方でも変更あり）
   bool get hasChanges => localChange != MergeChangeType.none || remoteChange != MergeChangeType.none;

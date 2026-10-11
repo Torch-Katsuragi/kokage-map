@@ -175,10 +175,13 @@ class DriveSyncOperations {
       final result = await syncEngine.executeMerge(localPath, decisions);
 
       if (result.success) {
-        // 行単位で合わせられなかったファイルは衝突のまま（端末かクラウドを選び直してもらう）
-        node.syncStatus = result.failedMerges.isEmpty
-            ? SyncStatus.synced
-            : SyncStatus.conflict;
+        // 行単位で合わせられなかったファイルは衝突のまま（端末かクラウドを選び直してもらう）。
+        // 置き場所が見つからず上げられなかったものがあればエラー（通知は notifyMerge）
+        node.syncStatus = result.failedUploads.isNotEmpty
+            ? SyncStatus.error
+            : result.failedMerges.isEmpty
+                ? SyncStatus.synced
+                : SyncStatus.conflict;
 
         if (result.downloadedCount > 0 ||
             result.deletedCount > 0 ||
@@ -229,6 +232,17 @@ class DriveSyncOperations {
     SyncResult result, {
     Future<void> Function()? afterRestore,
   }) {
+    if (result.failedUploads.isNotEmpty) {
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: t.drive.uploadFolderMissing(
+              count: result.failedUploads.length.toString(),
+            ),
+            detail: result.failedUploads.join('\n'),
+            level: NotificationLevel.warning,
+          );
+    }
     if (result.failedMerges.isNotEmpty) {
       ref
           .read(notificationCenterProvider.notifier)

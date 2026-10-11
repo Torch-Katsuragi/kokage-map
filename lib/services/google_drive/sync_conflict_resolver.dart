@@ -54,19 +54,24 @@ class _MergeRun {
   int deleted = 0;
   int moved = 0;
   int merged = 0;
+  int createdFolders = 0;
   final conflicts = <GpkgConflict>[];
   final failedMerges = <String>[];
   final settingConflicts = <QgsSettingConflict>[];
+
+  /// Drive の置き場所を見つけられず上げなかったファイル
+  final failedUploads = <String>[];
 
   /// 行単位マージで初めて要るときに作る（base の写しにも使い回す）
   Geodiff? geodiff;
 
   /// 同期できたと帳簿に書く
-  void record(String relativePath, String driveFileId, DateTime? remoteModifiedTime) {
+  void record(String relativePath, String driveFileId, DateTime? remoteModifiedTime, {String? remoteMd5}) {
     syncedFiles[relativePath] = KMetaSyncFile(
       driveFileId: driveFileId,
       lastSyncedTime: DateTime.now(),
       remoteModifiedTime: remoteModifiedTime,
+      remoteMd5: remoteMd5,
     );
   }
 
@@ -79,6 +84,8 @@ class _MergeRun {
         conflicts: conflicts,
         failedMerges: failedMerges,
         settingConflicts: settingConflicts,
+        failedUploads: failedUploads,
+        createdFolderCount: createdFolders,
       );
 }
 
@@ -117,7 +124,7 @@ class SyncConflictResolver {
 
       // Driveのフォルダ構造をローカルに反映（空フォルダ含む）
       try {
-        await _fileOps.ensureLocalDirs(localPath, tree.folderPaths);
+        run.createdFolders = await _fileOps.ensureLocalDirs(localPath, tree.folderPaths);
       } catch (e) {
         AppLogger.error('[SyncEngine] ensureDriveFolders エラー: $e');
       }
@@ -186,7 +193,9 @@ class SyncConflictResolver {
     switch (entry.localChange) {
       case MergeChangeType.added:
       case MergeChangeType.modified:
-        await _uploadLocal(run, relativePath, localFilePath);
+        // 両方にある（帳簿に無い）ものは、Drive の同じファイルの版として上げる
+        await _uploadLocal(run, relativePath, localFilePath,
+            existingFileId: entry.onBothWithoutLedger ? fileId : null);
       case MergeChangeType.deleted:
         if (fileId != null) {
           await _driveService.deleteFile(fileId);
@@ -218,15 +227,29 @@ class SyncConflictResolver {
     }
   }
 
-  /// 手元のファイルを Drive の同じ場所に上げる（同名があればその版を更新）
-  Future<void> _uploadLocal(_MergeRun run, String relativePath, String localFilePath) async {
+  /// 手元のファイルを Drive の同じ場所に上げる（[existingFileId] があればその版を、無ければ同名があればその版を更新）。
+  ///
+  /// Drive の置き場所（サブフォルダ）を見つけられなければ上げずに [_MergeRun.failedUploads] に残す。
+  /// 以前はルート直下に上げていて、Drive に同名のファイルがもう 1 つ散らかり、帳簿もそちらを指していた
+  Future<void> _uploadLocal(
+    _MergeRun run,
+    String relativePath,
+    String localFilePath, {
+    String? existingFileId,
+  }) async {
     if (!await fs.exists(localFilePath)) return;
-    // フォルダを解決できなければ根に上げる（以前から）
-    final targetFolderId = await _folderId(run, p.dirname(relativePath)) ?? run.driveId;
-    final result = await _driveService.uploadFile(localFilePath, targetFolderId);
+    final targetFolderId = await _folderId(run, p.dirname(relativePath));
+    if (targetFolderId == null) {
+      AppLogger.debug('  → Drive の置き場所を見つけられない。上げない: $relativePath');
+      run.failedUploads.add(relativePath);
+      return;
+    }
+    final result = existingFileId != null
+        ? await _driveService.uploadFileById(localFilePath, targetFolderId, existingFileId: existingFileId)
+        : await _driveService.uploadFile(localFilePath, targetFolderId);
     if (result == null) return;
     run.uploaded++;
-    run.record(relativePath, result.id!, result.modifiedTime);
+    run.record(relativePath, result.id!, result.modifiedTime, remoteMd5: result.md5Checksum);
     await SyncBaseStore.saveBase(run.localPath, relativePath, geodiff: run.geodiff); // web では saveBase が何もしない
   }
 
@@ -279,7 +302,7 @@ class SyncConflictResolver {
           newParentId: parentId,
           newName: from != null && p.posix.basename(from) != newName ? newName : null,
         )) {
-      run.record(relativePath, fileId, entry.remoteModifiedTime);
+      run.record(relativePath, fileId, entry.remoteModifiedTime, remoteMd5: entry.remoteMd5);
       run.moved++;
     }
   }
@@ -306,7 +329,7 @@ class SyncConflictResolver {
           await fs.createDirectory(p.dirname(newLocalPath));
           await fs.rename(oldPath, newLocalPath);
           run.syncedFiles.remove(from);
-          run.record(to, fileId, entry.remoteModifiedTime);
+          run.record(to, fileId, entry.remoteModifiedTime, remoteMd5: entry.remoteMd5);
           run.moved++;
         }
       case MergeChangeType.none:
@@ -336,7 +359,7 @@ class SyncConflictResolver {
     if (createDir) await fs.createDirectory(p.dirname(localFilePath));
     if (!await _fileOps.downloadReplacing(fileId, localFilePath)) return;
     run.downloaded++;
-    run.record(entry.relativePath, fileId, entry.remoteModifiedTime);
+    run.record(entry.relativePath, fileId, entry.remoteModifiedTime, remoteMd5: entry.remoteMd5);
     await SyncBaseStore.saveBase(run.localPath, entry.relativePath, geodiff: run.geodiff); // web では saveBase が何もしない
   }
 
@@ -444,14 +467,19 @@ class SyncConflictResolver {
         AppLogger.debug('  Drive 側が同期開始後に動いた。上げずに次回へ');
         return null;
       }
-      final targetFolderId = await _folderId(run, p.dirname(relativePath)) ?? run.driveId;
+      // 置き場所を見つけられなければ上げない（ルート直下に上げない）。合わせた結果は手元に残り、次の同期でもう一度
+      final targetFolderId = await _folderId(run, p.dirname(relativePath));
+      if (targetFolderId == null) {
+        AppLogger.debug('  Drive の置き場所を見つけられない。上げずに次回へ');
+        return null;
+      }
       final uploaded = await _driveService.uploadFileById(localFilePath, targetFolderId, existingFileId: fileId);
       if (uploaded == null) {
         AppLogger.debug('  上げられなかった');
         return null;
       }
       await SyncBaseStore.saveBase(run.localPath, relativePath, geodiff: run.geodiff);
-      run.record(relativePath, uploaded.id ?? fileId, uploaded.modifiedTime);
+      run.record(relativePath, uploaded.id ?? fileId, uploaded.modifiedTime, remoteMd5: uploaded.md5Checksum);
       return conflicts;
     } finally {
       try {

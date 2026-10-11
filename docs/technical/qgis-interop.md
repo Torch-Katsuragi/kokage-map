@@ -427,11 +427,18 @@ GDAL 拡張の件数キャッシュ。こかげマップ が直接 INSERT/DELETE
 ## 既にQGISに合わせてある点
 
 - **主キーは `fid`**（QGIS/GDAL標準）。旧 こかげマップ 形式の `id` も読める
+- **読んだ行の地物番号と解いた形は、列の名前と重ならない鍵に入れる**（`featureIdKey`・`featureGeometryKey`、
+  `lib/models/geopackage/feature_row.dart`。NUL で始まり、SQLite の識別子には入らない）。行のほかの鍵は列の名前と値そのまま。
+  `id`・`fid`・`geometry` という名前でも主キー・形の列でなければふつうの属性で、属性表・情報パネル・ラベル・描き分けの式に
+  自分の値で出て、書き込み・写す・足すでも名前では外さない（外すのは表の主キーと形の列だけ）。
+  属性表は QGIS と同じく主キーの列（fid）を読み取り専用で出す（主キーの無い表の rowid は列ではないので出ない）。
+  以前は地物番号を `id`、解いた形を `geometry` に入れていて、主キーが fid の表や主キーの無い表の `id` の列（林小班の番号など）が
+  地物番号に見えて直せず、形の列が geom の表の `geometry` の列は属性に出なかった（2026-10-12）。
+  テストは `test/gpkg_id_column_test.dart`・`test/gpkg_geometry_attribute_test.dart`
 - **形の列の名前は表ごとに `gpkg_geometry_columns` から引く**（`GeoPackageSchema.geometryColumn`。開いている間は控える）。
   GDAL の既定と QGIS は `geom` だが、GeoPandas / Fiona は `geometry`、ArcGIS Pro は `Shape`、PostGIS 由来は `the_geom`。
-  新しく作るレイヤは `geom`。読んだ行からは形の列を抜き（属性に出さない）、`geom` という名前のふつうの列（形の列が `geometry` の表）は属性として扱う。
+  新しく作るレイヤは `geom`。読んだ行からは形の列を抜き（属性に出さない）、`geom` という名前のふつうの列（形の列が `geometry` の表）と `geometry` という名前のふつうの列（形の列が `geom` の表）は属性として扱う。
   以前は `geom` を決め打ちしていて、ほかの名前の gpkg は地物が出ず、足すと `no column named geom` で落ちた（2026-10-12）。
-  ⚠ 形の列が `geom` の表に `geometry` という属性の列があると、読んだ行の形（`geometry`）と重なって属性として出ない（既知の穴）。
   テストは `test/gpkg_geometry_column_test.dart`
 - **主キーの無い表は `rowid` で読み書きする**（GDAL と同じ。GDAL は「no integer primary key」として `_rowid_` を FID にし、
   `fid`・`id` という名前の列があってもふつうの属性として扱う）。表に列を足さない。

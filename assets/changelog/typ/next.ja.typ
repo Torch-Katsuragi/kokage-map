@@ -51,7 +51,8 @@
   [一時的に保存できなかった属性を、次の編集まで書き直さなかった。間を空けて書き直し、裏に回るときも書く],
   [属性表の CSV が Excel で化けた。UTF-8 の BOM を付ける],
   [PDF の縮尺記号が大縮尺で数 % ずれていた。軌跡の長さ・GNSS のばらつきも楕円体の上で測る（QGIS と同じ値）],
-  [形の列が geom でない gpkg（GeoPandas の geometry・ArcGIS Pro の Shape など）で地物が出ず、足せなかった。rtree のある gpkg を見ただけで閉じるときに書き直していた]
+  [形の列が geom でない gpkg（GeoPandas の geometry・ArcGIS Pro の Shape など）で地物が出ず、足せなかった。rtree のある gpkg を見ただけで閉じるときに書き直していた],
+  [id という列が地物番号（fid）に見えて直せず、geometry という列が出なかった。列の値のまま出して直せる。主キーの列は読み取り専用で出す]
 )
 
 #fixes(

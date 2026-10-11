@@ -51,7 +51,8 @@
   [Attribute changes that failed to save were not retried until the next edit; they are now retried with backoff and written when going to the background],
   [Attribute table CSV showed garbled Japanese in Excel; a UTF-8 BOM is now added],
   [The map PDF scale bar was a few percent off at large scales; track length and GNSS spread are now measured on the ellipsoid too (same as QGIS)],
-  [GeoPackages whose geometry column is not geom (GeoPandas geometry, ArcGIS Pro Shape) showed no features and could not be added to; a gpkg with an rtree was rewritten on close even when only viewed]
+  [GeoPackages whose geometry column is not geom (GeoPandas geometry, ArcGIS Pro Shape) showed no features and could not be added to; a gpkg with an rtree was rewritten on close even when only viewed],
+  [A column named id showed the feature number (fid) and could not be edited, and a column named geometry did not appear; they now show and save their own values, and the primary key column is shown read-only]
 )
 
 #fixes(

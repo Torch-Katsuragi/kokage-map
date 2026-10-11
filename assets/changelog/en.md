@@ -49,6 +49,7 @@
 - CSV files saved with "Export CSV" in the attribute table showed garbled Japanese in Excel on Japanese Windows. A UTF-8 BOM is now added, as in the tree tally summary CSV
 - The scale bar of map PDFs was off by a few percent at large scales such as 1:500. Fixed. The length on the track extraction screen and the spread of GNSS fixes are now also measured on the WGS84 ellipsoid, like the measure tool and the info panel (the same values as QGIS ellipsoidal lengths)
 - In GeoPackages whose geometry column is not named geom, such as those written by GeoPandas (geometry) or ArcGIS Pro (Shape), features did not appear on the map and adding features failed. The geometry column name is now read from the gpkg. Also, a gpkg with a spatial index (rtree) was rewritten on close (extent and index) even when it was only viewed; it is now left unchanged
+- In tables whose primary key is fid or that have no primary key, a column named `id` (such as a compartment number) showed the feature number (fid) in the attribute table, info panel and labels, and could not be edited in the attribute table. Likewise, a column named `geometry` in a table whose geometry column is geom did not appear as an attribute. Such columns now show and save their own values and are kept when copying to another layer. The attribute table also shows the primary key column (fid) read-only, as QGIS does
 
 ### Lighter
 

@@ -33,6 +33,8 @@ import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/layer_tree_node.dart';
+import '../../../models/track_recording_settings.dart';
+import '../../../providers/gps_providers.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/project_providers.dart';
 import '../../../providers/ui_state_providers.dart';
@@ -50,6 +52,9 @@ import 'map_jump_mixin.dart';
 /// プロジェクトツリー、GPS、背景地図、コンパスの初期化を担当
 mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     on MapPageStateBase<T>, MapJumpMixin<T> {
+  /// 軌跡の記録の設定を記録係へ流す購読
+  ProviderSubscription<TrackRecordingSettings>? _trackSettingsSubscription;
+
   // =============================================
   // 初期化処理
   // =============================================
@@ -386,6 +391,14 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // GpsHistoryRecorder を初期化（ハイブリッド方式）
       await gpsHistoryRecorder.initialize(globalPath, supportDir.path);
 
+      // 軌跡の記録の設定（間隔・距離・飛び）。変えたら次の測位から効く
+      _trackSettingsSubscription?.close();
+      _trackSettingsSubscription = ref.listenManual(
+        trackRecordingSettingProvider,
+        (_, next) => gpsHistoryRecorder.filter.settings = next,
+        fireImmediately: true,
+      );
+
       // positionStream の購読開始（常時記録 + consolidationタイマー）
       gpsHistoryRecorder.startRecording(locationStore.positionStream);
 
@@ -510,6 +523,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     layerStyleSettings.removeListener(onLayerStyleChanged);
     gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);
     gpsHistoryRecorder.onConsolidated = null;
+    _trackSettingsSubscription?.close();
+    _trackSettingsSubscription = null;
 
     // GPS取得を停止（測量モードでない場合のみ）
     if (gpsManager.isGpsActive && !gpsManager.isSurveyMode) {

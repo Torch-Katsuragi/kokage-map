@@ -18,6 +18,7 @@
 - New Measure tool (the ruler in the left toolbar). Tap the map to place points and see each segment's distance and the total. Turn on the lower-left button or tap the first point to close it into an area and see area and perimeter. Undo and clear are on the panel. It creates no features and works in 3D
 - The magnifier in the layer list title bar searches the attributes of visible layers, ignoring full-/half-width and hiragana/katakana differences ("12" also finds compartment "１２"). Tap a match to select that feature and move the map to it
 - The attribute form settings of QGIS layers (value maps, checkboxes, dates, ranges, aliases, default values, constraints, tabs and groups) are now read, and the attribute form and edit panel inputs follow them. Value maps show descriptions and store values, and a feature is not saved while a required field is empty. Settings are still changed in QGIS
+- GPS track recording interval (seconds), minimum distance between points (m), accuracy limit and jump rejection (speed) can now be set under Settings → GPS & Positioning → "Track recording". Recording stays at every second by default, and fixes worse than ±100 m or jumping faster than 200 km/h are dropped. The location update rate does not change, so battery use does not increase. "Export GPX" in the track extraction screen saves the selected range as GPX with time and elevation per point (opens directly in QGIS). It can also be opened by long-pressing gps_tracks in the layer list
 
 ### Fixed
 

@@ -105,9 +105,15 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
   TreeTallyLayers get _layers => widget.layers;
   TruPulseService get _service => ref.read(trupulseServiceProvider);
 
+  // GPS を待つ間にシートが閉じられても通知・地図の描き直しができるよう、先に握っておく（閉じた画面の ref は使えない）
+  late final NotificationCenter _notifications;
+  late final FeatureRefreshTrigger _featureRefresh;
+
   @override
   void initState() {
     super.initState();
+    _notifications = ref.read(notificationCenterProvider.notifier);
+    _featureRefresh = ref.read(featureRefreshTriggerProvider.notifier);
     _heightSub = _service.heightStream.listen((h) {
       if (!mounted) return;
       setState(() {
@@ -152,7 +158,7 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
   }
 
   void _notify(String title, NotificationLevel level, {String? detail}) =>
-      ref.read(notificationCenterProvider.notifier).add(title: title, detail: detail, level: level);
+      _notifications.add(title: title, detail: detail, level: level);
 
   // ── 標準地 ─────────────────────────────
 
@@ -185,8 +191,8 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
       if (plot == null) return;
       _lastPlotId = plot.plotId;
       _notify(t.treeTally.plotCreated(id: id), NotificationLevel.success);
-      ref.read(featureRefreshTriggerProvider.notifier).trigger();
-      await _load();
+      _featureRefresh.trigger();
+      if (mounted) await _load();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -291,7 +297,8 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
       _lastSpecies = species;
       _lastPlotId = plot.plotId;
       _notify(t.treeTally.recorded(n: '$_treeNo', species: species, dbh: _dbh), NotificationLevel.success);
-      ref.read(featureRefreshTriggerProvider.notifier).trigger();
+      _featureRefresh.trigger();
+      if (!mounted) return;
       setState(() {
         _dbh = '';
         _height.clear();
@@ -621,6 +628,7 @@ class _TallySummaryDialogState extends State<_TallySummaryDialog> {
 Future<void> _saveCsv(WidgetRef ref, List<PlotTally> tallies) async {
   final stamp = DateTime.now().toIso8601String().replaceAll(':', '-').substring(0, 19);
   final name = 'tree_tally_$stamp.csv';
+  final notifications = ref.read(notificationCenterProvider.notifier); // 保存先を選ぶ間に画面が閉じても通知できるよう先に
   final saved = await FilePicker.saveFile(
     fileName: name,
     bytes: Uint8List.fromList(utf8.encode(plotTallyCsv(tallies, allLabel: t.treeTally.all))),
@@ -628,5 +636,5 @@ Future<void> _saveCsv(WidgetRef ref, List<PlotTally> tallies) async {
     allowedExtensions: ['csv'],
   );
   if (saved == null) return;
-  ref.read(notificationCenterProvider.notifier).add(title: t.treeTally.csvSaved(name: name), level: NotificationLevel.success);
+  notifications.add(title: t.treeTally.csvSaved(name: name), level: NotificationLevel.success);
 }

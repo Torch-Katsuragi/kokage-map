@@ -22,35 +22,40 @@ import 'package:sqflite/sqflite.dart';
 
 /// [table] の rtree テーブル名。rtree が無ければ null
 ///
+/// 形の列の名前は
 /// 1. `gpkg_extensions` の `gpkg_rtree_index`（仕様どおりに登録した gpkg はここに列名がある）
 /// 2. 無ければ `gpkg_geometry_columns` の列名（拡張の登録を省いた gpkg もある）
 ///
-/// どちらも、実際に `rtree_<表>_<列>` のテーブルがあるときだけ返す
+/// から取り、実際に `rtree_<表>_<列>` のテーブルがあるときだけ返す。
+/// 編集のたびに呼ぶので、rtree の無い gpkg（このアプリで作ったもの）は sqlite_master を 1 回見るだけで返す
 Future<String?> gpkgRtreeTable(DatabaseExecutor db, String table) async {
-  final candidates = <String>[];
-  Future<void> addColumns(String sql) async {
+  // LIKE の候補（大文字小文字を問わない）。表の名前の `_` `%` はそのままの文字として
+  final escaped = table.replaceAllMapped(RegExp(r'[\\%_]'), (m) => '\\${m[0]}');
+  final rtrees = {
+    for (final r in await db.rawQuery(
+      r"SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE ? ESCAPE '\'",
+      ['rtree\\_$escaped\\_%'],
+    ))
+      (r['name'] as String).toLowerCase(): r['name'] as String,
+  };
+  if (rtrees.isEmpty) return null;
+
+  Future<String?> match(String sql) async {
     try {
       for (final r in await db.rawQuery(sql, [table])) {
         final c = r['column_name'];
-        if (c is String && c.isNotEmpty && !candidates.contains(c)) candidates.add(c);
+        if (c is! String || c.isEmpty) continue;
+        final name = rtrees['rtree_${table}_$c'.toLowerCase()];
+        if (name != null) return name;
       }
     } catch (_) {
       // 表が無い（gpkg_extensions を持たない gpkg など）
     }
+    return null;
   }
 
-  await addColumns(
-    "SELECT column_name FROM gpkg_extensions WHERE extension_name = 'gpkg_rtree_index' AND table_name = ? COLLATE NOCASE",
-  );
-  await addColumns('SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ? COLLATE NOCASE');
-
-  for (final c in candidates) {
-    final name = 'rtree_${table}_$c';
-    final found = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? COLLATE NOCASE",
-      [name],
-    );
-    if (found.isNotEmpty) return found.first['name'] as String? ?? name;
-  }
-  return null;
+  return await match(
+        "SELECT column_name FROM gpkg_extensions WHERE extension_name = 'gpkg_rtree_index' AND table_name = ? COLLATE NOCASE",
+      ) ??
+      await match('SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ? COLLATE NOCASE');
 }

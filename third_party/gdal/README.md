@@ -1,6 +1,7 @@
-# GDAL（Android の libgdal.so）
+# GDAL（Android の libgdal.so と web の WASM）
 
-[GDAL](https://gdal.org/) 3.13.3 と [PROJ](https://proj.org/) 9.9.0 を、このアプリ向けに Android 3 ABI へ焼いたもの。
+[GDAL](https://gdal.org/) 3.13.3 と [PROJ](https://proj.org/) 9.9.0 を、このアプリ向けに Android 3 ABI と WebAssembly へ焼いたもの。
+両方とも同じ版・同じドライバの組（web は [[#web（WASM）]]）。
 設計と使いどころは [[../../docs/technical/gdal|GDAL]]、Dart の窓口は `lib/core/gdal/`。
 
 | 成果物 | 置き場 | 作り方 |
@@ -117,6 +118,44 @@ APK で減るのは圧縮後の 0.2〜0.5 MB だけ。ESRI は shp の `.prj`（
 
 - ホスト VM: `flutter test test/gdal_test.dart`（Windows は QGIS の `gdal313.dll`、CI は apt の `libgdal-dev`）
 - 実機: `flutter test integration_test/device/gdal_smoke_test.dart -d <device>`（同じ筋書きを `libgdal.so` で）
+
+## web（WASM）
+
+`build_web.sh`（WSL）が同じソース（SHA-256 も同じ値）を emscripten で焼き、`web/gdal3/<組>/` に書く。作業 dir は `build_android.sh` と共有（`~/kokage-gdal`、取得物も使い回す）。
+
+```bash
+wsl -d Ubuntu -- bash third_party/gdal/build_web.sh              # 初回は emsdk の取得込みで 15 分ほど（12 コア）
+wsl -d Ubuntu -- env CLEAN=1 bash third_party/gdal/build_web.sh  # 版や引数を変えたとき
+```
+
+| 成果物 | 中身 |
+|---|---|
+| `gdal.js` | emscripten の Module 工場（`MODULARIZE`、`createGdalModule`、`ENVIRONMENT=worker`） |
+| `gdal.wasm` | GDAL・PROJ・SQLite・expat・libiconv・zlib（静的に 1 本） |
+| `gdal.data` | `/gdal_data`（GDAL_DATA）と `/proj/proj.db`（`--preload-file`） |
+| `LICENSE` | GDAL・PROJ・expat・libiconv の条文 |
+
+| もの | 版 | 固定のしかた |
+|---|---|---|
+| emsdk / emscripten | 6.0.12（2026-10-08） | emsdk の git commit `35ff8a6d150541276abbc6bae512ca90bcfbe220`。toolchain は emsdk が版の hash で取る |
+| zlib | 1.3.2 | emscripten の port（`embuilder build zlib`。版は emsdk が決める） |
+| GDAL・PROJ・expat・libiconv・SQLite | 上の表と同じ | 上の表と同じ SHA-256 |
+
+Android との違い:
+
+- 単一スレッド（`-pthread` なし = `SharedArrayBuffer` なし）。SQLite も `SQLITE_THREADSAFE=0` なので GDAL の確認を `ACCEPT_MISSING_SQLITE3_MUTEX_ALLOC=ON` で通す
+- C++ の例外と setjmp は WebAssembly の例外（`-fwasm-exceptions -sSUPPORT_LONGJMP=wasm`）
+- zlib は emscripten の port（GDAL 内蔵の zlib は `gdal_crc32_combine` の `z_off_t` の幅が食い違い、リンクで signature mismatch が出た）
+- SQLite は拡張の読み込みを切る（`SQLITE_OMIT_LOAD_EXTENSION`、dlopen が無い）
+- libiconv は Android と同じ GNU のもの（emscripten の musl の iconv は使わない。CP932 の表を揃えるため）
+- リンク: `-sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=4GB -sINITIAL_MEMORY=64MB -sSTACK_SIZE=4MB -sFORCE_FILESYSTEM -lworkerfs.js -sDYNAMIC_EXECUTION=0`。
+  書き出す C 関数は `EXPORTS`（`web/gdal3/worker.js` が cwrap するものと揃える）
+
+大きさ（3.13.3-1）: `gdal.wasm` 12.3 MB（gzip 4.8 / brotli 3.6 MB）、`gdal.data` 11.8 MB（2.0 / 1.4 MB）、`gdal.js` 93 KB。
+gdal3.js 2.8.1 の 40.0 MB（gzip 11.2 MB）から 24.2 MB（gzip 6.9 MB）に。詳細と速さは [[../../docs/technical/gdal#web（WASM）]]。
+
+配り方: リポジトリには入れず、Release `gdal-wasm-<組>` に上げて `tool/web/fetch_gdal_wasm.sh` で取る（SHA-256 はスクリプトに固定）。
+Release の作成と upload は人の作業。
 
 ## ライセンス
 

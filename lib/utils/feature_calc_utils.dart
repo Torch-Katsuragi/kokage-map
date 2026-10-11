@@ -93,7 +93,11 @@ class GeometryCalc {
   static LatLng calcPolygonCentroid(List<List<LatLng>> polygon) {
     if (polygon.isEmpty || polygon[0].isEmpty) return const LatLng(0, 0);
 
-    final center = centroid(Feature(geometry: TurfConverter.createPolygon(polygon)));
+    // turf の centroid は面のリングの最後の座標を閉じの点とみなして必ず飛ばす。
+    // 閉じていないリングで実在の頂点が落ちないよう、先に閉じておく
+    List<LatLng> closed(List<LatLng> r) =>
+        r.isEmpty || (r.first.latitude == r.last.latitude && r.first.longitude == r.last.longitude) ? r : [...r, r.first];
+    final center = centroid(Feature(geometry: TurfConverter.createPolygon([for (final r in polygon) closed(r)])));
     return center.geometry!.coordinates.toLatLng();
   }
 

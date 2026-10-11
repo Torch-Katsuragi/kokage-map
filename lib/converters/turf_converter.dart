@@ -16,6 +16,7 @@
 import 'dart:convert';
 
 import 'package:latlong2/latlong.dart';
+import 'package:root_maps/models/geopackage/feature_row.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:root_maps/utils/geo_converter.dart';
 import 'package:root_maps/utils/geodesic.dart';
@@ -85,12 +86,15 @@ class TurfConverter {
     String geometryType,
   ) {
     try {
-      final geometryData = rowData['geometry'];
+      final geometryData = rowData[featureGeometryKey];
       if (geometryData == null) return null;
 
       // 形の列（geom・Shape など表ごとの名前）は読むときに抜いてある（FeatureRepository）。
-      // geom という名前のふつうの列（形の列が geometry の表）は属性として残す
-      final properties = Map<String, dynamic>.from(rowData)..remove('geometry');
+      // geom・geometry という名前のふつうの列は属性として残す。
+      // 解いた形（[featureGeometryKey]）と地物番号（[featureIdKey]）は列ではないので属性に入れない（地物番号は FeatureNode が持つ）
+      final properties = Map<String, dynamic>.from(rowData)
+        ..remove(featureGeometryKey)
+        ..remove(featureIdKey);
 
       turf.GeometryObject? geometry;
       final type = geometryType.toLowerCase();
@@ -139,8 +143,8 @@ class TurfConverter {
         for (final entry in feature.properties!.entries) {
           final key = entry.key;
           final value = entry.value;
-          // 形の列は書き手（FeatureRepository.updateFeatureAttributes）が表ごとの名前で外す
-          if (key == 'geometry') continue;
+          // 形の列は書き手（FeatureRepository.updateFeatureAttributes）が表ごとの名前で外す。
+          // geometry という名前のふつうの列（形の列が geom の表）は書く
           if (value == null ||
               value is String ||
               value is num ||

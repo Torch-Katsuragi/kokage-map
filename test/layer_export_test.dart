@@ -23,6 +23,7 @@ import 'package:root_maps/services/kmeta_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'support/colliding_columns_gpkg.dart';
 import 'support/foreign_geom_gpkg.dart';
 import 'support/gdal_host.dart';
 import 'support/gdal_scenarios.dart';
@@ -319,4 +320,33 @@ void main() {
       }
     }, skip: skip);
   }
+
+  // 主キーが fid の表・主キーの無い表の id というふつうの列は、直した値のまま書き出す
+  // （以前は地物番号が id に入っていて、id の列を直しても書かれなかった）
+  for (final kind in CollidingColumnsGpkg.values) {
+    test('${kind.label}: id の列を直して GeoJSON に', () async {
+      await kind.write(p.join(proj, 'colliding.gpkg'));
+      final layer = (await openLayers())[CollidingColumnsGpkg.table]!;
+      await layer.updateChildren();
+      final f = layer.features.firstWhere((f) => f.rowId == CollidingColumnsGpkg.featureIds.first);
+      await f.setAttributeValue('id', 555);
+      f.name = 'x';
+      final info = await features(await export(layer, FileFormat.geojson));
+      expect(featureValues(info, 'id'), [555, CollidingColumnsGpkg.idValues.last]);
+      expect(featureValues(info, 'name'), ['x', 'b']);
+    }, skip: skip);
+  }
+
+  // 形の列が geom の表の geometry というふつうの列は、直した値のまま属性として書き出す
+  test('geometry という列を直して GeoJSON に', () async {
+    await writeGeometryAttributeGpkg(p.join(proj, 'colliding.gpkg'));
+    final layer = (await openLayers())[CollidingColumnsGpkg.table]!;
+    await layer.updateChildren();
+    await layer.features.firstWhere((f) => f.rowId == 1).setAttributeValue('geometry', 'g-x');
+    final out = await export(layer, FileFormat.geojson);
+    final json = jsonDecode(File(out).readAsStringSync()) as Map<String, dynamic>;
+    final fs = [for (final f in json['features'] as List) f as Map<String, dynamic>];
+    expect([for (final f in fs) (f['properties'] as Map)['geometry']], ['g-x', 'g-b']);
+    expect((fs.first['geometry'] as Map)['coordinates'], [closeTo(135.96, 1e-6), closeTo(33.93, 1e-6)]);
+  }, skip: skip);
 }

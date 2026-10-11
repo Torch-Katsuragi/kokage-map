@@ -35,7 +35,6 @@ class GeometryConversionService {
     final geoFeatures = <Map<String, dynamic>>[];
     for (final f in features) {
       final props = Map<String, dynamic>.from(f.turfFeature.properties ?? {});
-      props.remove('id');
       geoFeatures.add({
         'type': 'Feature',
         'geometry': {

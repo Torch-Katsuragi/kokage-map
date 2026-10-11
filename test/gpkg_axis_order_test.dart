@@ -36,7 +36,7 @@ void main() {
     File('test/fixtures/qgis_6674_point.gpkg').copySync(path);
     final gpkg = GeoPackageFile(const ['q.gpkg'], absolutePath: path);
 
-    final read = (await gpkg.getFeaturesWithGeometry('pts')).single['geometry'] as List;
+    final read = (await gpkg.getFeaturesWithGeometry('pts')).single[featureGeometryKey] as List;
     final p = read.single as LatLng;
     expect(p.latitude, closeTo(36.0, 1e-9));
     expect(p.longitude, closeTo(136.01, 1e-9));
@@ -76,7 +76,7 @@ void main() {
       gpkg = GeoPackageFile(const ['u.gpkg'], absolutePath: path);
       await gpkg.addPointWithAttributes('pts', const LatLng(36.0, 136.01), {});
       final stored = await storedPoints(gpkg, 'pts');
-      final back = ((await gpkg.getFeaturesWithGeometry('pts')).single['geometry'] as List).single as LatLng;
+      final back = ((await gpkg.getFeaturesWithGeometry('pts')).single[featureGeometryKey] as List).single as LatLng;
       await gpkg.dispose();
 
       expect(stored.single.x, closeTo(901.55, 0.01));

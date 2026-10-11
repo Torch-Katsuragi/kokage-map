@@ -146,13 +146,19 @@ class AttributeTableController extends ChangeNotifier {
 
   /// 書き換えてよい列か（番号・形・内部用の列と、QGIS で編集可能を外した列・結合した表の列は書かない）
   bool canEdit(String column) =>
-      !readOnly && !isReadOnlyColumn(column) && !isJoinedColumn(column) && (_qgisForm?.editable(column) ?? true);
+      !readOnly &&
+      !isReadOnlyColumn(column, primaryKey: _primaryKey) &&
+      !isJoinedColumn(column) &&
+      (_qgisForm?.editable(column) ?? true);
 
   /// 結合した表の列か（読み取り専用。見出しに印）
   bool isJoinedColumn(String column) => _joinedColumns.contains(column);
 
   /// 列そのものを改名・削除してよいか（結合した表の列は gpkg に無いので `ALTER TABLE` が失敗する）
-  bool canAlterColumn(String column) => !isReadOnlyColumn(column) && !isJoinedColumn(column);
+  bool canAlterColumn(String column) => !isReadOnlyColumn(column, primaryKey: _primaryKey) && !isJoinedColumn(column);
+
+  /// レイヤの主キー（fid など。主キーの無い表は rowid で、列には出ない）。表に読み取り専用で出す（QGIS と同じ）
+  String? _primaryKey;
   AttributeTableSettings get settings => _settings;
   bool get isPointLayer => layer is PointLayerNode;
   bool get isFiltered => _isFiltered;
@@ -214,18 +220,17 @@ class AttributeTableController extends ChangeNotifier {
     try {
       AppLogger.debug('[AttributeTableController] 初期化開始: ${layer.layerName}');
 
-      // カラム名を取得（アプリが中身を持つメタデータの列は出さない）
+      // カラム名を取得（アプリが中身を持つメタデータの列は出さない）。
+      // 主キーの列（fid）も QGIS と同じく読み取り専用で出す。id・fid という名前のふつうの列は書ける
+      _primaryKey = await layer.geoPackageFile.getPrimaryKeyColumn(layer.layerName);
       _columnNames = [
-        for (final c in await layer.getAttributeColumnNames(
-          getAll: true,
-          skipPrimaryKey: true,
-        ))
+        for (final c in await layer.getAttributeColumnNames(getAll: true))
           if (!isSystemColumn(c)) c,
       ];
       _userColumnNames =
           _columnNames.where((c) => !isInternalColumn(c)).toList();
       _writableColumnNames =
-          _columnNames.where((c) => !isReadOnlyColumn(c)).toList();
+          _columnNames.where((c) => !isReadOnlyColumn(c, primaryKey: _primaryKey)).toList();
       // 結合した表の列（森林簿の樹種など）は後ろに読み取り専用で並べる。gpkg には無いので
       // SQL を使う操作（フィルタ・統計・置換・一括設定）の候補には入れない
       _joinedColumns = {for (final c in layer.joinedFieldNames) if (!_columnNames.contains(c)) c};
@@ -350,7 +355,7 @@ class AttributeTableController extends ChangeNotifier {
     String field,
     dynamic value,
   ) async {
-    if (isReadOnlyColumn(field) || isJoinedColumn(field)) return null;
+    if (isReadOnlyColumn(field, primaryKey: _primaryKey) || isJoinedColumn(field)) return null;
     if (refuseReadOnlyEditBy(_ref.read, layer)) return null;
     final form = _qgisForm;
     if (form != null && !form.editable(field)) return null;

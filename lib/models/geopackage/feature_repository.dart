@@ -26,11 +26,14 @@ import '../../services/coordinate/gpkg_crs_resolver.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/wkb_utils.dart';
 import '../geometry_type.dart';
+import 'feature_row.dart';
 import 'geopackage_connection.dart';
 import 'geopackage_schema.dart';
 import 'spatial_index_manager.dart';
 import 'sql_identifier.dart';
 import 'vertex_z.dart';
+
+export 'feature_row.dart';
 
 /// 地物ごとのメタデータ（JSON の TEXT）を入れる列。線・面の GPS 測量の点ごとの記録（`drawing_points`）など。
 /// 残す値が出たときに初めて作る（[FeatureRepository.ensureMetadataColumn]）。QGIS からはただの文字の列に見える。
@@ -106,7 +109,7 @@ List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
             needsAxisSwap: params.needsAxisSwap,
           );
         }
-        row['geometry'] = geobaseGeometryToLatLngs(geometry);
+        row[featureGeometryKey] = geobaseGeometryToLatLngs(geometry);
       }
     }
 
@@ -122,7 +125,7 @@ List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
 
 /// 行から形の列（[geomColumn]）の値を抜いて返す（GeoPackage のバイナリでなければ null）。
 ///
-/// 読んだ行は地物の属性になるので、形の列は残さない（名前は表ごとに違う。`geometry` なら解析した形で上書きされる）
+/// 読んだ行は地物の属性になるので、形の列は残さない（名前は表ごとに違う）。解いた形は [featureGeometryKey] に入れる
 Uint8List? takeGeometryBlob(Map<String, dynamic> row, String? geomColumn) {
   if (geomColumn == null) return null;
   final v = row.remove(geomColumn);
@@ -476,7 +479,7 @@ class FeatureRepository {
               needsAxisSwap: crs.needsAxisSwap,
             );
           }
-          row['geometry'] = geobaseGeometryToLatLngs(geometry);
+          row[featureGeometryKey] = geobaseGeometryToLatLngs(geometry);
         }
       }
 
@@ -550,7 +553,7 @@ class FeatureRepository {
         for (final row in page) {
           final normalizedRow = Map<String, dynamic>.from(row);
           _normalizePrimaryKey(normalizedRow, pkColumn);
-          if (normalizedRow['id'] == null) continue;
+          if (normalizedRow[featureIdKey] == null) continue;
           // 形を読まないときも、形の列は属性に残さない
           if (geomType == null) takeGeometryBlob(normalizedRow, geomCol);
           normalized.add(normalizedRow);
@@ -593,7 +596,7 @@ class FeatureRepository {
                 needsAxisSwap: crs.needsAxisSwap,
               );
             }
-            row['geometry'] = geobaseGeometryToLatLngs(geometry);
+            row[featureGeometryKey] = geobaseGeometryToLatLngs(geometry);
           }
         }
         _parseMetadata(row);
@@ -799,12 +802,11 @@ class FeatureRepository {
       await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final geomCol = await _writeGeomColumn(tableName);
-      // 主キー・形の列と、読んだ行で解析した形を入れている geometry は属性として書かない
+      // 主キー・形の列は属性として書かない。
+      // id・fid・geometry という名前のふつうの列（主キー・形の列でない）は書く
       final reservedColumns = {
-        'fid',
-        'id',
+        (await schema.getPrimaryKeyColumn(tableName)).toLowerCase(),
         'rowid',
-        'geometry',
         geomCol.toLowerCase(),
         for (final r in reserved) r.toLowerCase(),
       };
@@ -938,22 +940,25 @@ class FeatureRepository {
   }
 
   /// [sourceTable] の行（[where] があれば当てはまる行）を [targetTable] へ写し、写した数を返す。
-  /// 主キー（id / fid）は写さず振り直させる。形の列は名前が違っても（geometry → geom など）形の列へ写す。
-  /// 写す先の形の列と同じ名前のふつうの列は写さない。写せる列が無ければ null
+  /// 写す先の主キーには写さず振り直させる。形の列は名前が違っても（geometry → geom など）形の列へ写す。
+  /// 写す先の形の列と同じ名前のふつうの列と、写す先に無い列は写さない。
+  /// `id`・`fid` という名前のふつうの列（写す先の主キーでない）は写す（以前は名前で外していた）。写せる列が無ければ null
   Future<int?> _copyRows(String sourceTable, String targetTable, {String? where}) async {
     final sourceGeom = (await schema.geometryColumn(sourceTable))?.toLowerCase();
     final targetGeom = await schema.geometryColumn(targetTable);
+    final targetPk = (await schema.getPrimaryKeyColumn(targetTable)).toLowerCase();
+    final targetColumns = {for (final c in await schema.getTableColumns(targetTable)) c.toLowerCase()};
     final from = <String>[];
     final to = <String>[];
     for (final c in await schema.getTableColumns(sourceTable)) {
       final lc = c.toLowerCase();
-      if (lc == 'id' || lc == 'fid') continue;
+      if (lc == targetPk) continue;
       if (lc == sourceGeom) {
         if (targetGeom != null) {
           from.add(c);
           to.add(targetGeom);
         }
-      } else if (lc != targetGeom?.toLowerCase()) {
+      } else if (lc != targetGeom?.toLowerCase() && targetColumns.contains(lc)) {
         from.add(c);
         to.add(c);
       }
@@ -1004,16 +1009,18 @@ class FeatureRepository {
     );
   }
 
+  /// 地物番号（主キーの値）を [featureIdKey] に入れる。列の値は書き換えない。
+  /// 主キーの無い表は `SELECT rowid, *` の rowid を移す（表の列ではないので属性に残さない）
   void _normalizePrimaryKey(Map<String, dynamic> row, String pkColumn) {
-    if (pkColumn != 'id') {
-      if (row.containsKey(pkColumn)) {
-        row['id'] = row[pkColumn];
-      } else {
-        AppLogger.debug(
-          '[FeatureRepository] 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません',
-        );
-        row['id'] = 0;
-      }
+    if (pkColumn == 'rowid') {
+      row[featureIdKey] = row.remove('rowid');
+    } else if (row.containsKey(pkColumn)) {
+      row[featureIdKey] = row[pkColumn];
+    } else {
+      AppLogger.debug(
+        '[FeatureRepository] 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません',
+      );
+      row[featureIdKey] = 0;
     }
   }
 
@@ -1028,12 +1035,11 @@ class FeatureRepository {
     }
   }
 
-  /// 属性の一括更新で書かない列（読んだ行の解析した形 geometry・形の列 [geomColumn]・主キー）
+  /// 属性の一括更新で書かない列（形の列 [geomColumn]・主キー）。
+  /// `id`・`fid`・`geometry` という名前でも主キー・形の列でなければふつうの列として書く
   bool _isReservedColumn(String key, String pkColumn, String? geomColumn) =>
-      key == 'geometry' ||
       (geomColumn != null && key.toLowerCase() == geomColumn.toLowerCase()) ||
-      key == pkColumn ||
-      key == 'id';
+      key.toLowerCase() == pkColumn.toLowerCase();
 
   bool _isSupportedType(dynamic value) =>
       value == null ||

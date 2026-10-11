@@ -620,7 +620,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
         _tracksLayerName,
         _todayTrackFeatureId!,
       );
-      if (detail == null || detail['geometry'] == null) {
+      if (detail == null || detail[featureGeometryKey] == null) {
         // フィーチャが削除されている → addLine パスに切り替え
         AppLogger.debug(
           '$_logTag: フィーチャ未発見 (id=$_todayTrackFeatureId), リセット',
@@ -629,7 +629,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
         return [];
       }
 
-      return _lineCoords(detail['geometry']);
+      return _lineCoords(detail[featureGeometryKey]);
     } catch (e) {
       AppLogger.debug('$_logTag: Line読み出しエラー: $e');
       _todayTrackFeatureId = null;
@@ -682,7 +682,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
       for (final feature in features) {
         final index = segmentIndexOf(feature['name']?.toString(), _currentDateKey!);
         if (index == null || index <= latestIndex) continue;
-        final id = feature['id'];
+        final id = feature[featureIdKey];
         if (id == null) continue;
         latestIndex = index;
         latestId = id is int ? id : int.tryParse(id.toString()) ?? 0;
@@ -698,7 +698,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
           featureId,
         );
         if (detail != null) {
-          _lastRecordedPosition = _lineCoords(detail['geometry']).lastOrNull ?? _lastRecordedPosition;
+          _lastRecordedPosition = _lineCoords(detail[featureGeometryKey]).lastOrNull ?? _lastRecordedPosition;
         }
       }
 
@@ -742,7 +742,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
       int recovered = 0;
       for (final feature in rawFeatures) {
-        final id = feature['id'];
+        final id = feature[featureIdKey];
         if (id == null) continue;
 
         final featureId =
@@ -751,9 +751,9 @@ class GpsHistoryRecorder extends ChangeNotifier {
           rawLayerName,
           featureId,
         );
-        if (detail == null || detail['geometry'] == null) continue;
+        if (detail == null || detail[featureGeometryKey] == null) continue;
 
-        final geom = detail['geometry'];
+        final geom = detail[featureGeometryKey];
         LatLng? latLng;
         if (geom is List && geom.isNotEmpty && geom.first is LatLng) {
           latLng = geom.first as LatLng;

@@ -77,17 +77,17 @@ void main() {
     final pts = await dst.getFeaturesWithGeometry('pts');
     expect(pts.map((r) => r['name']), ['p1', 'p2']);
     expect(pts.first['dbh'], 30.5);
-    expect((pts.first['geometry'] as List).single, a);
+    expect((pts.first[featureGeometryKey] as List).single, a);
 
     final roads = await dst.getFeaturesWithGeometry('roads');
     expect(roads.map((r) => r['name']), ['r1']);
-    expect(roads.single['geometry'], [
+    expect(roads.single[featureGeometryKey], [
       [a, b],
     ]);
 
     final stands = await dst.getFeaturesWithGeometry('stands');
     expect(stands.map((r) => r['name']), ['s1']);
-    expect(stands.single['geometry'], [
+    expect(stands.single[featureGeometryKey], [
       [
         [a, b, c, a],
       ],

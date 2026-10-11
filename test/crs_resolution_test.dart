@@ -52,7 +52,7 @@ void main() {
       final rows = await (await gpkg.getDatabase()).rawQuery('SELECT geom FROM pts');
       final raw = (parseGpkgGeometry(rows.single['geom']! as dynamic)! as geo.Point).position;
       final features = await gpkg.getFeaturesWithGeometry('pts');
-      final back = (features.single['geometry'] as List<LatLng>).single;
+      final back = (features.single[featureGeometryKey] as List<LatLng>).single;
       await gpkg.dispose();
       return (raw, back);
     }

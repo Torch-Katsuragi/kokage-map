@@ -103,7 +103,7 @@ void main() {
     final p0 = (g as geo.MultiPolygon).polygons.first.exterior!.positions.first;
     expect(p0.x.abs() + p0.y.abs(), greaterThan(10000));
     // 読み戻すと元の緯度経度
-    Object first = back!['geometry'] as List;
+    Object first = back![featureGeometryKey] as List;
     while (first is List) {
       first = first.first as Object; // 多重の面・リングの入れ子を最初の点までたどる
     }

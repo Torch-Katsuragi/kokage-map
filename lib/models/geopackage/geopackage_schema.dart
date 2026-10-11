@@ -268,9 +268,11 @@ class GeoPackageSchema {
     bool includeBuiltIn = false,
   }) async {
     try {
-      // 組み込みの列: id と形の列（名前は表ごと）
+      // 組み込みの列: 形の列（名前は表ごと）と、旧形式の主キー id。
+      // 主キーでない id というふつうの列は属性（以前は名前で外していて、主キーが fid の表の id の列が編集に出なかった）
       final geomCol = (await geometryColumn(tableName))?.toLowerCase();
-      bool builtIn(String name) => name == 'id' || name.toLowerCase() == geomCol;
+      final pk = await getPrimaryKeyColumn(tableName);
+      bool builtIn(String name) => name.toLowerCase() == geomCol || (name == 'id' && pk == 'id');
       return [
         for (final row in await tableInfo(tableName))
           if (includeBuiltIn || !builtIn(row['name'] as String))

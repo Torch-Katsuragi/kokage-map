@@ -301,7 +301,7 @@ class FeatureEditor extends Notifier<EditState?> {
       final info = await f.geoPackageFile.getAttributeColumnInfo(f.layerName);
       final cols = [
         for (final c in info)
-          if (c['name'] is String && _editable(c['name'] as String))
+          if (c['name'] is String && c['primaryKey'] != true && _editable(c['name'] as String))
             c['name'] as String,
       ];
       _columnTypes = {
@@ -331,7 +331,7 @@ class FeatureEditor extends Notifier<EditState?> {
     }
   }
 
-  /// 書き換えてよい列（番号・形・内部用は除く。属性テーブルと同じ決まり [isReadOnlyColumn]。
+  /// 書き換えてよい列（形・内部用は除く。主キーは呼び手が除く。属性テーブルと同じ決まり [isReadOnlyColumn]。
   /// メタデータと、頂点ごとの記録 sub_table（形と一緒に扱う）も除く）
   static bool _editable(String name) {
     if (isReadOnlyColumn(name) || isSystemColumn(name)) return false;

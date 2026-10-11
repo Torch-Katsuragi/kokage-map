@@ -29,7 +29,7 @@ import '../../core/node_types.dart';
 import '../../i18n/strings.g.dart';
 import '../../services/qgis_form_logic.dart';
 import '../../utils/attribute_columns.dart';
-import '../geopackage/feature_repository.dart' show metadataColumn;
+import '../geopackage/feature_repository.dart' show featureIdKey, metadataColumn;
 import '../geopackage/geopackage_file.dart';
 import 'layer_node.dart';
 import 'layer_tree_node.dart';
@@ -363,14 +363,12 @@ abstract class FeatureNode extends LayerTreeNode {
       }
     }
 
-    // ID情報
-    details['id'] = rowId.toString();
-
     // 座標情報
     details['latitude'] = centroid.latitude.toStringAsFixed(6);
     details['longitude'] = centroid.longitude.toStringAsFixed(6);
 
-    // カスタム属性（属性テーブルのユーザー定義カラム）
+    // カスタム属性（属性テーブルのユーザー定義カラム。主キーの列 fid も表の列として出る）。
+    // 地物番号は属性に入っていない。以前はここで 'id' に地物番号を入れ、id というふつうの列が隠れていた
     final systemKeys = details.keys.toSet();
     final props = turfFeature.properties;
     if (props != null) {
@@ -448,7 +446,7 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// rowデータとジオメトリタイプを基にFeatureNodeを作成
   FeatureNode(Map<String, dynamic> row, this.parent, String geometryType)
-    : _rowId = row['id'] as int? ?? 0,
+    : _rowId = row[featureIdKey] as int? ?? 0,
       super(
         row['name'] as String? ?? t.featureDetail.unnamed,
         visible: parent.visible,
@@ -460,14 +458,14 @@ abstract class FeatureNode extends LayerTreeNode {
     final turfFeature = TurfConverter.createFeatureFromRow(row, geometryType) ??
         turf.Feature(
           geometry: turf.Point(coordinates: turf.Position.of([0, 0])),
-          properties: row,
+          properties: Map.of(row)..remove(featureIdKey),
         );
     parent.addFeatureToMap(_rowId, turfFeature);
   }
 
-  /// turf_dartのFeatureオブジェクトから直接FeatureNodeを作成
-  FeatureNode.fromTurfFeature(turf.Feature feature, this.parent)
-    : _rowId = feature.properties?['id'] as int? ?? 0,
+  /// turf_dartのFeatureオブジェクトから直接FeatureNodeを作成（[rowId] は地物番号。属性には入れない）
+  FeatureNode.fromTurfFeature(turf.Feature feature, this.parent, int rowId)
+    : _rowId = rowId,
       super(
         feature.properties?['name'] as String? ?? t.featureDetail.unnamed,
         visible: parent.visible,
@@ -538,6 +536,7 @@ abstract class FeatureNode extends LayerTreeNode {
     if (form == null || !form.fields.values.any((f) => f.defaultExpression != null)) return const {};
     try {
       final info = await parent.geoPackageFile.getAttributeColumnInfo(parent.layerName);
+      final pk = await parent.geoPackageFile.getPrimaryKeyColumn(parent.layerName);
       final types = {
         for (final c in info)
           if (c['name'] is String) c['name'] as String: '${c['type'] ?? ''}',
@@ -546,7 +545,7 @@ abstract class FeatureNode extends LayerTreeNode {
         form,
         given,
         types,
-        columns: columns.where((c) => !isReadOnlyColumn(c) && !isSystemColumn(c)),
+        columns: columns.where((c) => !isReadOnlyColumn(c, primaryKey: pk) && !isSystemColumn(c)),
       );
     } on Object catch (e) {
       AppLogger.debug('[FeatureNode] 既定値を当てられない: $e');
@@ -591,7 +590,6 @@ abstract class FeatureNode extends LayerTreeNode {
     Map<String, dynamic>? metadata,
   ) => {
     ...turfFeature.properties ?? {},
-    'id': _rowId,
     'name': name,
     'description': description,
     metadataColumn: metadata,
@@ -617,7 +615,7 @@ class PointFeatureNode extends FeatureNode {
     : super(row, parent, 'Point');
 
   /// turf_dartのFeatureから点フィーチャノードを作成
-  PointFeatureNode.fromTurfFeature(super.feature, super.parent)
+  PointFeatureNode.fromTurfFeature(super.feature, super.parent, super.rowId)
     : super.fromTurfFeature();
 
   /// 点座標（単一座標）
@@ -654,14 +652,16 @@ class PointFeatureNode extends FeatureNode {
       AppLogger.debug('[ERROR] PointFeatureNode: DB保存に失敗しました - $name');
       return null;
     }
+    // 保存した行を読み直す（主キーの列 fid・既定値の入った列も持たせる）。読めなければ渡した属性で
+    final row = await parent.geoPackageFile.getFeature(parent.layerName, rowId);
     return FeatureNode._adopt(
-      PointFeatureNode.fromTurfFeature(
-        turf.Feature(
-          geometry: TurfConverter.createPoint(point),
-          properties: {...properties, 'id': rowId},
-        ),
-        parent,
-      ),
+      row != null
+          ? PointFeatureNode(row, parent)
+          : PointFeatureNode.fromTurfFeature(
+              turf.Feature(geometry: TurfConverter.createPoint(point), properties: properties),
+              parent,
+              rowId,
+            ),
     );
   }
 
@@ -711,7 +711,7 @@ class LineFeatureNode extends FeatureNode {
     : super(row, parent, 'LineString');
 
   /// turf_dartのFeatureから線フィーチャノードを作成
-  LineFeatureNode.fromTurfFeature(super.feature, super.parent)
+  LineFeatureNode.fromTurfFeature(super.feature, super.parent, super.rowId)
     : super.fromTurfFeature();
 
   @override
@@ -786,14 +786,16 @@ class LineFeatureNode extends FeatureNode {
       AppLogger.debug('[ERROR] LineFeatureNode: DB保存に失敗しました - $name');
       return null;
     }
+    // 保存した行を読み直す（主キーの列 fid・既定値の入った列も持たせる）。読めなければ渡した属性で
+    final row = await parent.geoPackageFile.getFeature(parent.layerName, rowId);
     return FeatureNode._adopt(
-      LineFeatureNode.fromTurfFeature(
-        turf.Feature(
-          geometry: TurfConverter.createLineString(line),
-          properties: {...properties, 'id': rowId},
-        ),
-        parent,
-      ),
+      row != null
+          ? LineFeatureNode(row, parent)
+          : LineFeatureNode.fromTurfFeature(
+              turf.Feature(geometry: TurfConverter.createLineString(line), properties: properties),
+              parent,
+              rowId,
+            ),
     );
   }
 
@@ -844,7 +846,7 @@ class PolygonFeatureNode extends FeatureNode {
     : super(row, parent, 'Polygon');
 
   /// turf_dartのFeatureから面フィーチャノードを作成
-  PolygonFeatureNode.fromTurfFeature(super.feature, super.parent)
+  PolygonFeatureNode.fromTurfFeature(super.feature, super.parent, super.rowId)
     : super.fromTurfFeature();
 
   @override

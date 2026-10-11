@@ -43,7 +43,7 @@
 #fixes(
   "Changed",
   [Layer panel: tighter rows, only the eye at the right; long-press for the menu, swipe left to move],
-  [Layer rows show a color sample and the feature count],
+  [Layer rows show the type icon in its map color and the feature count],
   [A path above the list takes you back to any level],
 )
 

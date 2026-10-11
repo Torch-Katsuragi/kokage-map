@@ -136,7 +136,7 @@ Future<void> initialize() async {
   （フォルダの「ファイルを追加」と同じ `add_files_action.dart` → `FolderFileAdder`）。行ごとに置くと入れ子で両方に届く
 - gpkg は行ではなく小さい見出し（`DrawerGroupHeader`。▾ で畳む・目で中をまとめて隠す・長押しにレイヤ追加）。
   空の gpkg にだけ「レイヤ追加」の行を出す
-- レイヤ・View の行の左端は描画色の見本（`tiles/layer_swatch.dart`。View → レイヤ → 全体設定の順に合成）、名前の横に件数
+- レイヤ・View の行の左端は種類のアイコンを描画色で塗ったもの（2026-10-11 に形だけの見本から戻した。`tiles/layer_swatch.dart`。View → レイヤ → 全体設定の順に合成）、名前の横に件数
 - タイトルバーに道筋（`KokageMap › 共有`）。ルートの name は内部の `Home` なので、表示は `NodePresenter.getDisplayName` が
   開いているフォルダの名前にする
 - チュートリアルの「⋮ を押す」案内は「行を長押し」に替え、`areaLayerMenu` / `newViewMenu` の鍵は行に付けた

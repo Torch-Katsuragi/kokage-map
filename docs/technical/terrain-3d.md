@@ -193,8 +193,9 @@ DEM の組み立て 1.4 秒 → 21ms（常駐 isolate）。縮小 4 段のスク
 - 同じシーン: `FeatureGeoJsonCache` の GeoJSON（`k-style` / `k-label`）→ `TerrainSceneBuilder`。
   View 固有スタイル（`MapStyleGroup`）・全体設定の既定・選択色を反映。写真（琥珀の点 + 名前）、
   今日の GPS 軌跡（未 Consolidation 分）、現在位置（青い点）も載せる。
-  更新は `terrainSceneRevision`（`_pushFeaturesToSources` と GPS 履歴更新で増える）
-- **投影の差し替え**: 3D 中は `IMapState.offsetToLatLng` / `latLngToOffset` が `TerrainProjection`
+  更新は `terrainSceneRevision`（`_pushFeaturesToSources` と GPS 履歴更新で増える）。
+  2026-10-11 からは `MapScene.revision`（地図ページが `SceneSink.pushFeatures` / `invalidate` で進める。[[scene-model]]）
+- **投影の差し替え**: 3D 中は `IMapState.offsetToLatLng` / `latLngToOffset` が `TerrainProjection`（2026-10-11 から `MapSurface`、`MapSurfaceController` 越し）
   （視線と地形の交点 / 地形の高さで持ち上げた投影）を通る。選択ツール・投げ縄はそのまま動く
   （実機で確認: 3D 中のタップで情報カード、2D に戻っても選択が残る）
 - DEM: 表示ズーム −1 の 2×2 枚（zoom 16 → z15・4.8m・512²）。中心が範囲の内側 60% から外れるか
@@ -225,9 +226,9 @@ DEM の組み立て 1.4 秒 → 21ms（常駐 isolate）。縮小 4 段のスク
   3D = 1 本指 = 回転・傾き、2 本指 = 移動・拡縮・回転（回転は 2D と共通の式。透視なら `_groundUnder` で指の下を留める）。起動は 2D。3D に戻すと 2D に入る前の傾き（無ければ 50°）。
   CLI / URL で pitch > 0 を頼まれたら 3D に入る。ペンの真上ロックは両モード共通（2D ではペンを離しても真上のまま）
 - **ペン = 真上ロック**: ペンを選ぶと 3D のまま傾きを 0 に寄せ、1 本指を `PenTool` に渡す（2D と同じ経路。
-  座標は `TerrainProjection` を通るので傾いていても正しい）。2 本指は移動・拡縮のまま。ペンを離れたら元の傾きに戻す。
+  座標は `TerrainProjection`（いまの `MapSurface`）を通るので傾いていても正しい）。2 本指は移動・拡縮のまま。ペンを離れたら元の傾きに戻す。
   描画中の線・面・点は動的シーンに赤で出す（`GlobalDrawingState`）。GPS ツール・TruPulse・選択は 3D のまま
-- 2D のカメラ移動（`jumpTo`: 現在位置へ移動・フィーチャへ移動・属性テーブル）は 3D 中 `TerrainProjection.jumpTo` で地形のカメラを動かす
+- 2D のカメラ移動（`jumpTo`: 現在位置へ移動・フィーチャへ移動・属性テーブル）は 3D 中 `TerrainProjection.jumpTo`（いまの `MapSurfaceController.jumpTo` → `MapSurface.jumpTo`）で地形のカメラを動かす
 - 選択中のオーバーレイ画像の枠（青）と変換ツールの回転ハンドル、外部機器ツール（TruPulse）の基準点と計測線も 3D に載る
   （`DeviceTool.overlayLines` / `overlayStation`。MapLibre 向けの層はそれを包む）
 - 残っている仮実装: ツールバーの「3D 地形」切替（MapLibre を外すまで）。カメラ状態は保存しない（ユーザー 2026-09-09）
@@ -458,8 +459,8 @@ flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world
 
 ## 未着手
 
-1. `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）。いまは `TerrainMapLayer` が
-   `FeatureGeoJsonCache` と `MapStyleGroup` を直接読む形で seam ② を先取りしている
+1. ~~`SceneSink` / `MapSurfaceController` のインターフェース抽出（[[scene-model]]）~~（2026-10-11 に済み。
+   `TerrainMapLayer` は `MapSurface` を実装して `MapSurfaceHandle` に attach され、シーンは `MapScene` として読む）
 2. ~~3D 中の機能追い付き~~（2026-10-04 時点で済み。上の「未対応」の注記）
 4. ~~等高線の描画コスト: 間引いた格子から引いても 1.7 万本で raster 30〜40ms（Impeller の細線）。
    ジェスチャ中はさらに間引くか、等高線だけ間隔を広げる~~（2026-09-13 に等高線をラスタタイルにしたので線は描かない。

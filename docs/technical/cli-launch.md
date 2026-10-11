@@ -87,5 +87,5 @@ await m.list('Kitayama-2026'); await m.read('Kitayama-2026/Kitayama-2026.qgs'); 
 ## 実装
 
 - `lib/core/launch_request.dart`（解釈・生成・起動時の要求・到着の通知）、`launch_request_io.dart` / `launch_request_web.dart`
-- `lib/interfaces/terrain_projection.dart` の `lookAt`（方位・傾きまで含めてカメラを合わせる）
+- `lib/interfaces/map_surface.dart` の `MapSurface.lookAt`（方位・傾きまで含めてカメラを合わせる。attach 前に来た要求は地図ページが持っておき、attach の直前に流す）
 - テスト: `test/launch_request_test.dart`

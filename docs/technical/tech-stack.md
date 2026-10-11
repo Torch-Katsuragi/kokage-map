@@ -73,7 +73,7 @@ tags: [technical, stack, flutter]
 ## 座標管理
 
 - 描画中の座標は一時的なリスト（例: `List<Offset>`）に保持する。
-- 地図のズームレベルや表示範囲の変更に対応するため、画面座標と地理座標（緯度経度）の相互変換が必要 (`RMapController` 経由で地図面のカメラに投げる)。
+- 地図のズームレベルや表示範囲の変更に対応するため、画面座標と地理座標（緯度経度）の相互変換が必要 (`IMapState.mapController`＝`MapSurfaceController` 経由で地図面に投げる)。
 
 ## 線の平滑化 (オプション)
 

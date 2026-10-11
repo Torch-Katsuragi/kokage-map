@@ -112,7 +112,6 @@
 
 ## 3D・描画
 
-- [ ] `SceneSink` / `MapSurfaceController` のインターフェース抽出（[[docs/technical/scene-model]]）
 - [ ] メモリ削減の残り（2026-10-06 に大きいものは片づけた。経緯は [[docs/technical/performance]]）
   - [ ] Dart のヒープ（profile で約 340MB）: 地物の形を turf（点ごとに数値を箱に入れて持つ）・geobase（描画用）の 2 通りで
         持っている。turf をやめて 1 通りにできれば大きく減るが、turf はアプリ中で使っているので作り直しが大きい

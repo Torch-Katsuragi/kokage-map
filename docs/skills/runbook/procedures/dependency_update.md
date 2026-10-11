@@ -44,7 +44,7 @@ pwsh tool/test_matrix.ps1 -Only analyze,unit
 
 - Android は実機で `flutter run` のホットリロード確認。release は最後に 1 回（R8 の確認）
 - web は `flutter build web --release` → ローカル HTTP サーバ → Chrome
-- 地図まわりの依存（maplibre 等）が上がったら `integration_test/map_contract_test.dart` も回す
+- 地図まわりの依存（flutter_gpu 等）が上がったら実機で地図ページの描画とカメラ操作も確かめる（地図面の契約は unit テスト。[[docs/technical/testing#地図面の契約テスト]]）
 - Android の target SDK / Gradle / Kotlin / AGP が Flutter 側の要求で上がることがある。`android/` の差分も見る
 
 ## ステップ6: 記録して commit

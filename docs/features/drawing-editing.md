@@ -31,7 +31,7 @@ tags: [features, drawing, editing]
 - タップで点を置き、区間ごとの距離と合計を出す。1 点戻す・消すはパネル（左上）から
 - 面にするのは左下のボタン（ペンの消しゴム・選択の複数選択と同じ `isFabActiveProvider`）か始点のタップ。
   切り替えは中央に名前を出す（`ToolNameFlash` がツールとボタンの組から「距離を測る／面積を測る」）
-- 1 本指を取らないので、3D でも傾け・回転はいつもどおり。タップは `TerrainProjection.unproject` を通り、空や地図の外は無視する（`IMapState.tryOffsetToLatLng`）
+- 1 本指を取らないので、3D でも傾け・回転はいつもどおり。タップは `MapSurface.unproject`（`MapSurfaceController.toLatLng` 越し）を通り、空や地図の外は無視する（`IMapState.tryOffsetToLatLng`）
 - 線と点は地図の場面に焼かず、カメラが動くたびに描き直す（編集の重ね絵と同じ。`measure_overlay.dart`）。ほかのツールに替えると消える
 
 ## 長さ・面積の測り方

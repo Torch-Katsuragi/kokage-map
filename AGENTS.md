@@ -59,7 +59,7 @@ dart run build_runner build --delete-conflicting-outputs
 - **Androidの検証は実機で行う。エミュレータは不可**（Pixel 9 が常時接続されている）
 - webの検証は `flutter build web --release` → ローカルHTTPサーバ → Chrome（`flutter run -d chrome` は不安定）
 - 詳細・落とし穴は [[docs/technical/testing|テスト構成]] を読む
-- 地図まわりを触ったら `integration_test/map_contract_test.dart` を回す
+- 地図まわりを触ったら `test/map_surface_*_test.dart` と `test/map_scene_store_test.dart` を回す（地図面の契約。[[docs/technical/testing#地図面の契約テスト]]）
 
 ## よく使うパターン
 

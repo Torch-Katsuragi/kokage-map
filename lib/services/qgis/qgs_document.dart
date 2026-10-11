@@ -263,6 +263,7 @@ class QgsDocument {
       ..children.add(XmlText(project.name));
 
     _adoptRasterIds(project);
+    _adoptTableIds(project);
     final web = _webLayerIds();
     _applyTree(project, web);
     _applyMapLayers(project, report, web);
@@ -321,6 +322,95 @@ class QgsDocument {
       s = s.substring(2);
     }
     return s.toLowerCase();
+  }
+
+  // ---- 表（森林簿 CSV）----
+
+  /// 形の無い表の maplayer か（`wkbType="NoGeometry"`、古い形は `geometry="No geometry"`）
+  static bool isTableLayer(XmlElement maplayer) =>
+      maplayer.getAttribute('type') == 'vector' &&
+      (maplayer.getAttribute('wkbType') == 'NoGeometry' || maplayer.getAttribute('geometry') == 'No geometry');
+
+  /// 表の maplayer が指すファイルのパス（`.qgs` に書かれたまま。相対なら `./…`）。
+  /// delimitedtext は `file:./%E6….csv?type=csv&…`（パスは % エンコード）、ogr は `./林班表.csv|…`
+  static String? tableSourcePath(XmlElement maplayer) {
+    final provider = maplayer.getElement('provider')?.innerText.trim().toLowerCase();
+    final raw = maplayer.getElement('datasource')?.innerText.trim() ?? '';
+    if (raw.isEmpty) return null;
+    if (provider == 'delimitedtext') {
+      var path = raw.split('?').first;
+      if (path.startsWith('file:')) path = path.substring(5);
+      // file:///C:/… → C:/…（ドライブ文字が無ければ / から）
+      if (path.startsWith('///')) path = RegExp('^///[A-Za-z]:').hasMatch(path) ? path.substring(3) : path.substring(2);
+      try {
+        return Uri.decodeComponent(path);
+      } catch (_) {
+        return path;
+      }
+    }
+    if (provider == 'ogr') return raw.split('|').first.trim();
+    return null;
+  }
+
+  /// QGIS で足した表が、アプリの表（[QgsTableLayer]）と同じファイルを指していれば、アプリの決定的な id に付け替える。
+  /// 結合（`<join joinLayerId>`）も付け替える。外して足し直すと QGIS の結合が宙に浮くため
+  void _adoptTableIds(QgsProject project) {
+    final layers = mapLayers.toList();
+    final present = {for (final e in layers) e.getElement('id')?.innerText};
+    final byPath = <String, QgsTableLayer>{
+      for (final t in project.tableLayers)
+        if (!present.contains(t.id)) _rasterPathKey(t.dataSourcePath): t,
+    };
+    if (byPath.isEmpty) return;
+    final wanted = {for (final t in project.tableLayers) t.id};
+    for (final e in layers) {
+      if (isEmbedded(e) || !isTableLayer(e)) continue;
+      final oldId = e.getElement('id')?.innerText;
+      final path = tableSourcePath(e);
+      if (oldId == null || path == null || wanted.contains(oldId)) continue;
+      final target = byPath.remove(_rasterPathKey(path));
+      if (target == null) continue;
+      setChildText(e, 'id', target.id);
+      for (final t in root.findAllElements('layer-tree-layer').where((t) => t.getAttribute('id') == oldId)) {
+        t.setAttribute('id', target.id);
+      }
+      for (final j in root.findAllElements('join').where((j) => j.getAttribute('joinLayerId') == oldId)) {
+        j.setAttribute('joinLayerId', target.id);
+      }
+    }
+  }
+
+  /// 表の maplayer を合わせる。QGIS が同じファイルを読んでいる形（ogr・区切りの指定など）はそのまま残す
+  void _patchTableLayer(XmlElement e, QgsTableLayer layer) {
+    setChildText(e, 'layername', layer.name);
+    final path = tableSourcePath(e);
+    if (path != null && _rasterPathKey(path) == _rasterPathKey(layer.dataSourcePath)) return;
+    setChildText(e, 'datasource', layer.dataSourceUri);
+    final provider = e.getElement('provider');
+    if (provider != null) {
+      provider.children
+        ..clear()
+        ..add(XmlText('delimitedtext'));
+      provider.setAttribute('encoding', '');
+    }
+  }
+
+  /// レイヤの `<vectorjoins>` を合わせる。アプリの表（[managedTables]）への結合だけ差し替え、
+  /// ほかのレイヤへの結合（QGIS で足したもの）は残す
+  void _patchJoins(XmlElement e, QgsLayer layer, Set<String> managedTables) {
+    var joins = e.getElement('vectorjoins');
+    if (joins == null) {
+      if (layer.joins.isEmpty) return;
+      joins = XmlElement(const XmlName.parts('vectorjoins'));
+      insertIntoMapLayer(e, joins);
+    }
+    joins.childElements
+        .where((j) => j.name.local == 'join' && managedTables.contains(j.getAttribute('joinLayerId')))
+        .toList()
+        .forEach(detachNode);
+    for (final j in layer.joins) {
+      joins.children.add(_writer.vectorJoinsElement([j]).childElements.first.copy());
+    }
   }
 
   // ---- レイヤツリー ----
@@ -386,6 +476,10 @@ class QgsDocument {
               node.visible,
             ),
           );
+        case QgsTableLayer():
+          final old = oldLayers[node.id];
+          // QGIS が同じファイルを ogr で読んでいれば、その形のまま（[_patchTableLayer]）
+          result.add(old == null ? _writer.treeTableLayerElement(node) : (old.copy()..setAttribute('name', node.name)));
       }
     }
     return result;
@@ -439,9 +533,12 @@ class QgsDocument {
   void _applyMapLayers(QgsProject project, QgsApplyReport report, Set<String> web) {
     final layers = project.layers;
     final rasters = project.rasterLayers;
+    final tables = project.tableLayers;
+    final managedTables = {for (final t in tables) t.id};
     final wanted = <String, QgsTreeNode>{
       for (final l in layers) l.id: l,
       for (final r in rasters) r.id: r,
+      for (final t in tables) t.id: t,
     };
     final container = _projectLayers;
 
@@ -474,6 +571,9 @@ class QgsDocument {
       switch (layer) {
         case QgsLayer():
           _patchMapLayer(e, layer, report);
+          _patchJoins(e, layer, managedTables);
+        case QgsTableLayer():
+          _patchTableLayer(e, layer);
         case QgsRasterLayer():
           // ラスタは参照と名前だけが管轄。レンダラ（pipe）は QGIS 側の設定を残す
           setChildText(e, 'datasource', layer.dataSourcePath);
@@ -495,6 +595,10 @@ class QgsDocument {
     for (final raster in rasters) {
       if (existing.contains(raster.id)) continue;
       container.children.add(_writer.rasterMapLayerElement(raster));
+    }
+    for (final table in tables) {
+      if (existing.contains(table.id)) continue;
+      container.children.add(_writer.tableMapLayerElement(table));
     }
   }
 

@@ -88,6 +88,50 @@ class QgsWriter {
   XmlElement treeRasterLayerElement(QgsRasterLayer layer) =>
       _fragment((b) => _writeTreeNode(b, layer));
 
+  /// 表の `<maplayer>`
+  XmlElement tableMapLayerElement(QgsTableLayer layer) =>
+      _fragment((b) => _writeTableMapLayer(b, layer));
+
+  /// 表の `<layer-tree-layer>`
+  XmlElement treeTableLayerElement(QgsTableLayer layer) =>
+      _fragment((b) => _writeTreeNode(b, layer));
+
+  /// `<vectorjoins>`（[QgsLayer.joins]）
+  XmlElement vectorJoinsElement(List<QgsJoin> joins) =>
+      _fragment((b) => b.element('vectorjoins', nest: () {
+            for (final j in joins) {
+              writeJoin(b, j);
+            }
+          }));
+
+  /// `<join>` 1 本。属性は QGIS 4.2.2 が書く形（`tool/qgis/write_join_fixture.py`）
+  static void writeJoin(XmlBuilder b, QgsJoin join) {
+    b.element(
+      'join',
+      attributes: {
+        'cascadedDelete': '0',
+        if (join.customPrefix != null) 'customPrefix': join.customPrefix!,
+        'dynamicForm': '0',
+        'editable': '0',
+        if (join.customPrefix != null) 'hasCustomPrefix': '1',
+        'joinFieldName': join.joinFieldName,
+        'joinLayerId': join.joinLayerId,
+        'memoryCache': join.memoryCache ? '1' : '0',
+        'targetFieldName': join.targetFieldName,
+        'upsertOnEdit': '0',
+      },
+      nest: () {
+        final subset = join.subset;
+        if (subset == null) return;
+        b.element('joinFieldsSubset', nest: () {
+          for (final f in subset) {
+            b.element('field', attributes: {'name': f});
+          }
+        });
+      },
+    );
+  }
+
   /// 子を持たない `<layer-tree-group>`
   XmlElement treeGroupElement(String name, {bool visible = true}) => _fragment(
     (b) => _writeTreeNode(b, QgsGroup(name: name, children: const [], visible: visible)),
@@ -181,6 +225,8 @@ class QgsWriter {
         _writeTreeLayer(builder, node.id, node.name, node.dataSourceUri, 'ogr', node.visible);
       case QgsRasterLayer():
         _writeTreeLayer(builder, node.id, node.name, node.dataSourcePath, 'gdal', node.visible);
+      case QgsTableLayer():
+        _writeTreeLayer(builder, node.id, node.name, node.dataSourceUri, 'delimitedtext', true);
     }
   }
 
@@ -217,6 +263,36 @@ class QgsWriter {
         for (final raster in project.rasterLayers) {
           _writeRasterMapLayer(builder, raster);
         }
+        for (final table in project.tableLayers) {
+          _writeTableMapLayer(builder, table);
+        }
+      },
+    );
+  }
+
+  /// 表（森林簿 CSV）の `<maplayer>`。QGIS の「CSV テキストレイヤを追加」（geomType=none）と同じ形
+  void _writeTableMapLayer(XmlBuilder builder, QgsTableLayer layer) {
+    builder.element(
+      'maplayer',
+      attributes: {
+        'type': 'vector',
+        'geometry': 'No geometry',
+        'wkbType': 'NoGeometry',
+        'hasScaleBasedVisibilityFlag': '0',
+        'minScale': '1e+08',
+        'maxScale': '0',
+        'readOnly': '0',
+        'refreshOnNotifyEnabled': '0',
+        'autoRefreshMode': 'Disabled',
+        'styleCategories': 'AllStyleCategories',
+      },
+      nest: () {
+        builder.element('id', nest: layer.id);
+        builder.element('datasource', nest: layer.dataSourceUri);
+        builder.element('layername', nest: layer.name);
+        builder.element('provider', attributes: {'encoding': ''}, nest: 'delimitedtext');
+        builder.element('vectorjoins', nest: '');
+        builder.element('previewExpression', nest: '');
       },
     );
   }
@@ -270,6 +346,13 @@ class QgsWriter {
           nest: 'ogr',
         );
         builder.element('srs', nest: () => _writeCrs(builder, layer.crs));
+        if (layer.joins.isNotEmpty) {
+          builder.element('vectorjoins', nest: () {
+            for (final j in layer.joins) {
+              writeJoin(builder, j);
+            }
+          });
+        }
         _writeRenderer(builder, layer);
         _writeLabeling(builder, layer);
         // レイヤ名の表示に使う。空でよいが、無いと警告を出すQGISがある。

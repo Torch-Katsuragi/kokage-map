@@ -6,12 +6,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/core/gdal/gdal_ffi.dart';
 import 'package:root_maps/core/path_resolver.dart';
-import 'package:root_maps/models/geometry_type.dart';
-import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/layer_join.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
@@ -27,40 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'support/gdal_host.dart';
-
-/// fixture（QGIS が作った計画図）と同じ行
-const shobanRows = <(int?, String, String?)>[
-  (12, '1', '12-1'),
-  (12, '2', '12-2'),
-  (13, '1', '13-1'),
-  (14, '1', '14-1'),
-  (null, '9', null),
-];
-
-/// QGIS の fixture と同じ結合
-const fixtureJoins = [
-  LayerJoin(table: '森林簿.csv', joinField: '林小班', targetField: 'key', fields: ['樹種', '林齢']),
-  LayerJoin(table: '林班表.csv', joinField: '林班', targetField: 'rinpan', prefix: '林班_'),
-];
-
-/// [dir] に計画図.gpkg（shoban）と表 2 本を置く
-Future<void> makeProject(String dir) async {
-  final g = GeoPackageFile(const ['計画図.gpkg'], absolutePath: p.join(dir, '計画図.gpkg'));
-  await g.addLayer('shoban', GeometryType.polygon);
-  await g.addAttributeColumns('shoban', {'rinpan': 'INTEGER', 'shoban': 'TEXT', 'key': 'TEXT'});
-  for (var i = 0; i < shobanRows.length; i++) {
-    final (rinpan, shoban, key) = shobanRows[i];
-    final x = 135.9 + i * 0.01;
-    await g.addPolygonWithAttributes('shoban', [
-      [LatLng(33.9, x), LatLng(33.9, x + 0.009), LatLng(33.909, x + 0.009), LatLng(33.9, x)],
-    ], {'rinpan': rinpan, 'shoban': shoban, 'key': key});
-  }
-  await g.flushChanges();
-  await g.dispose();
-  for (final name in ['森林簿.csv', '林班表.csv']) {
-    File(p.join('test/fixtures/joins', name)).copySync(p.join(dir, name));
-  }
-}
+import 'support/join_fixture.dart';
 
 void main() {
   final gdalConfig = findHostGdal();
@@ -152,7 +116,7 @@ void main() {
       tmp = await Directory.systemTemp.createTemp('table_join_');
       proj = (await Directory(p.join(tmp.path, 'proj')).create()).path;
       ProjectPathResolver.instance.setRootPathGetter(() => proj);
-      await makeProject(proj);
+      await makeJoinProject(proj);
     });
 
     tearDown(() async {
@@ -258,7 +222,7 @@ void main() {
           format: FileFormat.geopackage, options: const ExportOptions(includeRowNumber: true));
       expect(result.success, isTrue, reason: result.errorMessage);
       final info = await ExternalGdal.instance.vectorInfo(out, args: const ['-features']);
-      final layerInfo = (info["layers"] as List).first as Map;
+      final layerInfo = (info['layers'] as List).first as Map;
       final fields = {for (final f in layerInfo['fields'] as List) (f as Map)['name']: f['type']};
       expect(fields['ROW_NUM'], isNotNull);
       expect(fields['森林簿_樹種'], 'String');

@@ -74,6 +74,7 @@ class QgsLayer extends QgsTreeNode {
     this.visible = true,
     this.uriOptions,
     this.providerEncoding = 'UTF-8',
+    this.joins = const [],
   });
 
   /// プロジェクト内で一意なID。`layer-tree-layer` と `maplayer` を結ぶ。
@@ -111,6 +112,9 @@ class QgsLayer extends QgsTreeNode {
   /// `<provider encoding=…>`。shp の属性の文字コード（`.cpg` が無い shp は Shift_JIS で読んでいる）
   final String providerEncoding;
 
+  /// アプリで結んだ表（`<vectorjoins>`）。結合先は [QgsTableLayer] の id
+  final List<QgsJoin> joins;
+
   /// OGRプロバイダのデータソース文字列。
   ///
   /// QGIS は GeoPackage のレイヤ指定とフィルタをこの1本の文字列に詰める。
@@ -123,6 +127,60 @@ class QgsLayer extends QgsTreeNode {
       buffer.write('|subset=${subset!.trim()}');
     }
     return buffer.toString();
+  }
+}
+
+/// 表の結合 1 本（QGIS の `<vectorjoins>/<join>`）
+class QgsJoin {
+  const QgsJoin({
+    required this.joinLayerId,
+    required this.joinFieldName,
+    required this.targetFieldName,
+    this.subset,
+    this.customPrefix,
+    this.memoryCache = true,
+  });
+
+  final String joinLayerId;
+  final String joinFieldName;
+  final String targetFieldName;
+
+  /// `<joinFieldsSubset>`。null なら全部
+  final List<String>? subset;
+
+  /// `customPrefix`（`hasCustomPrefix="1"`）。null なら QGIS の既定（`<表の名前>_`）
+  final String? customPrefix;
+  final bool memoryCache;
+}
+
+/// 形の無い表（森林簿 CSV）。QGIS の「CSV テキストレイヤ」（delimitedtext、geomType=none）として書く
+class QgsTableLayer extends QgsTreeNode {
+  const QgsTableLayer({
+    required this.id,
+    required this.name,
+    required this.dataSourcePath,
+    this.encoding = 'UTF-8',
+  });
+
+  /// 決定的な id（相対パスのハッシュ）
+  final String id;
+
+  /// QGIS 上のレイヤ名（ファイル名から拡張子を除いたもの。結合の既定の接頭辞になる）
+  final String name;
+
+  /// `.qgs` からの相対パス（例: `./森林簿.csv`）
+  final String dataSourcePath;
+
+  /// 文字コード（アプリが読んだもの。`UTF-8` か `CP932`）
+  final String encoding;
+
+  /// delimitedtext の URI。パスは QGIS と同じく `file:./<%エンコード>`（相対）
+  String get dataSourceUri {
+    final rel = dataSourcePath.replaceAll(r'\', '/');
+    final body = rel.startsWith('./') ? rel.substring(2) : rel;
+    final encoded = body.split('/').map(Uri.encodeComponent).join('/');
+    return 'file:./$encoded?type=csv&encoding=$encoding&maxFields=10000&detectTypes=yes'
+        '&geomType=none&subsetIndex=no&watchFile=no';
   }
 }
 
@@ -270,8 +328,8 @@ class QgsProject {
             walk(children);
           case QgsLayer():
             result.add(node);
-          case QgsRasterLayer():
-            break; // [rasterLayers]
+          case QgsRasterLayer() || QgsTableLayer():
+            break; // [rasterLayers] [tableLayers]
         }
       }
     }
@@ -290,7 +348,27 @@ class QgsProject {
             walk(children);
           case QgsRasterLayer():
             result.add(node);
-          case QgsLayer():
+          case QgsLayer() || QgsTableLayer():
+            break;
+        }
+      }
+    }
+
+    walk(root);
+    return result;
+  }
+
+  /// ツリーを深さ優先で辿って、表だけを順に返す
+  List<QgsTableLayer> get tableLayers {
+    final result = <QgsTableLayer>[];
+    void walk(List<QgsTreeNode> nodes) {
+      for (final node in nodes) {
+        switch (node) {
+          case QgsGroup(:final children):
+            walk(children);
+          case QgsTableLayer():
+            result.add(node);
+          case QgsLayer() || QgsRasterLayer():
             break;
         }
       }
@@ -311,6 +389,8 @@ class QgsProject {
           case QgsLayer(:final id):
             result.add(id);
           case QgsRasterLayer(:final id):
+            result.add(id);
+          case QgsTableLayer(:final id):
             result.add(id);
         }
       }

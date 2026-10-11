@@ -30,6 +30,7 @@ import 'package:path/path.dart' as p;
 import '../../core/fs/k_file_system.dart';
 import '../../models/geometry_type.dart';
 import '../../models/kmeta.dart';
+import '../../models/layer_join.dart';
 import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/external_overlay_image_node.dart';
 import '../../models/nodes/folder_node.dart';
@@ -38,6 +39,7 @@ import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
 import '../../models/nodes/sys_node.dart';
+import '../../models/nodes/table_node.dart';
 import '../../models/nodes/view_node.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/label_template.dart';
@@ -257,6 +259,20 @@ class QgsProjectBuilder {
     if (node is GeoPackageNode) {
       return _convertGeoPackage(node, rootPath, skipped, crsCache);
     }
+    // 形の無い表（森林簿 CSV）。QGIS の「CSV テキストレイヤ」として書き、結合の先にする
+    if (node is TableNode) {
+      final relPath = _relativeTo(rootPath, node.sourcePath);
+      if (relPath == null) {
+        skipped.add('${node.name}（プロジェクトフォルダの外を参照している）');
+        return null;
+      }
+      return QgsTableLayer(
+        id: tableLayerIdForPath(relPath),
+        name: node.tableName,
+        dataSourcePath: relPath,
+        encoding: (await node.load())?.encoding ?? 'UTF-8',
+      );
+    }
 
     // オーバーレイ画像は GeoTIFF ならラスタレイヤとして参照を書く（位置は .tif のタグに焼き込み済み）。
     // ⚠ ImageNode（写真）はオーバーレイの親クラスなので、オーバーレイの判定を先にする
@@ -309,6 +325,44 @@ class QgsProjectBuilder {
         isGeographic: probe.isGeographic,
       );
 
+  /// 表の決定的な id（相対パスのハッシュ）
+  static String tableLayerIdForPath(String relPath) {
+    var rel = relPath.replaceAll(r'\', '/');
+    if (!rel.startsWith('./')) rel = './$rel';
+    return 'table_${stableHashHex(rel)}';
+  }
+
+  /// [layer] の結合（フォルダ設定の [KMeta.joins]）を `.qgs` の形にする。表がプロジェクトの外・見つからなければ報告して外す
+  Future<List<QgsJoin>> _joinsOf(LayerNode layer, String? rootPath, List<String> skipped) async {
+    final folder = layer.folderNode;
+    final folderPath = folder?.getAbsoluteFilePath();
+    if (folder == null || folderPath == null) return const [];
+    final List<LayerJoin> defs;
+    try {
+      defs = (await folder.getMeta()).joins[layer.layerKey] ?? const [];
+    } on Object {
+      return const [];
+    }
+    final out = <QgsJoin>[];
+    for (final def in defs) {
+      final abs = p.normalize(p.join(folderPath, def.table));
+      final rel = _relativeTo(rootPath, abs);
+      if (rel == null || !await fs.exists(abs)) {
+        skipped.add('${layer.layerName} の結合 ${def.table}（表が見つからない）');
+        continue;
+      }
+      out.add(QgsJoin(
+        joinLayerId: tableLayerIdForPath(rel),
+        joinFieldName: def.joinField,
+        targetFieldName: def.targetField,
+        subset: def.fields,
+        customPrefix: def.prefix,
+        memoryCache: def.memoryCache,
+      ));
+    }
+    return out;
+  }
+
   /// ラスタレイヤの決定的な id（相対パスのハッシュ。[layerIdForViewKey] と同じ考え）
   static String rasterLayerIdForPath(String relPath) =>
       'raster_${stableHashHex(relPath.replaceAll(r'\', '/'))}';
@@ -349,7 +403,7 @@ class QgsProjectBuilder {
 
     final groups = <QgsTreeNode>[];
     for (final layer in gpkg.children.whereType<LayerNode>()) {
-      final group = await _convertLayer(layer, relPath, skipped, crsCache);
+      final group = await _convertLayer(layer, relPath, skipped, crsCache, rootPath: rootPath);
       if (group != null) groups.add(group);
     }
     if (groups.isEmpty) return null;
@@ -388,6 +442,7 @@ class QgsProjectBuilder {
         crsCache,
         uriOptions: externalUriOptions(node, layer.layerName, layerCount: layers.length),
         providerEncoding: encoding,
+        rootPath: rootPath,
       );
       if (group != null) groups.add(group);
     }
@@ -456,6 +511,7 @@ class QgsProjectBuilder {
     Map<LayerNode, QgsCrs> crsCache, {
     List<String>? uriOptions,
     String providerEncoding = 'UTF-8',
+    String? rootPath,
   }) async {
     final geometryType = _geometryTypeOf(layer);
     if (geometryType == null) {
@@ -466,6 +522,7 @@ class QgsProjectBuilder {
     if (layer.views.isEmpty) await layer.loadViews();
     final crs = crsCache[layer] ??= await _crsOf(layer);
     final layerStyle = await layer.getKmetaStyle();
+    final joins = await _joinsOf(layer, rootPath, skipped);
 
     final qgsLayers = <QgsTreeNode>[
       for (final view in layer.views)
@@ -482,6 +539,7 @@ class QgsProjectBuilder {
           visible: view.visible,
           uriOptions: uriOptions,
           providerEncoding: providerEncoding,
+          joins: joins,
         ),
     ];
     if (qgsLayers.isEmpty) return null;

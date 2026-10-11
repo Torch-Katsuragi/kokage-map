@@ -22,11 +22,9 @@ import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../core/r_map_controller.dart';
+import '../../core/map_surface_handle.dart';
 import '../../interfaces/map_state_interface.dart';
-import '../../interfaces/terrain_projection.dart';
 import '../../models/gps_position_record.dart';
-import '../../models/map_style_group.dart';
 import '../../models/nodes/current_location_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
@@ -39,7 +37,7 @@ import '../../services/basemap_service.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../services/gps_manager_service.dart';
 import '../../services/internal_gps_location_store.dart';
-import 'feature_geojson_cache.dart';
+import 'map_scene_store.dart';
 
 /// MapPageの状態変数を定義する基底mixin
 /// 各機能別Mixinはこのmixinを継承（on）して状態にアクセス
@@ -82,9 +80,9 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 決まっていない間だけ、GPS の初回フィックスで現在位置へ飛ぶ（フィーチャが無いプロジェクト＝東京から始まる場合）
   bool initialViewDecided = false;
 
-  /// 地図コントローラー（旧 flutter_map 互換ラッパー）
+  /// 地図面の窓口。地図面（`TerrainMapLayer`）が組み上がると attach される
   @override
-  final RMapController mapController = RMapController();
+  final MapSurfaceHandle mapController = MapSurfaceHandle();
 
   // =============================================
   // コンパス関連
@@ -187,46 +185,24 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   // レンダリングキャッシュ（パン/ズーム時の再構築を防止）
   // =============================================
 
-  /// 地図に流す GeoJSON（通常 / 選択済み）。組み立ては [FeatureGeoJsonCache]
-  final geoJson = FeatureGeoJsonCache();
-
-  /// View 固有スタイルの束（フィーチャの `k-style` と突き合わせる）。3D 地図面が見た目を決めるのに使う
-  List<MapStyleGroup> styleGroups = const [];
-
-  /// [styleGroups] を差し替える。変わったら true
-  bool setStyleGroups(List<MapStyleGroup> groups) {
-    if (styleGroupsEqual(styleGroups, groups)) return false;
-    styleGroups = List.unmodifiable(groups);
-    return true;
-  }
-
-  /// 地図面の投影。null なら地図面がまだ組み上がっていない（`TerrainMapLayer` が登録 / 解除する）
-  TerrainProjection? terrainProjection;
-
-  /// 地図に流す GeoJSON が更新されたら増える（3D 地図面がシーンを組み直す合図）
-  final ValueNotifier<int> terrainSceneRevision = ValueNotifier<int>(0);
+  /// 地図に流すシーン（フィーチャの GeoJSON・View 固有スタイル・オーバーレイ画像）。
+  /// 書くのは `SceneSink` として、3D 地図面は `MapScene` として読む
+  late final MapSceneStore scene = MapSceneStore(overlayImagesOf: () => overlayImageNodes);
 
   // =============================================
   // IMapState実装
   // =============================================
 
   @override
-  LatLng offsetToLatLng(Offset offset) {
-    final terrain = terrainProjection;
-    if (terrain != null) {
-      final p = terrain.unproject(offset);
-      if (p != null) return p;
-    }
-    return mapController.camera.center;
-  }
+  LatLng offsetToLatLng(Offset offset) => mapController.toLatLng(offset) ?? mapController.camera.center;
 
   @override
-  LatLng? tryOffsetToLatLng(Offset offset) => terrainProjection?.unproject(offset);
+  LatLng? tryOffsetToLatLng(Offset offset) => mapController.toLatLng(offset);
 
   @override
   Offset latLngToOffset(LatLng latlng) {
-    final terrain = terrainProjection;
-    if (terrain != null) return terrain.project(latlng);
+    final p = mapController.toScreenLocation(latlng);
+    if (p != null) return p;
     final size = MediaQuery.of(context).size;
     return Offset(size.width / 2, size.height / 2);
   }

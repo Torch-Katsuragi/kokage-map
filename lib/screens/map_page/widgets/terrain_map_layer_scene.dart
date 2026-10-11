@@ -125,7 +125,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
 
   /// View 固有スタイルをキーで引ける形に
   Map<String, TerrainFeatureStyle> _styleGroupsByKey() =>
-      {for (final sg in widget.styleGroups()) sg.key: _styleFromGroup(sg)};
+      {for (final sg in widget.scene.styleGroups) sg.key: _styleFromGroup(sg)};
 
   TerrainFeatureStyle _defaultStyle() {
     final s = layerStyleSettings;
@@ -172,7 +172,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
   /// 静的な部分は 1 フレーム [_staticBudget] 枚まで。超えたぶんは空のまま描いて次のフレームで足す
   /// （引いた直後に 10 枚ぶん同時に届くと 1 枚 30〜150ms × 10 で止まる）
   _TileScene _sceneFor(TerrainTile tile, TerrainMesh mesh, int step) {
-    final g = widget.geoJson;
+    final g = widget.scene.features;
     final track = widget.gpsTrack();
     final session = ref.read(partySessionProvider);
     final loc = widget.location.value;

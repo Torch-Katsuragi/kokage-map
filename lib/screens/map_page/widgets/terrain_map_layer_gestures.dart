@@ -82,7 +82,7 @@ mixin _TerrainGestures on ConsumerState<TerrainMapLayer> {
 
   void _onScaleStart(ScaleStartDetails d) {
     if (_penLock && d.pointerCount == 1) {
-      // 真上ロック中の 1 本指は描画（2D と同じ経路。座標は TerrainProjection を通る）
+      // 真上ロック中の 1 本指は描画（2D と同じ経路。座標は MapSurface を通る）
       _toolDrag = true;
       ref.read(currentToolProvider).onScaleStart(d, widget.mapState);
       return;

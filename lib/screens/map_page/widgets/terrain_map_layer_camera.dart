@@ -18,8 +18,8 @@ part of 'terrain_map_layer.dart';
 typedef _CameraPose = ({double bearing, double pitch, double centerX, double centerY, double zoom});
 
 /// カメラの動かし方: 滑らかに動かすアニメ、コンパスの 2D / 3D・北・眺めモード、ズームボタン、
-/// 外から呼ばれる [TerrainProjection]（投影と、jumpTo・lookAt・fitCoordinates）
-mixin _TerrainCameraControl on ConsumerState<TerrainMapLayer> implements TerrainProjection {
+/// 外から呼ばれる [MapSurface]（投影と、jumpTo・lookAt・fitCoordinates）
+mixin _TerrainCameraControl on ConsumerState<TerrainMapLayer> implements MapSurface {
   TerrainCamera get _camera;
   TerrainWorld get _world;
   TerrainWorldPainter get _painter;
@@ -127,7 +127,7 @@ mixin _TerrainCameraControl on ConsumerState<TerrainMapLayer> implements Terrain
     _refresh();
   }
 
-  // ── TerrainProjection ───────────────────────────────
+  // ── MapSurface ───────────────────────────────
 
   @override
   LatLng? unproject(Offset screen) {

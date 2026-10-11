@@ -239,8 +239,8 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
 
     // View / レイヤのスタイル指定を持ち直す。
     // ⚠ フィーチャを組み立てる**前**に済ませること。`k-style` を載せるかどうかの
-    //   判断が [styleGroups] を見ているため。
-    setStyleGroups(buildStyleGroups());
+    //   判断が `scene.styleGroups` を見ているため。
+    scene.setStyleGroups(buildStyleGroups());
 
     final input = FeatureGeoJsonInput(
       lines: _viewOrdered(lineFeatures),
@@ -250,27 +250,21 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
       selected: currentSelection.toSet(),
       hidden: {?ref.read(featureEditorProvider)?.feature},
       // 固有スタイルが1つでもあれば、フィーチャに「どのグループのものか」を載せる
-      styleKeyOf: styleGroups.isEmpty ? null : (f) => f.parent.styleKeyOf(f.rowId),
+      styleKeyOf: scene.styleGroups.isEmpty ? null : (f) => f.parent.styleKeyOf(f.rowId),
       stylePropKey: kStyleProp,
       labelOf: _labelFor,
       lineVertices: layerStyleSettings.getBool(lineVertexPointsEnabledDef),
       polygonVertices: layerStyleSettings.getBool(polygonVertexPointsEnabledDef),
     );
 
-    if (dataChanged) {
-      geoJson.rebuildAll(input);
-    } else {
-      // 選択のみ変更: 選択ソースだけ再構築（通常ソースは不変→送信スキップ）
-      geoJson.rebuildSelection(input);
-    }
-    // 3D 地図面にシーンを組み直させる
-    terrainSceneRevision.value++;
+    // 選択のみ変更なら選択ソースだけ再構築（通常ソースは不変）。どちらも 3D 地図面にシーンを組み直させる
+    scene.pushFeatures(input, selectionOnly: !dataChanged);
   }
 
   /// 同じレイヤの中を View の順に並べる（上の View ほど後＝手前に描く。どの View にも当たらないものはいちばん下）。
   /// レイヤどうしの順（ツリーの並び）は変えない。固有スタイルが 1 つも無ければそのまま返す
   List<F> _viewOrdered<F extends FeatureNode>(List<F> fs) {
-    if (styleGroups.isEmpty || fs.isEmpty) return fs;
+    if (scene.styleGroups.isEmpty || fs.isEmpty) return fs;
     final byLayer = <LayerNode, List<F>>{};
     for (final f in fs) {
       (byLayer[f.parent] ??= []).add(f);

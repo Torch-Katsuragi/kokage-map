@@ -52,10 +52,9 @@ mixin MapJumpMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
   /// Returns: 即座に反映できたら true。地図が未生成で保留された場合は false
   /// （保留分は地図の生成後に実行されるので、呼び出しは失われない）。
   Future<bool> jumpTo(LatLng target, {double? zoom, bool animate = true}) async {
-    final terrain = terrainProjection;
-    if (terrain != null) {
+    if (mapController.isAttached) {
       final z = zoom ?? mapController.camera.zoom;
-      await terrain.jumpTo(_centerForVisibleArea(target, zoom: z), z, animate: animate);
+      await mapController.jumpTo(_centerForVisibleArea(target, zoom: z), z, animate: animate);
       return true;
     }
     // 地図がまだ組み上がっていない。保留して組み上がったときに流す

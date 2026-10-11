@@ -29,6 +29,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/fs/k_file_system.dart';
 import '../../../core/map_layout.dart';
+import '../../../core/map_surface_handle.dart';
 import '../../../core/terrain/contour_tiles.dart';
 import '../../../core/terrain/dem_grid.dart';
 import '../../../core/terrain/dem_tiles.dart';
@@ -46,7 +47,7 @@ import '../../../core/terrain/web_mercator.dart';
 import '../../../devices/base/device_tool.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../interfaces/map_state_interface.dart';
-import '../../../interfaces/terrain_projection.dart';
+import '../../../interfaces/scene_sink.dart';
 import '../../../models/basemap_provider.dart';
 import '../../../models/map_style_group.dart';
 import '../../../models/nodes/external_overlay_image_node.dart';
@@ -81,25 +82,24 @@ part 'terrain_map_layer_scene.dart';
 
 /// 地図面（v2: タイルの世界）。地図はこれだけ（MapLibre は 2026-10-04 に外した）
 ///
-/// シーン（[FeatureGeoJsonCache] の GeoJSON と [MapStyleGroup]）を地形の上に描く（flutter_gpu、無い環境は純 Dart）。設計は `docs/technical/terrain-3d.md` の「v2: タイルの世界」。
+/// シーン（[MapScene]: [FeatureGeoJsonCache] の GeoJSON と [MapStyleGroup]）を地形の上に描く（flutter_gpu、無い環境は純 Dart）。設計は `docs/technical/terrain-3d.md` の「v2: タイルの世界」。
 ///
 /// - 世界は [TerrainWorld]（DEM タイルのストリーミング）。カメラが動くと見える範囲 + 余白のタイルを揃え、
 ///   届いたものから描く。読み込みで画面は止まらない
 /// - フィーチャはタイルごとに計算メッシュへ貼り付けてキャッシュ。パンで貼り直さない
-/// - 2D は真上から見ているだけ（コンパスのタップで切り替え）。カメラは `RMapController` に覚えさせる
-/// - `IMapState.offsetToLatLng` / `latLngToOffset` は [TerrainProjection] としてここを通る
+/// - 2D は真上から見ているだけ（コンパスのタップで切り替え）。カメラは [MapSurfaceHandle] に覚えさせる
+/// - `IMapState.offsetToLatLng` / `latLngToOffset` は [MapSurface] としてここを通る
 /// - 操作: 1 本指 = 回転と傾き、2 本指 = 平面移動と拡縮（ユーザーの指定）
 class TerrainMapLayer extends ConsumerStatefulWidget {
   const TerrainMapLayer({
     super.key,
     required this.mapState,
     required this.baseMapService,
-    required this.geoJson,
-    required this.sceneRevision,
-    required this.styleGroups,
+    required this.scene,
     required this.location,
     required this.gpsTrack,
-    required this.onProjectionChanged,
+    required this.controller,
+    required this.onSurfaceChanged,
     required this.mapBearingNotifier,
     required this.cameraTickNotifier,
     this.heading,
@@ -108,14 +108,8 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   final IMapState mapState;
   final BaseMapService baseMapService;
 
-  /// 地図に流している GeoJSON（通常 / 選択）。所有は map_page
-  final FeatureGeoJsonCache geoJson;
-
-  /// [geoJson] が更新されたら増える
-  final ValueListenable<int> sceneRevision;
-
-  /// View 固有スタイル（解決済み）
-  final List<MapStyleGroup> Function() styleGroups;
+  /// 描くもの（GeoJSON・View 固有スタイル・オーバーレイ画像）。所有は map_page。`revision` が増えたら組み直す
+  final MapScene scene;
 
   /// 現在位置。変わったら描き直す（ページは組み立て直さない）
   final ValueListenable<LatLng?> location;
@@ -126,8 +120,11 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   /// 端末の向き（度）。現在位置の扇（2D のコンパス扇と同じ）
   final ValueListenable<double?>? heading;
 
-  /// 投影の登録 / 解除（3D に入るとき / 出るとき）
-  final void Function(TerrainProjection? projection) onProjectionChanged;
+  /// 地図面の窓口（カメラを覚えさせる・組み立て直すときの初期値）
+  final MapSurfaceHandle controller;
+
+  /// 地図面の登録 / 解除（組み上がったとき / 外れるとき）。登録先は [controller] に attach する
+  final void Function(MapSurface? surface) onSurfaceChanged;
 
   /// コンパス扇と画面外インジケータの追従用（map_page_state_base のもの）
   final ValueNotifier<double> mapBearingNotifier;
@@ -285,7 +282,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     // web: 右ドラッグ = 回転なので、ブラウザのコンテキストメニューを地図の間だけ止める
     // （右ボタンを離すたびにメニューが出ていた。ユーザー 2026-09-12）
     if (kIsWeb) BrowserContextMenu.disableContextMenu();
-    final cam = widget.mapState.mapController.camera;
+    final cam = widget.controller.camera;
     final center = cam.center;
     _camera = TerrainCamera(
       centerX: WebMercator.xFromLon(center.longitude),
@@ -339,13 +336,13 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         }
       },
     );
-    widget.sceneRevision.addListener(_onSceneRevision);
+    widget.scene.revision.addListener(_onSceneRevision);
     TerrainAppearance.revision.addListener(_onAppearanceChanged);
     widget.heading?.addListener(_onHeading);
     widget.location.addListener(_scheduleRefresh);
     // 描きかけの線・面・点（ペン・GPS 測量）。地図ページは組み直さないのでここで聞く
     GlobalDrawingState.instance.addListener(_scheduleRefresh);
-    widget.onProjectionChanged(this);
+    widget.onSurfaceChanged(this);
     _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 350))
       ..addListener(_onAnimTick)
       ..addStatusListener((st) {
@@ -451,11 +448,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     widget.heading?.removeListener(_onHeading);
     widget.location.removeListener(_scheduleRefresh);
     GlobalDrawingState.instance.removeListener(_scheduleRefresh);
-    widget.sceneRevision.removeListener(_onSceneRevision);
+    widget.scene.revision.removeListener(_onSceneRevision);
     TerrainAppearance.revision.removeListener(_onAppearanceChanged);
-    widget.onProjectionChanged(null);
+    widget.onSurfaceChanged(null);
     // 最後のカメラを覚えさせる（次に組み立てるときの初期値）
-    widget.mapState.mapController.moveAndRotate(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);
+    widget.controller.moveAndRotate(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);
     _world
       ..removeListener(_onWorldChanged)
       ..dispose();
@@ -694,7 +691,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     widget.mapBearingNotifier.value = _camera.bearing * 180 / math.pi;
     widget.cameraTickNotifier.value++;
     // 組み立て直すときの初期値・ホルダー経由の camera として覚えさせる
-    widget.mapState.mapController.rememberCamera(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);
+    widget.controller.rememberCamera(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);
   }
 
   void _onTapUp(TapUpDetails d) {
@@ -706,7 +703,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         return;
       }
     }
-    // 選択などは既存のツールに任せる（投影は TerrainProjection 経由でここを通る）
+    // 選択などは既存のツールに任せる（投影は MapSurface 経由でここを通る）
     ref.read(currentToolProvider).onTap(d, widget.mapState);
   }
 

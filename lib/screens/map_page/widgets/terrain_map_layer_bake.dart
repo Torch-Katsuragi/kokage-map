@@ -44,7 +44,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     return [
       '${d.fillColor.toARGB32()} ${d.outlineColor.toARGB32()} ${d.lineColor.toARGB32()} ${d.pointColor.toARGB32()} '
           '${d.outlineWidth} ${d.lineWidth} ${d.pointSize}',
-      for (final g in widget.styleGroups())
+      for (final g in widget.scene.styleGroups)
         '${g.key} ${g.fillHex} ${g.fillOpacity} ${g.outlineHex} ${g.outlineOpacity} ${g.borderWidth} '
             '${g.lineHex} ${g.lineWidth} ${g.pointHex} ${g.pointSize}',
     ].join('|');
@@ -92,7 +92,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
 
   /// シーン（GeoJSON・スタイル）が変わった: 中身かスタイルが変わっていれば焼き込みの世代を進める
   void _onSceneRevision() {
-    final g = widget.geoJson;
+    final g = widget.scene.features;
     final rev = g.contentRevision;
     // 色や濃さだけ変えたときは地物の署名（形とスタイルの鍵）が変わらないので、スタイルの中身でも見る。
     // 塗りはどの段もテクスチャに描くので、変われば全部焼き直す
@@ -180,7 +180,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
   /// 選んだ面が変わったら、前と今の範囲のテクスチャを作り直す（塗りはテクスチャに描くので地形に埋もれない）。
   /// 枠線は今までどおり地形に沿わせた線ですぐ出るので、塗りが少し遅れて付いても選んだことは伝わる
   void _syncSelectionFill() {
-    final sel = widget.geoJson.selectedPolygons;
+    final sel = widget.scene.features.selectedPolygons;
     if (identical(sel, _selFillDrawn)) return;
     _selFillDrawn = sel;
     Rect? b;
@@ -203,7 +203,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
 
   /// 見えているオーバーレイ画像の集合・位置が変わったら、画像を読み、テクスチャを作り直す（400ms にまとめる）
   void _syncOverlays() {
-    final nodes = widget.mapState.overlayImageNodes;
+    final nodes = widget.scene.overlayImages;
     final key = [
       for (final n in nodes)
         '${n.filePath}|${n.overlayParams.centerLat},${n.overlayParams.centerLng},${n.overlayParams.scale},'
@@ -304,7 +304,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
   void _decorateTexture(ui.Canvas canvas, TileRange range, int demZoom) {
     final frame = TextureFrame(range);
     if (_overlayImages.isNotEmpty) {
-      for (final n in widget.mapState.overlayImageNodes) {
+      for (final n in widget.scene.overlayImages) {
         final im = _overlayImages[n.filePath];
         if (im != null) paintOverlayImage(canvas, frame, im, n.cornerCoordinates);
       }
@@ -318,7 +318,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     paintSelectionFill(
       canvas,
       frame,
-      selected: widget.geoJson.selectedPolygons,
+      selected: widget.scene.features.selectedPolygons,
       indexesIn: _featureIndexes,
       color: layerStyleSettings.getColor(selectedColorDef).withValues(alpha: 0.4),
     );
@@ -330,7 +330,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
   /// 以前は設定の半分にしていて、引くほど細く薄れて地物を見失った（ユーザー 2026-10-02。MapLibre の頃は画面の px で
   /// 一定の太さだったので、引いても色の塊として見えていた）
   void _bakeFeatures(ui.Canvas canvas, TextureFrame frame, int demZoom, {bool fillsOnly = false}) {
-    final g = widget.geoJson;
+    final g = widget.scene.features;
     if (g.polygons.isEmpty && (fillsOnly || (g.polylines.isEmpty && g.markers.isEmpty))) return;
     final groups = _styleGroupsByKey();
     final def = _defaultStyle();

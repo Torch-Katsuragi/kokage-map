@@ -17,8 +17,8 @@
 //
 // 通常ソース（全件）と選択ソース（選択中だけを上乗せするオーバーレイ）を
 // 同じ変換で作る。選択だけ変わったときは [FeatureGeoJsonCache.rebuildSelection] で
-// 選択リストだけ作り直し、通常リストは据え置く（GeoJSON が同じなら
-// MapSourceManager が送信を省くので、選択のたびに全件が再描画されない）。
+// 選択リストだけ作り直し、通常リストは据え置く（リストの同一性と [FeatureGeoJsonCache.contentRevision] が
+// 変わらないので、3D 地図面は選択のたびに全件を組み直さない）。地図ページは `SceneSink.pushFeatures` 越しに呼ぶ。
 
 import 'dart:ui' show Rect;
 
@@ -72,7 +72,7 @@ class FeatureGeoJsonInput {
   /// テンプレートの解決は呼び出し側（`label_template.dart`）
   final String? Function(FeatureNode f)? labelOf;
 
-  /// ラベルを載せる属性名。MapSourceManager のラベルレイヤと合わせる
+  /// ラベルを載せる属性名。3D 地図面のラベル（`TerrainSceneBuilder` の labelProp）に渡す
   static const labelPropKey = 'k-label';
 }
 

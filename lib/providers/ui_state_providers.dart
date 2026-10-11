@@ -18,7 +18,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/map_layout.dart';
-import '../core/r_map_controller.dart';
+import '../interfaces/map_surface.dart';
 import '../models/nodes/layer_tree_node.dart';
 
 part 'ui_state_providers.g.dart';
@@ -129,9 +129,9 @@ class FeatureRefreshTrigger extends _$FeatureRefreshTrigger {
 @Riverpod(keepAlive: true)
 class MapControllerHolder extends _$MapControllerHolder {
   @override
-  RMapController? build() => null;
+  MapSurfaceController? build() => null;
 
-  void set(RMapController controller) => state = controller;
+  void set(MapSurfaceController controller) => state = controller;
 }
 
 @Riverpod(keepAlive: true)

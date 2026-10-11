@@ -64,25 +64,23 @@ pwsh tool/test_matrix.ps1 -Emulator Medium_Phone_API_36
 > ⚠ベンチ（`integration_test/benchmark/`）の数字を比較するときは、
 > **どちらで取ったかを必ず併記する**こと。
 
-## 地図バックエンド契約テスト
+## 地図面の契約テスト
 
-[[map_contract_test|integration_test/map_contract_test.dart]] が本命。
-地図バックエンドを差し替えたとき、振る舞いが変わっていないかを機械的に検証する。
-もともとは Windows(maplibre_webview) と Android(maplibre-native) の挙動差を数値に
-固定するために書かれた。デスクトップ撤去後も、**Android と web で同じ契約が成り立つか**
-を見る網として有効。
+地図面の窓口（[[scene-model]] の `MapSurfaceController` / `MapSurface` / `SceneSink` / `MapScene`）の約束は、
+端末の要らない unit テストで固定している（2026-10-11）。描画系の代わりに偽の地図面・偽の地図状態を使う。
 
-検証している契約:
+- `test/map_surface_handle_test.dart`: attach 前の操作は最後の 1 件だけ保留して attach で流す、
+  `move` / `moveAndRotate` / `animateTo` / `jumpTo` / `fitCoordinates` / `lookAt` の流れ方、
+  attach 前の投影は null、外して付け直したときの保留
+- `test/map_surface_tools_test.dart`: ツール（てのひら）が `IMapState.mapController` 越しに地図面を動かし、
+  ホイール拡縮・中ボタンのドラッグで指の下の地点が留まる（平面の Web Mercator を投影する偽の地図面）
+- `test/map_scene_store_test.dart`: 書いたら必ず `revision` が進む、選択だけの投入は通常リストを据え置く、
+  View 固有スタイルは変わったときだけ差し替える
 
-- `onStyleLoaded` が発火する
-- `MapOptions` の初期カメラ（center / zoom / bearing / pitch）が反映される
-- `move()` / `moveAndRotate()` が即時にカメラへ反映される
-- カメラ中心のスクリーン座標がウィジェット中央になる（DPRの二重適用検出）
-- スクリーン座標 ⇄ 地理座標の往復が2px以内で一致する
-- `KMapCamera` のヘルパが `RMapController` と同じ値を返す
-- `animateTo()` の Future が完了し、目標カメラに着地する
-- `fitCoordinates()` が全座標を画面内に収める
-- GeoJSONソース／レイヤの追加・更新・削除が `getLayerIds()` に反映される
+> [!NOTE] `integration_test/map_contract_test.dart` は MapLibre と一緒に外した（2026-10-04）
+> もとは maplibre の各プラットフォーム実装の挙動差（初期カメラ・`move` の即時反映・投影の往復・
+> `fitCoordinates`・GeoJSON ソースの出し入れ）を実機で数値に固定する網だった。
+> 3D の地図面の投影・カメラの実機での確かめは、いまは手で行う。
 
 
 ## プラットフォーム前提の宣言

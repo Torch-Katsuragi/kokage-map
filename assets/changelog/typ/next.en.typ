@@ -10,6 +10,11 @@
 )
 
 #fixes(
+  "New",
+  [Add XYZ tiles and WMS not in the list as background maps by URL (forest planning maps, CS relief maps…); those in a .qgs are read back too],
+)
+
+#fixes(
   "Fixed",
   [Overlay GeoTIFFs made by the app are now written with GDAL, the same library QGIS uses, so QGIS opens them without warnings],
   [First sync after reinstalling overwrote files present on both sides with older cloud copies; the newer side is now chosen, with a warning],

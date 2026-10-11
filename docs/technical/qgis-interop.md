@@ -153,8 +153,8 @@ msiexec /a .temp\QGIS-LTR.msi /qn TARGETDIR=C:\Users\<user>\qgis-extract
 位置は `.tif` の GeoTIFF タグに焼き込み済み（`GeoTiffWriteScheduler`）なので、`.qgs` には
 `provider=gdal` の参照（相対パス）だけを書き、レンダラ（`<pipe>`）は書かない。QGIS は読込時に既定の
 レンダラを付ける。DOM 保持型の更新では参照と名前だけ直し、QGIS が付けた `<pipe>` は残す。
-読み戻し（インポータ）は可視性だけをオーバーレイに戻し、XYZ タイルは背景地図に足す（2026-10-09。それまでは黙って飛ばしていた）。
-扱えないラスタ（root の外・位置か座標系を読めないもの・WMS）は理由つきで報告する。
+読み戻し（インポータ）は可視性だけをオーバーレイに戻し、XYZ タイルは背景地図に足す（2026-10-09。それまでは黙って飛ばしていた。一覧に無い URL の XYZ と WMS も 2026-10-11 から利用者の地図として足す）。
+扱えないラスタ（root の外・位置か座標系を読めないもの・WMTS・Google などの規約で使えないタイル）は理由つきで報告する。
 QGIS / GDAL で作ったラスタ（GeoTIFF・JPEG2000・ワールドファイル付き PNG/JPEG・VRT。GDAL で位置と座標系が読めるもの）は
 2026-10-10 から読み取り専用のオーバーレイ（`ExternalOverlayImageNode`）になり、可視性を読み戻す。書き戻しは元のファイルの相対パスと
 元の座標系（`gdalinfo` の WKT2・EPSG）で書く（[[external-formats#ラスタのオーバーレイ（GDAL、2026-10-10）]]）。

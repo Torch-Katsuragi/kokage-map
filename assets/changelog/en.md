@@ -2,6 +2,10 @@
 
 ## Next release
 
+### New
+
+- XYZ tiles not in the list (such as the Forestry Agency's forest planning maps or prefectural CS relief maps) and WMS can now be added as background maps by URL (Settings → Map & tiles → Add layer → "Add a background map from a URL…"). They work like the built-in maps for layering, bulk download and 3D, and their attribution is shown on the map while visible. You are responsible for following the tile source's terms (Google and Bing cannot be added). Those in a .qgs are added when read back too
+
 ### Fixed
 
 - GeoTIFFs made with "Convert to overlay" from a photo, and those rewritten when repositioning an overlay, are now written with GDAL, the same library QGIS uses. QGIS no longer warns about them (such as "tags are not sorted"). GeoTIFFs made earlier keep working and are rewritten in the new form when repositioned

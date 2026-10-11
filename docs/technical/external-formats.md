@@ -181,14 +181,20 @@ fixture は QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_raster_xyz.qgs`�
   代わりに書き戻しで QGIS の `<pipe>` を残す: QGIS で足したラスタが同じ `.tif` を指していれば、外して足し直さずに
   **アプリの決定的な id に付け替える**（`QgsDocument._adoptRasterIds`）。不透明度などは QGIS 側で生き残る
 
-**wms（XYZ タイル）**: URI（`type=xyz&url=<URL エンコード>`）の URL を背景地図の一覧（`BaseMapProvider.availableProviders`）と
-突き合わせる（`BaseMapProvider.findByTileUrl`。http/https・OSM の `a.` `{s}.` は無視）。
+**wms（XYZ タイル・WMS）**: URI（`type=xyz&url=<URL エンコード>`）の URL を背景地図の一覧（組み込みと利用者の地図）と
+突き合わせる（`BaseMapProvider.findByTileUrl`。http/https・OSM の `a.` `{s}.` は無視）。一覧に無い URL は利用者の地図
+（`BaseMapType.custom`。[[terrain-3d#背景地図はレイヤ（2026-09-13 午後）]]）として足す（2026-10-11。それまでは報告だけ）。
 
 | `.qgs` 側 | 扱い |
 |---|---|
-| 一覧にある XYZ（地理院・OSM） | 背景地図のレイヤに足す。可視は checked、不透明度は `<rasterrenderer opacity>` |
-| 一覧に無い XYZ | 報告「背景地図の一覧に無い XYZ タイル: ホスト」 |
-| 本物の WMS / WMTS（`type=xyz` でない） | 報告「WMS は未対応」 |
+| 一覧にある XYZ（地理院・OSM・足したことのある URL） | 背景地図のレイヤに足す。可視は checked、不透明度は `<rasterrenderer opacity>` |
+| 一覧に無い XYZ | 利用者の地図として定義を入れ、レイヤに足す。名前はレイヤ名、ズームは `zmin` `zmax`、出典は空（地図面には名前を出す） |
+| 本物の WMS（`url` と `layers` がある） | `QgsRasterSource.wmsGetMapTemplate` で EPSG:3857 のタイルを引く GetMap 1.3.0 の URL（`BBOX={bbox-epsg-3857}`）にして、同上 |
+| WMTS（`tileMatrixSet` がある）・`layers` の無い WMS | 報告「WMTS は未対応」 |
+| Google・Bing（`BaseMapProvider.isForbiddenTileHost`。規約で配布アプリから使えない） | 報告「… を背景地図にできません: ホスト」 |
+
+- ⚠ WMS は `.qgs` の `crs` に関係なく EPSG:3857 で頼む（地図は Web メルカトルのタイル）。3857 を出さないサーバーは白いまま。
+  `.qgs` からの分は足す前の確かめ（1 枚取ってみる）をしない
 
 > [!IMPORTANT] 背景地図は端末の設定のまま（2026-10-09 決定）
 > 背景地図（`BaseMapService.layers`、prefs `basemap_layers`）は端末ごとの設定で、プロジェクトには属さない。
@@ -197,6 +203,7 @@ fixture は QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_raster_xyz.qgs`�
 > - **一度でも `.qgs` から足したプロバイダは二度と自動では足さない**（prefs `basemap_qgs_imported`）。
 >   開くたびに積み上がらず、端末で消したものが次の読み戻しで戻ってこない
 > - 足したら通知する（「QGIS のプロジェクトにあった背景地図を足しました」）
+> - 一覧に無い URL も同じ決まり（id が URL から決まるので、同じ URL は 1 つ・消したら戻らない）
 >
 > 読み戻しは QGIS が保存した `.qgs` を開いたときだけ走る（印で判定。[[qgis-interop]]）ので、そもそも頻度は低い。
 > 実装は `lib/services/qgis/qgs_base_map_import.dart`（並びの計算は純粋関数 `merge`）

@@ -117,6 +117,10 @@ class SyncPullHandler {
             await SyncBaseStore.saveBase(localPath, driveEntry.relativePath);
           } else {
             failedCount++;
+            // 落とせなかったものは前の記録を残す。消すと次の判定で「帳簿に無い手元のファイル」になり、
+            // push が Drive の新しい版を手元の古い版で上書きしていた
+            final before = previous[driveEntry.relativePath];
+            if (before != null) syncedFiles[driveEntry.relativePath] = before;
           }
         }),
         maxConcurrency: _downloadConcurrency,

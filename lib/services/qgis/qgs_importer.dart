@@ -516,20 +516,21 @@ class QgsImporter {
   /// [layer] の View を [views] に置き換えて保存する。可視性とスタイルも書く。
   /// [groupChecked] はこかげマップが書いた形のときの、レイヤグループの可視性
   Future<void> _replaceViews(LayerNode layer, List<ViewNode> views, bool? groupChecked) async {
+    // 既定 View に読んだスタイルを控える（persistViews がレイヤのスタイルへ移し、View からは外す）
+    final importedDefault = views.where((v) => v.isDefaultView).firstOrNull?.style;
     layer.views
       ..clear()
       ..addAll(views);
     await layer.persistViews();
+    // persistViews は前のスタイルに重ねるだけなので、QGIS で単一シンボルに戻した描き分けの印が残っていた。
+    // QGIS の今の状態に合わせ直す（2026-10-12）
+    if (importedDefault != null) await _applyLayerStyle(layer, importedDefault);
     // 可視性は View 定義とは別の場所に持つ。
     // 既定 View 1枚だけのレイヤは View ではなく**レイヤの可視性**で表す
     // （暗黙の既定 View は フォルダ設定（`.qgs`） に書かれず、可視性も読まれないため）
     if (views.length == 1 && views.first.isDefaultView) {
       layer.visible = views.first.visible && (groupChecked ?? true);
       await layer.persistVisibility();
-      // スタイルもレイヤ側に持つ。既定 View は書かれないので、View に入れたままだと消える
-      // （2026-09-29 まで、QGIS で変えた色は既定 View 1枚のレイヤに届いていなかった）
-      final imported = views.first.style;
-      if (imported != null) await _applyLayerStyle(layer, imported);
       return;
     }
     for (final v in views) {

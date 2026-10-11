@@ -254,5 +254,35 @@ void main() {
       final status = saveManager.getPendingChangesStatus();
       expect(status.containsKey(geoPackageFile), isFalse);
     });
+
+    // 書き込む前に消された地物の保留分が 1 行でもあると、同じ gpkg のほかの行の保留分も書けずに
+    // 戻され続け、閉じるときに捨てられていた（2026-10-12）
+    test('保留中に消された地物があっても、ほかの行の変更は書く', () async {
+      const point = LatLng(35.6762, 139.6503);
+      final gone = (await geoPackageFile.addPoint('test_points', point, name: 'gone'))!;
+      final kept = (await geoPackageFile.addPoint('test_points', point, name: 'kept'))!;
+
+      geoPackageFile.queueAttributeUpdate('test_points', gone, 'description', 'x');
+      geoPackageFile.queueAttributeUpdate('test_points', kept, 'description', 'saved');
+      expect(await geoPackageFile.removeFeature('test_points', gone), isTrue);
+
+      await geoPackageFile.flushChanges();
+      expect(await geoPackageFile.getFeatureAttribute('test_points', kept, 'description'), 'saved');
+      expect(saveManager.getPendingChangesStatus()[geoPackageFile] ?? 0, 0, reason: '消えた行の分は持ち続けない');
+
+      // あとから積んだ変更も書ける
+      geoPackageFile.queueAttributeUpdate('test_points', kept, 'name', 'renamed');
+      await geoPackageFile.flushChanges();
+      expect(await geoPackageFile.getFeatureAttribute('test_points', kept, 'name'), 'renamed');
+    });
+
+    test('タイマーで保存し、保存中に積んだ値は次に書く', () async {
+      const point = LatLng(35.6762, 139.6503);
+      final id = (await geoPackageFile.addPoint('test_points', point, name: 'a'))!;
+      geoPackageFile.queueAttributeUpdate('test_points', id, 'description', 'v1');
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      expect(await geoPackageFile.getFeatureAttribute('test_points', id, 'description'), 'v1');
+      expect(saveManager.getPendingChangesStatus()[geoPackageFile] ?? 0, 0);
+    });
   });
 }

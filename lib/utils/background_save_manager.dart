@@ -20,9 +20,19 @@ import 'dart:async';
 import 'package:root_maps/utils/app_logger.dart';
 
 import '../models/geopackage/geopackage_file.dart';
+import '../models/geopackage/sql_identifier.dart';
 
 /// 保留中の 1 セル
 typedef _CellKey = ({String table, int rowId, String column});
+
+/// 書けなかった変更（[failed] だけをキューに戻す）
+class _SaveFailure implements Exception {
+  _SaveFailure(this.failed);
+  final Map<_CellKey, dynamic> failed;
+
+  @override
+  String toString() => 'Failed to save ${failed.length} attribute changes';
+}
 
 /// バックグラウンド保存を一元管理するシングルトンクラス
 class BackgroundSaveManager {
@@ -109,6 +119,9 @@ class BackgroundSaveManager {
         in changesToSave.entries) {
       try {
         await _saveChangesForGeoPackage(geoPackageFile, changes);
+      } on _SaveFailure catch (e) {
+        AppLogger.debug('[ERROR] BackgroundSaveManager: $e');
+        _requeue(geoPackageFile, e.failed);
       } catch (e) {
         AppLogger.debug(
           '[ERROR] BackgroundSaveManager: Failed to save changes for GeoPackage: $e',
@@ -136,6 +149,9 @@ class BackgroundSaveManager {
       rows.putIfAbsent((k.table, k.rowId), () => {})[k.column] = v;
     }
 
+    // 1 行書けなくてもほかの行は書く。以前は最初に失敗した行で止めて全部を戻していたので、
+    // 保留中に消された地物が 1 つあると同じ gpkg のほかの変更がいつまでも書けず、閉じるときに捨てていた
+    final failed = <_CellKey, dynamic>{};
     for (final MapEntry(key: (tableName, rowId), value: attributes)
         in rows.entries) {
       final success = await geoPackageFile.updateFeatureAttributes(
@@ -143,12 +159,33 @@ class BackgroundSaveManager {
         rowId,
         attributes,
       );
-      if (!success) {
-        AppLogger.debug(
-          '[ERROR] BackgroundSaveManager: Failed to save attributes for $tableName:$rowId',
-        );
-        throw Exception('Failed to save attributes for $tableName:$rowId');
+      if (success) continue;
+      if (await _rowGone(geoPackageFile, tableName, rowId)) {
+        AppLogger.debug('[DEBUG] BackgroundSaveManager: 消えた地物の保留分を捨てる $tableName:$rowId');
+        continue;
       }
+      AppLogger.debug(
+        '[ERROR] BackgroundSaveManager: Failed to save attributes for $tableName:$rowId',
+      );
+      for (final MapEntry(key: column, :value) in attributes.entries) {
+        failed[(table: tableName, rowId: rowId, column: column)] = value;
+      }
+    }
+    if (failed.isNotEmpty) throw _SaveFailure(failed);
+  }
+
+  /// 行がもう無いか（消された地物）。確かめられなければ false（変更は捨てずに戻す）
+  Future<bool> _rowGone(GeoPackageFile geoPackageFile, String tableName, int rowId) async {
+    try {
+      final db = await geoPackageFile.getDatabase();
+      final pk = await geoPackageFile.getPrimaryKeyColumn(tableName);
+      final rows = await db.rawQuery(
+        'SELECT 1 FROM ${quoteIdent(tableName)} WHERE ${pkEquals(pk)} LIMIT 1',
+        [rowId],
+      );
+      return rows.isEmpty;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -159,6 +196,9 @@ class BackgroundSaveManager {
     if (changes == null || changes.isEmpty) return;
     try {
       await _saveChangesForGeoPackage(geoPackageFile, changes);
+    } on _SaveFailure catch (e) {
+      AppLogger.debug('[ERROR] BackgroundSaveManager: Failed to flush changes: $e');
+      _requeue(geoPackageFile, e.failed);
     } catch (e) {
       AppLogger.debug(
         '[ERROR] BackgroundSaveManager: Failed to flush changes: $e',

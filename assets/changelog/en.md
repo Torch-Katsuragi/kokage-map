@@ -34,6 +34,11 @@
 - In the attribute fields of the feature edit panel, full-width digits typed into numeric columns (such as "１２．５") were not converted to half-width. They are now saved as half-width numbers, as in the attribute form
 - The per-point records (accuracy, time and so on) of lines and polygons taken by GPS survey were thrown away instead of saved. When there is such a record, the layer now gets a `kmaps_metadata` column (JSON stored as text, which QGIS opens as is) to keep it. The column is not shown in the attribute table or the edit panel. Drawing with the pen alone does not add the column
 - KMZ files (such as those saved by Google Earth) whose doc.kml only holds links (NetworkLink) to other KML files could not be opened. Each linked KML inside the KMZ now becomes a layer, named after the linked file as in QGIS, and the file can be converted to gpkg. Links to URLs on the internet are not read
+- When some files failed to download while pulling from Drive, their sync records were dropped, and the next sync overwrote the newer cloud copy with the device's older copy. Files that fail to download now keep their previous record and are pulled on the next sync
+- When another layer was selected while drawing a line or polygon with the pen or GPS survey, the next autosave (every minute) replaced the drawing with the last feature of that layer, and continuing to draw overwrote that feature. Drawing now continues on the autosaved feature
+- Replace in the attribute table also counted values that differed only in letter case, or only resembled a search term containing % or _ (those values were not actually changed)
+- A layer switched back to "Single symbol" in QGIS after being categorized, graduated or rule-based still stayed QGIS-styled in Kokage Map after reading back (its colors could not be changed in the style screen)
+- Deleting a feature right after editing its attributes (within a second) kept later attribute edits in the same GeoPackage from being saved, and they were lost when the app closed
 
 ### Lighter
 

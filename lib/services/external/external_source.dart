@@ -367,10 +367,9 @@ class ExternalSource {
         '-f', 'GPKG',
         if (!first) '-update',
         ...oo,
-        // 形の型はアプリの 3 種（MULTI 系）に揃える。Z・M は元のまま（変換した gpkg で高さを失わないため。
-        // 表示とヒットテストは XY だけ見る）
-        '-nlt', layer.geometryType.value,
-        '-dim', layer.dim,
+        // 形の型はアプリの 3 種（MULTI 系）に揃え、Z・M は型名に付けて元のまま残す（MULTIPOINTZ など）。
+        // ⚠ `-nlt MULTIPOINT -dim XYZ` だと宣言だけ 3 次元になり、値は 2 次元で書かれる（2026-10-11 Pixel 9 で発見）
+        '-nlt', '${layer.geometryType.value}${layer.dim.substring(2)}',
         // CSV は座標系を持たない（GDAL は未定義の srs 99999 で書く）。経度・緯度の列だけ受けるので WGS84 と決める
         // （2026-10-11 Pixel 9 で見つけた）
         if (p.extension(path).toLowerCase() == '.csv') ...['-a_srs', 'EPSG:4326'],

@@ -50,9 +50,10 @@ tags: [technical, geopackage, qgis, interop, import]
 1. `ogrinfo -json -so`（`vectorInfo`）でレイヤと形の型・件数を見る。形の無いレイヤは飛ばす
 2. 型が `Geometry`（混在）・`GeometryCollection` のレイヤは、`-where "OGR_GEOMETRY IN (...)"` で点・線・面ごとに数え、
    2 種以上あれば分ける（1 種だけなら名前はそのまま）。GeometryCollection の地物は落ちる
-3. レイヤごとに `ogr2ogr -f GPKG [-update] -nlt MULTIPOINT|MULTILINESTRING|MULTIPOLYGON -dim <元の次元> -nln <名前> [-where …] <元> <GDAL のレイヤ名>`。
+3. レイヤごとに `ogr2ogr -f GPKG [-update] -nlt MULTIPOINT|MULTILINESTRING|MULTIPOLYGON[Z|M|ZM] -nln <名前> [-where …] <元> <GDAL のレイヤ名>`。
    **`-t_srs` は付けない**（元の CRS のまま。アプリは投影座標系の gpkg を描ける・選べる）。
-   Z・M は元のまま（`-dim XYZ` など。`-nlt` で型を決めると `-dim layer_dim` が効かず高さが落ちるので、元のレイヤの型から決めて渡す。2026-10-11）。
+   Z・M は元のまま。次元は `-nlt` の型名に付ける（`MULTIPOINTZ` など）。⚠ `-nlt MULTIPOINT -dim XYZ` は宣言だけ 3 次元になり値は 2 次元で書かれ、
+   `-dim layer_dim` は `-nlt` があると効かない（どちらも 2026-10-11 に踏んだ）。
    変換した gpkg を編集したときの Z は下の「Z・M 付きのレイヤの編集」
 4. 印の表 `kokage_external_source` に `signature`（`GDALGetFileList` の一式の名前・更新時刻・大きさ＋`formatVersion`）・`source`・
    `layers`（キャッシュのレイヤ → 元の GDAL のレイヤ名・分けた型・件数。`.qgs` の `|layername=` `|geometrytype=` に使う）

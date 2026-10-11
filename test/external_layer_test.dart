@@ -264,7 +264,7 @@ void main() {
       expect(srs.first['srs_id'], 4326, reason: 'CSV は座標系を持たないので WGS84 と決める（未定義の 99999 にしない）');
     }, skip: skip);
 
-    test('Z 付きの shp はキャッシュでも高さを保つ（-nlt で型を決めても -dim で次元を渡す）', () async {
+    test('Z 付きの shp はキャッシュでも高さを保つ（-nlt の型名に Z を付ける）', () async {
       final src = p.join(proj, 'z.geojson.tmp');
       writeGeoJson(src, [
         for (var i = 0; i < 3; i++)
@@ -281,6 +281,12 @@ void main() {
       final db = await node.geoPackageFile.getDatabase();
       final g = await db.rawQuery("SELECT z FROM gpkg_geometry_columns WHERE table_name = 'z_points'");
       expect(g.first['z'], isNot(0), reason: 'Z が落ちていない');
+      // 宣言だけでなく値も（-nlt MULTIPOINT -dim XYZ では値が 2 次元で書かれていた）
+      final info = await ExternalGdal.instance.vectorInfo(node.geoPackageFile.getAbsolutePath()!, args: const ['-features']);
+      final layer = (info['layers'] as List).cast<Map<String, dynamic>>().singleWhere((l) => l['name'] == 'z_points');
+      final features = (layer['features'] as List).cast<Map<String, dynamic>>();
+      final zs = [for (final f in features) (((f['geometry'] as Map)['coordinates'] as List).first as List)[2]];
+      expect(zs, [400, 410, 420]);
     }, skip: skip);
 
     test('GPX: 中身のあるレイヤだけ出す（空の routes・tracks などを並べない）', () async {

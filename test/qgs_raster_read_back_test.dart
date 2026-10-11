@@ -159,19 +159,33 @@ void main() {
       expect(meta.visibility.images['hidden.tif'], isFalse, reason: 'フォルダ設定にも書かれる');
       expect(meta.visibility.images['ortho.tif'] ?? true, isTrue);
 
-      expect(result.baseMaps, hasLength(1));
-      final pale = result.baseMaps.single;
+      expect(result.baseMaps, hasLength(3));
+      final pale = result.baseMaps.firstWhere((b) => b.layerName == '地理院 淡色');
       expect(pale.providerId, 'gsi_pale');
+      expect(pale.custom, isNull, reason: '一覧にある URL は組み込みのまま');
       expect(pale.visible, isFalse);
       expect(pale.opacity, 60);
+
+      // 一覧に無い XYZ は利用者の地図の定義つき（2026-10-11 から。それまでは報告して足さなかった）
+      final other = result.baseMaps.firstWhere((b) => b.layerName == 'どこかのタイル');
+      expect(other.custom, isNotNull);
+      expect(other.providerId, other.custom!.id);
+      expect(other.custom!.urlTemplate, 'https://tiles.example.com/v1/{z}/{x}/{y}.png');
+      expect(other.custom!.name, 'どこかのタイル');
+      expect((other.custom!.minZoom, other.custom!.maxZoom), (0, 18));
+      expect(other.visible, isTrue);
+
+      // 本物の WMS は EPSG:3857 のタイルとして引く GetMap
+      final wms = result.baseMaps.firstWhere((b) => b.layerName == '何かの WMS');
+      expect(wms.custom!.urlTemplate, startsWith('https://wms.example.com/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=foo'));
+      expect(wms.custom!.urlTemplate, contains('CRS=EPSG:3857'));
+      expect(wms.custom!.urlTemplate, contains('BBOX={bbox-epsg-3857}'));
 
       expect(result.discarded, containsAll(<Matcher>[
         contains('スキャン（scan.png の位置か座標系を読めません）'), // ワールドファイルの無い PNG は写真
         contains('共有オルソ（プロジェクトフォルダの外を参照している）'),
-        contains('どこかのタイル（背景地図の一覧に無い XYZ タイル: tiles.example.com）'),
-        contains('何かの WMS（WMS は未対応）'),
       ]));
-      expect(result.discarded, hasLength(4));
+      expect(result.discarded, hasLength(2));
     });
 
     test('位置を読めない TIFF・無いファイルは理由つきで報告する', () async {

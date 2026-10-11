@@ -559,6 +559,20 @@ web は新しい世代の GPU 転送が非同期で、終わるまで白だっ�
   （OSM の attribution guideline は対話型地図で地図上のクレジットを求める。地理院タイル・Terrain Tiles は「出典の明示」で置き場所は問わない）
 - 設定画面のプレビュー `BaseMapPreview`（`lib/widgets/basemap_preview.dart`）: 地図の中心のタイル 1 枚を同じ `composeLayers` で合成して見せる（設定変更から 300 ms 待って作り直し）
 - 一括ダウンロードは一番下の見えているレイヤ（`currentProvider`）だけ。
+- 利用者の地図（2026-10-11）: 任意の XYZ / WMS の URL を `BaseMapType.custom` のプロバイダとして足せる（設定の「レイヤを追加」→
+  「URL から背景地図を追加」、`lib/widgets/custom_basemap_dialog.dart`。`.qgs` の読み戻しからも: [[external-formats#ラスタ（2026-10-09 実装）]]）。
+  - 定義は prefs `basemap_custom_providers`（`BaseMapProvider.toJson` の配列）。`_loadSettings` はレイヤ（`basemap_layers`）より**先に**読む
+    （定義が無いと `BaseMapLayer.fromJson` が「知らないプロバイダ」として落とす）。実行中は `BaseMapProvider.customProviders`（static）に持ち、
+    `getProviderById` / `getProviderByCacheId` / `findByTileUrl` は組み込みの後に引く
+  - id は `custom_` + URL の FNV-1a（`customIdFor`。http/https・ホストの大小を無視）。同じ URL は 1 つ（`addCustomProvider` が既存を返す。
+    組み込みと同じ URL なら組み込み）。キャッシュ（MBTiles）もこの id。消すとレイヤから外し、キャッシュも消す
+  - URL テンプレート（`BaseMapProvider.expandTileUrl`）: `{z}` `{x}` `{y}`、`{-y}`（TMS。QGIS と同じ書き方）、`tms` の印で `{y}` を南から、
+    `{bbox-epsg-3857}`（WMS の GetMap をタイルとして引く。MapLibre と同じ書き方）
+  - 足す前に地図の中心のタイルを 1 枚取る（`BaseMapService.probeTile`、キャッシュしない）。取れなくても「それでも追加」で足せる
+    （範囲の狭い県のタイルは中心が範囲外だと 404）。Google・Bing（`isForbiddenTileHost`）は断る。利用規約の責任は足した人、とダイアログに 1 行
+  - 出典は OSM と同じく**見えている間は地図面にも出す**（規約が分からないので。出典が空なら地図の名前）
+  - web は `http` の取得が CORS に掛かる。例外は「通信できない」としか見えないので、web の利用者の地図で取れなければ
+    レイヤに「web ではタイルを取得できていません（CORS の可能性）」と出す（到達性の判定には数えない）。ダイアログの確かめも同じ文言
 
 ### 高密度画面ではテクスチャを 2 段上で（2026-09-13 夕）
 

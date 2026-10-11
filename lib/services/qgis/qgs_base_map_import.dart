@@ -19,6 +19,7 @@
 // > `.qgs` を読むたびに足していくと、開くたびに積み上がり、消しても次の読み戻しで戻ってくる。
 // > そこで **一度でも `.qgs` から足したプロバイダは二度と自動では足さない**（端末に印を持つ）。
 // > すでに一覧にあるプロバイダは、可視・不透明度も含めて触らない（端末の利用者の選択を優先）。
+// > 一覧に無い URL の XYZ / WMS は利用者の地図として足す（id は URL から決まるので、同じ URL は 1 つ）。
 // > 決定は [[docs/technical/external-formats#`.qgs` との往復]]。
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,7 +48,7 @@ abstract final class QgsBaseMapImport {
     for (final b in incoming) {
       if (alreadyImported.contains(b.providerId)) continue;
       if (layers.any((l) => l.providerId == b.providerId)) continue;
-      if (BaseMapProvider.getProviderById(b.providerId) == null) continue;
+      if (b.custom == null && BaseMapProvider.getProviderById(b.providerId) == null) continue;
       layers.add(BaseMapLayer(providerId: b.providerId, visible: b.visible, opacity: b.opacity));
       added.add(b.providerId);
     }
@@ -69,6 +70,11 @@ abstract final class QgsBaseMapImport {
     }
 
     final (:layers, :added) = merge(svc.layers, incoming, imported);
+    // 一覧に無い URL は利用者の地図として定義を入れてから（定義が無いと setLayers が落とす）
+    for (final id in added) {
+      final custom = incoming.firstWhere((b) => b.providerId == id).custom;
+      if (custom != null) await svc.addCustomProvider(custom);
+    }
     if (added.isNotEmpty) await svc.setLayers(layers);
     // 一覧に既にあったものも印を付ける（あとで消したときに戻さない）
     final next = {...imported, for (final b in incoming) b.providerId};

@@ -109,6 +109,17 @@ Uint8List? _processTileExtraction(Map<String, dynamic> params) {
   }
 }
 
+/// [BaseMapService.probeTile] の結果
+enum TileProbeStatus { ok, httpError, notImage, networkError, blockedOnWeb }
+
+class TileProbeResult {
+  const TileProbeResult(this.status, {this.statusCode, this.detail});
+  final TileProbeStatus status;
+  final int? statusCode;
+  final String? detail;
+  bool get ok => status == TileProbeStatus.ok;
+}
+
 /// 一括ダウンロードの 1 枚の結果
 enum _DownloadResult { downloaded, skipped, error }
 
@@ -411,6 +422,9 @@ class BaseMapService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       _isOfflineMode = prefs.getBool('basemap_offline_mode') ?? false;
 
+      // 利用者の地図はレイヤより先に（読めないとレイヤが「知らないプロバイダ」として落ちる）
+      BaseMapProvider.customProviders = decodeCustomProviders(prefs.getString(customProvidersPrefsKey));
+
       final layersJson = prefs.getString('basemap_layers');
       if (layersJson != null) {
         final decoded = json.decode(layersJson) as List<dynamic>;
@@ -444,6 +458,7 @@ class BaseMapService extends ChangeNotifier {
       await prefs.setString('basemap_provider_id', _currentProvider.id);
       await prefs.setBool('basemap_offline_mode', _isOfflineMode);
       await prefs.setString('basemap_layers', json.encode([for (final l in _layers) l.toJson()]));
+      await prefs.setString(customProvidersPrefsKey, encodeCustomProviders(BaseMapProvider.customProviders));
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Settings save error: $e');
     }
@@ -482,6 +497,73 @@ class BaseMapService extends ChangeNotifier {
     final l = next.removeAt(from);
     next.insert(to, l);
     await setLayers(next);
+  }
+
+  // --- 利用者の地図（任意の XYZ URL。端末の prefs に持つ） ---
+
+  /// 利用者の地図の定義（[BaseMapProvider.toJson] の並び）
+  static const customProvidersPrefsKey = 'basemap_custom_providers';
+
+  static List<BaseMapProvider> decodeCustomProviders(String? jsonText) {
+    if (jsonText == null || jsonText.isEmpty) return const [];
+    try {
+      final seen = <String>{};
+      return [
+        for (final e in json.decode(jsonText) as List<dynamic>)
+          if (e is Map<String, Object?>)
+            if (BaseMapProvider.fromJson(e) case final p? when seen.add(p.id)) p,
+      ];
+    } on Object catch (e) {
+      AppLogger.debug('[BaseMapService] 利用者の地図が読めない: $e');
+      return const [];
+    }
+  }
+
+  static String encodeCustomProviders(List<BaseMapProvider> list) => json.encode([for (final p in list) p.toJson()]);
+
+  /// 利用者の地図を足す（定義だけ。レイヤに足すのは [addLayer]）。同じ URL のものが既にあればそれを返す
+  /// （組み込みの地図と同じ URL なら組み込みのほう）
+  Future<BaseMapProvider> addCustomProvider(BaseMapProvider provider) async {
+    final existing = BaseMapProvider.findByTileUrl(provider.urlTemplate) ?? BaseMapProvider.getProviderById(provider.id);
+    if (existing != null) return existing;
+    BaseMapProvider.customProviders = [...BaseMapProvider.customProviders, provider];
+    await _saveSettings();
+    notifyListeners();
+    return provider;
+  }
+
+  /// 利用者の地図を消す（レイヤからも外し、タイルのキャッシュも消す）
+  Future<void> removeCustomProvider(String id) async {
+    final p = BaseMapProvider.getProviderById(id);
+    if (p == null || !p.isCustom) return;
+    BaseMapProvider.customProviders = [for (final c in BaseMapProvider.customProviders) if (c.id != id) c];
+    _webFetchFailed.remove(id);
+    // 定義を先に消すと setLayers がそのレイヤを「知らないプロバイダ」として落とす
+    await _commitLayers([for (final l in _layers) if (l.providerId != id) l]);
+    await clearCache(providerId: p.cacheId);
+  }
+
+  /// web で取れなかった利用者の地図（CORS を許していないサーバーの見込み。設定画面で注意を出す）
+  final Set<String> _webFetchFailed = {};
+  bool webFetchFailed(String providerId) => _webFetchFailed.contains(providerId);
+
+  /// 地図を足す前の確かめ: タイルを 1 枚取ってみる（キャッシュには入れない）
+  Future<TileProbeResult> probeTile(BaseMapProvider provider, int z, int x, int y) async {
+    try {
+      final r = await _http
+          .get(Uri.parse(provider.tileUrl(z, x, y)), headers: _tileHeaders)
+          .timeout(const Duration(seconds: 10));
+      if (r.statusCode != 200) return TileProbeResult(TileProbeStatus.httpError, statusCode: r.statusCode);
+      final type = r.headers['content-type']?.toLowerCase() ?? '';
+      if (type.contains('xml') || type.contains('html') || type.contains('json') || type.startsWith('text/')) {
+        return TileProbeResult(TileProbeStatus.notImage, detail: type);
+      }
+      if (!TileCacheMBTiles.isPlausibleTile(r.bodyBytes)) return const TileProbeResult(TileProbeStatus.notImage);
+      return const TileProbeResult(TileProbeStatus.ok);
+    } on Object catch (e) {
+      // web では CORS の拒否も「通信できない」としか見えない（ClientException: XMLHttpRequest error / Failed to fetch）
+      return TileProbeResult(kIsWeb ? TileProbeStatus.blockedOnWeb : TileProbeStatus.networkError, detail: '$e');
+    }
   }
 
   /// オフラインモードの切り替え
@@ -586,6 +668,11 @@ class BaseMapService extends ChangeNotifier {
             .timeout(Duration(seconds: timeout));
       } catch (e) {
         AppLogger.debug('[TILE] ❌ Network error');
+        // web の利用者の地図は、CORS で断られても例外になる。設定画面で注意を出す（到達性の判定には数えない）
+        if (kIsWeb && provider.isCustom) {
+          if (_webFetchFailed.add(provider.id)) notifyListeners();
+          return null;
+        }
         _noteFetchFailure();
         // 取り直す（到達不能と判定したら粘らない）
         if (attempt < 1 && _reachable) {
@@ -599,6 +686,7 @@ class BaseMapService extends ChangeNotifier {
       final httpMs = sw.elapsedMilliseconds - cacheMs;
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         _noteFetchSuccess();
+        if (_webFetchFailed.remove(provider.id)) notifyListeners();
         final data = response.bodyBytes;
         // 小さすぎるものは壊れている（形式は見ない。WebP などを返すサーバーもある。読めなければ描く側で弾く）
         if (!TileCacheMBTiles.isPlausibleTile(data)) return null;

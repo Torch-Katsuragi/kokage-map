@@ -73,7 +73,7 @@ class QgsImportResult {
   /// 取り込めなかったもの。理由つきの1行で入れる。
   final List<String> discarded;
 
-  /// XYZ タイルのレイヤ（背景地図の一覧に当たったもの）。背景地図は端末の設定なので、
+  /// XYZ タイル・WMS のレイヤ（一覧に無い URL は利用者の地図の定義つき）。背景地図は端末の設定なので、
   /// ここでは読むだけで足さない（`QgsBaseMapImport` が足す）
   final List<QgsBaseMap> baseMaps;
 
@@ -252,8 +252,14 @@ class QgsImporter {
 
     // XYZ タイル（背景地図）。端末の設定なのでここでは読むだけ
     final baseMaps = [
-      for (final (:providerId, :name, :id, :opacity) in sources.baseMaps)
-        QgsBaseMap(providerId: providerId, layerName: name, visible: tree.checked[id] ?? true, opacity: opacity),
+      for (final (:providerId, :name, :id, :opacity, :custom) in sources.baseMaps)
+        QgsBaseMap(
+          providerId: providerId,
+          layerName: name,
+          visible: tree.checked[id] ?? true,
+          opacity: opacity,
+          custom: custom,
+        ),
     ];
 
     AppLogger.debug(
@@ -561,8 +567,8 @@ class _SourceResolver {
   /// gdal のラスタのうち、dir にあるオーバーレイ画像に当たったもの（maplayer の id つき）
   final overlays = <({OverlayImageNode node, String id})>[];
 
-  /// wms の XYZ タイルのうち、背景地図の一覧に当たったもの
-  final baseMaps = <({String providerId, String name, String id, int opacity})>[];
+  /// wms の XYZ タイル・WMS（一覧に無い URL は利用者の地図の定義 `custom` つき）
+  final baseMaps = <({String providerId, String name, String id, int opacity, BaseMapProvider? custom})>[];
 
   /// 取り込む先のレイヤ。取り込めなければ理由を [discarded] に足して null。
   /// 黙って飛ばすもの（埋め込みスタブ・ラスタ）も null
@@ -655,18 +661,33 @@ class _SourceResolver {
           overlays.add((node: node, id: id));
         }
       case 'wms':
-        final url = QgsRasterSource.xyzUrl(datasource);
+        // XYZ はその URL、本物の WMS は EPSG:3857 のタイルで引く GetMap の URL（どちらも利用者の地図になりうる）
+        final xyz = QgsRasterSource.xyzUrl(datasource);
+        final url = xyz ?? QgsRasterSource.wmsGetMapTemplate(datasource);
         if (url == null) {
-          discarded.add('$name（WMS は未対応）');
+          discarded.add('$name（WMTS は未対応）');
           return;
         }
+        final opacity = QgsRasterSource.opacityPercent(maplayer);
         final known = BaseMapProvider.findByTileUrl(url);
-        if (known == null) {
-          final host = Uri.tryParse(url)?.host ?? '';
-          discarded.add('$name（背景地図の一覧に無い XYZ タイル${host.isEmpty ? '' : ': $host'}）');
+        if (known != null) {
+          baseMaps.add((providerId: known.id, name: name, id: id, opacity: opacity, custom: null));
           return;
         }
-        baseMaps.add((providerId: known.id, name: name, id: id, opacity: QgsRasterSource.opacityPercent(maplayer)));
+        final host = Uri.tryParse(url)?.host ?? '';
+        // 配布アプリからの利用を規約で禁じているタイル（Google など）は持ち込まない
+        if (BaseMapProvider.isForbiddenTileHost(url) || !BaseMapProvider.isValidTemplate(url)) {
+          discarded.add('$name（${xyz == null ? 'WMS' : 'XYZ タイル'}を背景地図にできません${host.isEmpty ? '' : ': $host'}）');
+          return;
+        }
+        final params = QgsRasterSource.parseWmsUri(datasource);
+        final custom = BaseMapProvider.custom(
+          name: name,
+          urlTemplate: url,
+          minZoom: int.tryParse(params['zmin'] ?? '') ?? 0,
+          maxZoom: int.tryParse(params['zmax'] ?? '') ?? 18,
+        );
+        baseMaps.add((providerId: custom.id, name: name, id: id, opacity: opacity, custom: custom));
       default:
         discarded.add('$name（${provider ?? '不明なプロバイダ'} のラスタは取り込めません）');
     }

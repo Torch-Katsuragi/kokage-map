@@ -346,41 +346,41 @@ abstract class FeatureNode extends LayerTreeNode {
     await geoPackageFile.flushChanges();
   }
 
-  /// 詳細情報をMap形式で返す（表示用）
+  /// 属性を「列の名前 → 値の文字」で返す（情報パネル用。値が null の列とメタデータの列は出さない）。
+  ///
+  /// 属性の列だけを入れる。計算した情報（座標・頂点数・記録の時間）は [computedInfo] で別に出す。
+  /// 以前はここに latitude・longitude・vertex_count・timestamp を同じ名前で入れていて、
+  /// 同名の列（測量の CSV 由来のデータによくある）の値が隠れたり上書きされたりしていた
   Map<String, String> get infoMap {
-    final details = <String, String>{};
-
-    // 基本情報
-    details['name'] = name;
+    final details = <String, String>{'name': name};
     if (description != null && description!.isNotEmpty) {
       details['description'] = description!;
     }
-
-    // メタデータ
-    if (metadata != null && metadata!.isNotEmpty) {
-      for (final entry in metadata!.entries) {
-        details['metadata.${entry.key}'] = entry.value.toString();
-      }
-    }
-
-    // 座標情報
-    details['latitude'] = centroid.latitude.toStringAsFixed(6);
-    details['longitude'] = centroid.longitude.toStringAsFixed(6);
-
-    // カスタム属性（属性テーブルのユーザー定義カラム。主キーの列 fid も表の列として出る）。
-    // 地物番号は属性に入っていない。以前はここで 'id' に地物番号を入れ、id というふつうの列が隠れていた
-    final systemKeys = details.keys.toSet();
+    // 主キーの列 fid も表の列として出る。地物番号は属性に入っていない
     final props = turfFeature.properties;
     if (props != null) {
       for (final entry in props.entries) {
-        if (systemKeys.contains(entry.key)) continue;
-        if (entry.value == null) continue;
+        if (entry.value == null || isSystemColumn(entry.key)) continue;
         details[entry.key] = entry.value.toString();
       }
     }
-
     return details;
   }
+
+  /// 計算した情報（見出し → 値）。情報パネルが属性と別に出す。
+  /// 長さ・面積・周長は情報パネルが自分で測って出す
+  List<(String, String)> get computedInfo => [
+    (t.featureDetail.centroidLabel, _formatLatLng(centroid)),
+  ];
+
+  static String _formatLatLng(LatLng p) =>
+      '${p.latitude.toStringAsFixed(6)}, ${p.longitude.toStringAsFixed(6)}';
+
+  /// 頂点数と記録の時間（線・面）
+  List<(String, String)> _shapeInfo(int vertices) => [
+    (t.featureDetail.vertexCountLabel, '$vertices'),
+    if (_getSubTableTimeRange() case final range?) (t.featureDetail.recordedTimeLabel, range),
+  ];
 
   /// フィーチャ削除（親子関係切断・UI更新の最適化）
   /// DBからの削除も基底クラスで統一処理
@@ -627,8 +627,13 @@ class PointFeatureNode extends FeatureNode {
     return const LatLng(0, 0);
   }
 
+  @override
+  List<(String, String)> get computedInfo => [
+    (t.featureDetail.coordLabel, FeatureNode._formatLatLng(point)),
+  ];
+
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
-  
+
   @override
   Future<void> updateChildren() async {
     children.clear();
@@ -741,25 +746,7 @@ class LineFeatureNode extends FeatureNode {
   }
 
   @override
-  Map<String, String> get infoMap {
-    final details = <String, String>{};
-
-    // 基底クラスの情報をコピー
-    details.addAll(super.infoMap);
-
-    // 長さは情報パネルが見出しの下に別に出す（ここに 'length' を入れると同名の属性列を上書きしていた）
-
-    // 頂点数情報
-    details['vertex_count'] = '${line.length}';
-
-    // sub_tableタイムスタンプ範囲
-    final timeRange = _getSubTableTimeRange();
-    if (timeRange != null) {
-      details['timestamp'] = timeRange;
-    }
-
-    return details;
-  }
+  List<(String, String)> get computedInfo => [...super.computedInfo, ..._shapeInfo(line.length)];
   
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
   
@@ -884,29 +871,13 @@ class PolygonFeatureNode extends FeatureNode {
   }
 
   @override
-  Map<String, String> get infoMap {
-    final details = <String, String>{};
-
-    // 基底クラスの情報をコピー
-    details.addAll(super.infoMap);
-
-    // 面積・周の長さは情報パネルが見出しの下に別に出す（ここに 'area' を入れると同名の属性列を上書きしていた）
-
-    // 頂点数情報（閉じたリングの最後の点を除く）
+  List<(String, String)> get computedInfo {
+    // 頂点数（閉じたリングの最後の点は最初と同じなので数えない）
     final totalVertices = polygon.fold<int>(0, (sum, ring) {
       if (ring.isEmpty) return sum;
-      // 閉じたリングの場合は最後の点を除く（最初と最後が同じため）
       return sum + (ring.length > 1 ? ring.length - 1 : ring.length);
     });
-    details['vertex_count'] = '$totalVertices';
-
-    // sub_tableタイムスタンプ範囲
-    final timeRange = _getSubTableTimeRange();
-    if (timeRange != null) {
-      details['timestamp'] = timeRange;
-    }
-
-    return details;
+    return [...super.computedInfo, ..._shapeInfo(totalVertices)];
   }
   
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動

@@ -41,7 +41,7 @@ tags: [features, drawing, editing]
 - 長さは WGS84 楕円体の Vincenty。面積は正積緯度で等積の球に移して球面多角形で測る。pyproj（Karney）と 0.01% 以内（`test/geodesic_test.dart`）
 - turf は半径 6378137 m の球なので、北緯 34° で面積が 0.3% ほど大きく出ていた
 - 投影座標系のレイヤも読み込み時に WGS84 へ直してあるので、同じ式で測れる
-- 情報パネルは見出しの下に、線は長さ、面は面積（m²・ha）と周長（穴の周も足す）。`infoMap` の `area` / `length` はやめた（同名の属性列を上書きしていた）
+- 情報パネルは見出しの下に、線は長さ、面は面積（m²・ha）と周長（穴の周も足す）。`infoMap` の `area` / `length` はやめた（同名の属性列を上書きしていた）。続けて中心（点は座標）・頂点数・記録の時間を `FeatureNode.computedInfo` から出す。`infoMap` は属性の列だけで、計算した値を同じ表に入れない（以前は `latitude`・`longitude`・`vertex_count`・`timestamp` の列が隠れたり上書きされたりしていた）
 
 ## 属性で探す
 

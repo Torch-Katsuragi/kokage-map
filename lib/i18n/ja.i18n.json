@@ -455,7 +455,11 @@
     "copyTitle": "「$name」の複製先",
     "copied": "「$name」を $target に複製しました",
     "noWritableFolder": "複製できるフォルダがありません",
-    "deleteConfirm": "$name を削除しますか？\n元のファイル一式（$files）を削除します。"
+    "deleteConfirm": "$name を削除しますか？\n元のファイル一式（$files）を削除します。",
+    "renameTitle": "名前の変更",
+    "deleteTitle": "削除",
+    "renamed": "名前を変更しました: $name",
+    "deleted": "$name を削除しました"
   },
   "layerDrawer": {
     "openDrawer": "レイヤ一覧を開く",

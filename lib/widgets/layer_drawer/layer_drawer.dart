@@ -31,6 +31,7 @@ import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/drive_folder_node.dart';
 import '../../models/nodes/external_layer_node.dart';
+import '../../models/nodes/external_overlay_image_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
@@ -417,13 +418,13 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
   Future<void> _renamePhoto(BuildContext context, ImageNode node) => _rename(
         context,
-        title: t.layerDrawer.renamePhoto,
+        title: node is ExternalOverlayImageNode ? t.externalLayer.renameTitle : t.layerDrawer.renamePhoto,
         currentName: p.basenameWithoutExtension(node.name),
         label: t.layerDrawer.newFileName,
         apply: (name) async {
           await LayerDrawerService.renamePhoto(node, name);
           triggerMapRefresh();
-          ref.notify(t.layerDrawer.photoRenamed(name: name));
+          ref.notify(node is ExternalOverlayImageNode ? t.externalLayer.renamed(name: name) : t.layerDrawer.photoRenamed(name: name));
         },
       );
 
@@ -458,7 +459,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
   Future<void> _renameGeoPackage(BuildContext context, GeoPackageNode node) => _rename(
         context,
-        title: t.layerDrawer.renameGeoPackage,
+        title: node is ExternalLayerNode ? t.externalLayer.renameTitle : t.layerDrawer.renameGeoPackage,
         currentName: p.basenameWithoutExtension(node.name),
         label: t.layerDrawer.newFileName,
         apply: (name) async {
@@ -494,7 +495,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
           }
 
           triggerMapRefresh();
-          ref.notify(t.layerDrawer.gpkgRenamed(name: newFileName));
+          ref.notify(node is ExternalLayerNode ? t.externalLayer.renamed(name: newFileName) : t.layerDrawer.gpkgRenamed(name: newFileName));
         },
       );
 

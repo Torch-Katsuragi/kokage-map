@@ -214,8 +214,24 @@ abstract class LayerTreeNode {
       return true;
     });
     removed.forEach(_structureChanged);
-    for (final node in current) {
-      addChildIfNotExists(node);
+    final used = [for (final node in current) addChildIfNotExists(node)];
+
+    // 並びも [current] に合わせる（[keep] で残した子は先頭のまま）。
+    // ⚠ 以前は足した子を末尾に積むだけで、ファイルの追加や改名のあとの子が写真などの後ろ（一覧の最下段）に
+    // 回り、開き直すまで見つからなかった（2026-10-11 Pixel 9）
+    final inCurrent = Set<LayerTreeNode>.identity()..addAll(used);
+    final ordered = <LayerTreeNode>[
+      for (final c in children)
+        if (!inCurrent.contains(c)) c,
+      for (final c in used)
+        if (identical(c.parent, this)) c,
+    ];
+    final seen = Set<LayerTreeNode>.identity();
+    ordered.retainWhere(seen.add);
+    if (ordered.length == children.length) {
+      children
+        ..clear()
+        ..addAll(ordered);
     }
   }
 

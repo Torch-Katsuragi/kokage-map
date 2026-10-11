@@ -5,6 +5,7 @@
 // ⚠ GDAL を sqflite より先に読み込む（QGIS の DLL は sqlite3.dll を名前で読む。test/gdal_test.dart の注意）
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,7 +26,9 @@ import 'package:root_maps/services/coordinate/gpkg_crs_resolver.dart';
 import 'package:root_maps/services/external/external_layer_cache.dart';
 import 'package:root_maps/services/external/external_layer_converter.dart';
 import 'package:root_maps/services/external/external_source.dart';
+import 'package:root_maps/services/folder_file_adder.dart';
 import 'package:root_maps/services/kmeta_service.dart';
+import 'package:root_maps/services/layer_drawer_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -324,6 +327,41 @@ void main() {
         expect(File('$base$ext').existsSync(), isFalse, reason: ext);
       }
       expect(File(cachePath).existsSync(), isFalse);
+    }, skip: skip);
+
+    // 2026-10-11 Pixel 9: 改名・ファイルの追加のあと、足した子が一覧の末尾（写真の後ろ）に積まれて見つからなかった
+    test('shp を改名・ファイルを追加して読み直すと、開き直したときと同じ並び（フォルダ・gpkg・外部形式・写真の順、名前順）', () async {
+      await writePoints(p.join(proj, 'z_points'));
+      await writePoints(p.join(proj, 'b_points'));
+      await Directory(p.join(proj, 'sub')).create();
+      final g = GeoPackageFile(['a.gpkg'], absolutePath: p.join(proj, 'a.gpkg'));
+      await g.addLayer('trees', GeometryType.point);
+      await g.dispose();
+      File(p.join(proj, 'photo.jpg')).writeAsBytesSync(const [0xFF, 0xD8, 0xFF, 0xD9]);
+      final root = await openRoot();
+      List<String> names() => [for (final c in root.children) c.name];
+      final opened = names();
+      expect(opened, ['sub', 'a.gpkg', 'b_points.shp', 'z_points.shp', 'photo.jpg']);
+
+      final z = root.children.whereType<ExternalLayerNode>().singleWhere((n) => n.name == 'z_points.shp');
+      final newName = await LayerDrawerService.renameGeoPackage(z, 'か', projectRootDir: proj);
+      expect(newName, 'か.shp');
+      expect(names(), ['sub', 'a.gpkg', 'b_points.shp', 'か.shp', 'photo.jpg']);
+      final renamed = root.children.whereType<ExternalLayerNode>().singleWhere((n) => n.name == 'か.shp');
+      await renamed.updateChildren();
+      expect(renamed.loadError, isNull);
+      expect(renamed.children.whereType<LayerNode>(), isNotEmpty);
+
+      final added = await FolderFileAdder.addTo(proj, [
+        (name: 'added_test.geojson', read: () async => Uint8List.fromList(utf8.encode(jsonEncode({
+              'type': 'FeatureCollection',
+              'features': [feature({'type': 'Point', 'coordinates': [135.0, 33.0]}, {'a': 1})],
+            })))),
+      ]);
+      expect(added.added, ['added_test.geojson']);
+      await root.updateChildren();
+      expect(names(), ['sub', 'a.gpkg', 'added_test.geojson', 'b_points.shp', 'か.shp', 'photo.jpg']);
+      expect(names(), [for (final c in (await openRoot()).children) c.name], reason: '開き直したときと同じ');
     }, skip: skip);
   });
 

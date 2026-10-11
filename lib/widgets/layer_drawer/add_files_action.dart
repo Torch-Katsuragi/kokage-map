@@ -23,8 +23,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/folder_node.dart';
+import '../../models/nodes/geopackage_node.dart';
 import '../../presentation/node_presenter.dart';
 import '../../providers/notification_providers.dart';
+import '../../providers/ui_state_providers.dart';
 import '../../services/folder_file_adder.dart';
 import '../../services/layer_drawer_service.dart';
 import '../../utils/app_logger.dart';
@@ -82,6 +84,14 @@ Future<void> _addFiles(WidgetRef ref, FolderNode folder, List<IncomingFile> file
   if (result.added.isNotEmpty) {
     try {
       await folder.updateChildren();
+      // 足した gpkg・読み取り専用レイヤは中のレイヤまで読んで開いておく（開き直したときと同じ見え方にする。
+      // 読まないとレイヤの無い見出しだけが出て、`.qgs` にも載らない）
+      final addedNames = result.added.toSet();
+      for (final g in folder.children.whereType<GeoPackageNode>().where((g) => addedNames.contains(g.name)).toList()) {
+        await g.updateChildren();
+        final path = g.geoPackageFile.getAbsolutePath();
+        if (path != null) ref.read(expandedGeoPackagesProvider.notifier).addExpanded(path);
+      }
     } on Object catch (e) {
       AppLogger.error('[AddFiles] フォルダの読み直しに失敗: $e');
     }

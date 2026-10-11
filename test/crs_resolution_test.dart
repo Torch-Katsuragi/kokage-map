@@ -28,7 +28,7 @@ void main() {
   });
 
   group('GPKG のレイヤ CRS（どの定義でも GDAL と同じ x = 東・y = 北で保存）', () {
-    Future<GeoPackageFile> layerWithSrs(int srsId, String definition) async {
+    Future<GeoPackageFile> layerWithSrs(int srsId, String definition, {int? epsg}) async {
       final path = '${tmp.path}/c.gpkg';
       final gpkg = GeoPackageFile(const ['c.gpkg'], absolutePath: path);
       await gpkg.addLayer('pts', GeometryType.point);
@@ -38,7 +38,7 @@ void main() {
       await db.execute(
         'INSERT OR IGNORE INTO gpkg_spatial_ref_sys (srs_name, srs_id, organization, organization_coordsys_id, definition) '
         "VALUES ('test', ?, 'EPSG', ?, ?)",
-        [srsId, srsId, definition],
+        [srsId, epsg ?? srsId, definition],
       );
       await db.execute('UPDATE gpkg_geometry_columns SET srs_id = ? WHERE table_name = ?', [srsId, 'pts']);
       await db.close();
@@ -86,6 +86,28 @@ void main() {
       expect(back, kitayama);
     });
 
+    // GDAL の書く地理座標系の WKT は緯度・経度の順の AXIS を持つ。gpkg の中は経度・緯度のまま
+    for (final (label, srsId, epsg, wkt) in [
+      ('WGS 84', 100000, 4326, _gdalWgs84),
+      ('JGD2011', 100001, 6668, _gdalJgd2011),
+    ]) {
+      test('独自の srs_id に入った $label（EPSG:$epsg・緯度経度の AXIS 付き）も x = 経度で読み書きする', () async {
+        final (raw, back) = await writeAndRead(await layerWithSrs(srsId, wkt, epsg: epsg));
+        expect(raw.x, closeTo(135.96, 1e-9));
+        expect(raw.y, closeTo(33.93, 1e-9));
+        expect(back.latitude, closeTo(kitayama.latitude, 1e-9));
+        expect(back.longitude, closeTo(kitayama.longitude, 1e-9));
+      });
+    }
+
+    test('Web メルカトル（3857）はメートルで書き、同じ位置で読み戻す', () async {
+      final (raw, back) = await writeAndRead(await layerWithSrs(3857, 'undefined'));
+      expect(raw.x, closeTo(15134998, 1));
+      expect(raw.y, closeTo(4019407, 1));
+      expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
+      expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
+    });
+
     test('3 次元の地理座標系（WGS 84 の 4979）も変換しない（epsg.io に問い合わせない）', () async {
       final (raw, back) = await writeAndRead(await layerWithSrs(4979, 'undefined'));
       expect(raw.x, 135.96);
@@ -94,3 +116,11 @@ void main() {
     });
   });
 }
+
+const _gdalWgs84 = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],'
+    'AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,'
+    'AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]';
+const _gdalJgd2011 = 'GEOGCS["JGD2011",DATUM["Japanese_Geodetic_Datum_2011",SPHEROID["GRS 1980",6378137,298.257222101,'
+    'AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","1128"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],'
+    'UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],'
+    'AUTHORITY["EPSG","6668"]]';

@@ -48,7 +48,7 @@ Future<void> showTableViewDialog(BuildContext context, TableNode node) async {
             Expanded(
               child: table == null
                   ? Center(child: Text(t.tableJoin.readError))
-                  : _TableGrid(table: table),
+                  : CsvTableGrid(table: table),
             ),
           ],
         ),
@@ -57,22 +57,29 @@ Future<void> showTableViewDialog(BuildContext context, TableNode node) async {
   );
 }
 
-class _TableGrid extends StatelessWidget {
-  const _TableGrid({required this.table});
+/// 表の中身の格子（読み取り専用）
+class CsvTableGrid extends StatelessWidget {
+  const CsvTableGrid({super.key, required this.table});
   final CsvTable table;
 
   @override
   Widget build(BuildContext context) {
+    // 数の列は書式を最初に当てない（当てると空のマスが 0 になる）。空は空のまま見せる
+    TrinaColumnType typeOf(TableFieldType t) => switch (t) {
+          TableFieldType.integer => TrinaColumnType.number(applyFormatOnInit: false),
+          TableFieldType.real => TrinaColumnType.number(format: '#,##0.######', applyFormatOnInit: false),
+          TableFieldType.text => TrinaColumnType.text(),
+        };
+    final types = [for (final f in table.fields) typeOf(f.type)];
     final columns = [
       for (final (i, f) in table.fields.indexed)
         TrinaColumn(
           title: f.name,
           field: 'c$i',
-          type: switch (f.type) {
-            TableFieldType.integer => TrinaColumnType.number(),
-            TableFieldType.real => TrinaColumnType.number(format: '#,##0.######'),
-            TableFieldType.text => TrinaColumnType.text(),
-          },
+          type: types[i],
+          formatter: f.type == TableFieldType.text
+              ? null
+              : (v) => v == null || v == '' ? '' : types[i].applyFormat(v),
           readOnly: true,
           enableEditingMode: false,
           width: 110,

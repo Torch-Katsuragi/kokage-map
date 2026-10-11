@@ -201,7 +201,8 @@ class FeatureDetailPanel extends ConsumerWidget {
     if (feature is FeatureNode) {
       final node = feature as FeatureNode; // dynamic のフィールドは is で昇格しない
       final infoMap = node.infoMap;
-      const hiddenKeys = {'geom', 'sub_table'};
+      // 形の列（名前は表ごと）は属性に入っていない。geom という名前のふつうの列は出す
+      const hiddenKeys = {'sub_table'};
       final filteredEntries =
           infoMap.entries
               .where((entry) =>

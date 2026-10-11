@@ -412,6 +412,10 @@ QGIS はここをレイヤの範囲として使う。空だと「レイヤにズ
 
 rtree が無い場合はスキップする（全件走査は重く、こかげマップ は rtree を自前で維持しているので通常は存在する）。
 
+2〜3 と rtree の焼き直し（`GpkgIndexRepair`）は、**アプリが書いたときだけ**行う（`GeoPackageConnection.hasWrites` = `total_changes()`）。
+以前は見ただけの rtree つき gpkg も閉じるときに範囲と rtree を書き直していて、rtree の float32 の範囲が元の値と違うので
+ファイルが変わっていた（2026-10-12、`test/gpkg_open_no_write_test.dart`）。
+
 ## 3. `gpkg_ogr_contents` のフィーチャ数
 
 GDAL 拡張の件数キャッシュ。こかげマップ が直接 INSERT/DELETE すると実態とズレる
@@ -423,6 +427,12 @@ GDAL 拡張の件数キャッシュ。こかげマップ が直接 INSERT/DELETE
 ## 既にQGISに合わせてある点
 
 - **主キーは `fid`**（QGIS/GDAL標準）。旧 こかげマップ 形式の `id` も読める
+- **形の列の名前は表ごとに `gpkg_geometry_columns` から引く**（`GeoPackageSchema.geometryColumn`。開いている間は控える）。
+  GDAL の既定と QGIS は `geom` だが、GeoPandas / Fiona は `geometry`、ArcGIS Pro は `Shape`、PostGIS 由来は `the_geom`。
+  新しく作るレイヤは `geom`。読んだ行からは形の列を抜き（属性に出さない）、`geom` という名前のふつうの列（形の列が `geometry` の表）は属性として扱う。
+  以前は `geom` を決め打ちしていて、ほかの名前の gpkg は地物が出ず、足すと `no column named geom` で落ちた（2026-10-12）。
+  ⚠ 形の列が `geom` の表に `geometry` という属性の列があると、読んだ行の形（`geometry`）と重なって属性として出ない（既知の穴）。
+  テストは `test/gpkg_geometry_column_test.dart`
 - **主キーの無い表は `rowid` で読み書きする**（GDAL と同じ。GDAL は「no integer primary key」として `_rowid_` を FID にし、
   `fid`・`id` という名前の列があってもふつうの属性として扱う）。表に列を足さない。
   以前は主キーを調べるだけで `fid` 列を ALTER で足していて、開いただけでファイルが変わり Drive 同期で上がっていた（2026-10-12）。

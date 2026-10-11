@@ -88,9 +88,9 @@ class TurfConverter {
       final geometryData = rowData['geometry'];
       if (geometryData == null) return null;
 
-      final properties = Map<String, dynamic>.from(rowData)
-        ..remove('geom')
-        ..remove('geometry');
+      // 形の列（geom・Shape など表ごとの名前）は読むときに抜いてある（FeatureRepository）。
+      // geom という名前のふつうの列（形の列が geometry の表）は属性として残す
+      final properties = Map<String, dynamic>.from(rowData)..remove('geometry');
 
       turf.GeometryObject? geometry;
       final type = geometryType.toLowerCase();
@@ -139,7 +139,8 @@ class TurfConverter {
         for (final entry in feature.properties!.entries) {
           final key = entry.key;
           final value = entry.value;
-          if (key == 'geometry' || key == 'geom') continue;
+          // 形の列は書き手（FeatureRepository.updateFeatureAttributes）が表ごとの名前で外す
+          if (key == 'geometry') continue;
           if (value == null ||
               value is String ||
               value is num ||

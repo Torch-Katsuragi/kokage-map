@@ -28,12 +28,14 @@ bool isSystemColumn(String name) {
   return n == metadataColumn || n == 'rmaps_metadata'; // 旧名
 }
 
-/// 書き換えない列（番号・形・内部用）。大文字小文字は区別しない
+/// 書き換えない列（番号・内部用と、読んだ行で解析した形を入れる geometry）。大文字小文字は区別しない。
+///
+/// 形の列（geom・Shape など表ごとの名前）は列の一覧（`GeoPackageSchema.getColumnNames`）から外してある。
+/// ここで geom を名前で弾くと、形の列が geometry の表の geom というふつうの列が書けなくなる
 bool isReadOnlyColumn(String name) {
   final n = name.toLowerCase();
   return n == 'id' ||
       n == 'fid' ||
-      n == 'geom' ||
       n == 'geometry' ||
       n.startsWith('_');
 }

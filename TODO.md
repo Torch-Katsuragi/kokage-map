@@ -234,14 +234,6 @@ profile 版（`flutter run --profile`、debug と同じ鍵なので上書きで�
 挙動が変わるので触っていない。同じ中身の複製だけ寄せた（git log の refactor:）。
 
 - [ ] 属性テーブルの CSV 書き出しのファイル名にレイヤ名をそのまま使う（ファイル名に使えない文字を落としていない）
-- [ ] 形の列が `geom` 以外（GeoPandas の `geometry`・`the_geom` など）の gpkg を読めない・足せない。`FeatureRepository` が
-      `geom` 列を決め打ちしていて、形が読まれず（地物が出ない）、追加は `no column named geom` で失敗する（2026-10-12 に確認）。
-      rtree の名前は実際の列名で引くように直した（`gpkgRtreeTable`）が、読み書き本体は未対応。直すなら `gpkg_geometry_columns` の列名を
-      レイヤごとに引いて SELECT・INSERT・UPDATE に通す（`AS geom` で読むのが安い）
-- [ ] 同じ gpkg を別の `GeoPackageFile` で開き直す最中に、前のものの `dispose`（await されない）が共有の Database を閉じると、
-      開き直した側の初期化が `database_closed` で落ちる（sqflite の singleInstance で同じパスは 1 つの Database）。
-      `gps_history_recorder_test` の「落ちて raw に残った点」がこの間合いに乗っていて、rtree の名前引きで問い合わせが増えたときに落ちた
-      （名前引きを rtree の無い gpkg では 1 回に戻して通した）。閉じる側が、同じパスの接続が残っていれば閉じないようにするのが筋
 - [ ] 重複したまま残したもの（意味が少しずつ違う）: 全角→半角（検索・結合キー・数値欄の 3 種）、ファイル名の安全化（4 種）、
       重複しない名前（`_2` 型と ` 2` 型）、`.qgs` の `<Option>` 読み（3 種）、QGIS の色の読み（`_readColor` は黒に倒す・reader は null）、
       確認ダイアログ・文字入力ダイアログの手書き、通知センターへの `add` の手書き（約 30 箇所）

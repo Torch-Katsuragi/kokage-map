@@ -48,6 +48,7 @@
 - When an attribute change could not be saved for a moment, it was not retried until the next edit or until closing. It is now retried after a short wait (growing up to 1 minute). When the app goes to the background (or the tab is hidden on the web), pending attributes are written before the file is saved back
 - CSV files saved with "Export CSV" in the attribute table showed garbled Japanese in Excel on Japanese Windows. A UTF-8 BOM is now added, as in the tree tally summary CSV
 - The scale bar of map PDFs was off by a few percent at large scales such as 1:500. Fixed. The length on the track extraction screen and the spread of GNSS fixes are now also measured on the WGS84 ellipsoid, like the measure tool and the info panel (the same values as QGIS ellipsoidal lengths)
+- In GeoPackages whose geometry column is not named geom, such as those written by GeoPandas (geometry) or ArcGIS Pro (Shape), features did not appear on the map and adding features failed. The geometry column name is now read from the gpkg. Also, a gpkg with a spatial index (rtree) was rewritten on close (extent and index) even when it was only viewed; it is now left unchanged
 
 ### Lighter
 

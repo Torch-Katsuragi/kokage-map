@@ -72,6 +72,9 @@ class _GeometryParseParams {
   final List<Map<String, dynamic>> rows;
   final GeometryType geomType;
 
+  /// 形の列の名前（行から抜いて解析する）
+  final String? geomColumn;
+
   /// re-projection用: ソースCRSのProjection（nullならWGS84で変換不要）
   final Projection? sourceProjection;
 
@@ -80,6 +83,7 @@ class _GeometryParseParams {
   _GeometryParseParams(
     this.rows,
     this.geomType, {
+    required this.geomColumn,
     this.sourceProjection,
     this.needsAxisSwap = false,
   });
@@ -90,7 +94,7 @@ List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
   _GeometryParseParams params,
 ) {
   for (final row in params.rows) {
-    final geom = row['geom'] as Uint8List?;
+    final geom = takeGeometryBlob(row, params.geomColumn);
     if (geom != null) {
       var geometry = parseGpkgGeometry(geom);
       if (geometry != null) {
@@ -116,6 +120,15 @@ List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
   return params.rows;
 }
 
+/// 行から形の列（[geomColumn]）の値を抜いて返す（GeoPackage のバイナリでなければ null）。
+///
+/// 読んだ行は地物の属性になるので、形の列は残さない（名前は表ごとに違う。`geometry` なら解析した形で上書きされる）
+Uint8List? takeGeometryBlob(Map<String, dynamic> row, String? geomColumn) {
+  if (geomColumn == null) return null;
+  final v = row.remove(geomColumn);
+  return v is Uint8List ? v : null;
+}
+
 /// Isolate化する閾値（これ以上のフィーチャ数でcompute()を使用）
 const _kIsolateThreshold = 500;
 
@@ -130,6 +143,19 @@ class FeatureRepository {
   /// レイヤのCRS情報（GpkgCrsResolver が DB とテーブルごとに覚えている）
   Future<GpkgCrsInfo> _getLayerCrs(String tableName) async =>
       GpkgCrsResolver.instance.resolveLayerCrs(await connection.getDatabase(), tableName);
+
+  /// 書き込む形の列。表から引けなければ geom（このアプリと QGIS の既定）
+  Future<String> _writeGeomColumn(String tableName) async =>
+      await schema.geometryColumn(tableName) ?? 'geom';
+
+  /// [attributes] から [names] と同じ名前（大文字小文字を問わない）の項目を除く
+  static Map<String, dynamic> _withoutColumns(Map<String, dynamic> attributes, Set<String> names) {
+    final lower = {for (final n in names) n.toLowerCase()};
+    return {
+      for (final MapEntry(:key, :value) in attributes.entries)
+        if (!lower.contains(key.toLowerCase())) key: value,
+    };
+  }
 
   // ============================================================
   // 書き込み前クリンナップ
@@ -227,7 +253,7 @@ class FeatureRepository {
         metadata: metadata,
       );
 
-      final updateColumns = <String>['geom = ?'];
+      final updateColumns = <String>['${quoteIdent(await _writeGeomColumn(tableName))} = ?'];
       final updateValues = <dynamic>[wkb];
 
       for (final entry in attributes.entries) {
@@ -295,11 +321,13 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
+      final geomCol = await schema.geometryColumn(tableName);
+      if (geomCol == null) return null;
       final rows = await db.rawQuery(
-        'SELECT geom FROM ${quoteIdent(tableName)} WHERE ${pkEquals(pkColumn)}',
+        'SELECT ${quoteIdent(geomCol)} AS g FROM ${quoteIdent(tableName)} WHERE ${pkEquals(pkColumn)}',
         [rowId],
       );
-      final blob = rows.isEmpty ? null : rows.first['geom'] as Uint8List?;
+      final blob = rows.isEmpty ? null : rows.first['g'] as Uint8List?;
       if (blob == null) return null;
       final g = parseGpkgGeometry(blob);
       if (g == null || crs.isWgs84 || crs.projection == null) return g;
@@ -333,7 +361,8 @@ class FeatureRepository {
       await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final wkb = await _toLayerWkb(tableName, geom);
-      final rowId = await _insertRow(db, tableName, {'geom': wkb, ...attributes});
+      final geomCol = await _writeGeomColumn(tableName);
+      final rowId = await _insertRow(db, tableName, {..._withoutColumns(attributes, {geomCol}), geomCol: wkb});
       await spatialIndex.indexRows(tableName, {rowId: wkb});
       return rowId;
     } catch (e) {
@@ -434,7 +463,7 @@ class FeatureRepository {
       final row = Map<String, dynamic>.from(rows.first);
       _normalizePrimaryKey(row, pkColumn);
 
-      final geom = row['geom'] as Uint8List?;
+      final geom = takeGeometryBlob(row, await schema.geometryColumn(tableName));
       if (geom != null && geomType != null) {
         var geometry = parseGpkgGeometry(geom);
         if (geometry != null) {
@@ -505,6 +534,7 @@ class FeatureRepository {
       // 同じ時間のタイルキャッシュの読み出しまで 2.5 秒待たされていた（2026-10-06、Fold で起動時）。
       // 大きいレイヤはページごとに isolate で解析を始め、次のページの読み込みと重ねる
       final orderCol = pkRef(pkColumn);
+      final geomCol = await schema.geometryColumn(tableName);
       final crs = geomType == null ? null : await _getLayerCrs(tableName);
       final needsReproject = crs != null && !crs.isWgs84 && crs.projection != null;
       if (needsReproject) {
@@ -521,6 +551,8 @@ class FeatureRepository {
           final normalizedRow = Map<String, dynamic>.from(row);
           _normalizePrimaryKey(normalizedRow, pkColumn);
           if (normalizedRow['id'] == null) continue;
+          // 形を読まないときも、形の列は属性に残さない
+          if (geomType == null) takeGeometryBlob(normalizedRow, geomCol);
           normalized.add(normalizedRow);
         }
         final last = page.length < pageSize;
@@ -530,6 +562,7 @@ class FeatureRepository {
             _GeometryParseParams(
               normalized,
               geomType,
+              geomColumn: geomCol,
               sourceProjection: needsReproject ? crs.projection : null,
               needsAxisSwap: crs!.needsAxisSwap,
             ),
@@ -548,7 +581,7 @@ class FeatureRepository {
       }
 
       for (final row in mutableRows) {
-        final geom = row['geom'] as Uint8List?;
+        final geom = takeGeometryBlob(row, geomCol);
         if (geom != null) {
           var geometry = parseGpkgGeometry(geom);
           if (geometry != null) {
@@ -693,13 +726,14 @@ class FeatureRepository {
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
       final existingColumns =
           (await schema.getColumnNames(tableName, getAll: true)).toSet();
+      final geomCol = await schema.geometryColumn(tableName);
 
       final filteredAttributes = <String, dynamic>{};
       for (final entry in attributes.entries) {
         final key = entry.key;
         final value = entry.value;
 
-        if (_isReservedColumn(key, pkColumn)) continue;
+        if (_isReservedColumn(key, pkColumn, geomCol)) continue;
         if (!existingColumns.contains(key)) {
           AppLogger.debug('[FeatureRepository] カラム未存在のためスキップ: $key');
           continue;
@@ -761,18 +795,19 @@ class FeatureRepository {
     List<(geo.Geometry, Map<String, dynamic>)> items, {
     Set<String> reserved = const {},
   }) async {
-    final reservedColumns = {
-      'fid',
-      'geom',
-      'id',
-      'rowid',
-      'geometry',
-      ...reserved,
-    };
-
     try {
       await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
+      final geomCol = await _writeGeomColumn(tableName);
+      // 主キー・形の列と、読んだ行で解析した形を入れている geometry は属性として書かない
+      final reservedColumns = {
+        'fid',
+        'id',
+        'rowid',
+        'geometry',
+        geomCol.toLowerCase(),
+        for (final r in reserved) r.toLowerCase(),
+      };
       final batch = db.batch();
       final wkbs = <Uint8List>[];
       // 移す先のレイヤの CRS に合わせる（WGS84 のまま書くと別の CRS のレイヤで位置がずれる）
@@ -787,7 +822,7 @@ class FeatureRepository {
         final geometry = dims.isXY ? geom : await VertexZ.apply(geom, dims, context: '$tableName#new');
         final wkb = _encodeInCrs(crs, geometry);
         wkbs.add(wkb);
-        final insertData = <String, dynamic>{'geom': wkb};
+        final insertData = <String, dynamic>{geomCol: wkb};
 
         data.forEach((key, value) {
           if (!reservedColumns.contains(key.toLowerCase())) {
@@ -903,19 +938,32 @@ class FeatureRepository {
   }
 
   /// [sourceTable] の行（[where] があれば当てはまる行）を [targetTable] へ写し、写した数を返す。
-  /// 主キー（id / fid）は写さず振り直させる。写せる列が無ければ null
+  /// 主キー（id / fid）は写さず振り直させる。形の列は名前が違っても（geometry → geom など）形の列へ写す。
+  /// 写す先の形の列と同じ名前のふつうの列は写さない。写せる列が無ければ null
   Future<int?> _copyRows(String sourceTable, String targetTable, {String? where}) async {
-    final columnsToInsert = [
-      for (final c in await schema.getTableColumns(sourceTable))
-        if (c.toLowerCase() != 'id' && c.toLowerCase() != 'fid') c,
-    ];
-    if (columnsToInsert.isEmpty) return null;
+    final sourceGeom = (await schema.geometryColumn(sourceTable))?.toLowerCase();
+    final targetGeom = await schema.geometryColumn(targetTable);
+    final from = <String>[];
+    final to = <String>[];
+    for (final c in await schema.getTableColumns(sourceTable)) {
+      final lc = c.toLowerCase();
+      if (lc == 'id' || lc == 'fid') continue;
+      if (lc == sourceGeom) {
+        if (targetGeom != null) {
+          from.add(c);
+          to.add(targetGeom);
+        }
+      } else if (lc != targetGeom?.toLowerCase()) {
+        from.add(c);
+        to.add(c);
+      }
+    }
+    if (from.isEmpty) return null;
 
     final db = await connection.getDatabase();
-    final columnList = columnsToInsert.map(quoteIdent).join(', ');
     await db.execute(
-      'INSERT INTO ${quoteIdent(targetTable)} ($columnList) '
-      'SELECT $columnList FROM ${quoteIdent(sourceTable)}'
+      'INSERT INTO ${quoteIdent(targetTable)} (${to.map(quoteIdent).join(', ')}) '
+      'SELECT ${from.map(quoteIdent).join(', ')} FROM ${quoteIdent(sourceTable)}'
       '${where == null ? '' : ' WHERE $where'}',
     );
     final countResult = await db.rawQuery('SELECT changes() as count');
@@ -980,8 +1028,12 @@ class FeatureRepository {
     }
   }
 
-  bool _isReservedColumn(String key, String pkColumn) =>
-      key == 'geometry' || key == 'geom' || key == pkColumn || key == 'id';
+  /// 属性の一括更新で書かない列（読んだ行の解析した形 geometry・形の列 [geomColumn]・主キー）
+  bool _isReservedColumn(String key, String pkColumn, String? geomColumn) =>
+      key == 'geometry' ||
+      (geomColumn != null && key.toLowerCase() == geomColumn.toLowerCase()) ||
+      key == pkColumn ||
+      key == 'id';
 
   bool _isSupportedType(dynamic value) =>
       value == null ||

@@ -52,6 +52,9 @@ class QgisInterop {
   /// 生成し直すと元と違うものを書き込むことになるため。
   final Map<String, String> _removedTriggers = {};
 
+  /// 落として戻していないトリガーがあるか
+  bool get hasRemovedTriggers => _removedTriggers.isNotEmpty;
+
   /// 削除するトリガーの定義を控えておく。
   ///
   /// 実際の DROP は呼び出し側が行う。ここは「戻せるようにする」だけ。

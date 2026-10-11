@@ -469,7 +469,8 @@ class LayerTile extends ConsumerWidget {
     }
 
     try {
-      final targetColumns = await parentGpkg.geoPackageFile.getTableColumns(node.name);
+      // 形の列（geom・geometry・Shape など表ごとの名前）を除いた列で比べる
+      final targetColumns = await parentGpkg.geoPackageFile.getColumnNames(node.name, getAll: true);
       if (!context.mounted) return;
       if (targetColumns.isEmpty) {
         ref.notify(t.layerDrawer.layer.columnInfoFailed);
@@ -485,7 +486,7 @@ class LayerTile extends ConsumerWidget {
         return;
       }
 
-      final systemCols = {'id', 'fid', 'geom', 'geometry', 'ROWID'};
+      const systemCols = {'id', 'fid', 'rowid'};
       bool columnsMatch(List<String> a, List<String> b) {
         final a1 = a.where((c) => !systemCols.contains(c.toLowerCase())).toSet();
         final b1 = b.where((c) => !systemCols.contains(c.toLowerCase())).toSet();
@@ -494,7 +495,7 @@ class LayerTile extends ConsumerWidget {
 
       final matching = <LayerNode>[];
       for (final layer in siblings) {
-        final cols = await parentGpkg.geoPackageFile.getTableColumns(layer.name);
+        final cols = await parentGpkg.geoPackageFile.getColumnNames(layer.name, getAll: true);
         if (columnsMatch(targetColumns, cols)) matching.add(layer);
       }
       if (!context.mounted) return;

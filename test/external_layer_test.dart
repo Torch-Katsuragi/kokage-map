@@ -31,10 +31,12 @@ import 'package:root_maps/services/coordinate/gpkg_crs_resolver.dart';
 import 'package:root_maps/services/external/external_layer_cache.dart';
 import 'package:root_maps/services/external/external_layer_converter.dart';
 import 'package:root_maps/services/external/external_source.dart';
+import 'package:root_maps/services/external/kmz_layout.dart';
 import 'package:root_maps/services/folder_file_adder.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:root_maps/services/layer_drawer_service.dart';
 import 'package:root_maps/services/qgis/qgs_auto_refresh.dart';
+import 'package:root_maps/services/qgis/qgs_project_builder.dart';
 import 'package:root_maps/utils/app_navigator.dart';
 import 'package:root_maps/widgets/external_layer_actions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -56,6 +58,42 @@ const _surveyKml = '''<?xml version="1.0" encoding="utf-8"?>
   <Placemark><name>道1</name><LineString><coordinates>135.96,33.93 135.97,33.94</coordinates></LineString></Placemark>
 </Folder>
 </Document></kml>''';
+
+/// NetworkLink だけの doc.kml（LIBKML・Google Earth 製の KMZ の形）。[hrefs] を 1 本ずつ指す
+String _networkLinkDoc(List<String> hrefs) => '''<?xml version="1.0" encoding="utf-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>doc</name>
+${[for (final h in hrefs) '<NetworkLink><name>$h</name><Link><href>$h</href></Link></NetworkLink>'].join('\n')}
+</Document></kml>''';
+
+/// フォルダの無い KML（GDAL のレイヤは 1 枚。名前は Document の name）
+String _flatKml(String docName, String placemarks) => '''<?xml version="1.0" encoding="utf-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>$docName</name>
+$placemarks
+</Document></kml>''';
+
+/// LIBKML 製の形の KMZ: doc.kml は NetworkLink だけ。files/立木.kml（点 2）・files/road.kml（点 1 と線 1）、
+/// 外の URL へのリンクも 1 本
+List<int> _networkLinkKmz() {
+  final kmz = Archive()
+    ..addFile(ArchiveFile.bytes(
+      'doc.kml',
+      utf8.encode(_networkLinkDoc(['files/%E7%AB%8B%E6%9C%A8.kml', 'files/road.kml', 'https://example.com/remote.kml'])),
+    ))
+    ..addFile(ArchiveFile.bytes(
+      'files/立木.kml',
+      utf8.encode(_flatKml('layer0', '''
+<Placemark><name>スギ1</name><Point><coordinates>135.96,33.93</coordinates></Point></Placemark>
+<Placemark><name>ヒノキ2</name><Point><coordinates>135.961,33.931</coordinates></Point></Placemark>''')),
+    ))
+    ..addFile(ArchiveFile.bytes(
+      'files/road.kml',
+      utf8.encode(_flatKml('layer1', '''
+<Placemark><name>土場</name><Point><coordinates>135.97,33.94</coordinates></Point></Placemark>
+<Placemark><name>道1</name><LineString><coordinates>135.96,33.93 135.97,33.94</coordinates></LineString></Placemark>''')),
+    ))
+    ..addFile(ArchiveFile.bytes('files/icon.png', [0x89, 0x50, 0x4e, 0x47]));
+  return ZipEncoder().encodeBytes(kmz);
+}
 
 void main() {
   late Directory tmp;
@@ -246,6 +284,65 @@ void main() {
       expect(ExternalSource.kmzMainEntry(['layers/x.kml', 'files/a.png']), 'layers/x.kml');
       expect(ExternalSource.kmzMainEntry(['files/a.png']), isNull);
     });
+
+    test('KMZ の NetworkLink: zip の中の KML だけをたどり、外の URL・zip の外・無いものは読まない', () {
+      final names = ['doc.kml', 'files/a.kml', 'files/B.kml', 'files/松 林.kml', 'sub/doc.kml', 'files/x.png'];
+      const kml = '''<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<NetworkLink><Link><href>files/a.kml</href></Link></NetworkLink>
+<NetworkLink><Link><href> ./files/a.kml </href></Link></NetworkLink>
+<NetworkLink><Link><href>files/b.kml</href></Link></NetworkLink>
+<NetworkLink><Link><href>files/%E6%9D%BE%20%E6%9E%97.kml</href></Link></NetworkLink>
+<NetworkLink><Url><href>sub/doc.kml</href></Url></NetworkLink>
+<NetworkLink><Link><href>http://example.com/a.kml</href></Link></NetworkLink>
+<NetworkLink><Link><href>../outside.kml</href></Link></NetworkLink>
+<NetworkLink><Link><href>files/missing.kml</href></Link></NetworkLink>
+<NetworkLink><Link><href>files/x.png</href></Link></NetworkLink>
+<NetworkLink><Link><href>doc.kml</href></Link></NetworkLink>
+</Document></kml>''';
+      final (links, skipped) = KmzLayout.resolveNetworkLinks('doc.kml', kml, names);
+      expect(links, ['files/a.kml', 'files/B.kml', 'files/松 林.kml', 'sub/doc.kml']);
+      expect(skipped, ['http://example.com/a.kml', '../outside.kml', 'files/missing.kml', 'files/x.png']);
+      // リンク元が dir の中なら、そこからの相対パス
+      expect(KmzLayout.resolveNetworkLinks('sub/doc.kml', _networkLinkDoc(['../files/a.kml']), names).$1, ['files/a.kml']);
+      // NetworkLink の無い KML・壊れた KML
+      for (final kml in [_surveyKml, '<kml']) {
+        final (none, noneSkipped) = KmzLayout.resolveNetworkLinks('doc.kml', kml, names);
+        expect([...none, ...noneSkipped], isEmpty);
+      }
+      // zip から
+      final layout = KmzLayout.fromArchive(ZipDecoder().decodeBytes(_networkLinkKmz()));
+      expect(layout.main, 'doc.kml');
+      expect(layout.links, ['files/立木.kml', 'files/road.kml']);
+      expect(layout.skippedLinks, ['https://example.com/remote.kml']);
+    });
+
+    test('KMZ（doc.kml が NetworkLink だけ）: リンク先の KML を 1 本ずつレイヤにする（名前は QGIS と同じリンク先の名前）', () async {
+      File(p.join(proj, 'libkml.kmz')).writeAsBytesSync(_networkLinkKmz());
+      final node = (await openRoot()).children.whereType<ExternalLayerNode>().single;
+      expect(node.loadError, isNull);
+      expect(node.children.whereType<LayerNode>().map((l) => l.layerName), unorderedEquals(['立木', 'road_point', 'road_line']));
+      expect(await namesIn(node.geoPackageFile, '立木', column: 'Name'), ['スギ1', 'ヒノキ2']);
+      expect(await namesIn(node.geoPackageFile, 'road_line', column: 'Name'), ['道1']);
+      expect(await node.geoPackageFile.getGeometryType('road_point'), GeometryType.point);
+      final plan = node.sourcePlan!;
+      expect(plan.sourceLayerCount, 2);
+      final byName = {for (final l in plan.layers) l.name: l};
+      expect(byName['立木']!.dataset, 'files/立木.kml');
+      expect(byName['立木']!.qgisLayerName, '立木');
+      expect(byName['road_line']!.qgisLayerName, 'road');
+      expect(byName['road_line']!.qgisGeometryType, 'LineString');
+      // QGIS へ書く URI（LIBKML のレイヤ名 + 型）
+      expect(QgsProjectBuilder.externalUriOptions(node, 'road_point', layerCount: 3), ['layername=road', 'geometrytype=Point']);
+      expect(QgsProjectBuilder.externalUriOptions(node, '立木', layerCount: 3), ['layername=立木']);
+    }, skip: skip);
+
+    test('KMZ（NetworkLink が外の URL だけ）: 取りに行かず、読めない理由に出す', () async {
+      final kmz = Archive()..addFile(ArchiveFile.bytes('doc.kml', utf8.encode(_networkLinkDoc(['https://example.com/a.kml']))));
+      File(p.join(proj, 'remote.kmz')).writeAsBytesSync(ZipEncoder().encodeBytes(kmz));
+      final node = (await openRoot()).children.whereType<ExternalLayerNode>().single;
+      expect(node.loadError, contains('https://example.com/a.kml'));
+      expect(node.children, isEmpty);
+    }, skip: skip);
 
     test('CSV: 経度・緯度の列があれば点のレイヤ、無ければレイヤにしない', () async {
       File(p.join(proj, 'trees.csv')).writeAsStringSync('name,経度,緯度,dbh\nスギ1,135.96,33.93,32\nヒノキ2,135.961,33.931,28\n');
@@ -667,6 +764,19 @@ void main() {
       // 書いた gpkg を GDAL で読み直しても同じ（QGIS からも 6674 に見える）
       final info = await ExternalGdal.instance.vectorInfo(result.gpkgPath!, args: const ['-so']);
       expect(layerEpsg(info), 6674);
+      await gpkg.geoPackageFile.dispose();
+    }, skip: skip);
+
+    test('KMZ（doc.kml が NetworkLink だけ）も変換できる（リンク先ごとのレイヤ・件数を確かめる）', () async {
+      File(p.join(proj, 'libkml.kmz')).writeAsBytesSync(_networkLinkKmz());
+      final (root, node) = await open('libkml.kmz');
+      final result = await ExternalLayerConverter.convert(node);
+      expect(result.outcome, ExternalConvertOutcome.converted);
+      expect(File(p.join(proj, 'libkml.kmz')).existsSync(), isFalse);
+      final gpkg = root.children.whereType<GeoPackageNode>().single;
+      expect(gpkg.name, 'libkml.gpkg');
+      expect(await gpkg.geoPackageFile.getLayerNames(), unorderedEquals(['立木', 'road_point', 'road_line']));
+      expect(await namesIn(gpkg.geoPackageFile, '立木', column: 'Name'), ['スギ1', 'ヒノキ2']);
       await gpkg.geoPackageFile.dispose();
     }, skip: skip);
 

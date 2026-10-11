@@ -35,6 +35,7 @@
   [Attribute table copy covered only the first page; rows per page can be chosen and sorting covers all rows],
   [Attribute table filter indicator, and full-width digits in the edit panel],
   [Per-point records of GPS-surveyed lines and polygons were dropped],
+  [KMZ whose doc.kml only links (NetworkLink) to other KML could not be opened; the linked KML inside become layers],
 )
 
 #fixes(

@@ -716,7 +716,7 @@ String _externalLayerName(GeoPackageNode node, QgsDataSource source) {
   final plan = node is ExternalLayerNode ? node.sourcePlan : null;
   if (plan != null) {
     final candidates = plan.layers.where((l) =>
-        (source.layerName == null || l.sourceLayer == source.layerName) &&
+        (source.layerName == null || l.qgisLayerName == source.layerName) &&
         (type == null || !l.split || l.geometryType == type));
     if (candidates.length == 1) return candidates.single.name;
     if (source.layerName != null && candidates.isNotEmpty) return candidates.first.name;

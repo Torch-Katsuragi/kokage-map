@@ -29,6 +29,7 @@ import '../../core/gdal/gdal_provider.dart';
 import '../../core/path_resolver.dart';
 import '../../models/geometry_type.dart';
 import '../../utils/app_logger.dart';
+import 'kmz_layout.dart';
 
 /// 外部形式の読み書きに使う GDAL（差し替えはテスト用）
 class ExternalGdal {
@@ -105,6 +106,7 @@ class ExternalSourceLayer {
     required this.featureCount,
     this.split = false,
     this.dim = 'XY',
+    this.dataset,
   });
 
   /// キャッシュ・変換後の gpkg でのレイヤ名（GDAL のレイヤ名。分けたら `<名前>_point` など）
@@ -125,6 +127,14 @@ class ExternalSourceLayer {
   /// 高さが落ちる（2026-10-11 Pixel 9）ので、元のレイヤの型から決めて渡す
   final String dim;
 
+  /// KMZ の中で読んだ KML（doc.kml の NetworkLink が指す `files/a.kml` など）。null なら元のファイルそのもの
+  /// （KMZ なら [ExternalSource.datasetName] の KML）
+  final String? dataset;
+
+  /// QGIS の `|layername=` に書く名前。NetworkLink の先の KML は、QGIS（LIBKML）が `<リンク先の名前（拡張子なし）>` の
+  /// 1 レイヤにするので、それに合わせる
+  String get qgisLayerName => dataset == null ? sourceLayer : p.url.basenameWithoutExtension(dataset!);
+
   /// `ogr2ogr -where`（分けたときだけ）
   String? get where => split
       ? "OGR_GEOMETRY IN (${_familyGeometryNames[geometryType]!.map((n) => "'$n'").join(',')})"
@@ -140,6 +150,7 @@ class ExternalSourceLayer {
     'featureCount': featureCount,
     'split': split,
     'dim': dim,
+    if (dataset != null) 'dataset': dataset,
   };
 
   static ExternalSourceLayer fromJson(Map<String, Object?> json) => ExternalSourceLayer(
@@ -149,6 +160,7 @@ class ExternalSourceLayer {
     featureCount: (json['featureCount'] as num?)?.toInt() ?? 0,
     split: json['split'] == true,
     dim: json['dim'] as String? ?? 'XY',
+    dataset: json['dataset'] as String?,
   );
 }
 
@@ -202,24 +214,26 @@ class ExternalSource {
   /// 「Support only 1 file in archive」で開けない（2026-10-11 web で見つけた。Android も同じ）。中の KML を名指しする
   static Future<String> datasetName(String path) async {
     if (p.extension(path).toLowerCase() != '.kmz') return path;
-    String? inner;
+    return kmzDatasetName(path, (await _kmzLayout(path))?.main);
+  }
+
+  /// KMZ の中の [entry] を GDAL に渡す名前（null なら KMZ そのもの）
+  static String kmzDatasetName(String kmzPath, String? entry) => entry == null ? '/vsizip/$kmzPath' : '/vsizip/$kmzPath/$entry';
+
+  /// KMZ の中身（読む KML と、その NetworkLink の先）。KMZ でなければ null。zip が読めなければ中身の無い結果
+  static Future<KmzLayout?> _kmzLayout(String path) async {
+    if (p.extension(path).toLowerCase() != '.kmz') return null;
     try {
-      inner = kmzMainEntry(ZipDecoder().decodeBytes(await fs.readAsBytes(path)).files.where((f) => f.isFile).map((f) => f.name));
+      return KmzLayout.fromArchive(ZipDecoder().decodeBytes(await fs.readAsBytes(path)));
     } catch (e) {
       AppLogger.debug('[ExternalSource] KMZ の中身を引けない: $path - $e');
+      return const KmzLayout(main: null);
     }
-    return inner == null ? '/vsizip/$path' : '/vsizip/$path/$inner';
   }
 
   /// KMZ の中で読む KML（Google Earth と同じく、根の `doc.kml`、無ければ根の最初の `.kml`、無ければどこかの最初の `.kml`）。
   /// KML が無ければ null
-  static String? kmzMainEntry(Iterable<String> names) {
-    final kmls = [for (final n in names) n.replaceAll(r'\', '/')].where((n) => n.toLowerCase().endsWith('.kml')).toList();
-    bool atRoot(String n) => !n.contains('/');
-    return kmls.where((n) => atRoot(n) && n.toLowerCase() == 'doc.kml').firstOrNull ??
-        kmls.where(atRoot).firstOrNull ??
-        kmls.firstOrNull;
-  }
+  static String? kmzMainEntry(Iterable<String> names) => KmzLayout.mainEntryOf(names);
 
   /// [path] を開くときのオープンオプション（`-oo` を付けた引数）
   static Future<List<String>> openArgs(String path) async {
@@ -301,59 +315,156 @@ class ExternalSource {
 
   /// [path] を GDAL で読み、キャッシュに書くレイヤを決める。開けなければ投げる
   static Future<ExternalSourcePlan> plan(String path) async {
-    final gdal = ExternalGdal.instance;
-    final ds = await datasetName(path);
     final oo = await openArgs(path);
+    final kmz = await _kmzLayout(path);
+    List<ExternalSourceLayer> out;
+    int sourceLayerCount;
+    if (kmz == null || kmz.links.isEmpty) {
+      final skipped = kmz != null && kmz.skippedLinks.isNotEmpty;
+      if (skipped) _logSkipped(path, kmz);
+      try {
+        final (layers, count) = await _planDataset(kmz == null ? path : kmzDatasetName(path, kmz.main), oo);
+        out = layers;
+        sourceLayerCount = count;
+      } on GdalException {
+        // 外の URL へのリンクだけの doc.kml は、GDAL が開けなくても下で読めない理由（読まなかった href）を出す
+        if (!skipped) rethrow;
+        out = [];
+        sourceLayerCount = 0;
+      }
+    } else {
+      // doc.kml が NetworkLink で zip の中の KML を指している（LIBKML・Google Earth 製）。同梱の GDAL は LIBKML を
+      // 持たず、KML ドライバはリンクをたどらないので、リンク先の KML を 1 本ずつ開く。
+      // レイヤ名は QGIS（LIBKML）と同じ `<リンク先の名前（拡張子なし）>`。リンク先に GDAL のレイヤが複数あれば
+      // GDAL のレイヤ名（フォルダ名）のまま
+      if (kmz.skippedLinks.isNotEmpty) _logSkipped(path, kmz);
+      out = [];
+      // doc.kml 自体に地物があれば、それも出す（NetworkLink だけなら GDAL は開けないか空）
+      try {
+        out.addAll((await _planDataset(kmzDatasetName(path, kmz.main), oo)).$1.where((l) => l.featureCount > 0));
+      } on GdalException catch (e) {
+        AppLogger.debug('[ExternalSource] doc.kml に地物が無い: $path - ${e.message}');
+      }
+      for (final entry in kmz.links) {
+        final stem = p.url.basenameWithoutExtension(entry);
+        try {
+          final (layers, count) = await _planDataset(
+            kmzDatasetName(path, entry),
+            oo,
+            dataset: entry,
+            singleLayerName: stem,
+          );
+          out.addAll(layers);
+          AppLogger.debug('[ExternalSource] NetworkLink の先を読んだ: $entry（GDAL のレイヤ $count 枚）');
+        } on GdalException catch (e) {
+          AppLogger.debug('[ExternalSource] NetworkLink の先が読めない: $path/$entry - ${e.message}');
+        }
+      }
+      _dedupeNames(out);
+      sourceLayerCount = kmz.links.length;
+    }
+    if (out.isEmpty && kmz != null && kmz.skippedLinks.isNotEmpty) {
+      throw StateError('KMZ の NetworkLink は KMZ の中の KML だけを読みます（読まなかったもの: ${kmz.skippedLinks.join(', ')}）');
+    }
+    // 空のレイヤは、ほかに中身のあるレイヤがあれば出さない（GPX は waypoints だけでも routes・tracks・
+    // route_points・track_points の空の 4 枚が並ぶ。2026-10-11 Pixel 9）。全部空なら残す（空の shp も 1 枚のレイヤ）
+    final filled = out.where((l) => l.featureCount > 0).toList();
+    return ExternalSourcePlan(layers: filled.isEmpty ? out : filled, sourceLayerCount: sourceLayerCount);
+  }
+
+  static void _logSkipped(String path, KmzLayout kmz) =>
+      AppLogger.debug('[ExternalSource] KMZ の NetworkLink を読まなかった（外の URL・中に無い）: $path - ${kmz.skippedLinks}');
+
+  /// 名前がぶつかったら後ろに `_2` `_3` … を付ける（gpkg のレイヤ名は 1 つずつ）
+  static void _dedupeNames(List<ExternalSourceLayer> layers) {
+    final used = <String>{};
+    for (var i = 0; i < layers.length; i++) {
+      final l = layers[i];
+      var name = l.name;
+      for (var n = 2; used.contains(name.toLowerCase()); n++) {
+        name = '${l.name}_$n';
+      }
+      used.add(name.toLowerCase());
+      if (name != l.name) {
+        layers[i] = ExternalSourceLayer(
+          name: name,
+          sourceLayer: l.sourceLayer,
+          geometryType: l.geometryType,
+          featureCount: l.featureCount,
+          split: l.split,
+          dim: l.dim,
+          dataset: l.dataset,
+        );
+      }
+    }
+  }
+
+  /// GDAL のデータセット [ds] 1 つを読み、キャッシュに書くレイヤと GDAL のレイヤの数を返す（空のレイヤも返す）。
+  /// GDAL のレイヤが 1 枚なら、名前は [singleLayerName]（null なら GDAL のレイヤ名）。[dataset] は KMZ の中の KML
+  static Future<(List<ExternalSourceLayer>, int)> _planDataset(
+    String ds,
+    List<String> oo, {
+    String? dataset,
+    String? singleLayerName,
+  }) async {
+    final gdal = ExternalGdal.instance;
     final info = await gdal.vectorInfo(ds, args: ['-so', ...oo]);
     final layers = ((info['layers'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final alias = layers.length == 1 ? singleLayerName : null;
     final out = <ExternalSourceLayer>[];
     for (final layer in layers) {
-      final name = layer['name'] as String;
+      final sourceName = layer['name'] as String;
+      final name = alias ?? sourceName;
       final count = (layer['featureCount'] as num?)?.toInt() ?? 0;
       final family = _familyOf(layer);
       if (family == null) continue;
       if (family is GeometryType) {
         out.add(ExternalSourceLayer(
           name: name,
-          sourceLayer: name,
+          sourceLayer: sourceName,
           geometryType: family,
           featureCount: count,
           dim: _dimOf(layer),
+          dataset: dataset,
         ));
         continue;
       }
       // 型が混ざっている（GeoJSON・KML・DXF など）: 点・線・面ごとに数え、2 種以上なら分ける
       final counts = <GeometryType, int>{};
       for (final type in GeometryType.values) {
-        final probe = ExternalSourceLayer(name: name, sourceLayer: name, geometryType: type, featureCount: 0, split: true);
-        final sub = await gdal.vectorInfo(ds, args: ['-so', ...oo, '-where', probe.where!, name]);
+        final probe = ExternalSourceLayer(name: name, sourceLayer: sourceName, geometryType: type, featureCount: 0, split: true);
+        final sub = await gdal.vectorInfo(ds, args: ['-so', ...oo, '-where', probe.where!, sourceName]);
         // 名前で引く（レイヤ名の引数を受け付けない版でも、-where は全レイヤに掛かる）
         final subLayer = ((sub['layers'] as List?) ?? const [])
             .cast<Map<String, dynamic>>()
-            .where((l) => l['name'] == name)
+            .where((l) => l['name'] == sourceName)
             .firstOrNull;
         final n = (subLayer?['featureCount'] as num?)?.toInt() ?? 0;
         if (n > 0) counts[type] = n;
       }
       if (counts.length == 1) {
         // 1 種だけなら分けない（名前もそのまま）。件数は形の無い地物も含めた元の数
-        out.add(ExternalSourceLayer(name: name, sourceLayer: name, geometryType: counts.keys.single, featureCount: count));
+        out.add(ExternalSourceLayer(
+          name: name,
+          sourceLayer: sourceName,
+          geometryType: counts.keys.single,
+          featureCount: count,
+          dataset: dataset,
+        ));
       } else {
         for (final MapEntry(key: type, value: n) in counts.entries) {
           out.add(ExternalSourceLayer(
             name: '$name${externalSplitSuffix(type)}',
-            sourceLayer: name,
+            sourceLayer: sourceName,
             geometryType: type,
             featureCount: n,
             split: true,
+            dataset: dataset,
           ));
         }
       }
     }
-    // 空のレイヤは、ほかに中身のあるレイヤがあれば出さない（GPX は waypoints だけでも routes・tracks・
-    // route_points・track_points の空の 4 枚が並ぶ。2026-10-11 Pixel 9）。全部空なら残す（空の shp も 1 枚のレイヤ）
-    final filled = out.where((l) => l.featureCount > 0).toList();
-    return ExternalSourcePlan(layers: filled.isEmpty ? out : filled, sourceLayerCount: layers.length);
+    return (out, layers.length);
   }
 
   /// [plan] どおりに [path] を [dst]（GPKG）へ書く。座標系は元のまま（`-t_srs` を付けない）
@@ -363,7 +474,8 @@ class ExternalSource {
     final oo = await openArgs(path);
     var first = true;
     for (final layer in plan.layers) {
-      await gdal.vectorTranslate(ds, dst, args: [
+      final src = layer.dataset == null ? ds : kmzDatasetName(path, layer.dataset);
+      await gdal.vectorTranslate(src, dst, args: [
         '-f', 'GPKG',
         if (!first) '-update',
         ...oo,

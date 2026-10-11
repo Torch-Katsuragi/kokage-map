@@ -36,7 +36,16 @@ class ImportExportService {
   factory ImportExportService() => _instance;
   ImportExportService._internal();
 
-  static const _singlePointFormats = {FileFormat.shapefile, FileFormat.csv, FileFormat.gpx};
+  /// 点を POINT として書く形式。アプリの点レイヤは MULTIPOINT と宣言して中身は 1 点ずつなので、宣言どおりに書くと
+  /// GeoJSON・KML・FlatGeobuf でも MultiPoint になる（2026-10-11 web で確認）。GPKG だけは元の宣言のまま写す
+  static const _singlePointFormats = {
+    FileFormat.shapefile,
+    FileFormat.csv,
+    FileFormat.gpx,
+    FileFormat.geojson,
+    FileFormat.kml,
+    FileFormat.flatgeobuf,
+  };
 
   /// 書き出せる形式（ダイアログの選択肢の順）
   List<FileFormat> getSupportedExportFormats() => FileFormat.values;

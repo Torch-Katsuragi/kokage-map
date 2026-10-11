@@ -142,6 +142,7 @@ void main() {
     expect(first['properties'], containsPair('h', 21.5));
     expect(first['properties'], containsPair('n', 3));
     expect(first['properties'], containsPair('樹種', 'スギ'));
+    expect((first['geometry'] as Map)['type'], 'Point', reason: 'アプリの点レイヤ（MULTIPOINT 宣言）でも Point で書く');
     final coords = (first['geometry'] as Map)['coordinates'] as List;
     expect(coords[0] as num, closeTo(135.97, 1e-9));
     expect(coords[1] as num, closeTo(33.91, 1e-9));

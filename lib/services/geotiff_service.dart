@@ -15,23 +15,32 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 /// GeoTIFF変換サービス
 ///
-/// 画像ファイルをGeoTIFF形式に変換し、地理参照メタデータ
-/// （ModelTransformationTag, GeoKeyDirectoryTag）を注入する。
-/// `image` パッケージのTIFFエンコーダ/ExifData構造を活用。
+/// 写真を「オーバーレイに変換」した GeoTIFF を書き、位置合わせ（移動・拡大縮小・回転）で位置を書き換える。
+/// 書くのは GDAL（`gdal_translate`。Android は FFI、web は WASM）。QGIS で開いて警告が出ない形にするため
+/// （以前の `package:image` の TIFF は「タグの並びが不正」「タイル幅が規格外」「ExtraSamples が合わない」と言われた）。
+/// 形: EPSG:4326・DEFLATE・256 のタイル・RGBA（4 バンド目は ExtraSamples = 結合されていないアルファ）。
+/// 位置は geoTransform（回転があれば GDAL が ModelTransformationTag、無ければ ModelTiepoint + ModelPixelScale で書く）。
+/// 目印に TIFFTAG_SOFTWARE = [kSoftware] を入れ、これで外のラスタ（読み取り専用）と見分ける。
+/// 設計: docs/technical/external-formats.md「アプリの GeoTIFF」
 library;
 
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../core/fs/k_file_system.dart';
+import '../core/gdal/gdal_provider.dart';
+import '../core/path_resolver.dart';
 import '../core/terrain/terrain_worker.dart';
 import '../models/kmeta.dart';
 import '../utils/app_logger.dart';
 import '../widgets/dialogs/overlay_convert_dialog.dart';
+import 'global_folder_locator.dart';
 
 /// GeoTIFF読み書きサービス
 class GeoTiffService {
@@ -41,14 +50,37 @@ class GeoTiffService {
   /// ModelTransformationTag: 4x4アフィン変換行列（DOUBLE[16]）
   static const int kModelTransformationTag = 34264;
 
+  /// ModelPixelScaleTag（DOUBLE[3]）。回転の無い GeoTIFF を GDAL はこれと ModelTiepointTag で書く
+  static const int kModelPixelScaleTag = 33550;
+
+  /// ModelTiepointTag（DOUBLE[6n]）
+  static const int kModelTiepointTag = 33922;
+
   /// GeoKeyDirectoryTag: CRS定義等のキーディレクトリ（SHORT[N]）
   static const int kGeoKeyDirectoryTag = 34735;
+
+  /// TIFF の Software タグ
+  static const int kSoftwareTag = 305;
+
+  /// アプリが書いた GeoTIFF の目印（TIFFTAG_SOFTWARE の値）
+  static const kSoftware = 'kokage-map';
+
+  static Gdal? _gdal;
+  static Gdal get _g => _gdal ??= createGdal();
+  static String? _tempDirOverride;
+
+  /// テストで GDAL（ホストの GdalFfi）と作業フォルダを差し込む
+  @visibleForTesting
+  static void configureForTest({Gdal? gdal, String? tempDir}) {
+    _gdal = gdal;
+    _tempDirOverride = tempDir;
+  }
 
   // ── 公開API ────────────────────────────────────
 
   /// 元画像からGeoTIFFを生成する
   ///
-  /// [srcPath] 元画像ファイルパス（JPG/PNG等）
+  /// [srcPath] 元画像ファイルパス（JPG/PNG等、`fs` のパス）
   /// [outputPath] 出力GeoTIFFパス（.tif）
   /// [params] オーバーレイ変換パラメータ
   /// [mode] 変換時の画像処理モード
@@ -60,48 +92,112 @@ class GeoTiffService {
     OverlayConvertMode mode = OverlayConvertMode.none,
     double threshold = 0.5,
   }) async {
-    final srcBytes = await File(srcPath).readAsBytes();
-    var image = img.decodeImage(srcBytes);
-    if (image == null) {
+    final srcBytes = await fs.readAsBytes(srcPath);
+    // デコード・画像処理・PNG 化は作業用 isolate で（大きな写真で UI が止まらないように。web はその場で）
+    final png = await TerrainWorker.instance.run<(Uint8List, OverlayConvertMode, double), Uint8List?>(
+      _overlayPng,
+      (srcBytes, mode, threshold),
+    );
+    if (png == null) {
       throw Exception('画像のデコードに失敗: $srcPath');
     }
+    await _writeFromPng(png, outputPath, params);
 
-    // 画像処理を適用
-    image = _applyMode(image, mode, threshold);
+    // 3D の地図面が読む PNG キャッシュも作る（Android だけ。作れなくても地図の描き直しでまた作る）
+    if (!kIsWeb) {
+      try {
+        await ensurePngCache(outputPath);
+      } catch (e) {
+        AppLogger.debug('[GeoTiffService] PNG キャッシュを作れない: $e');
+      }
+    }
 
-    final tiffBytes = _encodeGeoTiff(image, params);
-    await File(outputPath).writeAsBytes(tiffBytes, flush: true);
-
-    // 3D の地図面が読む PNG キャッシュも作る
-    await ensurePngCache(outputPath);
-
-    AppLogger.debug(
-      '[GeoTiffService] created: ${p.basename(outputPath)} '
-      '(${tiffBytes.length} bytes)',
-    );
+    AppLogger.debug('[GeoTiffService] created: ${p.basename(outputPath)}');
   }
 
-  /// 既存GeoTIFFのメタデータ（位置・スケール・回転）を更新して再書き出し
+  /// 既存GeoTIFFの位置（中心・スケール・回転）を書き換える
   ///
-  /// 画像データはデコード→再エンコードされるが、ピクセル内容は不変。
-  /// デバウンスされた呼び出しで使用するため、頻繁には実行されない。
+  /// GDAL で書いたもの（[kSoftware] の目印あり）は `gdal_translate -a_gt` で同じ形のまま書き直す。
+  /// 旧版の `package:image` で書いたものは `package:image` で解いて GDAL の形に書き直す（この時に移行する）。
+  /// どちらも隣の一時ファイルに書いてから置き換える。デバウンスされた呼び出しで使うので、頻繁には走らない。
+  ///
+  /// GDAL のハンドルを開いたまま geoTransform だけ変える（gdal_edit）方が軽いが、web の WASM に
+  /// `GDALSetGeoTransform` が入っていない（足すと焼き直しと Release の上げ直しが要る）ので、作り直しにしている
   static Future<void> updateGeoTiffTags(
     String tifPath,
     KMetaImageOverlay params,
   ) async {
-    final srcBytes = await File(tifPath).readAsBytes();
-    final image = img.decodeImage(srcBytes);
-    if (image == null) {
-      throw Exception('TIFFのデコードに失敗: $tifPath');
+    final bytes = await fs.readAsBytes(tifPath);
+    final tmp = '$tifPath.kokage-tmp';
+    try {
+      if (isGdalWritten(bytes)) {
+        await _g.translate(tifPath, tmp, args: creationArgs(params));
+      } else {
+        final png = await TerrainWorker.instance.run<Uint8List, Uint8List?>(_legacyTiffToRgbaPng, bytes);
+        if (png == null) {
+          throw Exception('TIFFのデコードに失敗: $tifPath');
+        }
+        await _writeFromPng(png, tmp, params);
+      }
+      await fs.rename(tmp, tifPath);
+    } finally {
+      await _deleteQuietly(tmp);
     }
-
-    final tiffBytes = _encodeGeoTiff(image, params);
-    await File(tifPath).writeAsBytes(tiffBytes, flush: true);
     AppLogger.debug(
       '[GeoTiffService] updated tags: ${p.basename(tifPath)}',
     );
   }
 
+  /// `gdal_translate` に渡す書き出しの引数（位置・座標系・目印・圧縮・タイル・アルファ）
+  @visibleForTesting
+  static List<String> creationArgs(KMetaImageOverlay params) => [
+        '-of', 'GTiff',
+        '-a_srs', 'EPSG:4326',
+        '-a_gt', ...geoTransform(params).map((v) => v.toString()),
+        '-mo', 'TIFFTAG_SOFTWARE=$kSoftware',
+        // package:image（PNG キャッシュ・web の 3D）も解ける形にする:
+        // - ストリップ（タイルにしない）。package:image 4.10 は圧縮したタイルの右端（幅に満たないタイル）を崩して解く
+        // - DEFLATE は予測子なし（package:image は DEFLATE の予測子を戻さない）
+        '-co', 'TILED=NO',
+        '-co', 'COMPRESS=DEFLATE',
+        '-co', 'PHOTOMETRIC=RGB', '-co', 'ALPHA=YES',
+      ];
+
+  /// PNG（RGBA）を GeoTIFF にして [dst] に書く。PNG は作業フォルダに置いて GDAL に渡し、終わったら消す
+  static Future<void> _writeFromPng(Uint8List png, String dst, KMetaImageOverlay params) async {
+    final src = p.join(await _tempDir(), 'kokage_overlay_${DateTime.now().microsecondsSinceEpoch}.png');
+    await fs.writeAsBytes(src, png);
+    try {
+      await _g.translate(src, dst, args: creationArgs(params));
+    } finally {
+      await _deleteQuietly(src);
+      await _deleteQuietly('$src.aux.xml');
+      await _deleteQuietly('$dst.aux.xml');
+    }
+  }
+
+  /// 作業フォルダ（`fs` のパス）。Android はアプリの一時フォルダ、web はプロジェクトの `.kokage/tmp`
+  /// （web の GDAL は入力を `fs` から読むので、OPFS の中に置く）
+  static Future<String> _tempDir() async {
+    final String dir;
+    final override = _tempDirOverride;
+    if (override != null) {
+      dir = override;
+    } else if (fs.hasRealPaths) {
+      dir = (await getTemporaryDirectory()).path;
+    } else {
+      final root = ProjectPathResolver.instance.rootPath ?? '/';
+      dir = p.join(root, GlobalFolderLocator.systemDirName, 'tmp');
+    }
+    if (!await fs.isDirectory(dir)) await fs.createDirectory(dir);
+    return dir;
+  }
+
+  static Future<void> _deleteQuietly(String path) async {
+    try {
+      if (await fs.exists(path)) await fs.delete(path);
+    } catch (_) {}
+  }
 
   /// PNGキャッシュディレクトリ（遅延初期化）
   static Directory? _pngCacheDir;
@@ -167,11 +263,29 @@ class GeoTiffService {
     return png;
   }
 
-  /// GeoTIFFタグからオーバーレイパラメータを逆算する
+  /// アプリが書いた GeoTIFF か（GDAL で書いた今の形。TIFFTAG_SOFTWARE が [kSoftware]）
+  static bool isGdalWritten(Uint8List bytes) {
+    try {
+      final info = img.TiffDecoder().startDecode(bytes);
+      if (info == null || info.images.isEmpty) return false;
+      return _software(info.images.first) == kSoftware;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static String? _software(img.TiffImage tiff) =>
+      tiff.tags[kSoftwareTag]?.read()?.toString().replaceAll('\u0000', '').trim();
+
+  /// GeoTIFFタグからオーバーレイパラメータを逆算する（アプリの GeoTIFF でなければ null）
   ///
-  /// ModelTransformationTag（4x4行列）を読み取り、
-  /// centerLng/centerLat/scale/rotation/imageWidth/imageHeight を復元する。
-  /// GeoTIFFタグがない場合は null を返す。
+  /// アプリの GeoTIFF とみなすのは、座標系が EPSG:4326 で、次のどちらか:
+  /// - 今の形: TIFFTAG_SOFTWARE が [kSoftware]。位置は ModelTransformationTag（回転あり）か
+  ///   ModelTiepointTag + ModelPixelScaleTag（回転なし。GDAL はこちらで書く）
+  /// - 旧版（`package:image` で書いていた頃）: ModelTransformationTag がある
+  ///
+  /// それ以外（QGIS / GDAL で作ったラスタ）は null で、呼ぶ側が GDAL で開いて読み取り専用のオーバーレイにする。
+  /// 中心・m/px・回転・画素数は 4x4 行列から逆算する。
   static KMetaImageOverlay? readGeoTiffParams(Uint8List bytes) {
     try {
       final decoder = img.TiffDecoder();
@@ -179,17 +293,23 @@ class GeoTiffService {
       if (info == null || info.images.isEmpty) return null;
 
       final tiffImage = info.images.first;
-      if (!tiffImage.tags.containsKey(kModelTransformationTag)) return null;
+      if (_geographicEpsg(tiffImage) != 4326) return null;
+      final ours = _software(tiffImage) == kSoftware;
 
-      final matrixEntry = tiffImage.tags[kModelTransformationTag]!;
-      // TiffEntry.read() で遅延読み込み → IfdValue を取得
-      final matrixValue = matrixEntry.read();
-      if (matrixValue == null) return null;
-
-      // IfdValueから16要素のdouble配列を取得
-      final matrix = <double>[];
-      for (var i = 0; i < 16; i++) {
-        matrix.add(matrixValue.toDouble(i));
+      final List<double> matrix;
+      final transform = tiffImage.tags[kModelTransformationTag]?.read();
+      if (transform != null) {
+        matrix = [for (var i = 0; i < 16; i++) transform.toDouble(i)];
+      } else {
+        if (!ours) return null;
+        final scale = tiffImage.tags[kModelPixelScaleTag]?.read();
+        final tie = tiffImage.tags[kModelTiepointTag]?.read();
+        if (scale == null || tie == null) return null;
+        // 画素 (I, J) が地点 (X, Y)。経度 = X + (i - I)·sx、緯度 = Y − (j − J)·sy
+        final sx = scale.toDouble(0), sy = scale.toDouble(1);
+        final i0 = tie.toDouble(0), j0 = tie.toDouble(1);
+        final x0 = tie.toDouble(3), y0 = tie.toDouble(4);
+        matrix = [sx, 0, 0, x0 - i0 * sx, 0, -sy, 0, y0 + j0 * sy, 0, 0, 0, 0, 0, 0, 0, 1];
       }
 
       final a = matrix[0]; // scaleX * cosR
@@ -238,73 +358,17 @@ class GeoTiffService {
 
   // ── 内部実装 ──────────────────────────────────
 
-  /// 画像をGeoTIFFタグ付きTIFFとしてエンコードする
-  ///
-  /// TiffEncoder.encode() のロジックを参考に、
-  /// GeoTIFFタグを含む ExifData を手動構築して書き出す。
-  static Uint8List _encodeGeoTiff(img.Image image, KMetaImageOverlay params) {
-    // HDR画像はuint8に変換
-    var src = image;
-    if (src.isHdrFormat) {
-      src = src.convert(format: img.Format.uint8);
+  /// GeoKeyDirectoryTag の GeographicTypeGeoKey（2048）。無ければ null
+  static int? _geographicEpsg(img.TiffImage tiff) {
+    final keys = tiff.tags[kGeoKeyDirectoryTag]?.read();
+    if (keys == null || keys.length < 4) return null;
+    final count = keys.toInt(3);
+    for (var k = 0; k < count && 4 + k * 4 + 3 < keys.length; k++) {
+      final base = 4 + k * 4;
+      // 値が別のタグにあるもの（TIFFTagLocation ≠ 0）は見ない
+      if (keys.toInt(base) == 2048 && keys.toInt(base + 1) == 0) return keys.toInt(base + 3);
     }
-
-    final exif = img.ExifData();
-    final ifd = exif.imageIfd;
-
-    // ── 標準TIFFタグ（TiffEncoder.encode()と同等） ──
-    final nc = src.numChannels;
-    final type = nc == 1
-        ? img.TiffPhotometricType.blackIsZero.index
-        : src.hasPalette
-            ? img.TiffPhotometricType.palette.index
-            : img.TiffPhotometricType.rgb.index;
-
-    ifd['ImageWidth'] = src.width;
-    ifd['ImageHeight'] = src.height;
-    ifd['BitsPerSample'] = src.bitsPerChannel;
-    ifd['SampleFormat'] = _getSampleFormat(src).index;
-    ifd['SamplesPerPixel'] = src.hasPalette ? 1 : nc;
-    ifd['Compression'] = img.TiffCompression.none;
-    ifd['PhotometricInterpretation'] = type;
-    ifd['RowsPerStrip'] = src.height;
-    ifd['PlanarConfiguration'] = 1;
-    ifd['TileWidth'] = src.width;
-    ifd['TileLength'] = src.height;
-    ifd['StripByteCounts'] = src.lengthInBytes;
-    ifd['StripOffsets'] = img.IfdValueUndefined.list(src.toUint8List());
-
-    // パレット画像の場合
-    if (src.hasPalette) {
-      final palette = src.palette!;
-      const numCh = 3;
-      final numC = palette.numColors;
-      final colorMap = Uint16List(numC * numCh);
-      for (var c = 0, ci = 0; c < numCh; ++c) {
-        for (var i = 0; i < numC; ++i) {
-          colorMap[ci++] = palette.get(i, c).toInt() << 8;
-        }
-      }
-      ifd['ColorMap'] = colorMap;
-    }
-
-    // ── GeoTIFFタグ注入 ──
-    // exifImageTagsに未登録のタグはdata mapに直接設定
-    final matrix = buildModelTransformationMatrix(params);
-    ifd.data[kModelTransformationTag] =
-        img.IfdValueDouble.list(matrix.toList());
-
-    ifd.data[kGeoKeyDirectoryTag] = img.IfdValueShort.list(const [
-      1, 1, 0, 3, //     Version=1, Revision=1.0, KeyCount=3
-      1024, 0, 1, 2, //  GTModelTypeGeoKey = ModelTypeGeographic(2)
-      1025, 0, 1, 1, //  GTRasterTypeGeoKey = RasterPixelIsArea(1)
-      2048, 0, 1, 4326, // GeographicTypeGeoKey = EPSG:4326
-    ]);
-
-    // ── バイナリ書き出し ──
-    final out = img.OutputBuffer();
-    exif.write(out);
-    return out.getBytes();
+    return null;
   }
 
   /// kmetaパラメータから4x4 ModelTransformationMatrixを構築
@@ -352,16 +416,11 @@ class GeoTiffService {
     ]);
   }
 
-  /// 画像フォーマットからTIFF SampleFormatを決定
-  static img.TiffFormat _getSampleFormat(img.Image image) {
-    switch (image.formatType) {
-      case img.FormatType.uint:
-        return img.TiffFormat.uint;
-      case img.FormatType.int:
-        return img.TiffFormat.int;
-      case img.FormatType.float:
-        return img.TiffFormat.float;
-    }
+  /// GDAL の geoTransform（`-a_gt` の 6 つ）。[buildModelTransformationMatrix] と同じ変換で、並びが GDAL の形
+  /// （経度 = gt0 + i·gt1 + j·gt2、緯度 = gt3 + i·gt4 + j·gt5。i, j は画素の左上の角）
+  static List<double> geoTransform(KMetaImageOverlay params) {
+    final m = buildModelTransformationMatrix(params);
+    return [m[3], m[0], m[1], m[7], m[4], m[5]];
   }
 
   /// 元画像のパスからGeoTIFF出力パスを生成
@@ -380,7 +439,9 @@ class GeoTiffService {
     OverlayConvertMode mode,
     double threshold,
   ) {
-    final rgba = image.convert(numChannels: 4);
+    // 8bit RGBA にそろえる（16bit の PNG などから UInt16 の GeoTIFF を作らない）
+    // （`alpha:` を渡すと元のアルファまで上書きされるので渡さない。足したチャンネルは不透明になる）
+    final rgba = image.convert(format: img.Format.uint8, numChannels: 4);
 
     switch (mode) {
       case OverlayConvertMode.none:
@@ -432,4 +493,22 @@ Uint8List? _tiffToPng(Uint8List src) {
   final image = img.decodeImage(src);
   if (image == null) return null;
   return Uint8List.fromList(img.encodePng(image, level: 3));
+}
+
+/// 旧版の TIFF → 8bit RGBA の PNG（GDAL の形に書き直す入力。isolate で回すので top-level・同期）
+Uint8List? _legacyTiffToRgbaPng(Uint8List src) {
+  final image = img.decodeImage(src);
+  if (image == null) return null;
+  final rgba = image.convert(format: img.Format.uint8, numChannels: 4);
+  return Uint8List.fromList(img.encodePng(rgba, level: 1));
+}
+
+/// 元画像 → 画像処理 → 8bit RGBA の PNG（GDAL に渡す入力。isolate で回すので top-level・同期）。
+/// 圧縮は軽く（level 1）: すぐ GDAL が読んで消す一時ファイル
+Uint8List? _overlayPng((Uint8List, OverlayConvertMode, double) job) {
+  final (bytes, mode, threshold) = job;
+  final image = img.decodeImage(bytes);
+  if (image == null) return null;
+  final rgba = GeoTiffService._applyMode(image, mode, threshold);
+  return Uint8List.fromList(img.encodePng(rgba, level: 1));
 }

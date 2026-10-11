@@ -16,14 +16,13 @@
 /// Root Maps: 写真タイルウィジェット
 library;
 
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/fs/k_file_system.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../models/kmeta.dart';
 import '../../../models/nodes/external_overlay_image_node.dart';
@@ -159,8 +158,7 @@ class PhotoTile extends ConsumerWidget {
     int imageWidth = 1920;
     int imageHeight = 1080;
     try {
-      final file = File(absPath);
-      final imageBytes = await file.readAsBytes();
+      final imageBytes = await fs.readAsBytes(absPath);
       final decoded = img.decodeImage(imageBytes);
       if (decoded != null) {
         imageWidth = decoded.width;
@@ -244,9 +242,8 @@ class PhotoTile extends ConsumerWidget {
     if (success) {
       // GeoTIFFファイルを削除
       try {
-        final file = File(absPath);
-        if (await file.exists()) {
-          await file.delete();
+        if (await fs.exists(absPath)) {
+          await fs.delete(absPath);
           AppLogger.debug('[PhotoTile] Deleted GeoTIFF: $fileName');
         }
       } catch (e) {

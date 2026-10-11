@@ -16,7 +16,6 @@ import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/image_node.dart';
 import 'package:root_maps/models/nodes/overlay_image_node.dart';
 import 'package:root_maps/services/gdal_raster_overlay.dart';
-import 'package:root_maps/services/geotiff_service.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:root_maps/services/qgis/qgs_importer.dart';
 import 'package:root_maps/services/qgis/qgs_project_builder.dart';
@@ -24,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xml/xml.dart';
 
 import 'support/gdal_host.dart';
+import 'support/legacy_geotiff.dart';
 
 const _fx = 'test/fixtures/gdal';
 const _ext = [
@@ -218,9 +218,10 @@ void main() {
     }
 
     test('外のラスタは読み取り専用のオーバーレイ、こかげマップの GeoTIFF は従来どおり編集できる、写真は写真', () async {
-      File(at('app.tif')).writeAsBytesSync(img.encodeTiff(img.Image(width: 4, height: 3)));
-      await GeoTiffService.updateGeoTiffTags(
+      // 旧版の形（package:image で書いていた頃）。今の形（GDAL で書く）は geotiff_gdal_write_test.dart
+      writeLegacyGeoTiff(
         at('app.tif'),
+        img.Image(width: 4, height: 3),
         const KMetaImageOverlay(centerLng: 135.97, centerLat: 33.94, scale: 2, imageWidth: 4, imageHeight: 3),
       );
       File(at('photo.jpg')).writeAsBytesSync(img.encodeJpg(img.Image(width: 4, height: 3)));

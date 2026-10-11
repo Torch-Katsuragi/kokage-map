@@ -28,14 +28,18 @@ class GdalException implements Exception {
   String toString() => 'GdalException: $message';
 }
 
-/// `/vsizip/<fs のパス>`（KMZ など）を、GDAL に付ける接頭辞と fs のパスに分ける（web の実装が使う）。
+/// `/vsizip/<fs のパス>[/<zip の中のパス>]`（KMZ など）を、GDAL に付ける接頭辞・fs のパス・zip の中のパス
+/// （`/doc.kml` の形。無ければ空）に分ける（web の実装が使う）。
 ///
-/// 呼ぶ側は `/vsizip/` + 絶対パスで作るので `/vsizip//T/a.kmz` の形になる（GDAL の書き方としてはこれが正しい）。
+/// 呼ぶ側は `/vsizip/` + 絶対パスで作るので `/vsizip//T/a.kmz/doc.kml` の形になる（GDAL の書き方としてはこれが正しい）。
 /// fs のパスは先頭の `/` を 1 つにする（2 つのままだと web で「ファイルが無い: //T/a.kmz」になっていた。2026-10-11）
-(String vsi, String path) splitVsiZip(String path) {
+(String vsi, String path, String inner) splitVsiZip(String path) {
   const prefix = '/vsizip/';
-  if (!path.startsWith(prefix)) return ('', path);
-  return (prefix, '/${path.substring(prefix.length).replaceFirst(RegExp('^/+'), '')}');
+  if (!path.startsWith(prefix)) return ('', path, '');
+  final rest = '/${path.substring(prefix.length).replaceFirst(RegExp('^/+'), '')}';
+  final archiveEnd = RegExp(r'\.(kmz|zip)(?=/|$)', caseSensitive: false).firstMatch(rest)?.end;
+  if (archiveEnd == null) return (prefix, rest, '');
+  return (prefix, rest.substring(0, archiveEnd), rest.substring(archiveEnd));
 }
 
 abstract class Gdal {

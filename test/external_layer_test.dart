@@ -6,6 +6,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -216,6 +217,25 @@ void main() {
       expect(await node.geoPackageFile.getGeometryType('作業道'), GeometryType.linestring);
       expect(node.sourcePlan!.sourceLayerCount, 2);
     }, skip: skip);
+
+    test('KMZ: 画像を同梱していても中の doc.kml を読む', () async {
+      // `/vsizip/<kmz>` だけだと中身が 1 ファイルの zip しか開けない（Support only 1 file in archive）
+      final kmz = Archive()
+        ..addFile(ArchiveFile.bytes('doc.kml', utf8.encode(_surveyKml)))
+        ..addFile(ArchiveFile.bytes('files/icon.png', [0x89, 0x50, 0x4e, 0x47]));
+      File(p.join(proj, 'survey.kmz')).writeAsBytesSync(ZipEncoder().encodeBytes(kmz));
+      final node = (await openRoot()).children.whereType<ExternalLayerNode>().single;
+      expect(node.loadError, isNull);
+      expect(node.children.whereType<LayerNode>().map((l) => l.layerName), unorderedEquals(['立木', '作業道']));
+      expect(await namesIn(node.geoPackageFile, '立木', column: 'Name'), ['スギ1', 'ヒノキ2']);
+    }, skip: skip);
+
+    test('KMZ の中で読む KML: 根の doc.kml → 根の最初の .kml → どこかの .kml', () {
+      expect(ExternalSource.kmzMainEntry(['files/a.png', 'a.kml', 'doc.kml']), 'doc.kml');
+      expect(ExternalSource.kmzMainEntry(['layers/x.kml', 'b.kml']), 'b.kml');
+      expect(ExternalSource.kmzMainEntry(['layers/x.kml', 'files/a.png']), 'layers/x.kml');
+      expect(ExternalSource.kmzMainEntry(['files/a.png']), isNull);
+    });
 
     test('CSV: 経度・緯度の列があれば点のレイヤ、無ければレイヤにしない', () async {
       File(p.join(proj, 'trees.csv')).writeAsStringSync('name,経度,緯度,dbh\nスギ1,135.96,33.93,32\nヒノキ2,135.961,33.931,28\n');

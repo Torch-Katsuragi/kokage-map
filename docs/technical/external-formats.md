@@ -36,7 +36,7 @@ tags: [technical, geopackage, qgis, interop, import]
 |---|---|---|
 | Shapefile | `.shp`（付属は `GDALGetFileList` の一式） | `.cpg` も DBF の LDID も無ければ `-oo ENCODING=CP932`（[[gdal#Android の実装で決めたこと（2026-10-09）]]） |
 | GeoJSON | `.geojson` `.json` | `.json` は GDAL が形を見つけたときだけ |
-| KML / KMZ | `.kml` `.kmz` | 同梱の GDAL は LIBKML なし。KMZ は `/vsizip/<パス>` で KML ドライバに渡す（web は worker が `vsi` を付ける） |
+| KML / KMZ | `.kml` `.kmz` | 同梱の GDAL は LIBKML なし。KMZ は `/vsizip/<パス>/doc.kml`（根の `doc.kml` → 根の最初の `.kml` → どこかの `.kml`）で KML ドライバに渡す（web は worker が `vsi` を付ける）。`/vsizip/<パス>` だけだと中身が 1 ファイルの zip しか開けない。⚠ LIBKML で書いた KMZ（`doc.kml` は `layers/*.kml` への NetworkLink だけ）は地物が無く読めない |
 | CSV（点） | `.csv` | `X_POSSIBLE_NAMES`（lon・lng・long・longitude・経度・x）/`Y_POSSIBLE_NAMES`（lat・latitude・緯度・y）、`KEEP_GEOM_COLUMNS=NO`、`AUTODETECT_TYPE=YES`。座標列が無ければレイヤにしない |
 | GPX | `.gpx` | waypoints・routes・tracks… が別レイヤ（空のレイヤも GDAL が出す） |
 | FlatGeobuf | `.fgb` | |

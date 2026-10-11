@@ -24,20 +24,25 @@ Folders the app uses itself (the global folder and the tutorial's practice map) 
 
 ### Opening Other Folders
 
-:icon-folder_open: "Choose a folder to open" lets you pick one folder inside your everyday map (such as a map received in "共有") and open just that. Tap a folder to go into it and "<" to go back; "New folder" at the top right creates one. GeoPackage files (.gpkg) inside are recognized automatically and shown as layers. Folders outside your everyday map can be chosen from "Another place on the device…" in the top-right menu. If you last opened another folder, "Continue" appears on Home.
+:icon-folder_open: "Choose a folder to open" lets you pick one folder inside your everyday map (such as a map received in "共有") and open just that. Tap a folder to go into it and "<" to go back; "New folder" at the top right creates one. Folders outside your everyday map can be chosen from "Another place on the device…" in the top-right menu. If you last opened another folder, "Continue" appears on Home.
+
+### Web Version
+
+The web version (https://kokage-map.sleeptree.jp) runs in a PC browser. It opens folders on your PC, so use Chrome or Edge. Field features such as GPS recording and external devices are Android-only.
 
 ---
 
 ## Map Screen Layout
 
-The map screen consists of the following elements:
-
 - **Left edge**: Toolbar (vertical) — switch between tools
-- **Top**: AppBar — project name, notification bell :icon-notifications:, settings :icon-settings:, attribute table :icon-table_view:, layer panel :icon-layers:
-- **Right side**: Layer panel (toggle with :icon-layers: button)
-- **Bottom**: Attribute table (toggle with :icon-table_view: button)
-- **Bottom-left**: GPS survey buttons (when GPS tool is active), eraser FAB (when Pen tool is active)
+- **Top**: notification bell, attribute table button, ≡ menu, :icon-layers: layer panel button
+- **≡ menu**: Location Sharing Party, Reload project from disk, Spirit Level, :icon-settings: Settings
+- **Right side**: Layer panel (toggle with the :icon-layers: button)
+- **Bottom**: Attribute table and the feature info panel
+- **Bottom-left**: GPS survey buttons (when the GPS tool is active), eraser button (when the Pen tool is active)
 - **Bottom-right**: Drawing confirm buttons (during drawing / GPS survey)
+
+Where the toolbar and info panel go can be changed in Settings → "General" → "Screen layout" (Portrait, Landscape, Left-handed).
 
 ---
 
@@ -53,17 +58,33 @@ The map screen consists of the following elements:
 
 > Even with the :icon-edit: Pen tool selected, you can pan, zoom, and rotate the map using **two-finger gestures**.
 
+Tap the round compass button on the map to switch between 2D and 3D (terrain in relief). Double-tap it for north up, long-press it for the perspective view.
+
 ### Changing the Basemap
 
-1. Tap :icon-settings: in the AppBar.
-2. Select the :icon-map: "Basemap" category.
-3. Choose a tile source (OpenStreetMap, GSI Tiles, etc.).
+1. Open :icon-settings: Settings from the ≡ menu.
+2. Select :icon-map: "Map & Tiles".
+3. In the "Layers" list, choose the maps to use (OpenStreetMap, GSI Tiles, etc.).
+
+Basemaps work like layers in a drawing app: you can stack several. The top one is in front, and each has its own order, visibility, opacity and blend mode. "Add layer" adds a map.
+
+### Adding a Basemap by URL
+
+XYZ tiles and WMS that are not in the list (such as forest planning maps or a prefecture's CS relief map) can be added from "Add layer" → "Add a background map from a URL…".
+
+1. Enter a name and a URL template (`https://…/{z}/{x}/{y}.png`; for WMS use `BBOX={bbox-epsg-3857}`).
+2. Enter an attribution; it is shown on the map while that map is visible.
+3. "Check" fetches one tile; then add it.
+
+Added maps work like the built-in ones for stacking, bulk download and 3D. Following the tile provider's terms of use is the responsibility of whoever adds it. Google and Bing tiles cannot be added.
 
 ### Preparing Offline Maps
 
-1. Go to Settings → :icon-map: "Basemap".
-2. Use "Bulk Download" to save tiles for a specified area and zoom range.
-3. Downloaded tiles are automatically used when offline.
+1. Go to Settings → :icon-map: "Map & Tiles".
+2. "Bulk Map Download" saves tiles for an area around the current view and a zoom range.
+3. Saved tiles are used automatically when offline.
+
+OpenStreetMap cannot be bulk-downloaded under its tile usage policy.
 
 ---
 
@@ -71,40 +92,75 @@ The map screen consists of the following elements:
 
 ### Opening the Layer Panel
 
-Tap the :icon-layers: button on the right side of the AppBar to open the **layer panel on the right side**. Tap again to close it. The panel width can be adjusted by dragging.
+Tap the :icon-layers: button at the top to open the **layer panel on the right side**. Tap again to close it.
 
 ### Layer Hierarchy
 
-The layer panel displays the following hierarchy:
-
 - :icon-folder: **Folders** — correspond to subfolders in the project directory
 - :icon-table_chart: **GeoPackage files** — .gpkg files within folders, shown as small headings; tap one to fold its layers
-- :icon-layers: **Layers** — data layers within GeoPackage files (Point, Line, Polygon). The mark on the left is the color on the map, and the number next to the name is the feature count
+- **Layers** — data layers within GeoPackage files. The icon on the left shows the type (point, line, polygon) in its map color, and the number next to the name is the feature count
+- **Read-only files** — Shapefile, GeoJSON and other non-gpkg files (see "Opening Files Other Than gpkg" below)
+- **Photos and overlays** — image files in the folder and images laid over the map
 
 The top shows the current folder and the path above it. Tap a name in the path to go back there.
 
+Layers set to "Categorized", "Graduated" or "Rule-based" in QGIS (such as stands colored by species or age) are drawn per feature just as in QGIS, with a legend in the panel. Change the colors in QGIS.
+
 ### Opening a Menu
 
-**Long-press** a folder, GeoPackage, layer, or photo row (right-click on a PC) for rename, style, delete and other actions.
-- :icon-photo: **Photos** — image files within folders
+**Long-press** a folder, GeoPackage, layer, or photo row (right-click on a PC) for rename, style, export, delete and other actions.
 
 ### Creating a New Layer
 
-1. Use the add buttons in the layer panel's title bar.
-2. "GeoPackage" creates a new file. To add a layer to an existing GeoPackage, long-press its heading and choose "Add layer".
+1. Choose "GeoPackage" from :icon-add: in the layer panel's title bar to create a new file.
+2. To add a layer to an existing GeoPackage, long-press its heading and choose "Add Layer".
 3. Select a geometry type (MultiPoint / MultiLineString / MultiPolygon) and enter a layer name.
+
+### Adding Files
+
+:icon-add: → "Files" in the title bar, or "Add files" in a folder's long-press menu, puts the chosen files into the folder as they are. For a Shapefile, also choose its .dbf, .shx and other files. On the web you can also drag and drop files.
 
 ### Toggling Layer Visibility
 
 Tap the :icon-visibility: at the right end of a row to toggle between visible :icon-visibility: and hidden :icon-visibility_off:. The eye on a folder or GeoPackage toggles everything inside at once; its layers then turn gray.
 
+### Adding a View
+
+"Add view" in a layer's long-press menu shows the same layer another way. Each view has its own style and filter (a condition written as in QGIS, e.g. `樹種 = 'スギ'`). Deleting a view does not delete features.
+
 ### Moving Elsewhere
 
-**Swipe a row to the left** in the layer panel for "Move" and choose where it goes. Folders, GeoPackages and photos move to a folder; a layer moves to another GeoPackage (migration).
+**Swipe a row to the left** for "Move" and choose where it goes. Folders, GeoPackages and photos move to a folder; a layer moves to another GeoPackage (migration). If the source GeoPackage becomes empty, its file is removed.
 
 ### Using the Global Folder
 
-The :icon-folder_special: global folder is a shared folder independent of any project. It appears under "System" in the layer panel regardless of which project is open. Useful for GPS history and shared data. By default it is `Documents/KokageMap/.kokage/Global`; the path can be customized from Settings → "General".
+The :icon-folder_special: global folder is a shared folder independent of any project. It appears under "System" in the layer panel regardless of which project is open. Useful for GPS history and shared data. By default it is `Documents/KokageMap/.kokage/Global`; the path can be changed from Settings → "General".
+
+---
+
+## Opening Files Other Than gpkg
+
+### Read-Only Layers
+
+These files placed in a folder appear as layers without importing. They are read with GDAL, the same library QGIS uses.
+
+- Shapefile (.shp and its sidecar files)
+- GeoJSON, KML/KMZ, GPX, FlatGeobuf, GML, DXF, MapInfo (.tab, .mif)
+- CSV (with longitude and latitude columns)
+
+They are read-only; display, style, labels, views, the attribute table and export all work. A Shapefile without a .cpg is read as Shift_JIS (CP932), as the Japanese QGIS does. KML becomes one layer per folder, and a file mixing points, lines and polygons becomes one layer per type.
+
+### Converting to gpkg to Edit
+
+When you try to draw on a read-only layer or change its attributes, the app asks "This layer is read-only. Convert it to gpkg to edit?". "Convert to gpkg to edit" in the row's long-press menu does the same.
+
+- A gpkg with the same name is created in the same folder. After checking that the feature counts match, the original files are deleted.
+- The coordinate system stays as it was (a Shapefile in a Japan Plane Rectangular CRS becomes a gpkg in the same CRS). Style, views and display settings carry over.
+- In a read-only shared folder, "Copy as gpkg to my folder" is offered instead. The original files stay.
+
+### Raster Overlays
+
+Rasters made in QGIS or elsewhere (GeoTIFF, PNG/JPEG with a world file, VRT) appear on the map as overlays just by placing them in a folder. Any coordinate system works. Nodata is transparent, numeric rasters such as DEMs are shown in grayscale, and rasters with a color table use those colors. The file defines the position, so they cannot be georeferenced in the app.
 
 ---
 
@@ -122,7 +178,7 @@ Switch between tools using the toolbar on the **left edge** of the map screen:
 | GPS Survey | :icon-gps_fixed: | Create points, lines, and polygons using GPS |
 | Measure | :icon-straighten: | Measure distance and area (creates no features) |
 
-When an external device (TruPulse, etc.) is connected, additional tool buttons appear dynamically. When an overlay image is selected, a :icon-transform: transform tool also appears.
+When an external device (TruPulse, etc.) is connected, additional tool buttons appear. While an overlay made from a photo is selected, a :icon-transform: transform tool also appears.
 
 ### Adding Points
 
@@ -145,9 +201,11 @@ When an external device (TruPulse, etc.) is connected, additional tool buttons a
 3. **Drag** to draw freehand — the ring is automatically closed when you lift your finger, and saved as a polygon.
 4. You can also **tap** to place 3+ vertices, then press :icon-check: Confirm to save.
 
+On layers with heights (Z), vertices you don't move keep their height. Moved and added vertices and newly drawn features get the height from the same elevation tiles as the 3D terrain.
+
 ### Eraser Function
 
-While the :icon-edit: Pen tool is active, press the :icon-delete: eraser FAB button in the bottom-left, then tap or drag over features to delete them.
+While the :icon-edit: Pen tool is active, press the :icon-delete: eraser button in the bottom-left, then tap or drag over features to delete them.
 
 ### Selecting Features
 
@@ -177,7 +235,7 @@ Kokage Map distinguishes between stylus and touch input:
 - **Stylus (pen)**: Used for freehand drawing
 - **Touch (finger)**: Used for tapping points and map interaction
 
-On PC, use the mouse wheel to zoom and middle-click drag to pan the map.
+On the web, use the mouse wheel to zoom and drag with the right button to rotate (and tilt in 3D).
 
 ---
 
@@ -210,10 +268,12 @@ Use this to walk to a boundary point or a plot center. It works without a networ
 
 While guiding, the map shows the distance, bearing (true north), elevation difference and an arrow, with a line from your position to the target. The arrow follows the device heading, or your direction of travel when no heading is available. The distance includes GPS error (± m). When you are within 5 m (or the GPS accuracy, if worse) you get a notification. Tap × to stop. Guidance is cleared when the app restarts.
 
+The device compass heading is corrected to true north using the magnetic declination (WMM2025) for your position and date.
+
 ### Connecting External GNSS Devices
 
-1. Go to Settings → :icon-bluetooth_connected: "Devices".
-2. Select and connect a Bluetooth-capable high-precision GNSS receiver.
+1. Go to Settings → :icon-gps_fixed: "GPS & Positioning".
+2. Select and connect a Bluetooth high-precision GNSS receiver.
 3. Once connected, the external device's position data is automatically used for GPS surveys.
 
 ### Recording fix quality and rejecting poor fixes
@@ -226,11 +286,23 @@ When exporting a layer, "Include GNSS quality" adds the columns gnss_fix, gnss_s
 
 ---
 
+## Location Sharing Party
+
+"Location Sharing Party" in the ≡ menu shares everyone's position on the map.
+
+1. One person creates a room with "Create (Host)" and passes on the room code, invite link or QR code.
+2. Others enter the code or link under "Join", or scan the QR. The web version can join from the link too.
+3. Tap :icon-near_me: next to a member to be guided to them. In ghost mode your own position is not sent.
+
+While out of coverage the app stops sending and resumes when the connection returns. To finish, tap "Leave" (the host taps "End (Host)").
+
+---
+
 ## Attribute Table
 
 ### Opening the Attribute Table
 
-Tap the :icon-table_view: button in the AppBar to display the **attribute table at the bottom of the screen**. It shows data for the currently selected layer and switches automatically when you change the selected layer.
+Tap the attribute table button at the top to display the **attribute table at the bottom of the screen**. It shows data for the currently selected layer and switches automatically when you change the selected layer. Choose the rows per page (50, 100, 200, 500) at the bottom. Tapping a header sorts all rows.
 
 ### Editing Attributes
 
@@ -253,75 +325,68 @@ If you set up a layer's attribute form in QGIS on your PC (Layer Properties → 
 ### Other Features
 
 - CSV export
-- Copy table data to clipboard
+- Copy the table to the clipboard (all filtered rows, in the sorted order)
 - Add / delete features
 - Duplicate filtered results (copy to a new layer)
 - Batch editing (change values for checked rows)
 
 ---
 
-## Data Import & Export
+## Exporting Layers
 
-### Importing Files
+1. Long-press the layer to export to open its menu.
+2. Select :icon-file_download: "Export Layer".
+3. Choose a format: Shapefile, GeoJSON, KML, CSV, GPX, FlatGeobuf, DXF or GeoPackage.
+4. Choose a coordinate system if needed. By default the layer's own CRS is kept. GeoJSON, KML and GPX are always WGS 84, as their formats require.
+5. Choose where to save and export.
 
-The following file formats can be imported:
-
-- **Shapefile** (.shp + .shx/.dbf/.prj)
-- **GeoJSON** (.geojson / .json)
-
-Files are imported into a GeoPackage in the layer panel. For GeoJSON files, layers are automatically split by geometry type.
-
-### Exporting Layers
-
-1. Long-press the layer you want to export in the layer panel to open its menu.
-2. Select :icon-file_download: "Export".
-3. Choose the output format:
-   - **Shapefile** (.shp) — with coordinate system (EPSG) selection
-   - **GeoJSON** (.geojson)
-   - **CSV** (.csv)
-   - **KML** (.kml)
-4. Specify the save location and export.
+Export uses GDAL, as QGIS does, and writes all attributes. Shapefiles are written in UTF-8 with a .cpg file.
 
 ---
 
 ## Photo Management
 
-### Importing Photos from Gallery
+### Adding Photos
 
-1. Tap the :icon-photo: "Photos" button in the layer panel's title bar.
-2. Select photos from the gallery (file picker).
-3. Photos are copied to the project folder. If EXIF data includes location, they are automatically displayed as markers on the map.
+1. Choose "Photos" from :icon-add: in the layer panel's title bar.
+2. Select photos. On Android, "With location" narrows the list to photos that have a location.
+3. Photos are copied to the open folder. Photos with a location appear as markers on the map.
+
+Android may strip the location from photos passed through the file picker. Allowing Kokage Map "All files access" keeps it.
 
 ### Converting Photos to Overlays
 
-Photos can be converted to overlays to display them on the map. Select "Convert to Overlay" from the photo's menu in the layer panel. Overlays can be moved, rotated, and scaled using the :icon-transform: transform tool.
+Choose "Convert to overlay" from a photo's long-press menu to lay the image over the map. While converting you can choose processing such as making bright areas transparent. Overlays can be moved, rotated, and scaled using the :icon-transform: transform tool. The overlay is a GeoTIFF, so QGIS can open it as is.
 
 ---
 
-## Google Drive Integration (Android)
+## Google Drive Integration
+
+Syncs a folder in your own Google Drive with a folder on the device. Available on Android and the web version.
 
 ### Receiving a Map by QR
 
-1. The sender chooses "Share by QR" from a Drive-linked folder's menu.
-2. The receiver scans the QR with the phone camera. Kokage Map opens, adds the map to "共有" in the everyday map and shows where it is.
+1. The sender chooses "Share via QR code" from a Drive-linked folder's menu.
+2. The receiver scans the QR with the phone camera. Kokage Map opens and shows the folder name and owner before taking it in. The map is added to "共有" in the everyday map and shown.
 3. "Scan a QR" on Home does the same with the app's camera.
 4. You'll be asked to sign in to Google the first time.
 5. Scanning the same QR again just opens the map. Phones and PCs without Kokage Map get install instructions.
 
 ### Adding a Drive-Linked Folder
 
-1. In the layer panel, select "New Folder" → :icon-cloud: "Google Drive Clone".
+1. Choose :icon-add: → "Folder" in the layer panel's title bar, and pick :icon-cloud: "Google Drive Clone" as the type.
 2. Paste a Google Drive share URL or scan a QR code.
 3. Authenticate with Google when prompted.
 4. The folder contents are cloned locally.
 
 ### Syncing Data
 
-1. Use the Drive-linked folder's menu or the sync button in the title bar.
-2. Choose upload (local → Drive) or download (Drive → local) to sync.
+1. Use the Drive-linked folder's long-press menu or the sync button in the title bar.
+2. Choose upload (device → Drive) or download (Drive → device) to sync. Only changed files are transferred.
 3. Sync status is indicated by icons (synced / local changes / Drive changes / conflict).
+4. When the same GeoPackage was changed both on the device and in Drive, "Merge both, row by row" combines them row by row.
 
-> **On PC**, Google Drive Desktop sync is recommended. In-app Drive integration is Android-only.
+Besides GeoPackages, photos, Shapefiles (with sidecar files), GeoJSON, KML/KMZ, CSV, GPX, FlatGeobuf, GML, DXF and MapInfo are synced. Settings → :icon-sync: "Drive Sync" sets automatic sync on WiFi and its interval.
 
 ---
 
@@ -329,16 +394,18 @@ Photos can be converted to overlays to display them on the map. Select "Convert 
 
 ### Connecting a TruPulse Laser Rangefinder
 
-1. Go to Settings → :icon-bluetooth_connected: "Devices".
-2. Pair the TruPulse via Android's Bluetooth settings.
+1. Pair the TruPulse via Android's Bluetooth settings.
+2. Go to Settings → :icon-bluetooth_connected: "External Devices".
 3. Select and connect the TruPulse from the device list.
-4. Upon connection, a :icon-explore: compass tool is automatically added to the map toolbar.
+4. Upon connection, a TruPulse tool is added to the map toolbar.
 
 ### Capturing Survey Data
 
-1. Switch to the compass tool in the toolbar.
+1. Switch to the TruPulse tool in the toolbar.
 2. Take measurements with TruPulse — distance, azimuth, and inclination data are sent to Kokage Map in real-time.
 3. Points are calculated from the current GPS position and the measurement results.
+
+The app corrects the azimuth to true north using the magnetic declination. Leave the declination setting on the TruPulse itself at 0.
 
 ### Closure Surveying
 
@@ -354,18 +421,19 @@ You can survey multiple points and convert them to lines/polygons:
 
 ## Settings
 
-Open the settings screen from the :icon-settings: button in the AppBar. The settings screen uses a responsive Split View layout with a category list on the left and details on the right.
+Open :icon-settings: Settings from the ≡ menu. On a wide screen the category list is on the left and the details on the right.
 
 | Category | Icon | Settings |
 |----------|------|----------|
-| General | :icon-settings: | Language, UI size (7 levels), global folder path, permissions |
-| Basemap | :icon-map: | Tile source selection, offline cache management |
-| GPS | :icon-gps_fixed: | GPS source selection/test, external GNSS settings |
-| Devices | :icon-bluetooth_connected: | Bluetooth device connection (Android) |
-| Layer Style | :icon-palette: | Point, line, polygon display styles (color, width, clustering, etc.) |
-| Sync | :icon-sync: | Google Drive auto-sync settings (Android) |
+| General | :icon-settings: | Language, UI size (7 levels), screen layout, global folder, permissions |
+| Map & Tiles | :icon-map: | Basemap layers, adding by URL, bulk download, cache management |
+| GPS & Positioning | :icon-gps_fixed: | GPS source, external GNSS connection, fix quality thresholds |
+| External Devices | :icon-bluetooth_connected: | Laser rangefinders such as TruPulse (Android) |
+| Layer Rendering | :icon-palette: | Point, line, polygon display styles (color, width, clustering, etc.) |
+| Terrain look | | Slope and elevation coloring of the 3D terrain |
+| Drive Sync | :icon-sync: | Google account, WiFi auto-sync, sync interval |
 | Feedback | :icon-feedback: | Bug reports, feature requests |
-| App Info | :icon-info_outline: | Version info, license display |
+| App Info | :icon-info_outline: | Version info, licenses, map data sources |
 
 ### Changing Language
 
@@ -390,11 +458,12 @@ Select the "General" category in Settings and use the slider to choose from 7 le
 - Try outdoors in an open area.
 - Bluetooth permissions are also required for external GNSS devices.
 
-### :icon-warning: Cannot Open File
+### :icon-warning: A File Does Not Appear on the Map
 
 - Verify that storage permissions are granted.
-- Supported import formats are **Shapefile** and **GeoJSON**.
+- The map shows GeoPackages and the formats listed in "Opening Files Other Than gpkg".
+- For a Shapefile, put the .dbf and .shx with the same name in the same folder as the .shp.
 
 ---
 
-*This guide was generated by AI. Parts were updated for Kokage Map v0.11.0.*
+*This guide was generated by AI. It was rewritten for Kokage Map v0.12.0 and the next release.*

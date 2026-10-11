@@ -49,6 +49,15 @@ void main() {
       expect(z0, '-20037508.343,-20037508.343,20037508.343,20037508.343');
     });
 
+    test('web では http の URL を断り、https に替えた URL を示す（Android は通す）', () {
+      const http = 'http://tiles.example/{z}/{x}/{y}.png';
+      expect(BaseMapProvider.httpsSuggestionOnWeb(http, web: true), 'https://tiles.example/{z}/{x}/{y}.png');
+      expect(BaseMapProvider.httpsSuggestionOnWeb(' HTTP://w.example/wms?BBOX={bbox-epsg-3857}', web: true),
+          'https://w.example/wms?BBOX={bbox-epsg-3857}');
+      expect(BaseMapProvider.httpsSuggestionOnWeb(http, web: false), isNull);
+      expect(BaseMapProvider.httpsSuggestionOnWeb('https://tiles.example/{z}/{x}/{y}.png', web: true), isNull);
+    });
+
     test('使える URL か・規約で使えないタイルか', () {
       expect(BaseMapProvider.isValidTemplate('https://a.example/{z}/{x}/{y}.png'), isTrue);
       expect(BaseMapProvider.isValidTemplate('https://a.example/{z}/{x}/{-y}.png'), isTrue);

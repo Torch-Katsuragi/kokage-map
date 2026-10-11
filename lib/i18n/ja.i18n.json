@@ -253,6 +253,7 @@
       "terms": "タイルの利用規約を守るのは追加した人の責任です。",
       "invalidUrl": "{z} {x} {y}（または {bbox-epsg-3857}）を含む http(s) の URL を入れてください",
       "forbidden": "このタイルは利用規約で配布アプリからの利用が禁じられています（Google・Bing など）",
+      "httpOnWeb": "web 版では http の地図は読めません（ブラウザが https のページから http を読ませない）。https で配っていれば次の URL で使えます: ${url}",
       "duplicate": "同じ URL の地図がもうあります: ${name}",
       "checking": "タイルを 1 枚取ってみています…",
       "probeOk": "タイルを取得できました",

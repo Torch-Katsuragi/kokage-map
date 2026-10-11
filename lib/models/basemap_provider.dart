@@ -16,6 +16,7 @@
 /// 背景地図プロバイダー定義
 /// OpenStreetMap、国土地理院地図などの背景地図を管理
 library;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/terrain/contour_tiles.dart' show ContourTiles;
@@ -119,6 +120,16 @@ class BaseMapProvider {
     if (!RegExp('^https?://[^/]+', caseSensitive: false).hasMatch(u)) return false;
     if (u.contains('{bbox-epsg-3857}')) return true;
     return u.contains('{z}') && u.contains('{x}') && (u.contains('{y}') || u.contains('{-y}'));
+  }
+
+  /// web で http の URL なら、https に替えた URL を返す（断る理由に添える）。web でない・https なら null。
+  /// web 版は https で配っていて CSP も通信を https だけに絞るので、http のタイルは混在コンテンツとしてブラウザが読ませない。
+  /// Android は http も読めるので通す
+  static String? httpsSuggestionOnWeb(String url, {bool web = kIsWeb}) {
+    if (!web) return null;
+    final u = url.trim();
+    final m = RegExp('^http://', caseSensitive: false).firstMatch(u);
+    return m == null ? null : 'https://${u.substring(m.end)}';
   }
 
   /// 配布アプリからの利用を規約で禁じているタイル（QGIS でよく敷かれる Google・Bing の航空写真など）か。

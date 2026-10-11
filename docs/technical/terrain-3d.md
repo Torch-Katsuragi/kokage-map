@@ -571,6 +571,8 @@ web は新しい世代の GPU 転送が非同期で、終わるまで白だっ�
     `{bbox-epsg-3857}`（WMS の GetMap をタイルとして引く。MapLibre と同じ書き方）
   - 足す前に地図の中心のタイルを 1 枚取る（`BaseMapService.probeTile`、キャッシュしない）。取れなくても「それでも追加」で足せる
     （範囲の狭い県のタイルは中心が範囲外だと 404）。Google・Bing（`isForbiddenTileHost`）は断る。利用規約の責任は足した人、とダイアログに 1 行
+  - web では `http://` の URL を断り、`https://` に替えた URL を添える（`BaseMapProvider.httpsSuggestionOnWeb`）。web 版は https で配り CSP も通信を https に絞るので、
+    http のタイルは混在コンテンツとして読めない。Android は http も通す
   - 出典は OSM と同じく**見えている間は地図面にも出す**（規約が分からないので。出典が空なら地図の名前）
   - web は `http` の取得が CORS に掛かる。例外は「通信できない」としか見えないので、web の利用者の地図で取れなければ
     レイヤに「web ではタイルを取得できていません（CORS の可能性）」と出す（到達性の判定には数えない）。ダイアログの確かめも同じ文言

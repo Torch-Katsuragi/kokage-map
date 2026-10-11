@@ -253,6 +253,7 @@
       "terms": "You are responsible for following the tile source's terms of use.",
       "invalidUrl": "Enter an http(s) URL containing {z} {x} {y} (or {bbox-epsg-3857})",
       "forbidden": "This tile source's terms forbid use from distributed apps (Google, Bing, etc.)",
+      "httpOnWeb": "The web version cannot load http maps (the browser blocks http from an https page). If the server also serves https, use: ${url}",
       "duplicate": "A map with the same URL already exists: ${name}",
       "checking": "Fetching one tile…",
       "probeOk": "Fetched a tile",

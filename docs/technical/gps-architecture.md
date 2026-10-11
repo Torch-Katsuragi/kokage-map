@@ -84,7 +84,7 @@ tags: [technical, gps, architecture]
 | TruPulse の方位角 | 磁北（本体 dECLn = 0 の前提） | `TruPulseTool.trueAzimuth`（点の位置を出すときだけ。属性 `survey_az` は本体の値のまま） |
 | GPS の進行方向（course） | 真北 | 直さない |
 
-- 偏角は `lib/utils/wmm_declination.dart`（WMM2025、12 次の球面調和関数、測地→地心の変換、経年変化は小数年で一次補間）。直すのは `lib/utils/true_heading.dart`（`TrueHeadingConverter`: 10 km 以上動くか日付が変わったら出し直す。位置が一度も分からないうちは直さない）
+- 偏角は `lib/utils/wmm_declination.dart`（WMM2025、12 次の球面調和関数、測地→地心の変換、経年変化は小数年で一次補間）。直すのは `lib/utils/true_heading.dart`（`TrueHeadingConverter`: 10 km 以上動くか日付が変わったら出し直す。位置が一度も分からないうちは直さない）。偏角を引く位置は今の測位（`GpsInfo.positionOr`。外部 GNSS だけ先に測れて地図の現在位置がまだ無い間も直す）、測れていなければ地図の現在位置
 - 係数は NOAA NCEI の `WMM2025COF.zip`（https://www.ncei.noaa.gov/sites/default/files/2024-12/WMM2025COF.zip）内の `WMM.COF`。SHA-256 `dfa8597825af4e0b87ff4198a5b4fb661b3c49f4cd090cd0164e0259b075582f`。public domain
 - 検算は `test/wmm_declination_test.dart`: 同梱の `WMM2025_TestValues.txt` 100 点と技術報告の 12 点（`WMM2025_TEST_VALUES.txt`）を ±0.01° で、北山村を NOAA のオンライン計算機の値（−7.87666°）と、国土地理院の偏角一覧 2020.0 年値（西偏 7°30′、±0.5°）と照らす
 - 有効期間は 2025.0〜2030.0

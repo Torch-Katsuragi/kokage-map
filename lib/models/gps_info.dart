@@ -17,6 +17,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../i18n/strings.g.dart';
 
@@ -99,6 +100,9 @@ class GpsInfo {
 
   /// 位置が取れていて、GPS も動いている
   bool get isActive => latitude != null && longitude != null && isGpsActive;
+
+  /// 測れている位置。測れていなければ [fallback]（地図の現在位置など、最後に分かった位置）
+  LatLng? positionOr(LatLng? fallback) => isActive ? LatLng(latitude!, longitude!) : fallback;
 
   bool get isExternal => sourceType == GpsSourceType.external;
 

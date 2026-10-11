@@ -87,6 +87,8 @@ class _CustomBaseMapDialogState extends State<_CustomBaseMapDialog> {
     if (url.isEmpty) return null;
     if (!BaseMapProvider.isValidTemplate(url)) return t.basemap.custom.invalidUrl;
     if (BaseMapProvider.isForbiddenTileHost(url)) return t.basemap.custom.forbidden;
+    final https = BaseMapProvider.httpsSuggestionOnWeb(url);
+    if (https != null) return t.basemap.custom.httpOnWeb(url: https);
     final dup = BaseMapProvider.findByTileUrl(url);
     if (dup != null) return t.basemap.custom.duplicate(name: dup.name);
     return null;

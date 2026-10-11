@@ -253,6 +253,7 @@
       "terms": "You are responsible for following the tile source's terms of use.",
       "invalidUrl": "Enter an http(s) URL containing {z} {x} {y} (or {bbox-epsg-3857})",
       "forbidden": "This tile source's terms forbid use from distributed apps (Google, Bing, etc.)",
+      "httpOnWeb": "The web version cannot load http maps (the browser blocks http from an https page). If the server also serves https, use: ${url}",
       "duplicate": "A map with the same URL already exists: ${name}",
       "checking": "Fetching one tile…",
       "probeOk": "Fetched a tile",
@@ -920,10 +921,11 @@
     "seconds": "${n} s",
     "minDistance": "Minimum distance between points",
     "minDistanceDesc": "Skip fixes that moved less than this. One point is still kept every 5 minutes while standing still",
-    "maxAccuracy": "Accuracy limit",
+    "maxAccuracy": "Drop inaccurate points",
+    "maxAccuracyDesc": "Fixes less accurate than this (±m) are not added to the track. Fixes without an accuracy value are kept",
     "maxSpeed": "Jump rejection (speed)",
     "maxSpeedDesc": "Drop a fix that implies moving faster than this since the previous point. Accepted after 3 in a row",
-    "off": "Off"
+    "off": "Not set"
   },
   "simplification": {
     "tolerance": "Tolerance: ",
@@ -1170,6 +1172,10 @@
     "all": "All",
     "noTrees": "No trees recorded yet",
     "unknownArea": "Area unknown",
+    "cannotOpen": "Cannot open tree tally",
+    "conflictNotPolygon": "\"${layer}\" in this gpkg is not a polygon layer. Tree tally uses a polygon layer with this name. Rename it or start in another gpkg (the table was not changed)",
+    "conflictNotPoint": "\"${layer}\" in this gpkg is not a point layer. Tree tally uses a point layer with this name. Rename it or start in another gpkg (the table was not changed)",
+    "conflictColumns": "Could not add the tree tally columns to \"${layer}\" (read-only?)",
     "stat": {
       "count": "Trees",
       "perHa": "Trees/ha",
@@ -1735,6 +1741,7 @@
       "title": "Fix quality (thresholds)",
       "description": "Reject GPS survey fixes that do not meet these thresholds. Unset thresholds are ignored.",
       "maxAccuracy": "Max accuracy",
+      "maxAccuracyDesc": "Reject fixes less accurate than this (±m). Fixes without an accuracy value are rejected too",
       "minFix": "Minimum fix type",
       "minSatellites": "Minimum satellites",
       "none": "Not set",

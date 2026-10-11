@@ -1,6 +1,8 @@
 // GpsInfo / GpsSurveySample: 測量の記録に書く形が以前の Map と同じであること
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/gps_info.dart';
+import 'package:root_maps/utils/true_heading.dart';
 
 void main() {
   final ts = DateTime(2026, 10, 7, 9, 30);
@@ -70,5 +72,26 @@ void main() {
     expect(a.sameDisplayAs(b), isTrue);
     final c = GpsInfo(sourceType: GpsSourceType.internal, latitude: 1, longitude: 2.000001, timestamp: ts);
     expect(a.sameDisplayAs(c), isFalse);
+  });
+
+  test('外部 GNSS だけ測れていて地図の現在位置がまだ無くても、その位置の偏角でコンパスを真北に直す', () {
+    final gnss = GpsInfo(
+      sourceType: GpsSourceType.external,
+      latitude: 33.93,
+      longitude: 135.97,
+      timestamp: ts,
+      isGpsActive: true,
+    );
+    final here = gnss.positionOr(null);
+    expect(here, const LatLng(33.93, 135.97));
+    final converter = TrueHeadingConverter(clock: () => DateTime(2026, 10, 12));
+    final heading = converter.toTrue(0, lat: here?.latitude, lon: here?.longitude);
+    // 北山村の偏角は西偏 約 7.9°
+    expect(heading, closeTo(352.1, 0.3));
+
+    // 測れていなければ地図の現在位置（最後に分かった位置）に倒す
+    const last = LatLng(34, 136);
+    expect(const GpsInfo(sourceType: GpsSourceType.external).positionOr(last), last);
+    expect(GpsInfo(sourceType: GpsSourceType.internal, latitude: 1, longitude: 2, timestamp: ts).positionOr(last), last);
   });
 }

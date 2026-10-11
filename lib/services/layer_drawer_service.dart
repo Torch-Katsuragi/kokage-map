@@ -24,6 +24,7 @@ import '../core/fs/safe_path.dart';
 import '../i18n/strings.g.dart';
 import '../models/geopackage/geopackage_file.dart';
 import '../models/nodes/drive_folder_node.dart';
+import '../models/nodes/external_layer_node.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/global_folder_node.dart';
@@ -33,6 +34,7 @@ import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/sys_node.dart';
 import '../services/google_drive/index.dart';
 import '../services/kmeta_service.dart';
+import '../utils/app_logger.dart';
 
 class LayerDrawerService {
   const LayerDrawerService._();
@@ -140,6 +142,9 @@ class LayerDrawerService {
   }) async {
     final oldPath = node.getAbsoluteFilePath();
     final oldName = node.name;
+    // 値の関係の参照先は gpkg（読み取り専用レイヤなら元のファイル）の絶対パス。読み取り専用レイヤは中のレイヤ名も変わる
+    final oldSource = gpkgSourcePath(node);
+    final oldLayers = [for (final l in node.children.whereType<LayerNode>()) l.layerName];
     final newFileName = await node.rename(
       newName,
       projectRootDir: projectRootDir,
@@ -158,6 +163,21 @@ class LayerDrawerService {
     if (folder is FolderNode && folderPath != null && oldName != newFileName) {
       await KMetaService.instance.renameGeoPackageKeys(folderPath, oldName: oldName, newName: newFileName);
       folder.invalidateMetaCache();
+    }
+    if (oldSource != null && oldName != newFileName) {
+      final oldStem = p.basenameWithoutExtension(oldSource);
+      final newStem = p.basenameWithoutExtension(newFileName);
+      await retargetValueRelations(
+        node,
+        oldGpkgPath: oldSource,
+        newGpkgPath: p.join(p.dirname(oldSource), newFileName),
+        layerNames: node is ExternalLayerNode
+            ? {
+                for (final l in oldLayers)
+                  if (l == oldStem || l.startsWith('${oldStem}_')) l: '$newStem${l.substring(oldStem.length)}',
+              }
+            : const {},
+      );
     }
     await node.parent?.updateChildren();
     return newFileName;
@@ -182,7 +202,52 @@ class LayerDrawerService {
       );
       folder.invalidateMetaCache();
     }
+    final source = gpkgSourcePath(gpkgNode);
+    if (source != null && oldName != newName) {
+      await retargetValueRelations(gpkgNode, oldGpkgPath: source, newGpkgPath: source, layerNames: {oldName: newName});
+    }
     await gpkgNode.updateChildren();
+  }
+
+  /// 値の関係（ValueRelation）の参照先として見る gpkg の絶対パス（読み取り専用レイヤは元のファイル）
+  static String? gpkgSourcePath(GeoPackageNode node) =>
+      node is ExternalLayerNode ? node.sourcePath : node.geoPackageFile.getAbsolutePath();
+
+  /// gpkg・レイヤを改名したとき、プロジェクトのどのフォルダの属性フォームでも、値の関係（ValueRelation）の参照先を新しい名前へ付け替える。
+  /// 参照先は「フォームを持つフォルダからの gpkg の相対パス＋レイヤ名」なので、ほかのフォルダのフォームも見る
+  static Future<void> retargetValueRelations(
+    LayerTreeNode from, {
+    required String oldGpkgPath,
+    required String newGpkgPath,
+    Map<String, String> layerNames = const {},
+  }) async {
+    var root = from;
+    for (var up = root.parent; up != null; up = up.parent) {
+      root = up;
+    }
+    final folders = <FolderNode>[];
+    void walk(LayerTreeNode n) {
+      if (n is FolderNode) folders.add(n);
+      if (n is GeoPackageNode) return;
+      n.children.forEach(walk);
+    }
+
+    walk(root);
+    for (final folder in folders) {
+      final folderPath = folder.getAbsoluteFilePath();
+      if (folderPath == null) continue;
+      try {
+        final changed = await KMetaService.instance.retargetValueRelations(
+          folderPath,
+          oldGpkgPath: oldGpkgPath,
+          newGpkgPath: newGpkgPath,
+          layerNames: layerNames,
+        );
+        if (changed) folder.invalidateMetaCache();
+      } on Object catch (e) {
+        AppLogger.debug('[LayerDrawerService] 値の関係の参照先を付け替えられない: $folderPath - $e');
+      }
+    }
   }
 
   /// レイヤを消し（gpkg の表ごと）、フォルダ設定からそのレイヤの鍵を落とす

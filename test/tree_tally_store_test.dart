@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/nodes/feature_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
+import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/services/tree_tally/tree_tally_stats.dart';
 import 'package:root_maps/services/tree_tally/tree_tally_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -47,11 +48,33 @@ void main() {
     expect((await gpkg.getLayerNames()).where((n) => n.startsWith('tally_')), hasLength(2));
   });
 
+  test('同じ名前で形の違うレイヤがあると開かずに知らせる（表は変えない）', () async {
+    final wrong = (await PointLayerNode.createIn(gpkgNode, TreeTallySchema.plotsLayer))!;
+    final before = await gpkg.getAttributeColumnInfo(wrong.layerName);
+    await expectLater(
+      TreeTallyLayers.ensure(gpkgNode),
+      throwsA(isA<TreeTallyLayerConflict>().having((e) => e.layerName, 'layerName', TreeTallySchema.plotsLayer)),
+    );
+    expect(await gpkg.getAttributeColumnInfo(wrong.layerName), before);
+    expect((await gpkg.getLayerNames()).where((n) => n.startsWith('tally_')), [TreeTallySchema.plotsLayer]);
+  });
+
+  test('同じ名前の地物でない表があっても別名のレイヤを作らずに知らせる', () async {
+    final db = await gpkg.getDatabase();
+    await db.execute('CREATE TABLE tally_trees (x TEXT)');
+    await expectLater(
+      TreeTallyLayers.ensure(gpkgNode),
+      throwsA(isA<TreeTallyLayerConflict>().having((e) => e.layerName, 'layerName', TreeTallySchema.treesLayer)),
+    );
+    final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'tally_%'");
+    expect(tables.map((r) => r['name']), ['tally_trees']);
+  });
+
   test('円形標準地（0.05 ha）と、立木を足して集計する', () async {
     final layers = (await TreeTallyLayers.ensure(gpkgNode))!;
     const center = LatLng(33.93, 135.97);
     final plot = (await layers.createCirclePlot('P1', center, circlePlotRadiusM(0.05)))!;
-    expect(plot.areaM2, closeTo(500, 1e-6));
+    expect(plot.areaM2, closeTo(500, 0.05));
 
     final plots = await layers.loadPlots();
     expect(plots.single.plotId, 'P1');
@@ -70,8 +93,8 @@ void main() {
     final tallies = await layers.summarize();
     final p1 = tallies.firstWhere((p) => p.plotId == 'P1');
     expect(p1.all.count, 3);
-    expect(p1.all.stemsPerHa, closeTo(60, 1e-6));
-    expect(p1.all.basalAreaPerHa, closeTo((basalAreaM2(20) + basalAreaM2(30) + basalAreaM2(18)) * 20, 1e-6));
+    expect(p1.all.stemsPerHa, closeTo(60, 1e-3));
+    expect(p1.all.basalAreaPerHa, closeTo((basalAreaM2(20) + basalAreaM2(30) + basalAreaM2(18)) * 20, 1e-5));
     expect(p1.bySpecies['スギ']!.count, 2);
     final x = tallies.firstWhere((p) => p.plotId == 'X');
     expect(x.all.count, 1);
@@ -96,6 +119,35 @@ void main() {
     expect(plot.areaM2, closeTo(400, 1));
   });
 
+  test('円形の標準地も面の形から面積を出す（面を描き直したら集計も変わる）。面が無ければ πr²', () async {
+    final layers = (await TreeTallyLayers.ensure(gpkgNode))!;
+    const a = LatLng(33.93, 135.97);
+    // 円として作られた（radius_m あり）が、面は 20 m 四方に描き直された標準地
+    final ring = [
+      a,
+      const Distance().offset(a, 20, 90),
+      const Distance().offset(const Distance().offset(a, 20, 90), 20, 0),
+      const Distance().offset(a, 20, 0),
+      a,
+    ];
+    final f = (await PolygonFeatureNode.createIn(layers.plots, [ring], '', ''))!;
+    await f.setAttributeValues({'plot_id': 'P1', 'shape': 'circle', 'radius_m': circlePlotRadiusM(0.05)});
+    final plot = (await layers.loadPlots()).single;
+    expect(plot.radiusM, closeTo(circlePlotRadiusM(0.05), 1e-9));
+    expect(plot.areaM2, closeTo(400, 1));
+
+    expect(TallyPlot.areaOf(null, circlePlotRadiusM(0.05)), closeTo(500, 1e-6));
+    expect(TallyPlot.areaOf(null, null), 0);
+  });
+
+  test('作った円形の標準地の面は πr² と同じ面積（集計の値が作ったときの面積とそろう）', () async {
+    final layers = (await TreeTallyLayers.ensure(gpkgNode))!;
+    for (final ha in const [0.01, 0.05, 0.1]) {
+      final plot = (await layers.createCirclePlot('P$ha', const LatLng(33.93, 135.97), circlePlotRadiusM(ha)))!;
+      expect(plot.areaM2, closeTo(ha * 10000, ha * 10000 * 1e-4), reason: '$ha ha');
+    }
+  });
+
   test('立木の plot_id の前後の空白は標準地の番号とそろえる（集計・次の番号）', () async {
     final layers = (await TreeTallyLayers.ensure(gpkgNode))!;
     const center = LatLng(33.93, 135.97);
@@ -106,6 +158,6 @@ void main() {
     final tallies = await layers.summarize();
     expect(tallies.map((p) => p.plotId), ['P1']);
     expect(tallies.single.all.count, 2);
-    expect(tallies.single.all.stemsPerHa, closeTo(40, 1e-6));
+    expect(tallies.single.all.stemsPerHa, closeTo(40, 1e-3));
   });
 }

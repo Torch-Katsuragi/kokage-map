@@ -50,7 +50,16 @@ import '../../utils/app_navigator.dart';
 /// レイヤ一覧の行から開く。シートを閉じるまで待つので、行が組み直されても困らないよう容れ物を握る
 Future<void> showTreeTallySheet(BuildContext context, GeoPackageNode gpkg) async {
   final container = ProviderScope.containerOf(context, listen: false);
-  final layers = await TreeTallyLayers.ensure(gpkg);
+  TreeTallyLayers? ensured;
+  try {
+    ensured = await TreeTallyLayers.ensure(gpkg);
+  } on TreeTallyLayerConflict catch (e) {
+    container
+        .read(notificationCenterProvider.notifier)
+        .add(title: t.treeTally.cannotOpen, detail: e.message, level: NotificationLevel.error);
+    return;
+  }
+  final layers = ensured;
   if (layers == null || !context.mounted) return;
   final host = appDialogContext ?? context;
   container.read(featureRefreshTriggerProvider.notifier).trigger();

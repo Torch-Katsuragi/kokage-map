@@ -70,7 +70,7 @@ void main() {
   Future<GeoPackageNode> openGpkg() async {
     final root = FolderNode('Home', children: []);
     await root.updateChildren();
-    final gpkg = root.children.whereType<GeoPackageNode>().single;
+    final gpkg = root.children.whereType<GeoPackageNode>().singleWhere((g) => g.name == 'b.gpkg');
     await gpkg.updateChildren();
     return gpkg;
   }
@@ -114,6 +114,54 @@ void main() {
     expectSettings(meta, 'b.gpkg/trees', present: false);
     expectSettings(meta, 'b.gpkg/roads', present: true);
     await gpkg.geoPackageFile.dispose();
+  });
+
+  // 値の関係（ValueRelation）の参照先。gpkg の相対パスはフォームを持つフォルダから
+  QgisForm relationForm(String gpkg, String layer) => QgisForm(fields: {
+        'kind': QgisFieldForm(name: 'kind', widgetType: 'ValueRelation', config: {
+          'Key': 'id',
+          'Value': 'name',
+          kRelationTargetKey: {'gpkg': gpkg, 'layer': layer},
+        }),
+      });
+
+  /// 子フォルダ sub/ に d.gpkg を置き、そのフォームが ../b.gpkg の trees を参照する
+  Future<String> giveSubFolderRelation() async {
+    final sub = (await Directory(p.join(proj, 'sub')).create()).path;
+    final d = GeoPackageFile(const ['sub', 'd.gpkg'], absolutePath: p.join(sub, 'd.gpkg'));
+    await d.addLayer('plots', GeometryType.polygon);
+    await d.dispose();
+    await svc.setLayerForm(sub, 'd.gpkg/plots', relationForm('../b.gpkg', 'trees'));
+    return sub;
+  }
+
+  ({String gpkg, String layer})? targetOf(KMeta meta, String key) => meta.forms[key]?.fields['kind']?.relationTarget;
+
+  test('参照先のレイヤを改名すると、ほかのレイヤ・フォルダの値の関係も新しい名前を指す', () async {
+    await svc.setLayerForm(proj, 'b.gpkg/roads', relationForm('b.gpkg', 'trees'));
+    await svc.setLayerForm(proj, 'b.gpkg/trees', relationForm('b.gpkg', 'roads'));
+    final sub = await giveSubFolderRelation();
+    final gpkg = await openGpkg();
+    final trees = gpkg.children.whereType<LayerNode>().singleWhere((l) => l.layerName == 'trees');
+    await LayerDrawerService.renameLayer(trees, 'pines');
+
+    svc.clearCache();
+    final meta = await svc.getMeta(proj);
+    expect(targetOf(meta, 'b.gpkg/roads'), (gpkg: 'b.gpkg', layer: 'pines'));
+    expect(targetOf(meta, 'b.gpkg/pines'), (gpkg: 'b.gpkg', layer: 'roads'));
+    expect(targetOf(await svc.getMeta(sub), 'd.gpkg/plots'), (gpkg: '../b.gpkg', layer: 'pines'));
+    await gpkg.geoPackageFile.dispose();
+  });
+
+  test('参照先の gpkg を改名すると、ほかのフォルダの値の関係も新しい gpkg を指す', () async {
+    await svc.setLayerForm(proj, 'b.gpkg/roads', relationForm('b.gpkg', 'trees'));
+    final sub = await giveSubFolderRelation();
+    final gpkg = await openGpkg();
+    await LayerDrawerService.renameGeoPackage(gpkg, 'c', projectRootDir: proj);
+
+    svc.clearCache();
+    expect(targetOf(await svc.getMeta(proj), 'c.gpkg/roads'), (gpkg: 'c.gpkg', layer: 'trees'));
+    expect(targetOf(await svc.getMeta(sub), 'd.gpkg/plots'), (gpkg: '../c.gpkg', layer: 'trees'));
   });
 
   test('gpkg を忘れると、写真の列の印も落とす', () async {

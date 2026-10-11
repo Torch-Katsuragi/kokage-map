@@ -253,6 +253,7 @@
       "terms": "タイルの利用規約を守るのは追加した人の責任です。",
       "invalidUrl": "{z} {x} {y}（または {bbox-epsg-3857}）を含む http(s) の URL を入れてください",
       "forbidden": "このタイルは利用規約で配布アプリからの利用が禁じられています（Google・Bing など）",
+      "httpOnWeb": "web 版では http の地図は読めません（ブラウザが https のページから http を読ませない）。https で配っていれば次の URL で使えます: ${url}",
       "duplicate": "同じ URL の地図がもうあります: ${name}",
       "checking": "タイルを 1 枚取ってみています…",
       "probeOk": "タイルを取得できました",
@@ -920,10 +921,11 @@
     "seconds": "${n} 秒",
     "minDistance": "点の最小間隔（距離）",
     "minDistanceDesc": "これより動いていなければ記録しない。止まっていても 5 分に 1 点は残す",
-    "maxAccuracy": "精度の上限",
+    "maxAccuracy": "精度の悪い点を捨てる",
+    "maxAccuracyDesc": "精度（±m）がこれより悪い測位は軌跡に入れない。精度の分からない測位は入れる",
     "maxSpeed": "飛びの除外（速さ）",
     "maxSpeedDesc": "前の点からこの速さを超えて動いたことになる点を捨てる。3 回続いたら受け入れる",
-    "off": "なし"
+    "off": "指定しない"
   },
   "simplification": {
     "tolerance": "許容誤差: ",
@@ -1170,6 +1172,10 @@
     "all": "全体",
     "noTrees": "まだ記録がありません",
     "unknownArea": "面積不明",
+    "cannotOpen": "毎木調査を開けません",
+    "conflictNotPolygon": "この gpkg の「${layer}」が面のレイヤではありません。毎木調査はこの名前の面のレイヤを使います。名前を変えるか別の gpkg で始めてください（表は変えていません）",
+    "conflictNotPoint": "この gpkg の「${layer}」が点のレイヤではありません。毎木調査はこの名前の点のレイヤを使います。名前を変えるか別の gpkg で始めてください（表は変えていません）",
+    "conflictColumns": "「${layer}」に毎木調査の列を足せませんでした（読み取り専用など）",
     "stat": {
       "count": "本数",
       "perHa": "本/ha",
@@ -1735,6 +1741,7 @@
       "title": "測位の品質（足切り）",
       "description": "GPS 測量で、条件を満たさない測位を弾きます。指定しない条件は見ません。",
       "maxAccuracy": "精度の上限",
+      "maxAccuracyDesc": "精度（±m）がこれより悪い測位を弾く。精度の分からない測位も弾く",
       "minFix": "測位の種類の下限",
       "minSatellites": "衛星数の下限",
       "none": "指定しない",

@@ -103,12 +103,17 @@ class _TableJoinDialogState extends ConsumerState<_TableJoinDialog> {
       _joins = List.of(layer.joinDefs);
       _layerFields = [for (final c in columns) if (!isSystemColumn(c) && !isInternalColumn(c)) c];
     });
-    if (_tables.isNotEmpty) await _pickTable(_tables.first);
+    // 読む間に利用者が表を選んでいたら、最初の表に戻さない
+    if (_tables.isNotEmpty && _pickGen == 0) await _pickTable(_tables.first);
   }
 
+  /// 表を選んだ回数。大きい表を読む間に別の表を選んだら、先の表の読み込みで入力を上書きしない
+  int _pickGen = 0;
+
   Future<void> _pickTable(TableNode node) async {
+    final gen = ++_pickGen;
     final data = await node.load();
-    if (!mounted) return;
+    if (!mounted || gen != _pickGen) return;
     setState(() {
       _table = node;
       _tableData = data;

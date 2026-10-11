@@ -54,11 +54,13 @@ import '../../../models/nodes/overlay_image_node.dart';
 import '../../../models/party/party_room.dart';
 import '../../../providers/guidance_providers.dart';
 import '../../../providers/party_providers.dart';
+import '../../../providers/room_pin_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/basemap_service.dart';
 import '../../../services/dem_elevation.dart';
+import '../../../services/party/room_pin_store.dart';
 import '../../../tools/gps_tool.dart';
 import '../../../tools/map_tool.dart';
 import '../../../tools/overlay_transform_tool.dart';
@@ -67,6 +69,7 @@ import '../../../utils/app_logger.dart';
 import '../../../utils/global_drawing_state.dart';
 import '../../layer_style_settings_screen.dart';
 import '../feature_geojson_cache.dart';
+import 'room_pin_ui.dart';
 import 'terrain_texture_paint.dart';
 
 part 'terrain_map_layer_bake.dart';
@@ -133,6 +136,9 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   @override
   ConsumerState<TerrainMapLayer> createState() => _TerrainMapLayerState();
 }
+
+/// 地図の長押しメニューの項目
+enum _LongPressChoice { guide, pin }
 
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     with
@@ -692,24 +698,47 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   }
 
   void _onTapUp(TapUpDetails d) {
+    // パーティの共有ピンに当たればそのカードを出す（描く・測るツールの間は地図の操作を優先）
+    if (_longPressGuides(ref.read(currentToolProvider).name)) {
+      final pin = _pinAt(d.localPosition);
+      if (pin != null) {
+        unawaited(showRoomPinCard(context, pin));
+        return;
+      }
+    }
     // 選択などは既存のツールに任せる（投影は TerrainProjection 経由でここを通る）
     ref.read(currentToolProvider).onTap(d, widget.mapState);
+  }
+
+  /// [screen] に一番近い共有ピン（指の幅 24px 以内）
+  RoomPinView? _pinAt(Offset screen) {
+    RoomPinView? best;
+    var bestD = 24.0;
+    for (final v in ref.read(roomPinsProvider).pins) {
+      final d = (project(LatLng(v.pin.lat, v.pin.lon)) - screen).distance;
+      if (d <= bestD) {
+        best = v;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   /// 長押しで「ここへ案内」を出すツール（描く・測るツールは長押しを自分で使うか、指を止めることがあるので外す）
   static bool _longPressGuides(String toolName) => toolName == 'Pan' || toolName == 'Select';
 
-  /// 地図の長押し: その地点への「ここへ案内」を出す
+  /// 地図の長押し: その地点への「ここへ案内」と、ルームに入っていれば「ピンを立てる」を出す
   Future<void> _onLongPressStart(LongPressStartDetails d) async {
     final p = unproject(d.localPosition);
     final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
     if (p == null || overlay is! RenderBox) return;
-    final ok = await showMenu<bool>(
+    final inRoom = ref.read(roomPinsProvider).active;
+    final choice = await showMenu<_LongPressChoice>(
       context: context,
       position: RelativeRect.fromRect(d.globalPosition & const Size(1, 1), Offset.zero & overlay.size),
       items: [
         PopupMenuItem(
-          value: true,
+          value: _LongPressChoice.guide,
           child: Row(
             children: [
               Icon(Icons.near_me, size: 18, color: Colors.pink.shade700),
@@ -718,13 +747,31 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
             ],
           ),
         ),
+        if (inRoom)
+          PopupMenuItem(
+            value: _LongPressChoice.pin,
+            child: Row(
+              children: [
+                const Icon(Icons.push_pin, size: 18, color: Colors.deepOrange),
+                const SizedBox(width: 8),
+                Text(t.party.pins.place),
+              ],
+            ),
+          ),
       ],
     );
-    if (ok != true || !mounted) return;
-    ref.read(guidanceProvider.notifier).start(GuidanceTarget(
-          point: p,
-          label: '${t.guidance.mapPoint} ${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}',
-        ));
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case _LongPressChoice.guide:
+        ref.read(guidanceProvider.notifier).start(GuidanceTarget(
+              point: p,
+              label: '${t.guidance.mapPoint} ${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}',
+            ));
+      case _LongPressChoice.pin:
+        final r = await showRoomPinDialog(context);
+        if (r == null || !mounted) return;
+        await ref.read(roomPinsProvider.notifier).add(r.$1, p, text: r.$2);
+    }
   }
 
   // ── UI ──────────────────────────────────────────────
@@ -732,6 +779,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   @override
   Widget build(BuildContext context) {
     ref.listen(partySessionProvider, (_, _) => _scheduleRefresh());
+    ref.listen(roomPinsProvider, (_, _) => _scheduleRefresh());
     ref.listen(currentToolProvider, (_, next) => _onToolChanged(next.name));
     // 地点への誘導: 行き先・今の位置が変わったら線を引き直す
     ref.listen(guidanceProvider.select((g) => (g.target?.point, g.here)), (_, _) => _scheduleRefresh());

@@ -111,6 +111,17 @@ void main() {
     expect(hs, [for (var i = 0; i < _count; i++) i.toDouble()]);
   });
 
+  testWidgets('メタデータの列（kmaps_metadata）は表に出さない', (tester) async {
+    await tester.runAsync(() async {
+      await open();
+      await gpkg.addAttributeColumns('pts', {'kmaps_metadata': 'TEXT'});
+    });
+    addTearDown(() => tester.runAsync(close));
+    final ctrl = await pumpController(tester);
+    await tester.runAsync(ctrl.initialize);
+    expect(ctrl.columnNames, ['name', 'h']);
+  });
+
   testWidgets('ページの大きさ: 選んだ行数で切り、総ページ数もそれで数える', (tester) async {
     await tester.runAsync(open);
     addTearDown(() => tester.runAsync(close));

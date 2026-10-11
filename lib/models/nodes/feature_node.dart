@@ -495,21 +495,26 @@ abstract class FeatureNode extends LayerTreeNode {
     throw UnimplementedError('updateGeometry must be implemented by subclass');
   }
 
-  /// 新しい地物の属性。レイヤに列があるものだけ入れる
+  /// 新しい地物の属性。レイヤに列があるものだけ入れる。
+  /// メタデータは残す中身（GPS 測量の点ごとの記録など）があれば列を作ってでも入れる
   static Future<Map<String, dynamic>> _newAttributes(
     LayerNode parent,
     String name,
     String? description,
     Map<String, dynamic>? metadata,
   ) async {
-    final columns = (await parent.geoPackageFile
-            .getColumnNames(parent.layerName, getAll: true))
-        .toSet();
+    final gpkg = parent.geoPackageFile;
+    final columns =
+        (await gpkg.getColumnNames(parent.layerName, getAll: true)).toSet();
+    final withMetadata = columns.contains(metadataColumn) ||
+        await gpkg.ensureMetadataColumn(parent.layerName, metadata);
+    if (withMetadata && !columns.contains(metadataColumn)) {
+      parent.clearColumnNamesCache(); // 列が増えた
+    }
     return {
       if (columns.contains('name')) 'name': name,
       if (columns.contains('description')) 'description': description,
-      if (columns.contains(metadataColumn) && metadata != null)
-        metadataColumn: jsonEncode(metadata),
+      if (withMetadata && metadata != null) metadataColumn: jsonEncode(metadata),
     };
   }
 

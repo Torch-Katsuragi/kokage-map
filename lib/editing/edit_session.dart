@@ -30,7 +30,6 @@ import 'package:flutter/widgets.dart' show EdgeInsets;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../models/geopackage/feature_repository.dart' show metadataColumn;
 import '../models/nodes/feature_node.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
@@ -290,11 +289,8 @@ class FeatureEditor extends Notifier<EditState?> {
   /// 書き換えてよい列（番号・形・内部用は除く。属性テーブルと同じ決まり [isReadOnlyColumn]。
   /// メタデータと、頂点ごとの記録 sub_table（形と一緒に扱う）も除く）
   static bool _editable(String name) {
-    if (isReadOnlyColumn(name)) return false;
-    final n = name.toLowerCase();
-    return !(n == metadataColumn ||
-        n == 'rmaps_metadata' || // 旧名
-        n == 'sub_table');
+    if (isReadOnlyColumn(name) || isSystemColumn(name)) return false;
+    return name.toLowerCase() != 'sub_table';
   }
 
   void setMode(EditMode m) {

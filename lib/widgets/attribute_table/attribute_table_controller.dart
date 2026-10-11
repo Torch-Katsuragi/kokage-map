@@ -186,11 +186,14 @@ class AttributeTableController extends ChangeNotifier {
     try {
       AppLogger.debug('[AttributeTableController] 初期化開始: ${layer.layerName}');
 
-      // カラム名を取得
-      _columnNames = await layer.getAttributeColumnNames(
-        getAll: true,
-        skipPrimaryKey: true,
-      );
+      // カラム名を取得（アプリが中身を持つメタデータの列は出さない）
+      _columnNames = [
+        for (final c in await layer.getAttributeColumnNames(
+          getAll: true,
+          skipPrimaryKey: true,
+        ))
+          if (!isSystemColumn(c)) c,
+      ];
       _userColumnNames =
           _columnNames.where((c) => !isInternalColumn(c)).toList();
       _writableColumnNames =

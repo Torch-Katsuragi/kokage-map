@@ -12,7 +12,7 @@
 #fixes(
   "New",
   [Tree tally: record species, DBH and height in circular or polygon plots, then summarize trees/ha, basal area and mean height and save as CSV (height also from TruPulse HT)],
-  [Tree tally summaries show sugi and hinoki stem volume (m³/ha) for the Kinki and Chugoku region, from the Forestry Agency's West Japan volume table equations],
+  [Tree tally summaries show sugi and hinoki stem volume (m³/ha) for Kinki, Chugoku, Ishikawa and Fukui, from the Forestry Agency's West Japan volume table equations],
   [Save the map as a one-page PDF (≡ menu): A4/A3, title, date, scale, north arrow, legend and credits, drawn from above],
   [Attach photos to features: the camera app saves them in photos/ next to the data and the photo column holds the path (shown in QGIS forms)],
   [Join a stand-register CSV to a forest-plan layer (QGIS join); joined fields in the attribute table, labels, styling, search and export; round-trips with .qgs],
@@ -36,7 +36,7 @@
   [Attribute table copy covered only the first page; rows per page can be chosen and sorting covers all rows],
   [Attribute table filter indicator, and full-width digits in the edit panel],
   [Per-point records of GPS-surveyed lines and polygons were dropped],
-  [KMZ whose doc.kml only links (NetworkLink) to other KML could not be opened; the linked KML inside become layers],
+  [KMZ whose doc.kml only links (NetworkLink) to other KML could not be opened; each linked KML inside becomes a layer],
 )
 
 #fixes(

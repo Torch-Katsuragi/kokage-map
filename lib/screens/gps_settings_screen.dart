@@ -647,6 +647,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
         SettingsDescription(g.description),
         SettingsTile(
           title: g.maxAccuracy,
+          subtitle: g.maxAccuracyDesc,
           trailing: dropdown<double>(
             gate.maxAccuracy,
             const [0.02, 0.05, 0.1, 0.5, 1, 3, 5, 10],
@@ -728,6 +729,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
         ),
         SettingsTile(
           title: g.maxAccuracy,
+          subtitle: g.maxAccuracyDesc,
           trailing: dropdown<double?>(
             settings.maxAccuracy,
             [null, ...TrackRecordingSettings.maxAccuracyOptions],

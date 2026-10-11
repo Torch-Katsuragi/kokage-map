@@ -921,10 +921,11 @@
     "seconds": "${n} s",
     "minDistance": "Minimum distance between points",
     "minDistanceDesc": "Skip fixes that moved less than this. One point is still kept every 5 minutes while standing still",
-    "maxAccuracy": "Accuracy limit",
+    "maxAccuracy": "Drop inaccurate points",
+    "maxAccuracyDesc": "Fixes less accurate than this (±m) are not added to the track. Fixes without an accuracy value are kept",
     "maxSpeed": "Jump rejection (speed)",
     "maxSpeedDesc": "Drop a fix that implies moving faster than this since the previous point. Accepted after 3 in a row",
-    "off": "Off"
+    "off": "Not set"
   },
   "simplification": {
     "tolerance": "Tolerance: ",
@@ -1740,6 +1741,7 @@
       "title": "Fix quality (thresholds)",
       "description": "Reject GPS survey fixes that do not meet these thresholds. Unset thresholds are ignored.",
       "maxAccuracy": "Max accuracy",
+      "maxAccuracyDesc": "Reject fixes less accurate than this (±m). Fixes without an accuracy value are rejected too",
       "minFix": "Minimum fix type",
       "minSatellites": "Minimum satellites",
       "none": "Not set",

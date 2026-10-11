@@ -921,10 +921,11 @@
     "seconds": "${n} 秒",
     "minDistance": "点の最小間隔（距離）",
     "minDistanceDesc": "これより動いていなければ記録しない。止まっていても 5 分に 1 点は残す",
-    "maxAccuracy": "精度の上限",
+    "maxAccuracy": "精度の悪い点を捨てる",
+    "maxAccuracyDesc": "精度（±m）がこれより悪い測位は軌跡に入れない。精度の分からない測位は入れる",
     "maxSpeed": "飛びの除外（速さ）",
     "maxSpeedDesc": "前の点からこの速さを超えて動いたことになる点を捨てる。3 回続いたら受け入れる",
-    "off": "なし"
+    "off": "指定しない"
   },
   "simplification": {
     "tolerance": "許容誤差: ",
@@ -1740,6 +1741,7 @@
       "title": "測位の品質（足切り）",
       "description": "GPS 測量で、条件を満たさない測位を弾きます。指定しない条件は見ません。",
       "maxAccuracy": "精度の上限",
+      "maxAccuracyDesc": "精度（±m）がこれより悪い測位を弾く。精度の分からない測位も弾く",
       "minFix": "測位の種類の下限",
       "minSatellites": "衛星数の下限",
       "none": "指定しない",

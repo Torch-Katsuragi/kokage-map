@@ -18,6 +18,10 @@ const _size = Size(800, 600);
 
 /// 真上・北が上の Web Mercator。カメラは [handle] が覚えている値を読む（本物の地図面も動くたびに覚えさせる）
 class _FlatSurface implements MapSurface {
+  // スナップショット（PDF）はここでは使わない
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+
   _FlatSurface(this.handle);
   final MapSurfaceHandle handle;
   final jumps = <({LatLng center, double zoom, bool animate})>[];

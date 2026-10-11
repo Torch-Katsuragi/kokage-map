@@ -36,7 +36,7 @@ The web version (https://kokage-map.sleeptree.jp) runs in a PC browser. It opens
 
 - **Left edge**: Toolbar (vertical) — switch between tools
 - **Top**: notification bell, attribute table button, ≡ menu, :icon-layers: layer panel button
-- **≡ menu**: Location Sharing Party, Reload project from disk, Spirit Level, :icon-settings: Settings
+- **≡ menu**: Location Sharing Party, Reload project from disk, Map to PDF, Spirit Level, :icon-settings: Settings
 - **Right side**: Layer panel (toggle with the :icon-layers: button)
 - **Bottom**: Attribute table and the feature info panel
 - **Bottom-left**: GPS survey buttons (when the GPS tool is active), eraser button (when the Pen tool is active)
@@ -360,6 +360,17 @@ Long-press the forest-plan layer → "Join table" and choose the table, the fiel
 5. Choose where to save and export.
 
 Export uses GDAL, as QGIS does, and writes all attributes. Shapefiles are written in UTF-8 with a .cpg file.
+
+### Printing the map as a PDF
+
+Turn the map you are looking at into a one-page PDF, for paperwork or handouts on site.
+
+1. Pan, zoom and rotate the map to the area you want.
+2. Choose "Map to PDF" from the ≡ menu.
+3. Choose the paper (A4 or A3) and orientation (landscape or portrait), and type a title and notes. The title defaults to the project folder name.
+4. Press "Create" and choose where to save.
+
+The map is drawn from straight above at a round scale (such as 1:5,000) that fits the current screen, even if the 3D view is tilted. If the map is rotated, the PDF keeps that rotation and the north arrow points to true north. The page has the title, date, scale bar, north arrow, a legend (visible layers, views and QGIS style classes) and the credits of the background maps.
 
 ---
 

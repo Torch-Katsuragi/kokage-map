@@ -300,6 +300,45 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     _overlayKey = ''; // ホットリロードでオーバーレイを同期し直す
   }
 
+  /// 地図面の窓口「スナップショット」（[MapSurface.snapshotTopDown]）。地形のテクスチャと同じ合成
+  /// （背景地図の層 → オーバーレイ画像 → 地物）を、指定の範囲で 1 枚に描く。タイルの画像キャッシュは使わない
+  /// （印刷は細かい段を一度に何百枚も読むので、画面で使っている絵を追い出さないように）
+  Future<ui.Image> _snapshotTopDown(
+    TileRange range,
+    List<TextureLayer> layers, {
+    double strokeScale = 1,
+    TileProgress? onProgress,
+  }) {
+    final groups = _styleGroupsByKey();
+    final def = _defaultStyle();
+    return RasterTileComposer(fetcher: (_, _, _) => Future.value()).composeLayers(
+      range,
+      layers,
+      onProgress: onProgress,
+      decorate: (canvas, r) {
+        final frame = TextureFrame(r);
+        for (final n in widget.mapState.overlayImageNodes) {
+          final im = _overlayImages[n.filePath];
+          if (im != null) paintOverlayImage(canvas, frame, im, n.cornerCoordinates);
+        }
+        final g = widget.scene.features;
+        paintFeatures(
+          canvas,
+          frame,
+          polygons: g.polygons,
+          polylines: g.polylines,
+          markers: g.markers,
+          indexesIn: _featureIndexes,
+          styleOf: (f) => switch (f.properties[kStyleProp]) {
+            final String k => groups[k] ?? def,
+            _ => def,
+          },
+          strokeScale: strokeScale,
+        );
+      },
+    );
+  }
+
   /// テクスチャの上描き: オーバーレイ画像と、引いた段のフィーチャの焼き込み（[demZoom] はタイルの段、range はテクスチャの段）
   void _decorateTexture(ui.Canvas canvas, TileRange range, int demZoom) {
     final frame = TextureFrame(range);

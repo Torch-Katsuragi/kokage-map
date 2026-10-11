@@ -94,7 +94,8 @@ class TextureFrame {
 /// 地物をテクスチャに描き、描いた件数を返す。[fillsOnly] なら面の塗りだけ。
 ///
 /// 太さは画面で見える太さに合わせる。テクスチャは表示の段とほぼ同じ段で作るので、テクスチャの 1 px ≒ 画面の 1 px。
-/// [indexesIn] は範囲に掛かる地物の番号（範囲の索引で先にふるう）
+/// [indexesIn] は範囲に掛かる地物の番号（範囲の索引で先にふるう）。
+/// [strokeScale] は太さ・点の大きさの倍率（印刷のように 1 px が画面の 1 px でないとき）
 int paintFeatures(
   ui.Canvas canvas,
   TextureFrame frame, {
@@ -104,6 +105,7 @@ int paintFeatures(
   required List<int> Function(List<geo.Feature<geo.Geometry>> fs, Rect clip) indexesIn,
   required TerrainFeatureStyle Function(geo.Feature f) styleOf,
   bool fillsOnly = false,
+  double strokeScale = 1,
 }) {
   final merc = frame.mercator;
   final fill = Paint()..style = PaintingStyle.fill;
@@ -118,7 +120,7 @@ int paintFeatures(
     final path = frame.polygonPath(f.geometry);
     if (st.fillColor.a > 0) canvas.drawPath(path, fill..color = st.fillColor);
     if (!fillsOnly && st.outlineColor.a > 0 && st.outlineWidth > 0) {
-      canvas.drawPath(path, stroke..color = st.outlineColor..strokeWidth = math.max(1.0, st.outlineWidth));
+      canvas.drawPath(path, stroke..color = st.outlineColor..strokeWidth = math.max(1.0, st.outlineWidth) * strokeScale);
     }
     n++;
   }
@@ -126,7 +128,7 @@ int paintFeatures(
   for (final i in indexesIn(polylines, merc)) {
     final f = polylines[i];
     final st = styleOf(f);
-    canvas.drawPath(frame.linePath(f.geometry), stroke..color = st.lineColor..strokeWidth = math.max(1.5, st.lineWidth));
+    canvas.drawPath(frame.linePath(f.geometry), stroke..color = st.lineColor..strokeWidth = math.max(1.5, st.lineWidth) * strokeScale);
     n++;
   }
   for (final f in markers) {
@@ -136,7 +138,7 @@ int paintFeatures(
     final y = WebMercator.yFromLat(pos.y);
     if (x < merc.left || x > merc.right || y < merc.top || y > merc.bottom) continue;
     final st = styleOf(f);
-    canvas.drawCircle(frame.ofPosition(pos), math.max(2.0, st.pointSize), fill..color = st.pointColor);
+    canvas.drawCircle(frame.ofPosition(pos), math.max(2.0, st.pointSize) * strokeScale, fill..color = st.pointColor);
     n++;
   }
   return n;

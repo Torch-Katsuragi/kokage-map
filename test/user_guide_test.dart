@@ -34,7 +34,7 @@ void main() {
   test('日本語版と英語版の見出しの数が同じ', () {
     List<int> levels(String lang) => _guide(lang)
         .split('\n')
-        .where((l) => RegExp(r'^#{1,4} ').hasMatch(l))
+        .where((l) => RegExp('^#{1,4} ').hasMatch(l))
         .map((l) => l.indexOf(' '))
         .toList();
     expect(levels('en'), levels('ja'));

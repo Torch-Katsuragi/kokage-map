@@ -42,6 +42,13 @@ void main() {
 
   const expectedNames = gdalScenarioNames;
 
+  test('splitVsiZip: web に渡す fs のパスは先頭の / が 1 つ', () {
+    // ExternalSource.datasetName は '/vsizip/' + 絶対パス（'/vsizip//T/a.kmz'）を作る
+    expect(splitVsiZip('/vsizip//T/a.kmz'), ('/vsizip/', '/T/a.kmz'));
+    expect(splitVsiZip('/vsizip/T/a.kmz'), ('/vsizip/', '/T/a.kmz'));
+    expect(splitVsiZip('/T/a.kml'), ('', '/T/a.kml'));
+  });
+
   test('version', () async {
     final v = await gdal.version();
     // ignore: avoid_print

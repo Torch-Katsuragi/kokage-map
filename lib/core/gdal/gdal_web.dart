@@ -100,8 +100,7 @@ class GdalWeb implements Gdal {
   // =============================================
 
   /// `/vsizip/<fs のパス>`（KMZ など）は、fs のパスと GDAL に付ける接頭辞に分ける
-  static (String vsi, String path) _splitVsi(String path) =>
-      path.startsWith('/vsizip/') ? ('/vsizip/', path.substring('/vsizip'.length)) : ('', path);
+  static (String vsi, String path) _splitVsi(String path) => splitVsiZip(path);
 
   Future<String> _info(String op, String rawPath, List<String> args) async {
     final (vsi, path) = _splitVsi(rawPath);

@@ -352,11 +352,13 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     final feature = AttributeTableController.featureOfRow(event.row);
     if (feature == null) return;
     final field = event.column.field;
-    final error = await _controller.saveAttributeChange(
-      feature,
-      field,
-      event.value,
-    );
+    // 日付の列は表の日付選びの書式でなく、列の決まった形（DATE・DATETIME）で書く
+    final value = _controller.storedValueFor(field, event.value);
+    final error = await _controller.saveAttributeChange(feature, field, value);
+    if (error == null && value != event.value) {
+      event.row.cells[field]?.value = value;
+      _controller.stateManager?.notifyListeners();
+    }
     if (error != null) {
       // 書かなかったのでマスを元の値に戻す（QGIS の必須の制約など）
       event.row.cells[field]?.value = event.oldValue;

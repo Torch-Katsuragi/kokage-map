@@ -236,6 +236,65 @@ void main() {
     final sorted = await ctrl.fetchPage(TrinaLazyPaginationRequest(page: 1, pageSize: 3, sortColumn: hCol));
     expect(sorted.rows.map((r) => r.cells['name']!.value), ['p0', 'p249', 'p248']);
   });
+
+  testWidgets('日付の列: 読めない値・時刻つきの値もそのまま見せ、NULL だけ (NULL)。並べ替えは日付で、書くのは列の形', (tester) async {
+    await tester.runAsync(() async {
+      await open();
+      await gpkg.addAttributeColumns('pts', {'d': 'DATE', 'dt': 'DATETIME'});
+      final db = await gpkg.getDatabase();
+      Future<void> set(String name, String? d, String? dt) =>
+          db.rawUpdate('UPDATE pts SET d = ?, dt = ? WHERE name = ?', [d, dt, name]);
+      await set('p0', '2026/01/05', '2026-10-01T09:00:00Z');
+      await set('p1', '2026-09-15', '2026-10-01 09:00:00');
+      await set('p2', '未定', null);
+      await set('p3', null, '2026-09-30T23:00:00.000Z');
+      layer = PointLayerNode(gpkg, 'pts', parent: GeoPackageNode(gpkg));
+      await layer.updateChildren();
+    });
+    addTearDown(() => tester.runAsync(close));
+    final ctrl = await pumpController(tester);
+    await tester.runAsync(ctrl.initialize);
+    expect(ctrl.columnNames, ['name', 'h', 'd', 'dt']);
+
+    final page = await ctrl.fetchPage(TrinaLazyPaginationRequest(page: 1, pageSize: 50));
+    await tester.binding.setSurfaceSize(const Size(1400, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: TrinaGrid(
+          columns: [for (final c in ctrl.columns) if (!c.field.startsWith('_l')) c..width = 200],
+          rows: page.rows.take(4).toList(),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    for (final v in [
+      '2026/01/05',
+      '2026-10-01T09:00:00Z',
+      '2026-09-15',
+      '2026-10-01 09:00:00',
+      '未定',
+      '2026-09-30T23:00:00.000Z',
+    ]) {
+      expect(find.text(v), findsOneWidget, reason: v);
+    }
+    expect(find.text('(NULL)'), findsNWidgets(2));
+
+    // 並べ替えは日付として（2026/01/05 は 2026-09-15 より前）。NULL は小さい側、日付と読めない文字は後ろ
+    await tester.runAsync(() => ctrl.applyFilter('"h" >= 246'));
+    final dCol = ctrl.columns.firstWhere((c) => c.field == 'd')..sort = TrinaColumnSort.ascending;
+    final sorted = await ctrl.fetchPage(TrinaLazyPaginationRequest(page: 1, pageSize: 10, sortColumn: dCol));
+    expect(sorted.rows.map((r) => r.cells['name']!.value), ['p3', 'p0', 'p1', 'p2']);
+
+    // 表の日付選びの値は、DATE は yyyy-MM-dd、DATETIME は UTC の ISO 8601（Z つき）で書く
+    expect(ctrl.storedValueFor('d', '2026-10-03'), '2026-10-03');
+    final dt = ctrl.storedValueFor('dt', '2026-10-03 09:30')! as String;
+    expect(dt, matches(RegExp(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$')));
+    expect(DateTime.parse(dt).toLocal(), DateTime(2026, 10, 3, 9, 30));
+    expect(ctrl.storedValueFor('d', '未定'), '未定');
+    expect(ctrl.storedValueFor('name', '2026-10-03 09:30'), '2026-10-03 09:30');
+  });
 }
 
 Uint8List _gpkgPoint(double lon, double lat) {

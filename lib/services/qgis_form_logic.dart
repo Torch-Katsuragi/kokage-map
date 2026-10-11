@@ -43,7 +43,9 @@ final Set<String> _skippedDefaults = {};
 /// 文字の列は DateTime ウィジェットの `field_format`、無ければ Qt の ISO 形式（QGIS が文字の列に書く形）
 String storeDateValue(DateTime d, String sqlType, QgisFieldForm? field) {
   final t = sqlType.toUpperCase();
-  if (t.contains('DATETIME') || t.contains('TIMESTAMP')) return d.toUtc().toIso8601String();
+  if (t.contains('DATETIME') || t.contains('TIMESTAMP')) {
+    return formatQtDate(d.toUtc(), "yyyy-MM-dd'T'HH:mm:ss.zzz'Z'");
+  }
   if (t.contains('DATE')) return formatQtDate(d, 'yyyy-MM-dd');
   final fmt = field?.fieldFormat;
   return formatQtDate(d, fmt ?? "yyyy-MM-dd'T'HH:mm:ss");

@@ -32,7 +32,9 @@ class QgisFormOptions {
   /// 列 → 選択肢。UniqueValues と ValueRelation の列だけ（参照先が見つからない列は入れない）
   static Future<Map<String, List<QgisValueOption>>> load(LayerNode layer, QgisForm form) async {
     final out = <String, List<QgisValueOption>>{};
+    final columns = (await layer.getAttributeColumnNames(getAll: true)).toSet();
     for (final field in form.fields.values) {
+      if (!columns.contains(field.name)) continue; // QGIS 側にだけある列（式の仮想列など）
       try {
         switch (field.kind) {
           case QgisWidgetKind.uniqueValues:

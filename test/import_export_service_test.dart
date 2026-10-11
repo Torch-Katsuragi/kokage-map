@@ -43,6 +43,7 @@ void main() {
     });
 
     test('GeoJSON・KML・GPX は形式の決まりで 4326（選んだ座標系は使わない）', () {
+      // 点は -nlt POINT で単一の Point に書く（1a57f57）
       expect(args(FileFormat.geojson, crs: vi), ['-f', 'GeoJSON', '-t_srs', 'EPSG:4326', '-lco', 'RFC7946=YES', '-nlt', 'POINT', '林班']);
       expect(args(FileFormat.kml, crs: vi), ['-f', 'KML', '-t_srs', 'EPSG:4326', '-nlt', 'POINT', '林班']);
       expect(args(FileFormat.gpx), containsAllInOrder(['-t_srs', 'EPSG:4326', '-nlt', 'POINT']));

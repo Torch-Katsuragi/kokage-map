@@ -83,8 +83,16 @@ tags: [technical, geopackage, qgis, interop, import]
 - 削除: 元のファイル一式とキャッシュを消す（gpkg の削除と同じ扱い）。`syncChildren` で外れるだけのときは何も消さない
 - ファイルの改名は元一式の改名（拡張子は保つ）。中のレイヤ名も変わるので、フォルダ設定の鍵を移す
   （`KMetaService.renameGeoPackageKeys`）。フォルダへの移動（左スワイプ）は付属ファイルも一緒に動かす
-- 編集の門番は `lib/widgets/external_layer_actions.dart` の `refuseReadOnlyEdit`。断ったら通知センターに
-  「gpkgに変換して編集」のボタンつきで出す。地物の削除はまとめて削除の口（`SelectedFeatures.disposeSelectedFeatures`）、
+- 編集の門番は `lib/widgets/external_layer_actions.dart` の `refuseReadOnlyEdit`。断ったらその場で
+  「読み取り専用です。gpkg に変換して編集しますか？」の確認ダイアログを出す（中身は `confirmConvertExternalLayer` と同じ。
+  読み取り専用の Drive フォルダでは「自分のフォルダに gpkg として複製」）。以前は通知センターにボタンつきで出していたが、
+  上に出る通知にはボタンが無く見落とされた（2026-10-11 に変更）。
+  道具・状態のクラスは BuildContext を持たないので、ダイアログはアプリの Navigator（`utils/app_navigator.dart` の
+  `appNavigatorKey`）から出す。Navigator が無いとき（テストなど）だけ従来の通知に落とす。
+  変換・複製できたら、新しい gpkg の中の同じもの（レイヤ名・地物の rowId で引く。キャッシュをそのまま写すので変わらない）を
+  `onConverted` に渡して続きをする: 形の編集（`FeatureEditor.start`）はその地物で編集に入り直し、追記は追記を始め直し、
+  レイヤの移動は移動を続ける。続きを決めていない口（ペン・GPS・TruPulse・属性表・削除）は変換したレイヤ（と地物）を選び直すだけ。
+  削除は変換に続けて消すことはしない。地物の削除はまとめて削除の口（`SelectedFeatures.disposeSelectedFeatures`）、
   描画の確定は `GlobalDrawingState.confirmCurrentFeature`、形の編集は `FeatureEditor.start` で止める。
   View の追加・改名はフォルダ設定への書き込みなのでできる
 

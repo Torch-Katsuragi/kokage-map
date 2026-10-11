@@ -418,8 +418,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
     // 選択レイヤー変更 → 属性テーブルが開いていれば自動で切り替え
     ref.listen<LayerNode?>(selectedLayerNodeProvider, (prev, next) {
-      if (showAttributeTable && next != null &&
-          next.layerName != attributeTableLayer?.layerName) {
+      // レイヤ名でなくノードで比べる（gpkg に変換したレイヤは名前が同じまま別のノードになる）
+      if (showAttributeTable && next != null && !identical(next, attributeTableLayer)) {
         triggerSetState(() {
           attributeTableLayer = next;
         });

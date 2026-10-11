@@ -8,11 +8,14 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/core/gdal/gdal_ffi.dart';
 import 'package:root_maps/core/path_resolver.dart';
+import 'package:root_maps/editing/edit_session.dart';
+import 'package:root_maps/i18n/strings.g.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/kmeta.dart';
@@ -32,6 +35,8 @@ import 'package:root_maps/services/folder_file_adder.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:root_maps/services/layer_drawer_service.dart';
 import 'package:root_maps/services/qgis/qgs_auto_refresh.dart';
+import 'package:root_maps/utils/app_navigator.dart';
+import 'package:root_maps/widgets/external_layer_actions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -441,6 +446,101 @@ void main() {
       final notes = container.read(notificationCenterProvider);
       expect(notes.single.actionLabel, isNotNull);
     }, skip: skip);
+
+    /// 読み取り専用レイヤ trees.shp（点 3 つ）を開き、アプリの Navigator つきの画面を組む
+    Future<(ProviderContainer, ExternalLayerNode, List<FeatureNode>)> openWithApp(WidgetTester tester) async {
+      final (container, node, features) = (await tester.runAsync(() async {
+        await writePoints(p.join(proj, 'trees'));
+        final root = FolderNode('Home', children: []);
+        await root.updateChildren();
+        final node = root.children.whereType<ExternalLayerNode>().single;
+        await node.updateChildren();
+        final layer = node.children.whereType<LayerNode>().single;
+        await layer.updateChildren();
+        return (ProviderContainer(), node, layer.children.whereType<FeatureNode>().toList());
+      }))!;
+      addTearDown(container.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(navigatorKey: appNavigatorKey, home: const Scaffold()),
+      ));
+      return (container, node, features);
+    }
+
+    /// 本物の入出力（GDAL・sqflite）を待ちながら画面を進める
+    Future<void> settle(WidgetTester tester, bool Function() done) async {
+      for (var i = 0; i < 500 && !done(); i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump();
+      }
+    }
+
+    testWidgets('編集しようとすると「gpkg に変換して編集しますか？」を出す。キャンセルなら読み取り専用のまま', (tester) async {
+      final (container, node, features) = await openWithApp(tester);
+      // 確認の中身（作るファイル名・消すファイル）を調べてからダイアログを出すので、本物の入出力の中で呼ぶ
+      await tester.runAsync(() async => container.read(featureEditorProvider.notifier).start(features.first));
+      await settle(tester, () => find.text(t.externalLayer.editPrompt).evaluate().isNotEmpty);
+
+      expect(find.text(t.externalLayer.editPrompt), findsOneWidget);
+      expect(find.textContaining('trees.gpkg'), findsOneWidget);
+      // 通知には回さない（上に出る通知にはボタンが無く、見落とされていた）
+      expect(container.read(notificationCenterProvider), isEmpty);
+
+      await tester.tap(find.text(t.common.cancel));
+      await tester.pumpAndSettle();
+      expect(find.text(t.externalLayer.editPrompt), findsNothing);
+      expect(container.read(featureEditorProvider), isNull);
+      expect(File(p.join(proj, 'trees.shp')).existsSync(), isTrue);
+      expect(File(p.join(proj, 'trees.gpkg')).existsSync(), isFalse);
+      expect(node.parent, isNotNull);
+    }, skip: skip != null);
+
+    testWidgets('「gpkg に変換」を選ぶと変換し、新しい gpkg の同じ地物で編集に入る', (tester) async {
+      final (container, _, features) = await openWithApp(tester);
+      final target = features[1];
+      await tester.runAsync(() async => container.read(featureEditorProvider.notifier).start(target));
+      await settle(tester, () => find.text(t.externalLayer.editPrompt).evaluate().isNotEmpty);
+
+      await tester.tap(find.widgetWithText(FilledButton, t.externalLayer.convertTitle));
+      await tester.pump();
+      await settle(tester, () => container.read(featureEditorProvider) != null);
+
+      final editing = container.read(featureEditorProvider)!.feature;
+      expect(editing, isNot(same(target)));
+      expect(editing.rowId, target.rowId);
+      expect(readOnlyLayerOf(editing), isNull);
+      expect(editing.parent.geoPackageFile.getAbsolutePath(), p.join(proj, 'trees.gpkg'));
+      expect(container.read(selectedFeaturesProvider), [editing]);
+      expect(container.read(selectedLayerNodeProvider), same(editing.parent));
+      expect(File(p.join(proj, 'trees.shp')).existsSync(), isFalse);
+      // 変換を知らせる（成功の通知）
+      expect(container.read(notificationCenterProvider).map((n) => n.title), [
+        t.externalLayer.converted(name: 'trees.shp', target: 'trees.gpkg'),
+      ]);
+      await tester.runAsync(() async {
+        container.read(featureEditorProvider.notifier).cancel();
+        await editing.geoPackageFile.dispose();
+      });
+    }, skip: skip != null);
+
+    testWidgets('ペンなど続きの決まっていない編集は、変換したレイヤを選び直す', (tester) async {
+      final (container, node, _) = await openWithApp(tester);
+      final layer = node.children.whereType<LayerNode>().single;
+      container.read(selectedLayerNodeProvider.notifier).select(layer);
+      late bool refused;
+      await tester.runAsync(() async => refused = refuseReadOnlyEditBy(container.read, layer));
+      expect(refused, isTrue);
+      await settle(tester, () => find.text(t.externalLayer.editPrompt).evaluate().isNotEmpty);
+      await tester.tap(find.widgetWithText(FilledButton, t.externalLayer.convertTitle));
+      await tester.pump();
+      await settle(tester, () => !identical(container.read(selectedLayerNodeProvider), layer));
+
+      final selected = container.read(selectedLayerNodeProvider)!;
+      expect(readOnlyLayerOf(selected), isNull);
+      expect(selected.layerName, 'trees');
+      expect(selected.geoPackageFile.getAbsolutePath(), p.join(proj, 'trees.gpkg'));
+      await tester.runAsync(selected.geoPackageFile.dispose);
+    }, skip: skip != null);
   });
 
   group('gpkg への変換', () {

@@ -58,7 +58,18 @@ class SelectedFeatures extends _$SelectedFeatures {
   Future<void> disposeSelectedFeatures() async {
     // 読み取り専用レイヤ（shp・GeoJSON など）の地物は消さない（消しゴム・Delete キー・属性表・まとめて削除の共通の口）
     final readOnly = state.where(isInReadOnlyLayer).toList();
-    if (readOnly.isNotEmpty) refuseReadOnlyEditBy(ref.read, readOnly.first);
+    // 変換したら新しい gpkg の同じ地物を選び直す（消すのは選び直してからもう一度。変換に続けて消すことはしない）
+    if (readOnly.isNotEmpty) {
+      refuseReadOnlyEditBy(
+        ref.read,
+        readOnly.first,
+        onConverted: (converted) {
+          if (converted is! FeatureNode) return;
+          ref.read(selectedLayerNodeProvider.notifier).select(converted.parent);
+          set([converted]);
+        },
+      );
+    }
     final features = state.where((n) => !isInReadOnlyLayer(n)).toList();
     AppLogger.debug(
       '[SelectedFeatures] 削除処理開始: ${features.length}個のフィーチャ',

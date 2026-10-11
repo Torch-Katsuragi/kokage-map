@@ -21,6 +21,8 @@
     書き出し元にクラス名・改名/削除の題が「GeoPackage」
   - [ ] Drive: 本物のアプリが Google にサインインしていない（Pixel 9）。`/sdcard/FieldSurvey/flat_trial/Kitayama-2026/Kitayama-2026-demo`（Drive 連携）に
         sjis_cpg 一式・points.kml・IMG_TEST.JPG を置いてある。サインインしたら同期して gws で Drive 側を見る。`.kokage` が上がらないことも
+  - [ ] 編集しようとしたときの確認ダイアログ（2026-10-11 に通知から変更）: 編集ボタン →「gpkg に変換して編集しますか？」→ 変換 → 同じ地物の編集に入る／
+        ペン・GPS 記録 → 変換したレイヤが選ばれてそのまま描ける／属性表 → 表が新しいレイヤに替わる／読み取り専用 Drive フォルダで「自分のフォルダに複製」
   - [ ] 目で見る残り: nodata が透ける・DEM の濃淡・色表付きの色・アプリ製 GeoTIFF の位置合わせ（単体テストは通っている）・大きなオルソの初回 PNG 作成時間
   - [ ] アプリが書く GeoTIFF（オーバーレイ変換）を GDAL が「タグの並びが不正・タイル幅が規格外」と警告する（読めはする）。GDAL で書くように替える
   - web（`tool/web/fetch_gdal_wasm.sh` の後、Chrome で確認）:

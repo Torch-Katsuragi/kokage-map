@@ -112,7 +112,8 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     super.didUpdateWidget(oldWidget);
     // レイヤが変わったとき、または同じレイヤのフィーチャが読み直されたとき
     // （View のフィルタを変えると件数が変わる）は作り直す。
-    if (oldWidget.layer.layerName != widget.layer.layerName ||
+    // レイヤ名でなくノードで比べる（gpkg に変換したレイヤは名前が同じまま別のノードになる）
+    if (!identical(oldWidget.layer, widget.layer) ||
         _loadedRevision != widget.layer.featuresRevision) {
       _controller.removeListener(_onControllerChanged);
       // dispose中のプロバイダ変更を遅延実行

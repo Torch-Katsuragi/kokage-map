@@ -1,5 +1,9 @@
 # Changelog
 
+## Next release
+
+- Layers styled in QGIS as categorized, graduated or rule-based (such as compartments colored by species or stand age) are now drawn feature by feature in the same colors as QGIS, in 2D and 3D. A legend appears in the layer list and the style screen. Colors are still changed in QGIS
+
 ## v0.12.0 — 2026/10/11
 
 ### Open files other than gpkg as they are

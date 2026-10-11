@@ -50,7 +50,7 @@ class KMetaLayerStyle {
   /// QGIS 側で単一シンボル以外（`categorizedSymbol` / `graduatedSymbol` / `RuleRenderer` …）に
   /// 設定されているときの種類。null なら単一シンボル（アプリで色や太さを編集できる）。
   ///
-  /// アプリは描き分けを再現できないので代表の色で描き、`.qgs` のレンダラは触らない（不変条件4）。
+  /// 地物ごとの色は [qgisRendererDef] から決め（読めなければ代表の色）、`.qgs` のレンダラは触らない（不変条件4）。
   /// スタイル画面はこのとき色・太さを編集させない（変えても QGIS に届かず、見た目が食い違うため）
   final String? qgisRenderer;
 

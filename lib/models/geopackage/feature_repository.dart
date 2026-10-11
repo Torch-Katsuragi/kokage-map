@@ -30,6 +30,7 @@ import 'geopackage_connection.dart';
 import 'geopackage_schema.dart';
 import 'spatial_index_manager.dart';
 import 'sql_identifier.dart';
+import 'vertex_z.dart';
 
 /// 地物ごとのメタデータ（JSON）を入れる列。アプリは列を作らない（古いファイルにだけある）
 const metadataColumn = 'kmaps_metadata';
@@ -228,9 +229,53 @@ class FeatureRepository {
   // フィーチャ追加・更新
   // ============================================================
 
-  /// WGS84 の形をレイヤの CRS に移して GeoPackage の WKB にする
-  Future<Uint8List> _toLayerWkb(String tableName, geo.Geometry geom) async =>
-      _encodeInCrs(await _getLayerCrs(tableName), geom);
+  /// WGS84 の形をレイヤの CRS に移して GeoPackage の WKB にする。
+  /// Z・M 付きのレイヤなら頂点の Z・M を付け直す（[VertexZ]）。[rowId] は書き換える行（元の Z・M を引き継ぐ）
+  Future<Uint8List> _toLayerWkb(String tableName, geo.Geometry geom, {int? rowId}) async {
+    final crs = await _getLayerCrs(tableName);
+    final dims = await _layerDims(tableName);
+    if (!dims.isXY) {
+      final original = rowId == null ? null : await _currentGeometryWgs84(tableName, rowId, crs);
+      geom = await VertexZ.apply(geom, dims, original: original, context: '$tableName#${rowId ?? 'new'}');
+    }
+    return _encodeInCrs(crs, geom);
+  }
+
+  /// レイヤの Z・M（`gpkg_geometry_columns`）。読めなければ 2D
+  Future<LayerDims> _layerDims(String tableName) async {
+    try {
+      final db = await connection.getDatabase();
+      final rows = await db.rawQuery(
+        'SELECT z, m FROM gpkg_geometry_columns WHERE table_name = ? COLLATE NOCASE',
+        [tableName],
+      );
+      if (rows.isEmpty) return LayerDims.xy;
+      return LayerDims(z: (rows.first['z'] as num?)?.toInt() ?? 0, m: (rows.first['m'] as num?)?.toInt() ?? 0);
+    } catch (e) {
+      AppLogger.debug('[FeatureRepository] _layerDims: $e');
+      return LayerDims.xy;
+    }
+  }
+
+  /// 行 [rowId] のいまの形（WGS84、Z・M は付いたまま）。無ければ null
+  Future<geo.Geometry?> _currentGeometryWgs84(String tableName, int rowId, GpkgCrsInfo crs) async {
+    try {
+      final db = await connection.getDatabase();
+      final pkColumn = await schema.getPrimaryKeyColumn(tableName);
+      final rows = await db.rawQuery(
+        'SELECT geom FROM ${quoteIdent(tableName)} WHERE ${pkEquals(pkColumn)}',
+        [rowId],
+      );
+      final blob = rows.isEmpty ? null : rows.first['geom'] as Uint8List?;
+      if (blob == null) return null;
+      final g = parseGpkgGeometry(blob);
+      if (g == null || crs.isWgs84 || crs.projection == null) return g;
+      return GeometryReprojector.reprojectToWgs84(g, crs.projection!, needsAxisSwap: crs.needsAxisSwap);
+    } catch (e) {
+      AppLogger.debug('[FeatureRepository] _currentGeometryWgs84: $e');
+      return null;
+    }
+  }
 
   Uint8List _encodeInCrs(GpkgCrsInfo crs, geo.Geometry geom) {
     final target = (!crs.isWgs84 && crs.projection != null)
@@ -297,7 +342,7 @@ class FeatureRepository {
     required Map<String, dynamic>? metadata,
   }) async {
     await _prepareForWrite(tableName);
-    final wkb = await _toLayerWkb(tableName, geom);
+    final wkb = await _toLayerWkb(tableName, geom, rowId: id);
     final ok = await _updateFeatureGeometry(
       tableName,
       id,
@@ -699,11 +744,14 @@ class FeatureRepository {
       final wkbs = <Uint8List>[];
       // 移す先のレイヤの CRS に合わせる（WGS84 のまま書くと別の CRS のレイヤで位置がずれる）
       final crs = await _getLayerCrs(tableName);
+      // Z・M 付きのレイヤなら頂点の Z を標高から（新しい地物なので元の Z は無い）
+      final dims = await _layerDims(tableName);
 
       final tableColumns = await schema.getTableColumns(tableName);
       final tableColumnSet = tableColumns.map((c) => c.toLowerCase()).toSet();
 
-      for (final (geometry, data) in items) {
+      for (final (geom, data) in items) {
+        final geometry = dims.isXY ? geom : await VertexZ.apply(geom, dims, context: '$tableName#new');
         final wkb = _encodeInCrs(crs, geometry);
         wkbs.add(wkb);
         final insertData = <String, dynamic>{'geom': wkb};

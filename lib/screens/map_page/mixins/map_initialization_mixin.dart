@@ -36,6 +36,7 @@ import '../../../models/nodes/layer_tree_node.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/project_providers.dart';
 import '../../../providers/ui_state_providers.dart';
+import '../../../services/dem_elevation.dart';
 import '../../../services/google_drive/index.dart';
 import '../../../services/qgis/qgs_read_back.dart';
 import '../../../utils/app_logger.dart';
@@ -206,6 +207,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   Future<void> initializeBaseMapService() async {
     try {
       await baseMapService.initialize();
+      // Z 付きレイヤへ書く頂点の標高は 3D 地形と同じ標高タイル（同じキャッシュ）から引く
+      installDemElevationLookup(baseMapService);
       // 基図の切替は 3D 地図面（TerrainMapLayer）が baseMapService を直接購読して追従する
       triggerSetState(() => baseMapReady = true);
       AppLogger.debug('[Init] BaseMap ready');

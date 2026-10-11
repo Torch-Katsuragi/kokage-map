@@ -31,8 +31,6 @@
       直した: KMZ が開けない（2 件）・変換後の .qgs（2 件）・書き出しダイアログの型名
     - [ ] 残り: 選んだフォルダ（File System Access）・ドロップ・本番の `content-encoding`。LIBKML 製の KMZ（doc.kml が NetworkLink だけ）は読めない（未対応のまま）
     - ⚠ Claude の内蔵ブラウザ（Electron）では SharedWorker から fetch できず sqflite が全部落ちる（gpkg が一切開けない）。web の確認は Chrome で
-- [ ] Z 付きのレイヤを変換した gpkg をアプリで編集すると Z が落ちるはず（`createGpkgWkb` は XY だけ書く。gpkg の z=1 は「必須」）。
-      QGIS 製の Z 付き gpkg も同じ。編集した地物の Z をどうするか（元の Z を保つ／0 で埋める）決めて直す
 
 ## リリース・Play
 

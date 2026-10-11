@@ -57,6 +57,7 @@ import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/basemap_service.dart';
+import '../../../services/dem_elevation.dart';
 import '../../../tools/gps_tool.dart';
 import '../../../tools/map_tool.dart';
 import '../../../tools/overlay_transform_tool.dart';
@@ -146,22 +147,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   /// 傾きの上限。正射影では 90° で地面が線に潰れる（横顔になる）ので手前で止める。
   /// 寝かせるほど画面に掛かる地面が広がり、計画が段を下げて粗くなる（枚数は上限内に収まる）
   static const _maxPitchDeg = 75.0;
-
-  /// 標高タイルのソースごとの擬似プロバイダ（背景地図と同じ MBTiles キャッシュに入る。祖先フォールバックはしない）
-  static final Map<String, BaseMapProvider> _terrainProviders = {
-    for (final s in DemTileSource.defaultCascade)
-      s.id: BaseMapProvider(
-        id: s.id,
-        name: s.id,
-        description: '標高タイル ${s.id}',
-        urlTemplate: s.urlTemplate,
-        attribution: s.attribution,
-        minZoom: s.minZoom,
-        maxZoom: s.maxZoom,
-        type: BaseMapType.terrain,
-        icon: Icons.terrain,
-      ),
-  };
 
   /// デコード済みタイル画像。3D を出入りしても使い回す（256 枚 ≒ 64MB 上限）
   static final _tileImages = TileImageCache(capacity: 256); // 256² RGBA × 256 ≈ 64MB（細かい段は 1 タイル 16 枚 × 層）
@@ -306,7 +291,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     widget.baseMapService.registerTileGenerator(BaseMapProvider.contourOverlay.id, _renderContourTile);
     _world = TerrainWorld(
       demSources: DemTileSource.defaultCascade,
-      demFetcher: (source, z, x, y) => widget.baseMapService.getTile(_terrainProviders[source.id]!, z, x, y),
+      // 標高タイルは背景地図と同じ MBTiles キャッシュに入る（Z 付きレイヤの頂点の標高も同じ取り方: dem_elevation.dart）
+      demFetcher: baseMapDemFetcher(widget.baseMapService),
       // 基図は設定で変わりうるので、取りに行くたびに今のものを見る
       textureFetcher: (z, x, y) {
         final b = _basemap;

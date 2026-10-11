@@ -126,19 +126,22 @@ class GeometryReprojector {
     }
 
     final result = source.transform(target, Point(x: srcX, y: srcY));
+    // Z・M は水平の変換と関係ないのでそのまま運ぶ（Z 付きのレイヤを編集して書き戻すときに要る）
+    final z = pos.optZ;
+    final m = pos.optM;
 
     if (toWgs84) {
       // 結果は地理座標（lon/lat）→ Geographic が正しい
-      return geo.Geographic(lon: result.x, lat: result.y);
+      return geo.Geographic(lon: result.x, lat: result.y, elev: z, m: m);
     }
 
     // 結果は投影座標（メートル等）→ Projected を使う
     // Geographic に入れると正規化/クランプで値が破壊される
     if (needsAxisSwap) {
       // 北から並ぶ Projection の結果 (N, E) を保存の (E, N) に戻す
-      return geo.Projected(x: result.y, y: result.x);
+      return geo.Projected(x: result.y, y: result.x, z: z, m: m);
     }
-    return geo.Projected(x: result.x, y: result.y);
+    return geo.Projected(x: result.x, y: result.y, z: z, m: m);
   }
 
   /// Positionリストを一括変換

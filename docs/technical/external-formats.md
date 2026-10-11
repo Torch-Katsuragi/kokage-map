@@ -50,8 +50,10 @@ tags: [technical, geopackage, qgis, interop, import]
 1. `ogrinfo -json -so`（`vectorInfo`）でレイヤと形の型・件数を見る。形の無いレイヤは飛ばす
 2. 型が `Geometry`（混在）・`GeometryCollection` のレイヤは、`-where "OGR_GEOMETRY IN (...)"` で点・線・面ごとに数え、
    2 種以上あれば分ける（1 種だけなら名前はそのまま）。GeometryCollection の地物は落ちる
-3. レイヤごとに `ogr2ogr -f GPKG [-update] -nlt MULTIPOINT|MULTILINESTRING|MULTIPOLYGON -dim XY -nln <名前> [-where …] <元> <GDAL のレイヤ名>`。
-   **`-t_srs` は付けない**（元の CRS のまま。アプリは投影座標系の gpkg を描ける・選べる）。Z・M は落とす（`-dim XY`）
+3. レイヤごとに `ogr2ogr -f GPKG [-update] -nlt MULTIPOINT|MULTILINESTRING|MULTIPOLYGON -dim <元の次元> -nln <名前> [-where …] <元> <GDAL のレイヤ名>`。
+   **`-t_srs` は付けない**（元の CRS のまま。アプリは投影座標系の gpkg を描ける・選べる）。
+   Z・M は元のまま（`-dim XYZ` など。`-nlt` で型を決めると `-dim layer_dim` が効かず高さが落ちるので、元のレイヤの型から決めて渡す。2026-10-11）。
+   変換した gpkg を編集したときの Z は下の「Z・M 付きのレイヤの編集」
 4. 印の表 `kokage_external_source` に `signature`（`GDALGetFileList` の一式の名前・更新時刻・大きさ＋`formatVersion`）・`source`・
    `layers`（キャッシュのレイヤ → 元の GDAL のレイヤ名・分けた型・件数。`.qgs` の `|layername=` `|geometrytype=` に使う）
 
@@ -109,6 +111,29 @@ tags: [technical, geopackage, qgis, interop, import]
    ⚠ 鍵を持たないレイヤでは移し替えが何も書かず、以前はそれが唯一の合図だったので `.qgs` が元を指したまま残った（2026-10-11）
 
 変換後の座標系は **元のまま**（キャッシュが ogr2ogr の出力で、それを複製するので。2026-10-10〜）。
+
+### Z・M 付きのレイヤの編集（2026-10-11 決定）
+
+Z 付きの shp を変換した gpkg や QGIS で作った Z 付きの gpkg（`gpkg_geometry_columns.z` が 1＝必須・2＝任意）を編集しても Z を落とさない。
+編集の道具は緯度経度（2D）で動くので、書く直前に頂点ごとの Z・M を付け直す（`lib/models/geopackage/vertex_z.dart` の `VertexZ.apply`、
+呼ぶのは `FeatureRepository` の書き込み口 `_toLayerWkb`・`addGeometries`）。
+
+| 頂点 | Z | M（`m`=1、または `m`=2 で元に M があるとき） |
+|---|---|---|
+| 動かしていない（書き換える前の形に同じ位置の頂点がある） | 元の Z | 元の M |
+| 動かした・足した・新しい地物 | 標高タイル（3D 地形と同じ。DEM1A → 5A → 10B → AWS） | 0 |
+| 標高が引けない（オフラインでキャッシュに無い・範囲外） | 0（ログ `[VertexZ]`） | 0 |
+
+- 「動かしていない」の判定は **位置の一致**（差 1e-9 度以内）。書き換える前の行の形を読み、レイヤの CRS → WGS84 に移して（Z・M は運ぶ。
+  `GeometryReprojector` は Z・M をそのまま通す）、新しい頂点と位置で突き合わせる。編集の道具は動かしていない頂点を同じ値のまま返すので、
+  頂点を足して番号がずれても当たる。編集の型（`List<LatLng>`）に Z を持たせる案は、道具・Undo・スナップを全部触ることになるので採らなかった
+- 標高は `DemPointSampler`（`lib/core/terrain/dem_point_sampler.dart`）が点ごとに、各ソースの最大ズームのタイル 1 枚を取ってタイル内を双一次補間する。
+  タイルは 3D 地形と同じ `BaseMapService.getTile`（MBTiles キャッシュ → ネット）で取るので、3D で見た辺りならオフラインでも引ける。
+  PNG の展開は `TerrainWorker`（UI を止めない）。引き方は地図の初期化で `installDemElevationLookup`（`lib/services/dem_elevation.dart`）が
+  `VertexZ.elevationLookup` に入れる（テストは偽物を差す）
+- WKB は ISO の型番号（Z: 1001〜、M: 2001〜、ZM: 3001〜）で geobase が書く。GPB ヘッダーの範囲は XY のまま（仕様上どれでもよい）
+- 2D のレイヤ（z=0・m=0）は従来どおり XY だけ書き、標高も引かない
+- テスト: `test/gpkg_z_edit_test.dart`（GDAL で作った Z 付き gpkg を編集し、GDAL で `MultiLineStringZ` のまま読めて Z が合う）
 
 ### `.qgs` との往復
 

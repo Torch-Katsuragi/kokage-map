@@ -1,9 +1,9 @@
-// 更新履歴（図解）: 次のリリース。tool/changelog/build.py が切れごとの SVG に書き出す
+// 更新履歴（図解）: v0.12.0。tool/changelog/build.py が切れごとの SVG に書き出す
 #import "lib.typ": *
 #show: page-setup
 
 #hero(
-  "次のリリース",
+  "v0.12.0 — 2026/10/11",
   [フォルダはアプリの中で選ぶ],
   [ホームの「フォルダを選んで開く」は、端末のファイル選択ではなく、いつもの地図の中のフォルダをレイヤ一覧と同じ見た目でたどります。外の場所は右上のメニューから選べます。],
   box(width: 150pt, fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 0pt, clip: true, {

@@ -1,9 +1,9 @@
-// Changelog (illustrated): next release. tool/changelog/build.py writes it out as SVG chunks
+// Changelog (illustrated): v0.12.0. tool/changelog/build.py writes it out as SVG chunks
 #import "lib.typ": *
 #show: page-setup.with(lang: "en")
 
 #hero(
-  "Next release",
+  "v0.12.0 — 2026/10/11",
   [Choose folders inside the app],
   ["Choose a folder to open" on Home browses the folders inside your everyday map, styled like the layer panel, instead of the device's file picker. Places outside it are in the top-right menu.],
   box(width: 150pt, fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 0pt, clip: true, {

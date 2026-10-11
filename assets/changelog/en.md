@@ -1,6 +1,6 @@
 # Changelog
 
-## Next release
+## v0.12.0 — 2026/10/11
 
 ### Open files other than gpkg as they are
 

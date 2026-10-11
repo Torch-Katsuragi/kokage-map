@@ -1,5 +1,17 @@
 # Changelog
 
+## Next release
+
+### Fixed
+
+- On a device whose app data had been cleared or reinstalled, syncing a Drive-linked folder listed files that exist on both the device and the cloud with the cloud side checked, and syncing as shown overwrote newer files on the device with older cloud copies. Files with identical contents are now left alone; differing ones are shown as a single row with the more recently modified side selected and the note "On both sides — check which is newer". Auto-sync leaves these files for you to decide
+- When "Keep device" was chosen in sync and the file's folder could not be found on Drive, the file was uploaded to the top of the Drive folder. It is now not uploaded, and a notification tells you
+
+### Lighter
+
+- Downloading from Drive no longer re-downloads every file each time; only changed files are downloaded. A file that another device re-uploaded with the same contents no longer counts as changed
+- Auto-sync no longer rebuilds its Drive connection every cycle, and no longer reloads map layers when nothing changed
+
 ## v0.12.0 — 2026/10/11
 
 ### Open files other than gpkg as they are

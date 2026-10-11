@@ -141,11 +141,15 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
     await _refreshTreeNo();
   }
 
+  /// 次の番号を読み直した回数。待つ間に標準地を切り替えたり記録したりしたら、古い読みで番号を上書きしない
+  int _treeNoGen = 0;
+
   Future<void> _refreshTreeNo() async {
     final plot = _plot;
     if (plot == null) return;
+    final gen = ++_treeNoGen;
     final n = await _layers.nextTreeNo(plot.plotId);
-    if (mounted) setState(() => _treeNo = n);
+    if (mounted && gen == _treeNoGen) setState(() => _treeNo = n);
   }
 
   @override
@@ -176,7 +180,7 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
         ],
       ),
     );
-    if (areaHa == null) return;
+    if (areaHa == null || !mounted) return;
     setState(() => _busy = true);
     try {
       final gps = ref.read(gpsManagerServiceProvider);
@@ -215,7 +219,7 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
     );
     controller.dispose();
     final s = name?.trim() ?? '';
-    if (s.isEmpty) return;
+    if (s.isEmpty || !mounted) return;
     setState(() {
       if (!_species.contains(s)) _species.add(s);
       _selectedSpecies = _lastSpecies = s;
@@ -305,7 +309,11 @@ class _TreeTallySheetState extends ConsumerState<TreeTallySheet> {
         _note.clear();
         _truPulseHeight = null;
         _offset = null;
-        _treeNo++;
+        // GPS を待つ間に別の標準地へ切り替えていたら、その標準地の番号（切り替えで読み直した）はそのまま
+        if (_plot?.plotId == plot.plotId) {
+          _treeNo++;
+          _treeNoGen++; // 記録の前に頼んだ読み直しは古い
+        }
       });
     } finally {
       if (mounted) setState(() => _busy = false);

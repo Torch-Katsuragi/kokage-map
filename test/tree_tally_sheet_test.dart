@@ -1,9 +1,11 @@
-// 毎木調査の集計: 材積式の地域を続けて切り替えたとき、先に頼んだ遅い集計が新しい集計を上書きしない
+// 毎木調査: 材積式の地域を続けて切り替えたとき、先に頼んだ遅い集計が新しい集計を上書きしない。
+// 標準地を続けて切り替えたとき、前の標準地の次の番号が今の標準地の番号を上書きしない
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:root_maps/i18n/strings.g.dart';
 import 'package:root_maps/services/tree_tally/stem_volume.dart';
 import 'package:root_maps/services/tree_tally/tree_tally_stats.dart';
@@ -19,6 +21,25 @@ class _FakeLayers implements TreeTallyLayers {
   Future<List<PlotTally>> summarize({double? Function(TallyTree)? volume}) {
     final c = Completer<List<PlotTally>>();
     calls.add(c);
+    return c.future;
+  }
+
+  final plotList = const [
+    TallyPlot(plotId: 'P1', areaM2: 500, center: LatLng(34, 136)),
+    TallyPlot(plotId: 'P2', areaM2: 500, center: LatLng(34, 136.001)),
+  ];
+  final treeNoCalls = <(String, Completer<int>)>[];
+
+  @override
+  Future<List<TallyPlot>> loadPlots() async => plotList;
+
+  @override
+  Future<List<String>> usedSpecies() async => const [];
+
+  @override
+  Future<int> nextTreeNo(String plotId) {
+    final c = Completer<int>();
+    treeNoCalls.add((plotId, c));
     return c.future;
   }
 
@@ -87,5 +108,30 @@ void main() {
     expect(find.text('NEW'), findsOneWidget);
     expect(find.text('OLD'), findsNothing);
     expect(tester.widget<TextButton>(save).onPressed, isNotNull);
+  });
+
+  testWidgets('標準地を続けて切り替えても、前の標準地の番号で上書きしない', (tester) async {
+    final layers = _FakeLayers();
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(home: Scaffold(body: TreeTallySheet(layers: layers))),
+    ));
+    await tester.pumpAndSettle();
+    // 開いたときは最後の標準地（P2）の番号を読む。まだ返さないうちに P1 へ切り替える
+    expect(layers.treeNoCalls.map((c) => c.$1), ['P2']);
+    await tester.tap(find.byType(DropdownButton<TallyPlot>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('P1').last);
+    await tester.pumpAndSettle();
+    expect(layers.treeNoCalls.map((c) => c.$1), ['P2', 'P1']);
+
+    // P1 の番号が先に、P2 の番号があとから返る
+    layers.treeNoCalls[1].$2.complete(5);
+    await tester.pumpAndSettle();
+    layers.treeNoCalls[0].$2.complete(9);
+    await tester.pumpAndSettle();
+    expect(find.text(t.treeTally.treeNo(n: '5')), findsOneWidget);
+    expect(find.text(t.treeTally.treeNo(n: '9')), findsNothing);
   });
 }

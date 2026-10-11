@@ -47,8 +47,6 @@ dependencies:
   archive: ^4.3.0 # .qgz（zip 形式の QGIS プロジェクト）の読み取り用
   proj4dart: ^2.1.0  # 座標変換用（geobase ^1.5.0 が ^2.0.0 を要求するため据え置き）
   desktop_drop: ^0.8.4  # デスクトップでのファイルドラッグ&ドロップ用
-  charset_converter: ^2.3.0  # Shift_JIS等の文字コード変換用（ネイティブAPI使用）
-  charset: ^2.0.1  # 純粋Dart実装の文字コード変換（Shift-JIS, EUC-JP対応）
   
   # オフライン機能・キャッシュ用パッケージ
   path_provider: ^2.1.4              # アプリディレクトリ取得用

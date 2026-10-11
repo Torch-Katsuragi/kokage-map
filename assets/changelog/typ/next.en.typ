@@ -29,6 +29,7 @@
   [Folders get "Add files" (long-press and +, Android and web)],
   [A GeoPackage left empty by a move is deleted],
   [Drive sync now carries Shapefile sets, KML, CSV and more; upper-case extensions too],
+  [Export goes through GDAL like QGIS: every attribute, CRS kept],
 )
 
 #fixes(

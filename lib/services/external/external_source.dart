@@ -318,6 +318,9 @@ class ExternalSource {
         // 表示とヒットテストは XY だけ見る）
         '-nlt', layer.geometryType.value,
         '-dim', 'layer_dim',
+        // CSV は座標系を持たない（GDAL は未定義の srs 99999 で書く）。経度・緯度の列だけ受けるので WGS84 と決める
+        // （2026-10-11 Pixel 9 で見つけた）
+        if (p.extension(path).toLowerCase() == '.csv') ...['-a_srs', 'EPSG:4326'],
         '-nln', layer.name,
         if (layer.where != null) ...['-where', layer.where!],
         layer.sourceLayer,

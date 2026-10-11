@@ -230,6 +230,8 @@ void main() {
       expect(columns, isNot(contains('経度')), reason: 'KEEP_GEOM_COLUMNS=NO');
       final db = await trees.geoPackageFile.getDatabase();
       expect((await db.rawQuery('SELECT dbh FROM trees ORDER BY fid')).first['dbh'], 32, reason: 'AUTODETECT_TYPE=YES');
+      final srs = await db.rawQuery("SELECT srs_id FROM gpkg_geometry_columns WHERE table_name = 'trees'");
+      expect(srs.first['srs_id'], 4326, reason: 'CSV は座標系を持たないので WGS84 と決める（未定義の 99999 にしない）');
     }, skip: skip);
   });
 

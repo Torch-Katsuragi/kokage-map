@@ -7,13 +7,21 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geobase/geobase.dart' as geo;
+import 'package:root_maps/core/terrain/dem_grid.dart';
+import 'package:root_maps/core/terrain/terrain_camera.dart';
+import 'package:root_maps/core/terrain/terrain_mesh.dart';
+import 'package:root_maps/core/terrain/terrain_scene.dart';
+import 'package:root_maps/core/terrain/web_mercator.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/models/nodes/view_node.dart';
+import 'package:root_maps/models/qgis_renderer.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:turf/turf.dart' as turf;
 
@@ -179,6 +187,148 @@ void main() {
         reason: 'グループが無いのにキーだけ残ると、フィーチャに無駄な属性が載る');
   });
 
+
+  // QGIS の分類のレンダラを持つ View は、地物の属性で色を分ける（.qgs の描き分けの再現。2026-10-11）
+  group('QGIS の描き分け', () {
+    const sugi = Color(0xFF33A02C);
+    const hinoki = Color(0xFF1F78B4);
+    const other = Color(0xFF969696);
+    final categorized = QgisRenderer(
+      kind: QgisRendererKind.categorized,
+      attr: '樹種',
+      classes: const [
+        QgisRendererClass(label: 'スギ', values: ['スギ'], style: KMetaLayerStyle(pointColor: sugi)),
+        QgisRendererClass(label: 'ヒノキ', values: ['ヒノキ'], style: KMetaLayerStyle(pointColor: hinoki, pointSize: 9)),
+        QgisRendererClass(label: 'マツ', values: ['マツ'], render: false, style: KMetaLayerStyle(pointColor: Color(0xFFFF0000))),
+        QgisRendererClass(label: 'その他', style: KMetaLayerStyle(pointColor: other)),
+      ],
+    );
+    const species = ['スギ', 'ヒノキ', 'マツ', '広葉樹'];
+
+    void seedSpecies() {
+      for (var fid = 1; fid <= 12; fid++) {
+        layer.addFeatureToMap(
+          fid,
+          turf.Feature<turf.Point>(
+            geometry: turf.Point(coordinates: turf.Position(135.965 + fid * 0.0003, 33.927)),
+            properties: {'樹種': species[(fid - 1) % 4]},
+          ),
+        );
+      }
+    }
+
+    test('分類ごとに別のスタイルグループに振り分け、描かない分類は隠す', () async {
+      seedSpecies();
+      layer.views.add(ViewNode(
+        name: '既定',
+        parent: layer,
+        style: KMetaLayerStyle(pointColor: sugi, qgisRenderer: 'categorizedSymbol', qgisRendererDef: categorized),
+      ));
+      await layer.refreshStyleGroups();
+
+      final base = key('既定');
+      expect(layer.styleKeyOf(1), '$base#0');
+      expect(layer.styleKeyOf(2), '$base#1');
+      expect(layer.styleKeyOf(4), '$base#3', reason: '広葉樹は「その他」');
+      expect(layer.rendererHiddenRowIds, {3, 7, 11}, reason: 'マツはチェックを外してある');
+      expect(layer.styleGroups['$base#1']!.pointColor, hinoki);
+      expect(layer.styleGroups['$base#1']!.pointSize, 9);
+      expect(layer.styleGroupRank('$base#1'), layer.styleGroupRank(base), reason: '同じ View の中は並べ替えない');
+
+      // 属性を直したら、その地物だけ選び直す
+      layer.updateFeatureAttribute(3, '樹種', 'ヒノキ');
+      expect(layer.styleKeyOf(3), '$base#1');
+      expect(layer.rendererHiddenRowIds, isNot(contains(3)));
+      layer.updateFeatureAttribute(1, '樹種', 'マツ');
+      expect(layer.rendererHiddenRowIds, contains(1));
+
+      // 3D の地図面（TerrainSceneBuilder）に流すと、分類ごとに別の色の点になる
+      const lon0 = 135.965;
+      const lat0 = 33.925;
+      final originX = WebMercator.xFromLon(lon0);
+      final originY = WebMercator.yFromLat(lat0);
+      final dem = DemGrid(
+        cols: 101,
+        rows: 101,
+        originX: originX,
+        originY: originY,
+        cellSize: 10,
+        heights: Float32List(101 * 101),
+      );
+      final mesh = TerrainMesh.build(
+        dem,
+        TerrainCamera(centerX: originX + 500, centerY: originY + 500, scale: 1),
+        textureWidth: 4,
+        textureHeight: 4,
+        chunkSize: 25,
+      );
+      final builder = TerrainSceneBuilder(
+        mesh: mesh,
+        stylesByKey: {
+          for (final MapEntry(:key, :value) in layer.styleGroups.entries)
+            key: TerrainFeatureStyle(
+              lineColor: TerrainFeatureStyle.fallback.lineColor,
+              lineWidth: 1,
+              fillColor: TerrainFeatureStyle.fallback.fillColor,
+              outlineColor: TerrainFeatureStyle.fallback.outlineColor,
+              outlineWidth: 1,
+              pointColor: value.pointColor!,
+              pointSize: value.pointSize ?? 6,
+            ),
+        },
+      );
+      final scene = builder.build(points: [
+        for (var fid = 2; fid <= 12; fid++)
+          if (!layer.rendererHiddenRowIds.contains(fid))
+            geo.Feature<geo.Point>(
+              geometry: geo.Point(geo.Geographic(lon: lon0 + fid * 0.0003, lat: lat0 + 0.002)),
+              properties: {'k-style': layer.styleKeyOf(fid)},
+            ),
+      ]);
+      expect(scene.points.map((p) => p.color).toSet(), {sugi, hinoki, other});
+      expect(scene.points, hasLength(9), reason: 'マツの 2 件（7, 11）は描かない。3 は直してヒノキ');
+    });
+
+    test('1 万件の振り分け（地物の読み込み・スタイル変更のたびに 1 回）', () async {
+      for (var fid = 1; fid <= 10000; fid++) {
+        layer.addFeatureToMap(
+          fid,
+          turf.Feature<turf.Point>(
+            geometry: turf.Point(coordinates: turf.Position(135.965, 33.927)),
+            properties: {'樹種': species[fid % 4], '林齢': fid % 90},
+          ),
+        );
+      }
+      layer.views.add(ViewNode(
+        name: '既定',
+        parent: layer,
+        style: KMetaLayerStyle(qgisRenderer: 'categorizedSymbol', qgisRendererDef: categorized),
+      ));
+      final sw = Stopwatch()..start();
+      await layer.refreshStyleGroups();
+      // ignore: avoid_print
+      print('refreshStyleGroups 1 万件: ${sw.elapsedMilliseconds}ms');
+      expect(layer.styleKeyByRowId.length + layer.rendererHiddenRowIds.length, 10000);
+      expect(sw.elapsedMilliseconds, lessThan(1000));
+    });
+
+    test('式が読めない描き分けは代表の色（View のスタイル）で全部描く', () async {
+      seedSpecies();
+      final broken = QgisRenderer(
+        kind: QgisRendererKind.rule,
+        classes: const [QgisRendererClass(label: 'x', style: KMetaLayerStyle(pointColor: hinoki))],
+        rules: const [QgisRule(filter: r'$area > 1', classIndex: 0)],
+      );
+      layer.views.add(ViewNode(
+        name: '既定',
+        parent: layer,
+        style: KMetaLayerStyle(pointColor: sugi, qgisRenderer: 'RuleRenderer', qgisRendererDef: broken),
+      ));
+      await layer.refreshStyleGroups();
+      expect(layer.styleKeyByRowId.values.toSet(), {key('既定')});
+      expect(layer.rendererHiddenRowIds, isEmpty);
+    });
+  });
 }
 
 /// GeoPackage のジオメトリBLOB（ヘッダ + WKB Point）

@@ -238,6 +238,17 @@ Tap any cell in the attribute table to edit its value directly. Text and numeric
 
 If you set up a layer's attribute form in QGIS on your PC (Layer Properties → Attributes Form), the app's inputs follow it. Value maps become a list to choose from and dates are picked from a calendar. Aliases become field names, and default values are filled in for new features. A feature is not saved while it breaks a constraint such as "Not null" (constraints that are not enforced only show a warning). Change the settings in QGIS.
 
+### Joining tables such as a stand register
+
+Put a CSV file without coordinate columns (such as a stand register, UTF-8 or Shift_JIS) in a folder and it appears in the layer list as a :icon-table_chart: table. Tap it to view its contents.
+
+Long-press the forest-plan layer → "Join table" and choose the table, the fields to match (for example the layer's compartment code and the table's), the fields to add and a field name prefix (`<table name>_` by default). The number of matching features is shown as you choose. Joined fields appear at the right of the attribute table with :icon-link: (read-only), and can be used in labels, QGIS-styled colors, attribute search and export ("Include joined table fields").
+
+- This is the same as a QGIS join. It is written to the .qgs so QGIS shows the join too, and joins set up in QGIS are read back
+- Matching is **exact**, as in QGIS (the integer 12 matches the text "12"). If codes mix full-width and half-width digits, turn on "Ignore full/half width and surrounding spaces". QGIS does not do this, so some features will not be joined there
+- If compartment and sub-compartment are separate columns, make a single code column (such as "12-1") on both sides first. Joins use one field on each side, as in QGIS
+- Joined fields cannot be used in the attribute table filter expression
+
 ### Filtering, Search & Replace
 
 - **Filter**: Use QGIS-style filter expressions to narrow down data (e.g., `"area" > 100`).

@@ -202,23 +202,25 @@ class FeatureDetailPanel extends ConsumerWidget {
       final node = feature as FeatureNode; // dynamic のフィールドは is で昇格しない
       final infoMap = node.infoMap;
       // 形の列（名前は表ごと）は属性に入っていない。geom という名前のふつうの列は出す
+      // メタデータの列は infoMap に入っていない（以前は名前に metadata を含む列をすべて隠していた）
       const hiddenKeys = {'sub_table'};
       final filteredEntries =
           infoMap.entries
               .where((entry) =>
-                  !entry.key.toLowerCase().contains('metadata') &&
                   !hiddenKeys.contains(entry.key) &&
                   // 写真の列は下の縮図で出す
                   !FeaturePhotoPaths.isPhotoColumn(entry.key))
               .toList();
 
       // 長さ・面積・周長（WGS84 楕円体の上で測る。投影座標系のレイヤも読み込み時に WGS84 へ直してある）
+      // 続けて計算した情報（座標・頂点数・記録の時間）。属性とは別に出す（同名の列の値を隠さない）
       final measures = <(String, String)>[
         if (node is LineFeatureNode) (t.featureDetail.lengthLabel, Geodesic.formatLength(node.length)),
         if (node is PolygonFeatureNode) ...[
           (t.featureDetail.areaLabel, Geodesic.formatArea(node.area)),
           (t.featureDetail.perimeterLabel, Geodesic.formatLength(node.perimeter)),
         ],
+        ...node.computedInfo,
       ];
 
       final children = <Widget>[

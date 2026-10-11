@@ -208,7 +208,7 @@ class FeatureSearch {
     var truncated = false;
     for (final layer in layers) {
       if (layer.isDisposed) continue;
-      List<Map<String, Object?>> rows;
+      List<({int id, Map<String, Object?> values})> rows;
       try {
         rows = await layer.geoPackageFile.searchAttributeRows(layer.layerName, forms, limit: perLayer);
       } catch (e) {
@@ -224,11 +224,10 @@ class FeatureSearch {
       final byId = {for (final f in layer.features) f.rowId: f};
       final hitIds = <int>{};
       for (final row in rows) {
-        final f = byId[row['__id']];
+        final f = byId[row.id];
         if (f == null) continue;
         FeatureSearchHit? best;
-        for (final e in row.entries) {
-          if (e.key == '__id') continue;
+        for (final e in row.values.entries) {
           final r = rankOf(e.value, n);
           if (r != null && (best == null || r < best.rank)) {
             best = FeatureSearchHit(layer: layer, feature: f, column: e.key, value: e.value.toString(), rank: r);

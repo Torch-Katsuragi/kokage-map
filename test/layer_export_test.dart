@@ -65,29 +65,27 @@ void main() {
     await g.addLayer('pts', GeometryType.point);
     await g.addAttributeColumns('pts', attrs);
     await g.addPointsBatch('pts', [
-      {'point': const LatLng(33.91, 135.97), 'name': '杉', 'description': '樹高 "高い", 太い', 'h': 21.5, 'n': 3, '樹種': 'スギ'},
-      {'point': const LatLng(33.92, 135.98), 'name': 'hinoki', 'h': null, 'n': 7, '樹種': 'ヒノキ'},
-      {'point': const LatLng(33.93, 135.99), 'name': null, 'description': 'line\nbreak', 'h': 0.125},
+      (const LatLng(33.91, 135.97), {'name': '杉', 'description': '樹高 "高い", 太い', 'h': 21.5, 'n': 3, '樹種': 'スギ'}),
+      (const LatLng(33.92, 135.98), {'name': 'hinoki', 'h': null, 'n': 7, '樹種': 'ヒノキ'}),
+      (const LatLng(33.93, 135.99), {'name': null, 'description': 'line\nbreak', 'h': 0.125}),
     ]);
     await g.addLayer('lns', GeometryType.linestring);
     await g.addAttributeColumns('lns', attrs);
     await g.addLinesBatch('lns', [
-      {
-        'line': const [LatLng(33.90, 135.90), LatLng(33.91, 135.91), LatLng(33.905, 135.93)],
+      (const [LatLng(33.90, 135.90), LatLng(33.91, 135.91), LatLng(33.905, 135.93)], {
         'name': '林道 A',
         'h': 3.0,
-      },
+      }),
     ]);
     await g.addLayer('pls', GeometryType.polygon);
     await g.addAttributeColumns('pls', attrs);
     await g.addPolygonsBatch('pls', [
-      {
-        'rings': const [
+      (const [
           [LatLng(33.0, 135.0), LatLng(33.0, 135.1), LatLng(33.1, 135.1), LatLng(33.1, 135.0)],
-        ],
+        ], {
         'name': '小班 1-い',
         'n': 10,
-      },
+      }),
     ]);
     await g.flushChanges();
     await g.dispose();
@@ -195,28 +193,26 @@ void main() {
     await g.addLayer('pts', GeometryType.point);
     await g.addAttributeColumns('pts', {'name': 'TEXT', 'kmaps_metadata': 'TEXT'});
     await g.addPointsBatch('pts', [
-      {
-        'point': const LatLng(33.91, 135.97),
+      (const LatLng(33.91, 135.97), {
         'name': 'rtk',
         'kmaps_metadata': meta([
           {'source': 'GNSS', 'fix': 'rtk_fixed', 'sats': 12, 'hacc': 0.02, 'avg_n': 10},
         ]),
-      },
-      {'point': const LatLng(33.92, 135.98), 'name': 'none'},
-      {'point': const LatLng(33.93, 135.99), 'name': 'broken', 'kmaps_metadata': '{not json'},
+      }),
+      (const LatLng(33.92, 135.98), {'name': 'none'}),
+      (const LatLng(33.93, 135.99), {'name': 'broken', 'kmaps_metadata': '{not json'}),
     ]);
     await g.addLayer('lns', GeometryType.linestring);
     await g.addAttributeColumns('lns', {'name': 'TEXT', 'kmaps_metadata': 'TEXT'});
     await g.addLinesBatch('lns', [
-      {
-        'line': const [LatLng(33.90, 135.90), LatLng(33.91, 135.91), LatLng(33.92, 135.92)],
+      (const [LatLng(33.90, 135.90), LatLng(33.91, 135.91), LatLng(33.92, 135.92)], {
         'name': 'mixed',
         'kmaps_metadata': meta([
           {'source': 'GNSS', 'fix': 'rtk_fixed', 'sats': 12, 'hacc': 0.02, 'avg_n': 10},
           {'source': 'GNSS', 'fix': 'rtk_float', 'sats': 9, 'hacc': 0.08, 'avg_n': 5},
           null,
         ]),
-      },
+      }),
     ]);
     await g.flushChanges();
     await g.dispose();

@@ -180,6 +180,25 @@ void main() {
       expect(await g.searchAttributeRows('pts', ['a']), hasLength(1));
     });
 
+    // 主キーを __id という名前で読んでいて、__id という列があると地物が引けず当たらなかった（2026-10-12）
+    test('__id という列があっても当たり、その列の値も探す', () async {
+      final g = GeoPackageFile(const ['i.gpkg'], absolutePath: '${tmp.path}/i.gpkg');
+      addTearDown(g.dispose);
+      await g.addLayer('pts', GeometryType.point);
+      await g.addAttributeColumns('pts', {'name': 'TEXT', '__id': 'TEXT', '__id_': 'TEXT'});
+      await g.addPointWithAttributes('pts', const LatLng(33.9, 135.9), {'name': 'n1', '__id': 'x1', '__id_': 'y1'});
+      await g.addPointWithAttributes('pts', const LatLng(33.8, 135.8), {'name': 'n2', '__id': 'x2', '__id_': 'y2'});
+      final pts = PointLayerNode(g, 'pts', parent: GeoPackageNode(g));
+      await pts.updateChildren();
+
+      final byName = await FeatureSearch.search([pts], 'n2');
+      expect([for (final h in byName.hits) (h.feature.rowId, h.column, h.value)], [(2, 'name', 'n2')]);
+      final byIdColumn = await FeatureSearch.search([pts], 'x1');
+      expect([for (final h in byIdColumn.hits) (h.feature.rowId, h.column, h.value)], [(1, '__id', 'x1')]);
+      final byOther = await FeatureSearch.search([pts], 'y2');
+      expect([for (final h in byOther.hits) (h.feature.rowId, h.column, h.value)], [(2, '__id_', 'y2')]);
+    });
+
     test('当たらなければ空', () async {
       final r = await FeatureSearch.search([layer], '存在しない値');
       expect(r.hits, isEmpty);

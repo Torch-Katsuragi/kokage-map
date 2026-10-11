@@ -773,31 +773,12 @@ class FeatureRepository {
   // バッチ操作
   // ============================================================
 
-  /// [dataList] の各要素の [geometryKey] にある形を [build] で作り、残りを属性として一度に足す。
-  /// 足した行の rowid を返す。テーブルに無い列は捨てる
-  Future<List<int>> addGeometryBatch<T>(
-    String tableName,
-    List<Map<String, dynamic>> dataList,
-    String geometryKey,
-    geo.Geometry Function(T) build,
-  ) async {
-    final List<(geo.Geometry, Map<String, dynamic>)> items;
-    try {
-      items = [for (final data in dataList) (build(data[geometryKey] as T), data)];
-    } catch (e) {
-      AppLogger.debug('[ERROR] FeatureRepository.addGeometryBatch<$T>: $e');
-      return [];
-    }
-    return addGeometries(tableName, items, reserved: {geometryKey});
-  }
-
   /// 形（WGS84）と属性の組を一度に足し、足した行の rowid を返す。
-  /// 属性のうち主キー・形の列・[reserved] とテーブルに無い列は捨てる。失敗は空
+  /// 属性のうち主キー・形の列とテーブルに無い列は捨てる。失敗は空
   Future<List<int>> addGeometries(
     String tableName,
-    List<(geo.Geometry, Map<String, dynamic>)> items, {
-    Set<String> reserved = const {},
-  }) async {
+    List<(geo.Geometry, Map<String, dynamic>)> items,
+  ) async {
     try {
       await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
@@ -808,7 +789,6 @@ class FeatureRepository {
         (await schema.getPrimaryKeyColumn(tableName)).toLowerCase(),
         'rowid',
         geomCol.toLowerCase(),
-        for (final r in reserved) r.toLowerCase(),
       };
       final batch = db.batch();
       final wkbs = <Uint8List>[];

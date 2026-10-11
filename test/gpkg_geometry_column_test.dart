@@ -100,9 +100,9 @@ void main() {
 
         // 地図の検索も形の列を見ない（geom の列は見る）
         final hits = await gpkg.searchAttributeRows(table, ['b']);
-        expect([for (final h in hits) h['__id']], [2]);
-        expect(hits.single.keys, isNot(contains(kind.geomColumn)));
-        if (hasGeomAttr) expect(hits.single['geom'], 'geom-b');
+        expect([for (final h in hits) h.id], [2]);
+        expect(hits.single.values.keys, isNot(contains(kind.geomColumn)));
+        if (hasGeomAttr) expect(hits.single.values['geom'], 'geom-b');
       });
 
       test('足す: 形の列に入り、rtree にも載る', () async {
@@ -114,7 +114,7 @@ void main() {
         expect((await rtree())[3]!.$1, closeTo(136.0, 1e-6));
 
         final ids = await gpkg.addPointsBatch(table, [
-          {'point': const LatLng(34.1, 136.1), 'name': 'd', if (hasGeomAttr) 'geom': 'geom-d'},
+          (const LatLng(34.1, 136.1), {'name': 'd', if (hasGeomAttr) 'geom': 'geom-d'}),
         ]);
         expect(ids, [4]);
         final d = (await gpkg.getFeature(table, 4))!;

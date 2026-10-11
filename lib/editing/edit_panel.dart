@@ -252,7 +252,7 @@ class _EditPanelState extends ConsumerState<EditPanel> {
       case EditKind.line:
         // 情報パネル・計測ツールと同じ測り方（WGS84 楕円体）
         final len = Geodesic.lineLength(s.geom.first);
-        return t.featureEdit.lineStats(n: n, len: len >= 1000 ? '${(len / 1000).toStringAsFixed(2)} km' : '${len.toStringAsFixed(1)} m');
+        return t.featureEdit.lineStats(n: n, len: Geodesic.formatLengthShort(len));
       case EditKind.polygon:
         final a = Geodesic.polygonArea(s.geom);
         return t.featureEdit.polygonStats(n: n, area: a >= 10000 ? '${(a / 10000).toStringAsFixed(3)} ha' : '${a.toStringAsFixed(1)} m²');

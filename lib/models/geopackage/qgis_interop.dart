@@ -40,6 +40,7 @@ library;
 import 'package:sqflite/sqflite.dart';
 
 import '../../utils/app_logger.dart';
+import 'gpkg_rtree.dart';
 import 'sql_identifier.dart';
 
 /// GeoPackage を QGIS/GDAL と行き来させるための整合処理
@@ -90,12 +91,8 @@ class QgisInterop {
     String tableName,
   ) async {
     try {
-      final rtree = 'rtree_${tableName}_geom';
-      final exists = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name = ?",
-        [rtree],
-      );
-      if (exists.isEmpty) return;
+      final rtree = await gpkgRtreeTable(db, tableName);
+      if (rtree == null) return;
 
       final rows = await db.rawQuery(
         'SELECT MIN(minx) AS min_x, MIN(miny) AS min_y, '

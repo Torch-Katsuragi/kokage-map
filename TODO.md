@@ -32,7 +32,10 @@
       外部ラスタ 6 枚／KML・GeoJSON →「gpkgに変換」で元が消え .qgs が gpkg に付け替わる／書き出し shp(zip, .cpg=UTF-8)・GeoJSON・CSV が保存の手前（ダウンロード）まで行き
       `.kokage/tmp/` の中身は残らない（空の `tmp/` だけ残る）／「ファイルを追加」（file input を差し替えて 6 ファイル、名前の衝突は `points_1.csv`）。GDAL の初回読み込み 0.2〜0.4 秒。
       直した: KMZ が開けない（2 件）・変換後の .qgs（2 件）・書き出しダイアログの型名
-    - [ ] 残り: 選んだフォルダ（File System Access）・ドロップ。本番の圧縮は 2026-10-11 のデプロイで確認（wasm 4.8 MB・data 2.1 MB を gzip）。LIBKML 製の KMZ（doc.kml が NetworkLink だけ）は読めない（未対応のまま）
+    - [ ] 残り: 選んだフォルダ（File System Access）・ドロップ。本番の圧縮は 2026-10-11 のデプロイで確認（wasm 4.8 MB・data 2.1 MB を gzip）
+    - [ ] LIBKML・Google Earth 製の KMZ（doc.kml が NetworkLink だけ）: 2026-10-12 に対応（n7/kmz-networklink。リンク先の KML を 1 本ずつレイヤに、単体テストは通過。
+          [[docs/technical/external-formats#KMZ の NetworkLink（2026-10-12）]]）。残り: web（Chrome）と Pixel 9 で本物の KMZ がリンク先の名前のレイヤで件数どおり出る・
+          「gpkgに変換」できる／外の URL だけの KMZ は赤字の理由に href が出る／書いた .qgs を QGIS で開いて同じレイヤ名・件数
     - ⚠ Claude の内蔵ブラウザ（Electron）では SharedWorker から fetch できず sqflite が全部落ちる（gpkg が一切開けない）。web の確認は Chrome で
 - [ ] **地点への案内（n2/navigate-to-point）の実機確認**（Pixel 9）: 情報パネル（点・線・面の中心/頂点・写真）・地図の長押し（パン/選択のみ）・メンバー一覧から始まる／
       矢印が端末の向きで回る（コンパスは磁北のまま。偏角 約 7〜8° 西の分ずれる）・歩くと進行方向に替わる／目標への線が 2D・3D で出る／高低差が出る（標高タイルがキャッシュにある所）／

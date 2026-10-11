@@ -464,7 +464,7 @@ class QgsProjectBuilder {
     final layer = plan?.layers.where((l) => l.name == layerName).firstOrNull;
     if (plan == null || layer == null) return [if (layerCount > 1) 'layername=$layerName', ...csv];
     return [
-      if (plan.sourceLayerCount > 1) 'layername=${layer.sourceLayer}',
+      if (plan.sourceLayerCount > 1) 'layername=${layer.qgisLayerName}',
       if (layer.qgisGeometryType != null) 'geometrytype=${layer.qgisGeometryType}',
       ...csv,
     ];

@@ -36,7 +36,7 @@ tags: [technical, geopackage, qgis, interop, import]
 |---|---|---|
 | Shapefile | `.shp`（付属は `GDALGetFileList` の一式） | `.cpg` も DBF の LDID も無ければ `-oo ENCODING=CP932`（[[gdal#Android の実装で決めたこと（2026-10-09）]]） |
 | GeoJSON | `.geojson` `.json` | `.json` は GDAL が形を見つけたときだけ |
-| KML / KMZ | `.kml` `.kmz` | 同梱の GDAL は LIBKML なし。KMZ は `/vsizip/<パス>/doc.kml`（根の `doc.kml` → 根の最初の `.kml` → どこかの `.kml`）で KML ドライバに渡す（web は worker が `vsi` を付ける）。`/vsizip/<パス>` だけだと中身が 1 ファイルの zip しか開けない。⚠ LIBKML で書いた KMZ（`doc.kml` は `layers/*.kml` への NetworkLink だけ）は地物が無く読めない |
+| KML / KMZ | `.kml` `.kmz` | 同梱の GDAL は LIBKML なし。KMZ は `/vsizip/<パス>/doc.kml`（根の `doc.kml` → 根の最初の `.kml` → どこかの `.kml`）で KML ドライバに渡す（web は worker が `vsi` を付ける）。`/vsizip/<パス>` だけだと中身が 1 ファイルの zip しか開けない。LIBKML・Google Earth で書いた KMZ（`doc.kml` は `files/*.kml` などへの NetworkLink だけ）はリンク先を 1 本ずつ開く（下の「KMZ の NetworkLink」） |
 | CSV（点） | `.csv` | `X_POSSIBLE_NAMES`（lon・lng・long・longitude・経度・x）/`Y_POSSIBLE_NAMES`（lat・latitude・緯度・y）、`KEEP_GEOM_COLUMNS=NO`、`AUTODETECT_TYPE=YES`。座標列が無ければレイヤにせず、形の無い表（森林簿など。レイヤに結合する）にする（[[qgis-interop#表の結合（森林簿 CSV と計画図）（2026-10-11）]]） |
 | GPX | `.gpx` | waypoints・routes・tracks… が別レイヤ（空のレイヤも GDAL が出す） |
 | FlatGeobuf | `.fgb` | |
@@ -57,6 +57,26 @@ tags: [technical, geopackage, qgis, interop, import]
    変換した gpkg を編集したときの Z は下の「Z・M 付きのレイヤの編集」
 4. 印の表 `kokage_external_source` に `signature`（`GDALGetFileList` の一式の名前・更新時刻・大きさ＋`formatVersion`）・`source`・
    `layers`（キャッシュのレイヤ → 元の GDAL のレイヤ名・分けた型・件数。`.qgs` の `|layername=` `|geometrytype=` に使う）
+
+### KMZ の NetworkLink（2026-10-12）
+
+LIBKML・Google Earth で書いた KMZ は、`doc.kml` に NetworkLink だけを置き、地物は `files/a.kml`（GDAL の LIBKML なら `layers/a.kml`）に分ける。
+同梱の GDAL は LIBKML を持たず、KML ドライバはリンクをたどらないので、`doc.kml` だけでは地物が無い。
+
+- `KmzLayout`（`lib/services/external/kmz_layout.dart`、純 Dart）が zip を開き、読む KML（上の順）の `<NetworkLink>` の `<href>`
+  （KML 2.2 の `<Link>`、2.0 の `<Url>`）を zip の中のパスに直す。基準はリンク元の KML の dir。`%20` などは戻し、大文字小文字は zip の名前に合わせる
+- 読むのは **zip の中の `.kml` だけ**。外の URL（`http` など scheme 付き）・根からのパス・zip の外（`../`）・zip に無いもの・`.kml` でないものは読まない
+  （端末からネットへ取りに行かない）。それしか無くて地物が 1 件も無ければ、読めない理由（ツリーの赤字）に読まなかった href を並べる。
+  地物のあるリンクと混ざっていれば、ログに出すだけ
+- リンク先の中の NetworkLink はたどらない（QGIS の LIBKML も 1 段だけ）
+- リンク先は `/vsizip/<パス>/<リンク先>` で 1 本ずつ `plan` し、キャッシュのレイヤに `dataset`（zip の中のパス）を持たせて `translate` もそれで開く。
+  Android（FFI）と web（worker の `vsi`）で同じ経路
+- レイヤ名は QGIS（LIBKML。リンク 1 本＝`<リンク先の名前（拡張子なし）>` の 1 レイヤ）に合わせる。リンク先に GDAL のレイヤが 1 枚ならリンク先の名前、
+  フォルダがあって複数なら GDAL のレイヤ名（フォルダ名）。型が混ざれば `<名前>_point` など。名前がぶつかれば `_2` `_3`
+- `doc.kml` 自体に地物があれば、それもレイヤにする
+- `.qgs` の `|layername=` はリンク先の名前（`ExternalSourceLayer.qgisLayerName`）。リンク先にフォルダが複数ある KMZ では、
+  QGIS の 1 レイヤにアプリの複数のレイヤが対応する。⚠ QGIS で開いての照合は未確認
+- gpkg への変換もキャッシュと同じ割り当てで書き、照合する
 
 - 列名は GDAL のまま（旧来の予約名の言い換え `ID` → `ID_` はやめた）。属性の型も GDAL の判定（CSV は `AUTODETECT_TYPE`）
 - GDAL の呼び出しは FFI 版なら 1 回ごとに `Isolate.run`（UI を塞がない）、web は worker
@@ -146,7 +166,7 @@ Z 付きの shp を変換した gpkg や QGIS で作った Z 付きの gpkg（`g
 
 ### `.qgs` との往復
 
-- 書く: 読み取り専用レイヤは `provider=ogr`、`datasource=./林班.shp`。元の GDAL のレイヤが 2 枚以上なら `|layername=<GDAL のレイヤ名>`、
+- 書く: 読み取り専用レイヤは `provider=ogr`、`datasource=./林班.shp`。元の GDAL のレイヤが 2 枚以上なら `|layername=<GDAL のレイヤ名>`（NetworkLink の KMZ はリンク先の名前）、
   型の混ざったレイヤから分けたものは `|geometrytype=Point`（`LineString` `Polygon`。QGIS が型ごとのサブレイヤに付ける形）。
   CSV も `provider=ogr`（GDAL の CSV ドライバ。⚠ QGIS では `-oo` の座標列の指定が無いので形の無い表に見えるかもしれない。未確認）。キャッシュのパスは書かない
   - CRS はキャッシュ gpkg のもの（ogr2ogr が元の CRS のまま書いている）を gpkg と同じ経路（`GpkgCrsResolver`）で書く

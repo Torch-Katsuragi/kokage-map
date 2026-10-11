@@ -84,16 +84,9 @@ class GdalFfi implements Gdal {
 
   /// 初回: 設定を決め（Android は proj.db と GDAL_DATA をファイルに書き出す。rootBundle を使うので UI アイソレートで）、
   /// 1 つのアイソレートでドライバ登録とプロセス全体の設定を済ませる
-  Future<GdalFfiConfig> _init() => _ready ??= () async {
-        final c = _config ?? await _androidConfig();
-        await Isolate.run(() => _GdalLib.open(c).initProcess(c));
-        return c;
-      }();
+  Future<GdalFfiConfig> _init() => _ready ??= _initOnce(_config);
 
-  Future<T> _run<T>(T Function(_GdalLib g) f) async {
-    final c = await _init();
-    return Isolate.run(() => f(_GdalLib.open(c)));
-  }
+  Future<T> _run<T>(T Function(_GdalLib g) f) async => _runIn(await _init(), f);
 
   @override
   Future<String> version() => _run(_version);
@@ -120,6 +113,16 @@ class GdalFfi implements Gdal {
   @override
   Future<List<String>> fileList(String path) => _run((g) => g.fileList(path));
 }
+
+// アイソレートに渡すクロージャは GdalFfi の外（トップレベル）で作る。メソッドの中で作ると this（未完了の Future を持つ
+// _ready）まで連れていき、実機では「object is unsendable」で落ちる（2026-10-11 Pixel 9。ホストのテストでは出なかった）
+Future<GdalFfiConfig> _initOnce(GdalFfiConfig? config) async {
+  final c = config ?? await _androidConfig();
+  await Isolate.run(() => _GdalLib.open(c).initProcess(c));
+  return c;
+}
+
+Future<T> _runIn<T>(GdalFfiConfig c, T Function(_GdalLib g) f) => Isolate.run(() => f(_GdalLib.open(c)));
 
 String _version(_GdalLib g) => g.version();
 

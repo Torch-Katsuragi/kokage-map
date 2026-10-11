@@ -298,7 +298,8 @@ class _TableJoinDialogState extends ConsumerState<_TableJoinDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(t.common.close)),
+        // PopScope は Navigator.pop を止めないので、保存の途中はボタンも押せなくする
+        TextButton(onPressed: _busy ? null : () => Navigator.of(context).pop(), child: Text(t.common.close)),
         FilledButton(
           onPressed: _busy || draft == null || _fields.isEmpty
               ? null

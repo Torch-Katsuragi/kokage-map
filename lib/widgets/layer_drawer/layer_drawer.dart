@@ -40,6 +40,7 @@ import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/sys_node.dart';
+import '../../models/nodes/table_node.dart';
 import '../../presentation/node_presenter.dart';
 import '../../providers/notification_providers.dart';
 import '../../providers/project_providers.dart';
@@ -62,6 +63,7 @@ import 'sync_merge_dialog.dart';
 import 'tiles/folder_tile.dart';
 import 'tiles/geopackage_tile.dart';
 import 'tiles/photo_tile.dart';
+import 'tiles/table_tile.dart';
 
 /// レイヤ構造Drawer
 class LayerDrawer extends ConsumerStatefulWidget {
@@ -351,6 +353,9 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         onJumpTo: widget.onJumpTo,
         onSwipeMove: () => _swipeMove(node),
       );
+    }
+    if (node is TableNode) {
+      return TableTile(node: node);
     }
     if (node is GeoPackageNode) {
       return GeoPackageTile(

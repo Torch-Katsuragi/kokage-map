@@ -372,12 +372,15 @@ Widget _buildLabelExpressionTile(BuildContext context, SettingsStore store, Void
     Map<String, Object?>? sample;
     Map<String, double>? rates;
     if (layer != null) {
-      columns = (await layer.geoPackageFile.getColumnNames(layer.layerName, getAll: true))
-          .where((c) => !isInternalColumn(c) && !isSystemColumn(c))
-          .toList();
+      columns = [
+        ...(await layer.geoPackageFile.getColumnNames(layer.layerName, getAll: true))
+            .where((c) => !isInternalColumn(c) && !isSystemColumn(c)),
+        // 結合した表の列（森林簿の樹種など）もラベルに使える
+        ...layer.joinedFieldNames,
+      ];
       final rows = layer.children
           .whereType<FeatureNode>()
-          .map((f) => f.turfFeature.properties?.cast<String, Object?>())
+          .map((f) => layer.effectiveProperties(f.turfFeature.properties))
           .toList();
       sample = rows.firstOrNull;
       rates = rows.isEmpty ? null : columnFillRates(rows, columns);

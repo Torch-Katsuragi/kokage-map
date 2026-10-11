@@ -91,10 +91,10 @@ void main() {
     final doc = XmlDocument.parse(File('test/fixtures/qgis_4_2_joins.qgs').readAsStringSync());
     final shobanLayer = doc.findAllElements('maplayer').firstWhere((m) => m.getElement('layername')!.innerText == 'shoban');
     final selfId = shobanLayer.getElement('id')!.innerText;
-    shobanLayer.getElement('vectorjoins')!.children.add(XmlElement(XmlName('join'), [
-      XmlAttribute(XmlName('joinLayerId'), selfId),
-      XmlAttribute(XmlName('joinFieldName'), 'key'),
-      XmlAttribute(XmlName('targetFieldName'), 'key'),
+    shobanLayer.getElement('vectorjoins')!.children.add(XmlElement(const XmlName.parts('join'), [
+      XmlAttribute(const XmlName.parts('joinLayerId'), selfId),
+      XmlAttribute(const XmlName.parts('joinFieldName'), 'key'),
+      XmlAttribute(const XmlName.parts('targetFieldName'), 'key'),
     ]));
     File(qgs).writeAsStringSync(doc.toXmlString());
     final root = await loadTree();
@@ -160,10 +160,10 @@ void main() {
     final qgisShoban = doc.mapLayers.firstWhere((m) => m.getElement('layername')!.innerText == 'shoban');
     final oldShobanId = qgisShoban.getElement('id')!.innerText;
     qgisShoban.getElement('id')!.innerText = ourShobanId;
-    final foreign = XmlElement(XmlName('join'), [
-      XmlAttribute(XmlName('joinLayerId'), 'some_vector_layer'),
-      XmlAttribute(XmlName('joinFieldName'), 'a'),
-      XmlAttribute(XmlName('targetFieldName'), 'b'),
+    final foreign = XmlElement(const XmlName.parts('join'), [
+      XmlAttribute(const XmlName.parts('joinLayerId'), 'some_vector_layer'),
+      XmlAttribute(const XmlName.parts('joinFieldName'), 'a'),
+      XmlAttribute(const XmlName.parts('targetFieldName'), 'b'),
     ]);
     qgisShoban.getElement('vectorjoins')!.children.add(foreign);
     for (final t in doc.root.findAllElements('layer-tree-layer').where((t) => t.getAttribute('id') == oldShobanId)) {

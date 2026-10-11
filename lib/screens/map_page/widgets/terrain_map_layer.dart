@@ -47,6 +47,7 @@ import '../../../core/terrain/web_mercator.dart';
 import '../../../devices/base/device_tool.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../interfaces/map_state_interface.dart';
+import '../../../interfaces/scene_sink.dart';
 import '../../../models/basemap_provider.dart';
 import '../../../models/map_style_group.dart';
 import '../../../models/nodes/external_overlay_image_node.dart';
@@ -81,7 +82,7 @@ part 'terrain_map_layer_scene.dart';
 
 /// 地図面（v2: タイルの世界）。地図はこれだけ（MapLibre は 2026-10-04 に外した）
 ///
-/// シーン（[FeatureGeoJsonCache] の GeoJSON と [MapStyleGroup]）を地形の上に描く（flutter_gpu、無い環境は純 Dart）。設計は `docs/technical/terrain-3d.md` の「v2: タイルの世界」。
+/// シーン（[MapScene]: [FeatureGeoJsonCache] の GeoJSON と [MapStyleGroup]）を地形の上に描く（flutter_gpu、無い環境は純 Dart）。設計は `docs/technical/terrain-3d.md` の「v2: タイルの世界」。
 ///
 /// - 世界は [TerrainWorld]（DEM タイルのストリーミング）。カメラが動くと見える範囲 + 余白のタイルを揃え、
 ///   届いたものから描く。読み込みで画面は止まらない
@@ -94,9 +95,7 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
     super.key,
     required this.mapState,
     required this.baseMapService,
-    required this.geoJson,
-    required this.sceneRevision,
-    required this.styleGroups,
+    required this.scene,
     required this.location,
     required this.gpsTrack,
     required this.controller,
@@ -109,14 +108,8 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   final IMapState mapState;
   final BaseMapService baseMapService;
 
-  /// 地図に流している GeoJSON（通常 / 選択）。所有は map_page
-  final FeatureGeoJsonCache geoJson;
-
-  /// [geoJson] が更新されたら増える
-  final ValueListenable<int> sceneRevision;
-
-  /// View 固有スタイル（解決済み）
-  final List<MapStyleGroup> Function() styleGroups;
+  /// 描くもの（GeoJSON・View 固有スタイル・オーバーレイ画像）。所有は map_page。`revision` が増えたら組み直す
+  final MapScene scene;
 
   /// 現在位置。変わったら描き直す（ページは組み立て直さない）
   final ValueListenable<LatLng?> location;
@@ -343,7 +336,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         }
       },
     );
-    widget.sceneRevision.addListener(_onSceneRevision);
+    widget.scene.revision.addListener(_onSceneRevision);
     TerrainAppearance.revision.addListener(_onAppearanceChanged);
     widget.heading?.addListener(_onHeading);
     widget.location.addListener(_scheduleRefresh);
@@ -455,7 +448,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     widget.heading?.removeListener(_onHeading);
     widget.location.removeListener(_scheduleRefresh);
     GlobalDrawingState.instance.removeListener(_scheduleRefresh);
-    widget.sceneRevision.removeListener(_onSceneRevision);
+    widget.scene.revision.removeListener(_onSceneRevision);
     TerrainAppearance.revision.removeListener(_onAppearanceChanged);
     widget.onSurfaceChanged(null);
     // 最後のカメラを覚えさせる（次に組み立てるときの初期値）

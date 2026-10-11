@@ -25,7 +25,6 @@ import 'package:latlong2/latlong.dart';
 import '../../core/map_surface_handle.dart';
 import '../../interfaces/map_state_interface.dart';
 import '../../models/gps_position_record.dart';
-import '../../models/map_style_group.dart';
 import '../../models/nodes/current_location_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
@@ -38,7 +37,7 @@ import '../../services/basemap_service.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../services/gps_manager_service.dart';
 import '../../services/internal_gps_location_store.dart';
-import 'feature_geojson_cache.dart';
+import 'map_scene_store.dart';
 
 /// MapPageの状態変数を定義する基底mixin
 /// 各機能別Mixinはこのmixinを継承（on）して状態にアクセス
@@ -186,21 +185,9 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   // レンダリングキャッシュ（パン/ズーム時の再構築を防止）
   // =============================================
 
-  /// 地図に流す GeoJSON（通常 / 選択済み）。組み立ては [FeatureGeoJsonCache]
-  final geoJson = FeatureGeoJsonCache();
-
-  /// View 固有スタイルの束（フィーチャの `k-style` と突き合わせる）。3D 地図面が見た目を決めるのに使う
-  List<MapStyleGroup> styleGroups = const [];
-
-  /// [styleGroups] を差し替える。変わったら true
-  bool setStyleGroups(List<MapStyleGroup> groups) {
-    if (styleGroupsEqual(styleGroups, groups)) return false;
-    styleGroups = List.unmodifiable(groups);
-    return true;
-  }
-
-  /// 地図に流す GeoJSON が更新されたら増える（3D 地図面がシーンを組み直す合図）
-  final ValueNotifier<int> terrainSceneRevision = ValueNotifier<int>(0);
+  /// 地図に流すシーン（フィーチャの GeoJSON・View 固有スタイル・オーバーレイ画像）。
+  /// 書くのは `SceneSink` として、3D 地図面は `MapScene` として読む
+  late final MapSceneStore scene = MapSceneStore(overlayImagesOf: () => overlayImageNodes);
 
   // =============================================
   // IMapState実装

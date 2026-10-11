@@ -407,7 +407,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   /// GPS履歴更新コールバック（未Consolidation分を 3D 地図面の軌跡に流す）
   /// Consolidation済み分はGPKGレイヤツリー経由で表示される
   void _onGpsHistoryUpdate() {
-    if (mounted) terrainSceneRevision.value++;
+    if (mounted) scene.invalidate();
   }
 
   /// 今日の区間の 1 本だけ、書いた座標で地図のフィーチャを差し替える。できなければ false（レイヤを読み直す）。

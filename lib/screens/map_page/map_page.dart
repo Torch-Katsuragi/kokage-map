@@ -261,7 +261,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
   /// オーバーレイ画像の変形（ドラッグ中）。3D 地図面が枠とハンドルを描き直す
   @override
-  void updateOverlayTransform(OverlayImageNode node) => terrainSceneRevision.value++;
+  void updateOverlayTransform(OverlayImageNode node) => scene.invalidate();
 
   @override
   void onLayerStyleChanged() {
@@ -461,7 +461,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           invalidateLayerCache();
-          terrainSceneRevision.value++;
+          scene.invalidate();
         });
       }
     });
@@ -581,9 +581,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
             child: TerrainMapLayer(
               mapState: this,
               baseMapService: baseMapService,
-              geoJson: geoJson,
-              sceneRevision: terrainSceneRevision,
-              styleGroups: () => styleGroups,
+              scene: scene,
               location: locationNotifier,
               gpsTrack: () => gpsHistoryRecorder.todayPoints,
               controller: mapController,

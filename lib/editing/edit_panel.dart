@@ -25,6 +25,7 @@ import '../providers/notification_providers.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/geodesic.dart';
 import '../widgets/feature_silhouette.dart';
+import '../widgets/qgis_form/qgis_field_input.dart';
 import 'edit_session.dart';
 import 'edit_toolbar.dart';
 
@@ -56,19 +57,6 @@ class EditPanel extends ConsumerStatefulWidget {
 }
 
 class _EditPanelState extends ConsumerState<EditPanel> {
-  final _controllers = <String, TextEditingController>{};
-
-  TextEditingController _controller(String col, Object? value) =>
-      _controllers.putIfAbsent(col, () => TextEditingController(text: value == null ? '' : '$value'));
-
-  @override
-  void dispose() {
-    for (final c in _controllers.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(featureEditorProvider);
@@ -118,8 +106,10 @@ class _EditPanelState extends ConsumerState<EditPanel> {
                         ? null
                         : () async {
                             FocusScope.of(context).unfocus();
-                            final ok = await ref.read(featureEditorProvider.notifier).save();
-                            if (!ok && context.mounted) {
+                            final ed = ref.read(featureEditorProvider.notifier);
+                            final ok = await ed.save();
+                            // 制約で止めたときは理由を通知に出してある
+                            if (!ok && context.mounted && !ed.lastSaveBlocked) {
                               ref.read(notificationCenterProvider.notifier).add(
                                     title: t.featureEdit.saveFailed,
                                     level: NotificationLevel.error,
@@ -215,22 +205,36 @@ class _EditPanelState extends ConsumerState<EditPanel> {
     if (s.columns.isEmpty) {
       return Text(t.featureEdit.noAttrs, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline));
     }
+    final ed = ref.read(featureEditorProvider.notifier);
+    final form = s.form;
+    // QGIS のドラッグ&ドロップの配置があれば、タブ・グループを見出しにして並べる
+    final rows = form?.layout == null
+        ? [for (final c in s.columns) QgisFormFieldRow(c, depth: 0)]
+        : qgisFormRows(form, s.columns);
     return ListView(
       // 欄の名前は枠の上にはみ出して出るので、上に少し空ける
       padding: const EdgeInsets.only(top: 8),
       children: [
-        for (final c in s.columns)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: TextField(
-              key: c == 'name' ? TutorialTargets.nameField : null,
-              controller: _controller(c, s.originalAttrs[c]),
-              decoration: InputDecoration(labelText: c, isDense: true, border: const OutlineInputBorder()),
-              minLines: 1,
-              maxLines: c.toLowerCase().contains('memo') || c.contains('メモ') ? 4 : 1,
-              onChanged: (v) => ref.read(featureEditorProvider.notifier).setAttr(c, v.isEmpty ? null : v),
-            ),
-          ),
+        for (final row in rows)
+          switch (row) {
+            QgisFormHeader() => QgisFormHeaderView(row),
+            QgisFormFieldRow(column: final c, :final depth) => Padding(
+                padding: EdgeInsets.only(bottom: 10, left: depth * 8.0),
+                child: QgisFieldInput(
+                  key: c == 'name' ? TutorialTargets.nameField : ValueKey('edit/$c'),
+                  column: c,
+                  field: form?[c],
+                  sqlType: ed.columnType(c),
+                  value: s.attrs[c],
+                  enabled: s.canEdit(c),
+                  options: s.options[c],
+                  errorText: s.errors[c],
+                  dense: false,
+                  multilineFallback: c.toLowerCase().contains('memo') || c.contains('メモ'),
+                  onChanged: (v, {required commit}) => ed.setAttr(c, v),
+                ),
+              ),
+          },
       ],
     );
   }

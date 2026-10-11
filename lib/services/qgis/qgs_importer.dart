@@ -48,11 +48,13 @@ import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
 import '../../models/nodes/view_node.dart';
+import '../../models/qgis_form.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/label_expression.dart';
 import '../external/external_source.dart';
 import '../gdal_raster_overlay.dart';
 import '../kmeta_service.dart';
+import 'qgs_form_reader.dart';
 import 'qgs_project_builder.dart' show QgsProjectBuilder;
 import 'qgs_raster_source.dart';
 import 'qgs_renderer_reader.dart';
@@ -181,6 +183,8 @@ class QgsImporter {
 
     // 取り込み対象になったレイヤ。ここに入ったものだけ View を差し替える
     final touched = <LayerNode, List<ViewNode>>{};
+    // 属性フォームの設定を読む maplayer（既定 View のもの、無ければ最初のもの。QGIS では maplayer ごとに持つ）
+    final formSource = <LayerNode, XmlElement>{};
 
     // ⚠ `maplayer` は文書全体を探さない。QGIS は `<main-annotation-layer>` の
     //    ような「ユーザーのレイヤではないもの」も同じ形で書くため、
@@ -201,6 +205,7 @@ class QgsImporter {
       final isDefault = name == layer.layerName &&
           (source.subset == null || source.subset!.isEmpty) &&
           !views.any((v) => v.name == kDefaultViewName);
+      if (isDefault || !formSource.containsKey(layer)) formSource[layer] = maplayer;
       views.add(
         ViewNode(
           name: isDefault ? kDefaultViewName : _uniqueName(name, views),
@@ -223,6 +228,9 @@ class QgsImporter {
         for (final v in views) v.name,
       ];
     }
+
+    // 属性フォームの設定（`.qgs` の側は QGIS の持ち物なので、読んで写すだけ）
+    await _applyForms(formSource, projectLayers, sources, discarded);
 
     // gpkg と dir のグループの可視性（変わったものだけ書く）
     for (final MapEntry(key: node, value: checked) in containerChecked.entries) {
@@ -332,6 +340,110 @@ class QgsImporter {
     return filled;
   }
 
+  /// 属性フォームの設定を持たないレイヤに、`.qgs` の設定を足す。足した数を返す。
+  ///
+  /// 属性フォームを読むようになった版（2026-10-11）より前に取り込んだプロジェクトと、QGIS で設定してから
+  /// こかげマップが先に書き直した `.qgs`（QGIS の `<fieldConfiguration>` などはそのまま残る）のため。
+  /// 既に持っているレイヤには触らない（QGIS で保存し直したときの取り込みが差し替える）
+  Future<int> backfillForms(String qgsPath, FolderNode root) async {
+    final XmlDocument doc;
+    try {
+      doc = XmlDocument.parse(await readQgsText(qgsPath));
+    } on Object catch (e) {
+      AppLogger.debug('[QgsImporter] 属性フォームの補完: 読めない $e');
+      return 0;
+    }
+    final sources = _SourceResolver(
+      p.dirname(p.normalize(qgsPath)),
+      root.getAbsoluteFilePath(),
+      _indexGeoPackages(root),
+      _indexImages(root),
+    );
+    final projectLayers = doc.rootElement.findElements('projectlayers').firstOrNull;
+    final formSource = <LayerNode, XmlElement>{};
+    for (final maplayer in projectLayers?.findElements('maplayer') ?? const <XmlElement>[]) {
+      final target = sources.resolve(maplayer, <String>[]);
+      if (target == null) continue;
+      final (:name, :source, :layer, gpkg: _) = target;
+      final isDefault = name == layer.layerName && (source.subset == null || source.subset!.isEmpty);
+      if (isDefault || !formSource.containsKey(layer)) formSource[layer] = maplayer;
+    }
+    final missing = <LayerNode, XmlElement>{};
+    for (final MapEntry(key: layer, value: maplayer) in formSource.entries) {
+      final folderPath = layer.folderNode?.getAbsoluteFilePath();
+      if (folderPath == null) continue;
+      if ((await KMetaService.instance.getMeta(folderPath)).forms.containsKey(layer.layerKey)) continue;
+      missing[layer] = maplayer;
+    }
+    final filled = await _applyForms(missing, projectLayers, sources, <String>[], onlyNonEmpty: true);
+    if (filled > 0) AppLogger.debug('[QgsImporter] 属性フォームの設定を $filled 件補った（${p.basename(qgsPath)}）');
+    return filled;
+  }
+
+  /// [formSource] のレイヤごとに、maplayer の属性フォームの設定を読んでフォルダ設定に書く。
+  /// 設定の無いレイヤは外す（[onlyNonEmpty] なら外さない）。書いた（設定のある）数を返す。
+  ///
+  /// ValueRelation の参照先（maplayer の id）は、ツリーの gpkg とレイヤに読み替えて設定に入れる。
+  /// 読み替えられなければ [discarded] に足す（その列は文字の欄になる）
+  Future<int> _applyForms(
+    Map<LayerNode, XmlElement> formSource,
+    XmlElement? projectLayers,
+    _SourceResolver sources,
+    List<String> discarded, {
+    bool onlyNonEmpty = false,
+  }) async {
+    final byId = <String, XmlElement>{
+      for (final m in projectLayers?.findElements('maplayer') ?? const <XmlElement>[])
+        ?childText(m, 'id'): m,
+    };
+    var count = 0;
+    for (final MapEntry(key: layer, value: maplayer) in formSource.entries) {
+      final folder = layer.folderNode;
+      final folderPath = folder?.getAbsoluteFilePath();
+      if (folder == null || folderPath == null) continue;
+      var form = QgsFormReader.read(maplayer);
+      if (form == null && onlyNonEmpty) continue;
+      if (form != null) {
+        final fields = <String, QgisFieldForm>{};
+        for (final MapEntry(key: name, value: field) in form.fields.entries) {
+          if (field.kind != QgisWidgetKind.valueRelation) {
+            fields[name] = field;
+            continue;
+          }
+          final ref = byId[field.config['Layer']];
+          final target = ref == null ? null : sources.resolve(ref, <String>[]);
+          final gpkgPath = target == null ? null : _gpkgIndexPath(target.gpkg);
+          if (target == null || gpkgPath == null) {
+            discarded.add('${layer.layerName} の $name（値の関係の参照先 ${field.config['LayerName'] ?? ''} が見つかりません）');
+            fields[name] = field;
+            continue;
+          }
+          fields[name] = QgisFieldForm.fromJson({
+            ...field.toJson(),
+            'config': {
+              ...field.config,
+              kRelationTargetKey: {
+                'gpkg': p.relative(gpkgPath, from: folderPath).replaceAll(r'\', '/'),
+                'layer': target.layer.layerName,
+              },
+            },
+          });
+        }
+        form = QgisForm(fields: fields, layout: form.layout);
+        count++;
+      }
+      await KMetaService.instance.setLayerForm(folderPath, layer.layerKey, form);
+      folder.invalidateMetaCache();
+    }
+    return count;
+  }
+
+  /// gpkg（相当）のノードを引くときのパス（[_indexGeoPackages] と同じ決まり）
+  static String? _gpkgIndexPath(GeoPackageNode n) {
+    final abs = n is ExternalLayerNode ? n.sourcePath : n.geoPackageFile.getAbsolutePath();
+    return abs == null ? null : p.normalize(abs);
+  }
+
   // =============================================
   // 部品
   // =============================================
@@ -404,8 +516,8 @@ class QgsImporter {
     void walk(LayerTreeNode n) {
       if (n is GeoPackageNode) {
         // 読み取り専用レイヤは元のファイルのパスで引く（キャッシュのパスは .qgs に出てこない）
-        final abs = n is ExternalLayerNode ? n.sourcePath : n.geoPackageFile.getAbsolutePath();
-        if (abs != null) result[p.normalize(abs)] = n;
+        final abs = _gpkgIndexPath(n);
+        if (abs != null) result[abs] = n;
       }
       for (final child in n.children) {
         walk(child);

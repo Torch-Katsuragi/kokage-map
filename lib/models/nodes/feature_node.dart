@@ -27,6 +27,8 @@ import 'package:turf/turf.dart' as turf;
 import '../../converters/turf_converter.dart';
 import '../../core/node_types.dart';
 import '../../i18n/strings.g.dart';
+import '../../services/qgis_form_logic.dart';
+import '../../utils/attribute_columns.dart';
 import '../geopackage/feature_repository.dart' show metadataColumn;
 import '../geopackage/geopackage_file.dart';
 import 'layer_node.dart';
@@ -511,11 +513,45 @@ abstract class FeatureNode extends LayerTreeNode {
     if (withMetadata && !columns.contains(metadataColumn)) {
       parent.clearColumnNamesCache(); // 列が増えた
     }
-    return {
+    final given = {
       if (columns.contains('name')) 'name': name,
       if (columns.contains('description')) 'description': description,
+    };
+    // QGIS の既定値（uuid()・now()・決まった文字など）。名前・説明は道具が値を渡したらそちらを使う
+    final defaults = await _qgisDefaults(parent, columns, given);
+    bool givenWins(String k) => given[k] != null && '${given[k]}'.isNotEmpty;
+    return {
+      ...given,
+      for (final MapEntry(:key, :value) in defaults.entries)
+        if (!givenWins(key)) key: value,
       if (withMetadata && metadata != null) metadataColumn: jsonEncode(metadata),
     };
+  }
+
+  /// QGIS の属性フォームの既定値（[QgisForm]）。設定が無ければ空
+  static Future<Map<String, Object?>> _qgisDefaults(
+    LayerNode parent,
+    Set<String> columns,
+    Map<String, Object?> given,
+  ) async {
+    final form = await parent.getQgisForm();
+    if (form == null || !form.fields.values.any((f) => f.defaultExpression != null)) return const {};
+    try {
+      final info = await parent.geoPackageFile.getAttributeColumnInfo(parent.layerName);
+      final types = {
+        for (final c in info)
+          if (c['name'] is String) c['name'] as String: '${c['type'] ?? ''}',
+      };
+      return evaluateQgisDefaults(
+        form,
+        given,
+        types,
+        columns: columns.where((c) => !isReadOnlyColumn(c) && !isSystemColumn(c)),
+      );
+    } on Object catch (e) {
+      AppLogger.debug('[FeatureNode] 既定値を当てられない: $e');
+      return const {};
+    }
   }
 
   /// 作った地物を親に入れる（_featureMap にも登録しないと updateFeatureAttribute が効かない）

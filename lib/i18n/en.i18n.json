@@ -961,6 +961,17 @@
     "polygonType": "Polygon",
     "unknownType": "Unknown"
   },
+  "qgisForm": {
+    "notNull": "\"$field\" is required",
+    "unique": "\"$value\" in \"$field\" is already used by another feature",
+    "expression": "\"$field\": $desc",
+    "expressionNoDesc": "\"$field\" does not satisfy $exp",
+    "saveBlocked": "Not saved ($reasons)",
+    "softWarning": "Saved. Please check ($reasons)",
+    "noValue": "(none)",
+    "pickDate": "Pick a date",
+    "clear": "Clear"
+  },
   "featureEdit": {
     "title": "Edit $kind",
     "shapeTab": "Shape",

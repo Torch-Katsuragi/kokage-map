@@ -17,10 +17,12 @@
 // 継承チェーン解決・保存処理を担当
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:path/path.dart' as p;
 
 import '../models/kmeta.dart';
+import '../models/qgis_form.dart';
 import '../utils/app_logger.dart';
 import 'qgis/qgs_meta_store.dart';
 import 'sync_ledger.dart';
@@ -209,7 +211,8 @@ class KMetaService {
           !v.layers.keys.every(keep) ||
           !v.views.keys.every(keep) ||
           !s.layers.keys.every(keep) ||
-          !rawMeta.views.keys.every(keep);
+          !rawMeta.views.keys.every(keep) ||
+          !rawMeta.forms.keys.every(keep);
       if (!touched) return true;
       final updatedMeta = rawMeta.copyWith(
         visibility: KMetaVisibility(
@@ -224,6 +227,7 @@ class KMetaService {
           layers: {for (final e in s.layers.entries) if (keep(e.key)) e.key: e.value},
         ),
         views: {for (final e in rawMeta.views.entries) if (keep(e.key)) e.key: e.value},
+        forms: {for (final e in rawMeta.forms.entries) if (keep(e.key)) e.key: e.value},
       );
       return saveMeta(folderPath, updatedMeta);
     });
@@ -317,6 +321,23 @@ class KMetaService {
     });
   }
 
+  /// QGIS の属性フォームの設定を差し替える（null なら外す）。中身が同じなら書かない
+  Future<bool> setLayerForm(String folderPath, String layerKey, QgisForm? form) {
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final current = rawMeta.forms[layerKey];
+      if (form == null && current == null) return true;
+      if (form != null && current != null && jsonEncode(form.toJson()) == jsonEncode(current.toJson())) return true;
+      final updated = Map<String, QgisForm>.from(rawMeta.forms);
+      if (form == null) {
+        updated.remove(layerKey);
+      } else {
+        updated[layerKey] = form;
+      }
+      return saveMeta(folderPath, rawMeta.copyWith(forms: updated));
+    });
+  }
+
   /// レイヤースタイルを更新
   /// [layerKey] はgpkgName/layerName形式（例: "survey.gpkg/points"）
   Future<bool> setLayerStyle(
@@ -399,6 +420,7 @@ class KMetaService {
         ),
         styles: KMetaStyles(defaultStyle: rawMeta.styles.defaultStyle, layers: moveAll(rawMeta.styles.layers)),
         views: moveAll(rawMeta.views),
+        forms: moveAll(rawMeta.forms),
         layout: KMetaLayout(sortOrder: newSortOrder, expanded: rawMeta.layout.expanded),
       );
       if (!changed) return true;

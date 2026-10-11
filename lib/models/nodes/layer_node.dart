@@ -31,6 +31,7 @@ import '../geometry_type.dart';
 import '../geopackage/feature_repository.dart' show toGeoMultiLine, toGeoMultiPolygon, toGeoPoint;
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
+import '../qgis_form.dart';
 import '../qgis_renderer.dart';
 import 'feature_node.dart';
 import 'folder_node.dart';
@@ -395,6 +396,18 @@ abstract class LayerNode extends LayerTreeNode {
       return _cachedKmetaStyle;
     } catch (e) {
       AppLogger.debug('[LayerNode] Error getting KMeta style: $e');
+      return null;
+    }
+  }
+
+  /// QGIS の属性フォームの設定（フォルダ設定の [KMeta.forms]）。無ければ null
+  Future<QgisForm?> getQgisForm() async {
+    final folder = folderNode;
+    if (folder == null || _isDisposed) return null;
+    try {
+      return (await folder.getMeta()).forms[layerKey];
+    } on Object catch (e) {
+      AppLogger.debug('[LayerNode] 属性フォームの設定を読めない: $e');
       return null;
     }
   }

@@ -27,9 +27,12 @@
 //   CASE WHEN … THEN … [ELSE …] END
 //   関数: lower upper trim length coalesce concat to_string to_int to_real round abs if
 //         left right substr starts_with
+//         now() / $now（今の時刻。DateTime）・uuid()（既定値の式に使う）
 //
 // NULL は QGIS と同じく三値（比較の片方が NULL なら NULL、フィルタでは偽）。
 // それ以外は読めない（[QgisExpressionParseException]）。呼び出し側は代表の色に戻す。
+
+import 'dart:math' as math;
 
 /// 式の木（評価用にコンパイル済み）
 abstract class QgisExpr {
@@ -306,6 +309,8 @@ class _Func extends QgisExpr {
       }
       return null;
     }
+    if (name == 'now') return DateTime.now();
+    if (name == 'uuid') return _uuid(args.isEmpty ? null : args.first.eval(props));
     final v = [for (final a in args) a.eval(props)];
     if (name == 'concat') return v.map((x) => x == null ? '' : qgisToText(x)).join();
     final first = v.first;
@@ -378,7 +383,25 @@ const Map<String, (int, int)> _functions = {
   'right': (2, 2),
   'substr': (2, 3),
   'starts_with': (2, 2),
+  'now': (0, 0),
+  'uuid': (0, 1),
 };
+
+/// QGIS の uuid()。既定は波かっこつき、'WithoutBraces' で無し、'Id128' で区切りも無し
+String _uuid(Object? format) {
+  final r = math.Random.secure();
+  final b = [for (var i = 0; i < 16; i++) r.nextInt(256)];
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  final hex = [for (final x in b) x.toRadixString(16).padLeft(2, '0')].join();
+  final plain = '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-'
+      '${hex.substring(16, 20)}-${hex.substring(20)}';
+  return switch (format) {
+    'WithoutBraces' => plain,
+    'Id128' => hex,
+    _ => '{$plain}',
+  };
+}
 
 // ── 字句 ──────────────────────────────────────────
 
@@ -462,6 +485,13 @@ class _Parser {
       if (op != null) {
         pos += op.length;
         _toks.add(_Tok(_T.op, op == '!=' ? '<>' : op, start));
+        continue;
+      }
+      // `$now` だけ飲む（`$area` など地物の形を使うものは読めない）
+      if (c == r'$' && src.startsWith(r'$now', pos) &&
+          (pos + 4 >= src.length || !_identBody.hasMatch(src[pos + 4]))) {
+        pos += 4;
+        _toks.add(_Tok(_T.ident, r'$now', start));
         continue;
       }
       if (_identStart.hasMatch(c)) {
@@ -607,6 +637,7 @@ class _Parser {
         if (up == 'TRUE') return const _Lit(true);
         if (up == 'FALSE') return const _Lit(false);
         if (up == 'CASE') return _case();
+        if (up == r'$NOW') return const _Func('now', []);
         if (_cur.type == _T.lparen) return _func(t);
         if (const {'AND', 'OR', 'NOT', 'IN', 'LIKE', 'ILIKE', 'IS', 'WHEN', 'THEN', 'ELSE', 'END'}.contains(up)) {
           throw QgisExpressionParseException('ここに値が要る', t.offset);

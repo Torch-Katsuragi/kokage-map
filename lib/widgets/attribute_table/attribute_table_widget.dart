@@ -351,12 +351,18 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   void _onGridChanged(TrinaGridOnChangedEvent event) async {
     final feature = AttributeTableController.featureOfRow(event.row);
     if (feature == null) return;
+    final field = event.column.field;
     final error = await _controller.saveAttributeChange(
       feature,
-      event.column.field,
+      field,
       event.value,
     );
-    if (error != null) _notify(error, NotificationLevel.error);
+    if (error != null) {
+      // 書かなかったのでマスを元の値に戻す（QGIS の必須の制約など）
+      event.row.cells[field]?.value = event.oldValue;
+      _controller.stateManager?.notifyListeners();
+      _notify(error, NotificationLevel.error);
+    }
   }
 
   Future<void> _handleDeleteSelected() async {

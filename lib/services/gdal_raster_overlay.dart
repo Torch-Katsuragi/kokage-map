@@ -233,7 +233,7 @@ abstract final class GdalRasterOverlay {
       KMetaImageOverlay(
         centerLng: (west + east) / 2,
         centerLat: (south + north) / 2,
-        scale: (north - south) * 111320.0 / height,
+        scale: (north - south) * 111320.0 / height, // GeoTiffService と同じ 111,320 m/° の約束
         rotation: 0,
         imageWidth: width,
         imageHeight: height,

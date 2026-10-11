@@ -24,6 +24,8 @@ library;
 
 import 'package:latlong2/latlong.dart';
 
+import '../../utils/geodesic.dart';
+
 /// 送信判定ロジック（純粋関数的・状態は呼び出し側が保持）
 class PublishThrottle {
   /// 送信を発火する移動距離（メートル）
@@ -53,8 +55,6 @@ class PublishThrottle {
     this.lowBatteryFactor = 2.0,
   });
 
-  static const _distance = Distance();
-
   /// 新しい位置 [current] を送信すべきか判定する。
   ///
   /// [last] / [lastSentAt] は前回送信した位置・時刻（未送信なら null）。
@@ -74,7 +74,7 @@ class PublishThrottle {
     final factor = low ? lowBatteryFactor : 1.0;
 
     // 距離条件
-    final movedM = _distance.as(LengthUnit.Meter, last, current);
+    final movedM = Geodesic.distance(last, current);
     if (movedM >= distanceThresholdM * factor) return true;
 
     // ハートビート条件

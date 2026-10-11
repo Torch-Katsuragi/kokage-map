@@ -32,7 +32,8 @@ import '../models/nodes/feature_node.dart';
 import 'geo_converter.dart';
 import 'geodesic.dart';
 
-/// degree・metre変換系
+/// degree・metre変換系（球。[GeometryCalc.distancePointToSegment] の当たり判定・間引き用。
+/// 見せる長さ・距離は [Geodesic]）
 class _DegreeMeterConverter {
   /// 緯度1度あたりの距離（メートル）
   static double metersPerDegreeLat() {
@@ -54,11 +55,11 @@ class _DegreeMeterConverter {
 
 /// 距離・長さ・面積・重心計算
 class GeometryCalc {
-  /// 2点間の距離（メートル）を計算
-  /// [a], [b]: LatLng
-  /// 戻り値: 距離（m）
+  /// 2点間の距離（メートル）を計算（turf の球、R = 6371008.8 m）
+  ///
+  /// タップの当たり判定・線の間引きのしきい値に使う（楕円体との差は 0.5% 未満）。
+  /// 利用者に見せる距離は [Geodesic.distance]（WGS84 楕円体、QGIS と同じ値）を使うこと
   static double calcDistance(LatLng a, LatLng b) {
-    // turf_dartを使用した高精度な距離計算
     final pointA = Point(coordinates: a.toTurfPosition());
     final pointB = Point(coordinates: b.toTurfPosition());
     return distance(pointA, pointB, Unit.meters).toDouble();

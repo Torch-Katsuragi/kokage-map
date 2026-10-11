@@ -21,6 +21,8 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../utils/geodesic.dart';
+
 /// 軌跡の記録の設定。既定は以前の動き（1 秒ごと・同じ座標だけ捨てる）に、明らかな飛びの除外を足したもの
 @immutable
 class TrackRecordingSettings {
@@ -172,7 +174,7 @@ class TrackPointFilter {
     if (elapsed.inMilliseconds < s.intervalSeconds * 1000) return TrackFixVerdict.tooSoon;
     if (position == lastPosition) return TrackFixVerdict.duplicate;
 
-    final meters = const Distance(roundResult: false).distance(lastPosition, position);
+    final meters = Geodesic.distance(lastPosition, position);
     if (s.maxSpeedKmh case final max?) {
       final kmh = meters / 1000 / (elapsed.inMilliseconds / 3600000);
       if (kmh > max) {

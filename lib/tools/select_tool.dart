@@ -79,6 +79,7 @@ class SelectTool extends MapTool with PanDelegation {
       b = (geom, bb.lng1.toDouble(), bb.lat1.toDouble(), bb.lng2.toDouble(), bb.lat2.toDouble());
       _bboxes[f] = b;
     }
+    // 当たり判定の外枠（粗い足切り）なので赤道の 1° = 111,320 m で足りる。距離そのものは見せない
     final dLat = rangeM / 111320;
     final dLon = rangeM / (111320 * math.max(0.01, math.cos(p.latitude * math.pi / 180)));
     return p.longitude >= b.$2 - dLon && p.longitude <= b.$4 + dLon && p.latitude >= b.$3 - dLat && p.latitude <= b.$5 + dLat;

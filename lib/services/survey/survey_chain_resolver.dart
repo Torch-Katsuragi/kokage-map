@@ -25,6 +25,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/layer_node.dart';
+import '../../utils/geodesic.dart';
 
 /// 測量チェーン内の1点を表すデータクラス
 /// 測量の属性（survey_az など）の値を数にする。num と数として読める文字列のほかは 0
@@ -68,10 +69,9 @@ class TraverseChain {
 
   /// 総路線長（メートル）
   double get totalDistance {
-    const d = Distance(roundResult: false);
     double total = 0;
     for (final p in points) {
-      total += d.as(LengthUnit.Meter, p.stationPosition, p.position);
+      total += Geodesic.distance(p.stationPosition, p.position);
     }
     return total;
   }
@@ -79,11 +79,7 @@ class TraverseChain {
   /// 閉合差（起点と終点の距離、メートル）
   double get closureError {
     if (points.isEmpty) return 0;
-    return const Distance(roundResult: false).as(
-      LengthUnit.Meter,
-      origin.point,
-      points.last.position,
-    );
+    return Geodesic.distance(origin.point, points.last.position);
   }
 
   /// 閉合比（1/N の N）。0除算時はdouble.infinity

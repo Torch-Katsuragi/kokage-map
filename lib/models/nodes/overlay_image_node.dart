@@ -103,7 +103,7 @@ class OverlayImageNode extends ImageNode {
       final rotX = offset[0] * cosR - offset[1] * sinR;
       final rotY = offset[0] * sinR + offset[1] * cosR;
 
-      // メートル→緯度経度変換（近似）
+      // メートル→緯度経度変換（近似。GeoTiffService.buildModelTransformationMatrix と同じ 111,320 m/° の約束）
       final dLat = rotY / 111320.0;
       final dLng =
           rotX / (111320.0 * math.cos(overlayParams.centerLat * math.pi / 180));

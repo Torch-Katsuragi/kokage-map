@@ -23,6 +23,8 @@
 library;
 
 import 'package:latlong2/latlong.dart';
+
+import '../../utils/geodesic.dart';
 import 'survey_chain_resolver.dart';
 
 /// 補正方式
@@ -117,7 +119,7 @@ class TraverseAdjuster {
     final origin = positions.first;
     final lastPos = positions.last;
     final closureError =
-        const Distance(roundResult: false).as(LengthUnit.Meter, origin, lastPos);
+        Geodesic.distance(origin, lastPos);
 
     // Step 3: 総路線長を計算
     double totalDist = 0;
@@ -273,7 +275,7 @@ class TraverseAdjuster {
     final lastPos = recalc.positions.last;
 
     final error =
-        const Distance(roundResult: false).as(LengthUnit.Meter, origin, lastPos);
+        Geodesic.distance(origin, lastPos);
     double totalDist = 0;
     for (final p in chain.points) {
       totalDist += p.hd;

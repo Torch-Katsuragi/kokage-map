@@ -20,6 +20,8 @@ import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
 
+import 'geodesic.dart';
+
 /// 誘導の計算
 abstract final class NavigationMath {
   /// 到着とみなす最小の半径（m）。GPS の精度がこれより悪ければ精度の値を使う
@@ -28,11 +30,8 @@ abstract final class NavigationMath {
   /// 到着のあと、この倍率ぶん離れたら「まだ着いていない」に戻す（境目で通知が連発しないように）
   static const double rearmFactor = 2;
 
-  /// Vincenty（WGS84 楕円体）。既定の丸め（1 m 単位）は外す
-  static const _distance = Distance(roundResult: false);
-
-  /// [a] から [b] までの楕円体上の距離（m）
-  static double distanceMeters(LatLng a, LatLng b) => _distance.as(LengthUnit.Meter, a, b);
+  /// [a] から [b] までの楕円体上の距離（m）。計測・情報パネルと同じ [Geodesic]
+  static double distanceMeters(LatLng a, LatLng b) => Geodesic.distance(a, b);
 
   /// [a] から [b] への初期方位（真北から時計回り、0〜360°）
   static double bearingDeg(LatLng a, LatLng b) {

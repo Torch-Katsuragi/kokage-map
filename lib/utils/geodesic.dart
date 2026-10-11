@@ -54,6 +54,20 @@ class Geodesic {
     return karneyDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
   }
 
+  /// 緯度 [latDeg] での緯度 1° の長さ [m]（子午線曲率半径から。赤道 110,574 m・北緯 34° で 110,922 m）
+  static double metersPerDegreeLat(double latDeg) {
+    final s = math.sin(_rad(latDeg));
+    final w = 1 - _e2 * s * s;
+    return _a * (1 - _e2) / (w * math.sqrt(w)) * math.pi / 180;
+  }
+
+  /// 緯度 [latDeg] での経度 1° の長さ [m]（卯酉線曲率半径 × cos φ。赤道 111,320 m）
+  static double metersPerDegreeLon(double latDeg) {
+    final phi = _rad(latDeg);
+    final s = math.sin(phi);
+    return _a / math.sqrt(1 - _e2 * s * s) * math.cos(phi) * math.pi / 180;
+  }
+
   /// 折れ線の長さ [m]
   static double lineLength(List<LatLng> line) {
     var s = 0.0;

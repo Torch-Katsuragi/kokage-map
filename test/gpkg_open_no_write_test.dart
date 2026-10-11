@@ -14,6 +14,8 @@ import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/services/coordinate/index.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'support/foreign_geom_gpkg.dart';
+
 void main() {
   late Directory tmp;
   late String path;
@@ -97,6 +99,25 @@ void main() {
       await gpkg.dispose();
       expect(await columns(), ['geom', 'name']);
     });
+  });
+
+  group('形の列が geom 以外', () {
+    for (final kind in ForeignGeomGpkg.all) {
+      test('${kind.label}: 地物・列・検索を読むだけならファイルを変えない', () async {
+        await kind.write(path);
+        final before = digest();
+
+        final gpkg = open();
+        expect(await gpkg.getFeaturesWithGeometry(kind.table), hasLength(2));
+        expect(await gpkg.getFeature(kind.table, 1), isNotNull);
+        await gpkg.getColumnNames(kind.table, getAll: true);
+        await gpkg.getAttributeColumnInfo(kind.table);
+        await gpkg.searchAttributeRows(kind.table, ['a']);
+        await gpkg.dispose();
+
+        expect(digest(), before);
+      });
+    }
   });
 
   group('定義の無い CRS', () {

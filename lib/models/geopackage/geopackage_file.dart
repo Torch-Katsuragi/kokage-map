@@ -105,8 +105,10 @@ class GeoPackageFile {
     // BackgroundSaveManagerから変更キューをクリア
     BackgroundSaveManager.instance.clearPendingChanges(this);
 
-    // QGIS/GDALへ返す前の整合処理（書き込みが全部終わったこの位置で行う）
-    await _finalizeForQgis();
+    // QGIS/GDALへ返す前の整合処理（書き込みが全部終わったこの位置で行う）。
+    // 読んだだけなら範囲・件数・rtree は書き直さない（開いただけで持ち主のファイルを変えない）
+    final wrote = await _connection.hasWrites();
+    await _finalizeForQgis(syncLayers: wrote);
 
     // ⚠ 閉じる前に書き戻す。web はここを飛ばすと _finalizeForQgis() の
     // 成果（空間インデックス復元・範囲更新）が元ファイルに残らない
@@ -115,7 +117,7 @@ class GeoPackageFile {
     // データベースを閉じる
     await _connection.dispose();
 
-    await _repairIndexAfterClose();
+    if (wrote) await _repairIndexAfterClose();
   }
 
   /// 閉じたあと、QGIS 用の rtree と範囲を実データに合わせる。
@@ -127,9 +129,11 @@ class GeoPackageFile {
   /// 同じファイルを別の接続がまだ開いていれば、最後に閉じる側に任せる（別々の SQLite で同じファイルを開かない）。
   /// rtree の無い gpkg（このアプリで作ったもの）は何もしない。web は対象外。
   Future<void> _repairIndexAfterClose() async {
-    if (!fs.hasRealPaths) return;
     final path = getAbsolutePath();
-    if (path == null || GeoPackageConnection.openCountFor(path) > 0) return;
+    // 開いている途中の接続も数える（開き直しの最中に別の SQLite で書かない）
+    if (path == null || GeoPackageConnection.openCountFor(path) > 0 || GeoPackageConnection.isInUse(path)) return;
+    GeoPackageConnection.clearWrites(path);
+    if (!fs.hasRealPaths) return;
     try {
       if (!await fs.exists(path)) return;
       await GpkgIndexRepair.rebuildFile(path);
@@ -145,10 +149,11 @@ class GeoPackageFile {
   ///
   /// ⚠ トリガー復元は**必ず最後**。復元後に書き込むと sqflite に ST_ 関数が無く落ちる。
   /// 失敗してもクローズ自体は続行する（ファイルを開けたままにしない）。
-  Future<void> _finalizeForQgis() async {
+  Future<void> _finalizeForQgis({required bool syncLayers}) async {
+    if (!syncLayers && !_spatial.qgisInterop.hasRemovedTriggers) return; // 開いていなければ開かない
     try {
       final db = await _connection.getDatabase();
-      await QgisInterop.syncAllLayers(db);
+      if (syncLayers) await QgisInterop.syncAllLayers(db);
       await _spatial.qgisInterop.restoreTriggers(db);
     } catch (e) {
       AppLogger.debug('[GeoPackageFile] QGIS向けの整合処理に失敗: $e');

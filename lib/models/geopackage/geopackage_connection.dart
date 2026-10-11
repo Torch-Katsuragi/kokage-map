@@ -62,6 +62,49 @@ class GeoPackageConnection {
   /// 台帳に載せたときのキー（dispose で外すため）
   String? _registeredKey;
 
+  /// 共有の Database を使っている接続の数（正規化した絶対パス → 数）。
+  ///
+  /// [_openConnections] と違い、開いている途中の接続も数える（開き始めに足し、[dispose] で引く）。
+  /// sqflite の singleInstance で同じパスは 1 つの Database を共有するので、閉じるのは最後の 1 本だけ。
+  /// 以前は dispose が他の接続の有無を見ずに閉じていて、同じ gpkg を別の [GeoPackageFile] で開き直す最中に
+  /// 前のものの dispose（await されない）が閉じると、開き直した側が `database_closed` で落ちた
+  static final Map<String, int> _users = {};
+
+  /// 閉じている途中の Database（パス → 閉じ終わり）。開く側はこれを待ってから開く
+  static final Map<String, Future<void>> _closing = {};
+
+  /// [_users] に数えているときのキー
+  String? _userKey;
+
+  /// アプリが書いたのに、まだ QGIS 向けの整合（範囲・件数・rtree の焼き直し）をしていないパス。
+  /// 接続を閉じても覚えておく（[closeAllFor] で閉じて開き直したあとの最後の dispose が整合する）
+  static final Set<String> _writtenPaths = {};
+
+  /// このファイルにアプリが書いたか（開いている Database の `total_changes()` と、閉じる前に書いた分）。
+  /// 読んだだけのファイルは閉じるときに整合しない（開いただけで持ち主のファイルを変えない）
+  Future<bool> hasWrites() async {
+    final path = absPath;
+    if (path == null) return false;
+    if (_writtenPaths.contains(_registryKey(path))) return true;
+    return await _totalChanges(_database) > 0;
+  }
+
+  /// [absPath] の書き込みの整合を済ませた（[hasWrites] を戻す）
+  static void clearWrites(String absPath) => _writtenPaths.remove(_registryKey(absPath));
+
+  static Future<int> _totalChanges(Database? db) async {
+    if (db == null || !db.isOpen) return 0;
+    try {
+      return ((await db.rawQuery('SELECT total_changes() AS c')).first['c'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// [absPath] の Database を、開いている途中のものも含めて誰かが使っているか
+  /// （別の SQLite（geodiff）で同じファイルを書く前に確かめる）
+  static bool isInUse(String absPath) => (_users[_registryKey(absPath)] ?? 0) > 0;
+
   static String _registryKey(String path) => p.canonicalize(path);
 
   /// 同じファイルを開いている接続で共有するスキーマの控え（正規化した絶対パス → 控え）。
@@ -105,7 +148,7 @@ class GeoPackageConnection {
     var closed = 0;
     for (final c in set.toList()) {
       try {
-        await c.dispose();
+        await c.dispose(force: true);
         closed++;
       } catch (e) {
         AppLogger.debug('[GeoPackageConnection] closeAllFor: 閉じられなかった $absPath - $e');
@@ -366,6 +409,15 @@ class GeoPackageConnection {
       //    以前は `version: 1` にしていたため、QGIS が作った .gpkg を開くだけで
       //    版が 1 に書き換わり、GDAL が「unrecognized user_version=0x00000001」
       //    と警告していた（2026-09-12 QGIS 4.2.0 で確認）
+      // 開き始めに使い手として数える（開いている途中に前の接続の dispose が共有の Database を閉じないように）。
+      // 前の接続が閉じている途中なら、閉じ終わってから開く（閉じかけの Database を掴まない）
+      final key = _registryKey(absPath);
+      if (_userKey == null) {
+        _userKey = key;
+        _users[key] = (_users[key] ?? 0) + 1;
+      }
+      final closing = _closing[key];
+      if (closing != null) await closing;
       final (existed, db) = await _checkOutAndOpen(absPath);
       _database = db;
       if (!await _hasGeoPackageCore(_database!)) {
@@ -389,6 +441,17 @@ class GeoPackageConnection {
       // web: 以降の書き込みを監視して元ファイルへ書き戻す
       _startCheckInWatcher();
     } catch (e, stack) {
+      // 開けなかった: 使い手から外す（数えたままだと、ほかの接続が最後でも閉じなくなる）
+      final key = _userKey;
+      if (_database == null && key != null) {
+        _userKey = null;
+        final n = (_users[key] ?? 1) - 1;
+        if (n > 0) {
+          _users[key] = n;
+        } else {
+          _users.remove(key);
+        }
+      }
       AppLogger.debug('[GeoPackageConnection] 初期化時にエラー発生:');
       AppLogger.debug('  パス: $absPath');
       AppLogger.debug('  エラー: $e');
@@ -600,8 +663,20 @@ class GeoPackageConnection {
     }
   }
 
-  /// データベースのクローズ処理
-  Future<void> dispose() async {
+  /// データベースのクローズ処理。
+  ///
+  /// sqflite の singleInstance で同じパスの接続は 1 つの Database を共有しているので、
+  /// 同じパスを使っている接続（開いている途中のものも）が残っていれば閉じない（[_users]）。
+  /// [force] は残っていても閉じる（[closeAllFor]。geodiff・Drive がファイルを書く前）。
+  /// 閉じられた側は次の [getDatabase] で開き直す
+  Future<void> dispose({bool force = false}) async {
+    final path = absPath;
+    final pathKey = path == null ? null : _registryKey(path);
+    // 書いたかを先に控える（閉じると total_changes() が消える）。
+    // ⚠ ここより下は閉じるまで await を挟まない（使い手の数を見てから閉じるまでの間に、開き直す側が割り込まないように）
+    if (pathKey != null && await _totalChanges(_database) > 0) _writtenPaths.add(pathKey);
+    final db = _database;
+
     _dropSchemaCache();
     final key = _registeredKey;
     if (key != null) {
@@ -610,12 +685,30 @@ class GeoPackageConnection {
       if (set != null && set.isEmpty) _openConnections.remove(key);
       _registeredKey = null;
     }
-    if (_database != null) {
-      final db = _database!;
-      _database = null;
-      // sqflite の singleInstance で同じパスの接続は1つの Database を共有している。
-      // 先に誰かが閉じていれば、ここは閉じ済みのものを閉じるだけ
-      if (db.isOpen) await db.close();
+    var last = true;
+    final userKey = _userKey;
+    if (userKey != null) {
+      _userKey = null;
+      final n = (_users[userKey] ?? 1) - 1;
+      if (n > 0) {
+        _users[userKey] = n;
+        last = false;
+      } else {
+        _users.remove(userKey);
+      }
+    }
+    _database = null;
+    if (db != null) {
+      if ((last || force) && db.isOpen) {
+        final closing = db.close();
+        final closingKey = userKey ?? pathKey;
+        if (closingKey != null) _closing[closingKey] = closing;
+        try {
+          await closing;
+        } finally {
+          if (closingKey != null && identical(_closing[closingKey], closing)) unawaited(_closing.remove(closingKey));
+        }
+      }
     }
     _checkInTimer?.cancel();
     _checkInTimer = null;

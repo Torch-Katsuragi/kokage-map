@@ -201,36 +201,46 @@ class KMetaService {
   /// 消した gpkg（[gpkgName]）の設定を落とす（可視状態・中のレイヤと View の可視状態・スタイル・View）。
   /// 何も持っていなければ書かない
   Future<bool> forgetGeoPackage(String folderPath, String gpkgName) {
+    final prefix = '$gpkgName/';
+    return _forgetKeys(folderPath, (key) => key.startsWith(prefix), gpkgName: gpkgName);
+  }
+
+  /// 消したレイヤ（[layerKey] = `<gpkg>/<レイヤ>`）の設定を落とす（可視状態・View・スタイル・属性フォーム・写真の列・結合）。
+  /// 残すと、同じ名前で作り直したレイヤが前の設定を引き継いでしまう
+  Future<bool> forgetLayer(String folderPath, String layerKey) =>
+      _forgetKeys(folderPath, (key) => key == layerKey || key.startsWith('$layerKey/'));
+
+  /// [drop] に当たる鍵を、レイヤ単位の設定から全部落とす。[gpkgName] があればその gpkg の可視状態も落とす
+  Future<bool> _forgetKeys(String folderPath, bool Function(String key) drop, {String? gpkgName}) {
     return _serial(folderPath, () async {
       final rawMeta = await getRawMeta(folderPath);
       if (rawMeta == null) return true;
-      final prefix = '$gpkgName/';
-      bool keep(String key) => !key.startsWith(prefix);
+      bool keep(String key) => !drop(key);
+      Map<String, T> kept<T>(Map<String, T> m) => {for (final e in m.entries) if (keep(e.key)) e.key: e.value};
       final v = rawMeta.visibility;
       final s = rawMeta.styles;
-      final touched = v.geopackages.containsKey(gpkgName) ||
+      final touched = (gpkgName != null && v.geopackages.containsKey(gpkgName)) ||
           !v.layers.keys.every(keep) ||
           !v.views.keys.every(keep) ||
           !s.layers.keys.every(keep) ||
           !rawMeta.views.keys.every(keep) ||
           !rawMeta.forms.keys.every(keep) ||
+          !rawMeta.photoFields.keys.every(keep) ||
           !rawMeta.joins.keys.every(keep);
       if (!touched) return true;
       final updatedMeta = rawMeta.copyWith(
         visibility: KMetaVisibility(
-          layers: {for (final e in v.layers.entries) if (keep(e.key)) e.key: e.value},
-          geopackages: {...v.geopackages}..remove(gpkgName),
+          layers: kept(v.layers),
+          geopackages: gpkgName == null ? v.geopackages : ({...v.geopackages}..remove(gpkgName)),
           folders: v.folders,
           images: v.images,
-          views: {for (final e in v.views.entries) if (keep(e.key)) e.key: e.value},
+          views: kept(v.views),
         ),
-        styles: KMetaStyles(
-          defaultStyle: s.defaultStyle,
-          layers: {for (final e in s.layers.entries) if (keep(e.key)) e.key: e.value},
-        ),
-        views: {for (final e in rawMeta.views.entries) if (keep(e.key)) e.key: e.value},
-        forms: {for (final e in rawMeta.forms.entries) if (keep(e.key)) e.key: e.value},
-        joins: {for (final e in rawMeta.joins.entries) if (keep(e.key)) e.key: e.value},
+        styles: KMetaStyles(defaultStyle: s.defaultStyle, layers: kept(s.layers)),
+        views: kept(rawMeta.views),
+        forms: kept(rawMeta.forms),
+        photoFields: kept(rawMeta.photoFields),
+        joins: kept(rawMeta.joins),
       );
       return saveMeta(folderPath, updatedMeta);
     });
@@ -428,7 +438,7 @@ class KMetaService {
             out[key] = value;
           } else {
             moved[to] = value;
-            changed = true;
+            if (to != key) changed = true;
           }
         }
         return {...out, ...moved};

@@ -142,6 +142,42 @@ void main() {
       expect((await gpkg.getColumnNames('pts', getAll: true)).where(FeaturePhotoPaths.isPhotoColumn), hasLength(2));
     });
 
+    // 2026-10-11 夜のレビュー: 「外して消す」が photos/ の外（QGIS の絶対パス・../）や、
+    // 複製したレイヤが共有している写真まで消していた
+    test('外して消す: photos/ の外の写真と、ほかの地物も指している写真は消さない', () async {
+      final layer = (await PointLayerNode.createIn(gpkgNode, 'pts'))!;
+      final f = (await PointFeatureNode.createIn(layer, fix, 'p1', null))!;
+      final g = (await PointFeatureNode.createIn(layer, fix, 'p2', null))!;
+
+      // 外の写真（../DCIM/…）
+      final outside = File(p.join(tmp.path, '..', '${p.basename(tmp.path)}_dcim.jpg'))..writeAsBytesSync(jpeg);
+      addTearDown(() => outside.existsSync() ? outside.deleteSync() : null);
+      await FeaturePhotoService.link(f, '../${p.basename(outside.path)}');
+      final out = FeaturePhotoService.photosOf(f).single;
+      expect(await FeaturePhotoService.unlink(f, out, deleteFile: true), isFalse);
+      expect(outside.existsSync(), isTrue);
+      expect(FeaturePhotoService.photosOf(f), isEmpty, reason: 'リンクは外す');
+
+      // 2 つの地物が同じ写真を指す（レイヤの複製など）
+      final shared = (await FeaturePhotoService.attachBytes(f, jpeg, takenAt: DateTime(2026, 10, 11, 9)))!;
+      await FeaturePhotoService.link(g, shared.value);
+      expect(await FeaturePhotoService.unlink(f, shared, deleteFile: true), isFalse);
+      expect(File(shared.path).existsSync(), isTrue);
+
+      // 最後の 1 つを外せば消す
+      final last = FeaturePhotoService.photosOf(g).single;
+      expect(await FeaturePhotoService.unlink(g, last, deleteFile: true), isTrue);
+      expect(File(shared.path).existsSync(), isFalse);
+    });
+
+    test('写真の列を作ったら、レイヤの列名のキャッシュを捨てる', () async {
+      final layer = (await PointLayerNode.createIn(gpkgNode, 'pts'))!;
+      final f = (await PointFeatureNode.createIn(layer, fix, 'p1', null))!;
+      expect(await layer.getAttributeColumnNames(getAll: true), isNot(contains('photo')));
+      await FeaturePhotoService.attachBytes(f, jpeg);
+      expect(await layer.getAttributeColumnNames(getAll: true), contains('photo'));
+    });
+
     test('既にある photo 列（QGIS で作ったもの）にも書く', () async {
       final layer = (await PointLayerNode.createIn(gpkgNode, 'pts'))!;
       await gpkg.addAttributeColumns('pts', {'photo': 'TEXT'});

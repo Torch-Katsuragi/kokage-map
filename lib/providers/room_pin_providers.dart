@@ -128,9 +128,8 @@ class RoomPins extends Notifier<RoomPinsState> {
     final subs = List.of(_subs);
     _subs.clear();
     if (!disposing && store != null) state = const RoomPinsState();
-    for (final s in subs) {
-      await s.cancel();
-    }
+    // 全部まとめて止める（1 本ずつ待つと、その間に旧ルームの新着通知が出うる）
+    await Future.wait([for (final s in subs) s.cancel()]);
     if (store != null) {
       await store.dispose();
       await store.source.dispose();

@@ -86,10 +86,20 @@ class RoomPinStore {
   Stream<RoomPin> get newRemotePins => _newRemoteController.stream;
 
   Future<void> start() async {
+    // 購読は未送信キューを読む前に張る。ソース（RTDB）は作った時点で購読を始めていて、
+    // キューを読む間に届いた初回のスナップショットを聞き逃すと、次に誰かが書くまでピンが出ない。
+    // 読み終わるまでに届いた分は最後の 1 つだけ取っておく
+    Map<String, RoomPin>? early;
+    var loaded = false;
+    _sub = source.pins.listen((pins) => loaded ? _onRemote(pins) : early = pins);
     await outbox.load();
     if (_disposed) return;
-    _sub = source.pins.listen(_onRemote);
-    _emit();
+    loaded = true;
+    if (early case final pins?) {
+      _onRemote(pins);
+    } else {
+      _emit();
+    }
     unawaited(flush());
   }
 

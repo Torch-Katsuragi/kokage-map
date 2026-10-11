@@ -32,6 +32,7 @@ import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../screens/layer_style_settings_screen.dart';
 import '../../../services/geometry_conversion_service.dart';
+import '../../../services/layer_drawer_service.dart';
 import '../../../services/survey/survey_chain_resolver.dart';
 import '../../../tutorial/practice_project.dart';
 import '../../../tutorial/tutorial.dart';
@@ -233,8 +234,7 @@ class LayerTile extends ConsumerWidget {
     );
     if (newName == null || newName == node.layerName) return;
     try {
-      await node.geoPackageFile.renameLayer(node.layerName, newName);
-      await node.geoPackageNode.updateChildren();
+      await LayerDrawerService.renameLayer(node, newName);
       ref.refreshMap();
     } catch (e) {
       ref.notify(t.layerDrawer.layer.renameFailed(error: '$e'));
@@ -263,7 +263,7 @@ class LayerTile extends ConsumerWidget {
       confirmLabel: t.layerDrawer.layer.delete,
       execute: () async {
         ref.deselectLayer(node);
-        await node.dispose();
+        await LayerDrawerService.deleteLayer(node);
         ref.refreshMap();
       },
     );

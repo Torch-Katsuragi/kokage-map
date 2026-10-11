@@ -69,14 +69,26 @@ class _FeaturePhotoStripState extends ConsumerState<FeaturePhotoStrip> {
         }
       });
 
+  // 通知と描き直しの合図は、await の前に取っておく（カメラから戻る前にパネルが閉じると ref は使えない。
+  // 写真は gpkg に付くので、ツリーと地図の描き直しはパネルが無くても行う）
+  late final NotificationCenter _notes;
+  late final FeatureRefreshTrigger _refresh;
+
+  @override
+  void initState() {
+    super.initState();
+    _notes = ref.read(notificationCenterProvider.notifier);
+    _refresh = ref.read(featureRefreshTriggerProvider.notifier);
+  }
+
   void _notify(String title, NotificationLevel level, {String? detail}) =>
-      ref.read(notificationCenterProvider.notifier).add(title: title, detail: detail, level: level);
+      _notes.add(title: title, detail: detail, level: level);
 
   /// 付けたあと: レイヤ一覧に photos/ を出し、地図（写真の印）とパネルを描き直す
   Future<void> _afterAttach(int count) async {
     if (count == 0) return;
     await FeaturePhotoService.refreshTree(_f);
-    ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    _refresh.trigger();
     _notify(t.featurePhotos.attached(count: count), NotificationLevel.success);
   }
 
@@ -87,7 +99,7 @@ class _FeaturePhotoStripState extends ConsumerState<FeaturePhotoStrip> {
     setState(() => _busy = true);
     try {
       final count = await body();
-      if (mounted) await _afterAttach(count);
+      await _afterAttach(count);
     } on Object catch (e) {
       AppLogger.debug('[FeaturePhoto] 付けられない: $e');
       _notify(t.featurePhotos.attachFailed, NotificationLevel.error, detail: '$e');
@@ -194,7 +206,7 @@ class _FeaturePhotoStripState extends ConsumerState<FeaturePhotoStrip> {
     await FeaturePhotoService.unlink(_f, photo, deleteFile: choice);
     _bytes.remove(photo.path)?.ignore();
     if (choice) await FeaturePhotoService.refreshTree(_f);
-    ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    _refresh.trigger();
     if (mounted) setState(() {});
     _notify(t.featurePhotos.removed, NotificationLevel.success);
   }

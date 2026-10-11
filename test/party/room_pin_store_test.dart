@@ -209,4 +209,33 @@ void main() {
     expect(store.view.map((v) => v.pin.id), containsAll(['already0001', 'fromPeer001', 'pin00000000']));
     expect(store.view.map((v) => v.pin.id), isNot(contains('gonePeer001')));
   });
+
+  // 未送信キューを読む間に届いた初回のスナップショットを聞き逃し、次に誰かが書くまでピンが出なかった（2026-10-11）
+  test('キューを読む間に届いた初回のスナップショットも地図に出し、入った時点のピンは知らせない', () async {
+    source.server['already0001'] =
+        const RoomPin(id: 'already0001', author: 'x', type: RoomPinType.note, lat: 0, lon: 0, createdAtMs: 1);
+    final slow = _SlowStorage();
+    final store = build(outbox: PinOutbox(storage: slow, nowMs: () => now));
+    final got = <String>[];
+    store.newRemotePins.listen((p) => got.add(p.id));
+    final started = store.start();
+    await settle();
+    source.emit(); // キューを読んでいる最中に届く
+    slow.release.complete();
+    await started;
+    await settle();
+    expect(store.view.map((v) => v.pin.id), ['already0001']);
+    source.remoteWrite(const RoomPin(id: 'fromPeer001', author: 'peer', type: RoomPinType.hazard, lat: 0, lon: 0, createdAtMs: 2));
+    await settle();
+    expect(got, ['fromPeer001']);
+  });
+}
+
+class _SlowStorage extends MemoryPinOutboxStorage {
+  final release = Completer<void>();
+  @override
+  Future<String?> read() async {
+    await release.future;
+    return super.read();
+  }
 }

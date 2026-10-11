@@ -22,6 +22,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/attribute_columns.dart' show isSystemColumn;
 import '../../utils/background_save_manager.dart';
 import '../geometry_type.dart';
 import 'feature_repository.dart';
@@ -543,7 +544,7 @@ class GeoPackageFile {
     };
     final columns = [
       for (final c in await _schema.getTableColumns(tableName))
-        if (c != pk && c != metadataColumn && !geomCols.contains(c.toLowerCase()) && c != 'geom') c,
+        if (c != pk && !isSystemColumn(c) && !geomCols.contains(c.toLowerCase()) && c != 'geom') c,
     ];
     if (columns.isEmpty) return [];
     final hay = columns.map((c) => "COALESCE(CAST(${quoteIdent(c)} AS TEXT), '')").join(' || char(31) || ');

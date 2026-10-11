@@ -184,7 +184,10 @@ class _TableJoinDialogState extends ConsumerState<_TableJoinDialog> {
     final draft = _draft;
     final preview = _preview;
     final resolved = {for (final r in layer.joins) r.join};
-    return AlertDialog(
+    // 保存の途中は閉じさせない（閉じると後の ref.refreshMap / ref.notify が破棄済みの ref を使って落ちる）
+    return PopScope(
+      canPop: !_busy,
+      child: AlertDialog(
       title: Text(tr.title(layer: layer.layerName)),
       content: SizedBox(
         width: 460,
@@ -306,6 +309,7 @@ class _TableJoinDialogState extends ConsumerState<_TableJoinDialog> {
           child: Text(tr.save),
         ),
       ],
+      ),
     );
   }
 }

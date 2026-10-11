@@ -474,6 +474,52 @@ class KMetaService {
     });
   }
 
+  /// 値の関係（ValueRelation）の参照先が [oldGpkgPath]（絶対パス）の gpkg なら、[newGpkgPath] とそのレイヤの新しい名前
+  /// （[layerNames] にあれば）へ書き換える。参照先の gpkg の相対パスは [folderPath]（フォームを持つフォルダ）から。
+  /// 書き換えたら true（何も無ければ書かない）
+  Future<bool> retargetValueRelations(
+    String folderPath, {
+    required String oldGpkgPath,
+    required String newGpkgPath,
+    Map<String, String> layerNames = const {},
+  }) async {
+    final from = p.normalize(oldGpkgPath);
+    if (from == p.normalize(newGpkgPath) && layerNames.isEmpty) return false;
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath);
+      if (rawMeta == null || rawMeta.forms.isEmpty) return false;
+      var changed = false;
+      final forms = <String, QgisForm>{};
+      for (final MapEntry(key: layerKey, value: form) in rawMeta.forms.entries) {
+        final fields = <String, QgisFieldForm>{};
+        for (final MapEntry(key: name, value: field) in form.fields.entries) {
+          final target = field.relationTarget;
+          if (target == null || p.normalize(p.join(folderPath, target.gpkg)) != from) {
+            fields[name] = field;
+            continue;
+          }
+          final gpkg = p.relative(newGpkgPath, from: folderPath).replaceAll(r'\', '/');
+          final layer = layerNames[target.layer] ?? target.layer;
+          if (gpkg == target.gpkg && layer == target.layer) {
+            fields[name] = field;
+            continue;
+          }
+          changed = true;
+          fields[name] = QgisFieldForm.fromJson({
+            ...field.toJson(),
+            'config': {
+              ...field.config,
+              kRelationTargetKey: {'gpkg': gpkg, 'layer': layer},
+            },
+          });
+        }
+        forms[layerKey] = QgisForm(fields: fields, layout: form.layout);
+      }
+      if (!changed) return false;
+      return saveMeta(folderPath, rawMeta.copyWith(forms: forms));
+    });
+  }
+
   /// 展開状態を更新
   Future<bool> setExpanded(String folderPath, bool expanded) async {
     return _serial(folderPath, () async {

@@ -124,6 +124,8 @@ class ExternalLayerConverter {
         folder.invalidateMetaCache();
       }
     }
+    // 値の関係で元のファイルを参照していたフォームも、書いた gpkg を指す（レイヤ名はキャッシュ gpkg のまま）
+    await LayerDrawerService.retargetValueRelations(node, oldGpkgPath: source, newGpkgPath: target);
     await ExternalLayerCache.discard(node.geoPackageFile.getAbsolutePath()!);
     final written = folder is FolderNode ? await _reloadWith(folder, target) : null;
     return ExternalConvertResult(ExternalConvertOutcome.converted, gpkgPath: target, leftovers: leftovers, node: written);

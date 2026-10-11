@@ -316,6 +316,8 @@ QGIS のレイヤのプロパティ →「属性フォーム」で決めた入�
 - **持ち方**: QGIS では maplayer ごとに持つが、アプリはレイヤごと。同じレイヤを指す View が複数あれば既定 View のもの
 - **ValueRelation の参照先**は `.qgs` の maplayer の id なので、取り込みでツリーの gpkg とレイヤ（このフォルダからの相対パスとレイヤ名）に読み替えて
   設定に入れる（`kokageTarget`）。読み替えられなければ取り込みの報告に出し、その列は文字の欄
+  参照先の gpkg・レイヤをアプリで改名したら（読み取り専用レイヤの改名・gpkg への変換も）、プロジェクトのどのフォルダのフォームでも `kokageTarget` を新しい名前へ付け替える
+  （`LayerDrawerService.retargetValueRelations` → `KMetaService.retargetValueRelations`。前は参照先を見失い、その列が文字の欄になっていた）
 - **書き戻し**: `.qgs` のフォームの設定は触らない（QGIS の持ち物。`QgsDocument` が DOM ごと残す）。読み戻しのたびに差し替え、QGIS で設定を外したら外す
 - **古い取り込みの補完**: 自分が書いた `.qgs` は読み戻さないので、開いたときに `QgsImporter.backfillForms` が、フォームの設定を持たないレイヤにだけ足す
   （`.qgs` にフォームを設定した跡があるときだけ読む）

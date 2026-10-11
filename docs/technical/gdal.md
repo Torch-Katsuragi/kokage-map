@@ -25,6 +25,8 @@ tags: [technical, gdal, qgis, interop]
 - **ラスタのオーバーレイ**: `gdalwarp -t_srs EPSG:4326 -ts <長辺 ≤ 4096>` → `gdal_translate -of PNG`。
   オーバービューがあれば GDAL が自分で使う。四隅はワープ後の `geoTransform`（2026-10-10 実装、
   [[external-formats#ラスタのオーバーレイ（GDAL、2026-10-10）]]）
+- **レイヤの書き出し**: レイヤの gpkg → `ogr2ogr -f <ドライバ>`（Shapefile・GeoJSON・KML・CSV・GPX・FlatGeobuf・DXF・GeoPackage。
+  2026-10-10、[[import-export]]）。純 Dart の書き出し・取り込みはこのとき消した
 - 範囲は「読む・変換する」だけ。gpkg の編集はこれまでどおり sqflite（同期のマージは geodiff）
 
 ## 実装の選び方

@@ -17,13 +17,12 @@
         大きなオルソの初回 PNG 作成時間と 2 回目のキャッシュ・.qgs の消灯の読み戻し
   - [ ] ファイルの出し入れ: 「ファイルを追加」（SAF で .shp .dbf .shx を一緒に選べる・名前の衝突・.shp だけの警告）・移して空になった gpkg がツリーと .qgs から消える・
         Drive で shp 一式・`IMG.JPG` が上がり下りし `.kokage` は上がらない
+  - [ ] レイヤの書き出し（GDAL）: 各形式を保存ダイアログまで（shp は zip に .cpg 入り）・編集直後の書き出しに直した値が入る・
+        平面直角の gpkg → shp が QGIS で 6674 に見える・DXF（GDAL_DATA の header.dxf）・web では `.kokage/tmp/` が残らない
   - [ ] web（`tool/web/fetch_gdal3.sh` の後）: 上の一式を OPFS と選んだフォルダで。`.kokage/cache/` が開き直しで作り直されない・KMZ（`/vsizip/`）・
         .cpg の無い shp（呼ぶ側で `-oo ENCODING=CP932`）・「ファイルを追加」とドロップ・本番の `.wasm` `.data` の `content-encoding`
 - [ ] Z 付きのレイヤを変換した gpkg をアプリで編集すると Z が落ちるはず（`createGpkgWkb` は XY だけ書く。gpkg の z=1 は「必須」）。
       QGIS 製の Z 付き gpkg も同じ。編集した地物の Z をどうするか（元の Z を保つ／0 で埋める）決めて直す
-- [ ] 旧来の取り込み（`lib/services/import_export/importers/`・`parsers/`）を消す。UI からは呼ばれていないが、
-  `test/format_golden_test.dart`（取り込みの往復）・`shapefile_writer_test.dart`・`crs_resolution_test.dart`・`dbf_deleted_record_test.dart` が使っている。
-  書き出しの検証を GDAL（`vectorInfo`）に載せ替えてから消す。`ShapeType` は `shapefile_writer.dart` へ移す
 
 ## リリース・Play
 
@@ -117,9 +116,6 @@
   - [ ] 「表をコピー」は最初に読んだ 1 ページ目だけ。ページの大きさの選択も効かない（常に 100 行）
   - [ ] 再読込でフィルタが効いたままでも、ツールバーの表示は「未適用」に戻る
   - [ ] 編集パネルの属性欄では全角数字が半角にならない（フォームではなる）
-- 取り込み・書き出し
-  - [ ] 書き出しダイアログの「ポイントクラウドに変換」はどの形式も読んでいない
-  - [ ] GeoJSON・KML・CSV の書き出しは id・name・description しか出さない
 - そのほか
   - [ ] メタデータ列（`metadataColumn` = kmaps_metadata）はアプリが作らないので、線・面の GPS 測量の記録（drawing_points）は捨てられている
   - [ ] TruPulse の計測のたびに地図ページ全体を組み直す購読が残っている

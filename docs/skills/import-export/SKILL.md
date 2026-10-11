@@ -1,86 +1,30 @@
 ---
 name: import-export
-description: Import/Export機能の実装ガイド。Shapefile、GeoJSON、KML、CSVのインポート/エクスポート、座標系変換を含む。ファイル入出力機能を実装・修正する際に使用。
+description: レイヤの書き出し（GDAL の ogr2ogr）と、gpkg 以外のファイルの読み取りの実装ガイド。Shapefile・GeoJSON・KML・CSV などの入出力、座標系、文字コードを触る際に使用。
 ---
 
 # Import/Export 実装ガイド
 
 ## 詳細資料
 
-実装前に参照：
-
 | 資料 | パス |
 |------|------|
-| Import/Exportアーキテクチャ | `docs/technical/import-export.md` |
-| ジオメトリタイプ仕様 | `docs/features/geometry-types.md` |
+| レイヤの書き出し | `docs/technical/import-export.md` |
+| GDAL の呼び方（Android・web） | `docs/technical/gdal.md` |
+| gpkg 以外のファイルを読み取り専用レイヤに | `docs/technical/external-formats.md` |
 
-## モジュール構造
+## 原則
 
-```
-lib/services/import_export/
-├── import_export_service.dart      # ファサード（エントリポイント）
-├── import_export_models.dart       # FileFormat, ImportExportResult
-├── coordinate_system_manager.dart  # 座標系解析・変換
-├── importers/
-│   ├── base_importer.dart          # 抽象インポーター
-│   ├── shapefile_importer.dart
-│   └── geojson_importer.dart
-├── exporters/
-│   ├── base_exporter.dart          # 抽象エクスポーター
-│   ├── shapefile_exporter.dart
-│   ├── geojson_exporter.dart
-│   ├── csv_exporter.dart
-│   └── kml_exporter.dart
-└── parsers/
-    ├── shapefile_binary_parser.dart
-    ├── dbf_reader.dart
-    └── prj_reader.dart
-```
+- 形式の読み書きは **GDAL**（QGIS と同じ部品）。純 Dart で形式ごとの読み手・書き手を書かない（2026-10 に全部消した）
+- 書き出しは `ImportExportService.exportLayer` → レイヤの gpkg から `ogr2ogr`。引数は `ImportExportService.exportArgs`
+- 取り込みは無い。gpkg 以外のファイルはフォルダに置けば読み取り専用レイヤになり、必要なら「gpkgに変換」
+- GDAL は `ExternalGdal.instance`（テストで差し替える）。パスは `fs` のパス（web は OPFS）
+- 書き出しの前に `flushChanges()` と `checkIn()`（web は OPFS の元ファイルへ書き戻さないと GDAL が古い中身を読む）
 
-## 設計原則
+## 落とし穴
 
-| 原則 | 説明 |
-|------|------|
-| ファサードパターン | `ImportExportService`は軽量なエントリポイント |
-| DRY | バイナリ変換は`binary_utils.dart`に統合 |
-| 疎結合 | 各モジュールは独立動作可能 |
-| 後方互換性 | 元ファイルはre-exportとして維持 |
-
-## サポート形式
-
-### インポート
-
-| 形式 | 拡張子 | 備考 |
-|------|--------|------|
-| Shapefile | .shp, .shx, .dbf, .prj | バイナリ解析 |
-| GeoJSON | .geojson, .json | 標準JSON |
-
-### エクスポート
-
-| 形式 | 拡張子 | 備考 |
-|------|--------|------|
-| Shapefile | .shp, .shx, .dbf, .prj | バイナリ生成 |
-| GeoJSON | .geojson | 標準JSON |
-| KML | .kml | Google Earth互換 |
-| CSV | .csv | 座標テキスト出力 |
-
-## 新規フォーマット追加時
-
-1. `base_importer.dart` または `base_exporter.dart` を継承
-2. `importers/` または `exporters/` に新ファイル作成
-3. `import_export_models.dart` の `FileFormat` enumに追加
-4. `import_export_service.dart` のファサードから呼び出し
-
-## 座標系変換
-
-`SmartCoordinateSystemManager` が担当：
-- PRJファイルからの座標系検出
-- EPSG コード解析
-- WGS84への変換
-
-## 関連ユーティリティ
-
-```
-lib/utils/
-└── binary_utils.dart    # バイト変換ヘルパー
-```
+- shp を書くときは `-lco ENCODING=UTF-8`（付けないと ISO-8859-1 で日本語が落ちる）
+- アプリの点レイヤは MULTIPOINT 宣言に POINT が入っている。shp・CSV の X/Y・GPX は `-nlt POINT`
+- GeoJSON（RFC 7946）・KML・GPX は WGS 84 だけ
+- テストで GDAL を使うときは `setUpAll` で GDAL の `version()` を sqflite より先に呼ぶ（QGIS の DLL 群と sqlite3.dll の読み込み順）。
+  shp の用意は `test/support/shp_fixture.dart`

@@ -1,71 +1,65 @@
-﻿---
-title: Import/Export Service アーキテクチャ
-tags: [technical, architecture, import, export]
+---
+title: レイヤの書き出し（GDAL）
+tags: [technical, architecture, export, gdal]
 ---
 
-# Import/Export Service アーキテクチャ（リファクタリング完了）
+# レイヤの書き出し
 
-2024年12月のリファクタリングにより、`import_export_service.dart`（約3,800行）を以下のモジュラー構造に分割しました。
+2026-10-10 に純 Dart の書き出し（Shapefile・GeoJSON・KML・CSV を自前で組む）をやめ、**レイヤの gpkg を GDAL の `ogr2ogr` で書く** 形にした。
+QGIS の「名前を付けて保存」と同じ部品（[[gdal]]）なので、文字コード・座標系・型の扱いが QGIS と揃う。
+取り込みの純 Dart 実装（`importers/`・`parsers/`）も同時に消した。gpkg 以外のファイルはフォルダに置けば読み取り専用レイヤになる（[[external-formats]]）。
 
-## ディレクトリ構造
+## 構成
 
-```
-lib/services/
-├── import_export/                    # 新規ディレクトリ
-│   ├── import_export_service.dart    # ファサード（軽量なエントリポイント）
-│   ├── import_export_models.dart     # FileFormat, ImportExportResult等
-│   ├── coordinate_system_manager.dart # SmartCoordinateSystemManager
-│   ├── importers/
-│   │   ├── base_importer.dart        # 抽象インポーター
-│   │   ├── shapefile_importer.dart   # Shapefileインポート
-│   │   └── geojson_importer.dart     # GeoJSONインポート
-│   ├── exporters/
-│   │   ├── base_exporter.dart        # 抽象エクスポーター
-│   │   ├── shapefile_exporter.dart   # Shapefileエクスポート
-│   │   ├── geojson_exporter.dart     # GeoJSONエクスポート
-│   │   ├── csv_exporter.dart         # CSVエクスポート
-│   │   └── kml_exporter.dart         # KMLエクスポート
-│   └── parsers/
-│       ├── shapefile_binary_parser.dart  # SHP/SHXバイナリ解析
-│       ├── dbf_reader.dart           # DBF読み込み
-│       └── prj_reader.dart           # PRJ読み込み（座標系解析）
-├── import_export_service.dart        # 後方互換性のためのre-export
-lib/utils/
-└── binary_utils.dart                 # バイト変換ヘルパー（共通化）
-```
+| ファイル | 役目 |
+|---|---|
+| `lib/services/import_export/import_export_models.dart` | `FileFormat`（表示名・拡張子・GDAL のドライバ・WGS 84 固定か）、`ExportOptions`、`ImportExportResult` |
+| `lib/services/import_export/import_export_service.dart` | `exportArgs()`（ogr2ogr の引数）と `exportLayer()` |
+| `lib/widgets/layer_import_export_dialog.dart` | 書き出しダイアログ。一時フォルダに書いて、zip（shp）にしてから `FilePicker.saveFile` |
 
-## 設計原則
+## 流れ
 
-1. **ファサードパターン**: `ImportExportService`は軽量なエントリポイントとして、各インポーター/エクスポーターを呼び出すのみ
-2. **DRY原則**: バイナリ変換ヘルパーを`binary_utils.dart`に統合し、重複コードを排除
-3. **疎結合**: 各モジュールは独立して動作可能で、依存関係を最小化
-4. **後方互換性**: 元の`import_export_service.dart`はre-exportファイルとして残し、既存コードへの影響を最小化
+1. `GeoPackageFile.flushChanges()` で保存待ちの編集を gpkg へ、`checkIn()` で web の sqlite3 WASM の写しを元ファイル（OPFS）へ
+2. `ExternalGdal.instance.vectorTranslate(<gpkg>, <書き出し先>, args: exportArgs(...))`。ソースのレイヤ名を位置引数で渡す
+3. ダイアログは一時フォルダ（Android はアプリのキャッシュ、web は `<プロジェクト>/.kokage/tmp/kokage_export_*`）に書き、
+   Shapefile は付属ファイルごと zip にして保存ダイアログへ渡す。終わったら一時フォルダを消す。
+   file_picker の `saveFile` は中身を先に渡す作り（Android の SAF は保存先を選んでから書けない）なので、この順になる
 
-## 各モジュールの想定行数
+対象はレイヤ全体（View の絞り込みは掛けない。ダイアログはレイヤの行のメニューからだけ開く）。
 
-| ファイル | 行数 | 内容 |
-|---------|------|------|
-| import_export_models.dart | ~100 | enum, 結果クラス |
-| coordinate_system_manager.dart | ~300 | 座標系解析・変換 |
-| base_importer.dart | ~30 | 抽象クラス |
-| shapefile_importer.dart | ~250 | SHPインポート |
-| geojson_importer.dart | ~200 | GeoJSONインポート |
-| base_exporter.dart | ~20 | 抽象クラス |
-| shapefile_exporter.dart | ~400 | SHPエクスポート |
-| geojson_exporter.dart | ~130 | GeoJSONエクスポート |
-| csv_exporter.dart | ~100 | CSVエクスポート |
-| kml_exporter.dart | ~120 | KMLエクスポート |
-| shapefile_binary_parser.dart | ~350 | バイナリ解析 |
-| dbf_reader.dart | ~180 | DBF読み込み |
-| prj_reader.dart | ~50 | PRJ読み込み |
-| binary_utils.dart | ~140 | バイト変換 |
-| import_export_service.dart (facade) | ~180 | ファサード |
+## 形式ごとの引数
+
+| 形式 | ドライバ | 引数 | 決めたこと |
+|---|---|---|---|
+| GeoPackage | `GPKG` | — | |
+| Shapefile | `ESRI Shapefile` | `-lco ENCODING=UTF-8` | QGIS の新規 shp と同じ UTF-8 ＋ `.cpg`。CP932 にはしない（古いソフト向けの CP932 が要る場面が出たら選択肢にする）。付けないと GDAL は ISO-8859-1 で書き日本語が落ちる |
+| GeoJSON | `GeoJSON` | `-t_srs EPSG:4326 -lco RFC7946=YES` | RFC 7946 は WGS 84 だけ |
+| KML | `KML` | `-t_srs EPSG:4326` | KML は WGS 84 だけ。`name`・`description` は `<name>`・`<description>`、ほかは ExtendedData |
+| CSV | `CSV` | 点 `-lco GEOMETRY=AS_XY`、ほか `GEOMETRY=AS_WKT` | WKT の列名は形の列の名前（`geom`）。BOM は付けない（QGIS の既定と同じ） |
+| GPX | `GPX` | `-t_srs EPSG:4326 -dsco GPX_USE_EXTENSIONS=YES` | 点は waypoints、線は tracks。面のレイヤでは選択肢に出さない |
+| FlatGeobuf | `FlatGeobuf` | — | |
+| DXF | `DXF` | `-select ''` | 任意の属性列を持てないので形だけ。GDAL_DATA の `header.dxf` が要る |
+
+- **座標系**: 既定はレイヤのまま（平面直角の gpkg は平面直角の shp に、`.prj` は ESRI WKT）。ダイアログで選べば `-t_srs`。
+  GeoJSON・KML・GPX は選ばせない（4326 固定）
+- **点**: アプリの点レイヤは MULTIPOINT と宣言して POINT を入れている。Shapefile・CSV（X/Y）・GPX は `-nlt POINT` を付けて点として書く
+  （付けないと「MultiPoint の shp に POINT は書けない」で止まる。MultiPoint の shp は古いソフトが読めないこともある）
+- **行番号**: `ExportOptions.includeRowNumber` で
+  `-sql 'SELECT *, ROW_NUMBER() OVER (ORDER BY "<主キー>") AS ROW_NUM FROM "<レイヤ>"' -nln <レイヤ>`（属性表の # と同じ順）。DXF では付けない
+- 「ポイントクラウドとしてエクスポート」は旧実装でもどの形式も読んでいなかったので外した（頂点を点にしたいなら QGIS の「頂点を抽出」）
+
+## テスト
+
+- `test/import_export_service_test.dart`: 形式と `exportArgs()`（GDAL を呼ばない）
+- `test/layer_export_test.dart`: ホストの GDAL（QGIS の `gdal*.dll`）で書き出し、`vectorInfo` で読み直す。
+  日本語の属性の shp（`.cpg`）・GeoJSON の全属性と 4326・KML・CSV の X/Y と WKT・6674 の gpkg → shp が 6674・行番号・保存待ちの編集
+- テストで shp を用意するときは `test/support/shp_fixture.dart`（GDAL で書く。`.cpg` も LDID も無い古い shp も作れる）
 
 ## GeoPackage 互換性に関する注意事項
 
 ### 仮想カラム（`_`で始まるカラム名）
 
-Root Mapsでは、`_`で始まるカラム名を**仮想カラム**として扱います。
+`_`で始まるカラム名は**仮想カラム**として扱う。
 
 | カラム名 | 用途 | 備考 |
 |---------|------|------|
@@ -73,22 +67,16 @@ Root Mapsでは、`_`で始まるカラム名を**仮想カラム**として扱�
 | `_lat`, `_lon` | WGS84座標表示 | Pointレイヤーで座標表示時 |
 | `_x`, `_y` | 変換座標表示 | EPSG指定時の座標変換結果 |
 
-**仕様:**
-- 仮想カラムは**表示専用**であり、GeoPackageには保存されません
-- 外部ツールで作成したGeoPackageに`_`で始まるカラムが存在する場合、Root Mapsでは**編集不可**となります
-
-**外部互換性への影響:**
-- QGISやArcGISなど他のGISソフトウェアで`_`で始まるカラム名を持つGeoPackageを作成した場合、Root Mapsではそのカラムの値を編集・保存できません
-- これはデータ安全性（意図しない上書き防止）とのトレードオフです
-- 必要に応じて、外部ツールでカラム名をリネームしてからインポートしてください
+- 仮想カラムは**表示専用**であり、GeoPackageには保存されない
+- 外部ツールで作成したGeoPackageに`_`で始まるカラムが存在する場合、アプリでは**編集不可**となる（意図しない上書きを防ぐため）
 
 ### PRIMARY KEY カラムの扱い
 
-- 属性テーブルUIでは、PRIMARY KEYカラム（`fid`, `id`など）は非表示です
-- 新規追加したフィーチャのPRIMARY KEY値は内部的に自動採番されますが、表示には行番号（`#`）を使用します
+- 属性テーブルUIでは、PRIMARY KEYカラム（`fid`, `id`など）は非表示
+- 新規追加したフィーチャのPRIMARY KEY値は内部的に自動採番されるが、表示には行番号（`#`）を使う
 
 ## 関連ドキュメント
 
+- [[gdal]] - GDAL の呼び方（Android・web）
+- [[external-formats]] - gpkg 以外のファイルを読み取り専用レイヤにする
 - [[../features/geometry-types]] - レイヤジオメトリタイプ仕様
-- [[tech-stack]] - 技術スタック
-

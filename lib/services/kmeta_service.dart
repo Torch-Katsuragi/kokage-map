@@ -22,6 +22,7 @@ import 'dart:convert';
 import 'package:path/path.dart' as p;
 
 import '../models/kmeta.dart';
+import '../models/layer_join.dart';
 import '../models/qgis_form.dart';
 import '../utils/app_logger.dart';
 import 'qgis/qgs_meta_store.dart';
@@ -212,7 +213,8 @@ class KMetaService {
           !v.views.keys.every(keep) ||
           !s.layers.keys.every(keep) ||
           !rawMeta.views.keys.every(keep) ||
-          !rawMeta.forms.keys.every(keep);
+          !rawMeta.forms.keys.every(keep) ||
+          !rawMeta.joins.keys.every(keep);
       if (!touched) return true;
       final updatedMeta = rawMeta.copyWith(
         visibility: KMetaVisibility(
@@ -228,6 +230,7 @@ class KMetaService {
         ),
         views: {for (final e in rawMeta.views.entries) if (keep(e.key)) e.key: e.value},
         forms: {for (final e in rawMeta.forms.entries) if (keep(e.key)) e.key: e.value},
+        joins: {for (final e in rawMeta.joins.entries) if (keep(e.key)) e.key: e.value},
       );
       return saveMeta(folderPath, updatedMeta);
     });
@@ -351,6 +354,24 @@ class KMetaService {
     });
   }
 
+  /// 表の結合を差し替える（空なら外す）。中身が同じなら書かない
+  Future<bool> setLayerJoins(String folderPath, String layerKey, List<LayerJoin> joins) {
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final current = rawMeta.joins[layerKey] ?? const <LayerJoin>[];
+      if (current.length == joins.length && Iterable<int>.generate(joins.length).every((i) => current[i] == joins[i])) {
+        return true;
+      }
+      final updated = Map<String, List<LayerJoin>>.from(rawMeta.joins);
+      if (joins.isEmpty) {
+        updated.remove(layerKey);
+      } else {
+        updated[layerKey] = List.unmodifiable(joins);
+      }
+      return saveMeta(folderPath, rawMeta.copyWith(joins: updated));
+    });
+  }
+
   /// レイヤースタイルを更新
   /// [layerKey] はgpkgName/layerName形式（例: "survey.gpkg/points"）
   Future<bool> setLayerStyle(
@@ -435,6 +456,7 @@ class KMetaService {
         views: moveAll(rawMeta.views),
         forms: moveAll(rawMeta.forms),
         photoFields: moveAll(rawMeta.photoFields),
+        joins: moveAll(rawMeta.joins),
         layout: KMetaLayout(sortOrder: newSortOrder, expanded: rawMeta.layout.expanded),
       );
       if (!changed) return true;

@@ -41,6 +41,7 @@ import '../../../widgets/external_layer_actions.dart';
 import '../../../widgets/geometry_conversion_dialogs.dart';
 import '../../../widgets/layer_import_export_dialog.dart';
 import '../../../widgets/survey_conversion_dialog.dart';
+import '../../../widgets/table_join/table_join_dialog.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
 import 'layer_swatch.dart';
@@ -137,6 +138,8 @@ class LayerTile extends ConsumerWidget {
         if (!_readOnly) RowMenuItem('rename', t.layerDrawer.layer.rename, icon: Icons.edit),
         RowMenuItem('style', t.layerDrawer.layer.style, icon: Icons.palette, key: guiding ? TutorialTargets.styleMenuItem : null),
         RowMenuItem('add_view', t.layerDrawer.view.addView, icon: Icons.filter_alt, key: guiding ? TutorialTargets.addViewMenuItem : null),
+        // 森林簿 CSV などの表を結ぶ（QGIS の「結合」。読み取り専用レイヤでもできる。書くのはフォルダ設定）
+        RowMenuItem('join_table', t.tableJoin.menu, icon: Icons.link),
         RowMenuItem('export', t.layerDrawer.layer.exportLayer, icon: Icons.file_download, dividerBefore: true),
         if (node is PointLayerNode) RowMenuItem('convert_to_line', t.layerDrawer.layer.convertToLinePolygon, icon: Icons.transform),
         if (node is PolygonLayerNode && !_readOnly) RowMenuItem('merge', t.layerDrawer.layer.merge, icon: Icons.join_full),
@@ -172,6 +175,8 @@ class LayerTile extends ConsumerWidget {
         await _absorbMatchingLayers(context, ref);
       case 'add_view':
         await _addView(ref);
+      case 'join_table':
+        await showTableJoinDialog(context, node);
       case 'zoom':
         _zoomToLayer(ref);
       case 'delete':

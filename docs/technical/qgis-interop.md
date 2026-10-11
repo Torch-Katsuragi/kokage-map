@@ -325,6 +325,65 @@ QGIS のレイヤのプロパティ →「属性フォーム」で決めた入�
 テストは `test/qgis_form_test.dart`（QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_forms.qgs` を読む・並び・式・既定値・制約・欄の出し分け。
 作り直しは `tool/qgis/write_form_fixture.py`）と `test/qgs_form_import_test.dart`（取り込み・値の関係の解決と選択肢・新しい地物の既定値・補完・往復で残る）。
 
+## 表の結合（森林簿 CSV と計画図）（2026-10-11）
+
+森林簿（林班・小班ごとの樹種・林齢・面積の表）は CSV や Excel で、計画図（小班のポリゴン）は shp・gpkg で配られる。
+QGIS ではレイヤのプロパティ →「結合」で 1 つの列どうしを結ぶ（`.qgs` の `<vectorjoins>`）。それと同じものをアプリに入れた。
+
+```
+座標の列が無い CSV ─ ExternalLayerNode.loadNodes が GDAL で座標の列を探して無ければ ─→ TableNode（models/nodes/table_node.dart）
+  └ CsvTable.parse（services/table/csv_table.dart）  文字コードの判定・CSV の分解・型の判定
+KMeta.joins[レイヤキー] = [LayerJoin]（models/layer_join.dart）  フォルダ設定に持つ。.qgs と往復
+LayerNode.loadJoins（地物の読み込みのたび）
+  └ TableCache.load → ResolvedJoin.build（services/table/table_join.dart）  表を「結合の値 → 行」の Map に 1 回だけ
+  └ LayerNode.effectiveProperties(props)  属性 + 結合した列（描き分け・ラベル・検索・属性テーブルが読む）
+```
+
+- **表のノード**: 座標の列が無い CSV（`ExternalSource.accepts` が偽）はレイヤでなく表（`NodeType.table`）。地図には描かず、可視性も持たない。
+  押すと中身を見る（`table_view_dialog.dart`）。長押しで削除。⚠ XLSX は同梱の GDAL にドライバが無い（[[gdal#Android の実装で決めたこと（2026-10-09）]]）ので CSV だけ
+- **文字コード**: GDAL の CSV ドライバは文字コードを選べない（`ENCODING` のオープンオプションが無く、Shift_JIS はバイト列のまま化ける）ので、
+  表は Dart で読む。UTF-8（BOM の有無を問わない）として正しければ UTF-8、でなければ CP932。CP932 の表は Python の cp932 から作った
+  `cp932_table.dart`（`tool/gen_cp932_table.py`。NEC 特殊文字・IBM 拡張文字を含む。pub の charset は IBM 拡張文字を持たず「髙」「﨑」が化けた）
+- **型**: QGIS の「CSV テキストレイヤ」（delimitedtext、`detectTypes=yes`）に合わせて整数・小数・文字。空の欄は NULL
+- **照合**: QGIS と同じく **値の文字の形** で比べる（結合の記憶は `QVariant::toString()` を鍵にする）。整数 12 と文字 "12"、
+  12.0 と "12" は当たる。NULL は当たらない。同じ値の行が複数あれば、記憶あり（`memoryCache="1"`、既定）は最後の行、なしは最初の行
+  - 全角・半角と前後の空白を揃える照合（`LayerJoin.normalize`）はアプリだけの選択。既定は QGIS と同じ完全一致。
+    `.qgs` には書けない（QGIS は揃えない）ので、付けると QGIS では結ばれない地物が出る。画面に注記
+- **列**: 足す列は `<接頭辞><表の列名>`。接頭辞の既定は `<表の名前>_`（QGIS の既定も `<結合先のレイヤ名>_`。アプリは表の QGIS のレイヤ名を
+  ファイル名から拡張子を除いたものに揃えて書くので一致する）。結合の列そのものと、既にある名前の列は足さない（QGIS と同じ）
+- **速さ**: 表は読み込みのたびに 1 回だけ Map にし、地物ごとには引くだけ。1 万行の CSV で、読む 80 ms・Map にする 12 ms・1 万件の照合と属性の合成 35 ms（2026-10-11、メイン PC のテスト VM。
+  `test/table_join_test.dart` は 1 秒を上限に確かめる）。
+  表の中身は更新時刻と大きさで控える（`TableCache`）
+- **出る所**: 属性テーブル（右側に鎖の印・薄い色で読み取り専用。フォーム表示も）、ラベル（式とラベルの組み立ての列の一覧）、
+  QGIS の描き分け（分類・段階・ルールの式）、属性で探す（gpkg の SQL の後に、読み込んである地物の結合の値を見る）、
+  書き出し（既定で書く。「結合した表の列も書く」で外せる）
+- **書き出し**: `ogr2ogr -sql` に `WITH "__kokage_join"(fid, 列…) AS (VALUES …) SELECT t.*, … FROM <レイヤ> t LEFT JOIN …`。値はアプリの
+  照合の結果を主キーごとに並べる（gpkg の SQLite で結合し直さない。照合の決まりが 1 か所に揃う）。View で絞らず全部の地物。
+  1 行目は空の行（VALUES は空にできない）。数の列は数のまま書かれる（GDAL 3.13 で確認）
+- **使えない所**: 属性テーブルのフィルタ（式を gpkg の SQL にする）・統計・置換・一括設定・View のフィルタ（`|subset=` は gpkg の SQL）。
+  結合の先は表だけ（QGIS ではベクタのレイヤにも結べる。読み戻しで報告して外す）。林班と小班が別の列なら、両側に 1 つの列を作ってから結ぶ
+
+### `.qgs` との往復
+
+- **書く**（`QgsProjectBuilder`・`QgsWriter`・`QgsDocument`）: 表は `QgsTableLayer`。`provider=delimitedtext`、
+  `datasource=file:./%E6%A3%AE%E6%9E%97%E7%B0%BF.csv?type=csv&encoding=CP932&maxFields=10000&detectTypes=yes&geomType=none&subsetIndex=no&watchFile=no`
+  （QGIS の「CSV テキストレイヤを追加」が書く形。パスは % エンコードした相対）、`wkbType="NoGeometry"`。id は相対パスのハッシュ（`table_<hash>`）。
+  ツリーには dir のグループの中に `providerKey="delimitedtext"` で載る。
+  レイヤ（View）の maplayer に `<vectorjoins><join joinLayerId targetFieldName joinFieldName memoryCache [customPrefix hasCustomPrefix]><joinFieldsSubset>`
+  （QGIS 4.2.2 が書く属性と同じ）。同じレイヤの View 全部に同じ結合を書く
+- **更新**（DOM 保持型）: QGIS で足した表が同じファイルを指していれば、id をアプリのものに付け替え、`<join joinLayerId>` とツリーも付け替える
+  （`_adoptTableIds`。外して足し直すと QGIS の結合が宙に浮く）。QGIS が ogr で読んでいる表（`encoding="CP932"` など）はその形のまま残す。
+  `<vectorjoins>` はアプリの表への `<join>` だけ差し替え、ほかのレイヤへの結合（QGIS の持ち物）は残す
+- **読む**（`QgsImporter`）: 形の無い maplayer（`wkbType="NoGeometry"`）は View にせず、delimitedtext・ogr のパスで表のノードに結ぶ。
+  既定 View の maplayer（無ければ最初の maplayer）の `<vectorjoins>` を `KMeta.joins` に写す（無ければ外す）。結合先が表でなければ報告
+- QGIS 4.2.2 で確認: アプリが書いた `.qgs` を開いて、UTF-8 の表（delimitedtext）と CP932 の表（`encoding=CP932`）が valid で、
+  結合した列と値が QGIS が付けた値（`test/fixtures/qgis_4_2_joins_expected.json`）と一致（2026-10-11）
+
+テストは `test/table_join_test.dart`（表のノード・UTF-8 と CP932・照合を QGIS の値と突き合わせる・検索・書き出し）と
+`test/qgs_join_test.dart`（QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_joins.qgs` の読み・書いて読み直す・QGIS の表の id の付け替えと
+QGIS の結合を残す）。fixture の作り直しは `tool/qgis/write_join_fixture.py`。`KOKAGE_KEEP_QGS=<dir>` で書いた一式が残る
+（`tool/qgis/check_qgs.py` で開ける）。
+
 ## 1. SpatiaLiteトリガーの復元
 
 QGIS/GDAL 製の GeoPackage は RTree を自動更新するトリガーを持ち、

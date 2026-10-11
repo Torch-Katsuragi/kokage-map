@@ -40,6 +40,7 @@ import 'package:xml/xml.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../models/basemap_provider.dart';
 import '../../models/kmeta.dart';
+import '../../models/layer_join.dart';
 import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
@@ -47,6 +48,7 @@ import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
+import '../../models/nodes/table_node.dart';
 import '../../models/nodes/view_node.dart';
 import '../../models/qgis_form.dart';
 import '../../utils/app_logger.dart';
@@ -54,6 +56,7 @@ import '../../utils/label_expression.dart';
 import '../external/external_source.dart';
 import '../gdal_raster_overlay.dart';
 import '../kmeta_service.dart';
+import 'qgs_document.dart' show QgsDocument;
 import 'qgs_form_reader.dart';
 import 'qgs_project_builder.dart' show QgsProjectBuilder;
 import 'qgs_raster_source.dart';
@@ -175,7 +178,7 @@ class QgsImporter {
 
     final rootPath = root.getAbsoluteFilePath();
     final qgsDir = p.dirname(p.normalize(qgsPath));
-    final sources = _SourceResolver(qgsDir, rootPath, _indexGeoPackages(root), _indexImages(root));
+    final sources = _SourceResolver(qgsDir, rootPath, _indexGeoPackages(root), _indexImages(root), _indexTables(root));
     final tree = _TreeVisibility.read(doc);
     // 形が合ったレイヤの、グループ側の可視性（レイヤ・gpkg・dir）
     final layerGroupChecked = <LayerNode, bool>{};
@@ -231,6 +234,9 @@ class QgsImporter {
 
     // 属性フォームの設定（`.qgs` の側は QGIS の持ち物なので、読んで写すだけ）
     await _applyForms(formSource, projectLayers, sources, discarded);
+
+    // 表の結合（`<vectorjoins>`。結合先は表のノードに読み替える）
+    await _applyJoins(formSource, projectLayers, sources, discarded);
 
     // gpkg と dir のグループの可視性（変わったものだけ書く）
     for (final MapEntry(key: node, value: checked) in containerChecked.entries) {
@@ -436,6 +442,65 @@ class QgsImporter {
       folder.invalidateMetaCache();
     }
     return count;
+  }
+
+  /// [formSource] のレイヤごとに、maplayer の `<vectorjoins>` を読んでフォルダ設定の結合に書く（無ければ外す）。
+  /// 結合先が表のノード（座標の無い CSV）に読み替えられなければ [discarded] に足す
+  Future<void> _applyJoins(
+    Map<LayerNode, XmlElement> formSource,
+    XmlElement? projectLayers,
+    _SourceResolver sources,
+    List<String> discarded,
+  ) async {
+    final names = <String, String>{
+      for (final m in projectLayers?.findElements('maplayer') ?? const <XmlElement>[])
+        ?childText(m, 'id'): childText(m, 'layername') ?? '',
+    };
+    for (final MapEntry(key: layer, value: maplayer) in formSource.entries) {
+      final folder = layer.folderNode;
+      final folderPath = folder?.getAbsoluteFilePath();
+      if (folder == null || folderPath == null) continue;
+      final joins = <LayerJoin>[];
+      for (final j in maplayer.getElement('vectorjoins')?.findElements('join') ?? const <XmlElement>[]) {
+        final id = j.getAttribute('joinLayerId') ?? '';
+        final table = sources.tables[id];
+        final joinField = j.getAttribute('joinFieldName');
+        final targetField = j.getAttribute('targetFieldName');
+        if (table == null || joinField == null || targetField == null) {
+          discarded.add('${layer.layerName} の結合（結合先 ${names[id] ?? id} は表ではないので未対応）');
+          continue;
+        }
+        final subset = j.getElement('joinFieldsSubset');
+        joins.add(LayerJoin(
+          table: p.relative(table.sourcePath, from: folderPath).replaceAll(r'\', '/'),
+          joinField: joinField,
+          targetField: targetField,
+          fields: subset == null ? null : [for (final f in subset.findElements('field')) ?f.getAttribute('name')],
+          prefix: j.getAttribute('hasCustomPrefix') == '1' ? (j.getAttribute('customPrefix') ?? '') : null,
+          memoryCache: j.getAttribute('memoryCache') != '0',
+        ));
+      }
+      await KMetaService.instance.setLayerJoins(folderPath, layer.layerKey, joins);
+      folder.invalidateMetaCache();
+      if (layer.featuresLoaded) {
+        await layer.loadJoins();
+        await layer.refreshStyleGroups();
+      }
+    }
+  }
+
+  /// ルート以下の表（座標の無い CSV）を、正規化した絶対パスで引けるようにする
+  Map<String, TableNode> _indexTables(LayerTreeNode node) {
+    final result = <String, TableNode>{};
+    void walk(LayerTreeNode n) {
+      if (n is TableNode) result[p.normalize(n.sourcePath)] = n;
+      for (final child in n.children) {
+        walk(child);
+      }
+    }
+
+    walk(node);
+    return result;
   }
 
   /// gpkg（相当）のノードを引くときのパス（[_indexGeoPackages] と同じ決まり）
@@ -664,7 +729,7 @@ String _externalLayerName(GeoPackageNode node, QgsDataSource source) {
 }
 
 class _SourceResolver {
-  _SourceResolver(this.qgsDir, this.rootPath, this.gpkgIndex, this.imageIndex);
+  _SourceResolver(this.qgsDir, this.rootPath, this.gpkgIndex, this.imageIndex, [this.tableIndex = const {}]);
 
   /// `.qgs` のある dir（相対パスの基準）
   final String qgsDir;
@@ -675,6 +740,12 @@ class _SourceResolver {
 
   /// 正規化した絶対パス → 画像（写真・オーバーレイ）
   final Map<String, ImageNode> imageIndex;
+
+  /// 正規化した絶対パス → 表（座標の無い CSV）
+  final Map<String, TableNode> tableIndex;
+
+  /// 表の maplayer の id → 表のノード（結合先を読み替える）
+  final tables = <String, TableNode>{};
 
   /// gdal のラスタのうち、dir にあるオーバーレイ画像に当たったもの（maplayer の id つき）
   final overlays = <({OverlayImageNode node, String id})>[];
@@ -697,6 +768,12 @@ class _SourceResolver {
     // ラスタはレイヤ（View）にはならない。GeoTIFF はオーバーレイ画像、XYZ タイルは背景地図へ
     if (maplayer.getAttribute('type') == 'raster') {
       _resolveRaster(maplayer, name, provider, discarded);
+      return null;
+    }
+
+    // 形の無い表（森林簿 CSV）は View にならない。結合の先として表のノードに結びつける
+    if (QgsDocument.isTableLayer(maplayer)) {
+      _resolveTable(maplayer, name, discarded);
       return null;
     }
 
@@ -735,6 +812,28 @@ class _SourceResolver {
       return null;
     }
     return (name: name, source: source, layer: layer, gpkg: gpkg);
+  }
+
+  /// 表の `<maplayer>` を [tables] に入れる。dir に無い・座標のある CSV（点のレイヤになっている）なら報告
+  void _resolveTable(XmlElement maplayer, String name, List<String> discarded) {
+    final id = childText(maplayer, 'id');
+    final path = QgsDocument.tableSourcePath(maplayer);
+    if (id == null || path == null) {
+      discarded.add('$name（${childText(maplayer, 'provider') ?? '不明なプロバイダ'} の表は取り込めません）');
+      return;
+    }
+    final absPath = p.normalize(p.isAbsolute(path) ? path : p.join(qgsDir, path));
+    final root = rootPath;
+    if (root == null || relativeInside(root, absPath) == null) {
+      discarded.add('$name（プロジェクトフォルダの外を参照している）');
+      return;
+    }
+    final node = tableIndex[absPath];
+    if (node == null) {
+      discarded.add('$name（${p.basename(absPath)} を表として開けません）');
+      return;
+    }
+    tables[id] = node;
   }
 
   /// ラスタの `<maplayer>` を [overlays] か [baseMaps] に振り分ける。扱えなければ理由を [discarded] に足す。

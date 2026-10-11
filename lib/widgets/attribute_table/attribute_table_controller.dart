@@ -32,6 +32,7 @@ import '../../providers/ui_state_providers.dart';
 import '../../services/coordinate/index.dart';
 import '../../services/qgis_form_logic.dart';
 import '../../services/qgis_form_options.dart';
+import '../../services/table/csv_table.dart' show TableFieldType;
 import '../../tutorial/practice_project.dart';
 import '../../tutorial/tutorial.dart';
 import '../../utils/app_logger.dart';
@@ -73,6 +74,7 @@ class AttributeTableController extends ChangeNotifier {
   List<String> _columnNames = [];
   List<String> _userColumnNames = [];
   List<String> _writableColumnNames = [];
+  Set<String> _joinedColumns = const {};
   Map<String, String> _columnTypeMap = {};
   List<FeatureNode> _features = [];
   bool _isLoading = true;
@@ -140,9 +142,12 @@ class AttributeTableController extends ChangeNotifier {
   /// UniqueValues・ValueRelation の列の選択肢
   Map<String, List<QgisValueOption>> get formOptions => _formOptions;
 
-  /// 書き換えてよい列か（番号・形・内部用の列と、QGIS で編集可能を外した列は書かない）
+  /// 書き換えてよい列か（番号・形・内部用の列と、QGIS で編集可能を外した列・結合した表の列は書かない）
   bool canEdit(String column) =>
-      !readOnly && !isReadOnlyColumn(column) && (_qgisForm?.editable(column) ?? true);
+      !readOnly && !isReadOnlyColumn(column) && !isJoinedColumn(column) && (_qgisForm?.editable(column) ?? true);
+
+  /// 結合した表の列か（読み取り専用。見出しに印）
+  bool isJoinedColumn(String column) => _joinedColumns.contains(column);
   AttributeTableSettings get settings => _settings;
   bool get isPointLayer => layer is PointLayerNode;
   bool get isFiltered => _isFiltered;
@@ -216,6 +221,10 @@ class AttributeTableController extends ChangeNotifier {
           _columnNames.where((c) => !isInternalColumn(c)).toList();
       _writableColumnNames =
           _columnNames.where((c) => !isReadOnlyColumn(c)).toList();
+      // 結合した表の列（森林簿の樹種など）は後ろに読み取り専用で並べる。gpkg には無いので
+      // SQL を使う操作（フィルタ・統計・置換・一括設定）の候補には入れない
+      _joinedColumns = {for (final c in layer.joinedFieldNames) if (!_columnNames.contains(c)) c};
+      _columnNames = [..._columnNames, ..._joinedColumns];
       AppLogger.debug(
         '[AttributeTableController] カラム名: ${_columnNames.length}個',
       );
@@ -336,7 +345,7 @@ class AttributeTableController extends ChangeNotifier {
     String field,
     dynamic value,
   ) async {
-    if (isReadOnlyColumn(field)) return null;
+    if (isReadOnlyColumn(field) || isJoinedColumn(field)) return null;
     if (refuseReadOnlyEditBy(_ref.read, layer)) return null;
     final form = _qgisForm;
     if (form != null && !form.editable(field)) return null;
@@ -561,7 +570,7 @@ class AttributeTableController extends ChangeNotifier {
       buffer.writeln(
         _columnNames
             .map((col) =>
-                _escapeCsvField(readAttribute(feature, col)?.toString() ?? ''))
+                _escapeCsvField(_cellValue(feature, col)?.toString() ?? ''))
             .join(','),
       );
     }
@@ -592,7 +601,11 @@ class AttributeTableController extends ChangeNotifier {
   /// テキスト検索（全カラム横断）。マッチしたrowIdを返す。
   Future<List<int>> searchText(String text) async {
     if (text.isEmpty) return [];
-    return layer.geoPackageFile.searchText(layer.layerName, text, _columnNames);
+    return layer.geoPackageFile.searchText(
+      layer.layerName,
+      text,
+      [for (final c in _columnNames) if (!isJoinedColumn(c)) c],
+    );
   }
 
   /// テキスト置換（指定カラム内）
@@ -645,6 +658,10 @@ class AttributeTableController extends ChangeNotifier {
     // 属性カラム（ソート・ドラッグ有効、NULLハイライト付き）
     for (final columnName in _columnNames) {
       final qf = _qgisForm?[columnName];
+      if (isJoinedColumn(columnName)) {
+        tableColumns.add(_joinedColumn(columnName));
+        continue;
+      }
       tableColumns.add(
         TrinaColumn(
           title: qf?.alias ?? columnName,
@@ -661,6 +678,41 @@ class AttributeTableController extends ChangeNotifier {
     }
 
     return tableColumns;
+  }
+
+  /// 結合した表の列: 読み取り専用。見出しに鎖の印、マスは薄い色で gpkg の列と見分ける
+  TrinaColumn _joinedColumn(String columnName) => TrinaColumn(
+        title: columnName,
+        field: columnName,
+        titleSpan: TextSpan(children: [
+          const WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(padding: EdgeInsets.only(right: 2), child: Icon(Icons.link, size: 14, color: Colors.brown)),
+          ),
+          TextSpan(text: columnName),
+        ]),
+        type: _joinedColumnType(columnName),
+        readOnly: true,
+        enableEditingMode: false,
+        enableSorting: true,
+        enableColumnDrag: true,
+        enableContextMenu: true,
+        backgroundColor: const Color(0xFFF7F1EA),
+        width: _getColumnWidth(columnName),
+        renderer: _nullHighlightRenderer(columnName),
+      );
+
+  TrinaColumnType _joinedColumnType(String columnName) {
+    for (final j in layer.joins) {
+      final i = j.fieldNames.indexOf(columnName);
+      if (i < 0) continue;
+      return switch (j.fieldTypes[i]) {
+        TableFieldType.integer => TrinaColumnType.number(),
+        TableFieldType.real => TrinaColumnType.number(format: '#,##0.######'),
+        TableFieldType.text => TrinaColumnType.text(),
+      };
+    }
+    return TrinaColumnType.text();
   }
 
   static TrinaColumn _coordinateColumn(String field, double width) => TrinaColumn(
@@ -842,8 +894,24 @@ class AttributeTableController extends ChangeNotifier {
         final xy = CoordinateService.instance.transformToXYFormatted(point, epsg);
         return (field == '_x' ? xy['x'] : xy['y']) ?? '';
       default:
+        if (isJoinedColumn(field)) return _joinedValue(feature, field) ?? '';
         return readAttribute(feature, field) ?? '';
     }
+  }
+
+  /// 地物の列の値（結合した表の列なら表を引いた値）。フォーム表示が読む
+  Object? valueOf(FeatureNode feature, String column) =>
+      isJoinedColumn(column) ? _joinedValue(feature, column) : readAttribute(feature, column);
+
+  /// 結合した表の列の値（地物の結合の列で表を引く）
+  Object? _joinedValue(FeatureNode feature, String field) {
+    if (feature.isDisposed) return null;
+    for (final j in layer.joins) {
+      final i = j.fieldNames.indexOf(field);
+      if (i < 0) continue;
+      return j.valuesFor(readAttribute(feature, j.join.targetField))?[i];
+    }
+    return null;
   }
 
   /// 指定範囲のフィーチャからTrinaRowを構築

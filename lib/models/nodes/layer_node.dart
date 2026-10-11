@@ -22,15 +22,18 @@ import 'dart:convert';
 
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
+import 'package:path/path.dart' as p;
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:turf/turf.dart' as turf;
 
 import '../../core/node_types.dart';
 import '../../services/kmeta_service.dart';
+import '../../services/table/table_join.dart';
 import '../geometry_type.dart';
 import '../geopackage/feature_repository.dart' show toGeoMultiLine, toGeoMultiPolygon, toGeoPoint;
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
+import '../layer_join.dart';
 import '../qgis_form.dart';
 import '../qgis_renderer.dart';
 import 'feature_node.dart';
@@ -247,7 +250,7 @@ abstract class LayerNode extends LayerTreeNode {
           styleKeyByRowId[rowId] = key;
           return;
         }
-        final k = renderer.keyFor(_featureMap[rowId]?.properties);
+        final k = renderer.keyFor(effectiveProperties(_featureMap[rowId]?.properties));
         if (k == null) {
           hiddenBy.putIfAbsent(rowId, () => key);
         } else {
@@ -307,7 +310,7 @@ abstract class LayerNode extends LayerTreeNode {
     final viewKey = _renderers.keys.where((k) => current == k || current.startsWith('$k#')).firstOrNull;
     final renderer = viewKey == null ? null : _renderers[viewKey];
     if (renderer == null) return;
-    final k = renderer.keyFor(_featureMap[rowId]?.properties);
+    final k = renderer.keyFor(effectiveProperties(_featureMap[rowId]?.properties));
     if (k == null) {
       styleKeyByRowId.remove(rowId);
       rendererHiddenRowIds.add(rowId);
@@ -398,6 +401,65 @@ abstract class LayerNode extends LayerTreeNode {
       AppLogger.debug('[LayerNode] Error getting KMeta style: $e');
       return null;
     }
+  }
+
+  // ========== 表の結合 ==========
+
+  /// 結合した表（[loadJoins] が作る。表が見つからない・列が無い結合は入らない）
+  List<ResolvedJoin> get joins => _joins;
+  List<ResolvedJoin> _joins = const [];
+
+  /// 結合の設定（フォルダ設定の [KMeta.joins]。表が見つからないものも含む）
+  List<LayerJoin> get joinDefs => _joinDefs;
+  List<LayerJoin> _joinDefs = const [];
+
+  /// 結合で足される列（接頭辞つき）。読み取り専用
+  List<String> get joinedFieldNames => [for (final j in _joins) ...j.fieldNames];
+
+  /// [field] が結合で足された列か
+  bool isJoinedField(String field) => _joins.any((j) => j.fieldNames.contains(field));
+
+  /// 地物の属性に結合の値を足したもの（ラベル・描き分け・検索・属性テーブルが読む）。結合が無ければ [props] そのもの
+  Map<String, Object?>? effectiveProperties(Map<String, dynamic>? props) => withJoinedValues(props, _joins);
+
+  /// フォルダ設定の結合を読み、表を「結合の値 → 行」の Map にする（表は [TableCache] で 1 回だけ読む）。
+  /// 地物の読み込みのたびに呼ばれる。結合を変えたら呼んで [refreshStyleGroups]
+  Future<void> loadJoins() async {
+    final folder = folderNode;
+    final folderPath = folder?.getAbsoluteFilePath();
+    if (folder == null || folderPath == null || _isDisposed) {
+      _joins = const [];
+      _joinDefs = const [];
+      return;
+    }
+    List<LayerJoin> defs;
+    try {
+      defs = (await folder.getMeta()).joins[layerKey] ?? const [];
+    } on Object catch (e) {
+      AppLogger.debug('[LayerNode] 結合の設定を読めない: $e');
+      defs = const [];
+    }
+    _joinDefs = defs;
+    if (defs.isEmpty) {
+      _joins = const [];
+      return;
+    }
+    final own = (await getAttributeColumnNames(getAll: true)).toSet();
+    final resolved = <ResolvedJoin>[];
+    for (final def in defs) {
+      final table = await TableCache.load(p.normalize(p.join(folderPath, def.table)));
+      if (table == null) {
+        AppLogger.debug('[LayerNode] 結合の表が見つからない: ${def.table}');
+        continue;
+      }
+      final r = ResolvedJoin.build(
+        def,
+        table,
+        existingFields: {...own, for (final j in resolved) ...j.fieldNames},
+      );
+      if (r != null) resolved.add(r);
+    }
+    _joins = List.unmodifiable(resolved);
   }
 
   /// QGIS の属性フォームの設定（フォルダ設定の [KMeta.forms]）。無ければ null
@@ -656,6 +718,8 @@ abstract class LayerNode extends LayerTreeNode {
       // 子ノードの変更があったためキャッシュをクリア
       clearColumnNamesCache();
       _featuresRevision++;
+      // 結合した表（森林簿など）。描き分けが結合の列を読むので先に
+      await loadJoins();
       // フィーチャが入れ替わったので、どれがどの View のものかも取り直す
       await refreshStyleGroups();
       _updateChildrenCompleter!.complete();

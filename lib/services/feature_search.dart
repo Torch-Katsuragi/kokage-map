@@ -167,6 +167,33 @@ class FeatureSearch {
     return null;
   }
 
+  /// [layer] の結合した列の値から探す（地物ごとに表を引くだけ。表は読み込みのときに Map にしてある）
+  static List<FeatureSearchHit> _searchJoined(LayerNode layer, String normalizedQuery, int perLayer) {
+    final hits = <FeatureSearchHit>[];
+    for (final f in layer.features) {
+      final Map<String, dynamic>? props;
+      try {
+        props = f.turfFeature.properties;
+      } catch (_) {
+        continue;
+      }
+      FeatureSearchHit? best;
+      for (final j in layer.joins) {
+        final values = j.valuesFor(props?[j.join.targetField]);
+        if (values == null) continue;
+        for (var i = 0; i < values.length; i++) {
+          final r = rankOf(values[i], normalizedQuery);
+          if (r != null && (best == null || r < best.rank)) {
+            best = FeatureSearchHit(layer: layer, feature: f, column: j.fieldNames[i], value: values[i].toString(), rank: r);
+          }
+        }
+      }
+      if (best != null) hits.add(best);
+      if (hits.length >= perLayer) break;
+    }
+    return hits;
+  }
+
   /// [layers] の属性から [query] を探す。レイヤごとに [perLayer] 行まで、全体で [limit] 件まで
   static Future<FeatureSearchResult> search(
     List<LayerNode> layers,
@@ -189,9 +216,13 @@ class FeatureSearch {
         continue;
       }
       if (rows.length >= perLayer) truncated = true;
-      if (rows.isEmpty) continue;
+      // 結合した表の列（森林簿の樹種など）は gpkg に無いので、読み込んである地物の値を見る
+      final joined = layer.joins.isEmpty ? const <FeatureSearchHit>[] : _searchJoined(layer, n, perLayer);
+      if (joined.length >= perLayer) truncated = true;
+      if (rows.isEmpty && joined.isEmpty) continue;
       // 地図に読み込んである地物だけ（消灯した View の地物は出さない）
       final byId = {for (final f in layer.features) f.rowId: f};
+      final hitIds = <int>{};
       for (final row in rows) {
         final f = byId[row['__id']];
         if (f == null) continue;
@@ -203,7 +234,13 @@ class FeatureSearch {
             best = FeatureSearchHit(layer: layer, feature: f, column: e.key, value: e.value.toString(), rank: r);
           }
         }
-        if (best != null) hits.add(best);
+        if (best != null) {
+          hits.add(best);
+          hitIds.add(f.rowId);
+        }
+      }
+      for (final hit in joined) {
+        if (!hitIds.contains(hit.feature.rowId)) hits.add(hit);
       }
     }
     // 一致 → 前方一致 → 部分一致。同じ順位ならレイヤ順・行順のまま（sort は安定でないので添字で並べる）

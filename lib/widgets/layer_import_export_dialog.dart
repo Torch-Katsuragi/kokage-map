@@ -71,6 +71,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   FileFormat _exportFormat = FileFormat.shapefile;
   bool _includeRowNumber = false; // 初期値はオフ
   bool _includeGnssQuality = false; // GPS 測量の品質を列に（初期値はオフ）
+  bool _includeJoinedFields = true; // 結合した表（森林簿など）の列も書く（QGIS の「名前を付けて保存」と同じく既定で書く）
   EpsgDefinition? _selectedCrs = _lastUsedCrs; // 最後に使用したCRSを初期値に
   String _crsSearchQuery = ''; // CRS検索クエリ
 
@@ -208,6 +209,18 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                   value: _includeGnssQuality,
                   onChanged: (value) {
                     setState(() => _includeGnssQuality = value ?? false);
+                  },
+                ),
+              // 結合した表の列（レイヤに結合があるときだけ）
+              if (_exportFormat != FileFormat.dxf && widget.exportLayer.joinedFieldNames.isNotEmpty)
+                CheckboxListTile(
+                  title: Text(t.importExport.includeJoinedFields),
+                  subtitle: Text(
+                    t.importExport.includeJoinedFieldsDesc(count: widget.exportLayer.joinedFieldNames.length),
+                  ),
+                  value: _includeJoinedFields,
+                  onChanged: (value) {
+                    setState(() => _includeJoinedFields = value ?? false);
                   },
                 ),
               if (_exportFormat.wgs84Only)
@@ -459,6 +472,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         targetCrs: _exportFormat.wgs84Only ? null : _selectedCrs,
         includeRowNumber: _includeRowNumber && _exportFormat != FileFormat.dxf,
         includeGnssQuality: _includeGnssQuality && _exportFormat != FileFormat.dxf,
+        includeJoinedFields: _includeJoinedFields,
       );
 
       final ext = _exportFormat.extension.replaceFirst('.', '');

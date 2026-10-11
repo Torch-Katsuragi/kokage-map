@@ -80,7 +80,7 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
     _currentIndex = _currentIndex.clamp(0, ctrl.features.length - 1);
     final feature = ctrl.features[_currentIndex];
     for (final col in ctrl.columnNames) {
-      _values[col] = _loaded[col] = readAttribute(feature, col);
+      _values[col] = _loaded[col] = ctrl.valueOf(feature, col);
     }
   }
 

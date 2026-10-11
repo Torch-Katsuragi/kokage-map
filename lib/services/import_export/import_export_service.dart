@@ -31,6 +31,73 @@ import 'import_export_models.dart';
 
 export 'import_export_models.dart';
 
+/// 結合した表の列を書き出しに足す形（`-sql` の CTE）。値はアプリの結合の評価（[ResolvedJoin]）のまま
+/// 地物の主キーごとに並べ、gpkg の SQLite の `WITH … AS (VALUES …)` で LEFT JOIN する
+class JoinedExport {
+  const JoinedExport({required this.pk, required this.columns, required this.rows});
+
+  /// レイヤの主キー
+  final String pk;
+
+  /// 足す列（接頭辞つき）
+  final List<String> columns;
+
+  /// 主キー → 足す列の値（[columns] の順）。当たらない地物は入れない
+  final Map<int, List<Object?>> rows;
+
+  /// [layer] の結合を、gpkg の全地物（View で絞らない）について引く
+  static Future<JoinedExport?> of(LayerNode layer) async {
+    final columns = layer.joinedFieldNames;
+    if (columns.isEmpty) return null;
+    final gpkg = layer.geoPackageFile;
+    final pk = await gpkg.getPrimaryKeyColumn(layer.layerName);
+    final targets = {for (final j in layer.joins) j.join.targetField};
+    final records = await gpkg.getAllFeatureAttributes(layer.layerName, columns: [pk, ...targets]);
+    final rows = <int, List<Object?>>{};
+    for (final r in records) {
+      final id = r[pk];
+      if (id is! int) continue;
+      final values = <Object?>[];
+      var any = false;
+      for (final j in layer.joins) {
+        final v = j.valuesFor(r[j.join.targetField]);
+        if (v != null) any = true;
+        values.addAll(v ?? List<Object?>.filled(j.fieldNames.length, null));
+      }
+      if (any) rows[id] = values;
+    }
+    return JoinedExport(pk: pk, columns: columns, rows: rows);
+  }
+
+  static String _quote(String name) => '"${name.replaceAll('"', '""')}"';
+
+  static String _literal(Object? v) => switch (v) {
+        null => 'NULL',
+        final int i => '$i',
+        final double d when d.isFinite => '$d',
+        _ => "'${v.toString().replaceAll("'", "''")}'",
+      };
+
+  /// `ogr2ogr -sql` に渡す SELECT（[extraColumns] は行番号・GPS の品質の列）
+  String selectSql(String layerName, List<String> extraColumns) {
+    const j = '"__kokage_join"';
+    final head = ['"__kokage_fid"', for (final c in columns) _quote(c)].join(', ');
+    // 1 行目は型の手がかりにならない空の行（VALUES は空にできない）
+    final values = [
+      '(${List.filled(columns.length + 1, 'NULL').join(', ')})',
+      for (final MapEntry(key: id, value: v) in rows.entries) '($id, ${v.map(_literal).join(', ')})',
+    ];
+    final select = [
+      't.*',
+      ...extraColumns,
+      for (final c in columns) '$j.${_quote(c)} AS ${_quote(c)}',
+    ];
+    return 'WITH $j($head) AS (VALUES ${values.join(', ')}) '
+        'SELECT ${select.join(', ')} FROM ${_quote(layerName)} t '
+        'LEFT JOIN $j ON t.${_quote(pk)} = $j."__kokage_fid"';
+  }
+}
+
 /// レイヤの書き出しの窓口
 class ImportExportService {
   /// シングルトンインスタンス
@@ -64,12 +131,14 @@ class ImportExportService {
     EpsgDefinition? targetCrs,
     String? rowNumberPk,
     bool gnssQuality = false,
+    JoinedExport? joined,
   }) {
     String quote(String name) => '"${name.replaceAll('"', '""')}"';
     final extraColumns = [
       if (rowNumberPk != null) 'ROW_NUMBER() OVER (ORDER BY ${quote(rowNumberPk)}) AS ROW_NUM',
       if (gnssQuality) ...gnssQualityColumns,
     ];
+    final useJoined = joined != null && joined.columns.isNotEmpty && format != FileFormat.dxf;
     return [
       '-f', format.driver,
       if (format.wgs84Only)
@@ -90,7 +159,11 @@ class ImportExportService {
       // アプリの点レイヤは MULTIPOINT と宣言して POINT を入れている。shp（MultiPoint の shp は古いソフトが読めないことがある）・
       // CSV の X/Y・GPX の waypoint は POINT しか受け付けないので、点として書く
       if (geometryType == GeometryType.point && _singlePointFormats.contains(format)) ...['-nlt', 'POINT'],
-      if (extraColumns.isNotEmpty && format != FileFormat.dxf) ...[
+      if (useJoined) ...[
+        '-sql',
+        joined.selectSql(layerName, extraColumns),
+        '-nln', layerName,
+      ] else if (extraColumns.isNotEmpty && format != FileFormat.dxf) ...[
         '-sql',
         'SELECT *, ${extraColumns.join(', ')} FROM ${quote(layerName)}',
         '-nln', layerName,
@@ -143,6 +216,7 @@ class ImportExportService {
       if (!targetFormat.supports(geometryType)) {
         return ImportExportResult.error(t.importExport.exportUnsupported(format: targetFormat.value));
       }
+      final joined = options.includeJoinedFields && layer.joins.isNotEmpty ? await JoinedExport.of(layer) : null;
       final args = exportArgs(
         format: targetFormat,
         layerName: layer.layerName,
@@ -151,6 +225,7 @@ class ImportExportService {
         rowNumberPk: options.includeRowNumber ? await gpkg.getPrimaryKeyColumn(layer.layerName) : null,
         gnssQuality: options.includeGnssQuality &&
             (await gpkg.getColumnNames(layer.layerName, getAll: true)).contains(metadataColumn),
+        joined: joined,
       );
       AppLogger.debug('[ImportExportService] ogr2ogr ${args.join(' ')} $outputPath $src');
       await ExternalGdal.instance.vectorTranslate(src, outputPath, args: args);

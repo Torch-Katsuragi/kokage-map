@@ -74,9 +74,8 @@ class _LevelScreenState extends State<LevelScreen> {
   // 三角形の基準辺（タップで切り替え）
   _TriangleRef _triangleRef = _TriangleRef.base;
 
-  // コンパスEMA平滑化パラメータ
-  static const double _compassAlpha = 0.08;
-  double? _lastSmoothedHeading;
+  // コンパスのEMA平滑化
+  final _headingSmoother = HeadingSmoother();
 
   @override
   void initState() {
@@ -117,7 +116,7 @@ class _LevelScreenState extends State<LevelScreen> {
         final gps = _gpsManager.currentInfo;
         final heading = _trueHeading.toTrue(magnetic, lat: gps.latitude, lon: gps.longitude);
         setState(() {
-          _heading = _smoothHeading(heading);
+          _heading = _headingSmoother.add(heading);
           _compassAccuracy = event.accuracy ?? -1;
         });
       }
@@ -135,23 +134,6 @@ class _LevelScreenState extends State<LevelScreen> {
 
   void _onGpsUpdate() {
     if (mounted) setState(() {});
-  }
-
-  /// 循環角度対応 EMA 平滑化
-  double _smoothHeading(double rawHeading) {
-    final prev = _lastSmoothedHeading;
-    if (prev == null) {
-      _lastSmoothedHeading = rawHeading;
-      return rawHeading;
-    }
-    // 最短角度差分を計算（-180° ~ +180°）
-    double diff = rawHeading - prev;
-    if (diff > 180) diff -= 360;
-    if (diff < -180) diff += 360;
-    double smoothed = (prev + _compassAlpha * diff) % 360;
-    if (smoothed < 0) smoothed += 360;
-    _lastSmoothedHeading = smoothed;
-    return smoothed;
   }
 
   void _selectTriangleRef(_TriangleRef ref) {

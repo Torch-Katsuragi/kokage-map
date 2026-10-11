@@ -27,6 +27,33 @@ double magneticToTrue(double magneticDeg, double declinationDeg) {
   return t < 0 ? t + 360 : t;
 }
 
+/// コンパスの向きの指数移動平均（EMA）。0°/360° の境界をまたいでも最短の向きの差で寄せる
+///
+/// [alpha] が小さいほど滑らかだが追従が遅い（0.08 = 安定重視）。最初の値はそのまま返す。
+class HeadingSmoother {
+  HeadingSmoother({this.alpha = 0.08});
+
+  final double alpha;
+  double? _last;
+
+  /// [rawHeading]（度）を足して、平滑化した向き（0〜360）を返す
+  double add(double rawHeading) {
+    final prev = _last;
+    if (prev == null) {
+      _last = rawHeading;
+      return rawHeading;
+    }
+    // 最短角度差分を計算（-180° ~ +180°）
+    double diff = rawHeading - prev;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+    double smoothed = (prev + alpha * diff) % 360;
+    if (smoothed < 0) smoothed += 360;
+    _last = smoothed;
+    return smoothed;
+  }
+}
+
 /// 位置ごとの偏角を覚えておき、コンパスの値を真北に直す
 ///
 /// 偏角は 10 km 動いても 0.1° 前後しか変わらないので、出し直すのは [_recomputeKm] 以上動いたか

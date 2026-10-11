@@ -474,7 +474,7 @@ Record the trees in a sample plot one by one and get per-plot summaries. Works w
 5. For the position, choose "GNSS" (where you stand; the fix quality is recorded) or "TruPulse (from center)" (shoot the tree from the plot center).
 6. :icon-table_chart: "Summary" shows trees, trees/ha, basal area (m²/ha), mean DBH, mean height and top height per plot and per species. "Save as CSV" exports it.
 
-Volume is not calculated yet.
+Pick a region under "Volume equation" in the summary (currently Kinki, Chugoku, Ishikawa, Fukui) to also see the volume (m³/ha) of sugi and hinoki. Other species and trees without a height are left out (values from only some trees are marked *).
 
 ---
 

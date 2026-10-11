@@ -168,6 +168,18 @@ void main() {
       expect(picked!.parent, same(layer));
     });
 
+    // メタデータの列の除外が完全一致で、旧名・大文字の列では JSON が検索に当たっていた（2026-10-11）
+    test('メタデータの列は旧名・大文字でも見ない', () async {
+      final g = GeoPackageFile(const ['m.gpkg'], absolutePath: '${tmp.path}/m.gpkg');
+      addTearDown(g.dispose);
+      await g.addLayer('pts', GeometryType.point);
+      await g.addAttributeColumns('pts', {'name': 'TEXT', 'RMAPS_METADATA': 'TEXT', 'KMAPS_METADATA': 'TEXT'});
+      await g.addPointWithAttributes(
+          'pts', const LatLng(33.9, 135.9), {'name': 'a', 'RMAPS_METADATA': '{"gnss":"rtk"}', 'KMAPS_METADATA': '{"gnss":"rtk"}'});
+      expect(await g.searchAttributeRows('pts', ['gnss']), isEmpty);
+      expect(await g.searchAttributeRows('pts', ['a']), hasLength(1));
+    });
+
     test('当たらなければ空', () async {
       final r = await FeatureSearch.search([layer], '存在しない値');
       expect(r.hits, isEmpty);

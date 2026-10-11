@@ -33,7 +33,7 @@
       外部ラスタ 6 枚／KML・GeoJSON →「gpkgに変換」で元が消え .qgs が gpkg に付け替わる／書き出し shp(zip, .cpg=UTF-8)・GeoJSON・CSV が保存の手前（ダウンロード）まで行き
       `.kokage/tmp/` の中身は残らない（空の `tmp/` だけ残る）／「ファイルを追加」（file input を差し替えて 6 ファイル、名前の衝突は `points_1.csv`）。GDAL の初回読み込み 0.2〜0.4 秒。
       直した: KMZ が開けない（2 件）・変換後の .qgs（2 件）・書き出しダイアログの型名
-    - [ ] 残り: 選んだフォルダ（File System Access）・ドロップ・本番の `content-encoding`。LIBKML 製の KMZ（doc.kml が NetworkLink だけ）は読めない（未対応のまま）
+    - [ ] 残り: 選んだフォルダ（File System Access）・ドロップ。本番の圧縮は 2026-10-11 のデプロイで確認（wasm 4.8 MB・data 2.1 MB を gzip）。LIBKML 製の KMZ（doc.kml が NetworkLink だけ）は読めない（未対応のまま）
     - ⚠ Claude の内蔵ブラウザ（Electron）では SharedWorker から fetch できず sqflite が全部落ちる（gpkg が一切開けない）。web の確認は Chrome で
 
 ## リリース・Play
@@ -56,8 +56,6 @@
 
 - [ ] debug ビルドの App Check デバッグトークン（logcat に出る）を Firebase コンソールに登録（Pixel 9 は 2026-10-09 登録済み。Fold・メインPC側の端末が残り）
 - [ ] App Check の指標で web・Android とも検証済みの要求が来ているのを確かめてから、RTDB を「強制」に
-- [ ] GDAL（web）を載せて最初のデプロイの後: `/gdal3/3.13.3-1/gdal.{wasm,data}` が圧縮（`content-encoding`）されて返るか、
-      `Cache-Control: immutable` が付くかを見る。`.data` が素の 11.6 MB なら対策を考える（[[docs/technical/gdal#未決・見張り]]）
 - [ ] 本番でログインして Drive 一覧・同期・App Check に CSP 違反が出ないのを確かめてから、`Content-Security-Policy-Report-Only` を強制に（ハッシュの作り直しは [[docs/technical/web-hosting]]）
 - [ ] release で外部インテントの `route` が効かないこと・共有リンクの確認ダイアログを実機で確認
 - [ ] プライバシーポリシーの「App Check で保護」は強制に切り替えるまで実態と食い違う。強制と同時に見直す

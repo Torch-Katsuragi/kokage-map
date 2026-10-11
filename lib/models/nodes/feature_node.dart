@@ -697,7 +697,7 @@ class LineFeatureNode extends FeatureNode {
     return [];
   }
 
-  /// 線の長さを計算（turf_dartで計算、キャッシュあり）
+  /// 線の長さ [m]（WGS84 楕円体の上で測る、キャッシュあり。Multi は合計）
   double get length {
     if (_isDisposed || parent.isDisposed) return 0.0;
     return _cachedLength ??=
@@ -711,15 +711,7 @@ class LineFeatureNode extends FeatureNode {
     // 基底クラスの情報をコピー
     details.addAll(super.infoMap);
 
-    // 線の長さ情報
-    final len = length;
-    String lengthStr;
-    if (len >= 10000) {
-      lengthStr = '${(len / 1000).toStringAsFixed(2)} km';
-    } else {
-      lengthStr = '${len.toStringAsFixed(2)} m';
-    }
-    details['length'] = lengthStr;
+    // 長さは情報パネルが見出しの下に別に出す（ここに 'length' を入れると同名の属性列を上書きしていた）
 
     // 頂点数情報
     details['vertex_count'] = '${line.length}';
@@ -809,6 +801,7 @@ class LineFeatureNode extends FeatureNode {
 /// PolygonFeatureNode: 面フィーチャ用
 class PolygonFeatureNode extends FeatureNode {
   double? _cachedArea;
+  double? _cachedPerimeter;
 
   /// rowデータから面フィーチャノードを作成
   PolygonFeatureNode(Map<String, dynamic> row, LayerNode parent)
@@ -822,6 +815,7 @@ class PolygonFeatureNode extends FeatureNode {
   void _invalidateCache() {
     super._invalidateCache();
     _cachedArea = null;
+    _cachedPerimeter = null;
   }
 
   /// 単一のポリゴン（外環＋穴リスト）。Multi の場合は最初のサブポリゴンを返す
@@ -837,11 +831,18 @@ class PolygonFeatureNode extends FeatureNode {
     return [];
   }
 
-  /// ポリゴンの面積を計算（turf_dartで計算、キャッシュあり）
+  /// ポリゴンの面積 [m²]（WGS84 楕円体の上で測る、キャッシュあり。Multi は合計）
   double get area {
     if (_isDisposed || parent.isDisposed) return 0.0;
     return _cachedArea ??=
         TurfConverter.calculateArea(turfFeature) ?? 0.0;
+  }
+
+  /// ポリゴンの周の長さ [m]（穴の周も足す、キャッシュあり。Multi は合計）
+  double get perimeter {
+    if (_isDisposed || parent.isDisposed) return 0.0;
+    return _cachedPerimeter ??=
+        TurfConverter.calculatePerimeter(turfFeature) ?? 0.0;
   }
 
   @override
@@ -851,15 +852,7 @@ class PolygonFeatureNode extends FeatureNode {
     // 基底クラスの情報をコピー
     details.addAll(super.infoMap);
 
-    // 面積情報
-    final areaM2 = area; // turf_dartで計算された面積（平方メートル）
-    String areaStr;
-    if (areaM2 >= 10000) {
-      areaStr = '${(areaM2 / 10000).toStringAsFixed(3)} ha';
-    } else {
-      areaStr = '${areaM2.toStringAsFixed(3)} m²';
-    }
-    details['area'] = areaStr;
+    // 面積・周の長さは情報パネルが見出しの下に別に出す（ここに 'area' を入れると同名の属性列を上書きしていた）
 
     // 頂点数情報（閉じたリングの最後の点を除く）
     final totalVertices = polygon.fold<int>(0, (sum, ring) {

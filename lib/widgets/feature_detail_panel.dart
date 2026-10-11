@@ -33,6 +33,7 @@ import '../providers/project_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../tutorial/tutorial.dart';
+import '../utils/geodesic.dart';
 import '../widgets/info_panel_card.dart';
 import '../widgets/long_press_delete_button.dart';
 import '../widgets/photo_viewer.dart';
@@ -202,7 +203,22 @@ class FeatureDetailPanel extends ConsumerWidget {
                   !hiddenKeys.contains(entry.key))
               .toList();
 
+      // 長さ・面積・周長（WGS84 楕円体の上で測る。投影座標系のレイヤも読み込み時に WGS84 へ直してある）
+      final measures = <(String, String)>[
+        if (node is LineFeatureNode) (t.featureDetail.lengthLabel, Geodesic.formatLength(node.length)),
+        if (node is PolygonFeatureNode) ...[
+          (t.featureDetail.areaLabel, Geodesic.formatArea(node.area)),
+          (t.featureDetail.perimeterLabel, Geodesic.formatLength(node.perimeter)),
+        ],
+      ];
+
       final children = <Widget>[
+        for (final (label, value) in measures)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4.0),
+            child: _labelRow(label, value),
+          ),
+        if (measures.isNotEmpty) const SizedBox(height: 4),
         for (final entry in filteredEntries)
           Padding(
             padding: const EdgeInsets.only(bottom: 4.0),

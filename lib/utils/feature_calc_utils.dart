@@ -30,6 +30,7 @@ import 'package:turf/turf.dart';
 import '../converters/turf_converter.dart';
 import '../models/nodes/feature_node.dart';
 import 'geo_converter.dart';
+import 'geodesic.dart';
 
 /// degree・metre変換系
 class _DegreeMeterConverter {
@@ -66,21 +67,13 @@ class GeometryCalc {
   /// 線分（`List<LatLng>`）の長さ（メートル）を計算
   /// [line]: 線分の座標リスト
   /// 戻り値: 総距離（m）
-  static double calcLineLength(List<LatLng> line) {
-    if (line.length < 2) return 0.0;
+  static double calcLineLength(List<LatLng> line) => Geodesic.lineLength(line);
 
-    final feature = Feature(geometry: TurfConverter.createLineString(line));
-    return length(feature, Unit.meters).toDouble();
-  }
-
-  /// ポリゴン（外環＋穴リスト）の面積（m^2）
+  /// ポリゴン（外環＋穴リスト）の面積（m^2。WGS84 楕円体の上で測る → [Geodesic]）
   /// [polygon]: 外環＋穴リスト（`List<List<LatLng>>`）
-  /// 戻り値: 面積（m^2）
   static double calcPolygonArea(List<List<LatLng>> polygon) {
     if (polygon.isEmpty || polygon[0].length < 3) return 0.0;
-
-    final feature = Feature(geometry: TurfConverter.createPolygon(polygon));
-    return area(feature)?.toDouble() ?? 0.0; // デフォルトで平方メートル
+    return Geodesic.polygonArea(polygon);
   }
 
   /// 線分（`List<LatLng>`）の重心（中点）を計算

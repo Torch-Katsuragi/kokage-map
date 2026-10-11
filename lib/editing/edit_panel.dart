@@ -16,16 +16,14 @@
 // 編集中の情報パネル（情報パネルの枠のまま編集に替わる）。「形」と「属性」の 2 つ、下に取消・保存。
 // 背景には編集中の形を薄く敷き、直すたびに一緒に変わる。
 
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart' hide Path;
 
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
 import '../tutorial/tutorial.dart';
+import '../utils/geodesic.dart';
 import '../widgets/feature_silhouette.dart';
 import 'edit_session.dart';
 import 'edit_toolbar.dart';
@@ -245,36 +243,12 @@ class _EditPanelState extends ConsumerState<EditPanel> {
         final p = s.geom.first.first;
         return '${p.latitude.toStringAsFixed(6)}, ${p.longitude.toStringAsFixed(6)}';
       case EditKind.line:
-        const d = Distance();
-        var len = 0.0;
-        final l = s.geom.first;
-        for (var i = 1; i < l.length; i++) {
-          len += d(l[i - 1], l[i]);
-        }
+        // 情報パネル・計測ツールと同じ測り方（WGS84 楕円体）
+        final len = Geodesic.lineLength(s.geom.first);
         return t.featureEdit.lineStats(n: n, len: len >= 1000 ? '${(len / 1000).toStringAsFixed(2)} km' : '${len.toStringAsFixed(1)} m');
       case EditKind.polygon:
-        final a = _area(s.geom);
+        final a = Geodesic.polygonArea(s.geom);
         return t.featureEdit.polygonStats(n: n, area: a >= 10000 ? '${(a / 10000).toStringAsFixed(3)} ha' : '${a.toStringAsFixed(1)} m²');
     }
-  }
-
-  /// 面積（m²、平面近似。外周から穴を引く）
-  double _area(List<List<LatLng>> rings) {
-    double ringArea(List<LatLng> r) {
-      if (r.length < 3) return 0;
-      final lat0 = r.first.latitude * math.pi / 180;
-      const my = 110540.0;
-      final mx = 111320.0 * math.cos(lat0);
-      var sum = 0.0;
-      for (var i = 0; i < r.length; i++) {
-        final a = r[i];
-        final b = r[(i + 1) % r.length];
-        sum += a.longitude * mx * b.latitude * my - b.longitude * mx * a.latitude * my;
-      }
-      return sum.abs() / 2;
-    }
-
-    if (rings.isEmpty) return 0;
-    return math.max(0, ringArea(rings.first) - rings.skip(1).fold<double>(0, (a, r) => a + ringArea(r)));
   }
 }

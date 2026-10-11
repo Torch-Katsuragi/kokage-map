@@ -30,6 +30,7 @@ import '../models/nodes/layer_tree_node.dart';
 import '../providers/notification_providers.dart';
 import '../providers/selection_providers.dart';
 import '../utils/feature_calc_utils.dart';
+import '../utils/geodesic.dart';
 import 'info_panel_card.dart';
 import 'long_press_delete_button.dart';
 
@@ -53,7 +54,7 @@ class FeatureSetSummary {
       ? null
       : GeometryCalc.calcPointsCentroid([for (final p in points) p.point]);
 
-  /// 線の合計距離 [m]
+  /// 線の合計距離 [m]（WGS84 楕円体の上で測る）
   double get totalLength => lines.fold(0, (s, l) => s + l.length);
 
   /// 面の合計面積 [m²]
@@ -67,14 +68,6 @@ class FeatureSetSummary {
     }
     return m;
   }
-
-  static String formatLength(double meters) => meters >= 10000
-      ? '${(meters / 1000).toStringAsFixed(2)} km'
-      : '${meters.toStringAsFixed(1)} m';
-
-  static String formatArea(double m2) => m2 >= 10000
-      ? '${(m2 / 10000).toStringAsFixed(3)} ha'
-      : '${m2.toStringAsFixed(1)} m²';
 }
 
 class FeatureSetPanel extends ConsumerWidget {
@@ -105,16 +98,14 @@ class FeatureSetPanel extends ConsumerWidget {
       onClose: () => ref.read(selectedFeaturesProvider.notifier).clear(),
       children: [
         if (s.points.isNotEmpty) row(tr.points, '${s.points.length}'),
-        if (s.lines.isNotEmpty)
-          row(
-            tr.lines,
-            '${s.lines.length}（${FeatureSetSummary.formatLength(s.totalLength)}）',
-          ),
-        if (s.polygons.isNotEmpty)
-          row(
-            tr.polygons,
-            '${s.polygons.length}（${FeatureSetSummary.formatArea(s.totalArea)}）',
-          ),
+        if (s.lines.isNotEmpty) ...[
+          row(tr.lines, '${s.lines.length}'),
+          row(tr.totalLength, Geodesic.formatLength(s.totalLength)),
+        ],
+        if (s.polygons.isNotEmpty) ...[
+          row(tr.polygons, '${s.polygons.length}'),
+          row(tr.totalArea, Geodesic.formatArea(s.totalArea)),
+        ],
         if (s.photos.isNotEmpty) row(tr.photos, '${s.photos.length}'),
         if (centroid != null)
           row(

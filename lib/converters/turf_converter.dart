@@ -18,6 +18,7 @@ import 'dart:convert';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:root_maps/utils/geo_converter.dart';
+import 'package:root_maps/utils/geodesic.dart';
 import 'package:turf/turf.dart' as turf;
 
 /// turf_dartオブジェクトとこかげマップのデータ形式間の変換を行うユーティリティクラス
@@ -182,43 +183,30 @@ class TurfConverter {
     }
   }
 
-  /// Featureの面積を計算（Polygon/MultiPolygon対応）
+  /// Featureの面積 [m²]（Polygon/MultiPolygon。WGS84 楕円体の上で測る → [Geodesic]）
   static double? calculateArea(turf.Feature feature) {
     try {
-      final g = feature.geometry;
-      if (g is turf.Polygon || g is turf.MultiPolygon) {
-        return turf.area(feature)?.toDouble();
-      }
-      return null;
+      return Geodesic.areaOf(feature.geometry);
     } catch (e) {
       AppLogger.debug('[ERROR] TurfConverter.calculateArea: $e');
       return null;
     }
   }
 
-  /// Featureの長さを計算（LineString/MultiLineString対応）
+  /// Featureの周の長さ [m]（Polygon/MultiPolygon。穴の周も足す）
+  static double? calculatePerimeter(turf.Feature feature) {
+    try {
+      return Geodesic.perimeterOf(feature.geometry);
+    } catch (e) {
+      AppLogger.debug('[ERROR] TurfConverter.calculatePerimeter: $e');
+      return null;
+    }
+  }
+
+  /// Featureの長さ [m]（LineString/MultiLineString。WGS84 楕円体の上で測る）
   static double? calculateLength(turf.Feature feature) {
     try {
-      final g = feature.geometry;
-      if (g is turf.LineString) {
-        return turf
-            .length(
-              turf.Feature(geometry: g, properties: feature.properties),
-              turf.Unit.meters,
-            )
-            .toDouble();
-      }
-      if (g is turf.MultiLineString) {
-        double total = 0;
-        for (final coords in g.coordinates) {
-          final sub = turf.Feature(
-            geometry: turf.LineString(coordinates: coords),
-          );
-          total += turf.length(sub, turf.Unit.meters).toDouble();
-        }
-        return total;
-      }
-      return null;
+      return Geodesic.lengthOf(feature.geometry);
     } catch (e) {
       AppLogger.debug('[ERROR] TurfConverter.calculateLength: $e');
       return null;

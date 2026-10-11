@@ -1,7 +1,4 @@
-// Root Maps: Import/Export Service Tests
-import 'dart:io';
-import 'dart:typed_data';
-
+// Root Maps: 書き出しの形式と ogr2ogr の引数（GDAL を呼ばない部分）。GDAL での書き出しは test/layer_export_test.dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
@@ -11,72 +8,61 @@ import 'package:root_maps/services/coordinate/index.dart';
 import 'package:root_maps/services/import_export/import_export_service.dart';
 
 void main() {
-  group('ImportExportService Tests', () {
-    late ImportExportService service;
-
-    setUp(() {
-      service = ImportExportService();
+  group('書き出しの形式', () {
+    test('ダイアログの選択肢は GDAL のドライバ全部', () {
+      expect(ImportExportService().getSupportedExportFormats().map((f) => f.driver), [
+        'GPKG', 'ESRI Shapefile', 'GeoJSON', 'KML', 'CSV', 'GPX', 'FlatGeobuf', 'DXF',
+      ]);
     });
 
-    test('getSupportedExportFormats は書き出せる形式だけ（ダイアログの選択肢）', () {
-      expect(service.getSupportedExportFormats(), [FileFormat.shapefile, FileFormat.geojson, FileFormat.csv, FileFormat.kml]);
-      expect(service.getSupportedExportFormats().every((f) => f.isExportSupported), isTrue);
-    });
-
-    test('FileFormat.fromExtension should correctly identify file formats', () {
-      expect(FileFormat.fromExtension('.shp'), FileFormat.shapefile);
+    test('拡張子から形式（大小を問わない・.json も GeoJSON・ドット必須）', () {
       expect(FileFormat.fromExtension('.SHP'), FileFormat.shapefile);
-      expect(FileFormat.fromExtension('.geojson'), FileFormat.geojson);
       expect(FileFormat.fromExtension('.json'), FileFormat.geojson);
-      expect(FileFormat.fromExtension('.kml'), FileFormat.kml);
-      expect(FileFormat.fromExtension('.csv'), FileFormat.csv);
-      expect(FileFormat.fromExtension('.gpx'), FileFormat.gpx);
-      expect(FileFormat.fromExtension('.xyz'), FileFormat.unknown);
+      expect(FileFormat.fromExtension('.gpkg'), FileFormat.geopackage);
+      expect(FileFormat.fromExtension('shp'), isNull);
+      expect(FileFormat.fromExtension('.xyz'), isNull);
     });
 
-    test('FileFormat.isImportSupported should return correct values', () {
-      expect(FileFormat.shapefile.isImportSupported, isTrue);
-      expect(FileFormat.geojson.isImportSupported, isTrue);
-      expect(FileFormat.kml.isImportSupported, isFalse); // 将来実装予定
-      expect(FileFormat.csv.isImportSupported, isFalse); // 将来実装予定
-      expect(FileFormat.gpx.isImportSupported, isFalse); // 将来実装予定
-      expect(FileFormat.unknown.isImportSupported, isFalse);
-    });
-
-    test('FileFormat.isExportSupported should return correct values', () {
-      expect(FileFormat.shapefile.isExportSupported, isTrue);
-      expect(FileFormat.geojson.isExportSupported, isTrue);
-      expect(FileFormat.kml.isExportSupported, isTrue);
-      expect(FileFormat.csv.isExportSupported, isTrue);
-      expect(FileFormat.gpx.isExportSupported, isFalse); // 将来実装予定
-      expect(FileFormat.unknown.isExportSupported, isFalse);
-    });
-
-    test('ImportExportResult factory methods should work correctly', () {
-      final successResult = ImportExportResult.success();
-      expect(successResult.success, isTrue);
-      expect(successResult.errorMessage, isNull);
-
-      final errorResult = ImportExportResult.error('Test error');
-      expect(errorResult.success, isFalse);
-      expect(errorResult.errorMessage, equals('Test error'));
+    test('GPX は面を書けない', () {
+      expect(FileFormat.gpx.supports(GeometryType.polygon), isFalse);
+      expect(FileFormat.gpx.supports(GeometryType.point), isTrue);
+      expect(FileFormat.shapefile.supports(GeometryType.polygon), isTrue);
     });
   });
 
-  group('FileFormat enum tests', () {
-    test('fromExtension should handle case insensitive input', () {
-      expect(FileFormat.fromExtension('.SHP'), FileFormat.shapefile);
-      expect(FileFormat.fromExtension('.shp'), FileFormat.shapefile);
-      expect(FileFormat.fromExtension('.Shp'), FileFormat.shapefile);
+  group('ogr2ogr の引数', () {
+    final vi = EpsgRegistry.instance.getByCode('EPSG:6674');
+
+    List<String> args(FileFormat f, {GeometryType? type = GeometryType.point, EpsgDefinition? crs, String? pk}) =>
+        ImportExportService.exportArgs(format: f, layerName: '林班', geometryType: type, targetCrs: crs, rowNumberPk: pk);
+
+    test('座標系は選ばなければレイヤのまま、選べば -t_srs', () {
+      expect(args(FileFormat.shapefile), ['-f', 'ESRI Shapefile', '-lco', 'ENCODING=UTF-8', '-nlt', 'POINT', '林班']);
+      expect(args(FileFormat.shapefile, type: GeometryType.polygon), ['-f', 'ESRI Shapefile', '-lco', 'ENCODING=UTF-8', '林班']);
+      expect(args(FileFormat.geopackage, crs: vi), ['-f', 'GPKG', '-t_srs', 'EPSG:6674', '林班']);
     });
 
-    test('fromExtension should handle extensions with and without dots', () {
-      expect(FileFormat.fromExtension('.shp'), FileFormat.shapefile);
-      expect(FileFormat.fromExtension('shp'), FileFormat.unknown); // ドット必須
+    test('GeoJSON・KML・GPX は形式の決まりで 4326（選んだ座標系は使わない）', () {
+      expect(args(FileFormat.geojson, crs: vi), ['-f', 'GeoJSON', '-t_srs', 'EPSG:4326', '-lco', 'RFC7946=YES', '林班']);
+      expect(args(FileFormat.kml, crs: vi), ['-f', 'KML', '-t_srs', 'EPSG:4326', '林班']);
+      expect(args(FileFormat.gpx), containsAllInOrder(['-t_srs', 'EPSG:4326', '-nlt', 'POINT']));
+    });
+
+    test('CSV は点なら X・Y 列、ほかは WKT', () {
+      expect(args(FileFormat.csv), contains('GEOMETRY=AS_XY'));
+      expect(args(FileFormat.csv, type: GeometryType.polygon), contains('GEOMETRY=AS_WKT'));
+    });
+
+    test('行番号は主キーの順に -sql で足す', () {
+      final a = args(FileFormat.csv, pk: 'fid');
+      expect(a.sublist(a.indexOf('-sql') + 1), [
+        'SELECT *, ROW_NUMBER() OVER (ORDER BY "fid") AS ROW_NUM FROM "林班"',
+        '-nln', '林班',
+      ]);
     });
   });
 
-  group('Shapefile Analysis Tests', () {
+  group('GeometryType', () {
     test('GeometryType enum should have correct values', () {
       // GeometryType の value は MULTI 系が既定（Single も透過的に扱う設計）
       expect(GeometryType.point.value, equals('MULTIPOINT'));
@@ -99,57 +85,6 @@ void main() {
       );
       // 未知の文字列は null（呼び出し側でフォールバックを決める）
       expect(GeometryType.fromString('UNKNOWN'), isNull);
-    });
-
-    test('should handle basic file operations', () async {
-      // テスト用の一時ファイルを作成
-      final tempDir = Directory.systemTemp.createTempSync('k_maps_test');
-
-      try {
-        // 基本的なファイル作成テスト
-        final testFile = File('${tempDir.path}/test.shp');
-        await testFile.writeAsBytes([1, 2, 3, 4]); // 4バイト
-
-        expect(testFile.existsSync(), isTrue);
-        expect(testFile.lengthSync(), equals(4));
-
-        // 関連ファイルのテスト
-        final dbfFile = File('${tempDir.path}/test.dbf');
-        final shxFile = File('${tempDir.path}/test.shx');
-        final prjFile = File('${tempDir.path}/test.prj');
-
-        await dbfFile.writeAsBytes([5, 6]);
-        await shxFile.writeAsBytes([7, 8]);
-        await prjFile.writeAsBytes([9, 10]);
-
-        expect(dbfFile.existsSync(), isTrue);
-        expect(shxFile.existsSync(), isTrue);
-        expect(prjFile.existsSync(), isTrue);
-      } finally {
-        // テスト用一時ファイルを削除
-        tempDir.deleteSync(recursive: true);
-      }
-    });
-
-    test('should handle binary data operations', () {
-      // バイナリデータ操作のテスト
-      final headerBytes = ByteData(100);
-
-      // ファイルコードを設定（Big-endian）
-      headerBytes.setInt32(0, 0x0000270a, Endian.big);
-      expect(headerBytes.getInt32(0, Endian.big), equals(0x0000270a));
-
-      // ファイル長を設定（Big-endian）
-      headerBytes.setInt32(24, 50, Endian.big);
-      expect(headerBytes.getInt32(24, Endian.big), equals(50));
-
-      // シェープタイプを設定（Little-endian）
-      headerBytes.setInt32(32, 1, Endian.little);
-      expect(headerBytes.getInt32(32, Endian.little), equals(1));
-
-      // バイト配列変換テスト
-      final bytes = headerBytes.buffer.asUint8List();
-      expect(bytes.length, equals(100));
     });
   });
 

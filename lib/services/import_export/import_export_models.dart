@@ -14,20 +14,23 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: Import/Export Models
-// ファイル形式定義とインポート/エクスポート結果クラス
+// 書き出しの形式（GDAL のドライバ）と結果
+import '../../../models/geometry_type.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../coordinate/epsg_registry.dart';
 
-/// ファイル形式の種類
+/// 書き出しの形式。中身は GDAL のドライバ（`ogr2ogr -f`）。設計は docs/technical/import-export.md
 enum FileFormat {
-  shapefile('Shapefile', '.shp', isImportSupported: true, isExportSupported: true),
-  geojson('GeoJSON', '.geojson', isImportSupported: true, isExportSupported: true),
-  kml('KML', '.kml', isExportSupported: true),
-  csv('CSV', '.csv', isExportSupported: true),
-  gpx('GPX', '.gpx'), // 将来実装予定
-  unknown('Unknown', '');
+  geopackage('GeoPackage', '.gpkg', 'GPKG'),
+  shapefile('Shapefile', '.shp', 'ESRI Shapefile'),
+  geojson('GeoJSON', '.geojson', 'GeoJSON', wgs84Only: true),
+  kml('KML', '.kml', 'KML', wgs84Only: true),
+  csv('CSV', '.csv', 'CSV'),
+  gpx('GPX', '.gpx', 'GPX', wgs84Only: true),
+  flatgeobuf('FlatGeobuf', '.fgb', 'FlatGeobuf'),
+  dxf('DXF', '.dxf', 'DXF');
 
-  const FileFormat(this.value, this.extension, {this.isImportSupported = false, this.isExportSupported = false});
+  const FileFormat(this.value, this.extension, this.driver, {this.wgs84Only = false});
 
   /// 表示名
   final String value;
@@ -35,24 +38,27 @@ enum FileFormat {
   /// 形式に対応する拡張子（`.` 付き）
   final String extension;
 
-  /// 読み込み対応か
-  final bool isImportSupported;
+  /// GDAL のドライバ名（`-f`）
+  final String driver;
 
-  /// 書き出し対応か
-  final bool isExportSupported;
+  /// 形式の決まりで WGS 84（EPSG:4326）でしか書けない（GeoJSON は RFC 7946、KML・GPX は仕様）
+  final bool wgs84Only;
 
-  /// ファイル拡張子（`.` 付き・大小は問わない）から形式を判定。`.json` も GeoJSON
-  static FileFormat fromExtension(String extension) {
+  /// [geometryType] のレイヤを書き出せるか（GPX は点・線だけ。面はドライバが受け付けない）
+  bool supports(GeometryType? geometryType) => this != gpx || geometryType != GeometryType.polygon;
+
+  /// ファイル拡張子（`.` 付き・大小は問わない）から形式を判定。`.json` も GeoJSON。分からなければ null
+  static FileFormat? fromExtension(String extension) {
     final ext = extension.toLowerCase();
     if (ext == '.json') return FileFormat.geojson;
-    return FileFormat.values.firstWhere(
-      (f) => f != FileFormat.unknown && f.extension == ext,
-      orElse: () => FileFormat.unknown,
-    );
+    for (final f in values) {
+      if (f.extension == ext) return f;
+    }
+    return null;
   }
 }
 
-/// Import/Export結果の情報
+/// 書き出しの結果
 class ImportExportResult {
   final bool success;
   final String? errorMessage;
@@ -84,24 +90,17 @@ class ImportExportResult {
   }
 }
 
-/// エクスポートオプション
-/// CRS選択やその他のエクスポート設定を保持
+/// 書き出しの設定
 class ExportOptions {
-  /// 出力先のCRS（nullの場合はWGS84）
+  /// 書き出す座標系。null ならレイヤの座標系のまま（QGIS の「名前を付けて保存」と同じ）。
+  /// [FileFormat.wgs84Only] の形式では使わない
   final EpsgDefinition? targetCrs;
 
-  /// ポイントクラウドに変換するか（Shapefile用）
-  final bool convertToPointCloud;
-
-  /// 行番号を出力カラムに含めるか（属性テーブルの仮想カラム# に相当）
+  /// 行番号の列（ROW_NUM。属性テーブルの # と同じ、主キー順に 1 から）を足すか
   final bool includeRowNumber;
 
   const ExportOptions({
     this.targetCrs,
-    this.convertToPointCloud = false,
     this.includeRowNumber = false,
   });
-
-  /// WGS84かどうか判定
-  bool get isWgs84 => targetCrs == null || targetCrs!.code == 'EPSG:4326';
 }

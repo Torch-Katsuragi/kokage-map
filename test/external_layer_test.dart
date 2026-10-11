@@ -21,19 +21,17 @@ import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/providers/notification_providers.dart';
 import 'package:root_maps/providers/selection_providers.dart';
-import 'package:root_maps/services/coordinate/epsg_registry.dart';
 import 'package:root_maps/services/coordinate/gpkg_crs_resolver.dart';
 import 'package:root_maps/services/external/external_layer_cache.dart';
 import 'package:root_maps/services/external/external_layer_converter.dart';
 import 'package:root_maps/services/external/external_source.dart';
-import 'package:root_maps/services/import_export/exporters/shapefile_writer.dart';
-import 'package:root_maps/services/import_export/parsers/shapefile_binary_parser.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'support/gdal_host.dart';
 import 'support/gdal_scenarios.dart';
+import 'support/shp_fixture.dart';
 
 const _fx = 'test/fixtures/gdal';
 
@@ -79,36 +77,11 @@ void main() {
   });
 
   /// 点 3 つ（属性 NAME, H）の shp 一式
-  void writePoints(String base, {String? prj, bool cpg = true, String ext = '.dbf'}) {
-    final r = encodeShpShx(ShapeType.point, [
-      [
-        [
-          [135.97, 33.91],
-        ],
-      ],
-      [
-        [
-          [135.98, 33.92],
-        ],
-      ],
-      [
-        [
-          [135.99, 33.93],
-        ],
-      ],
-    ]);
-    File('$base.shp').writeAsBytesSync(r.shp);
-    File('$base.shx').writeAsBytesSync(r.shx);
-    File('$base$ext').writeAsBytesSync(
-      encodeDbf([
-        {'NAME': 'sugi', 'H': 21.5},
-        {'NAME': 'hinoki', 'H': 18.0},
-        {'NAME': 'matsu', 'H': 9.5},
-      ], now: DateTime(2026, 10, 9)),
-    );
-    if (prj != null) File('$base.prj').writeAsStringSync(EpsgRegistry.instance.getWktString(prj)!);
-    if (cpg) File('$base.cpg').writeAsStringSync('CP932');
-  }
+  Future<void> writePoints(String base, {String? prj}) => writePointShp(ExternalGdal.instance, base, [
+    (135.97, 33.91, {'NAME': 'sugi', 'H': 21.5}),
+    (135.98, 33.92, {'NAME': 'hinoki', 'H': 18.0}),
+    (135.99, 33.93, {'NAME': 'matsu', 'H': 9.5}),
+  ], epsg: prj);
 
   Map<String, Object?> feature(Map<String, Object?> geometry, Map<String, Object?> props) => {'type': 'Feature', 'properties': props, 'geometry': geometry};
 
@@ -263,7 +236,7 @@ void main() {
   group('ノードとキャッシュ', () {
 
     test('shp・GeoJSON はノードになり、付属ファイルや GeoJSON でない .json はならない', () async {
-      writePoints(p.join(proj, '林班'));
+      await writePoints(p.join(proj, '林班'));
       writeGeoJson(p.join(proj, 'roads.geojson'), [
         feature(
           {
@@ -334,7 +307,7 @@ void main() {
 
     test('ツリーの読み直しで外れても元は消さない。利用者の削除で元・付属・キャッシュを消す', () async {
       final base = p.join(proj, 'trees');
-      writePoints(base);
+      await writePoints(base);
       final root = await openRoot();
       final node = root.children.whereType<ExternalLayerNode>().single;
       final cachePath = node.geoPackageFile.getAbsolutePath()!;
@@ -354,7 +327,7 @@ void main() {
 
   group('編集の門番', () {
     test('選んだ地物をまとめて消しても、読み取り専用レイヤの地物は消さず「gpkg に変換して編集」を知らせる', () async {
-      writePoints(p.join(proj, 'trees'));
+      await writePoints(p.join(proj, 'trees'));
       final root = FolderNode('Home', children: []);
       await root.updateChildren();
       final node = root.children.whereType<ExternalLayerNode>().single;
@@ -387,7 +360,7 @@ void main() {
 
     test('書いて確かめてから元一式を消し、設定の鍵を移す', () async {
       final base = p.join(proj, 'trees');
-      writePoints(base, prj: 'EPSG:4326');
+      await writePoints(base, prj: 'EPSG:4326');
       final (root, node) = await open('trees.shp');
       // 可視性・スタイル・View を旧い鍵で持っておく
       await KMetaService.instance.setGeoPackageVisibility(proj, 'trees.shp', false);
@@ -477,7 +450,7 @@ void main() {
     }, skip: skip);
 
     test('自分のフォルダへ gpkg として複製（元は残す）', () async {
-      writePoints(p.join(proj, 'trees'));
+      await writePoints(p.join(proj, 'trees'));
       final mine = await Directory(p.join(proj, 'mine')).create();
       final (root, node) = await open('trees.shp');
       final target = root.children.whereType<FolderNode>().single;

@@ -1,14 +1,13 @@
 // 形式まわりの出力を、決まった結果（test/fixtures/golden/）と突き合わせる。
 //
-// 書き出し（Shapefile・GeoJSON・KML・CSV）のバイト、取り込み（Shapefile・GeoJSON）で
-// GeoPackage に入る中身、`.qgs` の XML（新規・DOM 保持の更新・QGIS からの読み取り）を固める。
+// `.qgs` の XML（新規・DOM 保持の更新・QGIS からの読み取り）を固める。
 // リファクタリングで結果が変わらないことを確かめるためのもの。
+// （Shapefile などの書き出しは GDAL に置き換えた。確かめ方は test/layer_export_test.dart）
 //
 // 出力を意図して変えたときは `KOKAGE_UPDATE_GOLDEN=1 flutter test test/format_golden_test.dart`
 // で作り直し、git の差分で変わった所を確かめてからコミットする。
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/painting.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
@@ -22,9 +21,6 @@ import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/models/nodes/layer_tree_node.dart';
-import 'package:root_maps/services/coordinate/epsg_registry.dart';
-import 'package:root_maps/services/import_export/exporters/shapefile_writer.dart';
-import 'package:root_maps/services/import_export/import_export_service.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:root_maps/services/qgis/qgs_auto_refresh.dart';
 import 'package:root_maps/services/qgis/qgs_document.dart';
@@ -39,21 +35,17 @@ import 'package:xml/xml.dart';
 final _update = Platform.environment['KOKAGE_UPDATE_GOLDEN'] == '1';
 const _goldenDir = 'test/fixtures/golden';
 
-/// バイナリの形式（改行を正規化しない）
-const _binaryExts = {'.shp', '.shx', '.dbf'};
-
 /// [bytes] を `test/fixtures/golden/[rel]` と比べる（更新モードなら書く）。
 /// 文字の形式は改行を揃えてから比べる（Windows の checkout は CRLF になる）
 void _expectGolden(String rel, List<int> bytes) {
   final file = File(p.join(_goldenDir, rel));
-  final binary = _binaryExts.contains(p.extension(rel).toLowerCase());
   if (_update) {
     file.parent.createSync(recursive: true);
     file.writeAsBytesSync(bytes);
     return;
   }
   expect(file.existsSync(), isTrue, reason: '$rel が無い（KOKAGE_UPDATE_GOLDEN=1 で作る）');
-  List<int> norm(List<int> b) => binary ? b : utf8.encode(utf8.decode(b, allowMalformed: true).replaceAll('\r\n', '\n'));
+  List<int> norm(List<int> b) => utf8.encode(utf8.decode(b, allowMalformed: true).replaceAll('\r\n', '\n'));
   final actual = norm(bytes);
   final expected = norm(file.readAsBytesSync());
   var firstDiff = -1;
@@ -70,14 +62,6 @@ void _expectGolden(String rel, List<int> bytes) {
 void _expectGoldenText(String rel, String text) => _expectGolden(rel, utf8.encode(text));
 
 String _prettyJson(Object? value) => const JsonEncoder.withIndent('  ').convert(value);
-
-/// 行の値を JSON にできる形へ（blob は16進）
-Object? _jsonable(Object? v) => switch (v) {
-  Uint8List() => v.map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
-  Map() => {for (final e in v.entries) '${e.key}': _jsonable(e.value)},
-  List() => [for (final x in v) _jsonable(x)],
-  _ => v,
-};
 
 void main() {
   late Directory tmp;
@@ -164,411 +148,6 @@ void main() {
     await g.flushChanges();
     await g.dispose();
   }
-
-  group('書き出し', () {
-    final cases = <(String, FileFormat, ExportOptions)>[
-      ('shp_wgs84', FileFormat.shapefile, const ExportOptions()),
-      (
-        'shp_6674_rownum',
-        FileFormat.shapefile,
-        ExportOptions(targetCrs: EpsgRegistry.instance.getByCode('EPSG:6674'), includeRowNumber: true),
-      ),
-      ('geojson', FileFormat.geojson, const ExportOptions()),
-      ('kml', FileFormat.kml, const ExportOptions()),
-      ('csv', FileFormat.csv, const ExportOptions()),
-    ];
-
-    test('点・線・面を各形式に書き出す', () async {
-      await makeSourceGpkg(p.join(proj, 'src.gpkg'));
-      final root = await loadTree();
-      final gpkg = root.children.whereType<GeoPackageNode>().single;
-      final layers = gpkg.children.whereType<LayerNode>().toList()..sort((a, b) => a.layerName.compareTo(b.layerName));
-      expect(layers.map((l) => l.layerName), ['lns', 'pls', 'pts']);
-
-      for (final (name, format, options) in cases) {
-        for (final layer in layers) {
-          final outDir = await Directory(p.join(tmp.path, 'out', name, layer.layerName)).create(recursive: true);
-          final outPath = p.join(outDir.path, '${layer.layerName}${format.extension}');
-          final result = await ImportExportService().exportLayer(layer, outPath, format: format, options: options);
-          final summary = {
-            'success': result.success,
-            'error': result.errorMessage,
-            'metadata': _jsonable(result.metadata?.map((k, v) => MapEntry(k, k == 'outputPath' ? p.basename('$v') : v))),
-          };
-          _expectGoldenText('export/$name/${layer.layerName}/result.json', _prettyJson(summary));
-          final files = outDir.listSync().whereType<File>().toList()..sort((a, b) => a.path.compareTo(b.path));
-          for (final f in files) {
-            final bytes = f.readAsBytesSync();
-            // DBF のヘッダの 1〜3 バイト目は書いた日付
-            if (p.extension(f.path) == '.dbf' && bytes.length > 4) bytes.setRange(1, 4, const [0, 0, 0]);
-            _expectGolden('export/$name/${layer.layerName}/${p.basename(f.path)}', bytes);
-          }
-        }
-      }
-      await gpkg.geoPackageFile.dispose();
-    });
-
-    test('平面直角座標系のレイヤも、地図と同じ位置で書き出す', () async {
-      // 36N, 136.01E の点 1 つ（x = 901.5 m 東, y = 0.05 m 北）。gpkg_axis_order_test と同じもの
-      File('test/fixtures/qgis_6674_point.gpkg').copySync(p.join(proj, 'q.gpkg'));
-      final root = await loadTree();
-      final gpkg = root.children.whereType<GeoPackageNode>().single;
-      final layer = gpkg.children.whereType<LayerNode>().single;
-
-      Future<List<double>> shpPoint(ExportOptions options) async {
-        final out = p.join(tmp.path, 'q_${options.targetCrs?.codeNumber ?? 'wgs'}.shp');
-        expect((await ImportExportService().exportLayer(layer, out, options: options)).success, isTrue);
-        final bytes = File(out).readAsBytesSync();
-        final d = ByteData.sublistView(bytes);
-        return [d.getFloat64(112, Endian.little), d.getFloat64(120, Endian.little)];
-      }
-
-      final wgs = await shpPoint(const ExportOptions());
-      expect(wgs[0], closeTo(136.01, 1e-7));
-      expect(wgs[1], closeTo(36.0, 1e-7));
-      final plane = await shpPoint(ExportOptions(targetCrs: EpsgRegistry.instance.getByCode('EPSG:6674')));
-      expect(plane[0], closeTo(901.5, 0.1));
-      expect(plane[1], closeTo(0.05, 0.1));
-
-      final geojson = p.join(tmp.path, 'q.geojson');
-      await ImportExportService().exportLayer(layer, geojson);
-      final collection = jsonDecode(File(geojson).readAsStringSync()) as Map<String, dynamic>;
-      final feature = (collection['features'] as List).single as Map<String, dynamic>;
-      final coords = (feature['geometry'] as Map<String, dynamic>)['coordinates'] as List;
-      expect(coords[0] as num, closeTo(136.01, 1e-7));
-      expect(coords[1] as num, closeTo(36.0, 1e-7));
-      await gpkg.geoPackageFile.dispose();
-    });
-  });
-
-  group('取り込み', () {
-    Future<Map<String, Object?>> dumpImport(ImportExportResult result, GeoPackageNode target) async {
-      final db = await target.geoPackageFile.getDatabase();
-      final tables = <String, Object?>{};
-      for (final layer in result.createdLayers ?? const <LayerNode>[]) {
-        final columns = await db.rawQuery('PRAGMA table_info("${layer.layerName}")');
-        final rows = await db.rawQuery('SELECT * FROM "${layer.layerName}" ORDER BY rowid');
-        tables[layer.layerName] = {
-          'columns': [for (final c in columns) '${c['name']} ${c['type']}'],
-          'rows': _jsonable(rows),
-        };
-      }
-      return {
-        'success': result.success,
-        'error': result.errorMessage,
-        'layers': [for (final l in result.createdLayers ?? const <LayerNode>[]) l.layerName],
-        'metadata': _jsonable(result.metadata?.map((k, v) => MapEntry(k, k == 'sourceFile' ? p.basename('$v') : v))),
-        'tables': tables,
-      };
-    }
-
-    Future<GeoPackageNode> targetGpkg() async {
-      final g = GeoPackageFile(const ['dst.gpkg'], absolutePath: p.join(proj, 'dst.gpkg'));
-      await g.addLayer('existing', GeometryType.point);
-      await g.dispose();
-      final root = await loadTree();
-      return root.children.whereType<GeoPackageNode>().single;
-    }
-
-    void writeShapefile(String base, int type, List<ShpShape> shapes, List<Map<String, dynamic>> attrs, {String? prjCode}) {
-      final r = encodeShpShx(type, shapes);
-      File('$base.shp').writeAsBytesSync(r.shp);
-      File('$base.shx').writeAsBytesSync(r.shx);
-      File('$base.dbf').writeAsBytesSync(encodeDbf(attrs, now: DateTime(2026, 10, 7)));
-      if (prjCode != null) File('$base.prj').writeAsStringSync(EpsgRegistry.instance.getWktString(prjCode)!);
-      File('$base.cpg').writeAsStringSync('CP932');
-    }
-
-    test('Shapefile（WGS84 の点・平面直角の面・名前の重なり）', () async {
-      final target = await targetGpkg();
-      final src = await Directory(p.join(tmp.path, 'src')).create();
-      writeShapefile(
-        p.join(src.path, 'existing'),
-        1,
-        [
-          [
-            [
-              [135.97, 33.91],
-            ],
-          ],
-          [
-            [
-              [135.98, 33.92],
-            ],
-          ],
-          [
-            [
-              [200.0, 33.92], // WGS84 の範囲外。形が捨てられる
-            ],
-          ],
-          [
-            [
-              [135.99, 33.93],
-            ],
-          ],
-        ],
-        [
-          {'NAME': 'sugi', 'H': 21.5, 'N': 3, 'OK': true},
-          {'NAME': '', 'H': 1.0, 'N': 4, 'OK': false},
-          {'NAME': 'out', 'H': 2.0, 'N': 5, 'OK': true},
-          {'NAME': 'last', 'H': 3.0, 'N': 6, 'OK': true},
-        ],
-        prjCode: 'EPSG:4326',
-      );
-      final pts = await ImportExportService().importFile(p.join(src.path, 'existing.shp'), target);
-      _expectGoldenText('import/shp_points.json', _prettyJson(await dumpImport(pts, target)));
-
-      // 平面直角座標系 VI 系（EPSG:6674）の面。原点付近
-      writeShapefile(
-        p.join(src.path, 'stands'),
-        5,
-        [
-          [
-            [
-              [0.0, 0.0],
-              [100.0, 0.0],
-              [100.0, 100.0],
-              [0.0, 100.0],
-              [0.0, 0.0],
-            ],
-            [
-              [20.0, 20.0],
-              [20.0, 40.0],
-              [40.0, 40.0],
-              [20.0, 20.0],
-            ],
-          ],
-        ],
-        [
-          {'KOHAN': 'い', 'AREA': 0.99},
-        ],
-        prjCode: 'EPSG:6674',
-      );
-      final pls = await ImportExportService().importFile(p.join(src.path, 'stands.shp'), target, layerName: 'stands');
-      _expectGoldenText('import/shp_polygons_6674.json', _prettyJson(await dumpImport(pls, target)));
-
-      writeShapefile(
-        p.join(src.path, 'roads'),
-        3,
-        [
-          [
-            [
-              [135.90, 33.90],
-              [135.91, 33.91],
-            ],
-            [
-              [135.92, 33.92],
-              [135.93, 33.93],
-            ],
-          ],
-        ],
-        [
-          {'NAME': 'r1'},
-        ],
-      );
-      final lns = await ImportExportService().importFile(p.join(src.path, 'roads.shp'), target);
-      _expectGoldenText('import/shp_lines.json', _prettyJson(await dumpImport(lns, target)));
-      await target.geoPackageFile.dispose();
-    });
-
-    test('Shapefile: 読めない頂点を持つ面を捨てても、次の面から読み続ける', () async {
-      final src = await Directory(p.join(tmp.path, 'src')).create();
-      final base = p.join(src.path, 'bad');
-      List<List<double>> square(double x, double y) => [
-        [x, y],
-        [x + 0.1, y],
-        [x + 0.1, y + 0.1],
-        [x, y + 0.1],
-        [x, y],
-      ];
-      writeShapefile(
-        base,
-        5,
-        [
-          [square(135.0, 33.0)],
-          [
-            [
-              [135.0, 33.0],
-              [200.0, 33.0], // WGS84 の範囲外。この面は捨てる
-              [135.1, 33.1],
-              [135.0, 33.0],
-            ],
-          ],
-          [square(136.0, 34.0)],
-          [square(137.0, 35.0)],
-        ],
-        [
-          {'NAME': 'a'},
-          {'NAME': 'bad'},
-          {'NAME': 'c'},
-          {'NAME': 'd'},
-        ],
-      );
-      final records = ShapefileBinaryParser.records(File('$base.shp').readAsBytesSync()).toList();
-      expect(records.map((r) => r.index), [0, 2, 3]);
-      expect((records[1].geometry as List<List<LatLng>>).first.first, const LatLng(34.0, 136.0));
-
-      final target = await targetGpkg();
-      final result = await ImportExportService().importFile('$base.shp', target);
-      final rows = await (await target.geoPackageFile.getDatabase()).rawQuery('SELECT NAME FROM bad ORDER BY fid');
-      expect(rows.map((r) => r['NAME']), ['a', 'c', 'd']);
-      expect(result.metadata?['featureCount'], 3);
-      await target.geoPackageFile.dispose();
-    });
-
-    test('GeoJSON（形の種類ごとにレイヤを分ける）', () async {
-      final target = await targetGpkg();
-      final src = await Directory(p.join(tmp.path, 'src')).create();
-      final path = p.join(src.path, 'mixed.geojson');
-      File(path).writeAsStringSync(jsonEncode({
-        'type': 'FeatureCollection',
-        'features': [
-          {
-            'type': 'Feature',
-            'properties': {'name': '杉', 'h': 21.5, 'n': 3, 'ok': true},
-            'geometry': {'type': 'Point', 'coordinates': [135.97, 33.91]},
-          },
-          {
-            'type': 'Feature',
-            'properties': {'name': 'multi', 'extra': 'x'},
-            'geometry': {
-              'type': 'MultiPoint',
-              'coordinates': [
-                [135.98, 33.92],
-                [135.99, 33.93],
-              ],
-            },
-          },
-          {
-            'type': 'Feature',
-            'properties': {'name': 'line'},
-            'geometry': {
-              'type': 'LineString',
-              'coordinates': [
-                [135.9, 33.9],
-                [135.91, 33.91],
-              ],
-            },
-          },
-          {
-            'type': 'Feature',
-            'properties': {'name': 'short'},
-            'geometry': {
-              'type': 'LineString',
-              'coordinates': [
-                [135.9, 33.9],
-              ],
-            },
-          },
-          {
-            'type': 'Feature',
-            'properties': {'name': 'mline'},
-            'geometry': {
-              'type': 'MultiLineString',
-              'coordinates': [
-                [
-                  [135.8, 33.8],
-                  [135.81, 33.81],
-                ],
-                [
-                  [135.82, 33.82],
-                  [135.83, 33.83],
-                ],
-              ],
-            },
-          },
-          {
-            'type': 'Feature',
-            'properties': {'name': 'poly', 'h': 1},
-            'geometry': {
-              'type': 'Polygon',
-              'coordinates': [
-                [
-                  [135.0, 33.0],
-                  [135.1, 33.0],
-                  [135.1, 33.1],
-                  [135.0, 33.0],
-                ],
-              ],
-            },
-          },
-          {
-            'type': 'Feature',
-            'properties': {'name': 'mpoly'},
-            'geometry': {
-              'type': 'MultiPolygon',
-              'coordinates': [
-                [
-                  [
-                    [136.0, 34.0],
-                    [136.1, 34.0],
-                    [136.1, 34.1],
-                    [136.0, 34.0],
-                  ],
-                ],
-              ],
-            },
-          },
-          {'type': 'Feature', 'properties': {'name': 'nogeom'}, 'geometry': null},
-        ],
-      }));
-      final result = await ImportExportService().importFile(path, target);
-      _expectGoldenText('import/geojson_mixed.json', _prettyJson(await dumpImport(result, target)));
-
-      // 1 種類だけならレイヤ名に種類を付けない
-      final single = p.join(src.path, 'single.json');
-      File(single).writeAsStringSync(jsonEncode({
-        'type': 'FeatureCollection',
-        'features': [
-          {
-            'type': 'Feature',
-            'properties': {'a': 'b'},
-            'geometry': {'type': 'Point', 'coordinates': [135.0, 33.0]},
-          },
-        ],
-      }));
-      final one = await ImportExportService().importFile(single, target, layerName: 'existing');
-      _expectGoldenText('import/geojson_single.json', _prettyJson(await dumpImport(one, target)));
-
-      // 読めないもの
-      final errors = <String, Object?>{};
-      File(p.join(src.path, 'feature.geojson')).writeAsStringSync(jsonEncode({
-        'type': 'Feature',
-        'properties': {},
-        'geometry': {'type': 'Point', 'coordinates': [135.0, 33.0]},
-      }));
-      File(p.join(src.path, 'empty.geojson')).writeAsStringSync(jsonEncode({'type': 'FeatureCollection', 'features': []}));
-      for (final name in ['feature.geojson', 'empty.geojson', 'missing.geojson', 'missing.shp', 'x.kml']) {
-        final r = await ImportExportService().importFile(p.join(src.path, name), target);
-        errors[name] = {'success': r.success, 'error': r.errorMessage?.replaceAll(src.path, '<src>')};
-      }
-      _expectGoldenText('import/errors.json', _prettyJson(errors));
-      await target.geoPackageFile.dispose();
-    });
-
-    test('GeoJSON: 空の MultiPoint は読み飛ばし、同じまとまりのほかの点は落とさない', () async {
-      final target = await targetGpkg();
-      final src = await Directory(p.join(tmp.path, 'src')).create();
-      final path = p.join(src.path, 'pts.geojson');
-      File(path).writeAsStringSync(jsonEncode({
-        'type': 'FeatureCollection',
-        'features': [
-          for (final (name, geometry) in [
-            ('a', {'type': 'Point', 'coordinates': [135.0, 33.0]}),
-            ('empty', {'type': 'MultiPoint', 'coordinates': <Object>[]}),
-            ('b', {'type': 'Point', 'coordinates': [135.1, 33.1]}),
-          ])
-            {'type': 'Feature', 'properties': {'name': name}, 'geometry': geometry},
-        ],
-      }));
-      final r = await ImportExportService().importFile(path, target);
-      expect(r.success, isTrue);
-      final layer = (await target.geoPackageFile.getLayerNames()).firstWhere((n) => n.startsWith('pts'));
-      final rows = await target.geoPackageFile.getFeaturesWithGeometry(layer);
-      expect(rows.map((r) => r['name']), ['a', 'b']);
-      await target.geoPackageFile.dispose();
-    });
-  });
 
   group('.qgs', () {
     QgsLayer layer(

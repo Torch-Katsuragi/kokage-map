@@ -1,4 +1,5 @@
-// CRS の解決（.prj の WKT・GPKG の srs 定義）と、解決した CRS での座標の向きを固定する
+// GPKG の srs 定義から CRS を解決し、その CRS での座標の向きを固定する
+// （.prj の読み取りと Shapefile の読み込みは GDAL に置き換えた。2026-10-10）
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -7,15 +8,11 @@ import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/services/coordinate/index.dart';
-import 'package:root_maps/services/import_export/exporters/shapefile_writer.dart';
-import 'package:root_maps/services/import_export/parsers/prj_reader.dart';
-import 'package:root_maps/services/import_export/parsers/shapefile_binary_parser.dart';
 import 'package:root_maps/utils/wkb_utils.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   late Directory tmp;
-  final registry = EpsgRegistry.instance;
   // 和歌山県北山村付近。VI 系（原点 36N, 136E）では北に約 -230 km、東に約 -4 km
   const kitayama = LatLng(33.93, 135.96);
 
@@ -28,91 +25,6 @@ void main() {
     try {
       await tmp.delete(recursive: true);
     } catch (_) {}
-  });
-
-  Future<EpsgDefinition?> readPrj(String content) async {
-    final path = '${tmp.path}/t.prj';
-    await File(path).writeAsString(content);
-    return PrjReader.read(path);
-  }
-
-  group('.prj の WKT から CRS を推定', () {
-    test('AUTHORITY 付きはレジストリの定義を返す', () async {
-      final def = await readPrj(
-        'PROJCS["JGD2011 / Japan Plane Rectangular CS VI",AUTHORITY["EPSG","6674"]]',
-      );
-      expect(identical(def, registry.getByCode('EPSG:6674')), isTrue);
-    });
-
-    test('EPSG:XXXX 表記もレジストリの定義を返す', () async {
-      final def = await readPrj('LOCAL_CS["x EPSG:2448"]');
-      expect(def?.code, 'EPSG:2448');
-      expect(def?.proj4String, startsWith('+proj=tmerc'));
-    });
-
-    test('コードの無い ESRI WKT は WKT のまま定義にする', () async {
-      final wkt = registry.getWktString('EPSG:6674')!;
-      final def = await readPrj(wkt);
-      expect(def?.code, 'WKT');
-      expect(def?.proj4String, wkt);
-    });
-
-    test('レジストリに無いコードは WKT のまま、コードは残す', () async {
-      final wkt = registry
-          .getWktString('EPSG:6674')!
-          .replaceFirst(',UNIT["Meter",1.0]]', ',UNIT["Meter",1.0],AUTHORITY["EPSG","99999"]]');
-      final def = await readPrj(wkt);
-      expect(def?.code, 'EPSG:99999');
-      expect(def?.proj4String, wkt);
-    });
-
-    test('proj4dart が読めない WKT は proj4 文字列を組み立てる', () async {
-      final def = await readPrj('UNKNOWN["GCS_WGS_1984",DATUM["D_WGS_1984"]]');
-      expect(def?.code, 'CONVERTED');
-      expect(def?.proj4String, '+proj=longlat +datum=WGS84 +no_defs');
-    });
-  });
-
-  group('Shapefile の読み込み（平面直角は入れ替えずに E, N として読む）', () {
-    Future<LatLng> readPoint(List<double> xy, EpsgDefinition? crs) async {
-      final r = encodeShpShx(ShapeType.point, [
-        [
-          [xy]
-        ],
-      ]);
-      final path = '${tmp.path}/p.shp';
-      File(path).writeAsBytesSync(r.shp);
-      LatLng? got;
-      await ShapefileBinaryParser.parseRecords(
-        path,
-        sourceCoordinateSystem: crs,
-        onRecord: (i, t, g) async => got = g as LatLng,
-      );
-      return got!;
-    }
-
-    test('EPSG:6674 の (E, N) を緯度経度に戻す', () async {
-      final vi = registry.getByCode('EPSG:6674')!;
-      final xy = CoordinateService.instance.transformToXY(kitayama, vi)!;
-      // transformToXY は X=Northing, Y=Easting。Shapefile は (E, N) で書く
-      final got = await readPoint([xy['y']!, xy['x']!], vi);
-      expect(got.latitude, closeTo(kitayama.latitude, 1e-6));
-      expect(got.longitude, closeTo(kitayama.longitude, 1e-6));
-    });
-
-    test('WKT のまま持った定義でも同じ結果', () async {
-      final vi = registry.getByCode('EPSG:6674')!;
-      final xy = CoordinateService.instance.transformToXY(kitayama, vi)!;
-      final fromWkt = await readPrj(registry.getWktString('EPSG:6674')!);
-      final got = await readPoint([xy['y']!, xy['x']!], fromWkt);
-      expect(got.latitude, closeTo(kitayama.latitude, 1e-6));
-      expect(got.longitude, closeTo(kitayama.longitude, 1e-6));
-    });
-
-    test('CRS なしは緯度経度として読む', () async {
-      final got = await readPoint([135.96, 33.93], null);
-      expect(got, kitayama);
-    });
   });
 
   group('GPKG のレイヤ CRS（どの定義でも GDAL と同じ x = 東・y = 北で保存）', () {

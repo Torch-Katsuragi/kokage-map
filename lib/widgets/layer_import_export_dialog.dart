@@ -15,16 +15,21 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: Layer Import/Export Dialog Widget
 // レイヤー全体のインポート・エクスポート機能を提供するダイアログ
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
+import '../core/fs/k_file_system.dart';
+import '../core/path_resolver.dart';
 import '../i18n/strings.g.dart';
+import '../models/geometry_type.dart';
 import '../models/nodes/layer_node.dart';
 import '../services/coordinate/epsg_registry.dart';
+import '../services/global_folder_locator.dart';
 import '../services/import_export/import_export_service.dart';
 
 /// レイヤーの書き出しダイアログ（取り込みはドロワーの GeoPackage 行から直接）
@@ -64,7 +69,6 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
 
   // エクスポート設定
   FileFormat _exportFormat = FileFormat.shapefile;
-  bool _exportAsPointCloud = false; // 初期値はオフ
   bool _includeRowNumber = false; // 初期値はオフ
   EpsgDefinition? _selectedCrs = _lastUsedCrs; // 最後に使用したCRSを初期値に
   String _crsSearchQuery = ''; // CRS検索クエリ
@@ -160,6 +164,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         items:
             _importExportService
                 .getSupportedExportFormats()
+                .where((format) => format.supports(_layerGeometryType))
                 .map(
                   (format) => DropdownMenuItem(
                     value: format,
@@ -175,29 +180,20 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       ),
       const SizedBox(height: 16),
 
-      // Shapefile用オプション
-      if (_exportFormat == FileFormat.shapefile) ...[
-        Card(
-          color: Colors.orange[50],
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  t.importExport.shapefileOptions,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                // Point Cloudオプション（Line/Polygonレイヤーのみ）
-                if (widget.exportLayer is! PointLayerNode)
-                  CheckboxListTile(
-                    title: Text(t.importExport.exportAsPointCloud),
-                    subtitle: Text(t.importExport.exportAsPointCloudDesc),
-                    value: _exportAsPointCloud,
-                    onChanged: (value) {
-                      setState(() => _exportAsPointCloud = value ?? false);
-                    },
-                  ),
+      // 書き出しの設定（行番号・座標系）
+      Card(
+        color: Colors.orange[50],
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t.importExport.exportOptions,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              // DXF は属性列を持てない
+              if (_exportFormat != FileFormat.dxf)
                 CheckboxListTile(
                   title: Text(t.importExport.includeRowNumber),
                   subtitle: Text(t.importExport.includeRowNumberDesc),
@@ -206,13 +202,27 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                     setState(() => _includeRowNumber = value ?? false);
                   },
                 ),
-              ],
-            ),
+              if (_exportFormat.wgs84Only)
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: Colors.blue[700]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        t.importExport.crsWgs84Only(format: _exportFormat.value),
+                        style: TextStyle(fontSize: 11, color: Colors.blue[700]),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
           ),
         ),
-        const SizedBox(height: 16),
-        
-        // CRS選択セクション
+      ),
+      const SizedBox(height: 16),
+
+      // 座標系（形式の決まりで WGS 84 しか書けない形式では選ばせない）
+      if (!_exportFormat.wgs84Only) ...[
         _buildCrsSelector(),
         const SizedBox(height: 16),
       ],
@@ -264,7 +274,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                     IconButton(
                       icon: const Icon(Icons.clear, size: 18),
                       onPressed: () => setState(() => _selectedCrs = null),
-                      tooltip: t.importExport.resetToWgs84,
+                      tooltip: t.importExport.resetCrs,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -325,9 +335,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                           )
                         : null,
                     onTap: () {
-                      setState(() {
-                        _selectedCrs = isWgs84 ? null : crs;
-                      });
+                      setState(() => _selectedCrs = crs);
                     },
                   );
                 },
@@ -417,10 +425,18 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
     );
   }
 
+  /// レイヤの形の種類（GPX は面を書けないので選択肢から外す）
+  GeometryType? get _layerGeometryType => switch (widget.exportLayer) {
+    PointLayerNode() => GeometryType.point,
+    LineLayerNode() => GeometryType.linestring,
+    PolygonLayerNode() => GeometryType.polygon,
+    _ => null,
+  };
+
   Future<void> _handleExport() async {
     // file_picker 12 の saveFile は中身（bytes）を先に渡す作り（Android の SAF は「保存先を選んでから書く」ができない）。
-    // 一時フォルダに書き出してから保存ダイアログへ。Shapefile は .shp/.shx/.dbf/.prj の組なので zip にまとめる
-    Directory? tmpDir;
+    // 一時フォルダに GDAL で書き出してから保存ダイアログへ。Shapefile は .shp/.shx/.dbf/.prj/.cpg の組なので zip にまとめる
+    String? tmpDir;
     try {
       setState(() {
         _isProcessing = true;
@@ -431,17 +447,15 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
 
       _updateProgress(0.3, t.importExport.analyzingLayer);
 
-      // エクスポートオプションを作成
       final exportOptions = ExportOptions(
-        targetCrs: _selectedCrs,
-        convertToPointCloud: _exportAsPointCloud,
-        includeRowNumber: _includeRowNumber,
+        targetCrs: _exportFormat.wgs84Only ? null : _selectedCrs,
+        includeRowNumber: _includeRowNumber && _exportFormat != FileFormat.dxf,
       );
 
       final ext = _exportFormat.extension.replaceFirst('.', '');
       final baseName = widget.exportLayer.name;
-      tmpDir = await Directory.systemTemp.createTemp('kokage_export_');
-      final tmpPath = '${tmpDir.path}${Platform.pathSeparator}$baseName.$ext';
+      tmpDir = await _createTempDir();
+      final tmpPath = p.join(tmpDir, '$baseName.$ext');
 
       final exportResult = await _importExportService.exportLayer(
         widget.exportLayer,
@@ -460,7 +474,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
 
       _updateProgress(0.8, t.importExport.saving);
       final isShapefile = _exportFormat == FileFormat.shapefile;
-      final bytes = isShapefile ? _zipDirectory(tmpDir) : await File(tmpPath).readAsBytes();
+      final bytes = isShapefile ? await _zipDirectory(tmpDir) : await fs.readAsBytes(tmpPath);
       final saveExt = isShapefile ? 'zip' : ext;
       final saved = await FilePicker.saveFile(
         dialogTitle: t.importExport.exportTitle,
@@ -480,17 +494,12 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       _updateProgress(1.0, t.importExport.exportCompleted);
 
       // 成功時は選択したCRSを保持
-      if (exportResult.success) {
-        _lastUsedCrs = _selectedCrs;
-      }
+      if (!_exportFormat.wgs84Only) _lastUsedCrs = _selectedCrs;
 
       setState(() {
         _isProcessing = false;
         _lastResult = exportResult;
-        _statusMessage =
-            exportResult.success
-                ? t.importExport.exportCompletedSuccess
-                : exportResult.errorMessage ?? t.importExport.exportFailedShort;
+        _statusMessage = t.importExport.exportCompletedSuccess;
       });
     } catch (e) {
       setState(() {
@@ -499,19 +508,36 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         _lastResult = ImportExportResult.error(e.toString());
       });
     } finally {
-      try {
-        tmpDir?.deleteSync(recursive: true);
-      } catch (_) {}
+      if (tmpDir != null) {
+        try {
+          await fs.delete(tmpDir, recursive: true);
+        } catch (_) {}
+      }
     }
   }
 
+  /// 書き出しの一時フォルダ（`fs` のパス）。Android はアプリのキャッシュ、web はプロジェクトの `.kokage/tmp`
+  /// （web の GDAL は出力を `fs` で書くので、OPFS の中に置く）
+  Future<String> _createTempDir() async {
+    final String base;
+    if (fs.hasRealPaths) {
+      base = (await getTemporaryDirectory()).path;
+    } else {
+      final root = ProjectPathResolver.instance.rootPath ??
+          p.dirname(widget.exportLayer.geoPackageFile.getAbsolutePath() ?? '/');
+      base = p.join(root, GlobalFolderLocator.systemDirName, 'tmp');
+    }
+    final dir = p.join(base, 'kokage_export_${DateTime.now().microsecondsSinceEpoch}');
+    await fs.createDirectory(dir);
+    return dir;
+  }
+
   /// フォルダの中のファイルを 1 つの zip に（Shapefile の組を 1 ファイルで保存するため）
-  static Uint8List _zipDirectory(Directory dir) {
+  static Future<Uint8List> _zipDirectory(String dir) async {
     final archive = Archive();
-    for (final entity in dir.listSync()) {
-      if (entity is! File) continue;
-      final data = entity.readAsBytesSync();
-      archive.addFile(ArchiveFile.bytes(entity.uri.pathSegments.last, data));
+    for (final entry in await fs.list(dir)) {
+      if (entry.isDirectory) continue;
+      archive.addFile(ArchiveFile.bytes(entry.name, await fs.readAsBytes(entry.path)));
     }
     return ZipEncoder().encodeBytes(archive);
   }

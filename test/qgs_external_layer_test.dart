@@ -15,10 +15,7 @@ import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/nodes/external_layer_node.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
-import 'package:root_maps/services/coordinate/epsg_registry.dart';
 import 'package:root_maps/services/external/external_source.dart';
-import 'package:root_maps/services/import_export/exporters/shapefile_writer.dart';
-import 'package:root_maps/services/import_export/parsers/shapefile_binary_parser.dart';
 import 'package:root_maps/services/kmeta_service.dart';
 import 'package:root_maps/services/qgis/qgs_auto_refresh.dart';
 import 'package:root_maps/services/qgis/qgs_importer.dart';
@@ -29,6 +26,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:xml/xml.dart';
 
 import 'support/gdal_host.dart';
+import 'support/shp_fixture.dart';
 
 void main() {
   late Directory tmp;
@@ -56,21 +54,10 @@ void main() {
 
     // 平面直角 VI 系の点（.cpg なし = Shift_JIS）
     final base = p.join(proj, '林班');
-    final r = encodeShpShx(ShapeType.point, [
-      [
-        [[0.0, 0.0]],
-      ],
-      [
-        [[10.0, 10.0]],
-      ],
-    ]);
-    File('$base.shp').writeAsBytesSync(r.shp);
-    File('$base.shx').writeAsBytesSync(r.shx);
-    File('$base.dbf').writeAsBytesSync(encodeDbf([
-      {'H': 10.0},
-      {'H': 20.0},
-    ]));
-    File('$base.prj').writeAsStringSync(EpsgRegistry.instance.getWktString('EPSG:6674')!);
+    await writePointShp(ExternalGdal.instance, base, [
+      (0.0, 0.0, {'H': 10.0}),
+      (10.0, 10.0, {'H': 20.0}),
+    ], epsg: 'EPSG:6674', cpg: false);
 
     // 型の混ざった GeoJSON
     File(p.join(proj, 'mixed.geojson')).writeAsStringSync(jsonEncode({

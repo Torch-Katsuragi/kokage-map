@@ -1,5 +1,0 @@
-id,name,description,geometry_type,longitude,latitude
-1,杉,"樹高 ""高い"", 太い",MULTIPOINT,135.97,33.91
-2,hinoki,,MULTIPOINT,135.98,33.92
-3,,"line
-break",MULTIPOINT,135.99,33.93

@@ -102,14 +102,10 @@ abstract class KFileSystem {
   bool get hasRealPaths;
 }
 
-KFileSystem? _override;
 KFileSystem? _instance;
 
 /// 現在のファイルシステム。
-KFileSystem get fs => _override ?? (_instance ??= impl.createKFileSystem());
-
-/// テスト用に差し替える。[reset] で戻す。
-void setFileSystemOverrideForTest(KFileSystem? value) => _override = value;
+KFileSystem get fs => _instance ??= impl.createKFileSystem();
 
 /// [KFileSystem] に足したい、実装を1つで済ませられるもの。
 ///

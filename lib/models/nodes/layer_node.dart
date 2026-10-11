@@ -416,9 +416,6 @@ abstract class LayerNode extends LayerTreeNode {
   /// 結合で足される列（接頭辞つき）。読み取り専用
   List<String> get joinedFieldNames => [for (final j in _joins) ...j.fieldNames];
 
-  /// [field] が結合で足された列か
-  bool isJoinedField(String field) => _joins.any((j) => j.fieldNames.contains(field));
-
   /// 地物の属性に結合の値を足したもの（ラベル・描き分け・検索・属性テーブルが読む）。結合が無ければ [props] そのもの
   Map<String, Object?>? effectiveProperties(Map<String, dynamic>? props) => withJoinedValues(props, _joins);
 

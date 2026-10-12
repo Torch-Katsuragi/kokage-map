@@ -100,6 +100,8 @@ Pixel 9 で触ったフォルダを Drive から落として QGIS 4.2.2 で開�
 - [ ] アプリ製の GeoTIFF（新規と位置合わせ後）を開いて警告が出ず、位置が合う
 - [ ] GNSS の品質を列にした書き出し（gnss_fix など）、`kmaps_metadata` の列が開ける
 - [ ] KMZ を変換・書いた `.qgs` を開いて同じレイヤ名・件数
+- [ ] QGIS 製の gpkg（rtree・トリガーつき）: Pixel 9 で地図を開いたまま点を足す → Drive 同期 → PC で落として `ogrinfo -spat <足した点の周り> x.gpkg 調査点` に足した点が出る。`sqlite_master` に `rtree_調査点_geom_*` のトリガーが元どおり、`rtree_調査点_geom` の件数が表と同じ。続けてアプリで点を足せる（ログに `no such function: ST_IsEmpty` が出ない）
+- [ ] 同じく点を足してホームボタンで裏に回す → `adb pull` した gpkg で上と同じ（同期しなくても整う）
 
 ### 8. メモリ・大きさ（profile 版と DevTools。n9/size-mem）
 

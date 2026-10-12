@@ -17,6 +17,7 @@
 // 複数のGeoPackageFileインスタンスのバックグラウンド保存を一元管理
 import 'dart:async';
 
+import 'package:path/path.dart' as p;
 import 'package:root_maps/utils/app_logger.dart';
 
 import '../models/geopackage/geopackage_file.dart';
@@ -228,6 +229,15 @@ class BackgroundSaveManager {
     final changes = _pendingChanges.remove(geoPackageFile);
     if (changes == null || changes.isEmpty) return;
     if (!await _save(geoPackageFile, changes)) _scheduleRetry();
+  }
+
+  /// [absPath] を開いている GeoPackageFile の保留分をすぐ保存する（gpkg を外へ出す前）
+  Future<void> flushChangesFor(String absPath) async {
+    final key = p.canonicalize(absPath);
+    for (final gpkg in _pendingChanges.keys.toList()) {
+      final path = gpkg.getAbsolutePath();
+      if (path != null && p.canonicalize(path) == key) await flushChanges(gpkg);
+    }
   }
 
   /// 全てのGeoPackageFileの変更を即座に保存（アプリを裏に回したとき。書き直しの予約も前倒しする）

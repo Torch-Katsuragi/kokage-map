@@ -15,8 +15,11 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: GeoPackageファイル管理クラス（ファサード）
 // 既存APIを維持しつつ、内部で各サービスクラスに委譲
+import 'dart:async';
+
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../../core/fs/k_file_system.dart';
@@ -141,6 +144,104 @@ class GeoPackageFile {
       await GpkgIndexRepair.rebuildFile(path);
     } catch (e) {
       AppLogger.debug('[GeoPackageFile] 閉じたあとの索引の焼き直しに失敗: $e');
+    }
+  }
+
+  /// 外へ出す整合をパスごとに 1 つずつ（同期と裏に回ったときが重なっても、同じファイルを同時に書き直さない）
+  static final Map<String, Future<void>> _handOffChains = {};
+
+  /// [absPath] を端末の外へ出す前（Drive へ上げる・3-way マージの base に写す・アプリが裏に回る）に、
+  /// QGIS/GDAL が読める状態にする。開いている [GeoPackageFile] はそのまま使える（次の読み書きで開き直す）。
+  ///
+  /// 1. 保留中の属性を書く
+  /// 2. アプリの接続を閉じる（このあと別の SQLite（geodiff）で書くため）
+  /// 3. 書き込みのために落としたトリガーを控えの定義のまま戻す（次に書くときにまた落とす）
+  /// 4. rtree・範囲・件数を実データに合わせる（[GpkgIndexRepair]。Android 本体の SQLite には rtree が無く、
+  ///    編集のたびの rtree 更新が効いていない）
+  ///
+  /// > [!WARNING] 以前は閉じる（[dispose]）ときにしか整合していなかった（2026-10-12 Pixel 9 で確認）
+  /// > 開いたままのプロジェクトを Drive に上げると、QGIS 製の gpkg に足した点が rtree に無く、
+  /// > トリガーも落ちたまま上がり、QGIS の空間検索（`ogrinfo -spat`）で見えなかった。
+  ///
+  /// 読んだだけのファイルは書き直さない（[GeoPackageConnection.hasWritesFor] とトリガーの控えで見る）。
+  /// rtree もトリガーも無いアプリ製の gpkg（GPS の記録など）は接続も閉じない。gpkg 以外は何もしない。投げない
+  static Future<void> prepareForHandOff(String absPath) {
+    if (!absPath.toLowerCase().endsWith('.gpkg')) return Future.value();
+    final key = p.canonicalize(absPath);
+    final run = (_handOffChains[key] ?? Future.value()).then((_) => _prepareForHandOff(absPath));
+    final settled = run.catchError((Object e) => AppLogger.debug('[GeoPackageFile] 外へ出す整合に失敗: $absPath - $e'));
+    _handOffChains[key] = settled;
+    unawaited(settled.whenComplete(() {
+      if (identical(_handOffChains[key], settled)) _handOffChains.remove(key);
+    }));
+    return settled;
+  }
+
+  /// 開いている・書いた・トリガーを落としたままの gpkg をすべて外へ出せる状態にする（アプリが裏に回ったとき）。
+  /// 同じ端末の QGIS や USB で写したファイルからも、足した地物が見えるように
+  static Future<void> prepareAllForHandOff() async {
+    for (final path in GeoPackageConnection.handOffCandidates()) {
+      await prepareForHandOff(path);
+    }
+  }
+
+  static Future<void> _prepareForHandOff(String absPath) async {
+    await BackgroundSaveManager.instance.flushChangesFor(absPath);
+    final interop = GeoPackageConnection.qgisInteropFor(absPath);
+    final wrote = await GeoPackageConnection.hasWritesFor(absPath);
+    if (!wrote && !interop.hasRemovedTriggers) return;
+
+    if (!fs.hasRealPaths) {
+      // web: 開いている写し（sqlite3 WASM）でトリガーを戻し、元ファイルへ書き戻す。
+      // 書いた分の書き戻しは見回り（checkIn）が受け持つので、戻すトリガーが無ければ何もしない（タブを隠すたびに丸ごと書かない）
+      if (!interop.hasRemovedTriggers) return;
+      final conn = GeoPackageConnection(const [], absolutePath: absPath);
+      try {
+        final db = await conn.getDatabase();
+        if (wrote) await QgisInterop.syncAllLayers(db);
+        await interop.restoreTriggers(db);
+        await conn.checkIn();
+      } finally {
+        await conn.dispose();
+      }
+      return;
+    }
+
+    if (!await fs.exists(absPath)) return;
+    if (!interop.hasRemovedTriggers && !await _hasRtree(absPath)) return;
+
+    await GeoPackageConnection.closeAllFor(absPath);
+    final db = await openDatabase(absPath, singleInstance: false);
+    try {
+      if (wrote) await QgisInterop.syncAllLayers(db);
+      await interop.restoreTriggers(db);
+    } finally {
+      await db.close();
+    }
+    if (!wrote) return;
+    // 閉じている間に開き直した接続があれば、別の SQLite で書かない（最後に閉じる側か次の機会に任せる）
+    if (GeoPackageConnection.isInUse(absPath)) {
+      AppLogger.debug('[GeoPackageFile] 開き直されたので索引の焼き直しを見送る: $absPath');
+      return;
+    }
+    if (await GpkgIndexRepair.rebuildFile(absPath) >= 0) GeoPackageConnection.clearWrites(absPath);
+  }
+
+  /// rtree（`rtree_*` の表）を持つか。読むだけ
+  static Future<bool> _hasRtree(String absPath) async {
+    try {
+      final db = await openDatabase(absPath, readOnly: true, singleInstance: false);
+      try {
+        final rows = await db.rawQuery(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name LIKE 'rtree\\_%' ESCAPE '\\' LIMIT 1",
+        );
+        return rows.isNotEmpty;
+      } finally {
+        await db.close();
+      }
+    } catch (e) {
+      AppLogger.debug('[GeoPackageFile] rtree の有無を読めない: $absPath - $e');
+      return false;
     }
   }
 

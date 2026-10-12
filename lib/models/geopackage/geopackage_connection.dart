@@ -26,6 +26,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
+import 'qgis_interop.dart';
 
 /// GeoPackage DB接続を管理するクラス
 /// 責務: DB接続の初期化、クローズ、構造検証
@@ -91,6 +92,42 @@ class GeoPackageConnection {
 
   /// [absPath] の書き込みの整合を済ませた（[hasWrites] を戻す）
   static void clearWrites(String absPath) => _writtenPaths.remove(_registryKey(absPath));
+
+  /// [absPath] にアプリが書いたか（[hasWrites] のパス版。開いている接続のどれかが書いていれば true）
+  static Future<bool> hasWritesFor(String absPath) async {
+    final key = _registryKey(absPath);
+    if (_writtenPaths.contains(key)) return true;
+    for (final c in [...?_openConnections[key]]) {
+      if (await _totalChanges(c._database) > 0) return true;
+    }
+    return false;
+  }
+
+  /// 外へ出す前に整合する候補（開いている・書いた・トリガーを落としたままのパス）。正規化したパス
+  static Set<String> handOffCandidates() => {
+        ..._openConnections.keys,
+        ..._writtenPaths,
+        for (final MapEntry(:key, :value) in _interops.entries)
+          if (value.hasRemovedTriggers) key,
+      };
+
+  /// QGIS 向けの控え（落としたトリガーの定義・見回り済みの表）。パスごとに 1 つ（正規化した絶対パス → 控え）。
+  ///
+  /// 接続を閉じても捨てない（[closeAllFor] で閉じたあと、外へ出す前に戻すため）
+  static final Map<String, QgisInterop> _interops = {};
+
+  /// パスが決まらない接続用
+  final QgisInterop _detachedInterop = QgisInterop();
+
+  /// このファイルの QGIS 向けの控え（同じファイルを開いている接続で共有）
+  QgisInterop get qgisInterop {
+    final path = absPath;
+    if (path == null) return _detachedInterop;
+    return qgisInteropFor(path);
+  }
+
+  /// [absPath] の QGIS 向けの控え
+  static QgisInterop qgisInteropFor(String absPath) => _interops[_registryKey(absPath)] ??= QgisInterop();
 
   static Future<int> _totalChanges(Database? db) async {
     if (db == null || !db.isOpen) return 0;
@@ -435,6 +472,7 @@ class GeoPackageConnection {
 
       _isInitialized = true;
       _dropSchemaCache(); // 閉じている間に外で書き換えられたかもしれない
+      qgisInterop.cleanedTables.clear(); // 同じく。書く前にトリガーを見回り直す
       _registeredKey = _registryKey(absPath);
       (_openConnections[_registeredKey!] ??= <GeoPackageConnection>{}).add(this);
 

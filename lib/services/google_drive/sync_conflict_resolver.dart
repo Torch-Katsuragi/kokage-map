@@ -244,6 +244,7 @@ class SyncConflictResolver {
       run.failedUploads.add(relativePath);
       return;
     }
+    await SyncBaseStore.prepareForUpload(localFilePath); // gpkg は QGIS が読める形に（トリガー・rtree）
     final result = existingFileId != null
         ? await _driveService.uploadFileById(localFilePath, targetFolderId, existingFileId: existingFileId)
         : await _driveService.uploadFile(localFilePath, targetFolderId);
@@ -475,6 +476,7 @@ class SyncConflictResolver {
         AppLogger.debug('  Drive の置き場所を見つけられない。上げずに次回へ');
         return null;
       }
+      await SyncBaseStore.prepareForUpload(localFilePath); // 合わせたあと落ちたままのトリガーを戻す
       final uploaded = await _driveService.uploadFileById(localFilePath, targetFolderId, existingFileId: fileId);
       if (uploaded == null) {
         AppLogger.debug('  上げられなかった');

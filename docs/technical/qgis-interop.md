@@ -53,6 +53,39 @@ dispose()
 > 復元後に書き込むと、sqflite に `ST_IsEmpty` 等が無いため落ちる。
 > 順序を入れ替えないこと。
 
+### 閉じずに外へ出すとき（2026-10-12〜）
+
+`dispose()` を待たずにファイルが端末の外へ出る場面がある。Drive へ上げる（push・マージの「端末を採用」・行単位マージのあと）、
+3-way マージの base に写す、アプリが裏に回る（同じ端末の QGIS・USB で写す・裏で止められる）。
+地図を開いている間はプロジェクトのツリーが `GeoPackageFile` を持ち続けるので、`dispose()` の整合だけでは
+上がったファイルの rtree に足した地物が無く、トリガーも落ちたままだった（Pixel 9 で `ogrinfo -spat` が 0 件）。
+
+`GeoPackageFile.prepareForHandOff(path)` がその前に同じ整合をする（`SyncBaseStore.prepareForUpload`・`saveBase`・`main.dart` の paused/hidden/detached から）。
+
+```
+prepareForHandOff(path)        パスごとに 1 つずつ
+  ├ BackgroundSaveManager.flushChangesFor(path)
+  ├ 書いていない・控えも無い → 何もしない（見ただけのファイルを変えない）
+  ├ rtree も控えも無い（アプリ製・GPS の記録）→ 何もしない（接続も閉じない）
+  ├ GeoPackageConnection.closeAllFor(path)
+  ├ 別の sqflite 接続で syncAllLayers()・restoreTriggers()
+  └ GpkgIndexRepair.rebuildFile(path)（書いたときだけ。開き直した接続があれば見送る）
+```
+
+開いていた `GeoPackageFile` はそのまま使える。次の `getDatabase()` で開き直し、次に書くときにトリガーをまた落とす。
+そのため控え（`QgisInterop`）はパスごとに 1 つにして接続を閉じても残し（`GeoPackageConnection.qgisInteropFor`）、
+「見回り済みの表」（`QgisInterop.cleanedTables`）も同じ控えに持ち、トリガーを戻したとき・開き直したときに空にする。
+Drive から落として置き換えたときは控えを捨てる（`SyncBaseStore.settleAfterDownload`）。
+web は rtree の焼き直しをせず、開いている写しでトリガーを戻して書き戻すだけ。
+
+テストは `test/gpkg_hand_off_test.dart`（`SpatialIndexManager.debugWithoutRtreeModule` で Android の rtree 無しをまねる）。
+
+#### Android でもトリガーを落とす理由
+
+GDAL の rtree トリガーは `ST_IsEmpty`・`ST_MinX` などを呼ぶ。Android 本体の SQLite には SpatiaLite の関数も rtree モジュールも無いので、
+トリガーを残したまま書くと INSERT/UPDATE が `no such function` で失敗する（地物を足せない）。関数を Dart から登録する手は sqflite に無い。
+だから書く前に落とし、外へ出す前に戻して rtree を rtree のある SQLite（geodiff）で焼き直す。
+
 ## `.qgs`（QGISプロジェクト）の書き出し
 
 実装は `lib/services/qgis/`、テストは `test/qgs_writer_test.dart`。
@@ -400,7 +433,8 @@ rtree は `SpatialIndexManager` が自前で更新している。
 （`update1`〜`update7` 等）。生成し直すと元と違うものを書き込むことになる。
 
 ⚠ アプリが強制終了した場合は控えが失われ、トリガーが落ちたまま残る。
-これは対処前と同じ状態なので退行ではないが、既知の穴。
+これは対処前と同じ状態なので退行ではないが、既知の穴。裏に回ったとき（paused）に戻すようにしたので、
+裏で止められる分は塞いだ（[[#閉じずに外へ出すとき（2026-10-12〜）]]）。前面で落ちたときは残る。
 
 ## 2. `gpkg_contents` のバウンディングボックス
 

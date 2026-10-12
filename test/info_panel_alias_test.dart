@@ -94,11 +94,11 @@ void main() {
       });
     });
 
-    final form = QgisForm(fields: {
-      '直径': const QgisFieldForm(name: '直径', alias: '胸高直径（cm）'),
+    const form = QgisForm(fields: {
+      '直径': QgisFieldForm(name: '直径', alias: '胸高直径（cm）'),
       '樹種': _speciesMap,
       '所有者': _ownerRelation,
-      '内部': const QgisFieldForm(name: '内部', alias: '内部番号', widgetType: 'Hidden'),
+      '内部': QgisFieldForm(name: '内部', alias: '内部番号', widgetType: 'Hidden'),
     });
     layer.debugQgisForm = form;
     QgisFormOptions.debugSetRelations(form, {

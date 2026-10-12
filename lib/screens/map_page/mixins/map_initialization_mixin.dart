@@ -23,9 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:turf/turf.dart' as turf;
 
-import '../../../converters/turf_converter.dart';
 import '../../../core/platform_capabilities.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
@@ -43,6 +41,7 @@ import '../../../utils/app_logger.dart';
 import '../../../utils/true_heading.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
 import '../../terrain_settings_screen.dart';
+import '../gps_track_sync.dart';
 import '../map_page_state_base.dart';
 import 'map_jump_mixin.dart';
 
@@ -366,12 +365,24 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // 軌跡更新リスナー登録（未Consolidation分をkGpsTrackソースに表示）
       gpsHistoryRecorder.addListener(_onGpsHistoryUpdate);
 
-      // Consolidation完了コールバック
-      // gps_tracksレイヤーのフィーチャを強制再読み込みしてから全体更新
+      // Consolidation完了コールバック: 今日の 1 本を差し替え、軌跡が見えていればその 1 本だけ地図に流す。
+      // ⚠ 全件の組み直し（updateFeatures）を引かない。20 秒ごとに全地物を集め直し、3D の下地を焼き直していた（2026-10-12）
       gpsHistoryRecorder.onConsolidated = () async {
         if (!mounted) return;
-        if (!_patchTodayTrack()) await _refreshGpsHistoryLayer();
-        await updateFeatures();
+        final tree = ref.read(folderTreeProvider);
+        try {
+          await syncConsolidatedTrack(
+            layer: tree == null ? null : _findLayerNode(tree, 'gps_tracks'),
+            featureId: gpsHistoryRecorder.todayTrackFeatureId,
+            line: gpsHistoryRecorder.lastConsolidatedLine,
+            refreshRows: refreshFeatureRows,
+            refreshAll: () async {
+              if (mounted) await updateFeatures();
+            },
+          );
+        } catch (e) {
+          AppLogger.debug('[Init] GPS history layer refresh error: $e');
+        }
       };
 
       AppLogger.debug('[Init] GpsHistory ready');
@@ -384,41 +395,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   /// Consolidation済み分はGPKGレイヤツリー経由で表示される
   void _onGpsHistoryUpdate() {
     if (mounted) scene.invalidate();
-  }
-
-  /// 今日の区間の 1 本だけ、書いた座標で地図のフィーチャを差し替える。できなければ false（レイヤを読み直す）。
-  /// 以前は 20 秒ごとにレイヤを丸ごと読み直し、過去の日の軌跡まで毎回デコードしていた（2026-10-06）
-  bool _patchTodayTrack() {
-    final id = gpsHistoryRecorder.todayTrackFeatureId;
-    final line = gpsHistoryRecorder.lastConsolidatedLine;
-    final tree = ref.read(folderTreeProvider);
-    if (id == null || line == null || line.length < 2 || tree == null) return false;
-    final layer = _findLayerNode(tree, 'gps_tracks');
-    if (layer == null || !layer.featuresLoaded) return false;
-    final old = layer.getFeatureById(id);
-    if (old == null) return false; // 新しい区間（まだ地図に無い）
-    final geom = old.geometry is turf.MultiLineString
-        ? TurfConverter.createMultiLineString([line])
-        : TurfConverter.createLineString(line);
-    layer.addFeatureToMap(id, turf.Feature(id: old.id, geometry: geom, properties: old.properties));
-    return true;
-  }
-
-  /// gps_tracks レイヤーのフィーチャを強制再読み込み
-  /// Consolidation後にGPKGの更新をレイヤツリーに反映させる
-  Future<void> _refreshGpsHistoryLayer() async {
-    try {
-      final folderTree = ref.read(folderTreeProvider);
-      if (folderTree == null) return;
-
-      // gps_tracks レイヤーを再帰検索
-      final gpsTracksLayer = _findLayerNode(folderTree, 'gps_tracks');
-      if (gpsTracksLayer != null) {
-        await gpsTracksLayer.updateChildren();
-      }
-    } catch (e) {
-      AppLogger.debug('[Init] GPS history layer refresh error: $e');
-    }
   }
 
   /// レイヤツリーから指定名のLayerNodeを再帰検索

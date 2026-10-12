@@ -59,6 +59,7 @@
 - Downloading from Drive no longer re-downloads every file each time; only changed files are downloaded. A file that another device re-uploaded with the same contents no longer counts as changed
 - Auto-sync no longer rebuilds its Drive connection every cycle, and no longer reloads map layers when nothing changed
 - Each TruPulse measurement no longer rebuilds the whole map screen. Only the measurement lines and the status display are redrawn
+- While a GPS track is being recorded with the map left open, all features are no longer rebuilt and the 3D base texture no longer re-baked every 20 seconds. Only the new part of today's track is drawn, and nothing happens while the track layer is hidden
 
 ## v0.12.0 — 2026/10/11
 

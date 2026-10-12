@@ -25,6 +25,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../models/map_style_group.dart';
+import '../models/nodes/feature_node.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../screens/map_page/feature_geojson_cache.dart';
 
@@ -36,6 +37,10 @@ abstract interface class SceneSink {
 
   /// フィーチャを組み直して描画系に知らせる。[selectionOnly] なら選択ソースだけ組み直す（通常ソースは前のまま）
   void pushFeatures(FeatureGeoJsonInput input, {required bool selectionOnly});
+
+  /// [changed] の地物だけ組み直して描画系に知らせる（ほかの地物の一覧は前回と同じ前提）。
+  /// 差分で組めなければ全件を組み直す（GPS 軌跡の統合で今日の 1 本が伸びたときなど）
+  void pushFeatureChanges(FeatureGeoJsonInput input, Set<FeatureNode> changed);
 
   /// 中身は変えずに描画系に組み直させる（GPS 軌跡・オーバーレイ画像の変形・編集の終わりなど、
   /// 描画系が別の経路で読むものが変わったとき）

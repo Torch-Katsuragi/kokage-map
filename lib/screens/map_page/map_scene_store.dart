@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../interfaces/scene_sink.dart';
 import '../../models/map_style_group.dart';
+import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
 import 'feature_geojson_cache.dart';
 
@@ -57,6 +58,12 @@ class MapSceneStore implements SceneSink, MapScene {
     } else {
       features.rebuildAll(input);
     }
+    invalidate();
+  }
+
+  @override
+  void pushFeatureChanges(FeatureGeoJsonInput input, Set<FeatureNode> changed) {
+    if (!features.rebuildFeatures(input, changed)) features.rebuildAll(input);
     invalidate();
   }
 

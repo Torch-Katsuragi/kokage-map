@@ -29,9 +29,8 @@ typedef _SceneBuilderFor = TerrainSceneBuilder Function(
 mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
   TerrainWorld get _world;
   bool get _gesturing;
-  int get _bakeGen;
+  FeatureBakeLedger get _bakes;
   int? get _bakedContentRevision;
-  bool _touchedSince(TileKey k, int since);
   void _scheduleRefresh();
 
   final Map<_SceneKey, _TileScene> _scenes = {};
@@ -228,7 +227,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
 
     // 静的な部分。1 回あたり数 ms ずつ育てる（1 タイル 1 万面を一度に持ち上げると 0.5〜1 秒止まる）
     var stat = _staticScenes[cacheKey];
-    // 線・面・点の一覧が組み直されても、変わった範囲（`_bakeEvents`）がこのタイルに掛からなければ作り直さない。
+    // 線・面・点の一覧が組み直されても、変わった範囲（`_bakes` の記録）がこのタイルに掛からなければ作り直さない。
     // GPS 軌跡の統合で 20 秒ごとに一覧が変わり、そのたびに見えている全タイルの 1.5 万面を持ち上げ直していた（2026-10-06）。
     // 選択・頂点・写真が変わったときと、今の一覧の変化がまだ記録されていないときは作り直す
     if (stat != null &&
@@ -237,10 +236,10 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
         stat.key.length == staticKey.length &&
         _sameKey(stat.key.sublist(3), staticKey.sublist(3)) &&
         g.contentRevision == _bakedContentRevision &&
-        !_touchedSince(tile.key, stat.gen)) {
+        !_bakes.touchedSince(tile.key, stat.gen)) {
       stat
         ..key = staticKey
-        ..gen = _bakeGen;
+        ..gen = _bakes.gen;
     }
     if (stat == null || !_sameKey(stat.key, staticKey)) {
       if (_staticBuilds >= _staticBudget) {
@@ -248,7 +247,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
         _scheduleRefresh();
         stat ??= _TileScene(key: const [], lines: const [], polygons: const [], points: const [], labels: const []);
       } else {
-        stat = _TileScene(key: staticKey, gen: _bakeGen, lines: [], polygons: [], points: [], labels: [], complete: false);
+        stat = _TileScene(key: staticKey, gen: _bakes.gen, lines: [], polygons: [], points: [], labels: [], complete: false);
         _staticScenes[cacheKey] = stat;
         _staticProgress[cacheKey] = _StaticProgress();
       }
@@ -739,7 +738,7 @@ class _TileScene {
   /// 何から作ったか（GeoJSON リストの同一性・選択・軌跡の点数・パーティ・現在位置など）。静的シーンは、範囲外の変化だけなら作り直さずに鍵を差し替えて使い続ける
   List<Object?> key;
 
-  /// 作ったときの焼き込みの世代（`_bakeGen`）。この後の変化の範囲がタイルに掛からなければ使い続けてよい
+  /// 作ったときの焼き込みの世代（`_bakes.gen`）。この後の変化の範囲がタイルに掛からなければ使い続けてよい
   int gen;
 
   /// まだ持ち上げていないフィーチャがある（時間を分けて育てる静的シーン）

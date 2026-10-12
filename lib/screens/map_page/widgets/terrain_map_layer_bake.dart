@@ -50,31 +50,17 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     ].join('|');
   }
 
-  /// 焼き込みの世代。フィーチャの一覧が変わるたびに進む。タイルごとに「どの世代で焼いたか」を [_bakedGen] に記録し、
-  /// 世代が古いタイルは焼き直す（[_checkBakes]）。
+  /// 焼き込みの台帳: 世代（フィーチャの一覧が変わるたびに進む）・タイルごとの焼いた世代・変わった範囲。
+  /// 世代が古く、その後の変化が掛かるタイルだけ焼き直す（[_checkBakes]）。
   /// ⚠ 以前は「一覧が変わった瞬間に読み込み済みのタイル」だけ焼き直していたので、その瞬間に読み込み中だった親タイルは
   ///   フィーチャ無しのテクスチャのまま残り、寄せる最中に親と子が入れ替わるたびにフィーチャが出たり消えたりした
-  ///   （ユーザー 2026-09-13「地形読み込み中だけフィーチャが表示されたりされなかったり」。web で目立つ）
-  int _bakeGen = 0;
-  final Map<TileKey, int> _bakedGen = {};
+  ///   （ユーザー 2026-09-13「地形読み込み中だけフィーチャが表示されたりされなかったり」。web で目立つ）。
+  /// 記録中の GPS 軌跡は 20 秒ごとに伸びるので、全部焼き直すと 46 枚 × 40〜90ms が毎回来る
+  final FeatureBakeLedger _bakes = FeatureBakeLedger(fillsOnlyAbove: kBakeMaxZoom);
 
-  /// 描いたがまだ貼っていないテクスチャの世代。作り直しが打ち切られると絵は捨てられるので、ここに描いただけでは
-  /// 焼いたことにしない（スタイルを戻してすぐ消灯すると、古い色のタイルが焼いた扱いで残っていた。2026-10-02）
-  final Map<TileKey, int> _composedGen = {};
+  void _onTextureApplied(TileKey key) => _bakes.applied(key);
 
-  void _onTextureApplied(TileKey key) {
-    final g = _composedGen.remove(key);
-    if (g != null) _bakedGen[key] = g;
-  }
-
-  /// 焼き直しを頼んだ世代（頼んだまま貼られていないタイルを二重に頼まない）
-  final Map<TileKey, int> _bakeRequested = {};
   Timer? _bakeCheckTimer;
-
-  /// フィーチャが変わった出来事（世代, 範囲 Mercator。null は全部）。この範囲に掛かる、古い世代のタイルだけ焼き直す
-  /// （記録中の GPS 軌跡は 30 秒ごとに伸びるので、全部焼き直すと 46 枚 × 40〜90ms が毎回来る）
-  final List<(int, ui.Rect?)> _bakeEvents = [];
-  static const _bakeEventsKept = 64;
 
   // オーバーレイ画像（GeoTIFF など）: 地形のテクスチャに焼く
   final Map<String, ui.Image> _overlayImages = {};
@@ -97,41 +83,25 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     // 色や濃さだけ変えたときは地物の署名（形とスタイルの鍵）が変わらないので、スタイルの中身でも見る。
     // 塗りはどの段もテクスチャに描くので、変われば全部焼き直す
     final styleSig = _styleSignature();
-    if (_bakedStyleSignature != null && _bakedStyleSignature != styleSig) _addBakeEvent(null);
+    if (_bakedStyleSignature != null && _bakedStyleSignature != styleSig) _bakes.addEvent(null);
     _bakedStyleSignature = styleSig;
     if (_bakedContentRevision != rev) {
       _bakedContentRevision = rev;
       final ll = g.lastChangeLonLat;
-      _addBakeEvent(ll == null
-          ? null
-          : ui.Rect.fromLTRB(
-              WebMercator.xFromLon(ll.left),
-              WebMercator.yFromLat(ll.top),
-              WebMercator.xFromLon(ll.right),
-              WebMercator.yFromLat(ll.bottom),
-            ).inflate(50));
+      _bakes.addEvent(
+        ll == null
+            ? null
+            : ui.Rect.fromLTRB(
+                WebMercator.xFromLon(ll.left),
+                WebMercator.yFromLat(ll.top),
+                WebMercator.xFromLon(ll.right),
+                WebMercator.yFromLat(ll.bottom),
+              ).inflate(50),
+        fills: g.lastChangeHasFills,
+      );
     }
     _scheduleBakeCheck();
     _scheduleRefresh();
-  }
-
-  /// 世代を進め、変わった範囲 [where]（Mercator。null は全部）を記録する（古いものから [_bakeEventsKept] 件まで）
-  void _addBakeEvent(ui.Rect? where) {
-    _bakeGen++;
-    _bakeEvents.add((_bakeGen, where));
-    if (_bakeEvents.length > _bakeEventsKept) _bakeEvents.removeRange(0, _bakeEvents.length - _bakeEventsKept);
-  }
-
-  /// [since] の世代より後の変化（`_bakeEvents`）が [k] のタイルに掛かるか。記録より古ければ掛かる扱い（安全側）
-  bool _touchedSince(TileKey k, int since) {
-    final oldest = _bakeEvents.isEmpty ? _bakeGen : _bakeEvents.first.$1;
-    if (since < oldest - 1) return true;
-    for (final (g, r) in _bakeEvents) {
-      if (g <= since) continue;
-      if (r == null) return true;
-      if (k.west < r.right && k.west + k.span > r.left && k.south < r.bottom && k.south + k.span > r.top) return true;
-    }
-    return false;
   }
 
   /// 古い世代で焼かれた（またはフィーチャが届く前に焼かれた）タイルを見つけて焼き直す（400ms にまとめる）
@@ -142,36 +112,14 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
 
   void _checkBakes() {
     if (!mounted) return;
-    final gen = _bakeGen;
-    final live = {for (final t in _world.tiles) t.key};
-    _bakedGen.removeWhere((k, _) => !live.contains(k));
-    _bakeRequested.removeWhere((k, _) => !live.contains(k));
-    final stale = <TileKey>{
-      for (final k in live)
-        if (_bakedGen[k] != gen && _bakeRequested[k] != gen && _touchedSince(k, _bakedGen[k] ?? -1)) k,
-    };
-    // 触れていないタイルは今の世代で焼けているのと同じ扱い（次の出来事まで見ない）
-    for (final k in live) {
-      if (!stale.contains(k) && _bakedGen.containsKey(k) && _bakedGen[k] != gen && _bakeRequested[k] != gen) {
-        _bakedGen[k] = gen;
-      }
-    }
+    final gen = _bakes.gen;
+    final stale = _bakes.takeStale([for (final t in _world.tiles) t.key]);
     if (stale.isEmpty) return;
-    for (final k in stale) {
-      _bakeRequested[k] = gen;
-    }
     debugPrint('[3D] bake: ${stale.length} 枚を世代 $gen で焼き直す');
     unawaited(_world.retexture(where: stale.contains).then((_) {
       if (!mounted) return;
       // 途中で別の作り直しに打ち切られた分は要求を取り下げ、少し置いてまた見る
-      var left = false;
-      for (final k in stale) {
-        if (_bakedGen[k] != gen && _world.has(k)) {
-          _bakeRequested.remove(k);
-          left = true;
-        }
-      }
-      if (left) _scheduleBakeCheck();
+      if (_bakes.withdrawUnapplied(stale, gen, _world.has)) _scheduleBakeCheck();
     }));
   }
 
@@ -358,7 +306,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     // 突き抜けられて下の地図が白く抜けた。ユーザー 2026-10-02。枠線・線・点は形のまま持ち上げる）
     _bakeFeatures(canvas, frame, demZoom, fillsOnly: demZoom > kBakeMaxZoom);
     // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）。確定はタイルに貼ったとき（[_onTextureApplied]）
-    _composedGen[TileKey(demZoom, range.x0 >> off, range.y0 >> off)] = _bakeGen;
+    _bakes.composed(TileKey(demZoom, range.x0 >> off, range.y0 >> off));
     paintSelectionFill(
       canvas,
       frame,

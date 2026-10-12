@@ -183,24 +183,4 @@ void main() {
     KMetaService.instance.clearCache();
     expect((await KMetaService.instance.getMeta(proj)).forms, isEmpty);
   });
-
-  // 写真（アプリが .qgs に ExternalResource を書く）と属性フォームの補完が重なったとき。
-  // アプリが自分で書いた写真の欄を「QGIS で設定したフォーム」と取り違えて、開くたびの補完で forms に入れない
-  test('アプリが書いた写真の欄だけの .qgs からはフォームを補わない', () async {
-    final root = await loadTree();
-    await KMetaService.instance.addPhotoField(proj, 'a.gpkg/chosa', 'photo');
-    root.invalidateMetaCache();
-    final qgs = (await const QgsProjectBuilder().writeTo(root))!.path;
-    expect(File(qgs).readAsStringSync(), contains('ExternalResource'));
-
-    expect(await const QgsImporter().backfillForms(qgs, root), 0);
-    KMetaService.instance.clearCache();
-    expect((await KMetaService.instance.getMeta(proj)).forms, isEmpty);
-
-    // そのあと QGIS でフォームを設定した .qgs なら補える（写真の欄を付けたせいで塞がない）
-    transplantForm(qgs);
-    expect(await const QgsImporter().backfillForms(qgs, root), 1);
-    KMetaService.instance.clearCache();
-    expect((await KMetaService.instance.getMeta(proj)).forms['a.gpkg/chosa']!['dbh']!.label, '胸高直径(cm)');
-  });
 }

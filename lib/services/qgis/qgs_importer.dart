@@ -378,17 +378,7 @@ class QgsImporter {
     for (final MapEntry(key: layer, value: maplayer) in formSource.entries) {
       final folderPath = layer.folderNode?.getAbsoluteFilePath();
       if (folderPath == null) continue;
-      final meta = await KMetaService.instance.getMeta(folderPath);
-      if (meta.forms.containsKey(layer.layerKey)) continue;
-      // アプリが自分で書いた写真の欄（ExternalResource）だけなら QGIS のフォームではない。
-      // 取り込むと forms に入って「持っている」扱いになり、後で QGIS で設定したフォームを補えなくなる
-      final form = QgsFormReader.read(maplayer);
-      final photos = meta.photoFields[layer.layerKey] ?? const <String>[];
-      if (form != null &&
-          form.layout == null &&
-          form.fields.values.every((f) => photos.contains(f.name) && f.widgetType == 'ExternalResource')) {
-        continue;
-      }
+      if ((await KMetaService.instance.getMeta(folderPath)).forms.containsKey(layer.layerKey)) continue;
       missing[layer] = maplayer;
     }
     final filled = await _applyForms(missing, projectLayers, sources, <String>[], onlyNonEmpty: true);

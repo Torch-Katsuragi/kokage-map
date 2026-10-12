@@ -1,7 +1,7 @@
 // フォルダを開いて見るだけなら、どの gpkg も書き換えない（ツリー・地物・読み戻し・検索を通して）。
 //
 // test/gpkg_open_no_write_test.dart は GeoPackageFile を直に呼ぶ。こちらは同じ夜に入った機能
-// （結合・写真の欄・描き分けとフォームの補完・検索）が、開いたときの経路で gpkg に書かないかを見る。
+// （結合・描き分けとフォームの補完・検索）が、開いたときの経路で gpkg に書かないかを見る。
 // `.qgs` は開いたときに書き直すことがある（前からの挙動）。ただし 2 回目以降に開いても変わらないこと
 import 'dart:io';
 
@@ -90,11 +90,10 @@ void main() {
       };
 
   test('開いて地物・結合・読み戻し・検索を通しても gpkg を変えず、2 回目は .qgs も変えない', () async {
-    // 1 回目: 結合と写真の欄を設定して .qgs を書く（前の作業の体）
+    // 1 回目: 結合を設定して .qgs を書く（前の作業の体）
     var root = await openTree();
     final shoban = layersOf(root).firstWhere((l) => l.layerName == 'shoban');
     await KMetaService.instance.setLayerJoins(proj, shoban.layerKey, fixtureJoins);
-    await KMetaService.instance.addPhotoField(proj, shoban.layerKey, 'photo');
     root.invalidateMetaCache();
     await const QgsProjectBuilder().writeTo(root);
     await close(root);

@@ -841,11 +841,6 @@ class GpsHistoryRecorder extends ChangeNotifier {
     }
   }
 
-  /// 軌跡のレイヤ（グローバルフォルダの gps_history.gpkg の gps_tracks）か。
-  /// レイヤの長押しメニューに「軌跡を抽出・GPX で書き出す」を出すのに使う
-  static bool isHistoryLayer(String layerName, String? gpkgPath) =>
-      layerName == _tracksLayerName && gpkgPath != null && p.basename(gpkgPath) == _historyGpkgFileName;
-
   /// 日付キーを表示用にフォーマット
   /// 例: '2026_02_06' → '2026/02/06'
   static String formatLayerNameAsDate(String layerName) {

@@ -908,11 +908,7 @@
     "trackDesc": "${total}点から抽出、${simplified}点に簡略化",
     "hours": "${h}時間${m}分",
     "minutes": "${m}分${s}秒",
-    "secondsOnly": "${s}秒",
-    "exportGpx": "GPXで書き出す",
-    "gpxExported": "${name} に ${count} 点を書き出しました",
-    "gpxExportFailed": "GPX の書き出しに失敗しました: $error",
-    "extractMenu": "軌跡を抽出・GPXで書き出す"
+    "secondsOnly": "${s}秒"
   },
   "trackRecording": {
     "title": "軌跡の記録",

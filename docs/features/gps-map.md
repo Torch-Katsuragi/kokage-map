@@ -43,15 +43,6 @@ tags: [features, gps, map]
 - 設定は地図ページが `ref.listenManual` で記録係（`GpsHistoryRecorder.filter`）へ流す。変えたら次の測位から効く。
   web は軌跡を記録しないので設定も出さない
 
-## 軌跡の GPX 書き出し
-
-- 軌跡の抽出画面（GPS ツールの左下の軌跡ボタン、またはレイヤ一覧で `gps_tracks` を長押し →「軌跡を抽出・GPXで書き出す」）の
-  「GPXで書き出す」で、選んだ時間範囲の記録した点（簡略化する前）を GPX に保存する。保存は `FilePicker.saveFile`（Android は SAF、web はダウンロード）
-- 書き手は `buildTrackGpx`（`lib/utils/gpx_writer.dart`、`test/gpx_writer_test.dart`）。GPX 1.1 の `trk` / `trkseg` / `trkpt`、
-  点ごとに `<ele>`（あれば）と `<time>`（UTC）。QGIS は GPX ドライバで `tracks`・`track_points` として開く
-- レイヤの書き出し（GDAL）の GPX は線の形だけで点ごとの時刻が無いので、軌跡はこちらを使う
-- ⚠ 標高は受信した値のまま。端末の GPS は楕円体高（日本で標高より約 40 m 高い）、外部 GNSS の NMEA は標高
-
 ## GPS測量機能
 
 - ユーザー操作で位置を記録（Point/Line/Polygon作成）

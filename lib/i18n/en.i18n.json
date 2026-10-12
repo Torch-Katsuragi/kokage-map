@@ -908,11 +908,7 @@
     "trackDesc": "Extracted from $total points, simplified to $simplified points",
     "hours": "$h hours $m min",
     "minutes": "$m min $s sec",
-    "secondsOnly": "$s sec",
-    "exportGpx": "Export GPX",
-    "gpxExported": "Exported ${count} points to ${name}",
-    "gpxExportFailed": "Failed to export GPX: $error",
-    "extractMenu": "Extract track / export GPX"
+    "secondsOnly": "$s sec"
   },
   "trackRecording": {
     "title": "Track recording",

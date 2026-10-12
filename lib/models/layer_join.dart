@@ -13,7 +13,8 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// レイヤに表（森林簿 CSV など）を結ぶ設定。QGIS のレイヤのプロパティ →「結合」（`.qgs` の `<vectorjoins>`）と同じもの。
+// レイヤに表（森林簿 CSV など）を結ぶ設定。QGIS のレイヤのプロパティ →「結合」（`.qgs` の `<vectorjoins>`）を読んだもの。
+// アプリでは作らない（QGIS 互換のためだけに読む・書き戻す）
 // 設計は docs/technical/qgis-interop.md#表の結合（森林簿 CSV と計画図）
 
 import 'package:path/path.dart' as p;
@@ -27,7 +28,6 @@ class LayerJoin {
     this.fields,
     this.prefix,
     this.memoryCache = true,
-    this.normalize = false,
   });
 
   /// 結ぶ表のファイル（レイヤのある dir からの相対パス、`/` 区切り。例 `森林簿.csv`）
@@ -49,29 +49,11 @@ class LayerJoin {
   /// 載せないと最初の行を使う。アプリは常に記憶に載せて引くので、この値は当たる行の選び方と `.qgs` の往復に使う
   final bool memoryCache;
 
-  /// 全角・半角と前後の空白をそろえて照合する（アプリだけの設定。QGIS は常に完全一致なので、
-  /// これを付けた結合は QGIS では当たらない行が出うる）
-  final bool normalize;
-
   /// 表の名前（QGIS のレイヤ名。ファイル名から拡張子を除いたもの）
   String get tableName => p.basenameWithoutExtension(table);
 
   /// 実際の接頭辞
   String get effectivePrefix => prefix ?? '${tableName}_';
-
-  /// 同じ表・同じ列の組か（一覧で 1 本を指すとき）
-  bool sameLink(LayerJoin other) =>
-      other.table == table && other.joinField == joinField && other.targetField == targetField;
-
-  LayerJoin copyWith({List<String>? fields, String? prefix, bool clearPrefix = false, bool? normalize}) => LayerJoin(
-    table: table,
-    joinField: joinField,
-    targetField: targetField,
-    fields: fields ?? this.fields,
-    prefix: clearPrefix ? null : (prefix ?? this.prefix),
-    memoryCache: memoryCache,
-    normalize: normalize ?? this.normalize,
-  );
 
   Map<String, Object?> toJson() => {
     'table': table,
@@ -80,7 +62,6 @@ class LayerJoin {
     if (fields != null) 'fields': fields,
     if (prefix != null) 'prefix': prefix,
     if (!memoryCache) 'memoryCache': false,
-    if (normalize) 'normalize': true,
   };
 
   static LayerJoin? tryFromJson(Object? json) {
@@ -97,21 +78,21 @@ class LayerJoin {
       fields: fields is List ? [for (final f in fields) '$f'] : null,
       prefix: json['prefix'] as String?,
       memoryCache: json['memoryCache'] != false,
-      normalize: json['normalize'] == true,
     );
   }
 
   @override
   bool operator ==(Object other) =>
       other is LayerJoin &&
-      sameLink(other) &&
+      other.table == table &&
+      other.joinField == joinField &&
+      other.targetField == targetField &&
       other.prefix == prefix &&
       other.memoryCache == memoryCache &&
-      other.normalize == normalize &&
       _listEquals(other.fields, fields);
 
   @override
-  int get hashCode => Object.hash(table, joinField, targetField, prefix, memoryCache, normalize, fields?.join('\u0000'));
+  int get hashCode => Object.hash(table, joinField, targetField, prefix, memoryCache, fields?.join('\u0000'));
 
   static bool _listEquals(List<String>? a, List<String>? b) {
     if (a == null || b == null) return a == b;

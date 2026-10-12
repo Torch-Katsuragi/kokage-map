@@ -1,4 +1,4 @@
-// 表（座標の列が無い CSV）のノードと、レイヤへの結合（森林簿 CSV と計画図）。
+// 表（座標の列が無い CSV）のノードと、QGIS で設定したレイヤへの結合（森林簿 CSV と計画図）。
 // 結合の値は QGIS 4.2.2 が付けた値（test/fixtures/qgis_4_2_joins_expected.json、tool/qgis/write_join_fixture.py）と突き合わせる。
 // 書き出しはホストの GDAL（無ければその分だけ skip）
 import 'dart:convert';
@@ -76,9 +76,7 @@ void main() {
       expect(joinKey(1.25), '1.25');
       expect(joinKey('12'), '12');
       expect(joinKey(null), isNull);
-      expect(joinKey('１２ ', normalize: false), '１２ ');
-      expect(joinKey('１２ ', normalize: true), '12');
-      expect(joinKey('　Ａ-１', normalize: true), 'A-1');
+      expect(joinKey('１２ '), '１２ ');
     });
 
     test('1 万件 × 1 万行でも一瞬（表は 1 回だけ Map にする）', () {

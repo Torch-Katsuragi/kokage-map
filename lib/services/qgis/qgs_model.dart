@@ -112,7 +112,7 @@ class QgsLayer extends QgsTreeNode {
   /// `<provider encoding=…>`。shp の属性の文字コード（`.cpg` が無い shp は Shift_JIS で読んでいる）
   final String providerEncoding;
 
-  /// アプリで結んだ表（`<vectorjoins>`）。結合先は [QgsTableLayer] の id
+  /// 表の結合（`<vectorjoins>`。QGIS で設定したものを読み・書き戻す）。結合先は [QgsTableLayer] の id
   final List<QgsJoin> joins;
 
   /// OGRプロバイダのデータソース文字列。

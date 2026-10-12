@@ -41,13 +41,13 @@ Future<void> showTableViewDialog(BuildContext context, TableNode node) async {
               title: Text(node.name),
               subtitle: table == null
                   ? null
-                  : Text(t.tableJoin.rows(count: table.rows.length, encoding: table.encoding)),
+                  : Text(t.csvTable.rows(count: table.rows.length, encoding: table.encoding)),
               trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
             ),
             const Divider(height: 1),
             Expanded(
               child: table == null
-                  ? Center(child: Text(t.tableJoin.readError))
+                  ? Center(child: Text(t.csvTable.readError))
                   : CsvTableGrid(table: table),
             ),
           ],

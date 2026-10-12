@@ -23,30 +23,12 @@ import 'csv_table.dart';
 
 /// 結合の値を照合の鍵にする。QGIS と同じく **値の文字の形** で比べる（整数 12 と文字 "12" は当たる。
 /// QGIS の結合の記憶は `QVariant::toString()` を鍵にする）。NULL は当たらない
-String? joinKey(Object? value, {bool normalize = false}) {
+String? joinKey(Object? value) {
   if (value == null) return null;
-  String s;
   if (value is double) {
-    s = value.isFinite && value == value.truncateToDouble() ? value.toInt().toString() : value.toString();
-  } else {
-    s = value.toString();
+    return value.isFinite && value == value.truncateToDouble() ? value.toInt().toString() : value.toString();
   }
-  return normalize ? normalizeJoinKey(s) : s;
-}
-
-/// 全角の英数字・記号・空白を半角にし、前後の空白を落とす（林班「１２」→「12」）
-String normalizeJoinKey(String s) {
-  final out = StringBuffer();
-  for (final c in s.runes) {
-    if (c >= 0xFF01 && c <= 0xFF5E) {
-      out.writeCharCode(c - 0xFEE0);
-    } else if (c == 0x3000) {
-      out.writeCharCode(0x20);
-    } else {
-      out.writeCharCode(c);
-    }
-  }
-  return out.toString().trim();
+  return value.toString();
 }
 
 /// 引ける形にした結合 1 本
@@ -73,7 +55,7 @@ class ResolvedJoin {
     }
     final byKey = <String, int>{};
     for (var r = 0; r < table.rows.length; r++) {
-      final key = joinKey(table.rows[r][joinIndex], normalize: join.normalize);
+      final key = joinKey(table.rows[r][joinIndex]);
       if (key == null) continue;
       // 同じ値の行が複数あれば、QGIS の記憶あり（既定）は最後の行、記憶なしは最初の行
       if (join.memoryCache || !byKey.containsKey(key)) byKey[key] = r;
@@ -91,7 +73,7 @@ class ResolvedJoin {
 
   /// 結合の列の値 [target] に当たる行の、足す列の値（[fieldNames] の順）。当たらなければ null
   List<Object?>? valuesFor(Object? target) {
-    final key = joinKey(target, normalize: join.normalize);
+    final key = joinKey(target);
     final row = key == null ? null : _rowByKey[key];
     if (row == null) return null;
     final values = table.rows[row];

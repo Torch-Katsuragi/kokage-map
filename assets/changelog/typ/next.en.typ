@@ -21,6 +21,7 @@
   [Attributes are entered with the QGIS attribute form settings (value maps, dates, aliases, defaults, required fields and more)],
   [GPS survey records fix type, satellites, accuracy and averaging per point, and can reject fixes below thresholds (Settings → GPS & Positioning)],
   [Set the GPS track interval, minimum distance, dropping of inaccurate points and jump rejection (Settings → GPS & Positioning)],
+  [Convert all Shapefile, GeoJSON, KML and other files directly in a folder to gpkg at once, one gpkg per file (long-press the folder → "Convert files inside to gpkg")],
 )
 
 #fixes(

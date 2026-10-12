@@ -68,6 +68,40 @@ class ExternalConvertVerifyException implements Exception {
   String toString() => 'ExternalConvertVerifyException: $detail';
 }
 
+/// [ExternalLayerConverter.planFolder] の 1 行: 元のノード・消える元のファイル一式（名前）・書く gpkg の名前
+class FolderConvertPlanItem {
+  const FolderConvertPlanItem(this.node, this.files, this.target);
+  final ExternalLayerNode node;
+  final List<String> files;
+  final String target;
+}
+
+/// [ExternalLayerConverter.convertFolder] の結果
+class FolderConvertReport {
+  const FolderConvertReport({
+    this.converted = const [],
+    this.failed = const [],
+    this.leftovers = const [],
+    this.deleteFailed,
+    this.readOnlyFolder = false,
+  });
+
+  /// 変換できたもの（元の名前, 書いた gpkg の名前）
+  final List<(String, String)> converted;
+
+  /// 照合で食い違った・読めなかったもの（元の名前, 理由）。元はそのまま
+  final List<(String, String)> failed;
+
+  /// 消せずに残った付属ファイル
+  final List<String> leftovers;
+
+  /// 元を消せずに止めたファイルの名前（それ以降は手を付けていない。そのファイルも元のまま）
+  final String? deleteFailed;
+
+  /// 読み取り専用の Drive フォルダだったので何もしなかった
+  final bool readOnlyFolder;
+}
+
 class ExternalLayerConverter {
   ExternalLayerConverter._();
 
@@ -90,7 +124,10 @@ class ExternalLayerConverter {
   ///    [ExternalConvertVerifyException]）
   /// 3. 元のファイル一式を消す（本体を消せなければ書いた gpkg を消して [ExternalConvertOutcome.deleteFailed]）
   /// 4. フォルダ設定の鍵（可視性・スタイル・View）を新しい gpkg へ移し、親を読み直す
-  static Future<ExternalConvertResult> convert(ExternalLayerNode node) async {
+  ///
+  /// [reload] が false なら 4 の読み直しをしない（[convertFolder] がまとめて 1 回読み直す。`.qgs` の更新も 1 回にするため）。
+  /// そのときの [ExternalConvertResult.node] は null
+  static Future<ExternalConvertResult> convert(ExternalLayerNode node, {bool reload = true}) async {
     if (isInReadOnlyFolder(node)) return const ExternalConvertResult(ExternalConvertOutcome.readOnlyFolder);
 
     final source = node.sourcePath;
@@ -127,8 +164,90 @@ class ExternalLayerConverter {
     // 値の関係で元のファイルを参照していたフォームも、書いた gpkg を指す（レイヤ名はキャッシュ gpkg のまま）
     await LayerDrawerService.retargetValueRelations(node, oldGpkgPath: source, newGpkgPath: target);
     await ExternalLayerCache.discard(node.geoPackageFile.getAbsolutePath()!);
-    final written = folder is FolderNode ? await _reloadWith(folder, target) : null;
+    final written = reload && folder is FolderNode ? await _reloadWith(folder, target) : null;
     return ExternalConvertResult(ExternalConvertOutcome.converted, gpkgPath: target, leftovers: leftovers, node: written);
+  }
+
+  /// [folder] の直下の読み取り専用ベクタレイヤ（gpkg にまとめる対象）を、dir を読み直して並べる。
+  ///
+  /// 下のフォルダには入らない（フォルダの操作はどれもそのフォルダの直下だけを相手にする。削除だけは丸ごと）。
+  /// 座標列の無い CSV は表（`TableNode`）、ラスタはオーバーレイなので、ここには出てこない
+  static Future<List<ExternalLayerNode>> folderSources(FolderNode folder) async {
+    await folder.updateChildren();
+    return folder.children.whereType<ExternalLayerNode>().toList();
+  }
+
+  /// [sources] をそれぞれどの gpkg に書くか（[convert] を順に回したときと同じ名前。`a.shp` と `a.geojson` なら `a.gpkg` と `a_1.gpkg`）
+  static Future<List<FolderConvertPlanItem>> planFolder(List<ExternalLayerNode> sources) async {
+    final reserved = <String>{};
+    final plan = <FolderConvertPlanItem>[];
+    for (final node in sources) {
+      final dir = p.dirname(node.sourcePath);
+      final stem = p.basenameWithoutExtension(node.sourcePath);
+      var target = p.join(dir, '$stem.gpkg');
+      for (var i = 1; reserved.contains(p.normalize(target)) || await fs.exists(target); i++) {
+        target = p.join(dir, '${stem}_$i.gpkg');
+      }
+      reserved.add(p.normalize(target));
+      plan.add(FolderConvertPlanItem(node, (await node.sourceFiles()).map(p.basename).toList(), p.basename(target)));
+    }
+    return plan;
+  }
+
+  /// [folder] の直下の [sources] を 1 本ずつ [convert] する（1 ファイル＝ 1 gpkg。単体の変換と同じ）。
+  ///
+  /// - 1 本ずつ書いて確かめてから元を消すので、途中で止まっても半端に置き換わったファイルは残らない
+  ///   （照合で食い違ったものは元のまま [FolderConvertReport.failed] に載せ、次へ進む）
+  /// - 元を消せなかったら（権限など、残りも同じになる見込み）そこで止める。読み取り専用の Drive フォルダなら何もしない
+  /// - 読み直し（＝ `.qgs` の自動更新の合図）は最後に 1 回だけ。途中で投げても読み直す
+  ///
+  /// [onProgress] は各ファイルに取りかかる前に呼ぶ（`done` は済んだ数）
+  static Future<FolderConvertReport> convertFolder(
+    FolderNode folder,
+    List<ExternalLayerNode> sources, {
+    void Function(int done, int total, ExternalLayerNode current)? onProgress,
+  }) async {
+    final converted = <(String, String)>[];
+    final failed = <(String, String)>[];
+    final leftovers = <String>[];
+    final written = <String>[];
+    String? deleteFailed;
+    var readOnly = false;
+    try {
+      for (var i = 0; i < sources.length; i++) {
+        final node = sources[i];
+        onProgress?.call(i, sources.length, node);
+        try {
+          final r = await convert(node, reload: false);
+          switch (r.outcome) {
+            case ExternalConvertOutcome.converted || ExternalConvertOutcome.copied:
+              converted.add((node.name, p.basename(r.gpkgPath!)));
+              written.add(r.gpkgPath!);
+              leftovers.addAll(r.leftovers);
+            case ExternalConvertOutcome.readOnlyFolder:
+              readOnly = true;
+            case ExternalConvertOutcome.deleteFailed:
+              deleteFailed = node.name;
+          }
+        } on ExternalConvertVerifyException catch (e) {
+          AppLogger.debug('[ExternalLayerConverter] ${node.name} の変換をやめた: $e');
+          failed.add((node.name, e.detail));
+        } catch (e) {
+          AppLogger.debug('[ExternalLayerConverter] ${node.name} の変換に失敗: $e');
+          failed.add((node.name, e.toString()));
+        }
+        if (readOnly || deleteFailed != null) break;
+      }
+    } finally {
+      if (written.isNotEmpty) await _reloadWithAll(folder, written);
+    }
+    return FolderConvertReport(
+      converted: converted,
+      failed: failed,
+      leftovers: leftovers,
+      deleteFailed: deleteFailed,
+      readOnlyFolder: readOnly,
+    );
   }
 
   /// [node] を [targetFolder] に gpkg として複製する（元は残す。読み取り専用の場所から編集用に持ち出す）
@@ -139,6 +258,50 @@ class ExternalLayerConverter {
     await _writeVerified(node, target);
     final written = await _reloadWith(targetFolder, target);
     return ExternalConvertResult(ExternalConvertOutcome.copied, gpkgPath: target, node: written);
+  }
+
+  /// [sources]（読み取り専用の Drive フォルダの直下）を [targetFolder] に 1 本ずつ gpkg として複製する（元は残す）。
+  /// 食い違ったものは書いた gpkg を消して [FolderConvertReport.failed] に載せ、次へ進む。読み直しは最後に 1 回
+  static Future<FolderConvertReport> copyFolder(
+    List<ExternalLayerNode> sources,
+    FolderNode targetFolder, {
+    void Function(int done, int total, ExternalLayerNode current)? onProgress,
+  }) async {
+    final dir = targetFolder.getAbsoluteFilePath();
+    if (dir == null) throw StateError('複製先のフォルダのパスが分かりません');
+    final copied = <(String, String)>[];
+    final failed = <(String, String)>[];
+    final written = <String>[];
+    try {
+      for (var i = 0; i < sources.length; i++) {
+        final node = sources[i];
+        onProgress?.call(i, sources.length, node);
+        try {
+          final target = await uniqueGpkgPath(dir, p.basenameWithoutExtension(node.sourcePath));
+          await _writeVerified(node, target);
+          copied.add((node.name, p.basename(target)));
+          written.add(target);
+        } on ExternalConvertVerifyException catch (e) {
+          failed.add((node.name, e.detail));
+        } catch (e) {
+          failed.add((node.name, e.toString()));
+        }
+      }
+    } finally {
+      if (written.isNotEmpty) await _reloadWithAll(targetFolder, written);
+    }
+    return FolderConvertReport(converted: copied, failed: failed);
+  }
+
+  /// [folder] を 1 回だけ読み直し、書いた gpkg（[written]）の中のレイヤまで読む（[_reloadWith] のまとめ版）。
+  /// レイヤが読まれていない gpkg は `.qgs` に載らない
+  static Future<void> _reloadWithAll(FolderNode folder, List<String> written) async {
+    await folder.updateChildren();
+    for (final gpkg in folder.children.whereType<GeoPackageNode>()) {
+      if (gpkg is ExternalLayerNode) continue;
+      final path = gpkg.geoPackageFile.getAbsolutePath() ?? '';
+      if (written.any((w) => p.equals(w, path))) await gpkg.updateChildren();
+    }
   }
 
   /// [folder] を読み直し、書いた gpkg（[target]）の中のレイヤまで読んで、そのノードを返す。

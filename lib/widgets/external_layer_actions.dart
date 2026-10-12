@@ -268,7 +268,7 @@ Future<GeoPackageNode?> copyExternalLayer(
   }
   FolderNode? target;
   if (context != null && context.mounted) {
-    target = await _pickWritableFolder(context, node, root);
+    target = await _pickWritableFolder(context, t.externalLayer.copyTitle(name: node.name), root);
     if (target == null) return null; // やめた
   } else if (_isWritableFolder(root)) {
     target = root as FolderNode;
@@ -293,7 +293,7 @@ Future<GeoPackageNode?> copyExternalLayer(
   return null;
 }
 
-Future<FolderNode?> _pickWritableFolder(BuildContext context, ExternalLayerNode node, LayerTreeNode root) {
+Future<FolderNode?> _pickWritableFolder(BuildContext context, String title, LayerTreeNode root) {
   final targets = <(FolderNode, int)>[];
   void walk(LayerTreeNode n, int depth) {
     if (n is SysNode) return;
@@ -309,7 +309,7 @@ Future<FolderNode?> _pickWritableFolder(BuildContext context, ExternalLayerNode 
   return showDialog<FolderNode>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text(t.externalLayer.copyTitle(name: node.name)),
+      title: Text(title),
       contentPadding: const EdgeInsets.only(top: 12),
       content: SizedBox(
         width: 360,
@@ -332,4 +332,212 @@ Future<FolderNode?> _pickWritableFolder(BuildContext context, ExternalLayerNode 
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(t.common.cancel))],
     ),
   );
+}
+
+/// フォルダの直下の読み取り専用ファイル（shp・GeoJSON・KML…）をまとめて gpkg に変換する（フォルダの長押しメニュー）。
+///
+/// 確認ダイアログに「どのファイルを・どの gpkg に・元は消える・Drive なら相手にも見える」を並べ、
+/// 進み具合はダイアログで、結果は通知センターに出す。読み取り専用の Drive フォルダでは、複製先を選ばせてまとめて複製する
+Future<void> convertFolderExternalLayers(
+  BuildContext context,
+  NotificationCenter center,
+  FolderNode folder, {
+  VoidCallback? onChanged,
+}) async {
+  final folderName = NodePresenter.getDisplayName(folder);
+  final sources = await ExternalLayerConverter.folderSources(folder);
+  if (sources.isEmpty) {
+    center.add(title: t.externalLayer.convertFolderEmpty(folder: folderName));
+    return;
+  }
+  if (!context.mounted) return;
+  final driveRoot = LayerDrawerService.findDriveRoot(folder);
+  if (driveRoot?.isReadOnly ?? false) {
+    await _copyFolderExternalLayers(context, center, folder, folderName, sources, onChanged: onChanged);
+    return;
+  }
+
+  final plan = await ExternalLayerConverter.planFolder(sources);
+  if (!context.mounted) return;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(t.externalLayer.convertFolderTitle),
+      content: _FolderPlanContent(
+        intro: t.externalLayer.convertFolderIntro(folder: folderName, count: plan.length),
+        lines: [for (final item in plan) '${item.files.join('、')} → ${item.target}'],
+        notes: [t.externalLayer.convertFolderNote, if (driveRoot != null) t.externalLayer.convertFolderDriveNote],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.common.cancel)),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t.externalLayer.convertTitle)),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+
+  final report = await _withProgress(
+    context,
+    center,
+    t.externalLayer.convertFolderTitle,
+    (onProgress) => ExternalLayerConverter.convertFolder(folder, sources, onProgress: onProgress),
+  );
+  if (report != null) reportFolderConversion(center, report);
+  onChanged?.call();
+}
+
+/// [ExternalLayerConverter.convertFolder] の結果を通知センターに出す（できた数・できなかったファイルごと・止めた理由）
+void reportFolderConversion(NotificationCenter center, FolderConvertReport report, {bool copy = false}) {
+  if (report.readOnlyFolder) {
+    center.add(title: t.externalLayer.readOnlyFolder, level: NotificationLevel.warning);
+    return;
+  }
+  if (report.converted.isNotEmpty) {
+    center.add(
+      title: copy
+          ? t.externalLayer.copyFolderDone(count: report.converted.length)
+          : t.externalLayer.convertFolderDone(count: report.converted.length),
+      detail: [for (final (from, to) in report.converted) '$from → $to'].join('\n'),
+      level: NotificationLevel.success,
+    );
+  }
+  for (final (name, detail) in report.failed) {
+    center.add(
+      title: copy ? t.externalLayer.copyFolderFailed(name: name) : t.externalLayer.convertFolderFailed(name: name),
+      detail: detail,
+      level: NotificationLevel.error,
+    );
+  }
+  if (report.deleteFailed != null) {
+    center.add(title: t.externalLayer.convertFolderStopped(name: report.deleteFailed!), level: NotificationLevel.warning);
+  }
+  if (report.leftovers.isNotEmpty) {
+    center.add(
+      title: t.externalLayer.leftovers(files: report.leftovers.map(p.basename).join('、')),
+      level: NotificationLevel.warning,
+    );
+  }
+}
+
+/// 読み取り専用の Drive フォルダの中身を、選んだ自分のフォルダへまとめて gpkg として複製する
+Future<void> _copyFolderExternalLayers(
+  BuildContext context,
+  NotificationCenter center,
+  FolderNode folder,
+  String folderName,
+  List<ExternalLayerNode> sources, {
+  VoidCallback? onChanged,
+}) async {
+  final lines = <String>[];
+  for (final node in sources) {
+    lines.add((await node.sourceFiles()).map(p.basename).join('、'));
+  }
+  if (!context.mounted) return;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(t.externalLayer.copyFolderTitle),
+      content: _FolderPlanContent(
+        intro: t.externalLayer.copyFolderIntro(folder: folderName, count: sources.length),
+        lines: lines,
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.common.cancel)),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t.externalLayer.copyAction)),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  LayerTreeNode root = folder;
+  while (root.parent != null) {
+    root = root.parent!;
+  }
+  final target = await _pickWritableFolder(context, t.externalLayer.copyFolderPickTitle(folder: folderName), root);
+  if (target == null || !context.mounted) return;
+  final report = await _withProgress(
+    context,
+    center,
+    t.externalLayer.copyFolderTitle,
+    (onProgress) => ExternalLayerConverter.copyFolder(sources, target, onProgress: onProgress),
+  );
+  if (report != null) reportFolderConversion(center, report, copy: true);
+  onChanged?.call();
+}
+
+/// 進み具合のダイアログ（閉じられない）を出して [run] を回す。投げたら通知して null
+Future<FolderConvertReport?> _withProgress(
+  BuildContext context,
+  NotificationCenter center,
+  String title,
+  Future<FolderConvertReport> Function(void Function(int, int, ExternalLayerNode) onProgress) run,
+) async {
+  final progress = ValueNotifier<(int, int, String)>((0, 1, ''));
+  final navigator = Navigator.of(context);
+  unawaited(showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => PopScope(
+      canPop: false,
+      child: AlertDialog(
+        title: Text(title),
+        content: ValueListenableBuilder<(int, int, String)>(
+          valueListenable: progress,
+          builder: (context, v, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LinearProgressIndicator(value: v.$2 == 0 ? null : v.$1 / v.$2),
+              const SizedBox(height: 12),
+              Text(v.$3.isEmpty ? '' : t.externalLayer.convertFolderProgress(done: v.$1 + 1, total: v.$2, name: v.$3)),
+            ],
+          ),
+        ),
+      ),
+    ),
+  ));
+  try {
+    return await run((done, total, node) => progress.value = (done, total, node.name));
+  } catch (e) {
+    AppLogger.debug('[ExternalLayer] まとめての変換に失敗: $e');
+    center.add(title: t.externalLayer.convertFailed(error: e.toString()), level: NotificationLevel.error);
+    return null;
+  } finally {
+    navigator.pop();
+    progress.dispose();
+  }
+}
+
+/// まとめての変換・複製の確認ダイアログの中身（説明・ファイルの一覧・注意）
+class _FolderPlanContent extends StatelessWidget {
+  const _FolderPlanContent({required this.intro, required this.lines, this.notes = const []});
+
+  final String intro;
+  final List<String> lines;
+  final List<String> notes;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 420,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(intro),
+            const SizedBox(height: 8),
+            for (final line in lines)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, bottom: 4),
+                child: Text('・$line', style: const TextStyle(fontSize: 14)),
+              ),
+            for (final note in notes) ...[
+              const SizedBox(height: 8),
+              Text(note, style: const TextStyle(fontSize: 13, color: Colors.black54)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

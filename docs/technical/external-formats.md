@@ -141,6 +141,28 @@ LIBKML・Google Earth で書いた KMZ は、`doc.kml` に NetworkLink だけを
 
 変換後の座標系は **元のまま**（キャッシュが ogr2ogr の出力で、それを複製するので。2026-10-10〜）。
 
+### フォルダの中をまとめて変換（2026-10-12）
+
+フォルダの行の長押し（`FolderTile`）→「中のファイルをgpkgに変換」、開いているフォルダはタイトルバーの ＋（読み取り専用のファイルがあるときだけ出す）。
+UI は `lib/widgets/external_layer_actions.dart` の `convertFolderExternalLayers`、中身は `ExternalLayerConverter.folderSources` → `planFolder` → `convertFolder`。
+
+- **1 ファイル＝ 1 gpkg**（単体の変換と同じ `<元の名前>.gpkg`、ぶつかれば `_1`）。フォルダ名の gpkg 1 本にまとめる案は採らなかった:
+  レイヤ名が衝突しうる（shp 2 本が同じ GDAL のレイヤ名、GeoJSON の `name`）・照合が 1 本ずつの件数で組んである・
+  途中で落ちたときに「どの元がどこまで入ったか」がフォルダを見て分からなくなる（原則「既存の gpkg に混ぜない」に反する）。
+  `.qgs` の付け替えも単体の変換の経路（子の顔ぶれの変化 → 自動更新）がそのまま効く
+- **対象は直下だけ**。フォルダの操作（ファイルを追加・改名・移動）は直下を相手にし、下のフォルダはツリーでも別のノード。
+  座標の列の無い CSV は `TableNode`、ラスタはオーバーレイなので `ExternalLayerNode` に出てこず、自然に外れる
+- 確認ダイアログに「元のファイル一式 → 書く gpkg」を並べ、元は照合のあと消えること、Drive 連携 dir なら同期でほかのメンバー・PC でも
+  元が消えて gpkg が現れることを出す。`planFolder` は順に回したときと同じ名前を予約して出す（`a.shp` と `a.geojson` → `a.gpkg` `a_1.gpkg`）
+- 1 本ずつ `convert(node, reload: false)`。書いて照合してから元を消すので、途中で止まっても半端に置き換わったファイルは残らない。
+  照合で食い違った・読めなかったファイルは元のまま `failed` に載せて **次へ進む**（止めると、同じ壊れたファイルが毎回先頭で止めて残りが変換できない）。
+  元を消せなかったら（権限。残りも同じ見込み）そこで止める
+- 読み直し（＝ `.qgs` の自動更新の合図）は **最後に 1 回**（`_reloadWithAll`。途中で投げても `finally` で）。書いた gpkg のレイヤまで読む
+- 進み具合は閉じられないダイアログ（`LinearProgressIndicator`・「n / N 件目: 名前」）、結果は通知センター
+  （できた数と一覧・ファイルごとの失敗・止めた理由・消せなかった付属ファイル。`reportFolderConversion`）
+- 読み取り専用の Drive フォルダでは変換を出さず「中のファイルをgpkgとして複製」→ 複製先を 1 回選んで `copyFolder`（元は残す）
+- テスト: `test/external_layer_test.dart` の「フォルダの中をまとめて変換」
+
 ### Z・M 付きのレイヤの編集（2026-10-11 決定）
 
 Z 付きの shp を変換した gpkg や QGIS で作った Z 付きの gpkg（`gpkg_geometry_columns.z` が 1＝必須・2＝任意）を編集しても Z を落とさない。

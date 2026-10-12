@@ -374,13 +374,13 @@ void main() {
   // Drive の一覧が途中で取れなかったとき（電波が切れた等）に、取れなかった分を「Drive から消えた」と
   // 見て手元を消さない（2026-10-07）。以前は一覧の失敗を空の一覧として扱っていた
   group('Drive の一覧が取れないとき', () {
-    test('同期状態は error、pull は失敗して手元を消さない、マージの一覧は空', () async {
+    test('同期状態は error、pull は失敗して手元を消さない、マージの一覧は投げる', () async {
       await shared();
       final sub = drive.findByName(rootId, 'sub')!;
       drive.failListFor.add(sub.id);
 
       expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.error);
-      expect(await engine.getMergeEntries(a), isEmpty);
+      await expectLater(engine.getMergeEntries(a), throwsA(isA<Exception>()));
       final r = await engine.pull(rootId, a);
       expect(r.success, isFalse);
       expect(local('sub/moved.jpg').existsSync(), isTrue);
@@ -388,6 +388,38 @@ void main() {
       final m = await engine.executeMerge(a, const []);
       expect(m.success, isFalse);
       expect(Directory(p.join(a, 'sub')).existsSync(), isTrue);
+    });
+
+    // 「アップロード」を押したとき名前解決に失敗して、空の一覧＝「同期済み」と出ていた（2026-10-12、Pixel 9）。
+    // 空の一覧は「変えたものが無い」の意味なので、取れなかったときは投げて、帳簿も書かない
+    test('根の一覧が取れなければ、マージの一覧もフォルダの反映も投げ、帳簿は変えない', () async {
+      await shared();
+      put('mod.jpg', 20);
+      await tick();
+      final before = (await KMetaService.instance.getMeta(a)).sync;
+      drive.failListFor.add(rootId);
+
+      expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.error);
+      await expectLater(engine.getMergeEntries(a), throwsA(isA<Exception>()));
+      await expectLater(engine.ensureDriveFolders(a), throwsA(isA<Exception>()));
+
+      KMetaService.instance.clearCache();
+      final after = (await KMetaService.instance.getMeta(a)).sync;
+      expect(after.lastSynced, before.lastSynced);
+      expect(after.files.keys.toSet(), before.files.keys.toSet());
+      expect(after.files['mod.jpg']!.lastSyncedTime, before.files['mod.jpg']!.lastSyncedTime);
+
+      // 電波が戻れば、上げていない変更がそのまま出る
+      drive.failListFor.clear();
+      expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.localChanges);
+      final mod = (await mergeEntries())['mod.jpg']!;
+      expect(mod.localChange, MergeChangeType.modified);
+    });
+
+    test('Drive のフォルダを取れなければ、マージの一覧は投げる', () async {
+      await shared();
+      drive.items[rootId]!.trashed = true;
+      await expectLater(engine.getMergeEntries(a), throwsA(isA<SyncCheckException>()));
     });
 
     test('push も失敗し、Drive のものを消さない', () async {

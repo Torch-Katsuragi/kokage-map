@@ -207,6 +207,10 @@ class AutoSyncService {
     }
   }
 
+  /// テスト用: 1 フォルダ分の自動同期
+  @visibleForTesting
+  Future<void> syncFolderForTest(SyncEngine engine, DriveFolderNode node) => _syncFolder(engine, node);
+
   /// 個別フォルダの同期
   Future<void> _syncFolder(SyncEngine engine, DriveFolderNode node) async {
     final localPath = node.getAbsoluteFilePath();
@@ -302,7 +306,7 @@ class AutoSyncService {
     String localPath,
     SyncSnapshot? snapshot,
   ) async {
-    // 判定に使った材料をそのまま使う（Drive をたどり直さない）
+    // 判定に使った材料をそのまま使う（Drive をたどり直さない）。判定できなければ投げる（呼び元でエラーにする）
     final entries = await engine.getMergeEntries(localPath, snapshot: snapshot);
     if (entries.isEmpty) {
       node.syncStatus = SyncStatus.synced;
@@ -373,7 +377,10 @@ class AutoSyncService {
         }
         if (needsTreeRefresh && result.changedLocal) await onTreeRefreshNeeded?.call(node);
       } else {
+        // 以前は失敗しても下で「同期済み」にしていた
         AppLogger.debug('[AutoSync] ${node.name}: auto-merge failed - ${result.errorMessage}');
+        node.syncStatus = SyncStatus.error;
+        return;
       }
     }
 

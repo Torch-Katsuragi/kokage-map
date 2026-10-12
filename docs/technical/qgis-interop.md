@@ -71,6 +71,7 @@ prepareForHandOff(path)        パスごとに 1 つずつ
   ├ rtree も控えも無い（アプリ製・GPS の記録）→ 何もしない（接続も閉じない）
   ├ GeoPackageConnection.closeAllFor(path)
   ├ 別の sqflite 接続で syncAllLayers()・restoreTriggers()
+  ├ GpkgIndexRepair.healRtreeTriggers(path)（書いたときだけ。トリガーが丸ごと無い表に規格のトリガー → [[#トリガーが丸ごと無いファイルの作り直し（2026-10-12〜）]]）
   └ GpkgIndexRepair.rebuildFile(path)（書いたときだけ。開き直した接続があれば見送る）
 ```
 
@@ -436,7 +437,33 @@ rtree は `SpatialIndexManager` が自前で更新している。
 
 ⚠ アプリが強制終了した場合は控えが失われ、トリガーが落ちたまま残る。
 これは対処前と同じ状態なので退行ではないが、既知の穴。裏に回ったとき（paused）に戻すようにしたので、
-裏で止められる分は塞いだ（[[#閉じずに外へ出すとき（2026-10-12〜）]]）。前面で落ちたときは残る。
+裏で止められる分は塞いだ（[[#閉じずに外へ出すとき（2026-10-12〜）]]）。前面で落ちたときは残るが、次に書いて外へ出すときに規格のトリガーで作り直す（下）。
+
+### トリガーが丸ごと無いファイルの作り直し（2026-10-12〜）
+
+控えを失ったファイルはもう逐語では戻せない。以前の版が Android でトリガーを落としたまま Drive に上げたファイルが実際にあった
+（「調査点」に行があるのに `rtree_調査点_geom` が 0 行、`gpkg_extensions` に `gpkg_rtree_index` の登録はあるがトリガーが 7 つとも無い。
+QGIS/GDAL の空間検索で行が漏れる）。
+
+`GpkgIndexRepair.healRtreeTriggers(path)` が、次の条件をすべて満たす表にだけ規格のトリガーを作り、その表の rtree・範囲・件数を実データから作り直す。
+
+- `gpkg_extensions` に `gpkg_rtree_index` で登録されている
+- `rtree_<表>_<列>` の rtree 仮想表がある
+- その rtree のトリガー（`rtree_<表>_<列>_*`）が **1 つも無い**（一部だけ残っている表はどの版の組か分からないので触らない）
+- 整数の主キー（GDAL の FID）がある
+
+判定は `GpkgRtreeTriggers.findMissing`（読むだけ）。作るトリガーは `GpkgRtreeTriggers.standard` で、GeoPackage 1.4 の rtree 拡張の組
+（insert・update6・update7・update2・update5・update4・delete。1.3 までの update1・update3 は使わない）を、
+GDAL 3.13.3（QGIS 4.2.2 同梱）の ogr2ogr が書くのと**名前・並び・SQL の文字列まで同じ**に組む。
+`test/gpkg_rtree_triggers_test.dart` がホストの ogr2ogr で作った gpkg の sqlite_master と突き合わせ、直したあと `ogrinfo -spat` で全件見えることも確かめる。
+
+走るのは**アプリが書いたファイルを外へ出す前**（`prepareForHandOff`）と閉じたあと（`dispose` の索引の焼き直し）だけ。見ただけのファイルは変えない。
+直す表が無ければファイルを書かない（読み取り専用で開いて調べるだけ）。
+
+> [!WARNING] Android 本体の SQLite（sqflite）ではトリガーを作らない
+> 組んだ SQL は rtree の DELETE から始まる。rtree の無い SQLite ではその最初の文で落ち、トランザクションごと巻き戻って
+> geodiff の SQLite（rtree つき）で流し直す。トリガーは ST_ 関数を呼ぶので、sqflite で作っても次の書き込みが落ちるだけ。
+> 作ったトリガーは、次にアプリが書くときにほかの GDAL のトリガーと同じく落として控え、外へ出す前に戻す。
 
 ## 2. `gpkg_contents` のバウンディングボックス
 

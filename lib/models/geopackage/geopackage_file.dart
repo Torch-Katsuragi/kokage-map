@@ -141,6 +141,7 @@ class GeoPackageFile {
     if (!fs.hasRealPaths) return;
     try {
       if (!await fs.exists(path)) return;
+      await GpkgIndexRepair.healRtreeTriggers(path);
       await GpkgIndexRepair.rebuildFile(path);
     } catch (e) {
       AppLogger.debug('[GeoPackageFile] 閉じたあとの索引の焼き直しに失敗: $e');
@@ -158,6 +159,8 @@ class GeoPackageFile {
   /// 3. 書き込みのために落としたトリガーを控えの定義のまま戻す（次に書くときにまた落とす）
   /// 4. rtree・範囲・件数を実データに合わせる（[GpkgIndexRepair]。Android 本体の SQLite には rtree が無く、
   ///    編集のたびの rtree 更新が効いていない）
+  ///    その前に、トリガーが丸ごと無い表（以前の版が落としたまま上げた）には規格のトリガーを作る
+  ///    （[GpkgIndexRepair.healRtreeTriggers]）
   ///
   /// > [!WARNING] 以前は閉じる（[dispose]）ときにしか整合していなかった（2026-10-12 Pixel 9 で確認）
   /// > 開いたままのプロジェクトを Drive に上げると、QGIS 製の gpkg に足した点が rtree に無く、
@@ -224,6 +227,8 @@ class GeoPackageFile {
       AppLogger.debug('[GeoPackageFile] 開き直されたので索引の焼き直しを見送る: $absPath');
       return;
     }
+    // 以前の版がトリガーを落としたまま上げたファイル（rtree は登録されているのにトリガーが無い）は規格のトリガーを作り直す
+    await GpkgIndexRepair.healRtreeTriggers(absPath);
     if (await GpkgIndexRepair.rebuildFile(absPath) >= 0) GeoPackageConnection.clearWrites(absPath);
   }
 

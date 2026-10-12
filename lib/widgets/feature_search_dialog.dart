@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../i18n/strings.g.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
+import '../presentation/feature_display_name.dart';
 import '../presentation/node_presenter.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/feature_search.dart';
@@ -147,13 +148,14 @@ class _FeatureSearchDialogState extends State<FeatureSearchDialog> {
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, i) {
               final h = r.hits[i];
-              final name = h.feature.isDisposed ? '' : h.feature.name;
+              // 表示名（無ければ当たった列以外の列）で見分ける。name 列の無いレイヤで「名前なし」が並んでいた
+              final id = featureIdentifier(h.feature, excludeColumn: h.column, exclude: h.value);
               return ListTile(
                 dense: true,
                 leading: Icon(NodePresenter.getIcon(h.feature), size: 20),
                 title: Text('${h.column}: ${h.value}', maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: Text(
-                  name.isEmpty || name == h.value ? h.layer.name : '${h.layer.name} › $name',
+                  id == null ? h.layer.name : '${h.layer.name} › $id',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

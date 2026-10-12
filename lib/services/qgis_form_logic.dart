@@ -51,6 +51,29 @@ String storeDateValue(DateTime d, String sqlType, QgisFieldForm? field) {
   return formatQtDate(d, fmt ?? "yyyy-MM-dd'T'HH:mm:ss");
 }
 
+/// チェックボックスで書く値（付けた・外した）。QGIS の QgsCheckboxWidgetWrapper に合わせる:
+/// - 真偽の列（BOOLEAN）は CheckedState・UncheckedState を見ずに 1/0（QGIS は bool を書き、GDAL が 0/1 にする）
+/// - ほかの列は設定の値を文字のまま。設定が空（QGIS の既定）のとき QGIS は空文字を書いて付けた・外したの区別が
+///   消えるので、ここでは数の列は 1/0、文字の列は true/false を書く
+(Object, Object) qgisCheckValues(QgisFieldForm? field, String sqlType) {
+  if (isBooleanSqlType(sqlType)) return (1, 0);
+  final numeric = isNumericSqlType(sqlType);
+  return (
+    field?.checkedState ?? (numeric ? 1 : 'true'),
+    field?.uncheckedState ?? (numeric ? 0 : 'false'),
+  );
+}
+
+/// チェックボックスの今の状態。NULL・空は null。
+/// 真偽の列と、設定の無い列は値を真偽として読む（1/0・true/false・t/f）。設定のある列は CheckedState と同じなら付いている
+bool? qgisCheckState(QgisFieldForm? field, String sqlType, Object? value) {
+  if (value == null || (value is String && value.isEmpty)) return null;
+  final checked = field?.checkedState;
+  if (isBooleanSqlType(sqlType) || checked == null) return parseBooleanValue(value) ?? false;
+  // 設定の値と違うものは付いていない（QGIS と同じ）
+  return '$value' == checked;
+}
+
 /// 式の結果を列に書く形にする（日時は文字に、整数の列は整数に）
 Object? _toStored(Object? v, String sqlType, QgisFieldForm field) {
   if (v is DateTime) return storeDateValue(v, sqlType, field);

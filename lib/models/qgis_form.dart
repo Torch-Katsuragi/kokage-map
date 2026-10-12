@@ -184,6 +184,9 @@ class QgisFieldForm {
   String? get checkedState => _str('CheckedState');
   String? get uncheckedState => _str('UncheckedState');
 
+  /// チェックボックスで NULL（三つめの状態）を選べる（QGIS の AllowNullState）
+  bool get allowNullState => _bool('AllowNullState');
+
   /// 保存する形（Qt の書式。DateTime の `field_format`）
   String? get fieldFormat => _str('field_format');
 

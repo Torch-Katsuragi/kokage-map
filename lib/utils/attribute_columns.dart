@@ -54,6 +54,35 @@ bool isNumericSqlType(String sqlType) {
       t.contains('NUMERIC');
 }
 
+/// 真偽の列か（SQLite の型名 BOOLEAN。GDAL・QGIS は真偽として読む）。
+/// GeoPackage の決まりで中身は INTEGER の 0/1
+bool isBooleanSqlType(String sqlType) => sqlType.toUpperCase().contains('BOOL');
+
+/// 値を真偽として読む。1/0・true/false・t/f・yes/no・y/n（大文字小文字を問わない）と bool。
+/// 空・NULL・読めない値は null
+bool? parseBooleanValue(Object? value) {
+  switch (value) {
+    case final bool b:
+      return b;
+    case final num n:
+      return n != 0;
+    case final String s:
+      final v = s.trim().toLowerCase();
+      if (v == '1' || v == 'true' || v == 't' || v == 'yes' || v == 'y') return true;
+      if (v == '0' || v == 'false' || v == 'f' || v == 'no' || v == 'n') return false;
+      final n = num.tryParse(v);
+      return n == null ? null : n != 0;
+  }
+  return null;
+}
+
+/// 真偽の列に書く形（1/0）。空は NULL、真偽と読めない値はそのまま（黙って捨てない）
+Object? toBooleanStorage(Object? value) {
+  if (value is String && value.trim().isEmpty) return null;
+  final b = parseBooleanValue(value);
+  return b == null ? value : (b ? 1 : 0);
+}
+
 /// 全角の数字・小数点・符号を半角にする（日本語入力のまま打つと「３３」になる）
 String toHalfWidthNumber(String text) {
   final b = StringBuffer();
@@ -74,9 +103,12 @@ String toHalfWidthNumber(String text) {
 }
 
 /// 入力欄で打った値を列に書く形にする（属性フォーム・編集パネルで共通）。
-/// 数値の列（[sqlType]）なら全角の数字・小数点・符号を半角に。ほかの列・文字でない値はそのまま
-Object? normalizeAttributeInput(String sqlType, Object? value) =>
-    value is String && isNumericSqlType(sqlType) ? toHalfWidthNumber(value) : value;
+/// 数値の列（[sqlType]）なら全角の数字・小数点・符号を半角に。真偽の列は 1/0（[toBooleanStorage]）。
+/// ほかの列・文字でない値はそのまま
+Object? normalizeAttributeInput(String sqlType, Object? value) {
+  if (isBooleanSqlType(sqlType)) return toBooleanStorage(value);
+  return value is String && isNumericSqlType(sqlType) ? toHalfWidthNumber(value) : value;
+}
 
 /// 地物の属性の値（同期で読む）。消した地物・読めない地物は null。
 /// [FeatureNode.getAttributeValue] と同じ値を返す（あちらは 1 マスごとに await が挟まる）

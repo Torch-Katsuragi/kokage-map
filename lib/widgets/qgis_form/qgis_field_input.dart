@@ -151,6 +151,9 @@ class _QgisFieldInputState extends State<QgisFieldInput> {
         return _date();
       case QgisWidgetKind.range:
         if (_f!.rangeSlider) return _slider();
+      case QgisWidgetKind.other || QgisWidgetKind.textEdit:
+        // 設定の無い真偽の列も、文字の欄でなくチェックボックスにする（1/0 を書く）
+        if (isBooleanSqlType(widget.sqlType)) return _checkBox();
       default:
     }
     return _textField();
@@ -239,36 +242,30 @@ class _QgisFieldInputState extends State<QgisFieldInput> {
     );
   }
 
-  /// チェックの付いた値・外した値。設定が無ければ、数の列は 1/0、それ以外は true/false
-  (Object, Object) get _checkValues {
-    final f = _f!;
-    final numeric = isNumericSqlType(widget.sqlType);
-    return (
-      f.checkedState ?? (numeric ? 1 : 'true'),
-      f.uncheckedState ?? (numeric ? 0 : 'false'),
-    );
-  }
-
+  /// チェックボックス（QGIS の CheckBox・設定の無い真偽の列）。書く値は [qgisCheckValues]。
+  /// 横に値の文字は出さない（QGIS と同じ）。NULL は、三つめの状態（AllowNullState）があれば「－」、無ければ（なし）と添える
   Widget _checkBox() {
-    final (on, off) = _checkValues;
-    final v = widget.value;
-    final bool? checked = v == null || '$v'.isEmpty
-        ? null
-        : '$v' == '$on' || (_f!.checkedState == null && qgisTruthyText('$v'));
+    final (on, off) = qgisCheckValues(_f, widget.sqlType);
+    final checked = qgisCheckState(_f, widget.sqlType, widget.value);
+    final tristate = _f?.allowNullState ?? false;
     return InputDecorator(
       decoration: _decoration(),
       child: Row(
         children: [
           Checkbox(
-            value: checked ?? false,
-            onChanged: widget.enabled ? (c) => widget.onChanged(c == true ? on : off, commit: true) : null,
+            tristate: tristate,
+            value: tristate ? checked : (checked ?? false),
+            onChanged: widget.enabled
+                ? (c) => widget.onChanged(c == null ? null : (c ? on : off), commit: true)
+                : null,
           ),
-          Expanded(
-            child: Text(
-              checked == null ? t.qgisForm.noValue : '${checked ? on : off}',
-              style: TextStyle(fontSize: widget.dense ? 12 : null, color: Colors.grey.shade700),
+          if (checked == null && !tristate)
+            Expanded(
+              child: Text(
+                t.qgisForm.noValue,
+                style: TextStyle(fontSize: widget.dense ? 12 : null, color: Colors.grey.shade600),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -380,12 +377,6 @@ class _QgisFieldInputState extends State<QgisFieldInput> {
       ),
     );
   }
-}
-
-/// 文字の真偽（チェックボックスの値が決まっていないとき）
-bool qgisTruthyText(String v) {
-  final s = v.trim().toLowerCase();
-  return s == '1' || s == 'true' || s == 't' || s == 'yes' || s == 'y';
 }
 
 /// 数として読めれば数

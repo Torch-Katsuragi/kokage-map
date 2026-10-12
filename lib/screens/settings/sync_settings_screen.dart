@@ -87,7 +87,11 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
   void _showAuthError() {
     final message = _driveService.authState.errorMessage;
     if (message == null || !mounted) return;
-    ref.read(notificationCenterProvider.notifier).add(title: message, level: NotificationLevel.error);
+    ref.read(notificationCenterProvider.notifier).add(
+          title: message,
+          detail: _driveService.authState.errorDetail,
+          level: NotificationLevel.error,
+        );
   }
 
   Future<void> _handleSignOut() async {

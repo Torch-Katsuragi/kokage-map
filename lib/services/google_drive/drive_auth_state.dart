@@ -75,6 +75,7 @@ class DriveAuthState extends ChangeNotifier {
   DriveAuthStatus _status = DriveAuthStatus.unauthenticated;
   DriveUser? _user;
   String? _errorMessage;
+  String? _errorDetail;
 
   /// 現在の認証状態
   DriveAuthStatus get status => _status;
@@ -85,6 +86,9 @@ class DriveAuthState extends ChangeNotifier {
   /// エラーメッセージ
   String? get errorMessage => _errorMessage;
 
+  /// エラーの詳細（サポート用のコードなど）。小さく添えて出す
+  String? get errorDetail => _errorDetail;
+
   /// 認証済みかどうか
   bool get isAuthenticated => _status == DriveAuthStatus.authenticated;
 
@@ -92,6 +96,7 @@ class DriveAuthState extends ChangeNotifier {
   void setAuthenticating() {
     _status = DriveAuthStatus.authenticating;
     _errorMessage = null;
+    _errorDetail = null;
     notifyListeners();
   }
 
@@ -100,6 +105,7 @@ class DriveAuthState extends ChangeNotifier {
     _status = DriveAuthStatus.authenticated;
     _user = user;
     _errorMessage = null;
+    _errorDetail = null;
     notifyListeners();
   }
 
@@ -108,13 +114,15 @@ class DriveAuthState extends ChangeNotifier {
     _status = DriveAuthStatus.unauthenticated;
     _user = null;
     _errorMessage = null;
+    _errorDetail = null;
     notifyListeners();
   }
 
   /// 認証エラー
-  void setError(String message) {
+  void setError(String message, {String? detail}) {
     _status = DriveAuthStatus.error;
     _errorMessage = message;
+    _errorDetail = detail;
     notifyListeners();
   }
 }

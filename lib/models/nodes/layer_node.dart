@@ -433,6 +433,31 @@ abstract class LayerNode extends LayerTreeNode {
   @visibleForTesting
   set debugDisplayExpression(String? expression) => _displayExpression = expression;
 
+  /// QGIS の属性フォームの設定（[loadJoins] が一緒に読む）。情報パネルが同期で読む。読んでいなければ null
+  QgisForm? get qgisFormIfLoaded => _qgisFormIfLoaded;
+  QgisForm? _qgisFormIfLoaded;
+
+  /// 属性の列の SQLite の型（列名 → 大文字の型。BOOLEAN など）。地物を読み込むたびに取り直す。
+  /// 情報パネルが真偽の列を見分けるのに同期で読む
+  Map<String, String> get columnSqlTypes => _columnSqlTypes;
+  Map<String, String> _columnSqlTypes = const {};
+
+  /// テスト用: 表を通さずに列の型を置く
+  @visibleForTesting
+  set debugColumnSqlTypes(Map<String, String> types) => _columnSqlTypes = types;
+
+  Future<void> _loadColumnSqlTypes() async {
+    try {
+      final info = await geoPackageFile.getAttributeColumnInfo(layerName);
+      _columnSqlTypes = {
+        for (final c in info)
+          if (c['name'] is String) c['name'] as String: '${c['type'] ?? ''}'.toUpperCase(),
+      };
+    } on Object catch (e) {
+      AppLogger.debug('[LayerNode] 列の型を読めない: $e');
+    }
+  }
+
   /// フォルダ設定の結合を読み、表を「結合の値 → 行」の Map にする（表は [TableCache] で 1 回だけ読む）。
   /// 表示名の式（[displayExpression]）も読み直す。
   /// 地物の読み込みのたびに呼ばれる。結合を変えたら呼んで [refreshStyleGroups]
@@ -443,13 +468,15 @@ abstract class LayerNode extends LayerTreeNode {
       _joins = const [];
       _joinDefs = const [];
       _displayExpression = null;
+      _qgisFormIfLoaded = null;
       return;
     }
     List<LayerJoin> defs;
     try {
       final meta = await folder.getMeta();
       defs = meta.joins[layerKey] ?? const [];
-      _displayExpression = meta.forms[layerKey]?.displayExpression;
+      _qgisFormIfLoaded = meta.forms[layerKey];
+      _displayExpression = _qgisFormIfLoaded?.displayExpression;
     } on Object catch (e) {
       AppLogger.debug('[LayerNode] 結合の設定を読めない: $e');
       defs = const [];
@@ -735,6 +762,7 @@ abstract class LayerNode extends LayerTreeNode {
       _featuresRevision++;
       // 結合した表（森林簿など）。描き分けが結合の列を読むので先に
       await loadJoins();
+      await _loadColumnSqlTypes();
       // フィーチャが入れ替わったので、どれがどの View のものかも取り直す
       await refreshStyleGroups();
       _updateChildrenCompleter!.complete();

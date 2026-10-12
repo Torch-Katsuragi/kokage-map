@@ -1051,6 +1051,8 @@
     "typeLine": "Line",
     "typePolygon": "Polygon",
     "unnamed": "Unnamed feature",
+    "boolTrue": "Yes",
+    "boolFalse": "No",
     "disposed": "Deleted feature",
     "scaleLabel": "Scale: ",
     "rotationLabel": "Rot: ",

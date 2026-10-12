@@ -29,6 +29,7 @@ import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/overlay_image_node.dart';
+import '../presentation/attribute_display.dart';
 import '../presentation/feature_display_name.dart';
 import '../providers/notification_providers.dart';
 import '../providers/project_providers.dart';
@@ -200,6 +201,8 @@ class FeatureDetailPanel extends ConsumerWidget {
     if (feature is FeatureNode) {
       final node = feature as FeatureNode; // dynamic のフィールドは is で昇格しない
       final infoMap = node.infoMap;
+      final props = node.turfFeature.properties;
+      final form = node.parent.qgisFormIfLoaded;
       // 形の列（名前は表ごと）は属性に入っていない。geom という名前のふつうの列は出す
       // メタデータの列は infoMap に入っていない（以前は名前に metadata を含む列をすべて隠していた）
       const hiddenKeys = {'sub_table'};
@@ -236,7 +239,15 @@ class FeatureDetailPanel extends ConsumerWidget {
         for (final entry in filteredEntries)
           Padding(
             padding: const EdgeInsets.only(bottom: 4.0),
-            child: _labelRow('${entry.key}: ', entry.value),
+            // 真偽の列は「はい／いいえ」（生の 1/0・true/false を出さない）
+            child: _labelRow(
+              '${entry.key}: ',
+              attributeDisplayText(
+                props?[entry.key] ?? entry.value,
+                form: form?.fields[entry.key],
+                sqlType: node.parent.columnSqlTypes[entry.key] ?? '',
+              ),
+            ),
           ),
         // GPS 測量の品質（kmaps_metadata の測量の記録から）
         if (summarizeFeatureQuality(node.metadata, isPoint: node is PointFeatureNode)

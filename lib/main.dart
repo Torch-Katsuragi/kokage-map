@@ -31,12 +31,14 @@ import 'core/native_licenses.dart';
 import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
 import 'i18n/strings.g.dart';
+import 'models/app_notification.dart';
 import 'models/geopackage/geopackage_connection.dart';
 import 'models/geopackage/geopackage_file.dart';
 import 'models/nodes/feature_node.dart';
 import 'models/nodes/layer_tree_node.dart';
 import 'providers/drawing_provider.dart';
 import 'providers/gps_providers.dart';
+import 'providers/notification_providers.dart';
 import 'providers/project_providers.dart';
 import 'providers/selection_providers.dart';
 import 'providers/service_providers.dart';
@@ -210,6 +212,17 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     KMetaService.instance.onSaved = QgsAutoRefresh.instance.schedule;
     // 変換・削除・改名・移動・ファイルの追加で子の顔ぶれが変わったときも（設定を書かないことがある）
     LayerTreeNode.onStructureChanged = QgsAutoRefresh.instance.scheduleFor;
+    // 属性の保存が落ち続けたとき・捨てたときは通知センターに残す（ログだけだと黙って失われる）
+    BackgroundSaveManager.instance.onPersistentFailure = (count, files, {required discarded}) {
+      if (!mounted) return;
+      ref.read(notificationCenterProvider.notifier).add(
+            title: discarded
+                ? t.services.attributeSaveDiscarded(count: count)
+                : t.services.attributeSaveFailing(count: count),
+            detail: discarded ? files.join(', ') : t.services.attributeSaveFailingDetail(files: files.join(', ')),
+            level: NotificationLevel.error,
+          );
+    };
     FeatureNode.setOnDisposeCallback((node) {
       final features = ref.read(selectedFeaturesProvider);
       if (features.contains(node)) {

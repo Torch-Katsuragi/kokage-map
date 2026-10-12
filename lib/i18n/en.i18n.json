@@ -1272,7 +1272,10 @@
     "fileNotFound": "File not found: ${path}",
     "fileAlreadyExists": "A file with the same name already exists: ${name}",
     "folderAlreadyExists": "A folder with the same name already exists",
-    "gpkgAlreadyExists": "A GeoPackage file with the same name already exists"
+    "gpkgAlreadyExists": "A GeoPackage file with the same name already exists",
+    "attributeSaveFailing": "Attribute changes are not being saved (${count})",
+    "attributeSaveFailingDetail": "Saving keeps being retried but fails. Before closing the app, check that the file can be opened and that there is free space. ${files}",
+    "attributeSaveDiscarded": "Discarded attribute changes that could not be saved (${count})"
   },
   "qgisFilter": {
     "emptyExpression": "Expression is empty",

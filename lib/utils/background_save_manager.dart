@@ -61,6 +61,31 @@ class BackgroundSaveManager {
   /// 続けて書けなかった回数（書けたら 0 に戻す）
   int _failedRounds = 0;
 
+  /// この回数続けて書けなかったら [onPersistentFailure] で知らせる（2 + 4 + 8 秒、最初の失敗から 15 秒ほど）
+  static const int _notifyAfterRounds = 3;
+
+  /// 書き直しても保存できない状態が続いたとき（[_notifyAfterRounds] 回。続くあいだ 1 回だけ）と、
+  /// 閉じるときに書けない変更を捨てたとき（[discarded]）に呼ぶ。通知センターに残す（main.dart で繋ぐ）。
+  /// [pending] は書けていない変更の数、[files] はそのファイル名。
+  ///
+  /// > [!WARNING] 黙って失われていた（2026-10-12 Pixel 9）
+  /// > QGIS 製の gpkg で属性の保存が ST_ 関数の無いトリガーで落ち続け、画面には新しい値が出たまま、
+  /// > ファイルは変わらず、閉じると捨てていた。ログにしか出ていなかった
+  void Function(int pending, List<String> files, {required bool discarded})? onPersistentFailure;
+
+  /// 書けていない変更の数とファイル名
+  (int, List<String>) _pendingSummary() {
+    var count = 0;
+    final files = <String>{};
+    for (final MapEntry(key: gpkg, value: changes) in _pendingChanges.entries) {
+      if (changes.isEmpty) continue;
+      count += changes.length;
+      final path = gpkg.getAbsolutePath();
+      files.add(path == null ? '?' : p.basename(path));
+    }
+    return (count, files.toList()..sort());
+  }
+
   /// 単一の属性値の遅延更新をキューに追加
   void queueAttributeUpdate(
     GeoPackageFile geoPackageFile,
@@ -112,6 +137,10 @@ class BackgroundSaveManager {
   void _scheduleRetry() {
     if (_pendingChanges.isEmpty) return;
     _failedRounds++;
+    if (_failedRounds == _notifyAfterRounds) {
+      final (count, files) = _pendingSummary();
+      if (count > 0) onPersistentFailure?.call(count, files, discarded: false);
+    }
     if (_saveTimer?.isActive ?? false) return;
     final ms = _retryBase.inMilliseconds << (_failedRounds - 1).clamp(0, 10);
     final delay = Duration(milliseconds: ms.clamp(0, _retryMax.inMilliseconds));
@@ -186,13 +215,23 @@ class BackgroundSaveManager {
     // 1 行書けなくてもほかの行は書く。以前は最初に失敗した行で止めて全部を戻していたので、
     // 保留中に消された地物が 1 つあると同じ gpkg のほかの変更がいつまでも書けず、閉じるときに捨てていた
     final failed = <_CellKey, dynamic>{};
+    // 落としたトリガーが戻っていた（QGIS 向けに戻したあと・別の SQLite が作った）ときは、
+    // 見回り直して落とし、すぐ 1 度だけ書き直す（書き直しの予約を待たない）
+    var redropped = false;
     for (final MapEntry(key: (tableName, rowId), value: attributes)
         in rows.entries) {
-      final success = await geoPackageFile.updateFeatureAttributes(
+      var success = await geoPackageFile.updateFeatureAttributes(
         tableName,
         rowId,
         attributes,
       );
+      if (!success && !redropped) {
+        redropped = true;
+        if (await geoPackageFile.dropGdalTriggers() > 0) {
+          AppLogger.debug('[DEBUG] BackgroundSaveManager: トリガーを落とし直して書き直す $tableName:$rowId');
+          success = await geoPackageFile.updateFeatureAttributes(tableName, rowId, attributes);
+        }
+      }
       if (success) continue;
       if (await _rowGone(geoPackageFile, tableName, rowId)) {
         AppLogger.debug('[DEBUG] BackgroundSaveManager: 消えた地物の保留分を捨てる $tableName:$rowId');
@@ -246,9 +285,14 @@ class BackgroundSaveManager {
     await _saveChangesToDB();
   }
 
-  /// 指定されたGeoPackageFileの変更キューをクリア（dispose時）
-  void clearPendingChanges(GeoPackageFile geoPackageFile) {
-    _pendingChanges.remove(geoPackageFile);
+  /// 指定されたGeoPackageFileの変更キューをクリア（dispose時）。
+  /// 書けずに残っていた変更を捨てたら知らせる（[onPersistentFailure]）。ファイルごと消すとき（[reportDiscarded] が false）は知らせない
+  void clearPendingChanges(GeoPackageFile geoPackageFile, {bool reportDiscarded = true}) {
+    final dropped = _pendingChanges.remove(geoPackageFile);
+    if (reportDiscarded && dropped != null && dropped.isNotEmpty) {
+      final path = geoPackageFile.getAbsolutePath();
+      onPersistentFailure?.call(dropped.length, [path == null ? '?' : p.basename(path)], discarded: true);
+    }
     AppLogger.debug(
       '[DEBUG] BackgroundSaveManager: Cleared pending changes for GeoPackage',
     );
@@ -269,7 +313,9 @@ class BackgroundSaveManager {
     _saveTimer?.cancel(); // 書けなかった分の書き直しの予約も取り消す
     _saveTimer = null;
     _failedRounds = 0;
-    _pendingChanges.clear(); // 保存できなかった分は捨てる
+    final (count, files) = _pendingSummary();
+    if (count > 0) onPersistentFailure?.call(count, files, discarded: true);
+    _pendingChanges.clear(); // 保存できなかった分は捨てる（知らせてから）
     AppLogger.debug('[DEBUG] BackgroundSaveManager: Disposed');
   }
 }

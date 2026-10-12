@@ -26,6 +26,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
+import 'gdal_trigger_guard.dart';
 import 'qgis_interop.dart';
 
 /// GeoPackage DB接続を管理するクラス
@@ -43,6 +44,10 @@ class GeoPackageConnection {
 
   /// データベース接続インスタンス
   Database? _database;
+
+  /// sqflite の Database を包んだもの（[getDatabase] が返す。書く文の前に GDAL の rtree トリガーを落とす）。
+  /// 同じ Database（singleInstance で同じパスの接続が共有）には同じものを返す
+  static final Expando<GuardedDatabase> _guards = Expando('gpkg.guarded');
 
   /// 初期化の排他制御用Completer（進行中のみ非null）
   Completer<void>? _initCompleter;
@@ -216,13 +221,18 @@ class GeoPackageConnection {
   /// コンストラクタ
   GeoPackageConnection(this.pathList, {this.absolutePath, this.projectRootDir});
 
-  /// データベース接続取得（初期化を含む）
+  /// データベース接続取得（初期化を含む）。
+  ///
+  /// 返すのは [GuardedDatabase]: 書く文（INSERT / UPDATE / DELETE / ALTER、それを含むバッチ・トランザクション）の前に
+  /// QGIS/GDAL の rtree トリガー（Android の SQLite に無い ST_ 関数を呼ぶ）を落とす。
+  /// 書く経路ごとに落とすと取りこぼす（属性の UPDATE が落ちていた。[GdalTriggerGuard]）
   Future<Database> getDatabase() async {
     await _initializeDatabase();
-    if (_database == null) {
+    final db = _database;
+    if (db == null) {
       throw Exception(t.services.dbInitFailed);
     }
-    return _database!;
+    return _guards[db] ??= GuardedDatabase(db, qgisInterop);
   }
 
   /// データベース初期化（遅延初期化・Completerで二重実行防止）
@@ -472,7 +482,7 @@ class GeoPackageConnection {
 
       _isInitialized = true;
       _dropSchemaCache(); // 閉じている間に外で書き換えられたかもしれない
-      qgisInterop.cleanedTables.clear(); // 同じく。書く前にトリガーを見回り直す
+      qgisInterop.triggersDropped = false; // 同じく。書く前にトリガーを見回り直す
       _registeredKey = _registryKey(absPath);
       (_openConnections[_registeredKey!] ??= <GeoPackageConnection>{}).add(this);
 

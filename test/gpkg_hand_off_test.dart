@@ -148,9 +148,8 @@ void main() {
 
       final (fids, ids) = await _rowsAndIndex(path, _points);
       expect((fids.length, ids.length), (2, 1));
-      final names = (await _triggers(path)).keys;
-      expect(names.where((n) => n.startsWith('rtree_${_points}_')), isEmpty);
-      expect(names.where((n) => n.startsWith('rtree_${_parcels}_')), hasLength(3));
+      // 書く前にファイル全体の GDAL のトリガーを落とす（書いていない表も。gdal_trigger_guard.dart）
+      expect(await _triggers(path), isEmpty);
     });
 
     test('開いたままでも、出ていくファイルは rtree が合いトリガーが戻る。続けて書くとまた落として書ける', () async {

@@ -93,14 +93,11 @@ class GeoPackageFile {
   Future<void> checkIn() => _connection.checkIn();
 
   /// 空のGeoPackageファイルを明示的に作成（即座に初期化）
-  Future<bool> createEmptyDatabase() async {
-    final result = await _connection.createEmptyDatabase();
-    if (result) {
-      // SpatiaLiteトリガーを削除
-      await _spatial.removeSpatiaLiteTriggers();
-    }
-    return result;
-  }
+  Future<bool> createEmptyDatabase() => _connection.createEmptyDatabase();
+
+  /// QGIS/GDAL の rtree トリガー（ST_ 関数を呼ぶ）を見回り直して落とす。落とした数を返す。
+  /// ふだんは接続が書く前に落とす。保存が落ちたあとのやり直し（`BackgroundSaveManager`）で使う
+  Future<int> dropGdalTriggers() => _spatial.dropGdalTriggers();
 
   /// データベースのクローズ処理
   Future<void> dispose() async {
@@ -228,7 +225,8 @@ class GeoPackageFile {
       return;
     }
     // 以前の版がトリガーを落としたまま上げたファイル（rtree は登録されているのにトリガーが無い）は規格のトリガーを作り直す
-    await GpkgIndexRepair.healRtreeTriggers(absPath);
+    // 作ったトリガーは控えに無い。次に書くときに見回り直して落とす（開き直しでも倒れるが、念のため）
+    if (await GpkgIndexRepair.healRtreeTriggers(absPath) > 0) interop.triggersDropped = false;
     if (await GpkgIndexRepair.rebuildFile(absPath) >= 0) GeoPackageConnection.clearWrites(absPath);
   }
 
@@ -273,8 +271,8 @@ class GeoPackageFile {
     // 保留中の変更を全て保存
     await flushChanges();
 
-    // BackgroundSaveManagerから変更キューをクリア
-    BackgroundSaveManager.instance.clearPendingChanges(this);
+    // BackgroundSaveManagerから変更キューをクリア（ファイルごと消すので、書けなかった分も知らせない）
+    BackgroundSaveManager.instance.clearPendingChanges(this, reportDiscarded: false);
 
     return _connection.deleteFile();
   }

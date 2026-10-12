@@ -161,11 +161,12 @@ class FeatureRepository {
   }
 
   // ============================================================
-  // 書き込み前クリンナップ
+  // 書き込み
+  // （QGIS 製の gpkg の ST_ トリガーは、接続（GuardedDatabase）が書く前に落とす）
   // ============================================================
 
   /// 1 行の 1 列にそのまま値を書く（同期の衝突を相手の値に戻すとき）。
-  /// 書く前に ST_ トリガーを外す（[_prepareForWrite]）。値の型は呼び手が合わせる（ジオメトリは GPKG の blob）
+  /// 値の型は呼び手が合わせる（ジオメトリは GPKG の blob）
   Future<bool> setColumnValue(
     String tableName,
     String pkColumn,
@@ -173,28 +174,12 @@ class FeatureRepository {
     String column,
     Object? value,
   ) async {
-    await _prepareForWrite(tableName);
     final db = await connection.getDatabase();
     final n = await db.rawUpdate(
       'UPDATE ${quoteIdent(tableName)} SET ${quoteIdent(column)} = ? WHERE ${quoteIdent(pkColumn)} = ?',
       [value, pk],
     );
     return n > 0;
-  }
-
-  /// 書き込み前にテーブルをクリンナップする
-  ///
-  /// 外部ツール（QGIS/GeoPandas等）が作成したGPKGには
-  /// SpatiaLite拡張に依存するトリガーが含まれることがあり、
-  /// sqfliteでは実行できない。書き込み前に検出・除去する。
-  /// 見回り済みの表は同じファイルの接続で共有し、トリガーを戻したとき・開き直したときに空になる
-  /// （`QgisInterop.cleanedTables`。外へ出す前に戻したあと、次に書くときにもう一度落とす）
-  Future<void> _prepareForWrite(String tableName) async {
-    final cleaned = spatialIndex.qgisInterop.cleanedTables;
-    if (cleaned.contains(tableName)) return;
-
-    await spatialIndex.removeTableTriggers(tableName);
-    cleaned.add(tableName);
   }
 
   // ============================================================
@@ -361,7 +346,6 @@ class FeatureRepository {
     Map<String, dynamic> attributes,
   ) async {
     try {
-      await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final wkb = await _toLayerWkb(tableName, geom);
       final geomCol = await _writeGeomColumn(tableName);
@@ -406,7 +390,6 @@ class FeatureRepository {
     required String description,
     required Map<String, dynamic>? metadata,
   }) async {
-    await _prepareForWrite(tableName);
     final wkb = await _toLayerWkb(tableName, geom, rowId: id);
     final ok = await _updateFeatureGeometry(
       tableName,
@@ -430,7 +413,6 @@ class FeatureRepository {
   ///   UI から消えたのに再起動で復活する事故を誰も検知できなかった
   Future<bool> removeFeature(String tableName, int id) async {
     try {
-      await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final whereClause = await schema.buildWhereClause(tableName);
       final deleted = await db.rawDelete(
@@ -780,7 +762,6 @@ class FeatureRepository {
     List<(geo.Geometry, Map<String, dynamic>)> items,
   ) async {
     try {
-      await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final geomCol = await _writeGeomColumn(tableName);
       // 主キー・形の列は属性として書かない。

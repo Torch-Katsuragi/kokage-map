@@ -56,7 +56,11 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
   ///   フィーチャ無しのテクスチャのまま残り、寄せる最中に親と子が入れ替わるたびにフィーチャが出たり消えたりした
   ///   （ユーザー 2026-09-13「地形読み込み中だけフィーチャが表示されたりされなかったり」。web で目立つ）。
   /// 記録中の GPS 軌跡は 20 秒ごとに伸びるので、全部焼き直すと 46 枚 × 40〜90ms が毎回来る
-  final FeatureBakeLedger _bakes = FeatureBakeLedger(fillsOnlyAbove: kBakeMaxZoom);
+  /// GPS の揺れ数 m のような 1 texel に届かない線の伸びは、貯めて届いたら焼く（texel はテクスチャを作る段で決まる）
+  late final FeatureBakeLedger _bakes = FeatureBakeLedger(
+    fillsOnlyAbove: kBakeMaxZoom,
+    texelOf: (k) => WebMercator.metersPerPixel(k.z + _world.textureZoomOffsetFor(k.z)),
+  );
 
   void _onTextureApplied(TileKey key) => _bakes.applied(key);
 
@@ -87,17 +91,18 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     _bakedStyleSignature = styleSig;
     if (_bakedContentRevision != rev) {
       _bakedContentRevision = rev;
-      final ll = g.lastChangeLonLat;
+      ui.Rect? merc(ui.Rect? ll) => ll == null
+          ? null
+          : ui.Rect.fromLTRB(
+              WebMercator.xFromLon(ll.left),
+              WebMercator.yFromLat(ll.top),
+              WebMercator.xFromLon(ll.right),
+              WebMercator.yFromLat(ll.bottom),
+            );
       _bakes.addEvent(
-        ll == null
-            ? null
-            : ui.Rect.fromLTRB(
-                WebMercator.xFromLon(ll.left),
-                WebMercator.yFromLat(ll.top),
-                WebMercator.xFromLon(ll.right),
-                WebMercator.yFromLat(ll.bottom),
-              ).inflate(50),
+        merc(g.lastChangeLonLat)?.inflate(50),
         fills: g.lastChangeHasFills,
+        extension: merc(g.lastChangeExtension),
       );
     }
     _scheduleBakeCheck();
@@ -115,11 +120,16 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     final gen = _bakes.gen;
     final stale = _bakes.takeStale([for (final t in _world.tiles) t.key]);
     if (stale.isEmpty) return;
-    debugPrint('[3D] bake: ${stale.length} 枚を世代 $gen で焼き直す');
+    final deferred = _bakes.lastDeferred;
     unawaited(_world.retexture(where: stale.contains).then((_) {
       if (!mounted) return;
       // 途中で別の作り直しに打ち切られた分は要求を取り下げ、少し置いてまた見る
-      if (_bakes.withdrawUnapplied(stale, gen, _world.has)) _scheduleBakeCheck();
+      final left = _bakes.withdrawUnapplied(stale, gen, _world.has);
+      // 実際に貼った枚数（打ち切り・見送りは別に）
+      final done = stale.where((k) => (_bakes.baked[k] ?? -1) >= gen).length;
+      debugPrint('[3D] bake: $done 枚を世代 $gen で焼き直した'
+          '${left > 0 ? '（打ち切り $left 枚）' : ''}${deferred > 0 ? '（1 texel 未満で見送り $deferred 枚）' : ''}');
+      if (left > 0) _scheduleBakeCheck();
     }));
   }
 

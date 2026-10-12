@@ -63,5 +63,5 @@
   [Drive downloads only changed files],
   [Auto-sync reuses its connection],
   [TruPulse measurements no longer rebuild the whole screen],
-  [Track recording no longer rebuilds all features and re-bakes 3D every 20 s; only the new part is drawn],
+  [Track recording no longer rebuilds all features and re-bakes 3D every 20 s; only visible growth is drawn],
 )

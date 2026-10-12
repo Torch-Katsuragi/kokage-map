@@ -104,6 +104,11 @@ class FeatureGeoJsonCache {
   /// 寄った段のテクスチャは面の塗りしか焼かないので、false のときは寄った段を焼き直さなくてよい
   bool lastChangeHasFills = true;
 
+  /// 直近の [contentRevision] の進みが、線の後ろに点を足しただけ（GPS 軌跡の統合）なら、その区間の範囲（経度・緯度。
+  /// [lastChangeLonLat] と同じ）。それ以外（描いた・消した・形や属性を変えた・面）は null。
+  /// 3D の焼き込みは、これが 1 texel に届かないタイルの焼き直しを見送る（`FeatureBakeLedger`）
+  Rect? lastChangeExtension;
+
   /// フィーチャごとの署名と範囲（前回の全件組み立て）。キー = (レイヤの同一性, rowId)
   Map<(int, int), _Sig> _signatures = {};
 
@@ -226,16 +231,20 @@ class FeatureGeoJsonCache {
     void dirty(Rect r) => changed = changed == null ? r : changed!.expandToInclude(r);
     var any = false;
     var fills = false;
+    var extensionOnly = true;
     for (final e in now.entries) {
       final before = prev[e.key];
       if (before != null && before.hash == e.value.hash) continue;
       any = true;
       fills = fills || e.value.fill || (before?.fill ?? false);
-      dirty(_changedBox(before, e.value));
+      final (box, extension) = _changedBox(before, e.value);
+      extensionOnly = extensionOnly && extension;
+      dirty(box);
     }
     for (final k in removed) {
       final before = prev[k]!;
       any = true;
+      extensionOnly = false;
       fills = fills || before.fill;
       dirty(before.box);
     }
@@ -243,6 +252,7 @@ class FeatureGeoJsonCache {
       // 最初の組み立ては「全部」
       lastChangeLonLat = prev.isEmpty ? null : changed;
       lastChangeHasFills = prev.isEmpty || fills;
+      lastChangeExtension = prev.isEmpty || fills || !extensionOnly ? null : changed;
       contentRevision++;
     }
   }
@@ -373,10 +383,11 @@ class FeatureGeoJsonCache {
   }
 }
 
-/// 変わった地物の焼き直す範囲。線の後ろに点を足しただけ（前の座標がそのまま先頭に並ぶ）なら、
-/// 前の最後の点から足した点までの範囲。それ以外は前と今の範囲を合わせたもの
-Rect _changedBox(_Sig? before, _Sig now) {
-  if (before == null) return now.box;
+/// 変わった地物の焼き直す範囲と、線の後ろに点を足しただけか。足しただけ（前の座標がそのまま先頭に並ぶ）なら、
+/// 前の最後の点から足した点までの範囲。それ以外は前と今の範囲を合わせたもの。
+/// 「足しただけ」は線（面でない）で、線の本数が変わらないときだけ（新しい本は離れた所に丸い点として現れるので）
+(Rect, bool) _changedBox(_Sig? before, _Sig now) {
+  if (before == null) return (now.box, false);
   final old = before.geom, cur = now.geom;
   if (old != null && cur != null && before.propsHash == now.propsHash && now.geomSig.n > before.geomSig.n && before.geomSig.n > 0) {
     final a = _flat(old), b = _flat(cur);
@@ -396,11 +407,20 @@ Rect _changedBox(_Sig? before, _Sig now) {
         if (y < minY) minY = y;
         if (y > maxY) maxY = y;
       }
-      return Rect.fromLTRB(minX, minY, maxX, maxY);
+      final chains = _chainCount(cur);
+      final extension = !now.fill && !before.fill && chains != null && chains == _chainCount(old);
+      return (Rect.fromLTRB(minX, minY, maxX, maxY), extension);
     }
   }
-  return before.box.expandToInclude(now.box);
+  return (before.box.expandToInclude(now.box), false);
 }
+
+/// 線の本数（線・複数線のとき。それ以外は null）
+int? _chainCount(geo.Geometry g) => switch (g) {
+      geo.LineString() => 1,
+      geo.MultiLineString(:final chains) => chains.length,
+      _ => null,
+    };
 
 /// 形の座標を順に（線・面・その複数形と点）
 void _eachPosition(geo.Geometry g, void Function(double x, double y) add) {

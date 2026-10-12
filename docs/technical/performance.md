@@ -147,7 +147,26 @@ Pixel 9 で地図を開いて置いたまま（GPS 記録中）、20 秒ごと�
   線・点だけの変化では寄った段を焼き直さない。台帳は `FeatureBakeLedger`（`lib/core/terrain/feature_bake_ledger.dart`）に切り出した
   （タイルの形の作り直し＝シーンは寄った段で線も描くので、こちらは今までどおり範囲で見る）
 
-テスト: `test/gps_track_sync_test.dart`・`test/feature_bake_ledger_test.dart`。端末での確かめは未（置いたままで `[3D] bake` が出ないこと、軌跡が伸びること）。
+テスト: `test/gps_track_sync_test.dart`・`test/feature_bake_ledger_test.dart`。
+
+### 1 texel に届かない線の伸びは焼き直さない（d2/bake-subpixel）
+
+上の直しの後も、z7 ほどに引いて置いたままで 20 秒ごとに `Consolidation完了 (4点反映)` → `[3D] bake: 6 枚` →
+`bake z7 …: 56 件 45ms`・`bake z8 …: 36ms` が続いた（約 90 ms）。足した 4 点は GPS の揺れ数 m で、z5〜z8 の 1 texel（数百 m）にまったく届かない。
+
+- `FeatureGeoJsonCache.lastChangeExtension`: 変化が全部「線の後ろに点を足しただけ」（面でなく、線の本数も属性も変わらない）なら、その区間の範囲。
+  描いた・消した・途中が動いた・属性やスタイルを変えた・新しい本が増えた（短くても丸い点として現れる）は null で、今までどおり必ず焼く
+- 台帳（`FeatureBakeLedger.addEvent(..., extension:)`）はその範囲を出来事に載せ、`takeStale` でタイルごとに
+  「まだ焼いていない伸び」（`pending`）と合わせた範囲の対角がそのタイルのテクスチャの 1 texel（`texelOf`。地図面では
+  `metersPerPixel(z + textureZoomOffsetFor(z))`、z13 以下は 512² なので z7 で約 610 m・z13 で約 9.6 m）に届かなければ焼かずに貯める。
+  届いたら焼き、そのタイルのテクスチャを貼れば貯めは消える（描いた世代が貯めた世代以降のとき）。オーバーレイなど別の作り直しで貼っても消える
+- 線は丸い端・丸い継ぎ目で描くので、足した区間で塗りが変わるのは前の端点から足した点までの距離の内側だけで、線の太さに依らない。
+  なので比べるのは区間の範囲の対角と 1 texel だけ（膨らませた 50 m は掛かるタイルを探すためのもので、比べには使わない）
+- 寄れば細かい段のタイルが今の中身で新しく焼かれるので、見ている所で軌跡がずれることはない。粗い段の貯めも歩けば 1 texel ごとに焼かれる
+- `[3D] bake: N 枚を世代 G で焼き直した` は貼り終えてから実際に貼った枚数を出す（打ち切り・見送りの枚数は括弧で）
+
+テスト: `test/feature_bake_ledger_test.dart`（見送り・貯めて焼く・必ず焼く変化・段ごとの texel）・`test/gps_track_sync_test.dart`（`lastChangeExtension`）。
+端末での確かめは未（引いて置いたままで `[3D] bake` が出ないこと、歩けば粗い段も追いつくこと）。
 
 ## 残り
 

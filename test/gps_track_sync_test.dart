@@ -135,6 +135,7 @@ void main() {
     expect(g.lastChangeLonLat!.right, closeTo(added.longitude, 1e-9));
     expect(g.lastChangeLonLat!.top, closeTo(last.latitude, 1e-9));
     expect(g.lastChangeLonLat!.bottom, closeTo(added.latitude, 1e-9));
+    expect(g.lastChangeExtension, g.lastChangeLonLat, reason: '線を伸ばしただけ（1 texel 未満なら焼き直しを見送れる）');
 
     // 同じ形でもう一度（統合で点が増えなかった）: 世代は進まない
     await syncConsolidatedTrack(
@@ -171,6 +172,7 @@ void main() {
     cache.rebuildAll(input(route, areas));
     expect(cache.lastChangeHasFills, isFalse);
     expect(cache.lastChangeLonLat!.left, closeTo(before.last.longitude, 1e-9));
+    expect(cache.lastChangeExtension, cache.lastChangeLonLat);
 
     // 最初の点を動かす → 線全体の範囲
     final moved = [turf.Position(before.first.longitude - 0.001, before.first.latitude), ...whole.coordinates.skip(1)];
@@ -178,6 +180,31 @@ void main() {
     cache.rebuildAll(input(route, areas));
     expect(cache.lastChangeLonLat!.left, closeTo(before.first.longitude - 0.001, 1e-9));
     expect(cache.lastChangeLonLat!.right, closeTo(added.longitude, 1e-9), reason: '前の形（足した点まで）も含む');
+    expect(cache.lastChangeExtension, isNull, reason: '途中が動いたら伸ばしただけではない（必ず焼く）');
+  });
+
+  test('線の本数が増えたら（離れた所に新しい本）伸ばしただけではない', () async {
+    final (route, areas) = await load();
+    final cache = FeatureGeoJsonCache()..rebuildAll(input(route, areas));
+    final track = route.children.whereType<LineFeatureNode>().single;
+    final whole = [for (final q in coordsOf(track)) turf.Position(q.longitude, q.latitude)];
+    void put(List<List<turf.Position>> chains) => route.addFeatureToMap(
+          track.rowId,
+          turf.Feature(geometry: turf.MultiLineString(coordinates: chains), properties: track.turfFeature.properties),
+        );
+    final last = whole.last;
+    put([
+      [...whole, turf.Position(last.lng.toDouble() + 0.00001, last.lat.toDouble())],
+    ]);
+    cache.rebuildAll(input(route, areas));
+    expect(cache.lastChangeExtension, isNotNull, reason: '1 本のまま後ろに足した');
+    put([
+      [...whole, turf.Position(last.lng.toDouble() + 0.00001, last.lat.toDouble())],
+      [turf.Position(last.lng.toDouble() + 0.00002, last.lat.toDouble()), turf.Position(last.lng.toDouble() + 0.00003, last.lat.toDouble())],
+    ]);
+    cache.rebuildAll(input(route, areas));
+    expect(cache.lastChangeLonLat, isNotNull);
+    expect(cache.lastChangeExtension, isNull, reason: '新しい本は短くても丸い点として現れる');
   });
 
   test('面が変われば塗りを含む', () async {
@@ -198,5 +225,6 @@ void main() {
     );
     expect(cache.rebuildFeatures(input(route, areas), {f}), isTrue);
     expect(cache.lastChangeHasFills, isTrue);
+    expect(cache.lastChangeExtension, isNull);
   });
 }

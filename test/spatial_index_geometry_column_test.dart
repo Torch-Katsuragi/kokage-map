@@ -63,7 +63,7 @@ void main() {
     final conn = GeoPackageConnection(const ['parcels.gpkg'], absolutePath: path);
     final spatial = SpatialIndexManager(conn);
     final db = await conn.getDatabase();
-    await spatial.removeTableTriggers('parcels');
+    await spatial.dropGdalTriggers();
 
     Future<List<Map<String, Object?>>> rtree() =>
         db.rawQuery('SELECT id, minx, maxx, miny, maxy FROM rtree_parcels_geometry ORDER BY id');
@@ -107,7 +107,7 @@ void main() {
     final conn = GeoPackageConnection(const ['parcels.gpkg'], absolutePath: path);
     final spatial = SpatialIndexManager(conn);
     final db = await conn.getDatabase();
-    await spatial.removeTableTriggers('parcels');
+    await spatial.dropGdalTriggers();
 
     final a = createWkbPoint(135.96, 33.93);
     final id = await db.rawInsert('INSERT INTO parcels (geometry, name) VALUES (?, ?)', [a, 'a']);

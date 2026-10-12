@@ -14,13 +14,14 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: 空間インデックス管理クラス
-// R-Tree操作、エンベロープ更新、SpatiaLiteトリガー処理を担当
+// R-Tree操作、エンベロープ更新を担当（SpatiaLiteトリガーは gdal_trigger_guard.dart）
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../utils/app_logger.dart';
 import '../../utils/wkb_utils.dart';
+import 'gdal_trigger_guard.dart';
 import 'geopackage_connection.dart';
 import 'gpkg_rtree.dart';
 import 'qgis_interop.dart';
@@ -66,7 +67,7 @@ class SpatialIndexManager {
   /// （gpkg_contents）に入れる。範囲はレイヤの CRS のまま（WGS84 に直さない）。
   ///
   /// QGIS 製の gpkg は R-Tree を保つトリガーを SpatiaLite 関数ごと落としているので
-  /// （[removeSpatiaLiteTriggers]）、追加・更新のたびにここで入れ直す
+  /// （[GdalTriggerGuard]）、追加・更新のたびにここで入れ直す
   Future<void> indexRows(String tableName, Map<int, Uint8List> geoms) async {
     if (geoms.isEmpty) return;
     try {
@@ -128,139 +129,17 @@ class SpatialIndexManager {
     }
   }
 
-  /// SpatiaLite固有のトリガーを検出して削除
-  /// QGISで作成されたGeoPackageにはST_IsEmpty等のSpatiaLite関数を使用する
-  /// トリガーが含まれており、sqfliteではこれらの関数がサポートされていないため
-  /// INSERT/UPDATE時にエラーが発生する。このメソッドで問題のトリガーを削除する。
-  Future<void> removeSpatiaLiteTriggers() async {
-    final db = await connection.getDatabase();
-
-    try {
-      // sqlite_masterからトリガー一覧を取得
-      final triggers = await db.rawQuery(
-        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger'",
-      );
-
-      int removedCount = 0;
-      for (final trigger in triggers) {
-        final triggerName = trigger['name'] as String?;
-        final sql = trigger['sql'] as String?;
-
-        // SpatiaLite関数を使用しているトリガーを検出して削除
-        if (triggerName != null &&
-            sql != null &&
-            _containsSpatiaLiteFunctions(sql)) {
-          // ⚠ 落とす前に定義を控える。落としたまま返すとQGIS側で
-          //    空間インデックスが更新されなくなる（クローズ時に復元する）。
-          qgisInterop.rememberTrigger(triggerName, sql);
-          await db.execute('DROP TRIGGER IF EXISTS ${quoteIdent(triggerName)}');
-          removedCount++;
-          AppLogger.debug(
-            '[SpatialIndexManager] SpatiaLiteトリガー削除: $triggerName',
-          );
-        }
-      }
-
-      if (removedCount > 0) {
-        AppLogger.debug(
-          '[SpatialIndexManager] 合計 $removedCount 個のSpatiaLiteトリガーを削除',
-        );
-      }
-    } catch (e) {
-      AppLogger.debug(
-        '[ERROR] SpatialIndexManager.removeSpatiaLiteTriggers: $e',
-      );
-    }
-  }
-
-  /// [tableName] の SpatiaLite 依存トリガーと rtree_ トリガーを検出・除去（書き込み前に 1 回）
+  /// SpatiaLite 関数・rtree のトリガーを見回り直して落とす（落とし済みの印に頼らない）。落とした数を返す。
   ///
-  /// QGIS/GeoPandasが生成するRTree自動更新トリガーは
-  /// ST_IsEmpty, ST_MinX等のSpatiaLite関数を使用するが、
-  /// sqfliteにはSpatiaLite拡張がないためINSERT/UPDATE時にエラーとなる。
-  /// こかげマップはここ（[indexRows]）でrtreeを管理するため、
-  /// これらのトリガーは不要。
-  Future<void> removeTableTriggers(String tableName) async {
+  /// ふだんは接続（[GuardedDatabase]）が書く前に落とすので呼ばなくてよい。保存が落ちたあとに
+  /// 落とし直してやり直すとき（`BackgroundSaveManager`）に使う
+  Future<int> dropGdalTriggers() async {
     try {
       final db = await connection.getDatabase();
-      // テーブルに関連するトリガーを全取得
-      final triggers = await db.rawQuery(
-        'SELECT name, sql FROM sqlite_master '
-        "WHERE type = 'trigger' AND tbl_name = ?",
-        [tableName],
-      );
-
-      if (triggers.isEmpty) return;
-
-      // SpatiaLite関数を使っているトリガーを検出
-      const spatialiteFunctions = [
-        'ST_IsEmpty',
-        'ST_MinX',
-        'ST_MaxX',
-        'ST_MinY',
-        'ST_MaxY',
-        'ST_MinZ',
-        'ST_MaxZ',
-        'ST_MinM',
-        'ST_MaxM',
-      ];
-
-      final triggersToRemove = <String>[];
-      for (final trigger in triggers) {
-        final sql = trigger['sql'] as String? ?? '';
-        final name = trigger['name'] as String;
-
-        // SpatiaLite関数を使っているトリガーを検出
-        final usesSpatialiteFunction = spatialiteFunctions.any(
-          sql.contains,
-        );
-
-        // rtree仮想テーブルを参照するトリガーを検出
-        // (DELETE時のrtreeクリーンアップ等、ST_関数を使わないものも含む)
-        final referencesRtree = name.startsWith('rtree_');
-
-        if (usesSpatialiteFunction || referencesRtree) {
-          // ⚠ 落とす前に定義を控える（クローズ時に復元してQGISへ返す）
-          qgisInterop.rememberTrigger(name, sql);
-          triggersToRemove.add(name);
-        }
-      }
-
-      if (triggersToRemove.isEmpty) return;
-
-      // トリガーを除去
-      for (final name in triggersToRemove) {
-        await db.execute('DROP TRIGGER IF EXISTS ${quoteIdent(name)}');
-      }
-
-      AppLogger.debug(
-        '[SpatialIndexManager] 🧹 SpatiaLiteトリガーを除去: '
-        '$tableName (${triggersToRemove.length}個: '
-        '${triggersToRemove.join(", ")})',
-      );
+      return await GdalTriggerGuard.drop(db, qgisInterop);
     } catch (e) {
-      AppLogger.debug('[SpatialIndexManager] ⚠️ トリガー除去エラー: $tableName - $e');
+      AppLogger.debug('[ERROR] SpatialIndexManager.dropGdalTriggers: $e');
+      return 0;
     }
-  }
-
-  /// SQLにSpatiaLite固有の関数が含まれているかチェック
-  bool _containsSpatiaLiteFunctions(String sql) {
-    const spatialiteFunctions = [
-      'ST_IsEmpty',
-      'ST_MinX',
-      'ST_MaxX',
-      'ST_MinY',
-      'ST_MaxY',
-      'ST_GeometryType',
-      'ST_SRID',
-      'IsValidGPB',
-      'gpkgMakePoint',
-      'gpkgMakePointZ',
-      'gpkgMakePointM',
-      'gpkgMakePointZM',
-    ];
-
-    final upperSql = sql.toUpperCase();
-    return spatialiteFunctions.any((f) => upperSql.contains(f.toUpperCase()));
   }
 }

@@ -22,8 +22,8 @@
 /// 1. **SpatiaLiteトリガーの復元**
 ///    QGIS/GDAL製のGeoPackageは RTree自動更新トリガーを持ち、それらは
 ///    `ST_IsEmpty` / `ST_MinX` 等の SpatiaLite 関数を使う。sqflite には
-///    その拡張が無いので、こかげマップ は書き込み前にトリガーを落とし、rtree は
-///    [SpatialIndexManager] が自前で更新している。
+///    その拡張が無いので、こかげマップ は書き込み前にトリガーを落とし（[GdalTriggerGuard]。
+///    アプリの接続で書く文はすべてそこを通る）、rtree は [SpatialIndexManager] が自前で更新している。
 ///    ⚠ **落としたまま返すと、その後QGISで編集しても空間インデックスが
 ///    更新されなくなる。** クローズ時に元のSQLで復元する。
 ///
@@ -55,17 +55,18 @@ class QgisInterop {
   /// 落として戻していないトリガーがあるか
   bool get hasRemovedTriggers => _removedTriggers.isNotEmpty;
 
-  /// 書く前のトリガーの見回り（`FeatureRepository._prepareForWrite`）を済ませた表。
+  /// ファイル全体の SpatiaLite・rtree トリガーを落とし終えているか（[GdalTriggerGuard] が書く前に見る）。
   ///
-  /// 同じファイルを開いている `GeoPackageFile` のあいだで共有する（`GeoPackageConnection.qgisInterop` はパスごとに 1 つ）。
-  /// トリガーを戻したとき・開き直したときに空にする。`GeoPackageFile` ごとに持つと、
-  /// 別のものがトリガーを戻したあとも「済み」のまま書き、ST_ 関数が無くて落ちる
-  final Set<String> cleanedTables = {};
+  /// 同じファイルを開いている接続のあいだで共有する（`GeoPackageConnection.qgisInterop` はパスごとに 1 つ）。
+  /// トリガーを戻したとき・作り直したとき・開き直したときに倒し、次に書くときに見回り直す。
+  /// 以前は経路（表）ごとに「済み」を持ち、属性の UPDATE などはそもそも落とさずに書いていたので、
+  /// 外へ出す前にトリガーを戻したあと、ST_ 関数が無くて保存が落ち続けた（2026-10-12 Pixel 9）
+  bool triggersDropped = false;
 
   /// 控えを捨てる（Drive から落としたファイルに置き換えたとき。落とした中身が正で、こちらの控えは古い）
   void forget() {
     _removedTriggers.clear();
-    cleanedTables.clear();
+    triggersDropped = false;
   }
 
   /// 削除するトリガーの定義を控えておく。
@@ -82,7 +83,7 @@ class QgisInterop {
   /// （復元後に書くと ST_ 関数が無くて落ちる）。
   Future<void> restoreTriggers(Database db) async {
     // 戻したあとに書くときは、もう一度落とす（見回りをやり直す）
-    cleanedTables.clear();
+    triggersDropped = false;
     if (_removedTriggers.isEmpty) return;
 
     var restored = 0;
@@ -104,6 +105,8 @@ class QgisInterop {
       }
     }
     _removedTriggers.clear();
+    // 戻している間に書いた側が「落とし済み」にしていても倒す（戻したトリガーが残っている）
+    triggersDropped = false;
     AppLogger.debug('[QgisInterop] SpatiaLiteトリガーを復元: $restored 個');
   }
 

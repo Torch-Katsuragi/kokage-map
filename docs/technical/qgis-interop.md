@@ -77,11 +77,36 @@ prepareForHandOff(path)        パスごとに 1 つずつ
 
 開いていた `GeoPackageFile` はそのまま使える。次の `getDatabase()` で開き直し、次に書くときにトリガーをまた落とす。
 そのため控え（`QgisInterop`）はパスごとに 1 つにして接続を閉じても残し（`GeoPackageConnection.qgisInteropFor`）、
-「見回り済みの表」（`QgisInterop.cleanedTables`）も同じ控えに持ち、トリガーを戻したとき・開き直したときに空にする。
+「落とし済み」の印（`QgisInterop.triggersDropped`）も同じ控えに持ち、トリガーを戻したとき・作り直したとき・開き直したときに倒す
+（落とす場所は [[#書く前に落とす関所（2026-10-12〜）]]）。
 Drive から落として置き換えたときは控えを捨てる（`SyncBaseStore.settleAfterDownload`）。
 web は rtree の焼き直しをせず、開いている写しでトリガーを戻して書き戻すだけ。
 
 テストは `test/gpkg_hand_off_test.dart`（`SpatialIndexManager.debugWithoutRtreeModule` で Android の rtree 無しをまねる）。
+
+### 書く前に落とす関所（2026-10-12〜）
+
+`GeoPackageConnection.getDatabase()` は sqflite の `Database` をそのまま返さず、`GuardedDatabase`（`gdal_trigger_guard.dart`）で包んで返す。
+書く文（INSERT / UPDATE / DELETE / REPLACE / ALTER、`WITH` で始まるそれ、書く文を積んだバッチ、トランザクションの中の書く文）の前に、
+ファイル全体の該当トリガー（`rtree_` で始まるもの・SpatiaLite / GeoPackage 拡張の関数を呼ぶもの）を定義を控えてから落とす（`GdalTriggerGuard.drop`）。
+読むだけの文（SELECT・PRAGMA・読むだけのトランザクション）では落とさない（見ただけのファイルを変えない）。
+トランザクションの中ではそのトランザクションで落とす（外の `Database` で落とすと待ち合って止まる）。
+
+それでも `no such function: ST_…` / `no such module: rtree` で落ちたら、見回り直して落とすものがあれば 1 度だけやり直す
+（印が古い: 別の SQLite が作り直した、戻している最中に書いた）。`BackgroundSaveManager` も、属性の保存が落ちたら
+`GeoPackageFile.dropGdalTriggers()` で見回り直し、落としたものがあればその場で書き直す（書き直しの予約を待たない）。
+書き直しても 3 回続けて落ちたとき、閉じるときに書けない変更を捨てたときは、通知センターにエラーで残す
+（`BackgroundSaveManager.onPersistentFailure`、`main.dart` で繋ぐ）。
+
+> [!WARNING] 経路ごとに落としていたときは属性の保存が失われた（2026-10-12 Pixel 9）
+> 以前はトリガーを落とすのが `FeatureRepository` の地物の追加・形の更新・削除だけで、表ごとの「見回り済み」を持っていた。
+> 属性の UPDATE（編集パネル・属性表）・置換・計算・写しなどは「どこかで先に落としてある」ことに頼っていた。
+> 外へ出す前にトリガーを戻すようにしたら、戻したあとの属性の保存が `no such function: ST_IsEmpty` で毎回落ち、
+> 画面には新しい値が出たままファイルは変わらず、書き直しも落ち続けて閉じると捨てていた。
+> GDAL 3.13 の組の `update5`・`update4` は `AFTER UPDATE ON <表>`（列を問わない）で、SQLite は文を準備する時点で
+> トリガーの関数を引くので、属性だけの UPDATE でも落ちる。書く経路を足すたびに落とし忘れるので、経路ごとに落とさない。
+
+テストは `test/gpkg_write_trigger_guard_test.dart`（GDAL 3.13 の組を付けた gpkg。ホストの SQLite にも ST_ 関数は無いので Android と同じく落ちる）。
 
 #### Android でもトリガーを落とす理由
 
@@ -426,8 +451,8 @@ QGIS の結合を残す）。fixture の作り直しは `tool/qgis/write_join_fi
 
 QGIS/GDAL 製の GeoPackage は RTree を自動更新するトリガーを持ち、
 それらは `ST_IsEmpty` / `ST_MinX` 等の **SpatiaLite 関数**を使う。
-sqflite にその拡張は無いので、こかげマップ は書き込み前にトリガーを落とし、
-rtree は `SpatialIndexManager` が自前で更新している。
+sqflite にその拡張は無いので、こかげマップ は書き込み前にトリガーを落とし
+（[[#書く前に落とす関所（2026-10-12〜）]]）、rtree は `SpatialIndexManager` が自前で更新している。
 
 > [!IMPORTANT] 落としたまま返してはいけない
 > トリガーが無いまま QGIS に戻すと、**その後 QGIS で編集しても空間インデックスが

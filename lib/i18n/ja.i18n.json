@@ -1272,7 +1272,10 @@
     "fileNotFound": "ファイルが存在しません: ${path}",
     "fileAlreadyExists": "同名のファイルが既に存在します: ${name}",
     "folderAlreadyExists": "同名のフォルダが既に存在します",
-    "gpkgAlreadyExists": "同名のGeoPackageファイルが既に存在します"
+    "gpkgAlreadyExists": "同名のGeoPackageファイルが既に存在します",
+    "attributeSaveFailing": "属性の変更を保存できていません（${count}件）",
+    "attributeSaveFailingDetail": "書き直しを続けていますが保存できません。アプリを閉じる前に、ファイルが開けるか・空き容量があるかを確かめてください。${files}",
+    "attributeSaveDiscarded": "保存できなかった属性の変更を捨てました（${count}件）"
   },
   "qgisFilter": {
     "emptyExpression": "式が空です",

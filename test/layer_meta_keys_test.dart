@@ -1,4 +1,4 @@
-// gpkg・レイヤの改名と削除で、フォルダ設定のレイヤ単位の鍵（スタイル・View・属性フォーム・写真の列・結合）が
+// gpkg・レイヤの改名と削除で、フォルダ設定のレイヤ単位の鍵（スタイル・View・属性フォーム・結合）が
 // ついていく／落ちる（2026-10-11 夜のレビュー。改名で描き分けや結合が外れ、削除後に同名で作ると前の設定を引き継いでいた）
 import 'dart:io';
 
@@ -54,7 +54,6 @@ void main() {
     await svc.setLayerStyle(proj, key, const KMetaLayerStyle(pointSize: 7));
     await svc.setViews(proj, key, [const KMetaView(name: '高い', filter: 'H > 10')]);
     await svc.setLayerForm(proj, key, form);
-    await svc.addPhotoField(proj, key, 'photo');
     await svc.setLayerJoins(proj, key, [join]);
   }
 
@@ -63,7 +62,6 @@ void main() {
     expect(meta.styles.layers.containsKey(key), m, reason: 'style $key');
     expect(meta.views.containsKey(key), m, reason: 'views $key');
     expect(meta.forms.containsKey(key), m, reason: 'forms $key');
-    expect(meta.photoFields.containsKey(key), m, reason: 'photoFields $key');
     expect(meta.joins.containsKey(key), m, reason: 'joins $key');
   }
 
@@ -84,7 +82,6 @@ void main() {
     final meta = await svc.getMeta(proj);
     expectSettings(meta, 'b.gpkg/trees', present: false);
     expectSettings(meta, 'c.gpkg/trees', present: true);
-    expect(meta.photoFields['c.gpkg/trees'], ['photo']);
   });
 
   test('レイヤを改名すると、そのレイヤの設定だけが新しい名前へ移る', () async {
@@ -164,7 +161,7 @@ void main() {
     expect(targetOf(await svc.getMeta(sub), 'd.gpkg/plots'), (gpkg: '../c.gpkg', layer: 'trees'));
   });
 
-  test('gpkg を忘れると、写真の列の印も落とす', () async {
+  test('gpkg を忘れると、レイヤ単位の設定も落とす', () async {
     await giveSettings('b.gpkg/trees');
     await svc.forgetGeoPackage(proj, 'b.gpkg');
     svc.clearCache();

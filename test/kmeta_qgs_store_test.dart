@@ -296,4 +296,15 @@ void main() {
     expect(await KMetaService.instance.linkBeforeReplace(p.join(dir, 'other.qgs')), isNull);
     expect(await KMetaService.instance.linkBeforeReplace(p.join(dir, 'a.gpkg')), isNull);
   });
+
+  // 撤去した「地物の写真」の開発版が書いた鍵（photoFields）は読み飛ばし、書き戻すときに落とす
+  test('知らない鍵（photoFields）があっても読めて、書き戻しでは消える', () {
+    final meta = KMeta.fromJson({
+      'version': kMetaSchemaVersion,
+      'photoFields': {'a.gpkg/pts': ['photo']},
+      'views': {'a.gpkg/pts': [{'name': '高い', 'filter': 'H > 10'}]},
+    });
+    expect(meta.getViews('a.gpkg/pts').single.name, '高い');
+    expect(meta.toJson().containsKey('photoFields'), isFalse);
+  });
 }

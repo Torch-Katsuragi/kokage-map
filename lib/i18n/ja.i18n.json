@@ -1070,22 +1070,6 @@
     "create": "作成",
     "next": "次へ"
   },
-  "featurePhotos": {
-    "title": "写真",
-    "take": "写真を撮る",
-    "pick": "写真を選ぶ",
-    "attached": "写真を $count 枚付けました",
-    "attachFailed": "写真を付けられませんでした",
-    "cameraFailed": "カメラを開けませんでした",
-    "missing": "ファイルが見つかりません",
-    "removeTitle": "この写真を外しますか？",
-    "removeBody": "地物の属性から外します。写真のファイルも消せます。",
-    "unlinkOnly": "外すだけ",
-    "unlinkAndDelete": "ファイルも消す",
-    "cancel": "やめる",
-    "removed": "写真を外しました",
-    "remove": "外す"
-  },
   "photoViewer": {
     "loadError": "画像を読み込めません",
     "close": "閉じる",

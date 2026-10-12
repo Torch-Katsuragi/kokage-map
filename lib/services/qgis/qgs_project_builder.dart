@@ -522,7 +522,6 @@ class QgsProjectBuilder {
     if (layer.views.isEmpty) await layer.loadViews();
     final crs = crsCache[layer] ??= await _crsOf(layer);
     final layerStyle = await layer.getKmetaStyle();
-    final photoFields = await _photoFieldsOf(layer);
     final joins = await _joinsOf(layer, rootPath, skipped);
 
     final qgsLayers = <QgsTreeNode>[
@@ -540,7 +539,6 @@ class QgsProjectBuilder {
           visible: view.visible,
           uriOptions: uriOptions,
           providerEncoding: providerEncoding,
-          photoFields: photoFields,
           joins: joins,
         ),
     ];
@@ -556,18 +554,6 @@ class QgsProjectBuilder {
   // =============================================
   // 部品
   // =============================================
-
-  /// アプリが作った写真の列（持ち主の dir の設定 [KMeta.photoFields]）
-  Future<List<String>> _photoFieldsOf(LayerNode layer) async {
-    try {
-      final folder = layer.folderNode;
-      if (folder == null) return const [];
-      return (await folder.getMeta()).photoFields[layer.layerKey] ?? const [];
-    } on Object catch (e) {
-      AppLogger.debug('[QgsProjectBuilder] 写真の列を読めない: $e');
-      return const [];
-    }
-  }
 
   /// `.qgs` から見た相対パス（[relativeInside]）。root外を指していたら null。
   /// QGIS は `./` 始まりを相対パスとして扱う。区切りは常に `/`

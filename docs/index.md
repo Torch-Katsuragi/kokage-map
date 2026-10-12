@@ -20,7 +20,6 @@ tags: [index, navigation]
 | [[features/project-management]] | プロジェクト・GeoPackage管理（フォルダ構造、メタデータ） |
 | [[features/google-drive]] | Google Drive連携（同期、共有） |
 | [[features/ui-ux]] | UI/UXの方向性（ツールバー、レイヤーパネル、ジェスチャー） |
-| [[features/feature-photos]] | 地物の写真（カメラで撮って付ける・QGIS の ExternalResource） |
 | [[features/map-pdf]] | 地図の PDF 出力（A4・A3、縮尺・方位・凡例・出典入りの 1 ページ） |
 | [[features/geometry-types]] | レイヤジオメトリタイプ仕様（OGC Simple Features準拠） |
 

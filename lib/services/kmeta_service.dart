@@ -225,7 +225,6 @@ class KMetaService {
           !s.layers.keys.every(keep) ||
           !rawMeta.views.keys.every(keep) ||
           !rawMeta.forms.keys.every(keep) ||
-          !rawMeta.photoFields.keys.every(keep) ||
           !rawMeta.joins.keys.every(keep);
       if (!touched) return true;
       final updatedMeta = rawMeta.copyWith(
@@ -239,7 +238,6 @@ class KMetaService {
         styles: KMetaStyles(defaultStyle: s.defaultStyle, layers: kept(s.layers)),
         views: kept(rawMeta.views),
         forms: kept(rawMeta.forms),
-        photoFields: kept(rawMeta.photoFields),
         joins: kept(rawMeta.joins),
       );
       return saveMeta(folderPath, updatedMeta);
@@ -351,19 +349,6 @@ class KMetaService {
     });
   }
 
-  /// アプリが作った写真の列を覚える（`.qgs` に写真の欄を書く印。[KMeta.photoFields]）
-  Future<bool> addPhotoField(String folderPath, String layerKey, String column) {
-    return _serial(folderPath, () async {
-      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-      final current = rawMeta.photoFields[layerKey] ?? const <String>[];
-      if (current.contains(column)) return true;
-      return saveMeta(
-        folderPath,
-        rawMeta.copyWith(photoFields: {...rawMeta.photoFields, layerKey: [...current, column]}),
-      );
-    });
-  }
-
   /// 表の結合を差し替える（空なら外す）。中身が同じなら書かない
   Future<bool> setLayerJoins(String folderPath, String layerKey, List<LayerJoin> joins) {
     return _serial(folderPath, () async {
@@ -465,7 +450,6 @@ class KMetaService {
         styles: KMetaStyles(defaultStyle: rawMeta.styles.defaultStyle, layers: moveAll(rawMeta.styles.layers)),
         views: moveAll(rawMeta.views),
         forms: moveAll(rawMeta.forms),
-        photoFields: moveAll(rawMeta.photoFields),
         joins: moveAll(rawMeta.joins),
         layout: KMetaLayout(sortOrder: newSortOrder, expanded: rawMeta.layout.expanded),
       );

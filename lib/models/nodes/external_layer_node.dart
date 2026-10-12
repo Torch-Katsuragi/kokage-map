@@ -169,7 +169,7 @@ class ExternalLayerNode extends GeoPackageNode {
     for (final entry in files) {
       if (!ExternalSource.isCandidate(entry.path)) continue; // 速い足切り（中身は読まない）
       if (!await ExternalSource.accepts(entry.path)) {
-        // 座標の列が無い CSV は形の無い表（森林簿など。レイヤに結合して使う）
+        // 座標の列が無い CSV は形の無い表（森林簿など。QGIS で設定した結合の先として読む）
         if (tableExtensions.contains(p.extension(entry.path).toLowerCase())) {
           nodes.add(TableNode(entry.path, parent: parent));
         }

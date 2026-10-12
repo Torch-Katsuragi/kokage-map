@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/services/table/csv_table.dart';
-import 'package:root_maps/widgets/table_join/table_view_dialog.dart';
+import 'package:root_maps/widgets/layer_drawer/table_view_dialog.dart';
 
 void main() {
   testWidgets('空の数値のマスは空のまま（0 にしない）。値のあるマスは数で見せる', (tester) async {

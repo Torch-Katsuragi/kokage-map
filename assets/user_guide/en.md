@@ -150,6 +150,8 @@ These files placed in a folder appear as layers without importing. They are read
 
 They are read-only; display, style, labels, views, the attribute table and export all work. A Shapefile without a .cpg is read as Shift_JIS (CP932), as the Japanese QGIS does. KML becomes one layer per folder, and a file mixing points, lines and polygons becomes one layer per type.
 
+A CSV without coordinate columns (such as a stand register) appears in the list as a :icon-table_chart: table that you can tap to view. Table joins set up in QGIS are read as they are, and the joined fields show in the attribute table (read-only), styling and labels.
+
 ### Converting to gpkg to Edit
 
 When you try to draw on a read-only layer or change its attributes, the app asks "This layer is read-only. Convert it to gpkg to edit?". "Convert to gpkg to edit" in the row's long-press menu does the same.
@@ -321,17 +323,6 @@ Tap the attribute table button at the top to display the **attribute table at th
 Tap any cell in the attribute table to edit its value directly. Text and numeric input are supported.
 
 If you set up a layer's attribute form in QGIS on your PC (Layer Properties → Attributes Form), the app's inputs follow it. Value maps become a list to choose from and dates are picked from a calendar. Aliases become field names, and default values are filled in for new features. A feature is not saved while it breaks a constraint such as "Not null" (constraints that are not enforced only show a warning). Change the settings in QGIS.
-
-### Joining tables such as a stand register
-
-Put a CSV file without coordinate columns (such as a stand register, UTF-8 or Shift_JIS) in a folder and it appears in the layer list as a :icon-table_chart: table. Tap it to view its contents.
-
-Long-press the forest-plan layer → "Join table" and choose the table, the fields to match (for example the layer's compartment code and the table's), the fields to add and a field name prefix (`<table name>_` by default). The number of matching features is shown as you choose. Joined fields appear at the right of the attribute table with :icon-link: (read-only), and can be used in labels, QGIS-styled colors, attribute search and export ("Include joined table fields").
-
-- This is the same as a QGIS join. It is written to the .qgs so QGIS shows the join too, and joins set up in QGIS are read back
-- Matching is **exact**, as in QGIS (the integer 12 matches the text "12"). If codes mix full-width and half-width digits, turn on "Ignore full/half width and surrounding spaces". QGIS does not do this, so some features will not be joined there
-- If compartment and sub-compartment are separate columns, make a single code column (such as "12-1") on both sides first. Joins use one field on each side, as in QGIS
-- Joined fields cannot be used in the attribute table filter expression
 
 ### Filtering, Search & Replace
 

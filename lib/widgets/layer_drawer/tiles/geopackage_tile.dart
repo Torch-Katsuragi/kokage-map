@@ -31,7 +31,6 @@ import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../tutorial/tutorial.dart';
 import '../../external_layer_actions.dart';
-import '../../tree_tally/tree_tally_sheet.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
 import 'layer_tile.dart';
@@ -83,7 +82,6 @@ class GeoPackageTile extends ConsumerWidget {
       eye: nodeVisibilityEye(ref, node),
       menu: () => [
         if (external == null) RowMenuItem('add_layer', t.layerDrawer.layer.addLayer, icon: Icons.add),
-        if (external == null) RowMenuItem('tree_tally', t.treeTally.menu, icon: Icons.park),
         if (external != null) ...[
           RowMenuItem('convert', t.externalLayer.convertAction, icon: Icons.transform),
           RowMenuItem('copy', t.externalLayer.copyAction, icon: Icons.copy),
@@ -95,8 +93,6 @@ class GeoPackageTile extends ConsumerWidget {
         switch (v) {
           case 'add_layer':
             await showAddLayerDialog(context, ref, node);
-          case 'tree_tally' when external == null:
-            await showTreeTallySheet(context, node);
           case 'convert' when external != null:
             if (await confirmConvertExternalLayer(context, external) && context.mounted) {
               await convertExternalLayer(

@@ -461,19 +461,6 @@ You can survey multiple points and convert them to lines/polygons:
 - **Instrument height and target height corrections**
 - **Backsight correction** (automatic backsight calculation)
 
-### Tree Tally (Plot Survey)
-
-Record the trees in a sample plot one by one and get per-plot summaries. Works without a TruPulse too.
-
-1. In the layer list, open the menu on a gpkg heading and choose :icon-park: "Tree tally". The first time, `tally_plots` (plots) and `tally_trees` (trees) layers are created in the gpkg.
-2. Tap :icon-add_location: to create a circular plot centered on your position (0.05 ha = radius 12.62 m). For a polygon plot, draw a polygon in `tally_plots` and fill in its `plot_id` attribute.
-3. Pick the species, type the DBH on the number pad and tap "Record". The species carries over to the next tree.
-4. Enter the height by hand, or measure it in the TruPulse Height (HT) mode and it fills in automatically.
-5. For the position, choose "GNSS" (where you stand; the fix quality is recorded) or "TruPulse (from center)" (shoot the tree from the plot center).
-6. :icon-table_chart: "Summary" shows trees, trees/ha, basal area (m²/ha), mean DBH, mean height and top height per plot and per species. "Save as CSV" exports it.
-
-Pick a region under "Volume equation" in the summary (currently Kinki, Chugoku, Ishikawa, Fukui) to also see the volume (m³/ha) of sugi and hinoki. Other species and trees without a height are left out (values from only some trees are marked *).
-
 ---
 
 ## Settings

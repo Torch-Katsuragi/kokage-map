@@ -50,7 +50,6 @@ class TruPulseService extends ExternalDeviceService {
       StreamController<TruPulseMeasurement>.broadcast();
   TruPulseMeasurement? _lastMeasurement;
   int _measurementCount = 0;
-  final _heightController = StreamController<double>.broadcast();
 
   // 計測以外のシリアル応答を待つ問い合わせ
   Completer<String>? _pendingQuery;
@@ -74,12 +73,6 @@ class TruPulseService extends ExternalDeviceService {
   int get measurementCount => _measurementCount;
   Stream<TruPulseMeasurement> get measurementStream =>
       _measurementController.stream;
-
-  /// 高さルーチン（本体の HT モード）の結果（m）。docs/devices/trupulse-360r.md「高さ（HT）」
-  Stream<double> get heightStream => _heightController.stream;
-
-  /// 毎木調査の画面が計測を受け取っている間 true。地図の TruPulse ツールは点を作らない
-  bool claimedByTally = false;
 
   @override
   Future<List<BluetoothDevice>> scanDevices() async {
@@ -202,7 +195,7 @@ class TruPulseService extends ExternalDeviceService {
 
   /// TruPulseの出力行をパース（文の形は [TruPulseSentence]）
   ///
-  /// HV は計測、HT は高さルーチンの結果として流す。ML（2点間の連結ベクトル）は器械点からの位置ではないので流さない
+  /// HV だけを計測として流す。HT（高さルーチンの結果）・ML（2点間の連結ベクトル）は器械点からの位置ではないので流さない
   void _parseLine(String line) {
     _addLog(SerialDirection.rx, line);
     if (line.startsWith('\$OK')) return;
@@ -220,14 +213,8 @@ class TruPulseService extends ExternalDeviceService {
       AppLogger.debug('$_tag: 計測 #$_measurementCount: $measurement');
       return;
     }
-    if (sentence is TruPulseHeight) {
-      _heightController.add(sentence.heightM);
-      notifyListeners();
-      AppLogger.debug('$_tag: 高さ ${sentence.heightM.toStringAsFixed(2)} m');
-      return;
-    }
     if (sentence is TruPulseMissingLine) return;
-    // 読めなかった計測の文（低品質ターゲットで距離が空の HV・チェックサム違い）は問い合わせの応答ではない。
+    // HT の文と読めなかった計測の文（低品質ターゲットで距離が空の HV・チェックサム違い）は問い合わせの応答ではない。
     // 応答として渡すと `$ID` の問い合わせが計測の文を受け取ってしまう（ID の応答も `$PLTIT,ID,…` なので種類で見る）
     if (TruPulseSentence.isMeasurementLine(line)) return;
 
@@ -265,7 +252,6 @@ class TruPulseService extends ExternalDeviceService {
   void dispose() {
     disconnect();
     _measurementController.close();
-    _heightController.close();
     _logNotifier.close();
     super.dispose();
   }

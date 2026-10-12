@@ -18,13 +18,10 @@
 /// GpsHistoryRecorder から日付別のGPS軌跡を読み取り、
 /// 時間範囲の切り取り・Douglas-Peucker簡略化・ライン保存を行う。
 /// 保存時は抽出範囲のポイント詳細をsub_table JSONとして付与。
-/// 抽出範囲を GPX（時刻・標高つき）で書き出すこともできる。
 library;
 
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -41,7 +38,6 @@ import '../providers/ui_state_providers.dart';
 import '../services/gps_history_recorder.dart';
 import '../utils/app_logger.dart';
 import '../utils/geodesic.dart';
-import '../utils/gpx_writer.dart';
 import 'feature_editor/shared/line_preview_painter.dart';
 import 'feature_editor/shared/simplification_controls.dart';
 
@@ -49,10 +45,7 @@ import 'feature_editor/shared/simplification_controls.dart';
 class TrackExtractionDialog extends ConsumerStatefulWidget {
   final GpsHistoryRecorder recorder;
 
-  /// 最初に開く区間のフィーチャ名（`2026_09_12` / `2026_09_12 #2`）。無ければいちばん新しい区間
-  final String? initialName;
-
-  const TrackExtractionDialog({super.key, required this.recorder, this.initialName});
+  const TrackExtractionDialog({super.key, required this.recorder});
 
   @override
   ConsumerState<TrackExtractionDialog> createState() => _TrackExtractionDialogState();
@@ -101,9 +94,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
 
     setState(() {
       _availableDates = dates;
-      _selectedDate = dates.contains(widget.initialName)
-          ? widget.initialName
-          : (dates.isNotEmpty ? dates.first : null);
+      _selectedDate = dates.isNotEmpty ? dates.first : null;
     });
 
     if (_selectedDate != null) {
@@ -198,32 +189,6 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
       ]);
     }
     return jsonEncode(rows);
-  }
-
-  /// 抽出範囲（簡略化前の記録した点そのまま）を GPX で書き出す。保存先は端末の保存ダイアログ（web はダウンロード）
-  Future<void> _exportGpx() async {
-    if (_selectedPoints.length < 2 || _selectedDate == null) return;
-    final notify = ref.read(notificationCenterProvider.notifier);
-    final name = _selectedDate!;
-    final fileName = 'track_${name.replaceAll(' #', '_')}.gpx';
-    try {
-      final gpx = buildTrackGpx([_selectedPoints], name: t.track.trackLabel(date: GpsHistoryRecorder.formatLayerNameAsDate(name)));
-      final saved = await FilePicker.saveFile(
-        dialogTitle: t.track.exportGpx,
-        fileName: fileName,
-        bytes: Uint8List.fromList(utf8.encode(gpx)),
-        type: FileType.custom,
-        allowedExtensions: const ['gpx'],
-      );
-      if (saved == null) return; // 取りやめ
-      notify.add(
-        title: t.track.gpxExported(name: fileName, count: '${_selectedPoints.length}'),
-        level: NotificationLevel.success,
-      );
-    } catch (e) {
-      AppLogger.debug('[TrackExtractionDialog] GPX書き出しエラー: $e');
-      notify.add(title: t.track.gpxExportFailed(error: '$e'), level: NotificationLevel.error);
-    }
   }
 
   /// 保存処理
@@ -546,39 +511,28 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
 
             const SizedBox(height: 12),
 
-            // ボタン（狭い画面では折り返す）
-            SizedBox(
-              width: double.infinity,
-              child: Wrap(
-                alignment: WrapAlignment.end,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(null),
-                    child: Text(t.common.cancel),
-                  ),
-                  // 抽出範囲を GPX で（QGIS などへ。時刻・標高つき）
-                  OutlinedButton.icon(
-                    onPressed: _selectedPoints.length < 2 ? null : _exportGpx,
-                    icon: const Icon(Icons.file_download),
-                    label: Text(t.track.exportGpx),
-                  ),
-                  ElevatedButton(
-                    onPressed: _isSaving || _simplifiedLine.length < 2
-                        ? null
-                        : _saveTrack,
-                    child: _isSaving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(t.track.saveToLayer),
-                  ),
-                ],
-              ),
+            // ボタン
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  child: Text(t.common.cancel),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton(
+                  onPressed: _isSaving || _simplifiedLine.length < 2
+                      ? null
+                      : _saveTrack,
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(t.track.saveToLayer),
+                ),
+              ],
             ),
           ],
         ),

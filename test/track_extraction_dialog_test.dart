@@ -42,7 +42,7 @@ void main() {
     final recorder = _FakeRecorder();
     await tester.pumpWidget(ProviderScope(
       child: MaterialApp(
-        home: Scaffold(body: TrackExtractionDialog(recorder: recorder, initialName: '2026_10_01')),
+        home: Scaffold(body: TrackExtractionDialog(recorder: recorder)),
       ),
     ));
     await tester.pump();

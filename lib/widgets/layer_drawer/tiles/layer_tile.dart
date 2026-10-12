@@ -32,7 +32,6 @@ import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../screens/layer_style_settings_screen.dart';
 import '../../../services/geometry_conversion_service.dart';
-import '../../../services/gps_history_recorder.dart';
 import '../../../services/layer_drawer_service.dart';
 import '../../../services/survey/survey_chain_resolver.dart';
 import '../../../tutorial/practice_project.dart';
@@ -44,7 +43,6 @@ import '../../../widgets/geometry_conversion_dialogs.dart';
 import '../../../widgets/layer_import_export_dialog.dart';
 import '../../../widgets/survey_conversion_dialog.dart';
 import '../../../widgets/table_join/table_join_dialog.dart';
-import '../../../widgets/track_extraction_dialog.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
 import 'layer_swatch.dart';
@@ -136,11 +134,6 @@ class LayerTile extends ConsumerWidget {
   /// 表示・スタイル・View・書き出し・線や面への変換（書き込み先は別のレイヤ）はできる
   bool get _readOnly => isInReadOnlyLayer(node);
 
-  /// GPS 軌跡のレイヤ（記録中の端末だけ。記録係が読む gps_history.gpkg と同じもの）
-  bool get _isGpsTrack =>
-      GpsHistoryRecorder().isInitialized &&
-      GpsHistoryRecorder.isHistoryLayer(node.layerName, node.geoPackageFile.getAbsolutePath());
-
   List<RowMenuItem> _menuItems(bool guiding) => [
         RowMenuItem('zoom', t.layerDrawer.layer.zoomTo, icon: Icons.center_focus_strong),
         if (!_readOnly) RowMenuItem('rename', t.layerDrawer.layer.rename, icon: Icons.edit),
@@ -149,8 +142,6 @@ class LayerTile extends ConsumerWidget {
         // 森林簿 CSV などの表を結ぶ（QGIS の「結合」。読み取り専用レイヤでもできる。書くのはフォルダ設定）
         RowMenuItem('join_table', t.tableJoin.menu, icon: Icons.link),
         RowMenuItem('export', t.layerDrawer.layer.exportLayer, icon: Icons.file_download, dividerBefore: true),
-        // 軌跡は記録した点（時刻・標高つき）から GPX に。レイヤの書き出しの GPX は線の形だけ
-        if (_isGpsTrack) RowMenuItem('track_gpx', t.track.extractMenu, icon: Icons.timeline),
         if (node is PointLayerNode) RowMenuItem('convert_to_line', t.layerDrawer.layer.convertToLinePolygon, icon: Icons.transform),
         if (node is PolygonLayerNode && !_readOnly) RowMenuItem('merge', t.layerDrawer.layer.merge, icon: Icons.join_full),
         if (!_readOnly) RowMenuItem('absorb', t.layerDrawer.layer.absorbMatchingLayers, icon: Icons.merge_type),
@@ -177,14 +168,6 @@ class LayerTile extends ConsumerWidget {
         await _openStyleSettings(context, ref);
       case 'export':
         await LayerImportExportDialog.showExportDialog(context, exportLayer: node);
-      case 'track_gpx':
-        // 地図でこのレイヤの区間を選んでいれば、その区間から開く
-        final selected = ref.read(selectedFeaturesProvider).whereType<FeatureNode>().where((f) => f.parent == node);
-        final saved = await showDialog<bool>(
-          context: context,
-          builder: (_) => TrackExtractionDialog(recorder: GpsHistoryRecorder(), initialName: selected.firstOrNull?.name),
-        );
-        if (saved == true) ref.refreshMap();
       case 'convert_to_line' when node is PointLayerNode:
         await _convertPointsToLine(context, ref, node as PointLayerNode);
       case 'merge' when node is PolygonLayerNode:

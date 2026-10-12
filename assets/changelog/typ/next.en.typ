@@ -23,7 +23,7 @@
   [Measure tool (distance and area), length/area/perimeter in the info panel, and attribute search from the layer list that jumps to the feature],
   [Attributes are entered with the QGIS attribute form settings (value maps, dates, aliases, defaults, required fields and more)],
   [GPS survey records fix type, satellites, accuracy and averaging per point, and can reject fixes below thresholds (Settings → GPS & Positioning)],
-  [GPS track interval, minimum distance, dropping inaccurate points and jump rejection in Settings; export a track as GPX with time and elevation (opens in QGIS)],
+  [Set the GPS track interval, minimum distance, dropping of inaccurate points and jump rejection (Settings → GPS & Positioning)],
 )
 
 #fixes(

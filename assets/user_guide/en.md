@@ -258,9 +258,7 @@ On the web, use the mouse wheel to zoom and drag with the right button to rotate
 
 While the GPS tool is active, tap the :icon-timeline: track extraction button in the bottom-left. Select a date and time range from GPS position history, then save it to a line layer.
 
-While the app is open, the track is recorded automatically to gps_history.gpkg (layer gps_tracks) in the global folder. A gap of 10 minutes or more starts a new segment (`2026_10_12 #2`). You can also open it by long-pressing gps_tracks in the layer list and choosing :icon-timeline: "Extract track / export GPX".
-
-In the extraction screen, :icon-file_download: "Export GPX" saves the selected time range as GPX (GPX 1.1, with time and elevation per point). QGIS opens it directly as layers (tracks, track_points). Elevation is written as received (the phone's GPS reports ellipsoidal height, about 40 m above the elevation tiles in Japan).
+While the app is open, the track is recorded automatically to gps_history.gpkg (layer gps_tracks) in the global folder. A gap of 10 minutes or more starts a new segment (`2026_10_12 #2`).
 
 Under Settings → "GPS & Positioning", **Track recording** sets the recording interval (seconds), minimum distance between points (m), accuracy limit, and jump rejection (speed). The defaults are every second, accuracy up to ±100 m, and dropping jumps faster than 200 km/h. The location update rate does not change; points are picked from fixes already received, so battery use does not increase.
 

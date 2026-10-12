@@ -56,9 +56,6 @@ class MapSurfaceHandle implements MapSurfaceController {
   @override
   bool get isAttached => _surface != null;
 
-  /// 付いている地図面（PDF のスナップショットなど、カメラの外の窓口を使うとき）。外れていれば null
-  MapSurface? get surface => _surface;
-
   @override
   LatLng? get lastCenter => _lastCenter;
 

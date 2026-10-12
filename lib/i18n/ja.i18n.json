@@ -1496,28 +1496,6 @@
     "threshold": "閾値",
     "convert": "変換"
   },
-  "mapPdf": {
-    "menu": "地図を PDF に",
-    "dialogTitle": "地図を PDF に",
-    "paper": "用紙",
-    "orientation": "向き",
-    "landscape": "横",
-    "portrait": "縦",
-    "docTitle": "表題",
-    "notes": "備考",
-    "notesHint": "任意。凡例の下（縦向きは右）に入ります",
-    "about": "今の画面の範囲が入る縮尺で、真上から見た地図にします（3D で傾けていても）。表題・日付・縮尺・方位・凡例・地図の出典が入ります",
-    "create": "作る",
-    "rendering": "地図を描いています… $percent%",
-    "saved": "PDF を保存しました: $name",
-    "failed": "PDF を作れませんでした: $error",
-    "cancelled": "PDF の作成を取りやめました",
-    "notReady": "地図の用意ができていません。少し待ってからやり直してください",
-    "legend": "凡例",
-    "scale": "縮尺",
-    "source": "出典",
-    "more": "ほか $n 件"
-  },
   "level": {
     "title": "水準器",
     "tilt": "傾斜",

@@ -19,6 +19,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:google_sign_in/google_sign_in.dart';
@@ -33,6 +34,7 @@ import '../../core/shared_link.dart';
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
 import 'drive_auth_state.dart';
+import 'sign_in_failure.dart';
 import 'web_session_token.dart';
 import 'web_token_client.dart';
 
@@ -347,7 +349,7 @@ class GoogleDriveService {
           AppLogger.debug('[GoogleDriveService] サインイン成功: ${AppLogger.maskEmail(event.user.email)}');
         } catch (e) {
           AppLogger.debug('[GoogleDriveService] Drive API初期化エラー: $e');
-          authState.setError(t.services.signInFailed(error: e.toString()));
+          await _signInFailed(e, 'Drive API初期化');
         }
       case GoogleSignInAuthenticationEventSignOut():
         _currentUser = null;
@@ -357,50 +359,31 @@ class GoogleDriveService {
     }
   }
 
-  /// `GoogleSignInException` が「本当のユーザーキャンセル」かどうか
-  ///
-  /// ⚠ google_sign_in v7（Credential Manager）は**設定系のエラーを
-  /// `code=canceled` で返すことがある**（無効な serverClientId、SHA-1 未登録、
-  /// OAuth クライアント削除など）。コードだけ見て黙って握り潰すと、
-  /// 2026-07 の「Drive 同期サインイン不能」のように原因が何も残らない。
-  /// description に設定エラーの兆候があるものはエラーとして扱う。
-  static bool isUserCancellation(GoogleSignInException e) {
-    if (e.code != GoogleSignInExceptionCode.canceled) return false;
+  /// 通信できるかの確認。テストで差し替える
+  @visibleForTesting
+  static Future<bool> Function() onlineCheck = _checkOnline;
 
-    final desc = e.description?.toLowerCase() ?? '';
-    if (desc.isEmpty) return true;
-
-    // 設定エラー・認証情報なしを示す語（黙らせない）
-    const configErrorMarkers = [
-      'developer console', // 例: [28444] Developer console is not set up correctly
-      'deleted_client', // OAuth クライアント削除
-      'invalid_client',
-      'unregistered',
-      'client id',
-      'clientid', // serverClientId など
-      'sha-1',
-      'sha1',
-      'certificate',
-      'api exception',
-      'apiexception',
-      'no credential', // 認証情報なし系
-      'credential is unavailable',
-      'reauth',
-    ];
-    if (configErrorMarkers.any(desc.contains)) return false;
-
-    // GMS/GIS のステータスコード付きメッセージ
-    // （10: DEVELOPER_ERROR、16: 内部エラー/ブロック、28444: コンソール未設定）
-    if (RegExp(r'\[?(10|16|28444)[\]:]').hasMatch(desc)) return false;
-
-    return true;
-  }
-
-  /// `GoogleSignInException` を表示用に整形する（code と description を必ず残す）
-  static String formatSignInError(GoogleSignInException e) {
-    final desc = e.description;
-    if (desc == null || desc.isEmpty) return e.code.name;
-    return '${e.code.name}: $desc';
+  /// 通信できるか。connectivity_plus は**インターフェイスの有無**しか見ないので、
+  /// native は短いタイムアウトで実際に 1 本投げて確かめる（圏外でもモバイル回線は「接続中」のまま）。
+  /// web はブラウザが繋がっていなければそもそもこの画面まで来にくいので、インターフェイスだけ見る。
+  /// 確かめられないとき（プラグイン無しなど）は「通信できる」とする
+  static Future<bool> _checkOnline() async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      if (results.isEmpty || results.every((r) => r == ConnectivityResult.none)) return false;
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] 接続状態を取れない: $e');
+    }
+    if (PlatformCapabilities.isWeb) return true;
+    try {
+      await http
+          .head(Uri.parse('https://clients3.google.com/generate_204'))
+          .timeout(const Duration(seconds: 3));
+      return true;
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] 到達確認に失敗: $e');
+      return false;
+    }
   }
 
   /// サインイン
@@ -442,24 +425,25 @@ class GoogleDriveService {
       // ここはボタン直下なので選択画面が出てよい
       return await _authenticateInteractively();
     } catch (e) {
-      return _signInFailed(e, 'サインイン');
+      return await _signInFailed(e, 'サインイン');
     }
   }
 
-  /// サインイン（[what]）の失敗を状態に写して false を返す。本当のキャンセルならエラーにしない
-  bool _signInFailed(Object e, String what) {
-    if (e is GoogleSignInException) {
-      if (isUserCancellation(e)) {
-        AppLogger.debug('[GoogleDriveService] $whatキャンセル: code=${e.code.name} description=${e.description}');
+  /// サインイン（[what]）の失敗を状態に写して false を返す
+  ///
+  /// 圏外なら何のエラーでも「通信できない」、本当のキャンセルならエラーにしない、
+  /// それ以外は短い文言にサポート用のコード（[DriveAuthState.errorDetail]）を添える
+  Future<bool> _signInFailed(Object e, String what) async {
+    final failure = classifySignInFailure(e, online: await onlineCheck());
+    AppLogger.debug('[GoogleDriveService] $what失敗(${failure.kind.name}): ${failure.detail}');
+    switch (failure.kind) {
+      case SignInFailureKind.cancelled:
         authState.setUnauthenticated();
-        return false;
-      }
-      AppLogger.debug('[GoogleDriveService] $whatエラー: code=${e.code.name} description=${e.description}');
-      authState.setError(t.services.signInFailed(error: formatSignInError(e)));
-      return false;
+      case SignInFailureKind.offline:
+        authState.setError(t.drive.signInOffline, detail: failure.detail);
+      case SignInFailureKind.other:
+        authState.setError(t.drive.signInFailed, detail: failure.detail);
     }
-    AppLogger.debug('[GoogleDriveService] $whatエラー: $e');
-    authState.setError(t.services.signInFailed(error: e.toString()));
     return false;
   }
 
@@ -477,7 +461,8 @@ class GoogleDriveService {
       try {
         await _initializeDriveApi(user);
       } on GoogleSignInException catch (e) {
-        if (!isUserCancellation(e)) rethrow;
+        // 圏外で閉じられたものは同意の案内でなく「通信できない」へ回す
+        if (!isUserCancellation(e) || !await onlineCheck()) rethrow;
         AppLogger.debug('[GoogleDriveService] スコープ同意キャンセル: code=${e.code.name} description=${e.description}');
         authState.setError(t.drive.consentCanceled);
         return false;
@@ -530,7 +515,7 @@ class GoogleDriveService {
       // authenticate() でアカウント選択UIが表示される
       return await _authenticateInteractively();
     } catch (e) {
-      return _signInFailed(e, 'アカウント切替');
+      return await _signInFailed(e, 'アカウント切替');
     }
   }
 

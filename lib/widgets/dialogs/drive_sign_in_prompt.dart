@@ -43,6 +43,9 @@ class _DriveSignInPromptState extends State<DriveSignInPrompt> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  /// サポート用のコード（[_errorMessage] の下に小さく出す）
+  String? _errorDetail;
+
   @override
   void initState() {
     super.initState();
@@ -93,14 +96,16 @@ class _DriveSignInPromptState extends State<DriveSignInPrompt> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _errorDetail = null;
     });
     try {
       final success = await _driveService.signIn();
       if (success) {
         _notifySignedIn();
       } else {
-        _errorMessage =
-            _driveService.authState.errorMessage ?? t.drive.signInFailed;
+        // 本当のキャンセルなら errorMessage は null。何も出さずにそのまま待つ
+        _errorMessage = _driveService.authState.errorMessage;
+        _errorDetail = _driveService.authState.errorDetail;
       }
     } catch (e) {
       _errorMessage = t.drive.signInError(error: e.toString());
@@ -149,6 +154,17 @@ class _DriveSignInPromptState extends State<DriveSignInPrompt> {
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.red, fontSize: 12),
           ),
+          if (_errorDetail != null) ...[
+            const SizedBox(height: 4),
+            SelectableText(
+              _errorDetail!,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: 10,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
         ],
       ],
     );

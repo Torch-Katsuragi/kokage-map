@@ -1080,6 +1080,7 @@
     "invalidUrl": "Invalid Google Drive URL",
     "accessDenied": "Cannot access folder. Check sharing settings.",
     "signInFailed": "Sign-in failed",
+    "signInOffline": "Cannot sign in without a connection. Please try again where you have signal.",
     "consentCanceled": "Google Drive access isn't allowed yet. Sign in again; if you see \"Google hasn't verified this app\", tap \"Advanced\" → \"Go to … (unsafe)\", tick the Drive item and tap \"Continue\"",
     "signInError": "Sign-in error: $error",
     "fetchError": "Failed to get folder info: $error",
@@ -1244,7 +1245,6 @@
   },
   "services": {
     "downloadInProgress": "Download already in progress",
-    "signInFailed": "Sign-in failed: $error",
     "projectNotFound": "Project folder not found",
     "uploadFailed": "File upload failed ($count skipped)",
     "downloadFailed": "File download failed ($count skipped)",

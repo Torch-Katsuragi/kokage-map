@@ -538,6 +538,8 @@ web は新しい世代の GPU 転送が非同期で、終わるまで白だっ�
 統合は全件を組み直さず `FeatureGeoJsonCache.rebuildFeatures` で今日の 1 本だけ差し替え（軌跡のレイヤが見えていなければ何もしない）、
 線の後ろに足しただけなら変わった範囲は足した区間だけ。寄った段のテクスチャは面の塗りしか焼かないので、
 `lastChangeHasFills` が false の出来事では寄った段を焼き直さない（シーンの作り直しは線も描くので範囲で見る）。[[performance#2026-10-12 置いたままの焼き直し（d2/rebake-loop）]]
+線の後ろに足しただけの伸び（`lastChangeExtension`）は、タイルごとに貯めた範囲がそのテクスチャの 1 texel に届くまで焼き直さない
+（引いた段で GPS の揺れ数 m を焼き直していた）。[[performance#1 texel に届かない線の伸びは焼き直さない（d2/bake-subpixel）]]
 
 ### web のマウス操作とコンテキストメニュー
 

@@ -54,7 +54,8 @@
   [QGIS settings (Views, legends, background maps) of a folder cloned from Drive were not applied until the map was reopened; they are now read back when the clone finishes (and when a .qgs arrives by sync)],
   [The attribute table pager overflowed on a phone in portrait, the info panel showed "Unnamed feature" for layers without a name column, and the attribute table would not open with no layer selected; it now opens the layer of the feature selected on the map],
   [Features added on Android to a QGIS-made gpkg were missing from the rtree of the file uploaded to Drive, so QGIS extent queries did not find them; triggers are now restored and the rtree rebuilt before upload and when going to the background],
-  [Signing in to Drive without signal showed a raw error ([16] Account reauth failed); it now says there is no connection, and closing the sign-in yourself shows nothing]
+  [Signing in to Drive without signal showed a raw error ([16] Account reauth failed); it now says there is no connection, and closing the sign-in yourself shows nothing],
+  [Files uploaded by earlier versions could have none of the rtree triggers left, so QGIS extent queries missed features; after the app writes to them, standard triggers are recreated and the rtree rebuilt before they leave the device]
 )
 
 #fixes(

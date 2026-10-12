@@ -21,6 +21,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../services/geodiff/geodiff.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/wkb_utils.dart';
+import 'gpkg_rtree_triggers.dart';
 import 'sql_identifier.dart';
 
 /// 外から行を書き換えられた GeoPackage の索引を実データに合わせ直す。
@@ -51,39 +52,82 @@ abstract final class GpkgIndexRepair {
       return -1;
     }
     if (plan.isEmpty) return 0;
+    return await _execute(path, plan.statements) ? plan.tables : -1;
+  }
 
-    // まずアプリの SQLite で（rtree があれば）。無ければ geodiff の SQLite で
+  /// rtree が登録され rtree の表もあるのにトリガーが 1 つも無い表（[GpkgRtreeTriggers.findMissing]）に、
+  /// 規格（GDAL が今書くもの）のトリガーを作り、その表の rtree・範囲・件数を実データに合わせる。
+  /// 直した表の数を返す（失敗は -1、投げない）。直す表が無ければファイルを書かない（読むだけで開く）。
+  ///
+  /// 以前の版が Android でトリガーを落としたまま Drive へ上げたファイルを、アプリが書いたあと外へ出す前に直す
+  /// （`GeoPackageFile.prepareForHandOff`・閉じたあと）。呼ぶ前にアプリの接続を閉じておくこと。
+  ///
+  /// ⚠ **Android 本体の SQLite（sqflite）ではトリガーを作らない**（ST_ 関数も rtree も無く、作ると次の書き込みが落ちる）。
+  /// 組んだ SQL は rtree の DELETE から始まるので、rtree の無い SQLite では最初の文で落ち、geodiff の SQLite で流し直す
+  static Future<int> healRtreeTriggers(String path) async {
+    final List<RtreeTriggerGap> gaps;
+    final _Plan plan;
+    try {
+      final db = await openDatabase(path, readOnly: true, singleInstance: false);
+      try {
+        gaps = await GpkgRtreeTriggers.findMissing(db);
+        if (gaps.isEmpty) return 0;
+        plan = await _plan(db, onlyRtrees: {for (final g in gaps) g.rtree.toLowerCase()});
+      } finally {
+        await db.close();
+      }
+    } catch (e) {
+      AppLogger.debug('[GpkgIndexRepair] $path を読めない: $e');
+      return -1;
+    }
+    // rtree を焼き直せる表だけ（主キー・形の列が引けたもの）。rtree の文を先に、トリガーをあとに
+    final healed = [for (final g in gaps) if (plan.rtrees.contains(g.rtree.toLowerCase())) g];
+    if (healed.isEmpty) return 0;
+    final statements = [
+      ...plan.statements,
+      for (final g in healed) ...[
+        for (final name in g.triggers.keys) 'DROP TRIGGER IF EXISTS ${quoteIdent(name)}',
+        ...g.triggers.values,
+      ],
+    ];
+    if (!await _execute(path, statements)) return -1;
+    AppLogger.debug('[GpkgIndexRepair] rtree のトリガーを作り直した: ${[for (final g in healed) g.table].join(', ')}');
+    return healed.length;
+  }
+
+  /// [statements] を 1 つのトランザクションで流す。まずアプリの SQLite で（rtree があれば）、無ければ geodiff の SQLite で
+  static Future<bool> _execute(String path, List<String> statements) async {
     Database? db;
     try {
       db = await openDatabase(path, singleInstance: false);
       await db.transaction((txn) async {
-        for (final sql in plan.statements) {
+        for (final sql in statements) {
           await txn.execute(sql);
         }
       });
-      return plan.tables;
+      return true;
     } on DatabaseException catch (e) {
       if (!'$e'.contains('no such module: rtree')) {
         AppLogger.debug('[GpkgIndexRepair] $path の焼き直しに失敗: $e');
-        return -1;
+        return false;
       }
     } catch (e) {
       AppLogger.debug('[GpkgIndexRepair] $path の焼き直しに失敗: $e');
-      return -1;
+      return false;
     } finally {
       await db?.close();
     }
 
-    if (!Geodiff.isSupported) return -1;
+    if (!Geodiff.isSupported) return false;
     final g = Geodiff();
     try {
-      final err = g.execSql(path, 'BEGIN;\n${plan.statements.join(';\n')};\nCOMMIT;');
+      final err = g.execSql(path, 'BEGIN;\n${statements.join(';\n')};\nCOMMIT;');
       if (err != null) {
         AppLogger.debug('[GpkgIndexRepair] geodiff の SQLite でも失敗: $err');
-        return -1;
+        return false;
       }
-      AppLogger.debug('[GpkgIndexRepair] rtree を geodiff の SQLite で焼き直した: ${plan.tables} テーブル');
-      return plan.tables;
+      AppLogger.debug('[GpkgIndexRepair] rtree を geodiff の SQLite で焼き直した');
+      return true;
     } finally {
       g.dispose();
     }
@@ -101,8 +145,11 @@ abstract final class GpkgIndexRepair {
   }
 
   /// 実データから、rtree・gpkg_contents・gpkg_ogr_contents を書き直す SQL を組む（読むだけ）
-  static Future<_Plan> _plan(Database db) async {
+  ///
+  /// [onlyRtrees] を渡すと、その rtree（小文字の名前）の表だけ
+  static Future<_Plan> _plan(Database db, {Set<String>? onlyRtrees}) async {
     final statements = <String>[];
+    final rtrees = <String>{};
     var tables = 0;
     final hasOgr = (await db.rawQuery(
       "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'gpkg_ogr_contents'",
@@ -113,6 +160,7 @@ abstract final class GpkgIndexRepair {
       final geomCol = c['column_name'] as String?;
       if (table == null || geomCol == null) continue;
       final rtree = 'rtree_${table}_$geomCol';
+      if (onlyRtrees != null && !onlyRtrees.contains(rtree.toLowerCase())) continue;
       final hasRtree = (await db.rawQuery(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
         [rtree],
@@ -153,8 +201,9 @@ abstract final class GpkgIndexRepair {
         statements.add('UPDATE gpkg_ogr_contents SET feature_count = ${rows.length} WHERE table_name = ${quoteSqlString(table)}');
       }
       tables++;
+      rtrees.add(rtree.toLowerCase());
     }
-    return _Plan(statements, tables);
+    return _Plan(statements, tables, rtrees);
   }
 
   static Future<String?> _primaryKey(Database db, String table) async {
@@ -169,8 +218,11 @@ abstract final class GpkgIndexRepair {
 }
 
 class _Plan {
-  const _Plan(this.statements, this.tables);
+  const _Plan(this.statements, this.tables, this.rtrees);
   final List<String> statements;
   final int tables;
+
+  /// 焼き直す rtree（小文字の名前）
+  final Set<String> rtrees;
   bool get isEmpty => statements.isEmpty;
 }

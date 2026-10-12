@@ -107,6 +107,7 @@ Pixel 9 で触ったフォルダを Drive から落として QGIS 4.2.2 で開�
 - [ ] KMZ を変換・書いた `.qgs` を開いて同じレイヤ名・件数
 - [ ] QGIS 製の gpkg（rtree・トリガーつき）: Pixel 9 で地図を開いたまま点を足す → Drive 同期 → PC で落として `ogrinfo -spat <足した点の周り> x.gpkg 調査点` に足した点が出る。`sqlite_master` に `rtree_調査点_geom_*` のトリガーが元どおり、`rtree_調査点_geom` の件数が表と同じ。続けてアプリで点を足せる（ログに `no such function: ST_IsEmpty` が出ない）
 - [ ] 同じく点を足してホームボタンで裏に回す → `adb pull` した gpkg で上と同じ（同期しなくても整う）
+- [ ] トリガーが 1 つも無い gpkg（今日 Drive にあった「調査点」）: Pixel 9 で点を 1 つ足して同期 → PC で `sqlite_master` に `rtree_調査点_geom_*` が 7 つ（insert・update2/4/5/6/7・delete）、`rtree_調査点_geom` の件数が表と同じ、`ogrinfo -spat` で全件出る。QGIS で点を動かすと rtree が追う。Android の geodiff の SQLite で作れたか（ログ「rtree のトリガーを作り直した」）
 
 ### 8. メモリ・大きさ（profile 版と DevTools。n9/size-mem）
 

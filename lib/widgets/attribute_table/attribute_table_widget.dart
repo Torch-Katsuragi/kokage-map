@@ -85,11 +85,8 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       rowHeight: 32,
       columnHeight: 36,
       cellTextStyle: const TextStyle(fontSize: 13, height: 1.2),
-      columnTextStyle: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.bold,
-        height: 1.2,
-      ),
+      // 列の最初の幅（[AttributeTableController.columnWidthFor]）もこの文字で測る
+      columnTextStyle: AttributeTableController.columnTitleStyle,
       borderColor: Colors.grey.shade300,
       activatedBorderColor: Colors.blue.shade300,
       evenRowColor: Colors.grey.shade50,

@@ -216,6 +216,33 @@ void main() {
     expect(next.pageSize, 200);
   });
 
+  testWidgets('結合した列の最初の幅は、接頭辞つきの列名と鎖の印が収まる幅（ふつうの列と同じ決め方）', (tester) async {
+    await tester.runAsync(() async {
+      await open();
+      layer = PointLayerNode(gpkg, 'pts', parent: GeoPackageNode(gpkg));
+      await layer.updateChildren();
+    });
+    addTearDown(() => tester.runAsync(close));
+    final table = CsvTable.parse(Uint8List.fromList(utf8.encode('name,樹種\np0,スギ\n')));
+    layer.debugJoins = [
+      ResolvedJoin.build(const LayerJoin(table: 't.csv', joinField: 'name', targetField: 'name', prefix: '簿_'), table)!,
+    ];
+    final ctrl = await pumpController(tester);
+    await tester.runAsync(ctrl.initialize);
+    final joined = ctrl.columns.firstWhere((c) => c.field == '簿_樹種');
+    final painter = TextPainter(
+      text: const TextSpan(text: '簿_樹種', style: AttributeTableController.columnTitleStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    // 以前は 60 で決め打ち（鎖の印と「…」しか見えなかった）
+    expect(joined.width, greaterThanOrEqualTo(painter.width + 16 + 36));
+    expect(joined.width, AttributeTableController.columnWidthFor('簿_樹種', title: '簿_樹種') + 16);
+    painter.dispose();
+    // 短い列名のふつうの列は今までの幅より狭くしない
+    expect(ctrl.columns.firstWhere((c) => c.field == 'h').width, 60);
+    expect(AttributeTableController.columnWidthFor('x' * 100), AttributeTableController.maxColumnWidth);
+  });
+
   testWidgets('数の列の NULL は (NULL) と見せる（0 にしない）。結合した表の数の列も', (tester) async {
     await tester.runAsync(() async {
       await open();

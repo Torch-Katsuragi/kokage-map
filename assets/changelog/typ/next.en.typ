@@ -11,8 +11,6 @@
 
 #fixes(
   "New",
-  [Tree tally: record species, DBH and height in circular or polygon plots, then summarize trees/ha, basal area and mean height and save as CSV (height also from TruPulse HT)],
-  [Tree tally summaries show sugi and hinoki stem volume (m³/ha) for Kinki, Chugoku, Ishikawa and Fukui, from the Forestry Agency's West Japan volume table equations],
   [Save the map as a one-page PDF (≡ menu): A4/A3, title, date, scale, north arrow, legend and credits, drawn from above],
   [Attach photos to features: the camera app saves them in photos/ next to the data and the photo column holds the path (shown in QGIS forms)],
   [Join a stand-register CSV to a forest-plan layer (QGIS join); joined fields in the attribute table, labels, styling, search and export; round-trips with .qgs],

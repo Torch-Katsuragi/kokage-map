@@ -128,8 +128,6 @@ class TruPulseTool extends DeviceTool {
   Future<void> _onMeasurement(TruPulseMeasurement m) async {
     AppLogger.debug('[TruPulseTool] _onMeasurement called: $m');
     try {
-      // 毎木調査の画面が開いている間は、計測は立木の位置に使う
-      if (_service.claimedByTally) return;
       if (_station == null || _mapState == null) {
         AppLogger.debug('[TruPulseTool] Station or mapState not set');
         return;

@@ -4,27 +4,17 @@ import 'package:root_maps/devices/trupulse/trupulse_sentence.dart';
 import 'package:root_maps/devices/trupulse/trupulse_service.dart';
 
 void main() {
-  group('HT（高さ）', () {
-    test('マニュアルの例: 22.10 F → メートル', () {
-      final s = TruPulseSentence.parse(r'$PLTIT,HT,22.10,F*0C');
-      expect(s, isA<TruPulseHeight>());
-      expect((s as TruPulseHeight).heightM, closeTo(22.10 * 0.3048, 1e-9));
-    });
+  test('HT（高さ）は計測にしないが、計測の文として扱う', () {
+    // マニュアルの例
+    expect(TruPulseSentence.parse(r'$PLTIT,HT,22.10,F*0C'), isNull);
+    expect(TruPulseSentence.isMeasurementLine(r'$PLTIT,HT,22.10,F*0C'), isTrue);
+  });
 
-    test('メートル設定の文（チェックサムを計算して付ける）', () {
-      const body = 'PLTIT,HT,18.45,M';
-      final cs = TruPulseSentence.checksum(body).toRadixString(16).toUpperCase().padLeft(2, '0');
-      final s = TruPulseSentence.parse('\$$body*$cs\r\n');
-      expect((s as TruPulseHeight).heightM, 18.45);
-    });
-
-    test('チェックサム違いは捨てる', () {
-      expect(TruPulseSentence.parse(r'$PLTIT,HT,22.10,F*0D'), isNull);
-    });
-
-    test('値が空なら捨てる', () {
-      expect(TruPulseSentence.parse(r'$PLTIT,HT,,F'), isNull);
-    });
+  test('チェックサムを計算して付けた文を読み、合わない文は捨てる', () {
+    const body = 'PLTIT,HV,10.00,M,90.00,D,0.00,D,10.00,M';
+    final cs = TruPulseSentence.checksum(body).toRadixString(16).toUpperCase().padLeft(2, '0');
+    expect(TruPulseSentence.parse('\$$body*$cs\r\n'), isA<TruPulseVector>());
+    expect(TruPulseSentence.parse(r'$PLTIT,HT,22.10,F*0D'), isNull);
   });
 
   group('HV（計測）', () {
@@ -68,8 +58,9 @@ void main() {
     final service = TruPulseService();
     final answer = service.query('ID');
     await Future<void>.delayed(const Duration(milliseconds: 150)); // sendCommand の待ちのあと
-    // 低品質ターゲットの HV（距離が空）とチェックサム違いの HT
+    // 低品質ターゲットの HV（距離が空）・HT（高さ）・チェックサム違いの HT
     service.debugReceiveLine(r'$PLTIT,HV,,,187.10,D,8.40,D,,*64');
+    service.debugReceiveLine(r'$PLTIT,HT,22.10,F*0C');
     service.debugReceiveLine(r'$PLTIT,HT,22.10,F*0D');
     service.debugReceiveLine(r'$PLTIT,ID,TP360 MAIN,2.42*74');
     expect(await answer, r'$PLTIT,ID,TP360 MAIN,2.42*74');

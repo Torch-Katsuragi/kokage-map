@@ -285,12 +285,7 @@ class GpsTool extends MapTool with PanDelegation {
   }
 
   /// 現在のGPS位置を記録（単発）。足切りの条件を満たさなければ記録しない（警告だけにしていれば記録して警告）
-  ///
-  /// [into] を渡すと選択中のレイヤでなくそのレイヤに点を作り、[extra] の属性も書く（毎木調査の記録）
-  Future<GpsSurveyResult> recordCurrentGpsPosition({
-    PointLayerNode? into,
-    Map<String, dynamic> extra = const {},
-  }) async {
+  Future<GpsSurveyResult> recordCurrentGpsPosition() async {
     // 長押し中の場合は何もしない
     if (_isLongPressing) {
       AppLogger.debug('[GpsTool] 長押し中のため単発GPS記録をスキップ');
@@ -359,7 +354,7 @@ class GpsTool extends MapTool with PanDelegation {
       AppLogger.debug('[GpsTool] 単発測量 optimizedGpsData: $optimizedGpsData');
 
       // 現在選択中のレイヤーに応じてデータを追加
-      final LayerNode? selected = into ?? _ref.read(selectedLayerNodeProvider);
+      final selected = _ref.read(selectedLayerNodeProvider);
       // 読み取り専用レイヤ（shp・GeoJSON など）には記録しない
       if (refuseReadOnlyEditBy(_ref.read, selected)) return GpsSurveyResult.failed;
       if (selected is PointLayerNode) {
@@ -372,7 +367,6 @@ class GpsTool extends MapTool with PanDelegation {
             ..._gpsAttributes(gpsInfo),
             'nmea': gpsInfo['nmea'],
             'sample_count': 1, // 単発測量なので1
-            ...extra,
           },
           optimizedGpsData,
         );

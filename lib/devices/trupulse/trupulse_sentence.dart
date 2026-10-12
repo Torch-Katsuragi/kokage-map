@@ -18,7 +18,7 @@
 /// 出典: LTI TruPulse 360 User's Manual 4th Edition (part 0144801),
 /// Section 8 "Download Message Formats" p.43–45。
 /// - HV: `$PLTIT,HV,HD,units,AZ,D,INC,D,SD,units*csum`
-/// - HT: `$PLTIT,HT,HT,units*csum`（高さルーチンの結果）
+/// - HT: `$PLTIT,HT,HT,units*csum`（高さルーチンの結果）。アプリは使わないので値は読まず、[isMeasurementLine] で応答と区別するだけ
 /// - ML: `$PLTIT,ML,HD,units,AZ,D,INC,D,SD,units*csum`（2点間の連結ベクトル）
 ///
 /// チェックサムは `$` と `*` の間の全文字の XOR（NMEA 0183 と同じ）。付いていて合わない行は捨てる。
@@ -31,7 +31,7 @@ import 'dart:math' as math;
 sealed class TruPulseSentence {
   const TruPulseSentence();
 
-  /// 1行を解釈する。`$PLTIT` の HV / HT / ML 以外、値の欠けた文、チェックサムの合わない文は null
+  /// 1行を解釈する。`$PLTIT` の HV / ML 以外（HT も）、値の欠けた文、チェックサムの合わない文は null
   static TruPulseSentence? parse(String line) {
     var s = line.trim();
     if (!s.startsWith(r'$PLTIT,')) return null;
@@ -56,10 +56,6 @@ sealed class TruPulseSentence {
         return p[1] == 'HV'
             ? TruPulseVector(hd: hd, az: az, inc: inc, sd: sd)
             : TruPulseMissingLine(hd: hd, az: az, inc: inc, sd: sd);
-      case 'HT':
-        if (p.length < 4) return null;
-        final ht = _dist(p[2], p[3]);
-        return ht == null ? null : TruPulseHeight(ht);
     }
     return null;
   }
@@ -100,12 +96,6 @@ class TruPulseVector extends TruPulseSentence {
 
   /// 鉛直距離 = HD × tan(INC)
   double get vd => hd * math.tan(inc * math.pi / 180.0);
-}
-
-/// HT（Height）: 高さルーチン（HD → 角度1 → 角度2 の3ショット）で本体が算出した高さ（m）
-class TruPulseHeight extends TruPulseSentence {
-  final double heightM;
-  const TruPulseHeight(this.heightM);
 }
 
 /// ML（Missing Line）: 2ショットの間の連結ベクトル。器械点からの位置ではないので点の生成には使わない

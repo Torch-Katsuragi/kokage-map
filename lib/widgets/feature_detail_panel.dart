@@ -29,6 +29,7 @@ import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/overlay_image_node.dart';
+import '../presentation/feature_display_name.dart';
 import '../providers/notification_providers.dart';
 import '../providers/project_providers.dart';
 import '../providers/selection_providers.dart';
@@ -220,6 +221,12 @@ class FeatureDetailPanel extends ConsumerWidget {
       ];
 
       final children = <Widget>[
+        // QGIS の表示名（式が列 1 つだけならその列の行で足りるので出さない）
+        if (featureQgisDisplayName(node) case final display?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4.0),
+            child: _labelRow(t.featureDetail.displayNameLabel, display),
+          ),
         for (final (label, value) in measures)
           Padding(
             padding: const EdgeInsets.only(bottom: 4.0),
@@ -294,10 +301,10 @@ class FeatureDetailPanel extends ConsumerWidget {
 
   static const _small = TextStyle(fontSize: 11);
 
-  /// 案内の見出し: 地物の名前（無ければ種類）
+  /// 案内の見出し: 地物の表示名（無ければ種類）
   static String _guidanceLabel(FeatureNode node) {
-    final name = node.name;
-    if (name.trim().isNotEmpty && name != t.featureDetail.unnamed) return name;
+    final name = featureDisplayName(node);
+    if (name != null && name.trim().isNotEmpty) return name;
     return switch (node) {
       PointFeatureNode() => t.featureDetail.typePoint,
       LineFeatureNode() => t.featureDetail.typeLine,

@@ -1039,6 +1039,7 @@
     "rotationLabel": "Rot: ",
     "viewPhoto": "View the photo",
     "nameLabel": "Name: ",
+    "displayNameLabel": "Display name: ",
     "pathLabel": "Path: ",
     "coordLabel": "Coordinates: ",
     "noLocation": "No location",

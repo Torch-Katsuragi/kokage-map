@@ -435,7 +435,7 @@ class QgsImporter {
             },
           });
         }
-        form = QgisForm(fields: fields, layout: form.layout);
+        form = form.withFields(fields);
         count++;
       }
       await KMetaService.instance.setLayerForm(folderPath, layer.layerKey, form);

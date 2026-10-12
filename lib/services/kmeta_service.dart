@@ -497,7 +497,7 @@ class KMetaService {
             },
           });
         }
-        forms[layerKey] = QgisForm(fields: fields, layout: form.layout);
+        forms[layerKey] = form.withFields(fields);
       }
       if (!changed) return false;
       return saveMeta(folderPath, rawMeta.copyWith(forms: forms));

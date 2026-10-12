@@ -115,6 +115,24 @@ void main() {
     expect(hs, [for (var i = 0; i < _count; i++) i.toDouble()]);
   });
 
+  // 地図で選んだ地物から表を開くと、その行のページから出す（2026-10-12）
+  testWidgets('pageOf: 地物の載るページ（並べ替え・ページの大きさに従う）', (tester) async {
+    await tester.runAsync(open);
+    addTearDown(() => tester.runAsync(close));
+    final ctrl = await pumpController(tester);
+    await tester.runAsync(ctrl.initialize);
+    final last = ctrl.orderedFeatures.last;
+    final first = ctrl.orderedFeatures.first;
+    expect(ctrl.pageOf(first), 1);
+    expect(ctrl.pageOf(last), 3); // 250 件・1 ページ 100 件
+    ctrl.setPageSize(50);
+    expect(ctrl.pageOf(last), 5);
+    // h は読んだ順の逆。h の小さい順に並べると最後の地物が先頭のページに来る
+    final hCol = ctrl.columns.firstWhere((c) => c.field == 'h')..sort = TrinaColumnSort.ascending;
+    await ctrl.fetchPage(TrinaLazyPaginationRequest(page: 1, pageSize: 50, sortColumn: hCol));
+    expect(ctrl.pageOf(last), 1);
+  });
+
   testWidgets('CSV 書き出しは UTF-8 の BOM 付き（日本語の Excel で化けない）', (tester) async {
     await tester.runAsync(() async {
       await open();
@@ -214,6 +232,33 @@ void main() {
     expect(next.filterExpression, '"h" >= 200');
     expect(next.filteredCount, 50);
     expect(next.pageSize, 200);
+  });
+
+  testWidgets('結合した列の最初の幅は、接頭辞つきの列名と鎖の印が収まる幅（ふつうの列と同じ決め方）', (tester) async {
+    await tester.runAsync(() async {
+      await open();
+      layer = PointLayerNode(gpkg, 'pts', parent: GeoPackageNode(gpkg));
+      await layer.updateChildren();
+    });
+    addTearDown(() => tester.runAsync(close));
+    final table = CsvTable.parse(Uint8List.fromList(utf8.encode('name,樹種\np0,スギ\n')));
+    layer.debugJoins = [
+      ResolvedJoin.build(const LayerJoin(table: 't.csv', joinField: 'name', targetField: 'name', prefix: '簿_'), table)!,
+    ];
+    final ctrl = await pumpController(tester);
+    await tester.runAsync(ctrl.initialize);
+    final joined = ctrl.columns.firstWhere((c) => c.field == '簿_樹種');
+    final painter = TextPainter(
+      text: const TextSpan(text: '簿_樹種', style: AttributeTableController.columnTitleStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    // 以前は 60 で決め打ち（鎖の印と「…」しか見えなかった）
+    expect(joined.width, greaterThanOrEqualTo(painter.width + 16 + 36));
+    expect(joined.width, AttributeTableController.columnWidthFor('簿_樹種', title: '簿_樹種') + 16);
+    painter.dispose();
+    // 短い列名のふつうの列は今までの幅より狭くしない
+    expect(ctrl.columns.firstWhere((c) => c.field == 'h').width, 60);
+    expect(AttributeTableController.columnWidthFor('x' * 100), AttributeTableController.maxColumnWidth);
   });
 
   testWidgets('数の列の NULL は (NULL) と見せる（0 にしない）。結合した表の数の列も', (tester) async {

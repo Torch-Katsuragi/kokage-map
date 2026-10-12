@@ -32,6 +32,7 @@ import '../../utils/app_logger.dart';
 import 'attribute_form_view.dart';
 import 'attribute_table_controller.dart';
 import 'attribute_table_dialogs.dart';
+import 'attribute_table_pager.dart';
 import 'attribute_table_toolbar.dart';
 
 /// 動的属性テーブルウィジェット（リファクタリング版）
@@ -84,11 +85,8 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       rowHeight: 32,
       columnHeight: 36,
       cellTextStyle: const TextStyle(fontSize: 13, height: 1.2),
-      columnTextStyle: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.bold,
-        height: 1.2,
-      ),
+      // 列の最初の幅（[AttributeTableController.columnWidthFor]）もこの文字で測る
+      columnTextStyle: AttributeTableController.columnTitleStyle,
       borderColor: Colors.grey.shade300,
       activatedBorderColor: Colors.blue.shade300,
       evenRowColor: Colors.grey.shade50,
@@ -294,8 +292,12 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       onLoaded: _onGridLoaded,
       onChanged: _onGridChanged,
       createFooter: (stateManager) {
+        // 地図で選んでいる地物があれば、その行のページから（開いたあとに行へ色を付ける。[_onGridLoaded]）
+        final selected = ref.read(selectedFeaturesProvider);
         return TrinaLazyPagination(
-          initialPage: 1,
+          initialPage: selected.length == 1 && selected.first is FeatureNode
+              ? _controller.pageOf(selected.first as FeatureNode)
+              : 1,
           // ⚠ 最初の取得をしないと総ページ数が 0 のままで、先頭のページから先へ進めない（2026-10-07 に Fold で確認）
           initialFetch: true,
           // 並べ替えは全件で（表に任せると今の 1 ページの中だけを並べていた）
@@ -308,6 +310,12 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
           onPageSizeChanged: _controller.setPageSize,
           fetch: _controller.fetchPage,
           stateManager: stateManager,
+          // 既定の見た目は縦向きのスマホで右がはみ出す（2026-10-12）
+          builder: (_, s) => AttributeTablePager.fromState(
+            s,
+            pageSizes: AttributeTableController.pageSizes,
+            onPageSizeChanged: _controller.setPageSize,
+          ),
         );
       },
       configuration: _gridConfiguration,

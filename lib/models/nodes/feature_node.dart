@@ -352,12 +352,15 @@ abstract class FeatureNode extends LayerTreeNode {
   /// 以前はここに latitude・longitude・vertex_count・timestamp を同じ名前で入れていて、
   /// 同名の列（測量の CSV 由来のデータによくある）の値が隠れたり上書きされたりしていた
   Map<String, String> get infoMap {
-    final details = <String, String>{'name': name};
+    final props = turfFeature.properties;
+    // name・description の列があれば先頭に。列の無いレイヤに「name: 名前なし」を出さない（2026-10-12）
+    final details = <String, String>{
+      if (props?['name'] case final n? when '$n'.isNotEmpty) 'name': '$n',
+    };
     if (description != null && description!.isNotEmpty) {
       details['description'] = description!;
     }
     // 主キーの列 fid も表の列として出る。地物番号は属性に入っていない
-    final props = turfFeature.properties;
     if (props != null) {
       for (final entry in props.entries) {
         if (entry.value == null || isSystemColumn(entry.key)) continue;

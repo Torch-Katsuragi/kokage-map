@@ -424,7 +424,17 @@ abstract class LayerNode extends LayerTreeNode {
   /// 地物の属性に結合の値を足したもの（ラベル・描き分け・検索・属性テーブルが読む）。結合が無ければ [props] そのもの
   Map<String, Object?>? effectiveProperties(Map<String, dynamic>? props) => withJoinedValues(props, _joins);
 
+  /// QGIS の「表示名」の式（フォルダ設定の [QgisForm.displayExpression]）。無ければ null。
+  /// [loadJoins] が一緒に読む（情報パネル・検索の結果が同期で読む）
+  String? get displayExpression => _displayExpression;
+  String? _displayExpression;
+
+  /// テスト用: フォルダ設定を通さずに表示名の式を置く
+  @visibleForTesting
+  set debugDisplayExpression(String? expression) => _displayExpression = expression;
+
   /// フォルダ設定の結合を読み、表を「結合の値 → 行」の Map にする（表は [TableCache] で 1 回だけ読む）。
+  /// 表示名の式（[displayExpression]）も読み直す。
   /// 地物の読み込みのたびに呼ばれる。結合を変えたら呼んで [refreshStyleGroups]
   Future<void> loadJoins() async {
     final folder = folderNode;
@@ -432,11 +442,14 @@ abstract class LayerNode extends LayerTreeNode {
     if (folder == null || folderPath == null || _isDisposed) {
       _joins = const [];
       _joinDefs = const [];
+      _displayExpression = null;
       return;
     }
     List<LayerJoin> defs;
     try {
-      defs = (await folder.getMeta()).joins[layerKey] ?? const [];
+      final meta = await folder.getMeta();
+      defs = meta.joins[layerKey] ?? const [];
+      _displayExpression = meta.forms[layerKey]?.displayExpression;
     } on Object catch (e) {
       AppLogger.debug('[LayerNode] 結合の設定を読めない: $e');
       defs = const [];

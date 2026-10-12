@@ -334,9 +334,9 @@ class QgisFormContainer extends QgisFormElement {
       };
 }
 
-/// レイヤの属性フォーム
+/// レイヤの属性フォーム（と、QGIS の「表示名」の式）
 class QgisForm {
-  const QgisForm({this.fields = const {}, this.layout});
+  const QgisForm({this.fields = const {}, this.layout, this.displayExpression});
 
   /// 列名 → 設定（`.qgs` の並び。何も設定していない列は持たない）
   final Map<String, QgisFieldForm> fields;
@@ -344,7 +344,15 @@ class QgisForm {
   /// ドラッグ&ドロップの配置（自動生成の配置なら null）。ここに出てこない列は QGIS でもフォームに出ない
   final List<QgisFormElement>? layout;
 
-  bool get isEmpty => fields.isEmpty && layout == null;
+  /// QGIS の「表示名」の式（レイヤのプロパティ → 表示。`.qgs` の `<previewExpression>`）。無ければ null。
+  /// フォームの設定ではないが、同じく maplayer ごとに QGIS が持つので一緒に写す
+  final String? displayExpression;
+
+  bool get isEmpty => fields.isEmpty && layout == null && displayExpression == null;
+
+  /// [fields] と [layout] を替えたもの（[displayExpression] は残す）
+  QgisForm withFields(Map<String, QgisFieldForm> fields, {List<QgisFormElement>? layout}) =>
+      QgisForm(fields: fields, layout: layout ?? this.layout, displayExpression: displayExpression);
 
   QgisFieldForm? operator [](String column) => fields[column];
 
@@ -385,9 +393,11 @@ class QgisForm {
       }
     }
     final layout = json['layout'];
+    final display = json['displayExpression'];
     return QgisForm(
       fields: fields,
       layout: layout is List ? [for (final e in layout) ?QgisFormElement.fromJson(e)] : null,
+      displayExpression: display is String && display.trim().isNotEmpty ? display : null,
     );
   }
 
@@ -403,6 +413,7 @@ class QgisForm {
   Map<String, dynamic> toJson() => {
         'fields': [for (final f in fields.values) f.toJson()],
         if (layout != null) 'layout': [for (final e in layout!) e.toJson()],
+        if (displayExpression != null) 'displayExpression': displayExpression,
       };
 }
 

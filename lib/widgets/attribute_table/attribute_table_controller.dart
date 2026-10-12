@@ -673,7 +673,7 @@ class AttributeTableController extends ChangeNotifier {
           enableSorting: true, // Phase 3: カラムヘッダーでソート
           enableColumnDrag: true, // Phase 3: ドラッグで並替え
           enableContextMenu: true, // Phase 3: 右クリックメニュー
-          width: _getColumnWidth(columnName),
+          width: columnWidthFor(columnName, title: qf?.alias ?? columnName),
           renderer: _nullHighlightRenderer(columnName), // Phase 3: NULL値ハイライト
         ),
       );
@@ -700,7 +700,7 @@ class AttributeTableController extends ChangeNotifier {
         enableColumnDrag: true,
         enableContextMenu: true,
         backgroundColor: const Color(0xFFF7F1EA),
-        width: _getColumnWidth(columnName),
+        width: columnWidthFor(columnName, joined: true),
         renderer: _nullHighlightRenderer(columnName),
       );
 
@@ -847,7 +847,29 @@ class AttributeTableController extends ChangeNotifier {
   static final _looseDate =
       RegExp(r'^(\d{4})[/.\-](\d{1,2})[/.\-](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$');
 
-  double _getColumnWidth(String columnName) {
+  /// 列の最初の幅。見出し（[title]。結合の列は鎖の印も）が読める幅まで広げる（上限 [maxColumnWidth]）。
+  ///
+  /// 以前は列名によらず決め打ちで、接頭辞の付く結合の列（`簿_樹種`）は鎖の印と「…」しか見えなかった
+  @visibleForTesting
+  static double columnWidthFor(String columnName, {String? title, bool joined = false}) {
+    final painter = TextPainter(
+      text: TextSpan(text: title ?? columnName, style: columnTitleStyle),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    // 左右の余白（10 + 10）と、右端に重なる列のメニューの印のぶん
+    final fit = painter.width + 36 + (joined ? 16 : 0);
+    painter.dispose();
+    return fit.ceilToDouble().clamp(_baseColumnWidth(columnName), maxColumnWidth);
+  }
+
+  /// [columnWidthFor] が広げる上限
+  static const double maxColumnWidth = 200;
+
+  /// 列の見出しの文字（表の設定 `columnTextStyle` と同じ）
+  static const columnTitleStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.bold, height: 1.2);
+
+  static double _baseColumnWidth(String columnName) {
     final lowerName = columnName.toLowerCase();
     if (lowerName == 'id' || lowerName == 'fid') return 40;
     if (lowerName == 'name') return 80;
@@ -883,6 +905,12 @@ class AttributeTableController extends ChangeNotifier {
       rows: rows,
       totalRecords: totalFeatures,
     );
+  }
+
+  /// [feature] が載るページ（1 始まり）。表に出ていなければ 1
+  int pageOf(FeatureNode feature) {
+    final i = orderedFeatures.indexWhere((f) => identical(f, feature));
+    return i < 0 ? 1 : i ~/ _pageSize + 1;
   }
 
   /// 並べ替える列を決める（null で読んだ順に戻す）

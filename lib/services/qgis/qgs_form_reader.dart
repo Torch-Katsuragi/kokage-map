@@ -17,7 +17,7 @@
 //
 // 読むもの: `<fieldConfiguration>`（編集ウィジェットとその設定）・`<aliases>`・`<defaults>`・
 // `<constraints>` / `<constraintExpressions>`・`<editable>`・`<attributeEditorForm>`（`<editorlayout>` が
-// `tablayout` のときのドラッグ&ドロップの配置）。書き戻しはしない（QGIS の持ち物）。
+// `tablayout` のときのドラッグ&ドロップの配置）・`<previewExpression>`（表示名の式）。書き戻しはしない（QGIS の持ち物）。
 
 import 'package:xml/xml.dart';
 
@@ -114,7 +114,9 @@ class QgsFormReader {
     }
 
     final layout = _readLayout(maplayer);
-    final form = QgisForm(fields: fields, layout: layout);
+    // 表示名の式。空なら持たない（こかげマップが書いた `.qgs` は空で書く）
+    final display = maplayer.getElement('previewExpression')?.innerText.trim();
+    final form = QgisForm(fields: fields, layout: layout, displayExpression: display == null || display.isEmpty ? null : display);
     return form.isEmpty ? null : form;
   }
 

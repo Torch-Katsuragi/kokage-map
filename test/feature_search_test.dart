@@ -199,6 +199,34 @@ void main() {
       expect([for (final h in byOther.hits) (h.feature.rowId, h.column, h.value)], [(2, '__id_', 'y2')]);
     });
 
+    // name 列の無いレイヤ（QGIS で作った小班など）で「小班 › 名前なし」が並んでいた（2026-10-12）
+    testWidgets('検索の窓: name 列が無ければ、当たった列以外の列で見分ける（名前なしと出さない）', (tester) async {
+      late PolygonLayerNode shohan;
+      await tester.runAsync(() async {
+        final g = GeoPackageFile(const ['s.gpkg'], absolutePath: '${tmp.path}/s.gpkg');
+        addTearDown(g.dispose);
+        await g.addLayer('小班', GeometryType.polygon);
+        await g.addAttributeColumns('小班', {'林班': 'INTEGER', '小班': 'TEXT', '林小班': 'TEXT', '樹種': 'TEXT'});
+        const ring = [LatLng(33.93, 135.96), LatLng(33.93, 135.97), LatLng(33.94, 135.97), LatLng(33.93, 135.96)];
+        await g.addPolygonWithAttributes('小班', [ring], {'林班': 77, '小班': 'い', '林小班': '77-い', '樹種': 'スギ'});
+        shohan = PolygonLayerNode(g, '小班', parent: GeoPackageNode(g));
+        await shohan.updateChildren();
+      });
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: FeatureSearchDialog(layers: [shohan]))));
+      await tester.enterText(find.byType(TextField), '77');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.runAsync(() async {
+        for (var i = 0; i < 50 && find.byType(ListTile).evaluate().isEmpty; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump();
+        }
+      });
+      await tester.pump();
+      expect(find.text('林班: 77'), findsOneWidget);
+      expect(find.text('小班 › 小班: い / 林小班: 77-い'), findsOneWidget);
+      expect(find.textContaining('名前なし'), findsNothing);
+    });
+
     test('当たらなければ空', () async {
       final r = await FeatureSearch.search([layer], '存在しない値');
       expect(r.hits, isEmpty);

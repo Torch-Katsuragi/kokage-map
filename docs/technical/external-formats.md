@@ -281,7 +281,9 @@ QGIS / GDAL で作ったラスタは **GDAL で開いて読み取り専用のオ
   （`GDALGetFileList` の一式の名前・大きさ・更新時刻）を持ち、印が変われば作り直す。作業用の `.warp.tif` は消す。
   同じラスタの呼び出しが重なったら走っている 1 本の結果を返す（2026-10-13。重なった呼び出しが作業用ファイルと PNG を消し合い、
   クローン直後の Pixel 9 で `林相.tif` が出なかった）
-- 作るのは地図の描き直し（`updateFeatures`）で、見えているものだけ。GDAL は Android では別アイソレート、web は worker で動く
+- 作るのは地図の描き直し（`updateFeatures`）で、見えているものだけ。GDAL は Android では別アイソレート、web は worker で動く。
+  描き直しは地物・可視性を先に地図へ流し、PNG を後から待って、できたオーバーレイを流し直す（`overlay_preparation.dart`、2026-10-13。
+  以前は PNG を待ってから流していて、ワープが遅い・止まると gpkg の目を消しても地図が変わらなかった）
 - **読み取り専用**: 位置はファイルが正。位置合わせの道具は押すと通知センターに「位置合わせできません」を出して起動しない
   （`OverlayImageNode.isReadOnly`、`saveOverlayParams` も何もしない）。「通常の写真に戻す」も出さない（元ファイルを消してしまうため）
 - `.qgs` には元のファイルの相対パスと元の座標系（`gdalinfo` の WKT2・末尾の EPSG・proj4）で `provider=gdal` を書く

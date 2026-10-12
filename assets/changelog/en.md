@@ -56,6 +56,7 @@
 - QGIS-made GeoPackages uploaded to Drive from Android by earlier versions could be left with none of the triggers that keep the rtree spatial index up to date and an empty index, so QGIS did not show their features when reading with an extent filter. After the app writes to such a file, before uploading to Drive, on close and when the app goes to the background, the triggers are recreated as defined by the GeoPackage standard (the same ones the GDAL in QGIS 4 creates) and the spatial index is rebuilt from the data. Tables without a registered spatial index and tables that still have some of the triggers are left alone
 - The feature info panel showed boolean columns (BOOLEAN columns made in QGIS, check box fields) as raw values such as "Checked: true" or "Checked: 1". They now read Yes or No
 - Raster overlays made in QGIS or similar could fail to appear right after opening a project or cloning it from Drive (back-to-back map refreshes built the display image of the same raster at the same time and broke it)
+- With a raster overlay made in QGIS or similar in the project, hiding a gpkg or layer did not change the map until the raster's display image was ready. Showing and hiding features now applies first, and the raster follows
 
 ### Lighter
 

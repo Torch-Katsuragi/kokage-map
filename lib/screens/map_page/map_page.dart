@@ -295,7 +295,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   /// 属性テーブルを開く
   Future<void> _openAttributeTable([LayerNode? targetLayer]) async {
     try {
-      final layer = targetLayer ?? ref.read(selectedLayerNodeProvider);
+      final layer = targetLayer ??
+          ref.read(selectedLayerNodeProvider) ??
+          layerOfSelectedFeatures(ref.read(selectedFeaturesProvider));
 
       if (layer == null) {
         ref

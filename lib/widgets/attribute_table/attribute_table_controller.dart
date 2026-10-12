@@ -907,6 +907,12 @@ class AttributeTableController extends ChangeNotifier {
     );
   }
 
+  /// [feature] が載るページ（1 始まり）。表に出ていなければ 1
+  int pageOf(FeatureNode feature) {
+    final i = orderedFeatures.indexWhere((f) => identical(f, feature));
+    return i < 0 ? 1 : i ~/ _pageSize + 1;
+  }
+
   /// 並べ替える列を決める（null で読んだ順に戻す）
   void setSort(String? field, {bool descending = false}) {
     if (field == _sortField && descending == _sortDescending) return;

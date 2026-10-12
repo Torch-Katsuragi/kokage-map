@@ -33,6 +33,18 @@ class SelectedLayerNode extends _$SelectedLayerNode {
   void select(LayerNode? node) => state = node;
 }
 
+/// 選んでいる地物がみな同じレイヤのものなら、そのレイヤ。何も選んでいない・レイヤが混ざる・地物でないものがあれば null。
+/// レイヤ一覧でレイヤを選ばずに属性表を開いたとき、地図で選んだ地物のレイヤを開く（2026-10-12）
+LayerNode? layerOfSelectedFeatures(List<LayerTreeNode> selected) {
+  LayerNode? layer;
+  for (final n in selected) {
+    if (n is! FeatureNode || n.isDisposed || n.parent.isDisposed) return null;
+    if (layer != null && !identical(layer, n.parent)) return null;
+    layer = n.parent;
+  }
+  return layer;
+}
+
 @Riverpod(keepAlive: true)
 class SelectedFeatures extends _$SelectedFeatures {
   @override

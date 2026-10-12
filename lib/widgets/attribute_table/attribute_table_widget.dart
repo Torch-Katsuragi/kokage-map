@@ -292,8 +292,12 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       onLoaded: _onGridLoaded,
       onChanged: _onGridChanged,
       createFooter: (stateManager) {
+        // 地図で選んでいる地物があれば、その行のページから（開いたあとに行へ色を付ける。[_onGridLoaded]）
+        final selected = ref.read(selectedFeaturesProvider);
         return TrinaLazyPagination(
-          initialPage: 1,
+          initialPage: selected.length == 1 && selected.first is FeatureNode
+              ? _controller.pageOf(selected.first as FeatureNode)
+              : 1,
           // ⚠ 最初の取得をしないと総ページ数が 0 のままで、先頭のページから先へ進めない（2026-10-07 に Fold で確認）
           initialFetch: true,
           // 並べ替えは全件で（表に任せると今の 1 ページの中だけを並べていた）

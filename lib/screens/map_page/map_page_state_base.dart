@@ -230,6 +230,9 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// フィーチャの追加・削除のあとに地図を更新する（`MapFeatureCacheMixin`）
   void refreshMapUI();
 
+  /// 形・属性を差し替えた地物だけ地図に流し直す（`MapFeatureCacheMixin`。GPS 軌跡の統合）
+  void refreshFeatureRows(Set<FeatureNode> changed);
+
   // =============================================
   // ヘルパーメソッド
   // =============================================

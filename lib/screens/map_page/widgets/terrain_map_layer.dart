@@ -33,6 +33,7 @@ import '../../../core/map_surface_handle.dart';
 import '../../../core/terrain/contour_tiles.dart';
 import '../../../core/terrain/dem_grid.dart';
 import '../../../core/terrain/dem_tiles.dart';
+import '../../../core/terrain/feature_bake_ledger.dart';
 import '../../../core/terrain/gpu/terrain_gpu.dart';
 import '../../../core/terrain/terrain_appearance.dart';
 import '../../../core/terrain/terrain_camera.dart';

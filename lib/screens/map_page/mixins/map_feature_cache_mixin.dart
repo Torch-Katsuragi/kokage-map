@@ -242,24 +242,37 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     //   判断が `scene.styleGroups` を見ているため。
     scene.setStyleGroups(buildStyleGroups());
 
-    final input = FeatureGeoJsonInput(
-      lines: _viewOrdered(lineFeatures),
-      polygons: _viewOrdered(polygonFeatures),
-      points: pointFeatures,
-      photos: photoNodes,
-      selected: currentSelection.toSet(),
-      hidden: {?ref.read(featureEditorProvider)?.feature},
-      // 固有スタイルが1つでもあれば、フィーチャに「どのグループのものか」を載せる
-      styleKeyOf: scene.styleGroups.isEmpty ? null : (f) => f.parent.styleKeyOf(f.rowId),
-      stylePropKey: kStyleProp,
-      labelOf: _labelFor,
-      lineVertices: layerStyleSettings.getBool(lineVertexPointsEnabledDef),
-      polygonVertices: layerStyleSettings.getBool(polygonVertexPointsEnabledDef),
-    );
-
     // 選択のみ変更なら選択ソースだけ再構築（通常ソースは不変）。どちらも 3D 地図面にシーンを組み直させる
-    scene.pushFeatures(input, selectionOnly: !dataChanged);
+    scene.pushFeatures(_featureInput(currentSelection), selectionOnly: !dataChanged);
   }
+
+  /// [changed] の地物（形・属性を差し替えた。一覧の顔ぶれは同じ）だけ地図に流し直す。
+  /// GPS 軌跡の統合（20 秒ごと）で全件を集め直さないための口。一覧やスタイルの変化が控えていれば全件を組み直す
+  @override
+  void refreshFeatureRows(Set<FeatureNode> changed) {
+    if (!mounted || changed.isEmpty) return;
+    final currentSelection = ref.read(selectedFeaturesProvider);
+    if (_featuresDirty || !identical(_lastSelection, currentSelection) || scene.setStyleGroups(buildStyleGroups())) {
+      invalidateLayerCache();
+      return;
+    }
+    scene.pushFeatureChanges(_featureInput(currentSelection), changed);
+  }
+
+  FeatureGeoJsonInput _featureInput(List<LayerTreeNode> currentSelection) => FeatureGeoJsonInput(
+        lines: _viewOrdered(lineFeatures),
+        polygons: _viewOrdered(polygonFeatures),
+        points: pointFeatures,
+        photos: photoNodes,
+        selected: currentSelection.toSet(),
+        hidden: {?ref.read(featureEditorProvider)?.feature},
+        // 固有スタイルが1つでもあれば、フィーチャに「どのグループのものか」を載せる
+        styleKeyOf: scene.styleGroups.isEmpty ? null : (f) => f.parent.styleKeyOf(f.rowId),
+        stylePropKey: kStyleProp,
+        labelOf: _labelFor,
+        lineVertices: layerStyleSettings.getBool(lineVertexPointsEnabledDef),
+        polygonVertices: layerStyleSettings.getBool(polygonVertexPointsEnabledDef),
+      );
 
   /// 同じレイヤの中を View の順に並べる（上の View ほど後＝手前に描く。どの View にも当たらないものはいちばん下）。
   /// レイヤどうしの順（ツリーの並び）は変えない。固有スタイルが 1 つも無ければそのまま返す

@@ -668,7 +668,7 @@ class AttributeTableController extends ChangeNotifier {
         TrinaColumn(
           title: qf?.alias ?? columnName,
           field: columnName,
-          type: _qgisColumnType(qf) ?? _determineColumnType(columnName),
+          type: _qgisColumnType(qf, columnSqlType(columnName)) ?? _determineColumnType(columnName),
           enableEditingMode: canEdit(columnName),
           enableSorting: true, // Phase 3: カラムヘッダーでソート
           enableColumnDrag: true, // Phase 3: ドラッグで並替え
@@ -734,6 +734,7 @@ class AttributeTableController extends ChangeNotifier {
   /// Phase 3: NULL/空値ハイライト用セルレンダラー
   TrinaColumnRenderer _nullHighlightRenderer(String columnName) {
     final qf = _qgisForm?[columnName];
+    final boolean = isBooleanSqlType(columnSqlType(columnName));
     // チュートリアル: 練習の測点の表では、色の付いた行の name のマスを案内先にする
     final guideName = columnName == 'name' && isPracticeLayer(layer, PracticeProject.pointsLayer);
     return (TrinaColumnRendererContext ctx) {
@@ -744,8 +745,10 @@ class AttributeTableController extends ChangeNotifier {
         final nf = type as TrinaColumnTypeWithNumberFormat;
         if (nf.isNumeric(value)) value = nf.toNumber(nf.applyFormat(value));
       }
-      // ValueMap・日付などは QGIS の見せ方で（書いてある値はそのまま）
-      final text = qf?.displayText(value) ?? value?.toString() ?? '';
+      // ValueMap・日付などは QGIS の見せ方で（書いてある値はそのまま）。
+      // 真偽の列は ○/×（1/0・以前の版が書いた 'true'/'false' も読む）
+      final bool? flag = boolean ? parseBooleanValue(value) : null;
+      final text = flag != null ? (flag ? '○' : '×') : qf?.displayText(value) ?? value?.toString() ?? '';
       final isNull = text.isEmpty;
       final key = guideName &&
               _ref.read(tutorialProvider) != null &&
@@ -784,14 +787,15 @@ class AttributeTableController extends ChangeNotifier {
 
   /// QGIS の編集ウィジェットで選ぶ列（ValueMap・ValueRelation・チェックボックス）は選択の列にする。
   /// マスには値を書き、見せるのは表示名（[_nullHighlightRenderer]）
-  TrinaColumnType? _qgisColumnType(QgisFieldForm? qf) {
+  TrinaColumnType? _qgisColumnType(QgisFieldForm? qf, String sqlType) {
     if (qf == null) return null;
     final List<QgisValueOption>? options = switch (qf.kind) {
       QgisWidgetKind.valueMap => qf.valueMapOptions.where((o) => o.value.isNotEmpty).toList(),
       QgisWidgetKind.valueRelation => _formOptions[qf.name],
-      QgisWidgetKind.checkBox when qf.checkedState != null && qf.uncheckedState != null => [
-          QgisValueOption(qf.checkedState!, qf.checkedState!),
-          QgisValueOption(qf.uncheckedState!, qf.uncheckedState!),
+      // 真偽の列は設定によらず 1/0（[_determineColumnType]）
+      QgisWidgetKind.checkBox when !isBooleanSqlType(sqlType) => [
+          for (final v in [qgisCheckValues(qf, sqlType).$1, qgisCheckValues(qf, sqlType).$2])
+            QgisValueOption('$v', '$v'),
         ],
       _ => null,
     };
@@ -806,6 +810,10 @@ class AttributeTableController extends ChangeNotifier {
   /// SQLiteのカラム型からTrinaColumnTypeにマッピング
   TrinaColumnType _determineColumnType(String columnName) {
     final sqlType = columnSqlType(columnName);
+    // 真偽の列: 付いている・外れているから選ぶ。書くのは 1/0（GeoPackage の決まり。QGIS・GDAL が読める形）
+    if (isBooleanSqlType(sqlType)) {
+      return TrinaColumnType.select<String>(const ['1', '0'], itemToString: (v) => v == '1' ? '○' : '×');
+    }
     if (isIntegerSqlType(sqlType)) return _numberColumnType();
     if (isNumericSqlType(sqlType)) return _numberColumnType(real: true);
     // 日付の列も書式は最初に当てない（当てると 2026/10/01 や自由な文字は (NULL)、
@@ -821,9 +829,10 @@ class AttributeTableController extends ChangeNotifier {
 
   /// 表で入れた値を列に書く形にする。日付・日時の列は、表の日付選び（`yyyy-MM-dd` / `yyyy-MM-dd HH:mm`）の値を
   /// DATE は `yyyy-MM-dd`、DATETIME は UTC の ISO 8601（Z つき）にする（QGIS・GeoPackage の決まり）。
-  /// 日付と読めない値・ほかの列はそのまま
+  /// 真偽の列（BOOLEAN）は 1/0（[toBooleanStorage]）。日付と読めない値・ほかの列はそのまま
   Object? storedValueFor(String field, Object? value) {
     final sqlType = columnSqlType(field);
+    if (isBooleanSqlType(sqlType)) return toBooleanStorage(value);
     if (value is! String || !_isDateSqlType(sqlType)) return value;
     final d = parseLooseDate(value);
     if (d == null) return value;

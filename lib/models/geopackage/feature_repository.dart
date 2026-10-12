@@ -24,6 +24,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../services/coordinate/geometry_reprojector.dart';
 import '../../services/coordinate/gpkg_crs_resolver.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/attribute_columns.dart' show isBooleanSqlType, toBooleanStorage;
 import '../../utils/wkb_utils.dart';
 import '../geometry_type.dart';
 import 'feature_row.dart';
@@ -164,6 +165,25 @@ class FeatureRepository {
   // 書き込み
   // （QGIS 製の gpkg の ST_ トリガーは、接続（GuardedDatabase）が書く前に落とす）
   // ============================================================
+
+  /// 真偽の列（宣言の型が BOOLEAN）の名前（小文字）。
+  /// GeoPackage の決まりで中身は INTEGER の 0/1。文字の 'true' を書くと GDAL・QGIS は 0（外れ）と読む
+  Future<Set<String>> _booleanColumns(String tableName) async => {
+        for (final row in await schema.tableInfo(tableName))
+          if (isBooleanSqlType('${row['type'] ?? ''}')) (row['name'] as String).toLowerCase(),
+      };
+
+  /// 真偽の列の値を 1/0 にする（[toBooleanStorage]）。ほかの列はそのまま
+  static Object? _storable(Set<String> booleanColumns, String column, Object? value) =>
+      booleanColumns.contains(column.toLowerCase()) ? toBooleanStorage(value) : value;
+
+  /// 真偽の列に文字で入っている真偽（以前の版が書いた 'true'/'false' など）を 1/0 に直す式。
+  /// 行を書くときに、書かない真偽の列にも当てる（開いただけでは書き換えない）
+  static String _booleanRepairExpr(String column) {
+    final c = quoteIdent(column);
+    return "CASE WHEN typeof($c) = 'text' AND lower(trim($c)) IN ('true', 't', 'yes', 'y', '1') THEN 1 "
+        "WHEN typeof($c) = 'text' AND lower(trim($c)) IN ('false', 'f', 'no', 'n', '0') THEN 0 ELSE $c END";
+  }
 
   /// 1 行の 1 列にそのまま値を書く（同期の衝突を相手の値に戻すとき）。
   /// 値の型は呼び手が合わせる（ジオメトリは GPKG の blob）
@@ -690,9 +710,10 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final whereClause = await schema.buildWhereClause(tableName);
+      final booleans = await _booleanColumns(tableName);
       final rowsUpdated = await db.rawUpdate(
         'UPDATE ${quoteIdent(tableName)} SET ${quoteIdent(attributeName)} = ? WHERE $whereClause',
-        [newValue, rowId],
+        [_storable(booleans, attributeName, newValue), rowId],
       );
       return rowsUpdated > 0;
     } catch (e) {
@@ -734,10 +755,19 @@ class FeatureRepository {
 
       if (filteredAttributes.isEmpty) return true;
 
-      final columnAssignments = filteredAttributes.keys
-          .map((key) => '${quoteIdent(key)} = ?')
-          .join(', ');
-      final values = [...filteredAttributes.values, rowId];
+      final booleans = await _booleanColumns(tableName);
+      final written = {for (final k in filteredAttributes.keys) k.toLowerCase()};
+      final columnAssignments = [
+        for (final key in filteredAttributes.keys) '${quoteIdent(key)} = ?',
+        // 書かない真偽の列に残る文字の真偽も、この行を書くついでに 1/0 へ
+        for (final c in existingColumns)
+          if (booleans.contains(c.toLowerCase()) && !written.contains(c.toLowerCase()))
+            '${quoteIdent(c)} = ${_booleanRepairExpr(c)}',
+      ].join(', ');
+      final values = [
+        for (final MapEntry(:key, :value) in filteredAttributes.entries) _storable(booleans, key, value),
+        rowId,
+      ];
       final whereClause = await schema.buildWhereClause(tableName);
       final sql =
           'UPDATE ${quoteIdent(tableName)} SET $columnAssignments WHERE $whereClause';
@@ -780,6 +810,7 @@ class FeatureRepository {
 
       final tableColumns = await schema.getTableColumns(tableName);
       final tableColumnSet = tableColumns.map((c) => c.toLowerCase()).toSet();
+      final booleans = await _booleanColumns(tableName);
 
       for (final (geom, data) in items) {
         final geometry = dims.isXY ? geom : await VertexZ.apply(geom, dims, context: '$tableName#new');
@@ -792,7 +823,7 @@ class FeatureRepository {
             final sanitizedKey = schema.sanitizeColumnName(key);
             if (sanitizedKey.isNotEmpty &&
                 tableColumnSet.contains(sanitizedKey.toLowerCase())) {
-              insertData[sanitizedKey] = value;
+              insertData[sanitizedKey] = _storable(booleans, sanitizedKey, value);
             }
           }
         });
@@ -948,13 +979,14 @@ class FeatureRepository {
     DatabaseExecutor db,
     String tableName,
     Map<String, dynamic> data,
-  ) {
+  ) async {
     final columns = data.keys.toList();
     final placeholders = List.filled(columns.length, '?').join(', ');
+    final booleans = await _booleanColumns(tableName);
     return db.rawInsert(
       'INSERT INTO ${quoteIdent(tableName)} (${columns.map(quoteIdent).join(', ')}) '
       'VALUES ($placeholders)',
-      [for (final c in columns) data[c]],
+      [for (final c in columns) _storable(booleans, c, data[c])],
     );
   }
 

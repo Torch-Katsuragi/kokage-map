@@ -11,7 +11,6 @@
 
 #fixes(
   "New",
-  [Save the map as a one-page PDF (≡ menu): A4/A3, title, date, scale, north arrow, legend and credits, drawn from above],
   [Read table joins set up in QGIS (such as a stand-register CSV) and show the joined fields in the attribute table, styling and labels],
   [Layers styled in QGIS by category, graduated range or rule (stands by species or age) are drawn feature by feature in the same colors as QGIS],
   [Add XYZ tiles and WMS not in the list as background maps by URL (forest planning maps, CS relief maps…); those in a .qgs are read back too],

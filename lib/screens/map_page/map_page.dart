@@ -69,7 +69,6 @@ import '../../widgets/resizable_bottom_panel.dart';
 import '../../widgets/resizable_side_panel.dart';
 // Mixins
 import 'map_page_state_base.dart';
-import 'map_pdf_export.dart';
 import 'mixins/index.dart';
 // Widgets
 import 'widgets/guidance_overlay.dart';
@@ -497,22 +496,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           ref.read(tutorialProvider.notifier).report(LayersPanelToggled(drawerOpen));
         },
         // ≡ メニュー（パーティ・水準器・設定を集約）はレイヤ一覧の左
-        beforeLayerButton: [KeyedSubtree(key: TutorialTargets.menuButton, child: MapMenuButton(onReload: reloadProjectFromDisk, onExportPdf: _openMapPdf))],
+        beforeLayerButton: [KeyedSubtree(key: TutorialTargets.menuButton, child: MapMenuButton(onReload: reloadProjectFromDisk))],
       ),
     );
   }
-
-  /// ≡ メニュー →「地図を PDF に」
-  void _openMapPdf() => unawaited(openMapPdfExport(
-        context,
-        projection: mapController.surface,
-        camera: mapController.camera,
-        geoJson: scene.features,
-        baseMaps: baseMapService,
-        features: [...pointFeatures, ...lineFeatures, ...polygonFeatures],
-        defaultTitle: p.basename(ref.read(projectRootDirProvider) ?? t.common.appName),
-        notify: ref.read(notificationCenterProvider.notifier),
-      ));
 
   /// 地図エリア: ツールバー・地図本体・レイヤ一覧・情報カード・下のボタン列
   Widget _buildMapArea(

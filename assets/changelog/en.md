@@ -4,7 +4,6 @@
 
 ### New
 
-- The map on screen can now be saved as a one-page PDF (≡ menu → "Map to PDF"). Choose A4 or A3, landscape or portrait; the page has the title, date, scale bar, north arrow, legend (including QGIS style classes) and background map credits. The map is drawn from straight above at a round scale that fits the screen, even if the 3D view is tilted. Useful for paperwork and handouts on site
 - Table joins set up in QGIS (such as a stand-register CSV) are now read, and the joined fields appear in the attribute table (read-only), styling, labels, search and export. Joins are written back to the .qgs unchanged. CSV files without coordinate columns appear in the layer list as read-only tables
 - Layers styled in QGIS as categorized, graduated or rule-based (such as compartments colored by species or stand age) are now drawn feature by feature in the same colors as QGIS, in 2D and 3D. A legend appears in the layer list and the style screen. Colors are still changed in QGIS
 - XYZ tiles not in the list (such as the Forestry Agency's forest planning maps or prefectural CS relief maps) and WMS can now be added as background maps by URL (Settings → Map & tiles → Add layer → "Add a background map from a URL…"). They work like the built-in maps for layering, bulk download and 3D, and their attribution is shown on the map while visible. You are responsible for following the tile source's terms (Google and Bing cannot be added). Those in a .qgs are added when read back too

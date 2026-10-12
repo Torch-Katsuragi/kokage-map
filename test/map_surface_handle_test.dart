@@ -13,10 +13,6 @@ import 'package:root_maps/core/map_surface_handle.dart';
 
 /// 呼ばれた操作を記録するだけの地図面。投影は 1° = 1000 px の素直な平面
 class _FakeSurface implements MapSurface {
-  // スナップショット（PDF）はここでは使わない
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-
   final jumps = <({LatLng center, double zoom, bool animate})>[];
   final fits = <({List<LatLng> coords, EdgeInsets padding})>[];
   final looks = <({LatLng? center, double? zoom, double? bearingDeg, double? pitchDeg, bool animate})>[];

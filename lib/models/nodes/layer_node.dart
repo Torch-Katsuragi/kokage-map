@@ -437,6 +437,10 @@ abstract class LayerNode extends LayerTreeNode {
   QgisForm? get qgisFormIfLoaded => _qgisFormIfLoaded;
   QgisForm? _qgisFormIfLoaded;
 
+  /// テスト用: フォルダ設定を通さずに属性フォームの設定を置く
+  @visibleForTesting
+  set debugQgisForm(QgisForm? form) => _qgisFormIfLoaded = form;
+
   /// 属性の列の SQLite の型（列名 → 大文字の型。BOOLEAN など）。地物を読み込むたびに取り直す。
   /// 情報パネルが真偽の列を見分けるのに同期で読む
   Map<String, String> get columnSqlTypes => _columnSqlTypes;

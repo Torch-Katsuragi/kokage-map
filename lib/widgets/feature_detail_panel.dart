@@ -29,12 +29,14 @@ import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/overlay_image_node.dart';
+import '../models/qgis_form.dart';
 import '../presentation/attribute_display.dart';
 import '../presentation/feature_display_name.dart';
 import '../providers/notification_providers.dart';
 import '../providers/project_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../services/qgis_form_options.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/geodesic.dart';
 import '../widgets/info_panel_card.dart';
@@ -201,8 +203,6 @@ class FeatureDetailPanel extends ConsumerWidget {
     if (feature is FeatureNode) {
       final node = feature as FeatureNode; // dynamic のフィールドは is で昇格しない
       final infoMap = node.infoMap;
-      final props = node.turfFeature.properties;
-      final form = node.parent.qgisFormIfLoaded;
       // 形の列（名前は表ごと）は属性に入っていない。geom という名前のふつうの列は出す
       // メタデータの列は infoMap に入っていない（以前は名前に metadata を含む列をすべて隠していた）
       const hiddenKeys = {'sub_table'};
@@ -236,19 +236,7 @@ class FeatureDetailPanel extends ConsumerWidget {
             child: _labelRow(label, value),
           ),
         if (measures.isNotEmpty) const SizedBox(height: 4),
-        for (final entry in filteredEntries)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4.0),
-            // 真偽の列は「はい／いいえ」（生の 1/0・true/false を出さない）
-            child: _labelRow(
-              '${entry.key}: ',
-              attributeDisplayText(
-                props?[entry.key] ?? entry.value,
-                form: form?.fields[entry.key],
-                sqlType: node.parent.columnSqlTypes[entry.key] ?? '',
-              ),
-            ),
-          ),
+        if (filteredEntries.isNotEmpty) _AttributeRows(node: node, entries: filteredEntries),
         // GPS 測量の品質（kmaps_metadata の測量の記録から）
         if (summarizeFeatureQuality(node.metadata, isPoint: node is PointFeatureNode)
             case final quality?)
@@ -493,3 +481,75 @@ class FeatureDetailPanel extends ConsumerWidget {
   }
 }
 
+/// 情報パネルの属性の行。QGIS の「地物情報の表示」と同じく、列は別名、値は表示する形
+/// （真偽は「はい／いいえ」、ValueMap・ValueRelation は表示名、日付は見せる書式）で出す。
+/// Hidden の列も出す（QGIS の地物情報の表示も出す）。ValueRelation の表示名は参照先の表を読むので、
+/// 読み終わるまでは値のまま出す
+class _AttributeRows extends StatefulWidget {
+  const _AttributeRows({required this.node, required this.entries});
+
+  final FeatureNode node;
+  final List<MapEntry<String, dynamic>> entries;
+
+  @override
+  State<_AttributeRows> createState() => _AttributeRowsState();
+}
+
+class _AttributeRowsState extends State<_AttributeRows> {
+  QgisForm? _form;
+  Map<String, List<QgisValueOption>> _relations = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRelations();
+  }
+
+  @override
+  void didUpdateWidget(_AttributeRows old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.node.parent.qgisFormIfLoaded, widget.node.parent.qgisFormIfLoaded)) _loadRelations();
+  }
+
+  void _loadRelations() {
+    final layer = widget.node.parent;
+    final form = layer.qgisFormIfLoaded;
+    _form = form;
+    _relations = const {};
+    if (form == null || !form.fields.values.any((f) => f.kind == QgisWidgetKind.valueRelation)) return;
+    final loaded = QgisFormOptions.relationsIfLoaded(form);
+    if (loaded != null) {
+      _relations = loaded;
+      return;
+    }
+    QgisFormOptions.relations(layer, form).then((r) {
+      if (mounted && identical(_form, form)) setState(() => _relations = r);
+    }, onError: (Object _) {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final node = widget.node;
+    final layer = node.parent;
+    final props = node.turfFeature.properties;
+    final form = layer.qgisFormIfLoaded;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final entry in widget.entries)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4.0),
+            child: FeatureDetailPanel._labelRow(
+              '${attributeLabel(entry.key, form)}: ',
+              attributeDisplayText(
+                props?[entry.key] ?? entry.value,
+                form: form?.fields[entry.key],
+                sqlType: layer.columnSqlTypes[entry.key] ?? '',
+                relationOptions: _relations[entry.key],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}

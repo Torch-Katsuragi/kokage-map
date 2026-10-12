@@ -26,6 +26,7 @@ import '../screens/layer_style_settings_screen.dart' show layerStyleSettings, la
 import '../utils/attribute_columns.dart';
 import '../utils/label_expression.dart';
 import '../utils/label_template.dart';
+import 'attribute_display.dart';
 
 /// QGIS の表示名の式で作った名前。式が無い・値が入らなければ null。
 ///
@@ -54,12 +55,13 @@ String? featureDisplayName(FeatureNode f) {
 }
 
 /// 地物を見分ける短い文字。表示名（[featureDisplayName]）が [exclude] 以外の値で取れればそれ、
-/// 無ければ [excludeColumn] 以外の列を [maxFields] 個まで「列: 値」で（文字の列を先に）。
+/// 無ければ [excludeColumn] 以外の列を [maxFields] 個まで「列: 値」で（文字の列を先に。列は QGIS の別名があれば別名）。
 /// 何も取れなければ null（「名前なし」は出さない）
 String? featureIdentifier(FeatureNode f, {String? excludeColumn, String? exclude, int maxFields = 2}) {
   if (f.isDisposed || f.parent.isDisposed) return null;
   final name = featureDisplayName(f);
   if (name != null && name != exclude) return name;
+  final form = f.parent.qgisFormIfLoaded;
   final texts = <String>[];
   final others = <String>[];
   for (final MapEntry(:key, :value) in (f.turfFeature.properties ?? const <String, dynamic>{}).entries) {
@@ -67,7 +69,7 @@ String? featureIdentifier(FeatureNode f, {String? excludeColumn, String? exclude
     if (value == null || value is Uint8List || value is List || value is Map) continue;
     final s = value.toString().trim();
     if (s.isEmpty) continue;
-    (value is String ? texts : others).add('$key: $s');
+    (value is String ? texts : others).add('${attributeLabel(key, form)}: $s');
   }
   final picked = [...texts, ...others].take(maxFields).toList();
   return picked.isEmpty ? null : picked.join(' / ');

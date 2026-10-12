@@ -28,6 +28,7 @@ import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/qgis_form.dart';
+import '../../presentation/attribute_display.dart' show valueRelationDisplayText;
 import '../../providers/notification_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/ui_state_providers.dart';
@@ -748,7 +749,13 @@ class AttributeTableController extends ChangeNotifier {
       // ValueMap・日付などは QGIS の見せ方で（書いてある値はそのまま）。
       // 真偽の列は ○/×（1/0・以前の版が書いた 'true'/'false' も読む）
       final bool? flag = boolean ? parseBooleanValue(value) : null;
-      final text = flag != null ? (flag ? '○' : '×') : qf?.displayText(value) ?? value?.toString() ?? '';
+      // ValueRelation は参照先の表示名（読めなければ値のまま）
+      final relation = qf != null && qf.kind == QgisWidgetKind.valueRelation && value != null
+          ? valueRelationDisplayText(value, qf, _formOptions[columnName])
+          : null;
+      final text = flag != null
+          ? (flag ? '○' : '×')
+          : relation ?? qf?.displayText(value) ?? value?.toString() ?? '';
       final isNull = text.isEmpty;
       final key = guideName &&
               _ref.read(tutorialProvider) != null &&

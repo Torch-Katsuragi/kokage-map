@@ -52,14 +52,20 @@ class DriveUrlInputResult {
 
 /// Drive URL入力ダイアログ
 class DriveUrlInputDialog extends StatefulWidget {
-  const DriveUrlInputDialog({super.key});
+  const DriveUrlInputDialog({super.key, @visibleForTesting this.driveService});
+
+  /// テスト用の差し替え。null なら本物のシングルトン
+  final GoogleDriveService? driveService;
 
   /// ダイアログを表示
-  static Future<DriveUrlInputResult?> show(BuildContext context) {
+  static Future<DriveUrlInputResult?> show(
+    BuildContext context, {
+    @visibleForTesting GoogleDriveService? driveService,
+  }) {
     return showDialog<DriveUrlInputResult>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const DriveUrlInputDialog(),
+      builder: (context) => DriveUrlInputDialog(driveService: driveService),
     );
   }
 
@@ -69,7 +75,7 @@ class DriveUrlInputDialog extends StatefulWidget {
 
 class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     with SingleTickerProviderStateMixin {
-  final GoogleDriveService _driveService = GoogleDriveService();
+  late final GoogleDriveService _driveService = widget.driveService ?? GoogleDriveService();
   final TextEditingController _urlController = TextEditingController();
 
   late TabController _tabController;
@@ -85,6 +91,9 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
   Timer? _validateDebounce;
   int _validateSeq = 0;
   String? _errorMessage;
+
+  /// エラーが取り直せば直りうるもの（圏外など）か。再試行のボタンを出す
+  bool _canRetry = false;
   String? _folderName;
   String? _folderId;
   bool? _isReadOnly;
@@ -93,6 +102,8 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
   void initState() {
     super.initState();
     _tabController = TabController(length: _hasQrTab ? 2 : 1, vsync: this);
+    // サインイン済みなら最初から入力欄を出す（サインインの案内を一瞬挟まない）
+    _isSignedIn = _driveService.authState.isAuthenticated;
     // One Tap は開いた後から返ってくる。届いたらボタンを差し替える
     _driveService.authState.addListener(_onAuthChanged);
     _initializeAuth();
@@ -144,11 +155,13 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     );
   }
 
-  /// 見つけたフォルダを忘れ、[error] を出す（null なら何も出さない）
-  void _clearFolder([String? error]) {
+  /// 見つけたフォルダを忘れ、[error] を出す（null なら何も出さない）。
+  /// [canRetry] なら再試行のボタンを添える
+  void _clearFolder([String? error, bool canRetry = false]) {
     if (!mounted) return;
     setState(() {
       _errorMessage = error;
+      _canRetry = canRetry;
       _folderName = null;
       _folderId = null;
       _isReadOnly = null;
@@ -168,14 +181,17 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _canRetry = false;
     });
 
     try {
-      // フォルダ情報を取得
-      final folderInfo = await _driveService.getFolderInfo(folderId);
+      // フォルダを確かめる。失敗は「圏外」「権限なし」「無い」「その他」で文言を分ける
+      // （⚠ 圏外を「共有設定を確認」と出すと、直す必要のない共有設定を触りに行かせる）
+      final lookup = await _driveService.lookupFolder(folderId);
       // 追い越された応答・閉じたあとの応答は捨てる
       if (seq != _validateSeq || !mounted) return;
-      if (folderInfo == null) return _clearFolder(t.drive.accessDenied);
+      final folderInfo = lookup.folder;
+      if (folderInfo == null) return _clearFolder(lookup.message, lookup.canRetry);
 
       // 権限を確認（編集可能かどうか）
       final canEdit = folderInfo.capabilities?.canEdit ?? false;
@@ -185,12 +201,13 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
         _folderName = folderInfo.name ?? 'Unknown';
         _isReadOnly = !canEdit;
         _errorMessage = null;
+        _canRetry = false;
         _isLoading = false;
       });
     } catch (e) {
       if (seq != _validateSeq) return;
       AppLogger.error('[DriveUrlInputDialog] フォルダ情報取得エラー: $e');
-      _clearFolder(t.drive.fetchError(error: e.toString()));
+      _clearFolder(t.drive.fetchError(error: e.toString()), true);
     }
   }
 
@@ -436,7 +453,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
         borderRadius: BorderRadius.circular(8),
       );
 
-  /// 赤い枠のエラー表示（URL タブ・QR タブ共通）
+  /// 赤い枠のエラー表示（URL タブ・QR タブ共通）。取り直せるものには再試行のボタンを添える
   Widget _buildErrorBox(String message) => Container(
         padding: const EdgeInsets.all(12),
         decoration: _boxDecoration(Colors.red),
@@ -450,9 +467,23 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                 style: const TextStyle(color: Colors.red, fontSize: 13),
               ),
             ),
+            if (_canRetry) ...[
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: _isLoading ? null : _retryValidate,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: Text(t.drive.retry),
+              ),
+            ],
           ],
         ),
       );
+
+  /// 同じ URL でもう一度確かめる
+  void _retryValidate() {
+    _validateDebounce?.cancel();
+    _validateUrl();
+  }
 
   /// 読み取り専用か編集可か
   String get _accessLabel =>

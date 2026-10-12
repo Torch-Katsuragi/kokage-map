@@ -1098,6 +1098,10 @@
   "drive": {
     "invalidUrl": "Invalid Google Drive URL",
     "accessDenied": "Cannot access folder. Check sharing settings.",
+    "folderOffline": "Cannot check the folder without a connection. Please try again where you have signal.",
+    "folderNotFound": "Folder not found. Check that the URL is correct (folders not shared with you also look like this).",
+    "folderLookupFailed": "Couldn't check the folder ($code)",
+    "retry": "Retry",
     "signInFailed": "Sign-in failed",
     "signInOffline": "Cannot sign in without a connection. Please try again where you have signal.",
     "consentCanceled": "Google Drive access isn't allowed yet. Sign in again; if you see \"Google hasn't verified this app\", tap \"Advanced\" → \"Go to … (unsafe)\", tick the Drive item and tap \"Continue\"",

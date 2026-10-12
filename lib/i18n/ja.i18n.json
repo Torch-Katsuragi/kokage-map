@@ -1039,6 +1039,7 @@
     "rotationLabel": "回転: ",
     "viewPhoto": "写真を大きく見る",
     "nameLabel": "名前: ",
+    "displayNameLabel": "表示名: ",
     "pathLabel": "パス: ",
     "coordLabel": "座標: ",
     "noLocation": "位置情報なし",

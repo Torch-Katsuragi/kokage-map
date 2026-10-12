@@ -192,6 +192,72 @@ void main() {
       expect(Directory(p.join(tmp.path, 'cache')).listSync().where((e) => p.basename(e.path).startsWith('probe_')), isEmpty);
     }, skip: skip);
 
+    test('同じラスタの呼び出しが重なっても 1 本だけ作り、全員が読める PNG を受け取る', () async {
+      // 地図の描き直しはクローン直後・開いた直後に続けて走る。以前は重なった呼び出しが同じ作業用ファイルを
+      // 消し合い、「No such file」「Cannot open TIFF image」で落ちていた（2026-10-13）
+      final src = at('ext_rgb_6674.tif');
+      final probe = (await GdalRasterOverlay.probe(src))!;
+      final results = await Future.wait([for (var i = 0; i < 6; i++) GdalRasterOverlay.render(src, probe)]);
+      for (final r in results) {
+        expect(r.pngPath, results.first.pngPath);
+        expect(img.decodePng(File(r.pngPath).readAsBytesSync()), isNotNull);
+      }
+      // 済んだら次の呼び出しはキャッシュを読む（作り直さない）
+      final t0 = File(results.first.pngPath).lastModifiedSync();
+      await GdalRasterOverlay.render(src, probe);
+      expect(File(results.first.pngPath).lastModifiedSync(), t0);
+    }, skip: skip);
+
+    test('QGIS で作った色表の GeoTIFF（EPSG:6674・4 m・nodata 0・Deflate・日本語の名前）: 色と透明と位置', () async {
+      // 2026-10-13 Pixel 9 の `林相.tif`（120x90、4 m、1 バンド Byte の色表、nodata 0）と同じ形をその場で作る
+      final idx = StringBuffer('ncols 120\nnrows 90\nxllcorner -3700\nyllcorner -229800\ncellsize 4\nNODATA_value 0\n');
+      for (var y = 0; y < 90; y++) {
+        idx.writeln([for (var x = 0; x < 120; x++) x < 10 && y < 10 ? 0 : 1 + (x ~/ 60) + 2 * (y ~/ 45)].join(' '));
+      }
+      final work = (await Directory(p.join(tmp.path, 'work')).create()).path;
+      File(p.join(work, 'idx.asc')).writeAsStringSync(idx.toString());
+      await gdal.translate(p.join(work, 'idx.asc'), p.join(work, 'idx.tif'), args: const ['-ot', 'Byte']);
+      File(p.join(work, 'pal.vrt')).writeAsStringSync('''
+<VRTDataset rasterXSize="120" rasterYSize="90">
+  <VRTRasterBand dataType="Byte" band="1">
+    <NoDataValue>0</NoDataValue>
+    <ColorInterp>Palette</ColorInterp>
+    <ColorTable>
+      <Entry c1="0" c2="0" c3="0" c4="255"/>
+      <Entry c1="200" c2="30" c3="30" c4="255"/>
+      <Entry c1="30" c2="160" c3="60" c4="255"/>
+      <Entry c1="40" c2="60" c3="200" c4="255"/>
+      <Entry c1="220" c2="200" c3="40" c4="255"/>
+    </ColorTable>
+    <SimpleSource><SourceFilename relativeToVRT="1">idx.tif</SourceFilename><SourceBand>1</SourceBand></SimpleSource>
+  </VRTRasterBand>
+</VRTDataset>''');
+      await gdal.translate(p.join(work, 'pal.vrt'), at('林相.tif'), args: const [
+        '-a_srs', 'EPSG:6674', '-a_ullr', '-3700', '-229440', '-3220', '-229800', '-co', 'COMPRESS=DEFLATE', //
+      ]);
+
+      final root = FolderNode('Home', children: []);
+      await root.updateChildren();
+      final node = root.children.whereType<ExternalOverlayImageNode>().singleWhere((n) => n.name == '林相.tif');
+      expect(node.probe.isPalette, isTrue);
+      expect(node.probe.epsg, 6674);
+      await node.ensureRendered();
+      final png = img.decodePng(File(node.cachedPngPath!).readAsBytesSync())!;
+      expect(png.numChannels, 4);
+      expect([png.width, png.height], [120, 90], reason: '4 m の正方形の画素のまま（地上の縦横比）');
+      expect(png.getPixel(2, 2).a, 0, reason: '左上の 10x10 は nodata');
+      Iterable<int> rgb(int x, int y) {
+        final px = png.getPixel(x, y);
+        return [px.r.toInt(), px.g.toInt(), px.b.toInt(), px.a.toInt()];
+      }
+
+      expect(rgb(30, 20), [200, 30, 30, 255]);
+      expect(rgb(90, 20), [30, 160, 60, 255]);
+      expect(rgb(30, 70), [40, 60, 200, 255]);
+      expect(rgb(90, 70), [220, 200, 40, 255]);
+      expectBoundsMatch(node.probe, node.overlayParams);
+    }, skip: skip);
+
     test('キャッシュ: 変わらなければ作り直さず、元が変われば作り直す', () async {
       final src = at('ext_rgb_6674.tif');
       final probe = (await GdalRasterOverlay.probe(src))!;

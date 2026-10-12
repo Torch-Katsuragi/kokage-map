@@ -125,6 +125,7 @@ abstract final class GdalRasterOverlay {
     _gdal = gdal;
     _cacheDirOverride = cacheDir;
     _probeCache.clear();
+    _rendering.clear();
   }
 
   static String? _cacheDirOverride;
@@ -294,8 +295,26 @@ abstract final class GdalRasterOverlay {
     _probeCache.remove(src);
   }
 
-  /// PNG キャッシュを作る（あれば使う）。付属ファイル一式（`GDALGetFileList`）の大きさ・更新時刻が変われば作り直す
-  static Future<GdalRasterRender> render(String src, GdalRasterProbe probe) async {
+  /// 作っている最中の PNG（元のパス → 結果）。同じラスタを同時に作らない
+  static final _rendering = <String, Future<GdalRasterRender>>{};
+
+  /// PNG キャッシュを作る（あれば使う）。付属ファイル一式（`GDALGetFileList`）の大きさ・更新時刻が変われば作り直す。
+  ///
+  /// 同じ [src] の呼び出しが重なったら、走っている 1 本の結果を返す。
+  /// ⚠ 以前は重なった呼び出しがそれぞれ同じ作業用の `.warp.tif` と PNG を消しては書いていて、片方が
+  /// 「No such file」「Cannot open TIFF image」で落ちたり、書き直し途中の PNG を地図が読んだりした
+  /// （地図の描き直しはクローン直後・開いた直後に続けて走る。2026-10-13 Pixel 9 で `林相.tif` が出なかった）
+  static Future<GdalRasterRender> render(String src, GdalRasterProbe probe) {
+    final running = _rendering[src];
+    if (running != null) return running;
+    final f = _render(src, probe);
+    _rendering[src] = f;
+    return f.whenComplete(() {
+      if (identical(_rendering[src], f)) _rendering.remove(src);
+    });
+  }
+
+  static Future<GdalRasterRender> _render(String src, GdalRasterProbe probe) async {
     final dir = await _cacheDir(src);
     final key = _key(src);
     final png = p.join(dir, '$key.png');

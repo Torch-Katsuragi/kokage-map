@@ -18,6 +18,7 @@
 
 import 'package:googleapis/drive/v3.dart' as drive;
 
+import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
@@ -126,6 +127,15 @@ class SyncResult {
   }
 }
 
+/// 同期の判定ができなかった（Drive のフォルダを取れない・連携していない）
+class SyncCheckException implements Exception {
+  const SyncCheckException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 /// Drive側ファイルエントリ（相対パス付き）
 class DriveFileEntry {
   final drive.File file;
@@ -218,14 +228,28 @@ class SyncEngine {
     }
   }
 
-  /// マージ用のファイルエントリ一覧を取得（[snapshot] を渡せばそれで判定する）
+  /// マージ用のファイルエントリ一覧を取得（[snapshot] を渡せばそれで判定する）。
+  ///
+  /// ⚠ 判定できなければ投げる（空の一覧を返さない）。空は「変えたものが無い」の意味なので、
+  /// 以前は名前解決の失敗（電波の切り替わり）でも「同期済み」と出て、上げていない変更が残っていた（2026-10-12、Pixel 9）
   Future<List<MergeFileEntry>> getMergeEntries(String localPath, {SyncSnapshot? snapshot}) async {
     try {
-      final s = snapshot ?? (await _take(localPath)).snapshot;
-      return s == null ? [] : await s.toMergeEntries();
+      final SyncSnapshot s;
+      if (snapshot != null) {
+        s = snapshot;
+      } else {
+        final taken = await _take(localPath);
+        if (taken.snapshot == null) {
+          throw SyncCheckException(
+            taken.failure == FolderSyncStatus.notLinked ? t.drive.driveNotLinked : t.drive.driveFolderNotFound,
+          );
+        }
+        s = taken.snapshot!;
+      }
+      return await s.toMergeEntries();
     } catch (e) {
       AppLogger.error('[SyncEngine] getMergeEntries エラー: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -237,7 +261,8 @@ class SyncEngine {
   }) =>
       _conflictResolver.executeMerge(localPath, decisions, snapshot: snapshot);
 
-  /// Driveのフォルダ構造をローカルに反映（空フォルダ含む）。作ったフォルダ数を返す
+  /// Driveのフォルダ構造をローカルに反映（空フォルダ含む）。作ったフォルダ数を返す。
+  /// Drive の一覧を取れなければ投げる（「同期済み」にしない）
   Future<int> ensureDriveFolders(String localPath) async {
     try {
       final driveId = (await _kmetaService.getMeta(localPath)).sync.driveId;
@@ -246,7 +271,7 @@ class SyncEngine {
       return await _fileOps.ensureLocalDirs(localPath, tree.folderPaths);
     } catch (e) {
       AppLogger.error('[SyncEngine] ensureDriveFolders エラー: $e');
-      return 0;
+      rethrow;
     }
   }
 }

@@ -69,11 +69,12 @@ class SyncPushHandler {
 
       final reuse = snapshot != null && snapshot.driveId == driveFolder ? snapshot : null;
       final folderInfo = reuse?.folderInfo ?? await _driveService.getFolderInfo(driveFolder);
-      final folderName = folderInfo?.name ?? 'Unknown';
+      final link = previousMeta.sync;
+      // フォルダ情報を取れなかった（電波など）ときは、控えてある名前を 'Unknown' で上書きしない
+      final folderName = folderInfo?.name ?? (link.driveId == driveFolder ? link.driveFolderName : null) ?? 'Unknown';
 
       // リンク情報は `<dir名>.qgs` に入る。集める前に書いておけば、その `.qgs` も
       // この push で一緒に上がる（後から書くと、次の同期でもう一度上がる）
-      final link = previousMeta.sync;
       if (link.driveId != driveFolder || link.driveFolderName != folderName) {
         await _kmetaService.setDriveSync(
           projectPath,

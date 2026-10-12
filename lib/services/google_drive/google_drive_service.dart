@@ -707,18 +707,39 @@ class GoogleDriveService {
     final out = <drive.File>[];
     String? pageToken;
     do {
-      final page = await api.files.list(
-        q: q,
-        $fields: 'nextPageToken, $fields',
-        pageSize: 1000,
-        pageToken: pageToken,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true,
-      );
+      final token = pageToken;
+      final page = await retryTransient(() => api.files.list(
+            q: q,
+            $fields: 'nextPageToken, $fields',
+            pageSize: 1000,
+            pageToken: token,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+          ));
       out.addAll(page.files ?? const []);
       pageToken = page.nextPageToken;
     } while (pageToken != null && pageToken.isNotEmpty);
     return out;
+  }
+
+  /// 通信の一時的な失敗（名前解決の失敗・接続切れ・時間切れ）を 1 回だけ待って取り直すまでの間
+  @visibleForTesting
+  static Duration transientRetryDelay = const Duration(milliseconds: 800);
+
+  /// 読むだけの呼び出し（一覧・情報取得）を、通信の一時的な失敗なら 1 回だけ取り直す。
+  ///
+  /// Wi-Fi の切り替わりで名前解決が一瞬落ちる（`Failed host lookup: 'www.googleapis.com'`）ことがある
+  /// （2026-10-12、Pixel 9）。書き込みは二重になりうるので使わない。API のエラー（4xx/5xx）はそのまま投げる
+  @visibleForTesting
+  static Future<T> retryTransient<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on Object catch (e) {
+      if (e is! http.ClientException && e is! TimeoutException) rethrow;
+      AppLogger.debug('[GoogleDriveService] 通信の一時的な失敗。1 回だけ取り直す: $e');
+      await Future<void>.delayed(transientRetryDelay);
+      return call();
+    }
   }
 
   /// 中身を上げる。[existingFileId] があればその版を更新し、無ければ [parentId] に作る
@@ -969,11 +990,12 @@ class GoogleDriveService {
     if (_driveApi == null) return null;
 
     try {
-      final result = await _driveApi!.files.get(
-        folderId,
-        $fields: 'id, name, modifiedTime, owners, capabilities',
-        supportsAllDrives: true,
-      );
+      final api = _driveApi!;
+      final result = await retryTransient(() => api.files.get(
+            folderId,
+            $fields: 'id, name, modifiedTime, owners, capabilities',
+            supportsAllDrives: true,
+          ));
       return result as drive.File;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] フォルダ情報取得エラー: $e');

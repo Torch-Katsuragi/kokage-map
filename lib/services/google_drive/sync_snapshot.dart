@@ -16,6 +16,8 @@
 // Root Maps: 同期の判定
 // 帳簿・Drive・手元をそろえて見て、何が変わったかを出す（同期状態とマージの一覧）
 
+import 'dart:async';
+
 import 'package:googleapis/drive/v3.dart' as gdrive;
 import 'package:path/path.dart' as p;
 
@@ -74,12 +76,22 @@ class SyncSnapshot {
       AppLogger.debug('[SyncSnapshot] driveId が無い: $localPath');
       return (snapshot: null, failure: FolderSyncStatus.notLinked);
     }
-    // フォルダの確認・Drive の一覧・手元の走査は互いに待たない
-    final (folderInfo, tree, localFiles) = await (
-      driveService.getFolderInfo(driveId),
-      fileOps.listDriveTree(driveId),
-      fileOps.scanLocalFiles(localPath),
-    ).wait;
+    // フォルダの確認・Drive の一覧・手元の走査は互いに待たない。
+    // どれかが失敗したら投げる（ParallelWaitError のままでは通知が読めないので、最初の失敗を投げ直す）
+    final gdrive.File? folderInfo;
+    final DriveTree tree;
+    final Map<String, DateTime> localFiles;
+    try {
+      (folderInfo, tree, localFiles) = await (
+        driveService.getFolderInfo(driveId),
+        fileOps.listDriveTree(driveId),
+        fileOps.scanLocalFiles(localPath),
+      ).wait;
+    } on ParallelWaitError<Object?, (AsyncError?, AsyncError?, AsyncError?)> catch (e) {
+      final first = e.errors.$1 ?? e.errors.$2 ?? e.errors.$3;
+      if (first == null) rethrow;
+      Error.throwWithStackTrace(first.error, first.stackTrace);
+    }
     if (folderInfo == null) {
       AppLogger.debug('[SyncSnapshot] Driveのフォルダを取れない: $driveId');
       return (snapshot: null, failure: FolderSyncStatus.error);
@@ -224,7 +236,7 @@ class SyncSnapshot {
     );
   }
 
-  /// マージ用のファイルエントリ一覧。途中で失敗したら、そこまでの分を返す
+  /// マージ用のファイルエントリ一覧。途中で失敗したら投げる（そこまでの分を返すと、残りを「変更なし」と見てしまう）
   Future<List<MergeFileEntry>> toMergeEntries() async {
     final entries = <MergeFileEntry>[];
     AppLogger.debug(
@@ -232,100 +244,95 @@ class SyncSnapshot {
       'drive=${drive.files.map((e) => e.relativePath).toList()} '
       'synced=${_ledger.keys.toList()}',
     );
-    try {
-      for (final item in _diff.ledger) {
-        final lastSyncedTime = item.synced.lastSyncedTime;
-        final drivePath = item.onDrive?.relativePath;
-        var localChange = MergeChangeType.none;
-        var remoteChange = MergeChangeType.none;
-        FileChangeInfo? moveInfo;
+    for (final item in _diff.ledger) {
+      final lastSyncedTime = item.synced.lastSyncedTime;
+      final drivePath = item.onDrive?.relativePath;
+      var localChange = MergeChangeType.none;
+      var remoteChange = MergeChangeType.none;
+      FileChangeInfo? moveInfo;
 
-        if (drivePath == null) {
-          remoteChange = MergeChangeType.deleted;
-        } else if (item.localMove) {
-          // この端末で改名・移動したもの（Drive はまだ元の場所）→ ローカルの移動
-          localChange = MergeChangeType.moved;
-          moveInfo = FileChangeInfo(
-            fileName: item.path,
-            type: FileChangeType.moved,
-            movedFrom: drivePath,
-            movedTo: item.path,
-          );
-        } else if (item.remoteMove) {
-          remoteChange = MergeChangeType.moved;
-          moveInfo = FileChangeInfo(
-            fileName: item.path,
-            type: FileChangeType.moved,
-            movedFrom: item.path,
-            movedTo: drivePath,
-          );
-        } else if (item.remoteNewer) {
-          remoteChange = MergeChangeType.modified;
+      if (drivePath == null) {
+        remoteChange = MergeChangeType.deleted;
+      } else if (item.localMove) {
+        // この端末で改名・移動したもの（Drive はまだ元の場所）→ ローカルの移動
+        localChange = MergeChangeType.moved;
+        moveInfo = FileChangeInfo(
+          fileName: item.path,
+          type: FileChangeType.moved,
+          movedFrom: drivePath,
+          movedTo: item.path,
+        );
+      } else if (item.remoteMove) {
+        remoteChange = MergeChangeType.moved;
+        moveInfo = FileChangeInfo(
+          fileName: item.path,
+          type: FileChangeType.moved,
+          movedFrom: item.path,
+          movedTo: drivePath,
+        );
+      } else if (item.remoteNewer) {
+        remoteChange = MergeChangeType.modified;
+      }
+
+      final localTime = item.consumedByMove ? null : item.localModified;
+      if (!item.consumedByMove) {
+        if (localTime == null) {
+          localChange = MergeChangeType.deleted;
+        } else if (lastSyncedTime != null && localTime.isAfter(lastSyncedTime)) {
+          localChange = MergeChangeType.modified;
         }
-
-        final localTime = item.consumedByMove ? null : item.localModified;
-        if (!item.consumedByMove) {
-          if (localTime == null) {
-            localChange = MergeChangeType.deleted;
-          } else if (lastSyncedTime != null && localTime.isAfter(lastSyncedTime)) {
-            localChange = MergeChangeType.modified;
-          }
-        }
-
-        if (localChange == MergeChangeType.none && remoteChange == MergeChangeType.none) continue;
-        // 両方 modified の gpkg で base が残っていれば、行単位で合わせられる
-        final mergeable = localChange == MergeChangeType.modified &&
-            remoteChange == MergeChangeType.modified &&
-            await SyncBaseStore.hasBase(localPath, item.path);
-        entries.add(MergeFileEntry(
-          relativePath: item.path,
-          localChange: localChange,
-          remoteChange: remoteChange,
-          localModifiedTime: localTime,
-          remoteModifiedTime: item.onDrive?.file.modifiedTime,
-          moveInfo: moveInfo,
-          driveFileId: item.synced.driveFileId,
-          remoteMd5: item.onDrive?.file.md5Checksum,
-          mergeable: mergeable,
-        ));
       }
 
-      for (final entry in _diff.localOnly.entries) {
-        entries.add(MergeFileEntry(
-          relativePath: entry.key,
-          localChange: MergeChangeType.added,
-          remoteChange: MergeChangeType.none,
-          localModifiedTime: entry.value,
-        ));
-      }
+      if (localChange == MergeChangeType.none && remoteChange == MergeChangeType.none) continue;
+      // 両方 modified の gpkg で base が残っていれば、行単位で合わせられる
+      final mergeable = localChange == MergeChangeType.modified &&
+          remoteChange == MergeChangeType.modified &&
+          await SyncBaseStore.hasBase(localPath, item.path);
+      entries.add(MergeFileEntry(
+        relativePath: item.path,
+        localChange: localChange,
+        remoteChange: remoteChange,
+        localModifiedTime: localTime,
+        remoteModifiedTime: item.onDrive?.file.modifiedTime,
+        moveInfo: moveInfo,
+        driveFileId: item.synced.driveFileId,
+        remoteMd5: item.onDrive?.file.md5Checksum,
+        mergeable: mergeable,
+      ));
+    }
 
-      for (final b in _diff.onBoth) {
-        entries.add(MergeFileEntry(
-          relativePath: b.onDrive.relativePath,
-          localChange: MergeChangeType.added,
-          remoteChange: MergeChangeType.added,
-          localModifiedTime: b.localModified,
-          remoteModifiedTime: b.onDrive.file.modifiedTime,
-          driveFileId: b.onDrive.file.id,
-          remoteMd5: b.onDrive.file.md5Checksum,
-          onBothWithoutLedger: true,
-        ));
-      }
+    for (final entry in _diff.localOnly.entries) {
+      entries.add(MergeFileEntry(
+        relativePath: entry.key,
+        localChange: MergeChangeType.added,
+        remoteChange: MergeChangeType.none,
+        localModifiedTime: entry.value,
+      ));
+    }
 
-      for (final driveEntry in _diff.driveOnly) {
-        AppLogger.debug('  リモート追加検出: ${driveEntry.relativePath} (id: ${driveEntry.file.id})');
-        entries.add(MergeFileEntry(
-          relativePath: driveEntry.relativePath,
-          localChange: MergeChangeType.none,
-          remoteChange: MergeChangeType.added,
-          remoteModifiedTime: driveEntry.file.modifiedTime,
-          driveFileId: driveEntry.file.id,
-          remoteMd5: driveEntry.file.md5Checksum,
-        ));
-      }
-    } catch (e) {
-      AppLogger.error('[SyncEngine] getMergeEntries エラー: $e');
-      return entries;
+    for (final b in _diff.onBoth) {
+      entries.add(MergeFileEntry(
+        relativePath: b.onDrive.relativePath,
+        localChange: MergeChangeType.added,
+        remoteChange: MergeChangeType.added,
+        localModifiedTime: b.localModified,
+        remoteModifiedTime: b.onDrive.file.modifiedTime,
+        driveFileId: b.onDrive.file.id,
+        remoteMd5: b.onDrive.file.md5Checksum,
+        onBothWithoutLedger: true,
+      ));
+    }
+
+    for (final driveEntry in _diff.driveOnly) {
+      AppLogger.debug('  リモート追加検出: ${driveEntry.relativePath} (id: ${driveEntry.file.id})');
+      entries.add(MergeFileEntry(
+        relativePath: driveEntry.relativePath,
+        localChange: MergeChangeType.none,
+        remoteChange: MergeChangeType.added,
+        remoteModifiedTime: driveEntry.file.modifiedTime,
+        driveFileId: driveEntry.file.id,
+        remoteMd5: driveEntry.file.md5Checksum,
+      ));
     }
     AppLogger.debug('[SyncEngine] getMergeEntries完了: ${entries.length}件のエントリ');
     return entries;

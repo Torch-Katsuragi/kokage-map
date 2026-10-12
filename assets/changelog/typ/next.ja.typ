@@ -49,7 +49,8 @@
   [属性表の CSV が Excel で化けた。UTF-8 の BOM を付ける],
   [軌跡の抽出の長さ・GNSS のばらつきを楕円体の上で測る（QGIS と同じ値）],
   [形の列が geom でない gpkg（GeoPandas の geometry・ArcGIS Pro の Shape など）で地物が出ず、足せなかった。rtree のある gpkg を見ただけで閉じるときに書き直していた],
-  [id という列が地物番号（fid）に見えて直せず、geometry という列が出なかった。情報パネルで latitude・longitude・vertex\_count・timestamp という列が座標や頂点数に隠れ、\_\_id という列のある表は検索で当たらなかった。列の値のまま出して直せる。主キーの列は読み取り専用で出す]
+  [id という列が地物番号（fid）に見えて直せず、geometry という列が出なかった。情報パネルで latitude・longitude・vertex\_count・timestamp という列が座標や頂点数に隠れ、\_\_id という列のある表は検索で当たらなかった。列の値のまま出して直せる。主キーの列は読み取り専用で出す],
+  [同期の「アップロード」「ダウンロード」で Drive の一覧を取れない（電波の切り替わりなど）と「同期済み」と出ていた。エラーにして記録を変えず、一瞬の失敗は 1 回取り直す]
 )
 
 #fixes(

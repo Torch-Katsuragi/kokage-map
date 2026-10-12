@@ -49,6 +49,7 @@ import '../../screens/gallery_import_screen.dart';
 import '../../services/external/external_layer_cache.dart';
 import '../../services/kmeta_service.dart';
 import '../../services/layer_drawer_service.dart';
+import '../../services/qgis/qgs_read_back_notice.dart';
 import '../../tutorial/tutorial.dart';
 import '../dialogs/add_folder_type_dialog.dart';
 import '../dialogs/drive_url_input_dialog.dart';
@@ -603,7 +604,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     ref.notify(t.layerDrawer.cloningDrive(name: urlResult.folderName));
 
     try {
-      final node = await LayerDrawerService.cloneDriveFolder(
+      final cloned = await LayerDrawerService.cloneDriveFolder(
         parent: widget.currentNode as FolderNode,
         folderId: urlResult.folderId,
         folderName: urlResult.folderName,
@@ -611,9 +612,11 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         isReadOnly: urlResult.isReadOnly,
       );
 
-      if (node != null) {
+      if (cloned != null) {
         triggerMapRefresh();
         ref.notify(t.layerDrawer.cloneSuccess(name: urlResult.folderName), level: NotificationLevel.success);
+        final readBack = cloned.readBack;
+        if (readBack != null) notifyQgsReadBack(ref, readBack);
       } else {
         ref.notify(t.layerDrawer.cloneFailed, level: NotificationLevel.error);
       }

@@ -29,7 +29,9 @@ tags: [technical, geopackage, qgis, interop]
 - **逆方向**: プロジェクトを開いたとき `QgsReadBack` が root と子 dir の `.qgs` を見て、印（`kokage/savedAt`）と
   root の `saveDateTime` が食い違えば（＝QGIS が後から保存した）寛容インポータで View・スタイル・可視性を
   取り込み、続く自動更新で正規化＋印つきに書き戻す。ログは `[QgsReadBack]`。
-  Drive 同期でツリーを読み直したあとにも走る（`DriveSyncOperations.refreshAfterSync`、2026-09-29）
+  Drive 同期でツリーを読み直したあとにも走る（`DriveSyncOperations.refreshAfterSync`、2026-09-29）。
+  レイヤ一覧からの Drive クローンのあとにも走る（`LayerDrawerService.attachClonedFolder`、2026-10-12）。
+  呼び出しが重なっても `QgsReadBack.run` は 1 本ずつ走り、後のものは付いた印を見て何もしない。通知は `notifyQgsReadBack`
 - **子 dir**: 自分の設定（`.qgs`）を持つ子 dir は `<子dir名>.qgs` を持つ。どの `.qgs` にも子孫の dir の
   レイヤが平らに写される（2026-09-30 に埋め込みをやめた。どの dir を QGIS で開いても下が全部直せる）。
   持ち主はデータソースの置き場所の dir。読み戻しは QGIS で保存された `.qgs` を古い順に取り込み、

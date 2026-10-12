@@ -38,6 +38,7 @@ import '../../widgets/dialogs/drive_sign_in_prompt.dart';
 import '../../widgets/layer_drawer/common_dialogs.dart';
 import '../../widgets/layer_drawer/sync_merge_dialog.dart';
 import '../qgis/qgs_read_back.dart';
+import '../qgis/qgs_read_back_notice.dart';
 import 'conflict_restorer.dart';
 import 'index.dart';
 
@@ -143,7 +144,7 @@ class DriveSyncOperations {
         node.syncStatus = SyncStatus.synced;
         onStateChanged();
         if (foldersCreated > 0) {
-          await refreshAfterSync(node);
+          await _refreshAndNotify(ref, node);
           onStateChanged();
         }
         _notify(
@@ -187,7 +188,7 @@ class DriveSyncOperations {
             result.deletedCount > 0 ||
             result.movedCount > 0 ||
             result.mergedCount > 0) {
-          await refreshAfterSync(node);
+          await _refreshAndNotify(ref, node);
           onMapRefresh?.call();
           onStateChanged();
         }
@@ -205,7 +206,7 @@ class DriveSyncOperations {
           ref,
           result,
           afterRestore: () async {
-            await refreshAfterSync(node);
+            await _refreshAndNotify(ref, node);
             onMapRefresh?.call();
           },
         );
@@ -516,9 +517,11 @@ class DriveSyncOperations {
   ///
   /// 読み戻しは開いたときにしか走らなかったので、QGIS で直した `.qgs` が Drive 越しに届いても、
   /// 次にアプリが設定や `.qgs` を書いた時点で QGIS 側の変更が消えていた（2026-09-29）
-  static Future<void> refreshAfterSync(LayerTreeNode node) async {
+  ///
+  /// 読み戻したときはその結果を返す（通知は呼び手。[notifyQgsReadBack]）
+  static Future<QgsReadBackResult?> refreshAfterSync(LayerTreeNode node) async {
     await updateChildrenRecursive(node);
-    if (node is! FolderNode) return;
+    if (node is! FolderNode) return null;
     try {
       final r = await const QgsReadBack().run(node);
       if (r != null) {
@@ -527,9 +530,17 @@ class DriveSyncOperations {
         );
         await updateChildrenRecursive(node);
       }
+      return r;
     } on Object catch (e) {
       AppLogger.debug('[DriveSync] 読み戻しに失敗: $e');
+      return null;
     }
+  }
+
+  /// [refreshAfterSync] して、読み戻したら通知する（手動の同期）
+  static Future<void> _refreshAndNotify(WidgetRef ref, LayerTreeNode node) async {
+    final r = await refreshAfterSync(node);
+    if (r != null) notifyQgsReadBack(ref, r);
   }
 
   /// 子ノードを再帰的に更新（フォルダ・GeoPackage両方）

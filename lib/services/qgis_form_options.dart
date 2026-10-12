@@ -16,6 +16,7 @@
 // こかげマップ: 属性フォームの選択肢を集める（UniqueValues はレイヤの既存の値、
 // ValueRelation は参照先のレイヤの キー・値 の組をフィルタの式で絞ったもの）
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/nodes/external_layer_node.dart';
@@ -44,6 +45,47 @@ class QgisFormOptions {
             if (opts != null) out[field.name] = opts;
           default:
         }
+      } on Object catch (e) {
+        AppLogger.debug('[QgisFormOptions] ${field.name} の選択肢を集められない: $e');
+      }
+    }
+    return out;
+  }
+
+  /// ValueRelation の列だけの選択肢（情報パネルが表示名を引くのに使う）。
+  /// [form] の写しごとに 1 回だけ読む（レイヤを読み込み直すと [form] も読み直すので、そのとき取り直す）
+  /// 参照先が見つからなかった列があれば次に呼んだとき読み直す（参照先のレイヤが後から読み込まれる）
+  static Future<Map<String, List<QgisValueOption>>> relations(LayerNode layer, QgisForm form) =>
+      _relationFutures[form] ??= _loadRelations(layer, form).then((r) {
+        final wanted = form.fields.values.where((f) => f.kind == QgisWidgetKind.valueRelation).length;
+        if (r.length < wanted) {
+          _relationFutures[form] = null;
+        } else {
+          _relationsLoaded[form] = r;
+        }
+        return r;
+      });
+
+  /// [relations] を読み終えていればその結果（参照先が欠けていた回は持たない）。まだなら null
+  static Map<String, List<QgisValueOption>>? relationsIfLoaded(QgisForm form) => _relationsLoaded[form];
+
+  static final _relationFutures = Expando<Future<Map<String, List<QgisValueOption>>>>();
+  static final _relationsLoaded = Expando<Map<String, List<QgisValueOption>>>();
+
+  /// テスト用: 参照先を読まずに ValueRelation の選択肢を置く
+  @visibleForTesting
+  static void debugSetRelations(QgisForm form, Map<String, List<QgisValueOption>> options) {
+    _relationsLoaded[form] = options;
+    _relationFutures[form] = Future.value(options);
+  }
+
+  static Future<Map<String, List<QgisValueOption>>> _loadRelations(LayerNode layer, QgisForm form) async {
+    final out = <String, List<QgisValueOption>>{};
+    for (final field in form.fields.values) {
+      if (field.kind != QgisWidgetKind.valueRelation) continue;
+      try {
+        final opts = await _relation(layer, field);
+        if (opts != null) out[field.name] = opts;
       } on Object catch (e) {
         AppLogger.debug('[QgisFormOptions] ${field.name} の選択肢を集められない: $e');
       }

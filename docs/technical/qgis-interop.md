@@ -361,6 +361,7 @@ QGIS のレイヤのプロパティ →「属性フォーム」で決めた入�
 | その他（Color・ExternalResource・RelationReference など） | 文字の欄（種類と設定は持ち帰る） |
 
 - **別名**は欄の名前と属性テーブルの見出しに。必須（強制）の欄は名前に `*`
+- **情報パネル**は QGIS の「地物情報の表示」に合わせ、列は別名、値は表示する形（ValueMap・ValueRelation は表示名、日付は `display_format`、真偽は「はい／いいえ」）で出す。Hidden の列も出す。検索の結果の「列: 値」も別名。属性テーブルのマスも ValueRelation は表示名
 - **既定値**は新しい地物（`FeatureNode._newAttributes`。どの道具で作っても通る）に入れる。名前・説明は道具が値を渡せばそちらを使う。
   `applyOnUpdate` のものは、属性フォームで欄を直したとき・編集パネルで保存したときにも当て直す。式は qgis_expression で評価する
   （`now()` / `$now` / `uuid()`・文字や数・列の参照・関数の部分集合）。読めない式（`@user_full_name` などの変数・知らない関数）はその列を飛ばしてログに 1 回

@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../i18n/strings.g.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
+import '../presentation/attribute_display.dart';
 import '../presentation/feature_display_name.dart';
 import '../presentation/node_presenter.dart';
 import '../providers/ui_state_providers.dart';
@@ -153,7 +154,12 @@ class _FeatureSearchDialogState extends State<FeatureSearchDialog> {
               return ListTile(
                 dense: true,
                 leading: Icon(NodePresenter.getIcon(h.feature), size: 20),
-                title: Text('${h.column}: ${h.value}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                // 列は QGIS の別名があれば別名（値は当たった値のまま）
+                title: Text(
+                  '${attributeLabel(h.column, h.layer.qgisFormIfLoaded)}: ${h.value}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 subtitle: Text(
                   id == null ? h.layer.name : '${h.layer.name} › $id',
                   maxLines: 1,

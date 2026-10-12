@@ -131,7 +131,9 @@ QGIS 製の gpkg を Android で編集して QGIS に戻すと、足した・動
 → `GeoPackageFile.dispose()` の最後（接続を閉じたあと）で `GpkgIndexRepair.rebuildFile()` を呼び、
 rtree と範囲を実データから焼き直すようにした。同じファイルを別の接続がまだ開いていれば最後に閉じる側に任せる。
 rtree の無い gpkg（このアプリで作ったもの）は何もしない。編集のたびの更新は今も Android では失敗する（警告ログ）が、
-閉じた時点で辻褄が合う
+閉じた時点で辻褄が合う。
+閉じずに Drive へ上げる・base に写す・裏に回るときは `GeoPackageFile.prepareForHandOff()` が同じ整合をする
+（2026-10-12〜。以前は開いたままのプロジェクトを上げると rtree とトリガーが欠けたまま上がっていた。[[qgis-interop#閉じずに外へ出すとき（2026-10-12〜）]]）
 
 ### 速さ（2026-09-24、`test/support/geodiff_bench.dart`）
 

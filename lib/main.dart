@@ -32,6 +32,7 @@ import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
 import 'i18n/strings.g.dart';
 import 'models/geopackage/geopackage_connection.dart';
+import 'models/geopackage/geopackage_file.dart';
 import 'models/nodes/feature_node.dart';
 import 'models/nodes/layer_tree_node.dart';
 import 'providers/drawing_provider.dart';
@@ -320,9 +321,13 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
 
   /// 裏に回るとき、保留中の属性（書き直し待ちも）を書いてから web の元ファイルへ書き戻す。
   /// ⚠ 順番を守る。以前は並べて呼んでいて、属性を書く前に書き戻すことがあり、web は hidden で属性を書いていなかった
+  /// そのあと、アプリが書いた gpkg を QGIS/GDAL が読める形にする（落としたトリガーを戻し、rtree を合わせる）。
+  /// 裏に回ったまま止められても、同じ端末の QGIS や USB で写したファイルで足した地物が見えるように。
+  /// トリガーの控えはメモリにしか無いので、ここを逃すと戻せなくなる
   Future<void> _flushOnBackground() async {
     await BackgroundSaveManager.instance.flushAllChanges();
     await GeoPackageConnection.flushPendingCheckIns();
+    await GeoPackageFile.prepareAllForHandOff();
   }
 
   Future<void> _cleanupOnAppExit() async {
@@ -330,6 +335,7 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     try {
       await InternalGpsLocationStore().dispose();
       await BackgroundSaveManager.instance.dispose();
+      await GeoPackageFile.prepareAllForHandOff();
       ref.read(gpsManagerServiceProvider).dispose();
       AppLogger.debug('[Root Maps] アプリ終了クリーンアップ完了');
     } catch (e) {

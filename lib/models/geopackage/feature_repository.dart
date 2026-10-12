@@ -164,9 +164,6 @@ class FeatureRepository {
   // 書き込み前クリンナップ
   // ============================================================
 
-  /// クリンナップ済みテーブルの記録（1テーブルにつき1回だけ実行）
-  final Set<String> _cleanedTables = {};
-
   /// 1 行の 1 列にそのまま値を書く（同期の衝突を相手の値に戻すとき）。
   /// 書く前に ST_ トリガーを外す（[_prepareForWrite]）。値の型は呼び手が合わせる（ジオメトリは GPKG の blob）
   Future<bool> setColumnValue(
@@ -190,11 +187,14 @@ class FeatureRepository {
   /// 外部ツール（QGIS/GeoPandas等）が作成したGPKGには
   /// SpatiaLite拡張に依存するトリガーが含まれることがあり、
   /// sqfliteでは実行できない。書き込み前に検出・除去する。
+  /// 見回り済みの表は同じファイルの接続で共有し、トリガーを戻したとき・開き直したときに空になる
+  /// （`QgisInterop.cleanedTables`。外へ出す前に戻したあと、次に書くときにもう一度落とす）
   Future<void> _prepareForWrite(String tableName) async {
-    if (_cleanedTables.contains(tableName)) return;
+    final cleaned = spatialIndex.qgisInterop.cleanedTables;
+    if (cleaned.contains(tableName)) return;
 
     await spatialIndex.removeTableTriggers(tableName);
-    _cleanedTables.add(tableName);
+    cleaned.add(tableName);
   }
 
   // ============================================================

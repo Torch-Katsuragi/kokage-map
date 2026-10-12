@@ -225,6 +225,7 @@ class SyncPushHandler {
               return;
             }
 
+            await SyncBaseStore.prepareForUpload(localFile.path); // gpkg は QGIS が読める形に（トリガー・rtree）
             final result = await _driveService.uploadFileById(
               localFile.path,
               targetFolder,

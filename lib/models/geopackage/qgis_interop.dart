@@ -55,6 +55,19 @@ class QgisInterop {
   /// 落として戻していないトリガーがあるか
   bool get hasRemovedTriggers => _removedTriggers.isNotEmpty;
 
+  /// 書く前のトリガーの見回り（`FeatureRepository._prepareForWrite`）を済ませた表。
+  ///
+  /// 同じファイルを開いている `GeoPackageFile` のあいだで共有する（`GeoPackageConnection.qgisInterop` はパスごとに 1 つ）。
+  /// トリガーを戻したとき・開き直したときに空にする。`GeoPackageFile` ごとに持つと、
+  /// 別のものがトリガーを戻したあとも「済み」のまま書き、ST_ 関数が無くて落ちる
+  final Set<String> cleanedTables = {};
+
+  /// 控えを捨てる（Drive から落としたファイルに置き換えたとき。落とした中身が正で、こちらの控えは古い）
+  void forget() {
+    _removedTriggers.clear();
+    cleanedTables.clear();
+  }
+
   /// 削除するトリガーの定義を控えておく。
   ///
   /// 実際の DROP は呼び出し側が行う。ここは「戻せるようにする」だけ。
@@ -68,6 +81,8 @@ class QgisInterop {
   /// クローズ時に呼ぶ。こかげマップ の書き込みが終わったあとでなければならない
   /// （復元後に書くと ST_ 関数が無くて落ちる）。
   Future<void> restoreTriggers(Database db) async {
+    // 戻したあとに書くときは、もう一度落とす（見回りをやり直す）
+    cleanedTables.clear();
     if (_removedTriggers.isEmpty) return;
 
     var restored = 0;

@@ -12,6 +12,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../core/fs/safe_path.dart';
 import '../../models/geopackage/geopackage_connection.dart';
+import '../../models/geopackage/geopackage_file.dart';
 import '../../utils/app_logger.dart';
 import '../geodiff/geodiff.dart';
 
@@ -80,6 +81,8 @@ abstract final class SyncBaseStore {
     try {
       if (!await fs.exists(src)) return false;
       await fs.createDirectory(p.dirname(dst));
+      // base は Drive に上げた中身と同じ形に（上げる前に整合済みなら何もしない）
+      await prepareForUpload(src);
       // geodiff の SQLite が読む前に、アプリの接続を閉じる（別の SQLite 同士で同じファイルを開かない）
       await GeoPackageConnection.closeAllFor(src);
       // sqlite のバックアップ API で写す（書き込み途中でも一貫した写しになる）
@@ -100,6 +103,14 @@ abstract final class SyncBaseStore {
     }
   }
 
+  /// 手元のファイルを Drive に上げる前に呼ぶ。gpkg は QGIS/GDAL が読める状態にする
+  /// （落としたトリガーを戻し、rtree・範囲・件数を実データに合わせる。[GeoPackageFile.prepareForHandOff]）。
+  /// gpkg 以外・アプリが書いていない gpkg は何もしない
+  static Future<void> prepareForUpload(String absPath) async {
+    if (!isGpkg(absPath)) return;
+    await GeoPackageFile.prepareForHandOff(absPath);
+  }
+
   /// Drive から gpkg を上書きダウンロードする前に呼ぶ。開いている接続を閉じる
   /// （開いたまま下で中身が入れ替わるのを避ける）。gpkg 以外・web では何もしない。
   static Future<void> releaseBeforeOverwrite(String absPath) async {
@@ -115,7 +126,11 @@ abstract final class SyncBaseStore {
   static Future<void> settleAfterDownload(String absPath) async {
     // 落とした中身はこの端末の編集を含まない。置き換える前（closeAllFor）に残った「書いた」印を消す。
     // 残すと、見ただけの接続を閉じるときに範囲と rtree を書き直し、落としたばかりのファイルが変わって上がっていた
-    if (isGpkg(absPath)) GeoPackageConnection.clearWrites(absPath);
+    // 落としたトリガーの控えも同じ（落とした中身にあるものが正。残すと閉じるときに古い定義を書き戻す）
+    if (isGpkg(absPath)) {
+      GeoPackageConnection.clearWrites(absPath);
+      GeoPackageConnection.qgisInteropFor(absPath).forget();
+    }
     if (defaultTargetPlatform != TargetPlatform.android || !fs.hasRealPaths || !isGpkg(absPath)) return;
     try {
       final db = await openDatabase(absPath, singleInstance: false);

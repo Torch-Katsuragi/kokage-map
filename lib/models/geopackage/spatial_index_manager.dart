@@ -17,6 +17,8 @@
 // R-Tree操作、エンベロープ更新、SpatiaLiteトリガー処理を担当
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import '../../utils/app_logger.dart';
 import '../../utils/wkb_utils.dart';
 import 'geopackage_connection.dart';
@@ -30,8 +32,17 @@ class SpatialIndexManager {
   /// DB接続への参照
   final GeoPackageConnection connection;
 
-  /// QGIS相互運用（落としたトリガーを控えて、クローズ時に戻す）
-  final QgisInterop qgisInterop = QgisInterop();
+  /// QGIS相互運用（落としたトリガーを控えて、クローズ時・外へ出す前に戻す）。同じファイルの接続で共有する
+  QgisInterop get qgisInterop => connection.qgisInterop;
+
+  /// テスト用: Android 本体の SQLite と同じく rtree モジュールが無いものとして振る舞う
+  /// （rtree への書き込みが `no such module: rtree` で落ちる）
+  @visibleForTesting
+  static bool debugWithoutRtreeModule = false;
+
+  static void _failIfNoRtreeModule() {
+    if (debugWithoutRtreeModule) throw StateError('no such module: rtree（debugWithoutRtreeModule）');
+  }
 
   /// コンストラクタ
   SpatialIndexManager(this.connection);
@@ -62,6 +73,7 @@ class SpatialIndexManager {
       final db = await connection.getDatabase();
       // 形の列が geom とは限らない（rtree_<表>_<列>）
       final rtreeTable = await gpkgRtreeTable(db, tableName);
+      if (rtreeTable != null) _failIfNoRtreeModule();
 
       double? minX, minY, maxX, maxY;
       final batch = db.batch();
@@ -108,6 +120,7 @@ class SpatialIndexManager {
       final db = await connection.getDatabase();
       final rtreeTable = await gpkgRtreeTable(db, tableName);
       if (rtreeTable != null) {
+        _failIfNoRtreeModule();
         await db.execute('DELETE FROM ${quoteIdent(rtreeTable)} WHERE id = ?', [rowId]);
       }
     } catch (e) {

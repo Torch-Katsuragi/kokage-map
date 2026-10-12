@@ -156,26 +156,29 @@ class _GuidanceOverlayState extends ConsumerState<GuidanceOverlay> {
                   if (distance == null || bearing == null)
                     Text(t.guidance.waitingPosition, style: const TextStyle(fontSize: 14))
                   else ...[
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
+                    // 幅が足りなければ精度・着いた札は距離の下へ回す（スマホ幅や大きい文字で横にはみ出さない）
+                    Wrap(
+                      spacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.end,
                       children: [
                         Text(formatDistance(distance), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 6),
                         if (s.accuracy != null)
-                          Text(
-                            t.guidance.accuracy(value: s.accuracy!.toStringAsFixed(0)),
-                            style: const TextStyle(fontSize: 11, color: Colors.black54),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              t.guidance.accuracy(value: s.accuracy!.toStringAsFixed(0)),
+                              style: const TextStyle(fontSize: 11, color: Colors.black54),
+                            ),
                           ),
-                        if (s.arrived) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                            decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(8)),
-                            child: Text(t.guidance.arrivedBadge, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                        if (s.arrived)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(8)),
+                              child: Text(t.guidance.arrivedBadge, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                            ),
                           ),
-                        ],
                       ],
                     ),
                     Text(
@@ -191,6 +194,8 @@ class _GuidanceOverlayState extends ConsumerState<GuidanceOverlay> {
               ),
             ),
             IconButton(
+              // 文字が詰まっても押せる大きさ（48 dp）は残す
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               tooltip: t.guidance.stop,
               icon: const Icon(Icons.close),
               onPressed: () => ref.read(guidanceProvider.notifier).stop(),

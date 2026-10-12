@@ -1051,6 +1051,8 @@
     "typeLine": "線",
     "typePolygon": "面",
     "unnamed": "名前なし",
+    "boolTrue": "はい",
+    "boolFalse": "いいえ",
     "disposed": "削除済み",
     "scaleLabel": "縮尺: ",
     "rotationLabel": "回転: ",

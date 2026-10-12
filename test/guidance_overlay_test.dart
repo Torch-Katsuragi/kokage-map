@@ -143,6 +143,53 @@ void main() {
     expect(find.text(t.guidance.elevationUp(m: '10')), findsOneWidget);
   });
 
+  for (final scale in [1.0, 1.3]) {
+    testWidgets('スマホ幅（412 dp）・文字 ×$scale でも横にはみ出さず、× は 48 dp で押せる', (tester) async {
+      tester.view.physicalSize = const Size(412, 923);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      VertexZ.elevationLookup = (points) async => [for (var i = 0; i < points.length; i++) i == 0 ? 100.0 : 419.0];
+      addTearDown(() => VertexZ.elevationLookup = null);
+      // 実機で出た札: 37.36 km 先の面、GNSS ±12 m、319 m 下り
+      c.read(guidanceProvider.notifier)
+        ..updatePosition(here, accuracy: 12)
+        ..start(const GuidanceTarget(point: LatLng(35.03, 135.41), label: '面'));
+      // 地図画面と同じ置き方（左 56・右 64・最大 360）
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: c,
+        child: MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(size: const Size(412, 923), textScaler: TextScaler.linear(scale)),
+            child: Scaffold(
+              body: Stack(children: [
+                Positioned(
+                  top: 8,
+                  left: 56,
+                  right: 64,
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 360),
+                      child: GuidanceOverlay(heading: heading, mapBearing: mapBearing),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text(t.guidance.accuracy(value: '12')), findsOneWidget);
+      expect(find.text(t.guidance.elevationDown(m: '319')), findsOneWidget);
+      final close = tester.getSize(find.ancestor(of: find.byIcon(Icons.close), matching: find.byType(IconButton)));
+      expect(close.width, greaterThanOrEqualTo(48));
+      expect(close.height, greaterThanOrEqualTo(48));
+    });
+  }
+
   test('距離の表示', () {
     expect(formatDistance(3.456), '3.5 m');
     expect(formatDistance(123.4), '123 m');

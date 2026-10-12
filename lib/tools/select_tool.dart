@@ -179,10 +179,7 @@ class SelectTool extends MapTool with PanDelegation {
   /// 選択を実行し、FeatureNodeならselectedLayerNodeも更新
   void _applySelection(LayerTreeNode? node) {
     if (node != null) {
-      _ref.read(selectedFeaturesProvider.notifier).set([node]);
-      if (node is FeatureNode) {
-        _ref.read(selectedLayerNodeProvider.notifier).select(node.parent);
-      }
+      _ref.read(selectedFeaturesProvider.notifier).selectOnMap(node);
     } else {
       _ref.read(selectedFeaturesProvider.notifier).set([]);
     }

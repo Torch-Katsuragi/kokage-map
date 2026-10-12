@@ -9,6 +9,8 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
+import 'package:root_maps/services/google_drive/drive_auth_state.dart';
+import 'package:root_maps/services/google_drive/folder_lookup.dart';
 import 'package:root_maps/services/google_drive/google_drive_service.dart';
 
 const _folderMime = 'application/vnd.google-apps.folder';
@@ -125,6 +127,30 @@ class FakeGoogleDrive implements GoogleDriveService {
     final f = items[folderId];
     return f == null || f.trashed ? null : f.toFile();
   }
+
+  /// テスト用: フォルダの確認（[lookupFolder]）をこの例外で失敗させる（圏外・権限なし等）。
+  /// 一度だけ失敗させたいなら、確認のあとで null に戻す
+  Object? lookupError;
+
+  @override
+  Future<FolderLookup> lookupFolder(String folderId) async {
+    _count('lookupFolder');
+    final error = lookupError;
+    if (error != null) return FolderLookup.fromError(error);
+    final f = items[folderId];
+    if (f == null || f.trashed) {
+      return FolderLookup.fromError(drive.DetailedApiRequestError(404, 'File not found: $folderId'));
+    }
+    return FolderLookup.found(f.toFile());
+  }
+
+  // ---- ダイアログが使う面 ----
+
+  @override
+  final DriveAuthState authState = DriveAuthState();
+
+  @override
+  Future<void> initialize() async {}
 
   /// テスト用: このフォルダの一覧を取ろうとすると失敗する（電波が切れた等）
   final Set<String> failListFor = {};

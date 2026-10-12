@@ -34,6 +34,8 @@ import '../../core/shared_link.dart';
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
 import 'drive_auth_state.dart';
+import 'folder_lookup.dart';
+import 'network_error.dart';
 import 'sign_in_failure.dart';
 import 'web_session_token.dart';
 import 'web_token_client.dart';
@@ -127,6 +129,8 @@ class GoogleDriveService {
     }
 
     _initCompleter = Completer<void>();
+    // 待つ人がいないまま失敗すると、未処理のエラーとして別に飛ぶ（呼んだ本人には rethrow で届く）
+    _initCompleter!.future.ignore();
     try {
       // v7: シングルトンを初期化
       //
@@ -720,7 +724,7 @@ class GoogleDriveService {
     try {
       return await call();
     } on Object catch (e) {
-      if (e is! http.ClientException && e is! TimeoutException) rethrow;
+      if (e is drive.ApiRequestError || !isNetworkError(e)) rethrow;
       AppLogger.debug('[GoogleDriveService] 通信の一時的な失敗。1 回だけ取り直す: $e');
       await Future<void>.delayed(transientRetryDelay);
       return call();
@@ -969,22 +973,25 @@ class GoogleDriveService {
     }
   }
 
-  /// フォルダ情報を取得
+  /// フォルダ情報を取得。取れなければ null（理由が要るなら [lookupFolder]）
+  Future<drive.File?> getFolderInfo(String folderId) async => (await lookupFolder(folderId)).folder;
+
+  /// フォルダを確かめる。失敗は「通信できない」「権限が無い」「無い」「その他」に分けて返す（投げない）。
   /// 共有フォルダにもアクセスするため supportsAllDrives=true を設定
-  Future<drive.File?> getFolderInfo(String folderId) async {
-    if (_driveApi == null) return null;
+  Future<FolderLookup> lookupFolder(String folderId) async {
+    final api = _driveApi;
+    if (api == null) return const FolderLookup.failed(FolderLookupFailure.other, 'not signed in');
 
     try {
-      final api = _driveApi!;
       final result = await retryTransient(() => api.files.get(
             folderId,
             $fields: 'id, name, modifiedTime, owners, capabilities',
             supportsAllDrives: true,
           ));
-      return result as drive.File;
+      return FolderLookup.found(result as drive.File);
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] フォルダ情報取得エラー: $e');
-      return null;
+      return FolderLookup.fromError(e);
     }
   }
 

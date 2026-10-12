@@ -41,6 +41,7 @@ import '../providers/project_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/changelog_service.dart';
 import '../services/global_folder_locator.dart';
+import '../services/google_drive/folder_lookup.dart';
 import '../services/google_drive/google_drive_service.dart';
 import '../services/party/party_invite.dart';
 import '../services/projects_home.dart';
@@ -142,9 +143,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               detail: drive.authState.errorDetail);
           return null;
         }
-        final info = await drive.getFolderInfo(driveId);
+        // 失敗は「圏外」「権限なし」「無い」で文言を分ける（圏外で共有設定を疑わせない）
+        final lookup = await drive.lookupFolder(driveId);
+        final info = lookup.folder;
         if (info == null) {
-          _notify(t.home.receiveFailed, NotificationLevel.error);
+          _notify(
+            lookup.message,
+            lookup.failure == FolderLookupFailure.offline ? NotificationLevel.warning : NotificationLevel.error,
+            detail: lookup.code,
+          );
           return null;
         }
         final name = info.name ?? driveId;

@@ -20,9 +20,9 @@
 /// 林業の現場は圏外が多いので、通信できないときは何のエラーでも「圏外」にまとめる。
 library;
 
-import 'dart:async';
-
 import 'package:google_sign_in/google_sign_in.dart';
+
+import 'network_error.dart';
 
 /// サインイン失敗の種類
 enum SignInFailureKind {
@@ -90,23 +90,6 @@ bool isUserCancellation(GoogleSignInException e) {
   return true;
 }
 
-/// 通信の失敗そのものを示す語。接続の確認が「繋がっている」と言っても圏外扱いにする
-/// （電波が弱いとインターフェイスは上がったまま届かないことがある）
-const _networkMarkers = [
-  'network_error',
-  'network error',
-  'networkerror',
-  'socketexception',
-  'failed host lookup',
-  'unknownhost',
-  'unable to resolve host',
-  'clientexception',
-  'connection refused',
-  'connection reset',
-  'connection timed out',
-  'timed out',
-];
-
 /// GMS の NETWORK_ERROR（7）
 final _networkStatusCode = RegExp(r'(^|[\[\s])7[\]:]');
 
@@ -119,9 +102,9 @@ SignInFailure classifySignInFailure(Object error, {required bool online}) {
   if (!online) return SignInFailure(SignInFailureKind.offline, detail);
 
   final text = detail.toLowerCase();
-  if (error is TimeoutException ||
-      _networkMarkers.any(text.contains) ||
-      _networkStatusCode.hasMatch(text)) {
+  // 通信の失敗そのものを示すものは、接続の確認が「繋がっている」と言っても圏外扱いにする
+  // （電波が弱いとインターフェイスは上がったまま届かないことがある）
+  if (isNetworkError(error) || isNetworkError(detail) || _networkStatusCode.hasMatch(text)) {
     return SignInFailure(SignInFailureKind.offline, detail);
   }
 

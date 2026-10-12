@@ -19,6 +19,7 @@
 export 'auto_sync_service.dart';
 export 'drive_auth_state.dart';
 export 'drive_sync_operations.dart';
+export 'folder_lookup.dart';
 export 'google_drive_service.dart';
 export 'sync_conflict_resolver.dart';
 export 'sync_engine.dart';

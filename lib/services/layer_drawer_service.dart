@@ -17,6 +17,7 @@
 /// フォルダ・GeoPackage の作成/リネーム/Driveクローンを UI 非依存で提供
 library;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 
 import '../core/fs/k_file_system.dart';
@@ -34,6 +35,7 @@ import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/sys_node.dart';
 import '../services/google_drive/index.dart';
 import '../services/kmeta_service.dart';
+import '../services/qgis/qgs_read_back.dart';
 import '../utils/app_logger.dart';
 
 class LayerDrawerService {
@@ -73,8 +75,10 @@ class LayerDrawerService {
     return child;
   }
 
-  /// Drive フォルダをクローンして追加。失敗時は null
-  static Future<DriveFolderNode?> cloneDriveFolder({
+  /// Drive フォルダをクローンして追加。失敗時は null。
+  ///
+  /// 届いた `.qgs` が QGIS で保存されたものなら読み戻し、その結果を [readBack] に返す（通知は呼び手）
+  static Future<({DriveFolderNode node, QgsReadBackResult? readBack})?> cloneDriveFolder({
     required FolderNode parent,
     required String folderId,
     required String folderName,
@@ -98,6 +102,28 @@ class LayerDrawerService {
     );
     if (!success) return null;
 
+    return attachClonedFolder(
+      parent: parent,
+      name: name,
+      folderId: folderId,
+      url: url,
+      isReadOnly: isReadOnly,
+    );
+  }
+
+  /// クローンし終えた dir（[parent] の下の [name]）をツリーに足し、`.qgs` を読み戻す。
+  ///
+  /// 読み戻しは地図を開いたときにしか走らなかったので、QGIS で作ったフォルダをクローンしても
+  /// View・凡例・背景地図が入らず、地図を開き直すまで素のレイヤのままだった（2026-10-12）。
+  /// その間は `.qgs` を書かない（QgsProjectBuilder が読み戻すまで断る）ので、ここで取り込んで印を付ける
+  @visibleForTesting
+  static Future<({DriveFolderNode node, QgsReadBackResult? readBack})> attachClonedFolder({
+    required FolderNode parent,
+    required String name,
+    required String folderId,
+    required String url,
+    required bool isReadOnly,
+  }) async {
     final node = DriveFolderNode(
       name,
       driveId: folderId,
@@ -108,7 +134,16 @@ class LayerDrawerService {
     );
     parent.addChild(node);
     await _reloadRecursive(node);
-    return node;
+
+    QgsReadBackResult? readBack;
+    try {
+      readBack = await const QgsReadBack().run(node);
+      // 取り込んだ View・可視性でノードを作り直す
+      if (readBack != null) await _reloadRecursive(node);
+    } on Object catch (e) {
+      AppLogger.debug('[LayerDrawer] クローンした ${node.name} の読み戻しに失敗: $e');
+    }
+    return (node: node, readBack: readBack);
   }
 
   // ---------- GeoPackage ----------

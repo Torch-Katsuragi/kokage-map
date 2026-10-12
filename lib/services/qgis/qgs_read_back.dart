@@ -23,6 +23,8 @@
 // 印が一致していれば何もしない（自分が書いたものを読み直す意味は無い）。
 // 印が無い `.qgs` は他人のファイルとして読む（旧 `project.qgs` を含む）。
 
+import 'dart:async';
+
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
@@ -68,10 +70,24 @@ class QgsReadBack {
     '<constraint [^>]*exp="[^"]|<field editable="0"|<editorlayout>tablayout',
   );
 
+  /// 走っている読み戻し（終わるまで次を待たせる）
+  static Future<void> _last = Future.value();
+
   /// [root] の `<dir名>.qgs`（無ければ旧 `project.qgs`）を見て、QGIS 側で保存されていれば取り込む。
   ///
   /// ツリーの子（gpkg とレイヤ）が読み込まれてから呼ぶこと。
-  Future<QgsReadBackResult?> run(FolderNode root) async {
+  ///
+  /// 開いたとき・クローンしたあと・同期で落としたあとの3か所から呼ばれ、重なることがある
+  /// （開いた直後の自動同期など）。1本ずつ順に走らせ、後の呼び出しは前の取り込みで付いた印を見て何もしない
+  /// （同じ `.qgs` を二度取り込まない）
+  Future<QgsReadBackResult?> run(FolderNode root) {
+    final done = Completer<void>();
+    final previous = _last;
+    _last = done.future;
+    return previous.then((_) => _run(root)).whenComplete(done.complete);
+  }
+
+  Future<QgsReadBackResult?> _run(FolderNode root) async {
     // 開いたら一度は書き直す（中身が同じなら書かない）。まだ `.qgs` が無ければ最初の1本になり、
     // 旧 `.kmeta.json` から移したばかりなら QGIS が読む部分（スタイル・可視性）がそろう
     // （手動の書き出しメニューは撤去したので、ここが唯一の入口）

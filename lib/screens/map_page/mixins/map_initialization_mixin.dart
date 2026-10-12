@@ -27,20 +27,18 @@ import 'package:turf/turf.dart' as turf;
 
 import '../../../converters/turf_converter.dart';
 import '../../../core/platform_capabilities.dart';
-import '../../../i18n/strings.g.dart';
-import '../../../models/app_notification.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/track_recording_settings.dart';
 import '../../../providers/gps_providers.dart';
-import '../../../providers/notification_providers.dart';
 import '../../../providers/project_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/dem_elevation.dart';
 import '../../../services/google_drive/index.dart';
 import '../../../services/qgis/qgs_read_back.dart';
+import '../../../services/qgis/qgs_read_back_notice.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/true_heading.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
@@ -119,31 +117,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       if (rootNode is FolderNode) {
         try {
           final readBack = await const QgsReadBack().run(rootNode);
-          if (readBack != null) {
-            final notifier = ref.read(notificationCenterProvider.notifier);
-            notifier.add(
-              title: t.qgis.readBack(
-                file: readBack.fileName,
-                count: readBack.importedViewCount,
-              ),
-              level: NotificationLevel.info,
-            );
-            if (readBack.baseMapsAdded.isNotEmpty) {
-              notifier.add(
-                title: t.qgis.baseMapsAdded(names: readBack.baseMapsAdded.join(' / ')),
-                level: NotificationLevel.info,
-              );
-            }
-            if (readBack.discarded.isNotEmpty) {
-              notifier.add(
-                title: t.qgis.discarded(
-                  count: readBack.discarded.length,
-                  names: readBack.discarded.join(' / '),
-                ),
-                level: NotificationLevel.warning,
-              );
-            }
-          }
+          if (readBack != null && mounted) notifyQgsReadBack(ref, readBack);
         } catch (e) {
           AppLogger.debug('[Init] QGIS 読み戻しに失敗: $e');
         }
@@ -165,7 +139,13 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
           root: rootNode,
           onStatusChanged: () => triggerSetState(() {}),
           // ツリーを読み直し、QGIS で保存された .qgs が届いていれば読み戻す
-          onRefreshNeeded: DriveSyncOperations.refreshAfterSync,
+          onRefreshNeeded: (node) async {
+            final readBack = await DriveSyncOperations.refreshAfterSync(node);
+            if (readBack == null || !mounted) return;
+            notifyQgsReadBack(ref, readBack);
+            // 読み戻した View・スタイルで描き直す
+            ref.read(featureRefreshTriggerProvider.notifier).trigger();
+          },
           onMerged: (node, result) {
             if (!mounted) return;
             DriveSyncOperations.notifyMerge(ref, result, afterRestore: () async {

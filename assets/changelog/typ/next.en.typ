@@ -50,7 +50,8 @@
   [Track extraction length and GNSS spread are now measured on the ellipsoid (same as QGIS)],
   [GeoPackages whose geometry column is not geom (GeoPandas geometry, ArcGIS Pro Shape) showed no features and could not be added to; a gpkg with an rtree was rewritten on close even when only viewed],
   [A column named id showed the feature number (fid) and could not be edited, a column named geometry did not appear, columns named latitude, longitude, vertex\_count and timestamp were hidden behind computed values in the info panel, and tables with a column named \_\_id gave no search results; they now show and save their own values, and the primary key column is shown read-only],
-  [Upload or Download in sync showed "Synced" when the Drive list could not be fetched (such as while Wi-Fi was switching); it now shows an error and keeps the sync records, retrying once after a brief failure]
+  [Upload or Download in sync showed "Synced" when the Drive list could not be fetched (such as while Wi-Fi was switching); it now shows an error and keeps the sync records, retrying once after a brief failure],
+  [QGIS settings (Views, legends, background maps) of a folder cloned from Drive were not applied until the map was reopened; they are now read back when the clone finishes (and when a .qgs arrives by sync)]
 )
 
 #fixes(

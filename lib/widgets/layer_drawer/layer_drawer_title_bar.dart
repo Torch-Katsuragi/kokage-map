@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 
 import '../../i18n/strings.g.dart';
 import '../../models/nodes/drive_folder_node.dart';
+import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/global_folder_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
@@ -27,7 +28,15 @@ import '../../models/nodes/sys_node.dart';
 import '../../presentation/node_presenter.dart';
 import '../../tutorial/tutorial.dart';
 
-enum AddAction { folder, geoPackage, photo, files }
+enum AddAction {
+  folder,
+  geoPackage,
+  photo,
+  files,
+
+  /// このフォルダの直下の読み取り専用ファイルをまとめて gpkg に変換（読み取り専用の Drive フォルダでは複製）
+  convertAll,
+}
 
 /// 濃グレーのタイトルパネル（currentNodeの名前を表示＋右側に統合追加ボタン）
 /// Drive連携フォルダ配下ではクラウドカラー背景＋同期UIを表示
@@ -275,6 +284,18 @@ class LayerDrawerTitleBar extends StatelessWidget {
           value: AddAction.files,
           child: _menuRow(Icons.note_add_outlined, Colors.teal, t.layerDrawer.titleBar.addFiles),
         ),
+        // 開いているフォルダに読み取り専用のファイルがあるときだけ（フォルダの行の長押しと同じ処理。ルートには行が無いので）
+        if (currentNode.children.any((c) => c is ExternalLayerNode)) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            value: AddAction.convertAll,
+            child: _menuRow(
+              isReadOnly ? Icons.copy_all : Icons.transform,
+              const Color(0xFF90A4AE),
+              isReadOnly ? t.layerDrawer.folder.copyAll : t.layerDrawer.titleBar.convertAll,
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -25,7 +25,9 @@ import '../../../i18n/strings.g.dart';
 import '../../../models/nodes/drive_folder_node.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../presentation/node_presenter.dart';
+import '../../../providers/notification_providers.dart';
 import '../../dialogs/drive_qr_dialog.dart';
+import '../../external_layer_actions.dart';
 import '../add_files_action.dart';
 import '../common_dialogs.dart';
 import '../drawer_row.dart';
@@ -103,6 +105,7 @@ class FolderTile extends ConsumerWidget {
       if (fixed) return const [];
       return [
         if (canAddFilesTo(node)) RowMenuItem('add_files', t.layerDrawer.folder.addFiles, icon: Icons.note_add_outlined),
+        _convertAllItem(null),
         RowMenuItem('rename', t.layerDrawer.folder.rename, icon: Icons.edit),
         RowMenuItem('delete', t.layerDrawer.folder.delete, icon: Icons.delete_outline, danger: true),
       ];
@@ -111,11 +114,13 @@ class FolderTile extends ConsumerWidget {
     if (!_canSync) {
       return [
         if (!drive.isReadOnly) RowMenuItem('add_files', t.layerDrawer.folder.addFiles, icon: Icons.note_add_outlined),
+        _convertAllItem(drive),
         RowMenuItem('qr', t.driveQr.menu, icon: Icons.qr_code_2),
       ];
     }
     return [
       if (!drive.isReadOnly) RowMenuItem('add_files', t.layerDrawer.folder.addFiles, icon: Icons.note_add_outlined),
+      _convertAllItem(drive),
       if (!drive.isReadOnly) RowMenuItem('upload', t.layerDrawer.folder.upload, icon: Icons.cloud_upload),
       RowMenuItem('download', t.layerDrawer.folder.download, icon: Icons.cloud_download),
       RowMenuItem('refresh', t.layerDrawer.folder.refreshStatus, icon: Icons.refresh),
@@ -126,10 +131,22 @@ class FolderTile extends ConsumerWidget {
     ];
   }
 
+  /// 「中のファイルをgpkgに変換」（読み取り専用の Drive フォルダでは複製）。直下の shp・GeoJSON などをまとめて変換する
+  RowMenuItem _convertAllItem(DriveFolderNode? drive) => (drive?.isReadOnly ?? false)
+      ? RowMenuItem('convert_all', t.layerDrawer.folder.copyAll, icon: Icons.copy_all)
+      : RowMenuItem('convert_all', t.layerDrawer.folder.convertAll, icon: Icons.transform);
+
   Future<void> _onMenu(BuildContext context, WidgetRef ref, String value, DriveFolderNode? drive) async {
     switch (value) {
       case 'add_files':
         await pickAndAddFiles(ref, node);
+      case 'convert_all':
+        await convertFolderExternalLayers(
+          context,
+          ref.read(notificationCenterProvider.notifier),
+          node,
+          onChanged: ref.refreshMap,
+        );
       case 'rename':
         onRename?.call();
       case 'delete':

@@ -491,7 +491,21 @@
     "renameTitle": "Rename",
     "deleteTitle": "Delete",
     "renamed": "Renamed: $name",
-    "deleted": "Deleted $name"
+    "deleted": "Deleted $name",
+    "convertFolderTitle": "Convert files inside to gpkg",
+    "convertFolderIntro": "The following $count files directly in \"$folder\" will each be converted to a gpkg in the same folder.",
+    "convertFolderNote": "For each file, the original files are deleted only after checking that the feature counts of the written gpkg match. Files that do not match are left as they are.\nFiles in subfolders, CSV files without coordinate columns (tables) and rasters are not converted.",
+    "convertFolderDriveNote": "This is a Drive-linked folder. After syncing, other members and PCs will also see the original files disappear and the gpkg files appear (deleted files can be restored from the Drive trash for 30 days).",
+    "convertFolderEmpty": "There are no files directly in \"$folder\" that can be converted to gpkg",
+    "convertFolderProgress": "$done of $total: $name",
+    "convertFolderDone": "Converted $count files to gpkg",
+    "convertFolderFailed": "Could not convert \"$name\" (the original files are unchanged)",
+    "convertFolderStopped": "Stopped because the original files of \"$name\" could not be deleted (that file and the rest are unchanged)",
+    "copyFolderTitle": "Copy files inside as gpkg",
+    "copyFolderIntro": "\"$folder\" is a read-only shared folder, so the original files cannot be replaced.\nThe following $count files will be copied as gpkg to the folder you choose. The original files stay.",
+    "copyFolderPickTitle": "Copy the files of \"$folder\" to",
+    "copyFolderDone": "Copied $count files as gpkg",
+    "copyFolderFailed": "Could not copy \"$name\""
   },
   "layerDrawer": {
     "openDrawer": "Open layer list",
@@ -610,7 +624,9 @@
       "filesAddFailed": "Could not add $count file(s)",
       "filesAddReadOnly": "\"$folder\" is read-only; files cannot be added",
       "shpMissingSidecars": "Shapefile companion files are missing: $names",
-      "shpMissingSidecarsDetail": "Pick the .dbf and .shx with the same name as the .shp too (and .prj / .cpg if present). Without them it cannot be shown on the map"
+      "shpMissingSidecarsDetail": "Pick the .dbf and .shx with the same name as the .shp too (and .prj / .cpg if present). Without them it cannot be shown on the map",
+      "convertAll": "Convert files inside to gpkg",
+      "copyAll": "Copy files inside as gpkg"
     },
     "photo": {
       "overlay": "Overlay",
@@ -636,7 +652,8 @@
       "addFolder": "Folder",
       "addGeoPackage": "GeoPackage",
       "addPhotos": "Photos",
-      "addFiles": "Files"
+      "addFiles": "Files",
+      "convertAll": "Convert files in this folder to gpkg"
     },
     "directoryNotFound": "Directory not found",
     "renamePhoto": "Rename Photo",

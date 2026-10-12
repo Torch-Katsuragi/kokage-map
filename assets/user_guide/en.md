@@ -160,6 +160,12 @@ When you try to draw on a read-only layer or change its attributes, the app asks
 - The coordinate system stays as it was (a Shapefile in a Japan Plane Rectangular CRS becomes a gpkg in the same CRS). Style, views and display settings carry over.
 - In a read-only shared folder, "Copy as gpkg to my folder" is offered instead. The original files stay.
 
+To convert all the files in a folder at once, choose "Convert files inside to gpkg" from the folder row's long-press menu (for the open folder, use the + button at the top right). The confirmation lists the files to convert and the gpkg files that will be created.
+
+- Each file becomes its own gpkg with the same name (files are not merged into one gpkg). Files whose feature counts do not match are left as they are and reported in the notifications.
+- Only files directly in that folder are converted. Files in subfolders, CSV files without coordinate columns (tables) and rasters are not.
+- In a Drive-linked folder, other members and PCs will also see the original files disappear and the gpkg files appear after syncing. In a read-only shared folder, the files are copied as gpkg to a folder of yours instead.
+
 ### Raster Overlays
 
 Rasters made in QGIS or elsewhere (GeoTIFF, PNG/JPEG with a world file, VRT) appear on the map as overlays just by placing them in a folder. Any coordinate system works. Nodata is transparent, numeric rasters such as DEMs are shown in grayscale, and rasters with a color table use those colors. The file defines the position, so they cannot be georeferenced in the app.

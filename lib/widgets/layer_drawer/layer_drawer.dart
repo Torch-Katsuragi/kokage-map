@@ -281,6 +281,12 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
                 AddAction.geoPackage => _addGeoPackage(context),
                 AddAction.photo => _addPhoto(context),
                 AddAction.files => pickAndAddFiles(ref, widget.currentNode! as FolderNode),
+                AddAction.convertAll => convertFolderExternalLayers(
+                    context,
+                    ref.read(notificationCenterProvider.notifier),
+                    widget.currentNode! as FolderNode,
+                    onChanged: ref.refreshMap,
+                  ),
               }
           : null,
       onBack: parent != null ? () => widget.onDirChanged(parent) : null,

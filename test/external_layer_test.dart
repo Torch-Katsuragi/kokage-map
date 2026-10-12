@@ -780,6 +780,132 @@ void main() {
       await gpkg.geoPackageFile.dispose();
     }, skip: skip);
 
+    group('フォルダの中をまとめて変換', () {
+      Map<String, Object?> point(double x, double y) => {
+        'type': 'Point',
+        'coordinates': [x, y],
+      };
+
+      test('shp 2 本と GeoJSON を 1 本ずつ gpkg にし、座標の無い CSV（表）と下のフォルダは触らず、.qgs は最後に付け替わる', () async {
+        await writePoints(p.join(proj, 'trees'), prj: 'EPSG:4326');
+        await writePointShp(ExternalGdal.instance, p.join(proj, 'stumps'), [
+          (135.90, 33.90, {'NAME': 'a', 'H': 1.0}),
+          (135.91, 33.91, {'NAME': 'b', 'H': 2.0}),
+        ], epsg: 'EPSG:4326');
+        writeGeoJson(p.join(proj, 'plots.geojson'), [
+          feature(point(135.0, 33.0), {'n': 1}),
+          feature(point(135.1, 33.1), {'n': 2}),
+          feature(point(135.2, 33.2), {'n': 3}),
+          feature(point(135.3, 33.3), {'n': 4}),
+        ]);
+        File(p.join(proj, '森林簿.csv')).writeAsStringSync('林小班,樹種\n1-い,スギ\n');
+        final sub = await Directory(p.join(proj, 'sub')).create();
+        await writePoints(p.join(sub.path, 'inner'), prj: 'EPSG:4326');
+
+        final root = FolderNode('Home', children: []);
+        QgsAutoRefresh.instance.rootGetter = () => root;
+        var signals = 0;
+        LayerTreeNode.onStructureChanged = (n) {
+          signals++;
+          QgsAutoRefresh.instance.scheduleFor(n);
+        };
+        addTearDown(() {
+          QgsAutoRefresh.instance.rootGetter = null;
+          LayerTreeNode.onStructureChanged = null;
+        });
+
+        final sources = await ExternalLayerConverter.folderSources(root);
+        expect(sources.map((n) => n.name), ['plots.geojson', 'stumps.shp', 'trees.shp']);
+        final plan = await ExternalLayerConverter.planFolder(sources);
+        expect(plan.map((i) => i.target), ['plots.gpkg', 'stumps.gpkg', 'trees.gpkg']);
+        expect(plan[2].files, containsAll(['trees.shp', 'trees.shx', 'trees.dbf']));
+
+        final progress = <String>[];
+        final signalsAtEachFile = <int>[];
+        final report = await ExternalLayerConverter.convertFolder(
+          root,
+          sources,
+          onProgress: (done, total, node) {
+            progress.add('$done/$total ${node.name}');
+            signalsAtEachFile.add(signals);
+          },
+        );
+        expect(progress, ['0/3 plots.geojson', '1/3 stumps.shp', '2/3 trees.shp']);
+        expect(report.converted, [('plots.geojson', 'plots.gpkg'), ('stumps.shp', 'stumps.gpkg'), ('trees.shp', 'trees.gpkg')]);
+        expect(report.failed, isEmpty);
+        expect(report.deleteFailed, isNull);
+        // ループの中ではツリーを読み直さない（.qgs の自動更新の合図は最後の読み直しでだけ立つ）
+        expect(signalsAtEachFile.toSet(), hasLength(1));
+
+        // 元は消え、件数の合う gpkg がある
+        for (final stem in ['trees', 'stumps']) {
+          for (final ext in ['.shp', '.shx', '.dbf', '.prj']) {
+            expect(File(p.join(proj, '$stem$ext')).existsSync(), isFalse, reason: '$stem$ext');
+          }
+        }
+        expect(File(p.join(proj, 'plots.geojson')).existsSync(), isFalse);
+        final gpkgs = {for (final g in root.children.whereType<GeoPackageNode>()) g.name: g};
+        expect(gpkgs.keys, unorderedEquals(['plots.gpkg', 'stumps.gpkg', 'trees.gpkg']));
+        expect(gpkgs.values.whereType<ExternalLayerNode>(), isEmpty);
+        expect(await gpkgs['trees.gpkg']!.geoPackageFile.countFilteredFeatures('trees', '1=1'), 3);
+        expect(await gpkgs['stumps.gpkg']!.geoPackageFile.countFilteredFeatures('stumps', '1=1'), 2);
+        expect(await gpkgs['plots.gpkg']!.geoPackageFile.countFilteredFeatures('plots', '1=1'), 4);
+        // 表の CSV と下のフォルダは元のまま
+        expect(File(p.join(proj, '森林簿.csv')).existsSync(), isTrue);
+        expect(File(p.join(sub.path, 'inner.shp')).existsSync(), isTrue);
+        expect(File(p.join(sub.path, 'inner.gpkg')).existsSync(), isFalse);
+
+        expect(signals, greaterThan(signalsAtEachFile.last));
+        await QgsAutoRefresh.instance.flushNow();
+        final qgs = File(p.join(proj, '${p.basename(proj)}.qgs')).readAsStringSync();
+        for (final stem in ['trees', 'stumps', 'plots']) {
+          expect(qgs, contains('./$stem.gpkg'));
+        }
+        expect(qgs, isNot(contains('./trees.shp')));
+        expect(qgs, isNot(contains('./plots.geojson')));
+        for (final g in gpkgs.values) {
+          await g.geoPackageFile.dispose();
+        }
+      }, skip: skip);
+
+      test('1 本が照合で食い違えば、その元は残して知らせ、ほかは変換する', () async {
+        writeGeoJson(p.join(proj, 'a.geojson'), [feature(point(135.0, 33.0), {'n': 1})]);
+        writeGeoJson(p.join(proj, 'b.geojson'), [
+          feature(point(135.0, 33.0), {'n': 1}),
+          feature(point(135.1, 33.1), {'n': 2}),
+        ]);
+        await writePoints(p.join(proj, 'trees'), prj: 'EPSG:4326');
+        final root = FolderNode('Home', children: []);
+        final sources = await ExternalLayerConverter.folderSources(root);
+        // b のキャッシュから 1 件消して、元（2 件）と食い違わせる
+        final b = sources.firstWhere((n) => n.name == 'b.geojson');
+        await b.updateChildren();
+        await (await b.geoPackageFile.getDatabase()).rawDelete('DELETE FROM b WHERE n = 2');
+
+        final report = await ExternalLayerConverter.convertFolder(root, sources);
+        expect(report.converted.map((c) => c.$1), ['a.geojson', 'trees.shp']);
+        expect(report.failed.single.$1, 'b.geojson');
+        expect(File(p.join(proj, 'b.geojson')).existsSync(), isTrue);
+        expect(File(p.join(proj, 'b.gpkg')).existsSync(), isFalse);
+        expect(File(p.join(proj, 'a.geojson')).existsSync(), isFalse);
+        expect(File(p.join(proj, 'trees.shp')).existsSync(), isFalse);
+        // ツリーには残った元（読み取り専用）と変換した gpkg が並ぶ
+        expect(root.children.whereType<ExternalLayerNode>().map((n) => n.name), ['b.geojson']);
+
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        reportFolderConversion(container.read(notificationCenterProvider.notifier), report);
+        final notes = container.read(notificationCenterProvider);
+        expect(notes.map((n) => n.title), [
+          t.externalLayer.convertFolderFailed(name: 'b.geojson'),
+          t.externalLayer.convertFolderDone(count: 2),
+        ]);
+        for (final g in root.children.whereType<GeoPackageNode>()) {
+          await g.geoPackageFile.dispose();
+        }
+      }, skip: skip);
+    });
+
     test('自分のフォルダへ gpkg として複製（元は残す）', () async {
       await writePoints(p.join(proj, 'trees'));
       final mine = await Directory(p.join(proj, 'mine')).create();

@@ -491,7 +491,21 @@
     "renameTitle": "名前の変更",
     "deleteTitle": "削除",
     "renamed": "名前を変更しました: $name",
-    "deleted": "$name を削除しました"
+    "deleted": "$name を削除しました",
+    "convertFolderTitle": "中のファイルを gpkg に変換",
+    "convertFolderIntro": "「$folder」の直下にある次の $count 件を、1 ファイルずつ同じフォルダの gpkg に変換します。",
+    "convertFolderNote": "1 件ずつ、書いた gpkg の件数が元と一致するのを確かめてから元のファイル一式を削除します。一致しなかったファイルは元のまま残します。\n下のフォルダの中・座標の列が無い CSV（表）・ラスタは変換しません。",
+    "convertFolderDriveNote": "Drive 連携フォルダです。同期すると、ほかのメンバーや PC でも元のファイルが消えて gpkg が現れます（消したファイルは Drive のゴミ箱から 30 日間戻せます）。",
+    "convertFolderEmpty": "「$folder」の直下に gpkg に変換できるファイルはありません",
+    "convertFolderProgress": "$done / $total 件目: $name",
+    "convertFolderDone": "$count 件を gpkg に変換しました",
+    "convertFolderFailed": "「$name」は変換できませんでした（元のファイルはそのままです）",
+    "convertFolderStopped": "「$name」の元のファイルを削除できないため、そこで止めました（そのファイルと残りは元のままです）",
+    "copyFolderTitle": "中のファイルを gpkg として複製",
+    "copyFolderIntro": "「$folder」は読み取り専用の共有フォルダなので、元のファイルを置き換えられません。\n次の $count 件を、元のファイルは残したまま、選んだフォルダに gpkg として複製します。",
+    "copyFolderPickTitle": "「$folder」のファイルの複製先",
+    "copyFolderDone": "$count 件を gpkg として複製しました",
+    "copyFolderFailed": "「$name」は複製できませんでした"
   },
   "layerDrawer": {
     "openDrawer": "レイヤ一覧を開く",
@@ -610,7 +624,9 @@
       "filesAddFailed": "$count 件のファイルを追加できませんでした",
       "filesAddReadOnly": "「$folder」は読み取り専用のため、ファイルを追加できません",
       "shpMissingSidecars": "Shapefile の付属ファイルが足りません: $names",
-      "shpMissingSidecarsDetail": ".shp と同じ名前の .dbf と .shx も一緒に選んでください（.prj・.cpg もあれば）。足りないままでは地図に出せません"
+      "shpMissingSidecarsDetail": ".shp と同じ名前の .dbf と .shx も一緒に選んでください（.prj・.cpg もあれば）。足りないままでは地図に出せません",
+      "convertAll": "中のファイルをgpkgに変換",
+      "copyAll": "中のファイルをgpkgとして複製"
     },
     "photo": {
       "overlay": "オーバーレイ",
@@ -636,7 +652,8 @@
       "addFolder": "フォルダ",
       "addGeoPackage": "GeoPackage",
       "addPhotos": "写真",
-      "addFiles": "ファイル"
+      "addFiles": "ファイル",
+      "convertAll": "このフォルダのファイルをgpkgに変換"
     },
     "directoryNotFound": "ディレクトリが見つかりません",
     "renamePhoto": "写真のリネーム",

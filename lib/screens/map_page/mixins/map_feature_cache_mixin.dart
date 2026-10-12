@@ -20,7 +20,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../editing/edit_session.dart';
 import '../../../models/map_style_group.dart';
-import '../../../models/nodes/external_overlay_image_node.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/image_node.dart';
 import '../../../models/nodes/layer_node.dart';
@@ -28,13 +27,13 @@ import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/overlay_image_node.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
-import '../../../services/geotiff_service.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/label_template.dart';
 import '../../layer_style_settings_screen.dart'
     show layerStyleSettings, labelEnabledDef, labelPropertyDef, lineVertexPointsEnabledDef, polygonVertexPointsEnabledDef;
 import '../feature_geojson_cache.dart';
 import '../map_page_state_base.dart';
+import '../overlay_preparation.dart';
 import 'map_style_mixin.dart';
 
 /// フィーチャキャッシュMixin
@@ -119,41 +118,30 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
       '[Features] P:${newPointFeatures.length} L:${newLineFeatures.length} Pg:${newPolygonFeatures.length} Ph:${newPhotoNodes.length} Ov:${newOverlayNodes.length}',
     );
 
-    // GeoTIFF オーバーレイの PNG キャッシュを事前生成（3D の地図面はこれを読む。web はアプリのキャッシュ領域が無いので元ファイルを直接読む）
-    // QGIS / GDAL のラスタは GDAL でワープした PNG を作る（web も。GDAL は別スレッド／worker で動く）
-    for (final node in newOverlayNodes.whereType<ExternalOverlayImageNode>()) {
-      try {
-        await node.ensureRendered();
-      } catch (e) {
-        AppLogger.debug('[Features] ${node.name} の PNG を作れない: $e');
-      }
-    }
-    if (!kIsWeb) {
-      for (final node in newOverlayNodes) {
-        if (node is ExternalOverlayImageNode) continue;
-        final absPath = node.getAbsoluteFilePath();
-        if (absPath == null) continue;
-        final lower = absPath.toLowerCase();
-        if (lower.endsWith('.tif') || lower.endsWith('.tiff')) {
-          node.cachedPngPath = await GeoTiffService.ensurePngCache(absPath);
-        }
-      }
-    }
-
     if (run != _featuresRun) {
       AppLogger.debug('[Features] 古い実行 #$run を捨てる（最新 #$_featuresRun）');
       return;
     }
-    if (mounted) {
-      triggerSetState(() {
-        pointFeatures = newPointFeatures;
-        lineFeatures = newLineFeatures;
-        polygonFeatures = newPolygonFeatures;
-        photoNodes = newPhotoNodes;
-        overlayImageNodes = newOverlayNodes;
-      });
-      invalidateLayerCache();
-    }
+    if (!mounted) return;
+    // 地物・可視性を先に流す。オーバーレイは表示用の画像が要らないもの・できているものだけ
+    // ⚠ 以前は全オーバーレイの PNG（GDAL のワープ）を待ってから流していて、ワープが遅い・止まると
+    //   gpkg の目を消しても地図が変わらなかった（2026-10-13 Pixel 9。overlay_preparation.dart）
+    triggerSetState(() {
+      pointFeatures = newPointFeatures;
+      lineFeatures = newLineFeatures;
+      polygonFeatures = newPolygonFeatures;
+      photoNodes = newPhotoNodes;
+      overlayImageNodes = [for (final n in newOverlayNodes) if (overlayDrawableNow(n, web: kIsWeb)) n];
+    });
+    invalidateLayerCache();
+
+    // 表示用の画像を用意し（あれば使う・元が変われば作り直す）、出揃ったオーバーレイを流し直す
+    final changed = await prepareOverlayImages(newOverlayNodes, web: kIsWeb);
+    if (run != _featuresRun || !mounted) return;
+    final drawable = [for (final n in newOverlayNodes) if (overlayDrawableNow(n, web: kIsWeb)) n];
+    if (!changed && drawable.length == overlayImageNodes.length) return;
+    triggerSetState(() => overlayImageNodes = drawable);
+    scene.invalidate();
   }
 
   /// ImageNodeを再帰的に集める。OverlayImageNodeは別リストに分ける

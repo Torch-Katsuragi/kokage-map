@@ -79,7 +79,7 @@ class AttributeTablePager extends StatelessWidget {
   /// これより狭いと「先頭へ・末尾へ」を出さない
   static const double compactWidth = 340;
 
-  /// これより狭いと左の件数も出さない（総件数はページの横の [n] に残る）
+  /// これより狭いと左の件数も出さない（総件数はページの横の [n] に移る）
   static const double narrowWidth = 280;
 
   @override
@@ -107,23 +107,31 @@ class AttributeTablePager extends StatelessWidget {
                     ],
                   ),
                 ),
-              const Spacer(),
-              if (showEnds) _button(Icons.first_page, first ? null : () => onPage(1)),
-              _button(Icons.navigate_before, first ? null : () => onPage(page - 1)),
-              Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
-                    totalRecords == null ? '$page / $totalPage' : '$page / $totalPage [$totalRecords]',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: activatedColor, fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
+              // ⚠ 文字を両脇の Spacer と並べない。空きを三等分され、1 件の表でも「1 / …」と切れていた（2026-10-12 に Pixel 9 で）。
+              //   真ん中の塊だけを Expanded にし、その中で空きを全部ページの表示に回す
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (showEnds) _button(Icons.first_page, first ? null : () => onPage(1)),
+                    _button(Icons.navigate_before, first ? null : () => onPage(page - 1)),
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          // 総件数は左に出ていれば繰り返さない（狭くて左を畳んだときだけ [n] を添える）
+                          showCount || totalRecords == null ? '$page / $totalPage' : '$page / $totalPage [$totalRecords]',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: activatedColor, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                    _button(Icons.navigate_next, last ? null : () => onPage(page + 1)),
+                    if (showEnds) _button(Icons.last_page, last ? null : () => onPage(totalPage)),
+                  ],
                 ),
               ),
-              _button(Icons.navigate_next, last ? null : () => onPage(page + 1)),
-              if (showEnds) _button(Icons.last_page, last ? null : () => onPage(totalPage)),
-              const Spacer(),
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: DropdownButton<int>(

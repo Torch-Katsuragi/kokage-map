@@ -45,6 +45,13 @@ LayerNode? layerOfSelectedFeatures(List<LayerTreeNode> selected) {
   return layer;
 }
 
+/// 属性表のボタンで開くレイヤ: レイヤ一覧で選んだレイヤ、なければ地図で選んだ地物のレイヤ。どちらもなければ null。
+/// 地図で地物を選ぶ口（タップ・属性の検索・属性表の行）は [SelectedFeatures.selectOnMap] でレイヤ一覧の選択も
+/// その地物のレイヤに移すので、レイヤ一覧の選択がいつも「最後に選んだもの」になる。
+/// ⚠ 地図の選択を先にしない。地物を選んだあとレイヤ一覧で別のレイヤを押したら、押したほうを開きたい（2026-10-12）
+LayerNode? attributeTableLayerFor(LayerNode? drawerLayer, List<LayerTreeNode> selected) =>
+    drawerLayer ?? layerOfSelectedFeatures(selected);
+
 @Riverpod(keepAlive: true)
 class SelectedFeatures extends _$SelectedFeatures {
   @override
@@ -58,6 +65,14 @@ class SelectedFeatures extends _$SelectedFeatures {
   void clear() => state = [];
 
   void set(List<LayerTreeNode> features) => state = [...features];
+
+  /// 地図で [node] だけを選ぶ。地物ならレイヤ一覧の選択もそのレイヤに移す（タップで選んだときと同じ）。
+  /// 属性の検索で地物へ飛んだときは移していなかったので、前にレイヤ一覧で押したレイヤの属性表が開いていた
+  /// （2026-10-12 に Pixel 9 で。調査点を押したあと検索で小班の 12-ろ へ飛び、属性表で調査点が開いた）
+  void selectOnMap(LayerTreeNode node) {
+    state = [node];
+    if (node is FeatureNode) ref.read(selectedLayerNodeProvider.notifier).select(node.parent);
+  }
 
   void toggle(LayerTreeNode node) {
     if (state.contains(node)) {

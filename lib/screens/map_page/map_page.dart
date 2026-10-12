@@ -296,8 +296,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   Future<void> _openAttributeTable([LayerNode? targetLayer]) async {
     try {
       final layer = targetLayer ??
-          ref.read(selectedLayerNodeProvider) ??
-          layerOfSelectedFeatures(ref.read(selectedFeaturesProvider));
+          attributeTableLayerFor(ref.read(selectedLayerNodeProvider), ref.read(selectedFeaturesProvider));
 
       if (layer == null) {
         ref
@@ -338,7 +337,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   /// 属性の検索（レイヤ一覧の虫眼鏡）で選んだ地物: 選んで、形が見える範囲に収まるよう寄せる。
   /// 点は今のズームのまま寄せる（遠すぎれば 17 まで寄る）
   void _onSearchHit(FeatureNode feature) {
-    ref.read(selectedFeaturesProvider.notifier).set([feature]);
+    ref.read(selectedFeaturesProvider.notifier).selectOnMap(feature);
     triggerSetState(() {});
     final coords = switch (feature) {
       LineFeatureNode() => feature.line,
@@ -356,7 +355,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   void _onAttributeTableFeatureSelected(FeatureNode feature) {
     try {
       AppLogger.debug('[MAP] 属性テーブルでフィーチャ選択: ${feature.rowId}');
-      ref.read(selectedFeaturesProvider.notifier).set([feature]);
+      // 表のレイヤと同じなら表は切り替わらない（選択レイヤの変化を見る listen は同じノードなら何もしない）
+      ref.read(selectedFeaturesProvider.notifier).selectOnMap(feature);
       triggerSetState(() {});
       jumpTo(feature.centroid);
     } catch (e) {

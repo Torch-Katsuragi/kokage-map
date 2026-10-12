@@ -32,6 +32,7 @@ import '../../utils/app_logger.dart';
 import 'attribute_form_view.dart';
 import 'attribute_table_controller.dart';
 import 'attribute_table_dialogs.dart';
+import 'attribute_table_pager.dart';
 import 'attribute_table_toolbar.dart';
 
 /// 動的属性テーブルウィジェット（リファクタリング版）
@@ -308,6 +309,12 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
           onPageSizeChanged: _controller.setPageSize,
           fetch: _controller.fetchPage,
           stateManager: stateManager,
+          // 既定の見た目は縦向きのスマホで右がはみ出す（2026-10-12）
+          builder: (_, s) => AttributeTablePager.fromState(
+            s,
+            pageSizes: AttributeTableController.pageSizes,
+            onPageSizeChanged: _controller.setPageSize,
+          ),
         );
       },
       configuration: _gridConfiguration,

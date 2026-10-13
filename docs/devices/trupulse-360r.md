@@ -220,6 +220,42 @@ target = Distance().offset(station, HD, AZ)
 | `survey_stn` | Station 位置 (GeoJSON Point: `{"type":"Point","coordinates":[lon,lat]}`) |
 | `survey_timestamp` | 計測時刻 (ISO8601) |
 
+### 後視補正
+
+測線の先の点に立って後ろ（器械点）を測ると、アプリが**後視**と見分けて前視と平均する。切り替えはなく、2通りの流れのどちらでも使える。
+
+| 流れ | 測り方 | 器械点 |
+|------|--------|--------|
+| 振り返り | P0→P1 を測ったら、P1 に立ったまま P0 を測る。続けて P2 へ前視 | そのまま（P1） |
+| 戻り | P0→…→Pn と前視だけ済ませ、Pn で Pn-1 → Pn-1 へ歩いて Pn-2 → … → P1 で P0 | 2本目から1つずつ手前へ移る |
+
+見分け方（`TraverseRecorder.record`）:
+
+1. 器械点 S がまだ後視されていなければ、S の測線（S の `survey_stn` → S）を試す
+2. S が後視済みなら、S の1つ手前の点 P の測線（P の `survey_stn` → P）を試す。合えば器械点を P へ移す（戻り）
+3. 試す測線の先の点から計測を延ばした位置が、その測線の器械点から **前視 HD の 15%（1〜5 m）** 以内なら後視。外れれば前視として新しい点を作る
+
+既に後視済みの測線は試さない。戻りは起点（`survey_stn` なし）の1つ先で止まる。
+
+採る値（前視 fs・後視 bs）:
+
+- 方位角: fs と bs+180° の円周平均
+- 傾斜角: (fs − bs) / 2（後視の傾斜角は前視と符号が逆）
+- HD・SD: 平均。VD = HD × tan(採った傾斜角)
+
+点の位置は器械点から採った HD・方位角で出し直す。その点から先のチェーン（`survey_stn` で辿る点）は同じだけ平行移動し、`survey_stn` もずらす（各測線の向き・長さは変わらない）。通知は振り返りが「後視補正を適用」、戻りが「後視（戻り）: P2 → P1」（立っている点 → 測った点。名前が無ければ導線の順番）。
+
+後視した点に足す・書き換える属性（列は書くときに TEXT で足す）:
+
+| カラム名 | 内容 |
+|----------|------|
+| `survey_az` / `survey_inc` / `survey_hd` / `survey_sd` / `survey_vd` | 採った値（平均）に置き換える |
+| `survey_fs_az` / `survey_fs_inc` / `survey_fs_hd` / `survey_fs_sd` / `survey_fs_timestamp` | 前視の生の値（置き換える前の `survey_*`） |
+| `survey_bs_az` / `survey_bs_inc` / `survey_bs_hd` / `survey_bs_sd` / `survey_bs_timestamp` | 後視の生の値（測った向きのまま。方位角は前視の逆向き、傾斜角は符号が逆） |
+| `survey_backsight` | `true`（後視補正済みの印） |
+
+方位角はどれも本体の値（磁北基準）。真北への補正は置くときに足す（`survey_az` と同じ）。`survey_fs_*`・`survey_bs_*` の無い `survey_backsight=true` の点は、生の値を残す前に後視した点で、そのまま扱う。
+
 ### オーバーレイ表示
 
 ツール選択中、レイヤ内の `survey_stn` (GeoJSON Point) 属性を持つポイントから Station 座標への線分を動的に描画する。ポイントを削除すれば対応する線も消える。
@@ -231,7 +267,8 @@ target = Distance().offset(station, HD, AZ)
 | ファイル | 役割 |
 |----------|------|
 | `lib/devices/trupulse/trupulse_service.dart` | BT SPP 接続・コマンド送受信・計測データパース |
-| `lib/devices/trupulse/trupulse_tool.dart` | 地図ツール（Station選択・座標算出・ポイント逐次生成） |
+| `lib/devices/trupulse/trupulse_tool.dart` | 地図ツール（Station選択・計測の受け取り・通知） |
+| `lib/services/survey/traverse_recorder.dart` | 計測を点に記録（前視で点を作る・後視の見分けと平均・先の点の平行移動） |
 | `lib/devices/trupulse/trupulse_detail_screen.dart` | 詳細操作画面（モード切替・リモート操作） |
 | `lib/devices/trupulse/trupulse_calibration_guide.dart` | キャリブレーション手順ガイド |
 | `lib/devices/trupulse/trupulse_status_panel.dart` | ステータスパネル（計測値・Station表示） |

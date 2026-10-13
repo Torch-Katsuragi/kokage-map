@@ -22,8 +22,6 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/gestures.dart';
@@ -42,10 +40,10 @@ import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../services/survey/survey_chain_resolver.dart';
+import '../../services/survey/traverse_recorder.dart';
 import '../../tools/pan_tool.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/geo_converter.dart';
-import '../../utils/geodesic.dart';
 import '../../utils/true_heading.dart';
 import '../../utils/wmm_declination.dart';
 import '../../widgets/external_layer_actions.dart';
@@ -61,6 +59,7 @@ class TruPulseTool extends DeviceTool {
   ///
   /// 本体の偏角設定（dECLn）は 0 のまま使う前提（シリアルでは読めないので、本体側でも足すと二重になる）。
   /// 属性 `survey_az` には本体の値（磁北基準）をそのまま残す。ライン化の偏角補正（既定 ON）はこの値に足す。
+  /// 後視の生の値 `survey_fs_az`・`survey_bs_az` も同じく磁北基準。
   /// docs/devices/trupulse-360r.md「偏差（Declination）設定」
   static double trueAzimuth(double magneticAz, LatLng at, [DateTime? date]) =>
       magneticToTrue(magneticAz, WmmDeclination.calculate(at.latitude, at.longitude, date));
@@ -94,9 +93,6 @@ class TruPulseTool extends DeviceTool {
   IMapState? _mapState;
 
   static const double _hitRadius = 30.0;
-
-  // ~1mm squared. Absorbs serialization rounding but rejects missing stations.
-  static const double _stnMatchThresholdSq = 1e-16;
 
   @override
   void onActivate() {
@@ -136,155 +132,72 @@ class TruPulseTool extends DeviceTool {
       final stn = _station!;
       // 読み取り専用レイヤ（shp・GeoJSON など）の点を基準点にしていても書き込まない
       if (refuseReadOnlyEditBy(_ref.read, stn)) return;
-      final stnPos = stn.point;
-      final target = const Distance().offset(stnPos, m.hd, trueAzimuth(m.az, stnPos));
 
-      // --- バックサイト自動検出 ---
-      if (await _tryBacksightCorrection(stn, m, target)) return;
-
-      // --- 通常処理: 新規ポイント作成 ---
-      AppLogger.debug('[TruPulseTool] Creating point in layer: ${stn.parent.layerName}');
-
-      final newPoint = await PointFeatureNode.createIn(stn.parent, target, '', '');
-      if (newPoint == null) {
-        AppLogger.debug('[TruPulseTool] Failed to create point');
+      final shot = await TraverseRecorder.record(
+        stn,
+        TraverseReading(az: m.az, inc: m.inc, hd: m.hd, sd: m.sd, vd: m.vd, timestamp: m.timestamp),
+        trueAz: trueAzimuth,
+      );
+      if (shot == null) {
+        AppLogger.debug('[TruPulseTool] Failed to record measurement');
         return;
       }
 
-      await newPoint.setAttributeValues({
-        'survey_az': m.az,
-        'survey_inc': m.inc,
-        'survey_hd': m.hd,
-        'survey_sd': m.sd,
-        'survey_vd': m.vd,
-        'survey_stn': jsonEncode({
-          'type': 'Point',
-          'coordinates': [stnPos.longitude, stnPos.latitude],
-        }),
-        'survey_timestamp': m.timestamp.toIso8601String(),
-      });
-
-      _station = newPoint;
+      // 戻りの後視では器械点が1つ手前へ移る（ハイライトもそちらへ）
+      _station = shot.station;
       _ref.read(featureRefreshTriggerProvider.notifier).trigger();
       _mapState?.refreshFeatures();
       _notifyUI();
-      await _player.setPlaybackRate(1.0);
+      if (shot.kind != TraverseShotKind.forward) _notifyBacksight(shot);
+      // 後視は低い音で鳴らし分ける
+      await _player.setPlaybackRate(shot.kind == TraverseShotKind.forward ? 1.0 : 0.7);
       await _player.play(AssetSource('sounds/point_created.wav'));
 
       AppLogger.debug(
-        '[TruPulseTool] Point created at '
-        '(${target.latitude.toStringAsFixed(6)}, ${target.longitude.toStringAsFixed(6)})',
+        '[TruPulseTool] ${shot.kind.name}: '
+        '(${shot.point.point.latitude.toStringAsFixed(6)}, ${shot.point.point.longitude.toStringAsFixed(6)}), '
+        'shifted ${shot.shifted}',
       );
     } catch (e, st) {
       AppLogger.debug('[TruPulseTool] _onMeasurement error: $e\n$st');
     }
   }
 
-  // =========================================================
-  // Backsight auto-detection
-  // =========================================================
-
-  /// ターゲットが前測点の近傍であれば後視として補正を適用し true を返す。
-  Future<bool> _tryBacksightCorrection(
-    PointFeatureNode stn,
-    TruPulseMeasurement m,
-    LatLng target,
-  ) async {
-    final props = stn.turfFeature.properties;
-    if (props == null) return false;
-
-    // 起点（survey_stnなし）なら後視不可
-    final prevStnJson = props['survey_stn'];
-    if (prevStnJson == null) return false;
-
-    // 既に後視補正済みならスキップ
-    final backsightDone = props['survey_backsight'];
-    if (backsightDone == true || backsightDone == 'true') return false;
-
-    final prevStnCoords = _parseStnCoords(prevStnJson);
-    if (prevStnCoords == null) return false;
-
-    // 前視HDを取得して閾値を算出
-    final forwardHd = surveyNumber(props['survey_hd']);
-    if (forwardHd <= 0) return false;
-    final threshold = (forwardHd * 0.15).clamp(1.0, 5.0);
-
-    // ターゲットと前測点の距離を比較
-    final distToPrev = Geodesic.distance(target, prevStnCoords);
-
-    if (distToPrev > threshold) return false;
-
-    // --- バックサイト検出! 平均化補正を適用 ---
-    AppLogger.debug(
-      '[TruPulseTool] Backsight detected! dist=${distToPrev.toStringAsFixed(2)}m '
-      '(threshold=${threshold.toStringAsFixed(1)}m)',
+  /// 後視補正の通知。戻りなら「後視（戻り）: P3 → P2」のように立っている点と測った点を出す
+  void _notifyBacksight(TraverseShot shot) {
+    final adopted = shot.adopted!;
+    final azDelta = ((adopted.az - shot.forwardAz! + 540) % 360 - 180).abs();
+    final hdDelta = (adopted.hd - shot.forwardHd!).abs();
+    final detail = t.trupulse.backsightDetail(
+      azDelta: azDelta.toStringAsFixed(1),
+      hdDelta: hdDelta.toStringAsFixed(2),
     );
-
-    final forwardAz = surveyNumber(props['survey_az']);
-    final forwardSd = surveyNumber(props['survey_sd']);
-    final forwardInc = surveyNumber(props['survey_inc']);
-
-    // 後視AZを前視方向に変換して円周平均
-    final backsightAzForward = (m.az + 180) % 360;
-    final correctedAz = _circularMeanDeg(forwardAz, backsightAzForward);
-    final correctedHd = (forwardHd + m.hd) / 2;
-    final correctedSd = (forwardSd + m.sd) / 2;
-    final correctedVd = correctedHd * _tanDeg(forwardInc);
-
-    // 座標を再計算
-    final newPos = const Distance().offset(prevStnCoords, correctedHd, trueAzimuth(correctedAz, prevStnCoords));
-
-    // 属性を上書き
-    await stn.setAttributeValues({
-      'survey_az': correctedAz,
-      'survey_hd': correctedHd,
-      'survey_sd': correctedSd,
-      'survey_vd': correctedVd,
-      'survey_backsight': true,
-    });
-
-    // ジオメトリを更新
-    await stn.updateGeometry(
-      name: stn.name,
-      newGeometry: newPos,
-    );
-
-    _ref.read(featureRefreshTriggerProvider.notifier).trigger();
-    _mapState?.refreshFeatures();
-    _notifyUI();
-    await _player.setPlaybackRate(0.7);
-    await _player.play(AssetSource('sounds/point_created.wav'));
-
-    // 通知
-    final azDelta = (correctedAz - forwardAz).abs();
-    final hdDelta = (correctedHd - forwardHd).abs();
+    final title = shot.kind == TraverseShotKind.reverseBacksight
+        ? t.trupulse.backsightReverse(
+            from: _pointLabel(shot.point),
+            to: shot.legStation != null ? _pointLabel(shot.legStation!) : '?',
+          )
+        : t.trupulse.backsightApplied;
     _ref.read(notificationCenterProvider.notifier).add(
-      title: t.trupulse.backsightApplied,
-      detail: t.trupulse.backsightDetail(
-          azDelta: azDelta.toStringAsFixed(1),
-          hdDelta: hdDelta.toStringAsFixed(2)),
+      title: title,
+      detail: detail,
       level: NotificationLevel.success,
     );
-
-    AppLogger.debug(
-      '[TruPulseTool] Backsight correction applied: '
-      'AZ ${forwardAz.toStringAsFixed(1)} -> ${correctedAz.toStringAsFixed(1)}, '
-      'HD ${forwardHd.toStringAsFixed(2)} -> ${correctedHd.toStringAsFixed(2)}',
-    );
-    return true;
   }
 
-  /// 2つの角度（度）の円周平均を計算する。
-  static double _circularMeanDeg(double a, double b) {
-    final aRad = a * math.pi / 180;
-    final bRad = b * math.pi / 180;
-    final sinSum = math.sin(aRad) + math.sin(bRad);
-    final cosSum = math.cos(aRad) + math.cos(bRad);
-    final mean = math.atan2(sinSum, cosSum) * 180 / math.pi;
-    return mean < 0 ? mean + 360 : mean;
+  /// 点の呼び名。名前があれば名前、なければ導線の順番（起点 P0、続いて P1, P2, …）
+  String _pointLabel(PointFeatureNode p) {
+    if (p.name.isNotEmpty) return p.name;
+    final layer = p.parent;
+    if (layer is PointLayerNode) {
+      for (final chain in SurveyChainResolver.resolveAll(layer)) {
+        if (chain.origin == p) return 'P0';
+        final i = chain.points.indexWhere((tp) => tp.node == p);
+        if (i >= 0) return 'P${i + 1}';
+      }
+    }
+    return t.trupulse.panel.point;
   }
-
-  static double _tanDeg(double deg) => math.tan(deg * math.pi / 180);
 
   // =========================================================
   // Tap → radial menu
@@ -367,55 +280,7 @@ class TruPulseTool extends DeviceTool {
   // =========================================================
 
   /// Find all points in the same layer that reference [target] as their station.
-  List<PointFeatureNode> _findDependents(PointFeatureNode target) {
-    final layer = target.parent;
-    return layer.children.whereType<PointFeatureNode>().where((p) {
-      final stnCoords = _parseStnCoords(p.turfFeature.properties?['survey_stn']);
-      if (stnCoords == null) return false;
-      return _findNearestPoint(stnCoords, layer) == target;
-    }).toList();
-  }
-
-  /// Collect the entire forward chain starting from [start] (BFS).
-  List<PointFeatureNode> _collectChainForward(PointFeatureNode start) {
-    final result = <PointFeatureNode>[];
-    final visited = <PointFeatureNode>{start};
-    var frontier = [start];
-    while (frontier.isNotEmpty) {
-      final next = <PointFeatureNode>[];
-      for (final p in frontier) {
-        for (final dep in _findDependents(p)) {
-          if (visited.add(dep)) {
-            result.add(dep);
-            next.add(dep);
-          }
-        }
-      }
-      frontier = next;
-    }
-    return result;
-  }
-
-  /// Find the nearest PointFeatureNode in [layer] to [coords], within threshold.
-  static PointFeatureNode? _findNearestPoint(LatLng coords, LayerNode layer) {
-    PointFeatureNode? nearest;
-    double nearestDist = double.infinity;
-    for (final child in layer.children) {
-      if (child is! PointFeatureNode) continue;
-      final d = _sqDist(child.point, coords);
-      if (d < nearestDist) {
-        nearestDist = d;
-        nearest = child;
-      }
-    }
-    return (nearest != null && nearestDist < _stnMatchThresholdSq) ? nearest : null;
-  }
-
-  static double _sqDist(LatLng a, LatLng b) {
-    final dlat = a.latitude - b.latitude;
-    final dlon = a.longitude - b.longitude;
-    return dlat * dlat + dlon * dlon;
-  }
+  List<PointFeatureNode> _findDependents(PointFeatureNode target) => SurveyStation.dependentsOf(target);
 
   // =========================================================
   // Deletion strategies
@@ -473,22 +338,9 @@ class TruPulseTool extends DeviceTool {
     final vLat = target.point.latitude - targetStnCoords.latitude;
     final vLon = target.point.longitude - targetStnCoords.longitude;
 
-    // Collect chain BEFORE any mutations so _findDependents sees original data.
-    final chain = _collectChainForward(target);
-
-    for (final p in chain) {
-      await p.updateLocation(LatLng(
-        p.point.latitude - vLat,
-        p.point.longitude - vLon,
-      ));
-      final pStn = _parseStnCoords(p.turfFeature.properties?['survey_stn']);
-      if (pStn != null) {
-        await p.setAttributeValue('survey_stn', jsonEncode({
-          'type': 'Point',
-          'coordinates': [pStn.longitude - vLon, pStn.latitude - vLat],
-        }));
-      }
-    }
+    // Collect chain BEFORE any mutations so dependents are matched on original data.
+    final chain = SurveyStation.downstreamOf(target);
+    await SurveyStation.translate(chain, -vLat, -vLon);
 
     if (_station == target) _station = null;
     await target.dispose();
@@ -593,17 +445,7 @@ class TruPulseTool extends DeviceTool {
   // GeoJSON parsing
   // =========================================================
 
-  static LatLng? _parseStnCoords(dynamic value) {
-    try {
-      final map = value is String
-          ? jsonDecode(value) as Map<String, dynamic>
-          : value as Map;
-      final c = map['coordinates'] as List;
-      return LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble());
-    } catch (_) {
-      return null;
-    }
-  }
+  static LatLng? _parseStnCoords(dynamic value) => SurveyStation.parse(value);
 }
 
 // =========================================================

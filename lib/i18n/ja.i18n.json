@@ -1157,6 +1157,7 @@
     "closureRatio": "閉合比",
     "backsightCorrected": "後視補正済",
     "backsightApplied": "後視補正を適用",
+    "backsightReverse": "後視（戻り）: ${from} → ${to}",
     "backsightDetail": "AZ ${azDelta}° / HD ${hdDelta}m 修正",
     "detail": {
       "refreshInfo": "情報を更新",

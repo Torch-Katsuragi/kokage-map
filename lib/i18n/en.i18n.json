@@ -1157,6 +1157,7 @@
     "closureRatio": "Closure Ratio",
     "backsightCorrected": "Backsight corrected",
     "backsightApplied": "Backsight correction applied",
+    "backsightReverse": "Backsight (return): ${from} → ${to}",
     "backsightDetail": "AZ ${azDelta}° / HD ${hdDelta}m corrected",
     "detail": {
       "refreshInfo": "Refresh Info",

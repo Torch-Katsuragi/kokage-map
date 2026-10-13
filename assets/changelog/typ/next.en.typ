@@ -21,6 +21,7 @@
   [GPS survey records fix type, satellites, accuracy and averaging per point, and can reject fixes below thresholds (Settings → GPS & Positioning)],
   [Set the GPS track interval, minimum distance, dropping of inaccurate points and jump rejection (Settings → GPS & Positioning)],
   [Convert all Shapefile, GeoJSON, KML and other files directly in a folder to gpkg at once, one gpkg per file (long-press the folder → "Convert files inside to gpkg")],
+  [TruPulse backsights support a return pass: measure forward to the end, then walk back; each leg is averaged and the station steps back one point],
 )
 
 #fixes(
@@ -60,7 +61,8 @@
   [The info panel showed boolean columns (QGIS BOOLEAN or check box) as raw "true" or "1"; they now read Yes or No],
   [Raster overlays from QGIS and similar could fail to appear right after opening or cloning; back-to-back refreshes built the same display image at once and broke it],
   [With a raster overlay present, hiding a gpkg or layer did not change the map until the raster's display image was ready],
-  [The map drew overlapping layers in reverse list order and overlays always under polygon fills; it now draws higher list entries on top, as QGIS does, with the order read from the .qgs layer tree]
+  [The map drew overlapping layers in reverse list order and overlays always under polygon fills; it now draws higher list entries on top, as QGIS does, with the order read from the .qgs layer tree],
+  [TruPulse backsight averaging discarded the raw foresight and backsight readings; they are kept in survey\_fs\_\* and survey\_bs\_\* columns, and inclination is averaged too],
 )
 
 #fixes(

@@ -435,7 +435,7 @@ You can survey multiple points and convert them to lines/polygons:
 - **Compass rule (Bowditch)** / **Transit rule** for closure adjustment
 - **Magnetic declination correction** (auto-calculated from WMM2025)
 - **Instrument height and target height corrections**
-- **Backsight correction** (automatic backsight calculation)
+- **Backsight correction** (automatic backsight calculation). You can turn around and measure back at each point, or measure all forward legs to the last point and then walk back to the start measuring each leg. The readings before averaging are kept in the `survey_fs_*` and `survey_bs_*` columns
 
 ---
 

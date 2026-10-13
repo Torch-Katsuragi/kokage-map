@@ -27,7 +27,6 @@ import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../utils/geodesic.dart';
 
-/// 測量チェーン内の1点を表すデータクラス
 /// 測量の属性（survey_az など）の値を数にする。num と数として読める文字列のほかは 0
 double surveyNumber(Object? value) {
   if (value is num) return value.toDouble();
@@ -35,6 +34,104 @@ double surveyNumber(Object? value) {
   return 0;
 }
 
+/// survey_stn（器械点の GeoJSON Point）で点どうしをつなぐ道具
+///
+/// 器械点は座標の一致（約1mm以内）で引き当てる。TruPulse の道具・チェーン解決・後視補正が共有する。
+class SurveyStation {
+  // ~1mm squared — serialization rounding吸収閾値
+  static const double _matchThresholdSq = 1e-16;
+
+  /// survey_stn の値（GeoJSON Point の文字列か Map）を座標にする。読めなければ null
+  static LatLng? parse(dynamic value) {
+    try {
+      final map = value is String
+          ? jsonDecode(value) as Map<String, dynamic>
+          : value as Map;
+      final c = map['coordinates'] as List;
+      return LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 座標を survey_stn の値（GeoJSON Point の文字列）にする
+  static String encode(LatLng p) => jsonEncode({
+        'type': 'Point',
+        'coordinates': [p.longitude, p.latitude],
+      });
+
+  /// [layer] の点のうち [coords] に一致する（約1mm以内）もの
+  static PointFeatureNode? findAt(LatLng coords, LayerNode layer) {
+    PointFeatureNode? nearest;
+    double nearestDist = double.infinity;
+    for (final child in layer.children) {
+      if (child is! PointFeatureNode) continue;
+      final dlat = child.point.latitude - coords.latitude;
+      final dlon = child.point.longitude - coords.longitude;
+      final d = dlat * dlat + dlon * dlon;
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = child;
+      }
+    }
+    return (nearest != null && nearestDist < _matchThresholdSq) ? nearest : null;
+  }
+
+  /// [p] の器械点（survey_stn が指す点）。起点・器械点が見つからないときは null
+  static PointFeatureNode? stationOf(PointFeatureNode p) {
+    final coords = parse(p.turfFeature.properties?['survey_stn']);
+    return coords == null ? null : findAt(coords, p.parent);
+  }
+
+  /// [target] を器械点にしている点（同じレイヤ）
+  static List<PointFeatureNode> dependentsOf(PointFeatureNode target) {
+    final layer = target.parent;
+    return layer.children.whereType<PointFeatureNode>().where((p) {
+      final coords = parse(p.turfFeature.properties?['survey_stn']);
+      if (coords == null) return false;
+      return findAt(coords, layer) == target;
+    }).toList();
+  }
+
+  /// [start] から先のチェーン全体（幅優先、[start] は含まない）
+  static List<PointFeatureNode> downstreamOf(PointFeatureNode start) {
+    final result = <PointFeatureNode>[];
+    final visited = <PointFeatureNode>{start};
+    var frontier = [start];
+    while (frontier.isNotEmpty) {
+      final next = <PointFeatureNode>[];
+      for (final p in frontier) {
+        for (final dep in dependentsOf(p)) {
+          if (visited.add(dep)) {
+            result.add(dep);
+            next.add(dep);
+          }
+        }
+      }
+      frontier = next;
+    }
+    return result;
+  }
+
+  /// [points] を緯度経度で [dLat], [dLon] だけ平行移動し、survey_stn も同じだけずらす
+  ///
+  /// [points] は動かす前に [downstreamOf] で集めておくこと（動かすと座標の一致で引けなくなる）。
+  /// 器械点ごと平行移動するので、各測線の向きと長さは変わらない。
+  static Future<void> translate(List<PointFeatureNode> points, double dLat, double dLon) async {
+    for (final p in points) {
+      await p.updateLocation(LatLng(p.point.latitude + dLat, p.point.longitude + dLon));
+      final stn = parse(p.turfFeature.properties?['survey_stn']);
+      if (stn != null) {
+        await p.setAttributeValue(
+          'survey_stn',
+          encode(LatLng(stn.latitude + dLat, stn.longitude + dLon)),
+        );
+      }
+    }
+  }
+}
+
+/// 測量チェーン内の1点を表すデータクラス
 class TraversePoint {
   final PointFeatureNode node;
   final LatLng position;
@@ -95,9 +192,6 @@ class TraverseChain {
 
 /// survey_stnチェーンを辿ってTraverseChainを構築する
 class SurveyChainResolver {
-  // ~1mm squared — serialization rounding吸収閾値
-  static const double _stnMatchThresholdSq = 1e-16;
-
   /// レイヤ内の測量チェーンをすべて解決する
   ///
   /// 複数の独立したチェーンが存在する場合、それぞれを返す。
@@ -212,33 +306,8 @@ class SurveyChainResolver {
     return props.containsKey('survey_az') && props.containsKey('survey_hd');
   }
 
-  static LatLng? _parseStnCoords(dynamic value) {
-    try {
-      final map = value is String
-          ? jsonDecode(value) as Map<String, dynamic>
-          : value as Map;
-      final c = map['coordinates'] as List;
-      return LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble());
-    } catch (_) {
-      return null;
-    }
-  }
+  static LatLng? _parseStnCoords(dynamic value) => SurveyStation.parse(value);
 
-  static PointFeatureNode? _findNearestPoint(LatLng coords, LayerNode layer) {
-    PointFeatureNode? nearest;
-    double nearestDist = double.infinity;
-    for (final child in layer.children) {
-      if (child is! PointFeatureNode) continue;
-      final dlat = child.point.latitude - coords.latitude;
-      final dlon = child.point.longitude - coords.longitude;
-      final d = dlat * dlat + dlon * dlon;
-      if (d < nearestDist) {
-        nearestDist = d;
-        nearest = child;
-      }
-    }
-    return (nearest != null && nearestDist < _stnMatchThresholdSq)
-        ? nearest
-        : null;
-  }
+  static PointFeatureNode? _findNearestPoint(LatLng coords, LayerNode layer) =>
+      SurveyStation.findAt(coords, layer);
 }

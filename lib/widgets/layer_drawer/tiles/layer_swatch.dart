@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-/// レイヤ・View の行の左端: 種類のアイコン（点・線・面）を地図で描いている色で塗ったもの
+/// レイヤ・View の行の左端: レイヤは種類のアイコン（点・線・面）、View は筆と色見本のアイコン。どちらも地図で描いている色で塗る
 library;
 
 import 'package:flutter/material.dart';
@@ -26,10 +26,13 @@ import '../../../screens/layer_style_settings_screen.dart'
     show layerStyleSettings, pointColorDef, lineColorDef, polygonFillColorDef, polygonFillOpacityDef, polygonBorderColorDef;
 
 class LayerSwatch extends StatelessWidget {
-  const LayerSwatch({super.key, required this.layer, this.view, this.dimmed = false});
+  const LayerSwatch({super.key, required this.layer, this.view, this.dimmed = false, this.legend = false});
   final LayerNode layer;
   final ViewNode? view;
   final bool dimmed;
+
+  /// 行の下に QGIS の描き分けの凡例を出すか（出すなら View のアイコンは色を付けない）
+  final bool legend;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +51,12 @@ class LayerSwatch extends StatelessWidget {
           : s.resolveColor(polygonBorderColorDef, style),
       _ => Colors.blue,
     };
+    // View は「同じデータの見せ方」なので種類のアイコンでなく筆と色見本のアイコン。レイヤが何本もあるように見えた（2026-10-13）。
+    // QGIS の描き分けなら色は行の下の凡例で見えるので、アイコンは色を付けない。単色の View だけ描いている色を付ける
+    if (view != null) {
+      final neutral = Theme.of(context).colorScheme.onSurfaceVariant;
+      return Icon(Icons.style_outlined, size: 20, color: c(legend ? neutral : color.withValues(alpha: 1)));
+    }
     return Icon(NodePresenter.getIcon(layer), size: 20, color: c(color.withValues(alpha: 1)));
   }
 }

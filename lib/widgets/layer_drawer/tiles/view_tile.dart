@@ -48,11 +48,14 @@ class ViewTile extends ConsumerWidget {
     final dimmed = !node.isVisibleRecursive();
     final guiding = _guiding(ref);
     final index = _layer.views.indexOf(node);
+    // QGIS の描き分けなら、行の下に小さな凡例（View が印を持てば View の、無ければレイヤの）
+    final own = node.style;
+    final def = own?.qgisRenderer != null ? own!.qgisRendererDef : _layer.kmetaStyleIfLoaded?.qgisRendererDef;
     Widget row = DrawerRow(
       depth: depth,
       height: 40,
       dimmed: dimmed,
-      leading: LayerSwatch(layer: _layer, view: node, dimmed: dimmed),
+      leading: LayerSwatch(layer: _layer, view: node, dimmed: dimmed, legend: def != null),
       title: node.displayName,
       titleStyle: const TextStyle(fontSize: 16),
       subtitle: node.hasFilter
@@ -106,9 +109,6 @@ class ViewTile extends ConsumerWidget {
       },
     );
     if (guiding) row = KeyedSubtree(key: TutorialTargets.newViewMenu, child: row);
-    // QGIS の描き分けなら、行の下に小さな凡例（View が印を持てば View の、無ければレイヤの）
-    final own = node.style;
-    final def = own?.qgisRenderer != null ? own!.qgisRendererDef : _layer.kmetaStyleIfLoaded?.qgisRendererDef;
     if (def == null) return row;
     return Column(
       mainAxisSize: MainAxisSize.min,

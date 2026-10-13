@@ -113,6 +113,7 @@ Pixel 9 で触ったフォルダを Drive から落として QGIS 4.2.2 で開�
 - [ ] QGIS 製の gpkg（rtree・トリガーつき）: Pixel 9 で地図を開いたまま点を足す → Drive 同期 → PC で落として `ogrinfo -spat <足した点の周り> x.gpkg 調査点` に足した点が出る。`sqlite_master` に `rtree_調査点_geom_*` のトリガーが元どおり、`rtree_調査点_geom` の件数が表と同じ。続けてアプリで点を足せる（ログに `no such function: ST_IsEmpty` が出ない）
 - [ ] 同じく点を足してホームボタンで裏に回す → `adb pull` した gpkg で上と同じ（同期しなくても整う）
 - [ ] 裏に回して戻ったあと（トリガーが戻った状態）、編集パネルで既存の点の属性を変えて保存・属性表の置換・地物の削除 → `adb pull` した gpkg に反映。ログに `no such function: ST_IsEmpty` と「書けなかった変更を N 秒後に書き直す」が出ない。もう一度裏に回すとトリガーが元どおり
+- [ ] レイヤの並び = 描く順（d6/layer-order）: QGIS でオルソの GeoTIFF を面のレイヤより上に動かして保存 → Drive 同期 → Pixel 9 のレイヤ一覧でオルソが gpkg の上、地図（2D・3D、引いた段と寄った段）で塗りがオルソに隠れる。一番下に戻すと塗りが上に戻る。アプリが書き戻した `.qgs` を QGIS で開いて同じ並び
 - [ ] トリガーが 1 つも無い gpkg（今日 Drive にあった「調査点」）: Pixel 9 で点を 1 つ足して同期 → PC で `sqlite_master` に `rtree_調査点_geom_*` が 7 つ（insert・update2/4/5/6/7・delete）、`rtree_調査点_geom` の件数が表と同じ、`ogrinfo -spat` で全件出る。QGIS で点を動かすと rtree が追う。Android の geodiff の SQLite で作れたか（ログ「rtree のトリガーを作り直した」）
 
 ### 8. メモリ・大きさ（profile 版と DevTools。n9/size-mem）
@@ -202,6 +203,8 @@ profile 版（`flutter run --profile`、debug と同じ鍵なので上書きで�
 
 ## 要判断・保留
 
+- [ ] レイヤ一覧での並べ替え（ドラッグ）。描く順と `.qgs` の並びは `layout.sortOrder`（`KMetaService.setSortOrder`）を書けば付いてくる。いまは QGIS で並べ替える
+- [ ] QGIS の「レイヤ順の制御」（`custom-order enabled="1"`）を描く順に使うか（いまはツリーの並び）
 - [ ] JPEG2000（.jp2）を読むなら GDAL に OpenJPEG を入れて Android・web とも焼き直す（2026-10-12 に一覧から外した。林野庁・県のオルソに jp2 があるかで判断）
 - [ ] 「この端末」（sys）の実機確認の残り: global 配下の Drive 連携 dir（表示は Pixel / Fold、可視性の保存は 2026-10-06 に Fold で確認済み）
 - [ ] `sys/view`（端末の写真など読み取り専用の仮想レイヤ）。写真の権限（Play の申告）と大量写真の性能の設計が先

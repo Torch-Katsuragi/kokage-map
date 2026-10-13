@@ -57,6 +57,7 @@
 - The feature info panel showed boolean columns (BOOLEAN columns made in QGIS, check box fields) as raw values such as "Checked: true" or "Checked: 1". They now read Yes or No
 - Raster overlays made in QGIS or similar could fail to appear right after opening a project or cloning it from Drive (back-to-back map refreshes built the display image of the same raster at the same time and broke it)
 - With a raster overlay made in QGIS or similar in the project, hiding a gpkg or layer did not change the map until the raster's display image was ready. Showing and hiding features now applies first, and the raster follows
+- The map now draws in layer-list order, as QGIS does: what is higher in the list is drawn on top (before, overlapping layers were stacked in reverse and overlay images were always under polygon fills). A GeoTIFF or other raster placed above a polygon layer in QGIS is drawn above its fill in the app too. The order is read from the layer tree of a .qgs saved in QGIS, the layer list shows that order, and the .qgs the app writes keeps it. Lines, points, outlines and labels stay on top
 
 ### Lighter
 

@@ -27,6 +27,7 @@ import '../kmeta.dart';
 import 'folder_node.dart';
 import 'global_folder_node.dart';
 import 'layer_node.dart';
+import 'layer_order.dart';
 import 'layer_tree_node.dart';
 import 'sys_node.dart';
 
@@ -84,10 +85,16 @@ class GeoPackageNode extends LayerTreeNode {
     // DBから現在のレイヤ構造を取得
     final nodes = await LayerNode.loadNodes(this);
 
-    syncChildren(nodes);
+    // 親フォルダの最新の設定（`.qgs`）を読む
+    final folderParent = parent;
+    if (folderParent is FolderNode) folderParent.invalidateMetaCache();
+    final meta = await _getParentMeta();
+
+    // レイヤの並びは親フォルダの設定（`layout.sortOrder` の `gpkg名/レイヤ名`）。無ければ gpkg の順
+    syncChildren(applyLayerOrder(nodes, meta?.layout.sortOrder, layerOrderKey));
 
     // KMetaの可視性設定をレイヤーに適用
-    await _applyMetaVisibility();
+    _applyMetaVisibility(meta);
 
     // View定義を読む。ツリーUIは同期的に描くので、ここで揃えておく。
     // View が定義されていないレイヤにも「既定」View が1枚できる。
@@ -108,13 +115,7 @@ class GeoPackageNode extends LayerTreeNode {
   }
 
   /// KMetaの可視性設定をレイヤーに適用（layerKey形式で照合）
-  /// 親FolderNodeのキャッシュを無効化して最新のフォルダ設定（`.qgs`）を読む
-  Future<void> _applyMetaVisibility() async {
-    final folderParent = parent;
-    if (folderParent is FolderNode) {
-      folderParent.invalidateMetaCache();
-    }
-    final meta = await _getParentMeta();
+  void _applyMetaVisibility(KMeta? meta) {
     if (meta == null) return;
 
     for (final child in children) {

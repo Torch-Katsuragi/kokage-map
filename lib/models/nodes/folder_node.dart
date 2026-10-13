@@ -31,6 +31,7 @@ import 'external_layer_node.dart';
 import 'geopackage_node.dart';
 import 'global_folder_node.dart';
 import 'image_node.dart';
+import 'layer_order.dart';
 import 'layer_tree_node.dart';
 import 'sys_node.dart';
 
@@ -117,13 +118,19 @@ class FolderNode extends LayerTreeNode {
     // ファイルシステムから現在の構造を取得。
     // 列挙は1回だけ行い、3つのローダーに配る（web はハンドル走査が高いため）
     final entries = await listOnce();
+    // 並びはフォルダ設定の `layout.sortOrder`（QGIS のレイヤツリーから読み戻したもの）。無ければ種類順。
+    // 一覧の並びがそのまま描く順になる（上ほど手前。[[qgis-interop#レイヤの並びと描く順（2026-10-13）]]）
     syncChildren(
-      [
-        ...await loadFolderNodes(entries),
-        ...await loadGeoPackageNodes(entries),
-        ...await loadExternalNodes(entries),
-        ...await loadImageNodes(entries),
-      ],
+      applyLayerOrder(
+        [
+          ...await loadFolderNodes(entries),
+          ...await loadGeoPackageNodes(entries),
+          ...await loadExternalNodes(entries),
+          ...await loadImageNodes(entries),
+        ],
+        (await getMeta()).layout.sortOrder,
+        layerOrderKey,
+      ),
       keep: keepsChild,
     );
 

@@ -50,6 +50,9 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     ].join('|');
   }
 
+  /// 最後に焼いたときの描く順の世代（`MapScene.drawOrderRevision`）
+  int? _bakedDrawOrder;
+
   /// 焼き込みの台帳: 世代（フィーチャの一覧が変わるたびに進む）・タイルごとの焼いた世代・変わった範囲。
   /// 世代が古く、その後の変化が掛かるタイルだけ焼き直す（[_checkBakes]）。
   /// ⚠ 以前は「一覧が変わった瞬間に読み込み済みのタイル」だけ焼き直していたので、その瞬間に読み込み中だった親タイルは
@@ -89,6 +92,10 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     final styleSig = _styleSignature();
     if (_bakedStyleSignature != null && _bakedStyleSignature != styleSig) _bakes.addEvent(null);
     _bakedStyleSignature = styleSig;
+    // 描く順（レイヤの並び）が変わったら、面の塗りとオーバーレイ画像の重なりが変わるので一度だけ全部焼き直す
+    final order = widget.scene.drawOrderRevision;
+    if (_bakedDrawOrder != null && _bakedDrawOrder != order) _bakes.addEvent(null);
+    _bakedDrawOrder = order;
     if (_bakedContentRevision != rev) {
       _bakedContentRevision = rev;
       ui.Rect? merc(ui.Rect? ll) => ll == null
@@ -263,19 +270,52 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     _overlayKey = ''; // ホットリロードでオーバーレイを同期し直す
   }
 
-  /// テクスチャの上描き: オーバーレイ画像と、引いた段のフィーチャの焼き込み（[demZoom] はタイルの段、range はテクスチャの段）
+  /// テクスチャの上描き: オーバーレイ画像と面の塗りをレイヤの並びで混ぜて重ね、引いた段はその上に枠線・線・点
+  /// （[demZoom] はタイルの段、range はテクスチャの段）。
+  ///
+  /// QGIS と同じく、レイヤ一覧で上にあるものほど手前（[composeTextureDraws]）。線・点・枠線・ラベルはいつも一番上
+  /// （寄った段では地形に沿わせた形として持ち上げるので、テクスチャの重なりには入らない）
   void _decorateTexture(ui.Canvas canvas, TileRange range, int demZoom) {
     final frame = TextureFrame(range);
-    if (_overlayImages.isNotEmpty) {
-      for (final n in widget.scene.overlayImages) {
-        final im = _overlayImages[n.filePath];
-        if (im != null) paintOverlayImage(canvas, frame, im, n.cornerCoordinates);
+    final off = range.z - demZoom;
+    final sw = Stopwatch()..start();
+    final g = widget.scene.features;
+    final groups = _styleGroupsByKey();
+    final def = _defaultStyle();
+    TerrainFeatureStyle styleOf(geo.Feature f) => switch (f.properties[kStyleProp]) {
+          final String k => groups[k] ?? def,
+          _ => def,
+        };
+
+    // 面の塗りとオーバーレイ画像（段の小さい＝一覧で下のものから）
+    final overlays = <(OverlayImageNode, ui.Image)>[
+      if (_overlayImages.isNotEmpty)
+        for (final n in widget.scene.overlayImages)
+          if (_overlayImages[n.filePath] case final im?) (n, im),
+    ];
+    final fillIdx = g.polygons.isEmpty ? const <int>[] : _featureIndexes(g.polygons, frame.mercator);
+    final ranks = g.polygonRanks;
+    final steps = composeTextureDraws(
+      fillRanks: [for (final i in fillIdx) i < ranks.length ? ranks[i] : 0],
+      overlayRanks: [for (final (n, _) in overlays) widget.scene.drawRankOf(n)],
+    );
+    for (final step in steps) {
+      switch (step) {
+        case OverlayDraw(:final overlay):
+          final (n, im) = overlays[overlay];
+          paintOverlayImage(canvas, frame, im, n.cornerCoordinates);
+        case FillRun(:final from, :final to):
+          paintPolygonFills(canvas, frame, polygons: g.polygons, indexes: fillIdx.sublist(from, to), styleOf: styleOf);
       }
     }
-    final off = range.z - demZoom;
-    // 引いた段は面・線・点を全部、寄った段は面の塗りだけ描く（塗りを地形に沿わせた板にすると、尾根で地形に
+
+    // 引いた段は枠線・線・点も描く（寄った段は塗りだけ。塗りを地形に沿わせた板にすると、尾根で地形に
     // 突き抜けられて下の地図が白く抜けた。ユーザー 2026-10-02。枠線・線・点は形のまま持ち上げる）
-    _bakeFeatures(canvas, frame, demZoom, fillsOnly: demZoom > kBakeMaxZoom);
+    if (demZoom <= kBakeMaxZoom) _bakeFeatures(canvas, frame, styleOf);
+    if (sw.elapsedMilliseconds > 30) {
+      debugPrint('[3D] bake z$demZoom ${frame.range.x0},${frame.range.y0}: '
+          '面 ${fillIdx.length} 件・オーバーレイ ${overlays.length} 枚 ${sw.elapsedMilliseconds}ms');
+    }
     // どの世代のフィーチャで焼いたか（テクスチャの範囲 → タイルのキー）。確定はタイルに貼ったとき（[_onTextureApplied]）
     _bakes.composed(TileKey(demZoom, range.x0 >> off, range.y0 >> off));
     paintSelectionFill(
@@ -287,32 +327,24 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     );
   }
 
-  /// 引いた段のフィーチャをテクスチャに描く（真上からの投影。座標は範囲左上原点のピクセル）。
+  /// 引いた段のフィーチャの塗り以外（枠線・線・点）をテクスチャに描く（真上からの投影。座標は範囲左上原点のピクセル）。
+  /// 塗りは [_decorateTexture] がオーバーレイ画像と混ぜて先に描いている。
   ///
   /// 太さは画面で見える太さに合わせる。テクスチャは表示の段とほぼ同じ段で作るので、テクスチャの 1 px ≒ 画面の 1 px。
   /// 以前は設定の半分にしていて、引くほど細く薄れて地物を見失った（ユーザー 2026-10-02。MapLibre の頃は画面の px で
   /// 一定の太さだったので、引いても色の塊として見えていた）
-  void _bakeFeatures(ui.Canvas canvas, TextureFrame frame, int demZoom, {bool fillsOnly = false}) {
+  void _bakeFeatures(ui.Canvas canvas, TextureFrame frame, TerrainFeatureStyle Function(geo.Feature f) styleOf) {
     final g = widget.scene.features;
-    if (g.polygons.isEmpty && (fillsOnly || (g.polylines.isEmpty && g.markers.isEmpty))) return;
-    final groups = _styleGroupsByKey();
-    final def = _defaultStyle();
-    final sw = Stopwatch()..start();
-    final n = paintFeatures(
+    if (g.polygons.isEmpty && g.polylines.isEmpty && g.markers.isEmpty) return;
+    paintFeatures(
       canvas,
       frame,
       polygons: g.polygons,
       polylines: g.polylines,
       markers: g.markers,
       indexesIn: _featureIndexes,
-      styleOf: (f) => switch (f.properties[kStyleProp]) {
-        final String k => groups[k] ?? def,
-        _ => def,
-      },
-      fillsOnly: fillsOnly,
+      styleOf: styleOf,
+      fills: false,
     );
-    if (sw.elapsedMilliseconds > 30) {
-      debugPrint('[3D] bake z$demZoom ${frame.range.x0},${frame.range.y0}: $n 件 ${sw.elapsedMilliseconds}ms');
-    }
   }
 }

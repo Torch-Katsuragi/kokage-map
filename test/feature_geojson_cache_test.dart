@@ -87,4 +87,30 @@ void main() {
     expect(cache.contentRevision, rev + 1);
     expect(cache.lastChangeLonLat, isNotNull);
   });
+
+  test('面の段（描く順）は面と同じ並びで持ち、並びが変われば作り直す', () async {
+    final areas = PolygonLayerNode(gpkg, PracticeProject.areaLayer, parent: GeoPackageNode(gpkg));
+    await areas.updateChildren();
+    final polys = areas.children.whereType<PolygonFeatureNode>().toList();
+    FeatureGeoJsonInput ranked(List<PolygonFeatureNode> ps, int Function(FeatureNode f) rank) => FeatureGeoJsonInput(
+          lines: const [],
+          polygons: ps,
+          points: const [],
+          photos: const [],
+          selected: const {},
+          lineVertices: false,
+          polygonVertices: false,
+          drawRankOf: rank,
+        );
+
+    final cache = FeatureGeoJsonCache()..rebuildAll(input(polys));
+    expect(cache.polygonRanks, [0, 0], reason: '段が無ければ 0');
+    cache.rebuildAll(ranked(polys, (f) => identical(f, polys.first) ? 3 : 1));
+    expect(cache.polygonRanks, [3, 1]);
+    final ranks = cache.polygonRanks;
+    cache.rebuildAll(ranked(polys, (f) => identical(f, polys.first) ? 3 : 1));
+    expect(identical(cache.polygonRanks, ranks), isTrue, reason: '同じなら同じリスト');
+    cache.rebuildAll(ranked(polys.reversed.toList(), (f) => identical(f, polys.first) ? 3 : 1));
+    expect(cache.polygonRanks, [1, 3]);
+  });
 }

@@ -33,6 +33,7 @@ library;
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart' show Color;
 import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
@@ -46,6 +47,7 @@ import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
+import '../../models/nodes/layer_order.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
 import '../../models/nodes/table_node.dart';
@@ -180,6 +182,16 @@ class QgsImporter {
     final qgsDir = p.dirname(p.normalize(qgsPath));
     final sources = _SourceResolver(qgsDir, rootPath, _indexGeoPackages(root), _indexImages(root), _indexTables(root));
     final tree = _TreeVisibility.read(doc);
+    // レイヤツリーの並び（上から）。こかげマップの一覧の並び（= 描く順）に写す
+    final treeIds = qgsTreeLayerIds(doc);
+    final treePos = <String, int>{for (var i = 0; i < treeIds.length; i++) treeIds[i]: i};
+    final placed = <LayerTreeNode, int>{};
+    void place(LayerTreeNode node, String? id) {
+      final pos = id == null ? null : treePos[id];
+      if (pos == null) return;
+      final prev = placed[node];
+      if (prev == null || pos < prev) placed[node] = pos;
+    }
     // 形が合ったレイヤの、グループ側の可視性（レイヤ・gpkg・dir）
     final layerGroupChecked = <LayerNode, bool>{};
     final containerChecked = <LayerTreeNode, bool>{};
@@ -201,6 +213,7 @@ class QgsImporter {
       if (!accepts(layer.folderNode)) continue;
 
       final id = childText(maplayer, 'id');
+      place(layer, id);
       final shaped = id != null && tree.readGroups(id, layer, gpkg, root, layerGroupChecked, containerChecked);
       final views = touched.putIfAbsent(layer, () => []);
       // レイヤと同じ名前でフィルタの無い QGIS レイヤは既定 View（こかげマップは既定 View をレイヤ名で書く。
@@ -264,6 +277,12 @@ class QgsImporter {
       await node.persistVisibility();
     }
 
+    // 並び（レイヤツリーの上から）。オーバーレイは持ち主を問わず位置だけ取る（持ち主の判定は [_applyOrder]）
+    for (final (:node, :id) in sources.overlays) {
+      place(node, id);
+    }
+    await _applyOrder(root, placed, accepts);
+
     // XYZ タイル（背景地図）。端末の設定なのでここでは読むだけ
     final baseMaps = [
       for (final (:providerId, :name, :id, :opacity, :custom) in sources.baseMaps)
@@ -287,6 +306,66 @@ class QgsImporter {
       baseMaps: baseMaps,
       overlayCount: overlayCount,
     );
+  }
+
+  /// レイヤツリーの並びを、こかげマップのフォルダの子とレイヤの並び（フォルダ設定の `layout.sortOrder`）に写す。
+  ///
+  /// [placed] はツリーで位置の分かった葉（レイヤ・オーバーレイ）とその位置（上から）。
+  /// 祖先（gpkg・dir）の位置は子孫のいちばん上の位置。QGIS でレイヤをグループの外へ動かしていても、
+  /// こかげマップの構造（dir > gpkg > レイヤ）の中で近い並びになる。
+  /// 並びの持ち主はその dir（[accepts] で持ち主のほうが新しければ飛ばす）。今の並びと変わらず、
+  /// 並びの設定も持っていなければ書かない（開くたびに子 dir の `.qgs` を増やさない）
+  Future<void> _applyOrder(
+    FolderNode root,
+    Map<LayerTreeNode, int> placed,
+    bool Function(FolderNode? owner) accepts,
+  ) async {
+    if (placed.isEmpty) return;
+    final pos = <LayerTreeNode, int>{};
+    for (final MapEntry(key: leaf, value: at) in placed.entries) {
+      for (LayerTreeNode? n = leaf; n != null; n = n.parent) {
+        final prev = pos[n];
+        if (prev == null || at < prev) pos[n] = at;
+        if (identical(n, root)) break;
+      }
+    }
+    if (!pos.containsKey(root)) return;
+
+    Iterable<FolderNode> folders(FolderNode f) sync* {
+      yield f;
+      for (final c in f.children.whereType<FolderNode>()) {
+        if (pos.containsKey(c)) yield* folders(c);
+      }
+    }
+
+    for (final folder in folders(root).toList()) {
+      if (!accepts(folder)) continue;
+      final folderPath = folder.getAbsoluteFilePath();
+      if (folderPath == null) continue;
+      final gpkgs = folder.children.whereType<GeoPackageNode>().toList();
+      final order = [
+        for (final c in sortByPosition(folder.children, (c) => pos[c])) c.name,
+        for (final g in gpkgs)
+          for (final l in sortByPosition(g.children.whereType<LayerNode>(), (l) => pos[l])) l.layerKey,
+      ];
+      // 写しで受ける（並びが変わらなければ applyLayerOrder は渡したリストそのものを返す）
+      final children = List.of(applyLayerOrder(folder.children, order, layerOrderKey));
+      final layers = {for (final g in gpkgs) g: List.of(applyLayerOrder(g.children, order, layerOrderKey))};
+      final moved = !listEquals(children, folder.children) || layers.entries.any((e) => !listEquals(e.value, e.key.children));
+      final stored = (await folder.getMeta()).layout.sortOrder;
+      if (!moved && stored == null) continue;
+      // 並べ替えるだけ（顔ぶれは変わらない）。`.qgs` の書き直しは設定の保存が合図になる
+      folder.children
+        ..clear()
+        ..addAll(children);
+      for (final MapEntry(key: g, value: list) in layers.entries) {
+        g.children
+          ..clear()
+          ..addAll(list);
+      }
+      await KMetaService.instance.setSortOrder(folderPath, order);
+      folder.invalidateMetaCache();
+    }
   }
 
   /// 描き分けの印（[KMetaLayerStyle.qgisRenderer]）だけを持ち、中身（[KMetaLayerStyle.qgisRendererDef]）が

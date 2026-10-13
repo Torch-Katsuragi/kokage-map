@@ -43,8 +43,13 @@ class FeatureGeoJsonInput {
     this.styleKeyOf,
     this.stylePropKey = 'k-style',
     this.labelOf,
+    this.drawRankOf,
     this.hidden = const {},
   });
+
+  /// 地物の描く順の段（レイヤの並び。大きいほど手前）。面の塗りとオーバーレイ画像をこの順で重ねる。
+  /// null なら全部 0（[FeatureGeoJsonCache.polygonRanks]）
+  final int Function(FeatureNode f)? drawRankOf;
 
   /// 描かないもの（編集中の地物。写しを編集の重ね絵で描く）
   final Set<LayerTreeNode> hidden;
@@ -80,6 +85,10 @@ class FeatureGeoJsonCache {
   List<geo.Feature<geo.Geometry>> polylines = const [];
   List<geo.Feature<geo.Geometry>> selectedPolylines = const [];
   List<geo.Feature<geo.Geometry>> polygons = const [];
+
+  /// [polygons] と同じ並びの、描く順の段（[FeatureGeoJsonInput.drawRankOf]。大きいほど手前）。
+  /// [polygons] は下の段から並ぶ（地図ページが下のレイヤから渡す）
+  List<int> polygonRanks = const [];
   List<geo.Feature<geo.Geometry>> selectedPolygons = const [];
   List<geo.Feature<geo.Point>> markers = const [];
   List<geo.Feature<geo.Point>> selectedMarkers = const [];
@@ -287,6 +296,7 @@ class FeatureGeoJsonCache {
     }
 
     final polys = full ? <geo.Feature<geo.Geometry>>[] : null;
+    final polyRanks = full ? <int>[] : null;
     final polysSel = <geo.Feature<geo.Geometry>>[];
     final polyVerts = full ? <geo.Feature<geo.Point>>[] : null;
     final polyVertsSel = <geo.Feature<geo.Point>>[];
@@ -300,6 +310,7 @@ class FeatureGeoJsonCache {
       if (hit == null) continue;
       final feature = hit.$1;
       polys?.add(feature);
+      polyRanks?.add(input.drawRankOf?.call(f) ?? 0);
       sigs?[_keyOf(f)] = _Sig.of(hit.$2, props, fill: true);
       if (sel) polysSel.add(feature);
       if (input.polygonVertices) {
@@ -369,6 +380,7 @@ class FeatureGeoJsonCache {
       // 中身が前回と同じなら前回のリストのまま（同一性で引く描画側のキャッシュ＝タイルごとのシーンが外れない）
       polylines = _keep(polylines, lines!);
       polygons = _keep(polygons, polys!);
+      polygonRanks = _sameInts(polygonRanks, polyRanks!) ? polygonRanks : List.unmodifiable(polyRanks);
       markers = _keep(markers, pts!);
       images = _keep(images, imgs!);
       lineVertices = _keep(lineVertices, lineVerts!);
@@ -465,6 +477,14 @@ List<T> _keep<T>(List<T> before, List<T> after) {
     if (!identical(before[i], after[i])) return after;
   }
   return before;
+}
+
+bool _sameInts(List<int> a, List<int> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 bool _sameProps(Map<String, Object?>? a, Map<String, Object?>? b) {

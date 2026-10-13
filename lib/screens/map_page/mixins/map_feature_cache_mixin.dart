@@ -23,6 +23,7 @@ import '../../../models/map_style_group.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/image_node.dart';
 import '../../../models/nodes/layer_node.dart';
+import '../../../models/nodes/layer_order.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/overlay_image_node.dart';
 import '../../../providers/selection_providers.dart';
@@ -98,7 +99,10 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     final newLineFeatures = <LineFeatureNode>[];
     final newPolygonFeatures = <PolygonFeatureNode>[];
 
-    for (final layer in layers) {
+    // 描く順（レイヤ一覧の並び。上ほど手前）。地物は下のレイヤから積む（後に描いたものが手前）。
+    // 面の塗りとオーバーレイ画像は段で混ぜて重ねる（3D 地図面のテクスチャ）
+    final drawRanks = folderTree == null ? const <LayerTreeNode, int>{} : drawRanksOf(drawOrderOf(folderTree));
+    for (final layer in layers.reversed) {
       // QGIS の描き分けで描かない地物（チェックを外した分類など）は、地図にも選択にも出さない
       final hidden = layer.rendererHiddenRowIds;
       final activeFeatures = layer.children
@@ -126,6 +130,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     // 地物・可視性を先に流す。オーバーレイは表示用の画像が要らないもの・できているものだけ
     // ⚠ 以前は全オーバーレイの PNG（GDAL のワープ）を待ってから流していて、ワープが遅い・止まると
     //   gpkg の目を消しても地図が変わらなかった（2026-10-13 Pixel 9。overlay_preparation.dart）
+    scene.setDrawOrder(drawRanks);
     triggerSetState(() {
       pointFeatures = newPointFeatures;
       lineFeatures = newLineFeatures;
@@ -144,7 +149,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     scene.invalidate();
   }
 
-  /// ImageNodeを再帰的に集める。OverlayImageNodeは別リストに分ける
+  /// ImageNodeを再帰的に集める。OverlayImageNodeは別リストに分ける（どちらも一覧の上から）
   void _collectImageNodes(
     LayerTreeNode node,
     List<ImageNode> photos,
@@ -258,6 +263,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
         styleKeyOf: scene.styleGroups.isEmpty ? null : (f) => f.parent.styleKeyOf(f.rowId),
         stylePropKey: kStyleProp,
         labelOf: _labelFor,
+        drawRankOf: (f) => scene.drawRankOf(f.parent),
         lineVertices: layerStyleSettings.getBool(lineVertexPointsEnabledDef),
         polygonVertices: layerStyleSettings.getBool(polygonVertexPointsEnabledDef),
       );

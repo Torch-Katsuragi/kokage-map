@@ -390,7 +390,7 @@ QGIS は root 要素に `version` `saveDateTime` `saveUser` `saveUserFull` を�
 | `visibility.folders/geopackages/layers` | `layer-tree-group@checked` | dir/gpkg/Layer はグループ |
 | `visibility.views` | `layer-tree-layer@checked` | View が QGIS のレイヤ |
 | `visibility.images` | `properties/kokage/images/<名>/visible` | 写真はレイヤを持たない（QGIS には出ない）。オーバーレイだけラスタレイヤ |
-| `layout.sortOrder` / `expanded` | 子要素の並び / `@expanded` | `<layerorder>` も同じ順で書く |
+| `layout.sortOrder` / `expanded` | 子要素の並び / `@expanded` | `<layerorder>` も同じ順で書く。並びは描く順（上ほど手前）で、QGIS で保存されたツリーから読み戻す（[[qgis-interop#レイヤの並びと描く順（2026-10-13）]]） |
 | `views[*].filter` | `maplayer/subsetString` | 現行どおり |
 | `views[*].style` / `styles.layers` | `maplayer/renderer-v2`（single symbol） | 解決済みの値を各レイヤに書く |
 | `styles.layers.label*` | `maplayer/labeling type="simple"` | **現行未対応。ここで足す** |

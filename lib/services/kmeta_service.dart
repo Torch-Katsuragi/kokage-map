@@ -19,6 +19,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:path/path.dart' as p;
 
 import '../models/kmeta.dart';
@@ -436,8 +437,10 @@ class KMetaService {
         changed = true;
       }
       final sortOrder = rawMeta.layout.sortOrder;
-      final newSortOrder = sortOrder?.map((n) => n == oldName ? newName : n).toList();
-      if (sortOrder != null && sortOrder.contains(oldName)) changed = true;
+      // 並びは gpkg の名前と、その中のレイヤ（`gpkg名/レイヤ名`）
+      String renamed(String n) => n == oldName ? newName : (moveKey(n) ?? n);
+      final newSortOrder = sortOrder?.map(renamed).toList();
+      if (sortOrder != null && sortOrder.any((n) => renamed(n) != n)) changed = true;
 
       final updated = rawMeta.copyWith(
         visibility: KMetaVisibility(
@@ -501,6 +504,21 @@ class KMetaService {
       }
       if (!changed) return false;
       return saveMeta(folderPath, rawMeta.copyWith(forms: forms));
+    });
+  }
+
+  /// 子の並び（`layout.sortOrder`。フォルダの子は名前、gpkg の中のレイヤは `gpkg名/レイヤ名`）を更新する。
+  /// null か空で消す。並びはレイヤ一覧の並びで、描く順でもある（上ほど手前）
+  Future<bool> setSortOrder(String folderPath, List<String>? order) async {
+    return _serial(folderPath, () async {
+      final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+      final next = order == null || order.isEmpty ? null : List<String>.unmodifiable(order);
+      final current = rawMeta.layout.sortOrder;
+      if (listEquals(current, next)) return true;
+      return saveMeta(
+        folderPath,
+        rawMeta.copyWith(layout: KMetaLayout(sortOrder: next, expanded: rawMeta.layout.expanded)),
+      );
     });
   }
 

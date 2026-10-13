@@ -510,7 +510,14 @@ flutter_gpu は web に無い（Impeller が無い）ので、`terrain_gpu_world
 ### 引いた段の焼き込み（真上からの投影）
 
 z ≤ 13（`kBakeMaxZoom`）のタイルは、面・線・点を形として持ち上げず、**テクスチャに描き込む**
-（`_bakeFeatures`。`TerrainWorld.textureDecorator` の中、オーバーレイ画像の次）。
+（`_bakeFeatures`。`TerrainWorld.textureDecorator`（`_decorateTexture`）の中、オーバーレイ画像と面の塗りの次）。
+
+**重ねる順（2026-10-13）**: `_decorateTexture` は、オーバーレイ画像と面の塗り（どの段も焼く）を**レイヤの並び**で混ぜて重ね
+（`composeTextureDraws`。一覧の上ほど手前、QGIS と同じ）、引いた段はその上に枠線・線・点を描く。
+以前はオーバーレイ画像を全部先に描き、その上に塗りを載せていた（QGIS でラスタを面の上に置いても塗りに隠れた）。
+線・点・枠線・ラベルはいつも一番上（寄った段は形として持ち上げる）。段は `MapScene.drawRankOf` と
+`FeatureGeoJsonCache.polygonRanks`、並びが変わったら `drawOrderRevision` で一度だけ全部焼き直す。
+[[qgis-interop#レイヤの並びと描く順（2026-10-13）]]
 描画コストは基図と同じ 1 枚で済み、1 万面でも回る。寄せた段は今までどおり形で描く。
 選択・頂点・写真は形のまま（少ないし光らせたい）。ヒットテストはデータから引くので影響しない。
 フィーチャが変わったら（`sceneRevision` で一覧の同一性が変わったとき）焼き込む段のタイルだけ

@@ -290,6 +290,43 @@ QGIS で足したラスタが同じ `.tif` を指していれば、書き戻し�
 読み込み口はファイル選択ダイアログではなく「**このフォルダの中の `.qgs`**」。
 共有の単位が dir なので、それで足りる。複数あれば `project.qgs` を優先。
 
+## レイヤの並びと描く順（2026-10-13）
+
+ユーザー判断: **地図に描く順は QGIS と同じくレイヤの並びに従う**。レイヤ一覧（ドロワー）の並びがそのまま描く順で、
+上にあるものほど手前。種類をまたいで効く（QGIS で GeoTIFF を面のレイヤより上に置けば、アプリでもラスタが塗りの上。
+一番下に置いたオルソは一番下のまま）。
+
+- **並びの正**: フォルダ設定の `layout.sortOrder`（`kokage/meta`）。フォルダの子は名前、gpkg（外部形式）の中のレイヤは
+  `gpkg名/レイヤ名`。`FolderNode.updateChildren` と `GeoPackageNode.updateChildren` が `applyLayerOrder`
+  （`lib/models/nodes/layer_order.dart`）で当てはめる。並びに無い子（写真・あとから足したファイル）は**既定の席**のまま
+  （並びにある子の席だけを並びの順で埋め直す）。新しく足した gpkg が不透明なオルソの下に潜って見えなくならないように
+- **既定**（並びの設定が無いフォルダ）: 種類順（フォルダ → gpkg → 外部形式 → 画像、それぞれ名前順）、gpkg の中は gpkg の順。
+  アプリだけで使うフォルダはこれまでどおりで、その並びがそのまま描く順になる
+- **読み戻し**: `QgsImporter.import` が `<layer-tree-group>` の `layer-tree-layer` を上から（深さ優先、`qgsTreeLayerIds`）読み、
+  突き合わせたレイヤ・オーバーレイの位置から、祖先（gpkg・dir）の位置を「子孫のいちばん上」として決め、
+  dir ごとに `sortOrder` を書いてメモリの並びも並べ替える（`_applyOrder`）。持ち主の判定（`acceptOwner`）は可視性と同じ。
+  今の並びと変わらず並びの設定も無ければ書かない（開くたびに子 dir の `.qgs` を増やさない）。
+  QGIS でレイヤをグループの外へ動かしていても、こかげマップの構造（dir > gpkg > レイヤ）の中の近い並びになる
+- **書き出し**: `QgsProjectBuilder` はツリーの子の順に書くので、`<layer-tree-group>` も `<layerorder>` も一覧と同じ並び。
+  QGIS で開くと同じ並びに見える
+- **並べ替え UI は無い**（一覧のドラッグ等は未実装）。並べ替えるのは QGIS で
+- ⚠ QGIS の「レイヤ順の制御」（`<custom-order enabled="1">`、ツリーと違う描画順）は読まない。ツリーの並びを使う。
+  書き戻しでは `custom-order` の要素をそのまま残す
+- View（同じレイヤの中の描き分け）は従来どおり、上の View ほど手前
+
+**描くときの規則**（3D 地図面。[[terrain-3d#引いた段の焼き込み（真上からの投影）]]）:
+
+| もの | 重ね方 |
+|---|---|
+| オーバーレイ画像（GeoTIFF・QGIS のラスタ）と面の塗り | テクスチャの中でレイヤの並びに**混ぜて**重ねる（`composeTextureDraws`） |
+| 線・点・面の枠線・ラベル | **いつも一番上**（不透明なオルソの上にベクタの線が出るのが普通の使い方。寄った段では地形に沿わせた形として持ち上げるので、テクスチャの重なりには入らない） |
+| 線どうし・点どうし | レイヤの並び（下のレイヤから積む） |
+
+段は `drawRanksOf(drawOrderOf(root))`（一覧の上ほど大きい。消灯しているものも数え、目の切り替えで段がずれない）。
+地図ページが `SceneSink.setDrawOrder` で渡し、面は `FeatureGeoJsonCache.polygonRanks` に地物と同じ並びで持つ。
+並びが変わると `MapScene.drawOrderRevision` が進み、焼き込み済みのテクスチャを一度だけ全部焼き直す。
+テストは `test/qgs_layer_order_test.dart`（並びの当てはめ・重ねる順・`.qgs` との往復）。
+
 ## 描き分け（分類・段階・ルール）の再現（2026-10-11）
 
 QGIS で `categorizedSymbol` / `graduatedSymbol` / `RuleRenderer` にしたレイヤ（樹種で分類した小班など）を、

@@ -371,7 +371,8 @@ class KMetaStyles {
 
 /// レイアウト設定
 class KMetaLayout {
-  /// 並び順（レイヤー/GeoPackage/フォルダ名のリスト）
+  /// 子の並び（上から）。フォルダの子は名前、gpkg の中のレイヤは `gpkg名/レイヤ名`。
+  /// レイヤ一覧の並びで、描く順でもある（上ほど手前）。QGIS で保存された `.qgs` のレイヤツリーから読み戻す
   final List<String>? sortOrder;
 
   /// 展開状態

@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import '../../interfaces/scene_sink.dart';
 import '../../models/map_style_group.dart';
 import '../../models/nodes/feature_node.dart';
+import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
 import 'feature_geojson_cache.dart';
 
@@ -43,6 +44,32 @@ class MapSceneStore implements SceneSink, MapScene {
 
   @override
   ValueListenable<int> get revision => _revision;
+
+  Map<LayerTreeNode, int> _drawRanks = const {};
+  int _drawOrderRevision = 0;
+
+  @override
+  int drawRankOf(LayerTreeNode node) => _drawRanks[node] ?? -1;
+
+  @override
+  int get drawOrderRevision => _drawOrderRevision;
+
+  @override
+  bool setDrawOrder(Map<LayerTreeNode, int> ranks) {
+    if (_sameRanks(_drawRanks, ranks)) return false;
+    _drawRanks = Map.unmodifiable(ranks);
+    _drawOrderRevision++;
+    return true;
+  }
+
+  /// 同じノードに同じ段（キーは同一性で比べる。ノードは `==` を持たない）
+  static bool _sameRanks(Map<LayerTreeNode, int> a, Map<LayerTreeNode, int> b) {
+    if (a.length != b.length) return false;
+    for (final e in b.entries) {
+      if (a[e.key] != e.value) return false;
+    }
+    return true;
+  }
 
   @override
   bool setStyleGroups(List<MapStyleGroup> groups) {

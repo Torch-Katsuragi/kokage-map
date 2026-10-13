@@ -59,7 +59,8 @@
   [Files uploaded by earlier versions could have none of the rtree triggers left, so QGIS extent queries missed features; after the app writes to them, standard triggers are recreated and the rtree rebuilt before they leave the device],
   [The info panel showed boolean columns (QGIS BOOLEAN or check box) as raw "true" or "1"; they now read Yes or No],
   [Raster overlays from QGIS and similar could fail to appear right after opening or cloning; back-to-back refreshes built the same display image at once and broke it],
-  [With a raster overlay present, hiding a gpkg or layer did not change the map until the raster's display image was ready]
+  [With a raster overlay present, hiding a gpkg or layer did not change the map until the raster's display image was ready],
+  [The map drew overlapping layers in reverse list order and overlays always under polygon fills; it now draws higher list entries on top, as QGIS does, with the order read from the .qgs layer tree]
 )
 
 #fixes(

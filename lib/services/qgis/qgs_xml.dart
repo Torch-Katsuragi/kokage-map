@@ -86,3 +86,25 @@ String? relativeInside(String rootPath, String absPath) {
   if (rel.startsWith('..') || p.isAbsolute(rel)) return null;
   return rel;
 }
+
+/// レイヤツリー（root の `<layer-tree-group>`）の `<layer-tree-layer>` の id を上から順に（深さ優先）。
+/// QGIS の描く順（`<custom-order enabled="0">` のとき）で、先頭ほど手前。同じ id は最初の 1 回だけ
+List<String> qgsTreeLayerIds(XmlDocument doc) {
+  final treeRoot = doc.rootElement.getElement('layer-tree-group');
+  if (treeRoot == null) return const [];
+  final out = <String>[];
+  final seen = <String>{};
+  void walk(XmlElement group) {
+    for (final child in group.childElements) {
+      if (child.name.local == 'layer-tree-group') {
+        walk(child);
+      } else if (child.name.local == 'layer-tree-layer') {
+        final id = child.getAttribute('id');
+        if (id != null && seen.add(id)) out.add(id);
+      }
+    }
+  }
+
+  walk(treeRoot);
+  return out;
+}

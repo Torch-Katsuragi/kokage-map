@@ -5,6 +5,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/interfaces/scene_sink.dart';
 import 'package:root_maps/models/map_style_group.dart';
+import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/overlay_image_node.dart';
 import 'package:root_maps/screens/map_page/feature_geojson_cache.dart';
 import 'package:root_maps/screens/map_page/map_scene_store.dart';
@@ -90,5 +91,19 @@ void main() {
     final next = <OverlayImageNode>[];
     overlays = next;
     expect(identical(store.overlayImages, next), isTrue);
+  });
+
+  test('描く順は段を引け、変わったときだけ世代が進む（焼き直しは 1 回）', () {
+    final a = FolderNode('a');
+    final b = FolderNode('b');
+    expect(store.drawRankOf(a), -1, reason: '知らないものはいちばん下');
+    expect(store.setDrawOrder({a: 1, b: 0}), isTrue);
+    final rev = store.drawOrderRevision;
+    expect(store.drawRankOf(a), 1);
+    expect(store.setDrawOrder({a: 1, b: 0}), isFalse, reason: '同じ並びなら進まない');
+    expect(store.drawOrderRevision, rev);
+    expect(store.setDrawOrder({a: 0, b: 1}), isTrue);
+    expect(store.drawOrderRevision, rev + 1);
+    expect(store.drawRankOf(b), 1);
   });
 }

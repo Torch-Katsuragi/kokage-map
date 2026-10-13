@@ -26,6 +26,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/map_style_group.dart';
 import '../models/nodes/feature_node.dart';
+import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../screens/map_page/feature_geojson_cache.dart';
 
@@ -42,6 +43,10 @@ abstract interface class SceneSink {
   /// 差分で組めなければ全件を組み直す（GPS 軌跡の統合で今日の 1 本が伸びたときなど）
   void pushFeatureChanges(FeatureGeoJsonInput input, Set<FeatureNode> changed);
 
+  /// 描く順（レイヤ一覧の並び。[ranks] は段で、大きいほど手前）を差し替える。変わったら true。
+  /// ⚠ フィーチャを組み立てる**前**に呼ぶ（面の段は組み立てのときに引く）
+  bool setDrawOrder(Map<LayerTreeNode, int> ranks);
+
   /// 中身は変えずに描画系に組み直させる（GPS 軌跡・オーバーレイ画像の変形・編集の終わりなど、
   /// 描画系が別の経路で読むものが変わったとき）
   void invalidate();
@@ -57,6 +62,12 @@ abstract interface class MapScene {
 
   /// オーバーレイ画像（GeoTIFF・写真）
   List<OverlayImageNode> get overlayImages;
+
+  /// レイヤ（・オーバーレイ画像）の描く順の段。大きいほど手前。知らないものは -1（いちばん下）
+  int drawRankOf(LayerTreeNode node);
+
+  /// 描く順が変わるたびに増える（焼き込み済みのテクスチャを一度だけ焼き直す合図）
+  int get drawOrderRevision;
 
   /// シーンが変わるたびに増える
   ValueListenable<int> get revision;

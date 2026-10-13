@@ -91,7 +91,87 @@ class TextureFrame {
   }
 }
 
-/// 地物をテクスチャに描き、描いた件数を返す。[fillsOnly] なら面の塗りだけ。
+/// テクスチャに重ねる 1 歩（[composeTextureDraws]）
+sealed class TextureDrawStep {
+  const TextureDrawStep();
+}
+
+/// オーバーレイ画像 [overlay]（渡した一覧の番号）を描く
+final class OverlayDraw extends TextureDrawStep {
+  const OverlayDraw(this.overlay);
+  final int overlay;
+
+  @override
+  bool operator ==(Object other) => other is OverlayDraw && other.overlay == overlay;
+  @override
+  int get hashCode => overlay.hashCode;
+  @override
+  String toString() => 'OverlayDraw($overlay)';
+}
+
+/// 面の塗りの一続き（渡した一覧の [from] から [to] の手前まで）を描く
+final class FillRun extends TextureDrawStep {
+  const FillRun(this.from, this.to);
+  final int from;
+  final int to;
+
+  @override
+  bool operator ==(Object other) => other is FillRun && other.from == from && other.to == to;
+  @override
+  int get hashCode => Object.hash(from, to);
+  @override
+  String toString() => 'FillRun($from, $to)';
+}
+
+/// 面の塗りとオーバーレイ画像を描く順（下から）に混ぜる。
+///
+/// [fillRanks] は描く面それぞれの段（下から積む順に並んでいる前提。レイヤの並びで、大きいほど手前）、
+/// [overlayRanks] はオーバーレイ画像それぞれの段。段の小さいものから描き、同じ段ならオーバーレイが先
+/// （QGIS のレイヤ一覧で、上にあるものほど手前に描くのと同じ）。
+/// 線・点・枠線・ラベルはこの後（いつも一番上）。[[qgis-interop#レイヤの並びと描く順（2026-10-13）]]
+List<TextureDrawStep> composeTextureDraws({required List<int> fillRanks, required List<int> overlayRanks}) {
+  final overlays = [for (var i = 0; i < overlayRanks.length; i++) i]
+    ..sort((a, b) {
+      final c = overlayRanks[a].compareTo(overlayRanks[b]);
+      return c != 0 ? c : a.compareTo(b);
+    });
+  final out = <TextureDrawStep>[];
+  var o = 0;
+  var runStart = 0;
+  for (var i = 0; i < fillRanks.length; i++) {
+    if (o < overlays.length && overlayRanks[overlays[o]] <= fillRanks[i]) {
+      if (i > runStart) out.add(FillRun(runStart, i));
+      runStart = i;
+      while (o < overlays.length && overlayRanks[overlays[o]] <= fillRanks[i]) {
+        out.add(OverlayDraw(overlays[o++]));
+      }
+    }
+  }
+  if (fillRanks.length > runStart) out.add(FillRun(runStart, fillRanks.length));
+  while (o < overlays.length) {
+    out.add(OverlayDraw(overlays[o++]));
+  }
+  return out;
+}
+
+/// 面の塗りだけを描く（[indexes] は [polygons] の番号。並んだ順に描く）
+void paintPolygonFills(
+  ui.Canvas canvas,
+  TextureFrame frame, {
+  required List<geo.Feature<geo.Geometry>> polygons,
+  required Iterable<int> indexes,
+  required TerrainFeatureStyle Function(geo.Feature f) styleOf,
+}) {
+  final fill = Paint()..style = PaintingStyle.fill;
+  for (final i in indexes) {
+    final f = polygons[i];
+    final st = styleOf(f);
+    if (st.fillColor.a > 0) canvas.drawPath(frame.polygonPath(f.geometry), fill..color = st.fillColor);
+  }
+}
+
+/// 地物をテクスチャに描き、描いた件数を返す。[fillsOnly] なら面の塗りだけ、[fills] が false なら塗り以外
+/// （枠線・線・点。塗りはオーバーレイ画像と混ぜて先に描いてある: [composeTextureDraws]）。
 ///
 /// 太さは画面で見える太さに合わせる。テクスチャは表示の段とほぼ同じ段で作るので、テクスチャの 1 px ≒ 画面の 1 px。
 /// [indexesIn] は範囲に掛かる地物の番号（範囲の索引で先にふるう）
@@ -104,6 +184,7 @@ int paintFeatures(
   required List<int> Function(List<geo.Feature<geo.Geometry>> fs, Rect clip) indexesIn,
   required TerrainFeatureStyle Function(geo.Feature f) styleOf,
   bool fillsOnly = false,
+  bool fills = true,
 }) {
   final merc = frame.mercator;
   final fill = Paint()..style = PaintingStyle.fill;
@@ -115,10 +196,12 @@ int paintFeatures(
   for (final i in indexesIn(polygons, merc)) {
     final f = polygons[i];
     final st = styleOf(f);
-    final path = frame.polygonPath(f.geometry);
-    if (st.fillColor.a > 0) canvas.drawPath(path, fill..color = st.fillColor);
-    if (!fillsOnly && st.outlineColor.a > 0 && st.outlineWidth > 0) {
-      canvas.drawPath(path, stroke..color = st.outlineColor..strokeWidth = math.max(1.0, st.outlineWidth));
+    final outline = !fillsOnly && st.outlineColor.a > 0 && st.outlineWidth > 0;
+    final filled = fills && st.fillColor.a > 0;
+    if (filled || outline) {
+      final path = frame.polygonPath(f.geometry);
+      if (filled) canvas.drawPath(path, fill..color = st.fillColor);
+      if (outline) canvas.drawPath(path, stroke..color = st.outlineColor..strokeWidth = math.max(1.0, st.outlineWidth));
     }
     n++;
   }

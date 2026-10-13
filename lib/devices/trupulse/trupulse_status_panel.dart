@@ -23,17 +23,14 @@ import 'package:flutter/material.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../services/survey/survey_chain_resolver.dart';
+import '../../services/survey/traverse_recorder.dart';
 import 'trupulse_detail_screen.dart';
 import 'trupulse_tool.dart';
 
 /// 閉合比の警告閾値（1/N の N がこの値以下で警告）
 const double _closureWarningThreshold = 300;
 
-bool _isBacksightCorrected(PointFeatureNode? stn) {
-  if (stn == null) return false;
-  final v = stn.turfFeature.properties?['survey_backsight'];
-  return v == true || v == 'true';
-}
+bool _isBacksightCorrected(PointFeatureNode? stn) => stn != null && TraverseRecorder.isBacksighted(stn);
 
 /// 「名前 (緯度, 経度)」。未設定なら設定を促す文言
 String _stationText(PointFeatureNode? stn) {

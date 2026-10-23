@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kokage Map / こかげマップ</title>
+<title>こかげマップ（Kokage Map）｜林業・現場向けオフラインGISアプリ</title>
+<meta name="description" content="こかげマップ（Kokage Map）は、林業や屋外の現場作業向けのオープンソースGIS地図アプリです。GeoPackage（.gpkg）やQGISプロジェクト（.qgs）を直接読み書きし、オフライン地図・3D地形・班の位置共有・Google Drive同期に対応します。">
+<link rel="canonical" href="https://kokage-map.sleeptree.jp/about/">
+<link rel="icon" type="image/png" href="/favicon.png">
 <style>
   body{font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans JP","Hiragino Sans",sans-serif;max-width:760px;margin:0 auto;padding:24px 20px 64px;line-height:1.7;color:#222;background:#fff}
   h1{font-size:1.7rem;border-bottom:2px solid #1e88e5;padding-bottom:.3em}
@@ -15,52 +18,52 @@
 </style>
 </head>
 <body>
-<p class="lang"><a href="#ja">日本語</a> · <a href="#en">English</a> · <a href="/privacy/">Privacy Policy</a></p>
-
-<section id="en" lang="en">
-<h1>Kokage Map</h1>
-<p>Kokage Map is an open-source field GIS application for forestry and outdoor field work. It edits GeoPackage (<code>.gpkg</code>) files directly, works offline, and needs no stylus, no dedicated cloud service and no account to get started.</p>
-
-<h2>What it does</h2>
-<ul>
-  <li><strong>Open and edit GeoPackage projects</strong> stored in any folder you choose on the device, sharing the same files with desktop GIS tools such as QGIS.</li>
-  <li><strong>Work offline</strong> with cached base maps (GSI standard map, OpenStreetMap) and GPS track recording.</li>
-  <li><strong>Location-sharing party</strong>: see where the other members of your crew are, even after they were out of coverage. Nothing is shared outside the party.</li>
-  <li><strong>Optional Google Drive sync</strong>: clone a shared Drive folder to the device, edit offline, and upload the changes back to the same folder. The app only touches the Drive folders you select.</li>
-  <li><strong>Field measurement</strong> with external laser rangefinders and GNSS receivers over Bluetooth.</li>
-</ul>
-
-<h2>How Google account data is used</h2>
-<p>Signing in with Google is optional and is used only for Google Drive synchronisation of the project folders you choose. Your name, e-mail address and profile picture are shown so you can see which account is connected. No data is sent to the developer. Details: <a href="/privacy/">Privacy Policy</a>.</p>
-
-<h2>Platforms</h2>
-<p>Android (Google Play, package <code>com.k_root.k_maps</code>) and a web version at <a href="https://kokage-map.sleeptree.jp/">kokage-map.sleeptree.jp</a>.</p>
-
-<p class="links"><a href="https://github.com/Torch-Katsuragi/kokage-map">Source code (GitHub)</a> <a href="https://github.com/Torch-Katsuragi/kokage-map/issues">Support / Issues</a> <a href="/privacy/">Privacy Policy</a></p>
-</section>
-
-<hr>
+<p class="lang"><a href="#ja">日本語</a> · <a href="#en">English</a> · <a href="/privacy/">プライバシーポリシー / Privacy Policy</a></p>
 
 <section id="ja" lang="ja">
 <h1>こかげマップ</h1>
-<p>こかげマップは、林業や屋外の現場作業向けのオープンソースGISアプリです。GeoPackage（<code>.gpkg</code>）ファイルを直接編集し、オフラインで動き、スタイラス・専用クラウド・アカウントのどれも無しで使い始められます。</p>
+<p>こかげマップ（Kokage Map）は、林業や屋外の現場作業向けのオープンソースGISアプリです。GeoPackage（<code>.gpkg</code>）ファイルや QGIS プロジェクト（<code>.qgs</code>）を直接読み書きし、オフラインで動き、スタイラス・専用クラウド・アカウントのどれも無しで使い始められます。</p>
 
 <h2>できること</h2>
 <ul>
-  <li><strong>GeoPackage プロジェクトの閲覧と編集</strong>。端末上の好きなフォルダに置いたファイルを、QGIS などのデスクトップGISと同じまま扱います。</li>
-  <li><strong>オフライン利用</strong>。背景地図（地理院標準地図、OpenStreetMap）のキャッシュと GPS 軌跡の記録。</li>
+  <li><strong>GeoPackage・QGIS プロジェクトの閲覧と編集</strong>。端末上の好きなフォルダに置いたファイルを、QGIS などのデスクトップGISと同じまま扱います。Shapefile・GeoJSON・KML・CSV・GeoTIFF 等の読み込みと変換にも対応しています。</li>
+  <li><strong>オフライン利用と3D地形表示</strong>。背景地図（地理院タイル、OpenStreetMap、任意のXYZ/WMS）のキャッシュ、立体的な3D地形表示、GPS 軌跡の記録。</li>
   <li><strong>位置共有パーティ</strong>。仲間が圏外だった間の動きも含めて、どこにいるかが分かります。パーティの外には共有されません。</li>
-  <li><strong>任意の Google Drive 同期</strong>。共有された Drive フォルダを端末にクローンし、オフラインで編集して、同じフォルダに書き戻します。アプリが触るのはユーザーが選んだ Drive フォルダだけです。</li>
-  <li><strong>現場計測</strong>。Bluetooth 接続のレーザー距離計や GNSS 受信機に対応。</li>
+  <li><strong>任意の Google Drive 同期</strong>。共有された Drive フォルダを端末にクローンし、オフラインで編集して、同じフォルダに行単位マージ（geodiff）で書き戻します。アプリが触るのはユーザーが選んだ Drive フォルダだけです。</li>
+  <li><strong>現場計測</strong>。Bluetooth 接続のレーザー距離計（TruPulse）や外部 GNSS 受信機に対応。</li>
 </ul>
 
 <h2>Googleアカウントのデータの使い方</h2>
-<p>Google でのサインインは任意で、ユーザーが選んだプロジェクトフォルダの Google Drive 同期にだけ使います。氏名・メールアドレス・プロフィール画像は、接続中のアカウントを確認できるように表示します。開発者にデータが送られることはありません。詳しくは <a href="/privacy/">プライバシーポリシー</a>。</p>
+<p>Google でのサインインは任意で、ユーザーが選んだプロジェクトフォルダの Google Drive 同期にだけ使います。氏名・メールアドレス・プロフィール画像は、接続中のアカウントを確認できるように表示します。プロジェクトのファイルや認証情報が開発者のサーバに送られることはありません（位置共有パーティ機能のみ、参加中のメンバー間の中継に Firebase を一時利用します）。詳しくは <a href="/privacy/">プライバシーポリシー</a>。</p>
 
 <h2>対応環境</h2>
 <p>Android（Google Play、パッケージ名 <code>com.k_root.k_maps</code>）と web 版 <a href="https://kokage-map.sleeptree.jp/">kokage-map.sleeptree.jp</a>。</p>
 
 <p class="links"><a href="https://github.com/Torch-Katsuragi/kokage-map">ソースコード（GitHub）</a> <a href="https://github.com/Torch-Katsuragi/kokage-map/issues">サポート / 不具合報告</a> <a href="/privacy/">プライバシーポリシー</a></p>
+</section>
+
+<hr>
+
+<section id="en" lang="en">
+<h1>Kokage Map</h1>
+<p>Kokage Map is an open-source field GIS application for forestry and outdoor field work. It edits GeoPackage (<code>.gpkg</code>) and QGIS project (<code>.qgs</code>) files directly, works offline, and needs no stylus, no dedicated cloud service and no account to get started.</p>
+
+<h2>What it does</h2>
+<ul>
+  <li><strong>Open and edit GeoPackage and QGIS projects</strong> stored in any folder you choose on the device, sharing the same files with desktop GIS tools such as QGIS. Also reads Shapefile, GeoJSON, KML, CSV, GeoTIFF and more.</li>
+  <li><strong>Work offline in 2D and 3D</strong> with cached base maps (GSI tiles, OpenStreetMap, custom XYZ/WMS), 3D terrain rendering and GPS track recording.</li>
+  <li><strong>Location-sharing party</strong>: see where the other members of your crew are, even after they were out of coverage. Nothing is shared outside the party.</li>
+  <li><strong>Optional Google Drive sync</strong>: clone a shared Drive folder to the device, edit offline, and merge changes back to the same folder at the row level (geodiff). The app only touches the Drive folders you select.</li>
+  <li><strong>Field measurement</strong> with external laser rangefinders (TruPulse) and GNSS receivers over Bluetooth.</li>
+</ul>
+
+<h2>How Google account data is used</h2>
+<p>Signing in with Google is optional and is used only for Google Drive synchronisation of the project folders you choose. Your name, e-mail address and profile picture are shown so you can see which account is connected. Your project files and credentials are never sent to the developer (only the optional location-sharing party feature relays ephemeral position data through Firebase while you are in a party). Details: <a href="/privacy/">Privacy Policy</a>.</p>
+
+<h2>Platforms</h2>
+<p>Android (Google Play, package <code>com.k_root.k_maps</code>) and a web version at <a href="https://kokage-map.sleeptree.jp/">kokage-map.sleeptree.jp</a>.</p>
+
+<p class="links"><a href="https://github.com/Torch-Katsuragi/kokage-map">Source code (GitHub)</a> <a href="https://github.com/Torch-Katsuragi/kokage-map/issues">Support / Issues</a> <a href="/privacy/">Privacy Policy</a></p>
 </section>
 
 <footer>© Nemurigi Kobo / ねむりぎ工房</footer>

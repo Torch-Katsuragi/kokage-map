@@ -2,10 +2,10 @@
 
 山の現場で、追加の道具を用意せずに使える GIS（Flutter 製）。
 
-**web版**: https://kokage-map.sleeptree.jp
+- **紹介ページ**: https://kokage-map.sleeptree.jp/about/
+- **web版**: https://kokage-map.sleeptree.jp
 
-> このREADMEを見た方と、URLを共有した関係者向けの控えめな公開です。
-> 検索には載せていません（noindex）。Chrome / Edge 推奨
+> web版アプリ本体（`/`）は検索に載せていません（noindex）。紹介ページ（`/about/`）とプライバシーポリシー（`/privacy/`）のみ検索対象です。Chrome / Edge 推奨
 > （フォルダを開くのに File System Access API を使うため）。
 
 ## どんなアプリか

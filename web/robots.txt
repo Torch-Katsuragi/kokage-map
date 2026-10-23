@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://kokage-map.sleeptree.jp/sitemap.xml

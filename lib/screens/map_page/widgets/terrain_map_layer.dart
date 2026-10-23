@@ -481,10 +481,49 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _world.releaseCaches();
   }
 
-  /// 裏に回ったら同じく手放す（カメラなど別のアプリを使っている間に、OS に落とされにくくする）
+  /// バックグラウンドにいる（hidden / paused）。inactive（通知シェード等）は含めない
+  bool _backgrounded = false;
+
+  @override
+  bool get _textureWorkPaused => _backgrounded || _world.textureWorkSuspended;
+  int _resumeEpoch = 0;
+
+  /// 裏に回ったらテクスチャ合成（toImage・デコード）を止め、控えを手放す。
+  /// 戻ったらサーフェス再生成と最初のフレームが終わるのを待ってから再開する（2026-10-23 Pixel 10 Pro Fold での復帰時フリーズ対策）
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) _world.releaseCaches();
+    switch (state) {
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        // 復帰時の paused → hidden（合成遷移）では _backgrounded は既に true なので何もしない
+        if (!_backgrounded) {
+          _backgrounded = true;
+          _resumeEpoch++;
+          _world.suspendTextureWork();
+          _bakeCheckTimer?.cancel();
+          _retextureTimer?.cancel();
+        }
+        if (state == AppLifecycleState.paused) _world.releaseCaches();
+      case AppLifecycleState.resumed:
+        if (_backgrounded) {
+          _backgrounded = false;
+          unawaited(_resumeTextureWorkWhenSettled(++_resumeEpoch));
+        }
+      default:
+    }
+  }
+
+  /// サーフェスの作り直しと復帰後の最初のフレームが済んでから、テクスチャ仕事を再開する
+  Future<void> _resumeTextureWorkWhenSettled(int epoch) async {
+    await SchedulerBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    if (!mounted || _backgrounded || epoch != _resumeEpoch) return;
+    _world.resumeTextureWork();
+    if (_bakeCheckDeferred) {
+      _bakeCheckDeferred = false;
+      _scheduleBakeCheck();
+    }
+    if (_overlayBounds != null) _scheduleRetexture();
   }
 
   @override

@@ -17,7 +17,7 @@
 // MapPageの各種サービス初期化処理を分離
 import 'dart:async';
 
-import 'package:flutter/widgets.dart' show EdgeInsets;
+import 'package:flutter/widgets.dart' show AppLifecycleState, EdgeInsets, WidgetsBinding;
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -367,22 +367,14 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
       // Consolidation完了コールバック: 今日の 1 本を差し替え、軌跡が見えていればその 1 本だけ地図に流す。
       // ⚠ 全件の組み直し（updateFeatures）を引かない。20 秒ごとに全地物を集め直し、3D の下地を焼き直していた（2026-10-12）
+      // ⚠ バックグラウンド中は DB への統合だけ続け、地図への反映は復帰後まで保留する（2026-10-23 復帰時フリーズ対策）
       gpsHistoryRecorder.onConsolidated = () async {
         if (!mounted) return;
-        final tree = ref.read(folderTreeProvider);
-        try {
-          await syncConsolidatedTrack(
-            layer: tree == null ? null : _findLayerNode(tree, 'gps_tracks'),
-            featureId: gpsHistoryRecorder.todayTrackFeatureId,
-            line: gpsHistoryRecorder.lastConsolidatedLine,
-            refreshRows: refreshFeatureRows,
-            refreshAll: () async {
-              if (mounted) await updateFeatures();
-            },
-          );
-        } catch (e) {
-          AppLogger.debug('[Init] GPS history layer refresh error: $e');
+        if (_inBackground) {
+          _trackSyncDeferred = true;
+          return;
         }
+        await _syncConsolidatedTrackNow();
       };
 
       AppLogger.debug('[Init] GpsHistory ready');
@@ -391,10 +383,42 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     }
   }
 
+  bool _trackSyncDeferred = false;
+
+  static bool get _inBackground {
+    final s = WidgetsBinding.instance.lifecycleState;
+    return s == AppLifecycleState.hidden || s == AppLifecycleState.paused;
+  }
+
+  Future<void> _syncConsolidatedTrackNow() async {
+    if (!mounted) return;
+    final tree = ref.read(folderTreeProvider);
+    try {
+      await syncConsolidatedTrack(
+        layer: tree == null ? null : _findLayerNode(tree, 'gps_tracks'),
+        featureId: gpsHistoryRecorder.todayTrackFeatureId,
+        line: gpsHistoryRecorder.lastConsolidatedLine,
+        refreshRows: refreshFeatureRows,
+        refreshAll: () async {
+          if (mounted) await updateFeatures();
+        },
+      );
+    } catch (e) {
+      AppLogger.debug('[Init] GPS history layer refresh error: $e');
+    }
+  }
+
+  /// バックグラウンド中に保留した軌跡の反映を流す（復帰後のフレーム描画後に呼ぶ）
+  Future<void> flushDeferredTrackSync() async {
+    if (!_trackSyncDeferred || !mounted) return;
+    _trackSyncDeferred = false;
+    await _syncConsolidatedTrackNow();
+  }
+
   /// GPS履歴更新コールバック（未Consolidation分を 3D 地図面の軌跡に流す）
   /// Consolidation済み分はGPKGレイヤツリー経由で表示される
   void _onGpsHistoryUpdate() {
-    if (mounted) scene.invalidate();
+    if (mounted && !_inBackground) scene.invalidate();
   }
 
   /// レイヤツリーから指定名のLayerNodeを再帰検索

@@ -1,6 +1,6 @@
 # Changelog
 
-## Next release
+## v0.12.1 — 2026/10/23
 
 ### New
 
@@ -60,6 +60,7 @@
 - With a raster overlay made in QGIS or similar in the project, hiding a gpkg or layer did not change the map until the raster's display image was ready. Showing and hiding features now applies first, and the raster follows
 - The map now draws in layer-list order, as QGIS does: what is higher in the list is drawn on top (before, overlapping layers were stacked in reverse and overlay images were always under polygon fills). A GeoTIFF or other raster placed above a polygon layer in QGIS is drawn above its fill in the app too. The order is read from the layer tree of a .qgs saved in QGIS, the layer list shows that order, and the .qgs the app writes keeps it. Lines, points, outlines and labels stay on top
 - TruPulse backsight correction discarded the original foresight and backsight readings when averaging. They are now kept in `survey_fs_*` (foresight) and `survey_bs_*` (backsight) columns so they can be checked in QGIS. Inclination is now averaged from both readings (with the backsight sign reversed) and the vertical distance computed from it; previously the foresight inclination was used
+- Switching to another app (such as the camera) or locking the screen while walking with the map open and GPS track recording on could freeze the app when returning to Kokage Map. While in the background, 3D base texture re-baking and drawing new track points on the map are now paused and applied after the screen returns
 
 ### Lighter
 

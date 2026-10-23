@@ -20,6 +20,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
@@ -230,11 +231,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     }
   }
 
-  /// 裏に回ったらコンパスを止め、戻ったら付け直す
+  /// 裏に回ったらコンパスを止め、戻ったら付け直す（裏で溜まった軌跡の地図反映も最初のフレーム後に流す）
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       resumeCompass();
+      unawaited(SchedulerBinding.instance.endOfFrame.then((_) => flushDeferredTrackSync()));
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
       pauseCompass();
     }

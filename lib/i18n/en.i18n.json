@@ -119,7 +119,9 @@
       "otherDesc": "Impressions, questions, improvement suggestions, etc.",
       "feedbackTypes": "Feedback Types",
       "browserError": "Could not open browser",
-      "errorOccurred": "An error occurred: $error"
+      "errorOccurred": "An error occurred: $error",
+      "githubIssues": "Report on GitHub (for developers)",
+      "githubIssuesDesc": "Requires a GitHub account. Posts are public"
     },
     "appInfo": {
       "title": "App Info",
@@ -133,7 +135,9 @@
       "openSourceLicensesDesc": "List of licenses for packages used",
       "dataSources": "Map data sources",
       "dataSourcesBasemap": "Basemaps",
-      "dataSourcesElevation": "Elevation (3D terrain)"
+      "dataSourcesElevation": "Elevation (3D terrain)",
+      "sourceCode": "Source Code (GitHub)",
+      "sourceCodeDesc": "Published under GPL-2.0-or-later"
     },
     "general": {
       "layout": "Screen layout",
@@ -1697,7 +1701,16 @@
     "waitingPosition": "Waiting for your position",
     "accuracy": "GPS ±$value m",
     "bearing": "Bearing $deg° ($dir) true north",
-    "octants": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
+    "octants": [
+      "N",
+      "NE",
+      "E",
+      "SE",
+      "S",
+      "SW",
+      "W",
+      "NW"
+    ],
     "elevationUp": "$m m up",
     "elevationDown": "$m m down",
     "elevationLevel": "About level",

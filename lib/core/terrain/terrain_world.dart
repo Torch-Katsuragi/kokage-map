@@ -585,12 +585,30 @@ class TerrainWorld extends ChangeNotifier {
   double _lastCenterX = 0;
   double _lastCenterY = 0;
 
+  /// バックグラウンド中・復帰直後はテクスチャを作らない（toImage・基図のデコードは GPU / IO スレッドの仕事）。
+  /// null = 開いている
+  Completer<void>? _textureGate;
+  bool _disposed = false;
+
+  bool get textureWorkSuspended => _textureGate != null;
+
+  void suspendTextureWork() => _textureGate ??= Completer<void>();
+
+  void resumeTextureWork() {
+    final g = _textureGate;
+    _textureGate = null;
+    g?.complete();
+    _pump();
+    _pumpUpgrades();
+  }
+
   void _scheduleUpgrade(TileKey key) {
     if (!_upgradeQueue.contains(key)) _upgradeQueue.add(key);
     _pumpUpgrades();
   }
 
   void _pumpUpgrades() {
+    if (_textureGate != null) return; // 再開時に resumeTextureWork が回す
     if (_inFlight.isNotEmpty || _queue.isNotEmpty) return; // 見えるものを揃えるのが先
     _upgradeQueue.removeWhere((k) => _tiles[k]?.pendingTextureOffset == null);
     _sortByDistance(_upgradeQueue, _lastCenterX, _lastCenterY);
@@ -631,9 +649,15 @@ class TerrainWorld extends ChangeNotifier {
   }
 
   /// [key] のテクスチャを [offset] 段上の地図（層を重ね、上描きつき）で作る
-  Future<ui.Image> _composeTexture(TileKey key, int offset) =>
-      RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
-          .composeLayers(key.range.zoomIn(offset), _textureLayers(), decorate: _decorateFor(key.z));
+  Future<ui.Image> _composeTexture(TileKey key, int offset) async {
+    // 待っている間に再び閉じられたら、また待つ
+    while (_textureGate != null) {
+      await _textureGate!.future;
+    }
+    if (_disposed) throw StateError('TerrainWorld disposed');
+    return RasterTileComposer(fetcher: textureFetcher, imageCache: _imageCache)
+        .composeLayers(key.range.zoomIn(offset), _textureLayers(), decorate: _decorateFor(key.z));
+  }
 
   /// 読み込み済みのタイルにテクスチャを貼って知らせる（差し替え・作り直し）
   void _applyTexture(TerrainTile tile, ui.Image tex, int? pendingOffset) {
@@ -899,6 +923,10 @@ class TerrainWorld extends ChangeNotifier {
   Future<void> _load(TileKey key) async {
     try {
       final tile = await (_tileLoader ?? _defaultLoad)(key);
+      if (_disposed) {
+        tile?.dispose();
+        return;
+      }
       if (tile == null) {
         _failedAt[key] = DateTime.now().millisecondsSinceEpoch;
         return;
@@ -1122,6 +1150,10 @@ class TerrainWorld extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    final g = _textureGate;
+    _textureGate = null;
+    g?.complete();
     clear();
     _imageCache.clear();
     super.dispose();

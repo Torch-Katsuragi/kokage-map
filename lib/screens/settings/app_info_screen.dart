@@ -15,6 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/terrain/dem_tiles.dart';
 import '../../i18n/strings.g.dart';
@@ -24,6 +25,9 @@ import '../../widgets/settings_widgets.dart';
 /// アプリ情報画面
 class AppInfoScreen extends StatefulWidget {
   final bool isEmbedded;
+
+  static const _githubRepoUrl =
+      'https://github.com/Torch-Katsuragi/kokage-map';
 
   const AppInfoScreen({
     super.key,
@@ -93,6 +97,17 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
             iconColor: Colors.orange,
             children: [
               ListTile(
+                leading: const Icon(Icons.code, color: Colors.blueGrey),
+                title: Text(tr.sourceCode),
+                subtitle: Text(tr.sourceCodeDesc),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => launchUrl(
+                  Uri.parse(AppInfoScreen._githubRepoUrl),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+              const Divider(),
+              ListTile(
                 leading: const Icon(Icons.open_in_new, color: Colors.blue),
                 title: Text(tr.openSourceLicenses),
                 subtitle: Text(tr.openSourceLicensesDesc),
@@ -102,6 +117,8 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
                     context: context,
                     applicationName: t.common.appName,
                     applicationVersion: info?.version ?? '',
+                    applicationLegalese:
+                        'GPL-2.0-or-later\n${AppInfoScreen._githubRepoUrl}',
                   );
                 },
               ),

@@ -209,5 +209,35 @@ void main() {
       final plain = TerrainMeshBuilder(dem, textureWidth: 8, textureHeight: 8, chunkSize: 4).build(cam);
       expect(plain.skirt, isNull);
     });
+
+    test('suspendTextureWork 中は retexture のテクスチャ合成が保留され、resumeTextureWork で再開する', () async {
+      var fetchCount = 0;
+      final w = TerrainWorld(
+        demSources: const [DemTileSource.aws],
+        demFetcher: (s, z, x, y) async => null,
+        textureFetcher: (z, x, y) async {
+          fetchCount++;
+          return null;
+        },
+      );
+      const key = TileKey(12, 100, 100);
+      w.addTileForTest(fakeTile(key, 0));
+
+      w.suspendTextureWork();
+      expect(w.textureWorkSuspended, isTrue);
+
+      var retextureDone = false;
+      final fut = w.retexture().then((_) => retextureDone = true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(fetchCount, 0);
+      expect(retextureDone, isFalse);
+
+      w.resumeTextureWork();
+      expect(w.textureWorkSuspended, isFalse);
+      await fut;
+      expect(retextureDone, isTrue);
+      expect(fetchCount, greaterThan(0));
+      w.dispose();
+    });
   });
 }

@@ -119,7 +119,9 @@
       "otherDesc": "感想、質問、改善提案など何でも",
       "feedbackTypes": "フィードバックの種類",
       "browserError": "ブラウザを開けませんでした",
-      "errorOccurred": "エラーが発生しました: $error"
+      "errorOccurred": "エラーが発生しました: $error",
+      "githubIssues": "GitHub????????????",
+      "githubIssuesDesc": "GitHub??????????????????????"
     },
     "appInfo": {
       "title": "アプリ情報",
@@ -133,7 +135,9 @@
       "openSourceLicensesDesc": "使用しているパッケージのライセンス一覧",
       "dataSources": "地図データの出典",
       "dataSourcesBasemap": "背景地図",
-      "dataSourcesElevation": "標高（3D 地形）"
+      "dataSourcesElevation": "標高（3D 地形）",
+      "sourceCode": "???????GitHub?",
+      "sourceCodeDesc": "GPL-2.0-or-later ????????"
     },
     "general": {
       "layout": "画面の配置",
@@ -1697,7 +1701,16 @@
     "waitingPosition": "現在位置を待っています",
     "accuracy": "GPS ±$value m",
     "bearing": "方位 $deg°（$dir）真北",
-    "octants": ["北", "北東", "東", "南東", "南", "南西", "西", "北西"],
+    "octants": [
+      "北",
+      "北東",
+      "東",
+      "南東",
+      "南",
+      "南西",
+      "西",
+      "北西"
+    ],
     "elevationUp": "$m m 登り",
     "elevationDown": "$m m 下り",
     "elevationLevel": "高低差ほぼ無し",

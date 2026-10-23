@@ -192,10 +192,22 @@ class RootMapsApp extends ConsumerStatefulWidget {
 
 class _RootMapsAppState extends ConsumerState<RootMapsApp>
     with WidgetsBindingObserver {
+  late final AppLifecycleListener _lifecycle;
+  Future<void>? _flushing;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // ⚠ 復帰時も Flutter は paused → hidden → inactive → resumed と合成して配送する。
+    // didChangeAppLifecycleState で hidden を見ると、復帰の瞬間（サーフェス再生成と同時）にも
+    // prepareAllForHandOff が走っていた（2026-10-23 Pixel 10 Pro Fold）。onHide は下りの inactive → hidden だけ
+    _lifecycle = AppLifecycleListener(
+      onHide: () {
+        _flushing ??= _flushOnBackground().whenComplete(() => _flushing = null);
+      },
+      onDetach: () => unawaited(_cleanupOnAppExit()),
+    );
     _setupGlobalCallbacks();
     _initializeServices();
   }
@@ -317,19 +329,9 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.detached) {
-      _cleanupOnAppExit();
-    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
-      // web はタブを隠したとき hidden だけが来る（閉じる前の最後の機会になりやすい）
-      unawaited(_flushOnBackground());
-    }
   }
 
   /// 裏に回るとき、保留中の属性（書き直し待ちも）を書いてから web の元ファイルへ書き戻す。

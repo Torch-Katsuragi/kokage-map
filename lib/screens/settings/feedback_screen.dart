@@ -33,6 +33,10 @@ class FeedbackScreen extends ConsumerWidget {
   static const _feedbackBaseUrl =
       'https://docs.google.com/forms/d/e/1FAIpQLSdPPuWtjW-t4rfdyLF9fCGEcrIMG49hFkV4N3WU4CiidivkLg/viewform';
 
+  /// GitHub Issues URL
+  static const _githubIssuesUrl =
+      'https://github.com/Torch-Katsuragi/kokage-map/issues';
+
   /// バージョンフィールドの entry ID
   static const _versionEntryId = 'entry.2058352308';
 
@@ -57,11 +61,20 @@ class FeedbackScreen extends ConsumerWidget {
     return PlatformCapabilities.operatingSystem;
   }
 
-  Future<void> _openFeedbackForm(WidgetRef ref) async {
+  Future<void> _openUrl(WidgetRef ref, Uri uri) async {
     void error(String title) => ref.read(notificationCenterProvider.notifier).add(
           title: title,
           level: NotificationLevel.error,
         );
+    try {
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) error(t.settings.feedback.browserError);
+    } catch (e) {
+      error(t.settings.feedback.errorOccurred(error: e.toString()));
+    }
+  }
+
+  Future<void> _openFeedbackForm(WidgetRef ref) async {
     try {
       final info = await PackageInfo.fromPlatform();
       final version = '${info.version}+${info.buildNumber}';
@@ -73,10 +86,12 @@ class FeedbackScreen extends ConsumerWidget {
           _deviceModelEntryId: deviceModel,
         },
       );
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!launched) error(t.settings.feedback.browserError);
+      await _openUrl(ref, uri);
     } catch (e) {
-      error(t.settings.feedback.errorOccurred(error: e.toString()));
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.settings.feedback.errorOccurred(error: e.toString()),
+            level: NotificationLevel.error,
+          );
     }
   }
 
@@ -125,6 +140,14 @@ class FeedbackScreen extends ConsumerWidget {
                 leading: const Icon(Icons.thumb_up_outlined, color: Colors.green),
                 title: Text(tr.other),
                 subtitle: Text(tr.otherDesc),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.code, color: Colors.blueGrey),
+                title: Text(tr.githubIssues),
+                subtitle: Text(tr.githubIssuesDesc),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => _openUrl(ref, Uri.parse(_githubIssuesUrl)),
               ),
             ],
           ),

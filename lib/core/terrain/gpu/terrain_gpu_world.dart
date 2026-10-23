@@ -14,6 +14,7 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:async';
+import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -561,6 +562,10 @@ class TerrainGpuWorldRenderer {
     return target.asImage();
   }
 
+  final Queue<(Object, ui.Image, _TextureEntry)> _uploadQueue = Queue();
+  int _uploading = 0;
+  static const _maxConcurrentUploads = 2;
+
   /// タイルのテクスチャ。まず `ui.Image` を包んで（`Picture.toImage` 由来ならコピー無し・ミップ無し）すぐ描き、
   /// 裏でミップ段つきのテクスチャを作って差し替える（回転中のちらつき対策）。包めなければ届くまで白
   gpu.Texture _textureFor(Object key, ui.Image? image) {
@@ -574,9 +579,27 @@ class TerrainGpuWorldRenderer {
       } catch (_) {
         entry.texture = null;
       }
-      unawaited(_uploadMipped(key, image, entry));
+      // タイル側の releaseImage / applyTexture の dispose と独立に自前のハンドルで持ち、同時実行数を絞る
+      _uploadQueue.add((key, image.clone(), entry));
+      _pumpUploads();
     }
     return entry.texture ?? _whiteTexture();
+  }
+
+  void _pumpUploads() {
+    while (_uploading < _maxConcurrentUploads && _uploadQueue.isNotEmpty) {
+      final (key, img, entry) = _uploadQueue.removeFirst();
+      if (!identical(_textures[key], entry)) {
+        img.dispose(); // 待っている間に prune された
+        continue;
+      }
+      _uploading++;
+      unawaited(_uploadMipped(key, img, entry).whenComplete(() {
+        img.dispose();
+        _uploading--;
+        _pumpUploads();
+      }));
+    }
   }
 
   /// バイト列を取り、isolate でミップ段を作り、段ごとに上げる。できたら [onTextureReady] と [onTextureUploaded]
@@ -707,6 +730,10 @@ class TerrainGpuWorldRenderer {
 
   /// 全部手放す（レイヤを閉じるとき）
   void dispose() {
+    for (final (_, img, _) in _uploadQueue) {
+      img.dispose();
+    }
+    _uploadQueue.clear();
     _terrain.clear();
     _textures.clear();
     for (final c in [_polygons, _lines, _points, _segments]) {

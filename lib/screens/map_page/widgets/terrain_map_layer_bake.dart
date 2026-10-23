@@ -116,14 +116,22 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     _scheduleRefresh();
   }
 
+  /// バックグラウンド中・復帰直後はテクスチャ合成を保留する
+  bool get _textureWorkPaused;
+  bool _bakeCheckDeferred = false;
+
   /// 古い世代で焼かれた（またはフィーチャが届く前に焼かれた）タイルを見つけて焼き直す（400ms にまとめる）
   void _scheduleBakeCheck() {
     _bakeCheckTimer?.cancel();
+    if (_textureWorkPaused) {
+      _bakeCheckDeferred = true; // 台帳（_bakes）には事象が積まれているので、再開時に 1 回見れば足りる
+      return;
+    }
     _bakeCheckTimer = Timer(const Duration(milliseconds: 400), _checkBakes);
   }
 
   void _checkBakes() {
-    if (!mounted) return;
+    if (!mounted || _textureWorkPaused) return;
     final gen = _bakes.gen;
     final stale = _bakes.takeStale([for (final t in _world.tiles) t.key]);
     if (stale.isEmpty) return;
@@ -137,6 +145,12 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
       debugPrint('[3D] bake: $done 枚を世代 $gen で焼き直した'
           '${left > 0 ? '（打ち切り $left 枚）' : ''}${deferred > 0 ? '（1 texel 未満で見送り $deferred 枚）' : ''}');
       if (left > 0) _scheduleBakeCheck();
+    }).catchError((Object e) {
+      // 失敗（dispose でゲートを抜けた等）。取り下げておかないと台帳が要求済みのまま残る
+      if (mounted) {
+        _bakes.withdrawUnapplied(stale, gen, _world.has);
+        _scheduleBakeCheck();
+      }
     }));
   }
 
@@ -248,6 +262,7 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
   /// オーバーレイ画像が変わった範囲のテクスチャを作り直す（400ms にまとめる）。フィーチャの焼き直しは [_checkBakes]
   void _scheduleRetexture() {
     _retextureTimer?.cancel();
+    if (_textureWorkPaused) return; // _overlayBounds は残る。再開時に流す
     _retextureTimer = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
       _world.retexture(within: _overlayBounds);

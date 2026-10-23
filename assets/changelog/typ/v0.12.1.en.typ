@@ -1,11 +1,11 @@
-// Changelog (illustrated): next release. tool/changelog/build.py writes it out as SVG chunks
+// Changelog (illustrated): v0.12.1. tool/changelog/build.py writes it out as SVG chunks
 #import "lib.typ": *
 #show: page-setup.with(lang: "en")
 
 #hero(
-  "Next release",
-  [Next release],
-  [Fixes going into the next version.],
+  "v0.12.1 — 2026/10/23",
+  [QGIS styling, table joins, guidance and measure],
+  [Reads QGIS categorized, graduated and rule-based styling, table joins (such as stand-register CSVs) and attribute form settings. Adds point guidance, shared room pins and a measure tool.],
   [],
 )
 
@@ -63,6 +63,7 @@
   [With a raster overlay present, hiding a gpkg or layer did not change the map until the raster's display image was ready],
   [The map drew overlapping layers in reverse list order and overlays always under polygon fills; it now draws higher list entries on top, as QGIS does, with the order read from the .qgs layer tree],
   [TruPulse backsight averaging discarded the raw foresight and backsight readings; they are kept in survey\_fs\_\* and survey\_bs\_\* columns, and inclination is averaged too],
+  [Switching to another app (such as the camera) or locking the screen while walking with GPS track recording on could freeze when returning; 3D re-baking and track updates now pause in the background],
 )
 
 #fixes(

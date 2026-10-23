@@ -271,6 +271,12 @@ class BaseMapService extends ChangeNotifier {
   /// サービス初期化。何度呼んでもよい（初期化は 1 回だけ。失敗していたら次の呼び出しでやり直す）
   Future<void> initialize() => _initialization ??= _initialize();
 
+  /// SharedPreferences が外部（AppData 同期など）で更新された後にメモリ上の設定を再読込する
+  Future<void> reloadSettingsFromPrefs() async {
+    await _loadSettings();
+    notifyListeners();
+  }
+
   Future<void> _initialize() async {
     try {
       // タイルキャッシュはローカルファイルシステムが前提。

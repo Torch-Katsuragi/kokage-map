@@ -199,7 +199,15 @@
       "interval": "Sync Interval",
       "everyMinutes": "Every $minutes min",
       "minutes": "$count min",
-      "infoText": "Auto sync runs only over WiFi to save mobile data.\n\nWhen both local and Drive have changes to the same file (conflict), sync pauses and shows a warning on the folder. Tap the subtitle to resolve manually."
+      "infoText": "Auto sync runs only over WiFi to save mobile data.\n\nWhen both local and Drive have changes to the same file (conflict), sync pauses and shows a warning on the folder. Tap the subtitle to resolve manually.",
+      "appDataTitle": "Cross-Device Sync (AppData/kmap)",
+      "appDataEnable": "Sync data across devices",
+      "appDataEnableDesc": "Consolidate past GPS tracks, shared folder list, and settings via AppData/kmap in My Drive",
+      "appDataSyncNow": "Sync Now",
+      "appDataLastSynced": "Last synced: $time",
+      "appDataNeverSynced": "Never synced",
+      "appDataSyncSuccess": "Cross-device sync completed",
+      "appDataSyncFailed": "Cross-device sync failed: $error"
     }
   },
   "basemap": {

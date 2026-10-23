@@ -879,7 +879,8 @@ class GoogleDriveService {
       });
 
   /// ファイルを [localPath] にダウンロード
-  Future<bool> downloadFile(String fileId, String localPath) => _call('ダウンロードエラー', false, (api) async {
+  /// ファイルの中身をメモリ上にダウンロードする
+  Future<Uint8List?> downloadBytes(String fileId) => _call('ダウンロードエラー', null, (api) async {
         final response = await api.files.get(
           fileId,
           downloadOptions: drive.DownloadOptions.fullMedia,
@@ -887,15 +888,26 @@ class GoogleDriveService {
         );
         if (response is! drive.Media) {
           AppLogger.debug('[GoogleDriveService] ダウンロード応答が不正');
-          return false;
+          return null;
         }
-        // ⚠ 追記していく `openWrite()` は web に無いので、全部集めてから一度に書く
         final chunks = BytesBuilder(copy: false);
         await response.stream.forEach(chunks.add);
-        await fs.writeAsBytes(localPath, chunks.takeBytes());
-        AppLogger.debug('[GoogleDriveService] ダウンロード完了: $localPath');
-        return true;
+        return chunks.takeBytes();
       });
+
+  /// ファイルを [localPath] にダウンロード
+  Future<bool> downloadFile(String fileId, String localPath) async {
+    final bytes = await downloadBytes(fileId);
+    if (bytes == null) return false;
+    try {
+      await fs.writeAsBytes(localPath, bytes);
+      AppLogger.debug('[GoogleDriveService] ダウンロード完了: $localPath');
+      return true;
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] ファイル書き込みエラー: $e');
+      return false;
+    }
+  }
 
   /// フォルダ直下のファイルとフォルダの一覧（共有フォルダにも届くよう共有ドライブも含める）
   ///

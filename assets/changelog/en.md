@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.13.0 — 2026/10/23
+
+### New
+
+- Added "Consolidate data across devices" under Settings → Drive Sync. When turned on, your devices stay aligned via AppData/kmap in My Drive (both with the manual "Consolidate now" button and during Wi-Fi auto-sync)
+- Completed past-day GPS tracks (gps_history.gpkg) are consolidated both ways across devices. Today's active recording is never touched, so background sync never conflicts while walking. Tracks recorded on the same day on multiple devices are kept separate per device rather than interleaved into a single line
+- Shared Drive folders added under Shared/ on one device are automatically cloned into Shared/ on your other devices, and folders removed on one device are removed from the shared list so they are not re-cloned
+- Portable settings (basemap layers, custom tile URLs, GPS track recording filters and GNSS fix quality thresholds) are synced across devices with per-key 3-way merge, excluding screen-size-dependent layout settings
+
 ## v0.12.1 — 2026/10/23
 
 ### New

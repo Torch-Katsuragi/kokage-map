@@ -28,6 +28,8 @@ import '../../core/fs/k_file_system.dart';
 import '../../models/nodes/drive_folder_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../utils/app_logger.dart';
+import '../projects_home.dart';
+import 'appdata_sync_service.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';
 import 'sync_snapshot.dart';
@@ -166,6 +168,19 @@ class AutoSyncService {
   }
 
   /// メイン同期ロジック
+  /// ???????????????????????????????
+  Future<void> refreshSharedFolderTree() async {
+    final root = rootNode;
+    if (root == null) return;
+    await root.updateChildren();
+    for (final child in root.children) {
+      if (child.name == ProjectsHome.sharedDirName) {
+        await child.updateChildren();
+      }
+    }
+    onSyncStatusChanged?.call();
+  }
+
   Future<void> _runAutoSync() async {
     if (!_enabled || !_isWifi || _isSyncing) return;
     final root = rootNode;
@@ -185,6 +200,15 @@ class AutoSyncService {
         }
       }
       await driveService.refreshToken();
+
+      // 端末間データ統合（AppData/kmap: 設定・共有リスト・前日以前のGPS履歴）
+      try {
+        await AppDataSyncService.instance.syncIfEnabled(
+          onSharedFoldersChanged: refreshSharedFolderTree,
+        );
+      } catch (e) {
+        AppLogger.debug('[AutoSync] AppData sync error: $e');
+      }
 
       final folders = _collectDriveFolders(root);
       if (folders.isEmpty) return;

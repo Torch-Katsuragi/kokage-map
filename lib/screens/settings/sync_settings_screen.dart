@@ -19,7 +19,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
+import '../../providers/gps_providers.dart';
 import '../../providers/notification_providers.dart';
+import '../../services/google_drive/appdata_sync_service.dart';
 import '../../services/google_drive/auto_sync_service.dart';
 import '../../services/google_drive/google_drive_service.dart';
 import '../../widgets/settings_widgets.dart';
@@ -35,7 +37,10 @@ class SyncSettingsScreen extends ConsumerStatefulWidget {
 
 class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
   final GoogleDriveService _driveService = GoogleDriveService();
+  final AppDataSyncService _appDataSync = AppDataSyncService.instance;
   bool _autoSyncEnabled = true;
+  bool _appDataSyncEnabled = false;
+  DateTime? _appDataLastSynced;
   int _intervalMinutes = kAutoSyncDefaultInterval;
   bool _isAccountLoading = false;
 
@@ -51,8 +56,12 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    final lastSynced = await _appDataSync.lastSyncedAt();
+    if (!mounted) return;
     setState(() {
       _autoSyncEnabled = prefs.getBool(kAutoSyncEnabledKey) ?? true;
+      _appDataSyncEnabled = prefs.getBool(kAppDataSyncEnabledKey) ?? false;
+      _appDataLastSynced = lastSynced;
       _intervalMinutes =
           prefs.getInt(kAutoSyncIntervalKey) ?? kAutoSyncDefaultInterval;
     });
@@ -113,6 +122,39 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
     await prefs.setInt(kAutoSyncIntervalKey, minutes);
   }
 
+  Future<void> _runAppDataSyncNow() async {
+    if (!_driveService.authState.isAuthenticated) {
+      await _handleSignIn();
+      if (!_driveService.authState.isAuthenticated) return;
+    }
+    final res = await _appDataSync.syncNow(forceGpsCheck: true);
+    if (res.updatedSettings && mounted) {
+      await ref.read(trackRecordingSettingProvider.notifier).load();
+      await ref.read(gnssQualityGateSettingProvider.notifier).load();
+    }
+    final lastSynced = await _appDataSync.lastSyncedAt();
+    if (!mounted) return;
+    setState(() => _appDataLastSynced = lastSynced);
+    final tr = t.settings.autoSync;
+    if (res.success) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: tr.appDataSyncSuccess,
+            level: NotificationLevel.info,
+          );
+    } else {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: tr.appDataSyncFailed(error: res.errorMessage ?? ''),
+            level: NotificationLevel.error,
+          );
+    }
+  }
+
+  String _formatDateTime(DateTime dt) {
+    final l = dt.toLocal();
+    return '${l.year}/${l.month.toString().padLeft(2, '0')}/${l.day.toString().padLeft(2, '0')} '
+        '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final tr = t.settings.autoSync;
@@ -120,7 +162,7 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
       title: t.settings.categories.sync,
       isEmbedded: widget.isEmbedded,
       body: ListenableBuilder(
-        listenable: _driveService.authState,
+        listenable: Listenable.merge([_driveService.authState, _appDataSync]),
         builder: (context, _) {
           return SettingsBody(
             sections: [
@@ -157,6 +199,45 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                       ],
                       onChanged: _setInterval,
                     ),
+                  ),
+                ],
+              ),
+              SettingsSection(
+                title: tr.appDataTitle,
+                icon: Icons.devices,
+                iconColor: Colors.teal,
+                children: [
+                  SwitchListTile(
+                    secondary: const Icon(Icons.cloud_sync, color: Colors.teal),
+                    title: Text(tr.appDataEnable),
+                    subtitle: Text(tr.appDataEnableDesc),
+                    value: _appDataSyncEnabled,
+                    onChanged: (v) async {
+                      setState(() => _appDataSyncEnabled = v);
+                      await _appDataSync.setEnabled(v);
+                    },
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.history, color: Colors.blueGrey),
+                    title: Text(
+                      _appDataLastSynced != null
+                          ? tr.appDataLastSynced(
+                              time: _formatDateTime(_appDataLastSynced!),
+                            )
+                          : tr.appDataNeverSynced,
+                    ),
+                    trailing: _appDataSync.isSyncing
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: _runAppDataSyncNow,
+                            icon: const Icon(Icons.sync, size: 18),
+                            label: Text(tr.appDataSyncNow),
+                          ),
                   ),
                 ],
               ),

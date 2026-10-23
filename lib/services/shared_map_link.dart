@@ -35,6 +35,115 @@ import 'projects_home.dart';
 
 export '../core/shared_link.dart';
 
+/// `共有/` フォルダ内の Drive 連携済みエントリ情報
+class SharedMapEntry {
+  final String driveId;
+  final String folderName;
+  final String driveUrl;
+  final bool isReadOnly;
+  final String? localPath;
+
+  const SharedMapEntry({
+    required this.driveId,
+    required this.folderName,
+    required this.driveUrl,
+    required this.isReadOnly,
+    this.localPath,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'driveId': driveId,
+        'folderName': folderName,
+        'driveUrl': driveUrl,
+        'isReadOnly': isReadOnly,
+      };
+
+  factory SharedMapEntry.fromJson(Map<String, dynamic> json) {
+    final driveId = (json['driveId'] as String?) ?? '';
+    return SharedMapEntry(
+      driveId: driveId,
+      folderName: (json['folderName'] as String?) ?? driveId,
+      driveUrl: (json['driveUrl'] as String?) ??
+          'https://drive.google.com/drive/folders/$driveId',
+      isReadOnly: (json['isReadOnly'] as bool?) ?? false,
+    );
+  }
+}
+
+/// ローカルの `共有/` ディレクトリにある Drive 連携済みフォルダ一覧を返す
+Future<List<SharedMapEntry>> listLocalSharedMaps() async {
+  final root = await ProjectsHome.myMap();
+  final sharedDir = p.join(root, ProjectsHome.sharedDirName);
+  final out = <SharedMapEntry>[];
+  if (!await fs.exists(sharedDir)) return out;
+  for (final e in await fs.list(sharedDir)) {
+    if (!e.isDirectory) continue;
+    try {
+      final sync = (await KMetaService.instance.getMeta(e.path)).sync;
+      final id = sync.driveId;
+      if (id == null || id.isEmpty) continue;
+      out.add(SharedMapEntry(
+        driveId: id,
+        folderName: sync.driveFolderName ?? p.basename(e.path),
+        driveUrl: sync.driveUrl ?? 'https://drive.google.com/drive/folders/$id',
+        isReadOnly: sync.isReadOnly ?? false,
+        localPath: e.path,
+      ));
+    } catch (_) {}
+  }
+  return out;
+}
+
+/// 共有の地図がローカルの `共有/` にまだ無ければクローンする（カメラ移動はしない）。
+/// 新規にクローンした場合はローカルパスを返し、既にあれば null を返す。
+final Map<String, Future<String?>> _inFlightSharedClones = {};
+
+Future<String?> cloneSharedMapIfNeeded({
+  required String driveId,
+  required String folderName,
+  required String driveUrl,
+  required bool isReadOnly,
+}) {
+  final existing = _inFlightSharedClones[driveId];
+  if (existing != null) return existing;
+  final fut = _cloneSharedMapIfNeededImpl(
+    driveId: driveId,
+    folderName: folderName,
+    driveUrl: driveUrl,
+    isReadOnly: isReadOnly,
+  );
+  _inFlightSharedClones[driveId] = fut;
+  return fut.whenComplete(() => _inFlightSharedClones.remove(driveId));
+}
+
+Future<String?> _cloneSharedMapIfNeededImpl({
+  required String driveId,
+  required String folderName,
+  required String driveUrl,
+  required bool isReadOnly,
+}) async {
+  final existing = await listLocalSharedMaps();
+  for (final item in existing) {
+    if (item.driveId == driveId) return null;
+  }
+  final root = await ProjectsHome.myMap();
+  final sharedDir = p.join(root, ProjectsHome.sharedDirName);
+  final base = toLocalFolderName(folderName, fallback: driveId);
+  var localPath = p.join(sharedDir, base);
+  for (var n = 2; await fs.exists(localPath); n++) {
+    localPath = p.join(sharedDir, '$base $n');
+  }
+  final ok = await SyncEngine().cloneFromDrive(
+    driveId: driveId,
+    localPath: localPath,
+    folderName: p.basename(localPath),
+    driveUrl: driveUrl,
+    isReadOnly: isReadOnly,
+  );
+  if (!ok) throw StateError('clone failed');
+  return localPath;
+}
+
 /// 取り込んだ（または取り込み済みの）地図の範囲を見る位置。開いた地図がそこへ寄るように起動要求に置く
 Future<void> _focusOn(String dir) async {
   double? minX, minY, maxX, maxY;
@@ -89,19 +198,14 @@ Future<String?> receiveSharedMap({
     } catch (_) {}
   }
   if (confirm != null && !await confirm()) return null;
-  final base = toLocalFolderName(folderName, fallback: driveId);
-  var localPath = p.join(sharedDir, base);
-  for (var n = 2; await fs.exists(localPath); n++) {
-    localPath = p.join(sharedDir, '$base $n');
-  }
-  final ok = await SyncEngine().cloneFromDrive(
+  final localPath = await cloneSharedMapIfNeeded(
     driveId: driveId,
-    localPath: localPath,
-    folderName: p.basename(localPath),
+    folderName: folderName,
     driveUrl: driveUrl,
     isReadOnly: isReadOnly,
   );
-  if (!ok) throw StateError('clone failed');
-  await _focusOn(localPath);
+  if (localPath != null) {
+    await _focusOn(localPath);
+  }
   return root;
 }

@@ -199,7 +199,15 @@
       "interval": "同期間隔",
       "everyMinutes": "${minutes}分ごと",
       "minutes": "${count}分",
-      "infoText": "自動同期はモバイル通信量を抑えるため、WiFi接続時だけ動きます。\n\nローカルとDriveの両方で同じファイルが変更されている（競合）場合は同期を止め、フォルダに警告を出します。サブタイトルをタップして手動で解決してください。"
+      "infoText": "自動同期はモバイル通信量を抑えるため、WiFi接続時だけ動きます。\n\nローカルとDriveの両方で同じファイルが変更されている（競合）場合は同期を止め、フォルダに警告を出します。サブタイトルをタップして手動で解決してください。",
+      "appDataTitle": "端末間のデータ統合 (AppData/kmap)",
+      "appDataEnable": "端末間でデータを統合する",
+      "appDataEnableDesc": "マイドライブの AppData/kmap を介して、前日以前のGPS軌跡・共有フォルダリスト・設定を端末間で揃えます",
+      "appDataSyncNow": "今すぐ統合を実行",
+      "appDataLastSynced": "最終統合: $time",
+      "appDataNeverSynced": "未実行",
+      "appDataSyncSuccess": "端末間データの統合が完了しました",
+      "appDataSyncFailed": "端末間データの統合に失敗しました: $error"
     }
   },
   "basemap": {

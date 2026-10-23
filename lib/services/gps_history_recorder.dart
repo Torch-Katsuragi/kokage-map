@@ -26,6 +26,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
@@ -59,6 +60,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
   static const String _historyGpkgFileName = 'gps_history.gpkg';
   static const String _rawBufferDirName = 'gps_buffer';
   static const String _rawBufferGpkgFileName = 'gps_raw_buffer.gpkg';
+  static const String _deviceIdFileName = 'device_id.txt';
 
   // テーブル・レイヤ名
   static const String _tracksLayerName = 'gps_tracks';
@@ -78,6 +80,10 @@ class GpsHistoryRecorder extends ChangeNotifier {
   // GeoPackageファイル
   GeoPackageFile? _historyFile;
   GeoPackageFile? _rawBufferFile;
+
+  // 端末識別子（Auto Backup 対象外の supportDir に保持）
+  String _deviceId = '';
+  String get deviceId => _deviceId;
 
   // 日付・状態管理
   String? _currentDateKey;
@@ -143,10 +149,12 @@ class GpsHistoryRecorder extends ChangeNotifier {
   ///
   /// [globalFolderPath] gps_history.gpkg の配置先（グローバルフォルダ）
   /// [supportDirPath] gps_raw_buffer.gpkg の配置先（AppSupport、UI非表示）
+  /// [deviceIdOverride] テスト等で端末IDを明示指定する場合に使用
   Future<void> initialize(
     String globalFolderPath,
-    String supportDirPath,
-  ) async {
+    String supportDirPath, {
+    String? deviceIdOverride,
+  }) async {
     if (_isInitialized) return;
 
     if (_initCompleter != null) {
@@ -161,6 +169,9 @@ class GpsHistoryRecorder extends ChangeNotifier {
       await _ensureDirectory(globalFolderPath);
       final rawBufferDir = p.join(supportDirPath, _rawBufferDirName);
       await _ensureDirectory(rawBufferDir);
+
+      // 端末IDの読み込みまたは生成（supportDir配下に保存しAuto Backupによる複製を防止）
+      _deviceId = deviceIdOverride ?? await _loadOrCreateDeviceId(supportDirPath);
 
       // History GeoPackage（Line + details）
       final historyPath = p.join(globalFolderPath, _historyGpkgFileName);
@@ -218,6 +229,27 @@ class GpsHistoryRecorder extends ChangeNotifier {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
+  }
+
+  static Future<String> _loadOrCreateDeviceId(String supportDirPath) async {
+    try {
+      final file = File(p.join(supportDirPath, _deviceIdFileName));
+      if (await file.exists()) {
+        final existing = (await file.readAsString()).trim();
+        if (existing.isNotEmpty) return existing;
+      }
+      final rng = math.Random.secure();
+      final id = List.generate(12, (_) => rng.nextInt(16).toRadixString(16)).join();
+      await file.writeAsString(id, flush: true);
+      return id;
+    } catch (_) {
+      return 'local';
+    }
+  }
+
+  bool _isOwnDevice(Object? rowDeviceId) {
+    final s = rowDeviceId?.toString();
+    return s == null || s.isEmpty || s == _deviceId;
   }
 
   // ==============================
@@ -391,62 +423,96 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
   Future<void> _ensureTracksLayer() async {
     if (_historyFile == null) return;
+    await _ensureTracksLayerOn(_historyFile!, backfillDeviceId: _deviceId);
+  }
 
-    final existingLayers = await _historyFile!.getLayerNames();
+  static Future<void> _ensureTracksLayerOn(
+    GeoPackageFile file, {
+    String? backfillDeviceId,
+  }) async {
+    final existingLayers = await file.getLayerNames();
     if (!existingLayers.contains(_tracksLayerName)) {
       AppLogger.debug('$_logTag: gps_tracks LineLayer 作成');
-      await _historyFile!.addLayer(_tracksLayerName, GeometryType.linestring);
+      await file.addLayer(_tracksLayerName, GeometryType.linestring);
     }
 
-    // addLine/updateLine が name, description カラムを必要とするため確保
-    final columns = await _historyFile!.getTableColumns(_tracksLayerName);
-    final needed = {'name': 'TEXT', 'description': 'TEXT'};
+    // addLine/updateLine が name, description カラムを必要とするため確保 + 端末識別用の device_id
+    final columns = await file.getTableColumns(_tracksLayerName);
+    final needed = {'name': 'TEXT', 'description': 'TEXT', 'device_id': 'TEXT'};
     for (final entry in needed.entries) {
       if (!columns.contains(entry.key)) {
-        await _historyFile!.addAttributeColumn(
+        await file.addAttributeColumn(
           _tracksLayerName,
           entry.key,
           entry.value,
         );
       }
     }
+    if (backfillDeviceId != null && backfillDeviceId.isNotEmpty) {
+      final db = await file.getDatabase();
+      await db.rawUpdate(
+        'UPDATE $_tracksLayerName SET device_id = ? WHERE device_id IS NULL OR device_id = \'\'',
+        [backfillDeviceId],
+      );
+    }
   }
 
   Future<void> _ensureDetailsTable() async {
     if (_historyFile == null) return;
+    await _ensureDetailsTableOn(_historyFile!, backfillDeviceId: _deviceId);
+  }
 
+  static Future<void> _ensureDetailsTableOn(
+    GeoPackageFile file, {
+    String? backfillDeviceId,
+  }) async {
     try {
-      final db = await _historyFile!.getDatabase();
+      final db = await file.getDatabase();
       final tables = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
         [_detailsTableName],
       );
-      if (tables.isNotEmpty) return;
-
-      AppLogger.debug('$_logTag: gps_track_details テーブル作成');
-      await db.execute('''
-        CREATE TABLE $_detailsTableName (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          track_date TEXT NOT NULL,
-          point_index INTEGER NOT NULL,
-          timestamp TEXT NOT NULL,
-          latitude REAL NOT NULL,
-          longitude REAL NOT NULL,
-          altitude REAL,
-          accuracy REAL,
-          speed REAL,
-          bearing REAL,
-          source_type TEXT DEFAULT 'GPS'
-        )
-      ''');
-      await db.execute(
-        'CREATE INDEX idx_track_details_date '
-        'ON $_detailsTableName(track_date)',
-      );
-      await db.execute(
-        'CREATE INDEX idx_track_details_date_idx '
-        'ON $_detailsTableName(track_date, point_index)',
-      );
+      if (tables.isEmpty) {
+        AppLogger.debug('$_logTag: gps_track_details テーブル作成');
+        await db.execute('''
+          CREATE TABLE $_detailsTableName (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            track_date TEXT NOT NULL,
+            point_index INTEGER NOT NULL,
+            timestamp TEXT NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            altitude REAL,
+            accuracy REAL,
+            speed REAL,
+            bearing REAL,
+            source_type TEXT DEFAULT 'GPS',
+            device_id TEXT
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX idx_track_details_date '
+          'ON $_detailsTableName(track_date)',
+        );
+        await db.execute(
+          'CREATE INDEX idx_track_details_date_idx '
+          'ON $_detailsTableName(track_date, point_index)',
+        );
+      } else {
+        final info = await db.rawQuery('PRAGMA table_info($_detailsTableName)');
+        final hasDeviceId = info.any((r) => r['name'] == 'device_id');
+        if (!hasDeviceId) {
+          await db.execute(
+            'ALTER TABLE $_detailsTableName ADD COLUMN device_id TEXT',
+          );
+        }
+      }
+      if (backfillDeviceId != null && backfillDeviceId.isNotEmpty) {
+        await db.rawUpdate(
+          'UPDATE $_detailsTableName SET device_id = ? WHERE device_id IS NULL OR device_id = \'\'',
+          [backfillDeviceId],
+        );
+      }
     } catch (e) {
       AppLogger.debug('$_logTag: detailsテーブル作成エラー: $e');
     }
@@ -512,6 +578,8 @@ class GpsHistoryRecorder extends ChangeNotifier {
           .toList();
       currentLine.addAll(newCoords);
 
+      final db = await _historyFile!.getDatabase();
+
       // Line ジオメトリ更新
       if (currentLine.length >= 2) {
         if (_todayTrackFeatureId == null) {
@@ -521,6 +589,14 @@ class GpsHistoryRecorder extends ChangeNotifier {
             currentLine,
             name: _segmentName,
           );
+          if (_todayTrackFeatureId != null && _deviceId.isNotEmpty) {
+            await db.update(
+              _tracksLayerName,
+              {'device_id': _deviceId},
+              where: 'fid = ?',
+              whereArgs: [_todayTrackFeatureId],
+            );
+          }
           AppLogger.debug(
             '$_logTag: gps_tracks フィーチャ作成 (id=$_todayTrackFeatureId)',
           );
@@ -543,6 +619,14 @@ class GpsHistoryRecorder extends ChangeNotifier {
               currentLine,
               name: _segmentName,
             );
+            if (_todayTrackFeatureId != null && _deviceId.isNotEmpty) {
+              await db.update(
+                _tracksLayerName,
+                {'device_id': _deviceId},
+                where: 'fid = ?',
+                whereArgs: [_todayTrackFeatureId],
+              );
+            }
             AppLogger.debug(
               '$_logTag: gps_tracks フィーチャ再作成 '
               '(id=$_todayTrackFeatureId)',
@@ -552,7 +636,6 @@ class GpsHistoryRecorder extends ChangeNotifier {
       }
 
       // Details テーブルにバッチINSERT
-      final db = await _historyFile!.getDatabase();
       await db.transaction((txn) async {
         for (final pt in detailsToWrite) {
           await txn.insert(_detailsTableName, {
@@ -566,6 +649,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
             'speed': pt.speed,
             'bearing': pt.bearing,
             'source_type': pt.sourceType,
+            'device_id': _deviceId,
           });
           _lastConsolidatedIndex++;
         }
@@ -675,11 +759,12 @@ class GpsHistoryRecorder extends ChangeNotifier {
       final existingLayers = await _historyFile!.getLayerNames();
       if (!existingLayers.contains(_tracksLayerName)) return;
 
-      // 当日のフィーチャのうち一番新しい区間を拾う（`日付` `日付 #2` …）
+      // 当日の自端末フィーチャのうち一番新しい区間を拾う（`日付` `日付 #2` …）
       final features = await _historyFile!.getFeatures(_tracksLayerName);
       int? latestId;
       var latestIndex = 0;
       for (final feature in features) {
+        if (!_isOwnDevice(feature['device_id'])) continue;
         final index = segmentIndexOf(feature['name']?.toString(), _currentDateKey!);
         if (index == null || index <= latestIndex) continue;
         final id = feature[featureIdKey];
@@ -702,11 +787,12 @@ class GpsHistoryRecorder extends ChangeNotifier {
         }
       }
 
-      // details テーブルから反映済みインデックスと最後の記録時刻を算出
+      // details テーブルから自端末の反映済みインデックスと最後の記録時刻を算出
       final db = await _historyFile!.getDatabase();
       final countResult = await db.rawQuery(
-        'SELECT COUNT(*) as cnt, MAX(timestamp) as last_ts FROM $_detailsTableName WHERE track_date = ?',
-        [_currentDateKey],
+        'SELECT COUNT(*) as cnt, MAX(timestamp) as last_ts FROM $_detailsTableName '
+        'WHERE track_date = ? AND (device_id IS NULL OR device_id = \'\' OR device_id = ?)',
+        [_currentDateKey, _deviceId],
       );
       _lastConsolidatedIndex =
           (countResult.first['cnt'] as int?) ?? 0;
@@ -810,30 +896,302 @@ class GpsHistoryRecorder extends ChangeNotifier {
   }
 
   // ==============================
+  // 端末間の過去日統合（当日分は対象外）
+  // ==============================
+
+  static final RegExp _dateKeyPattern = RegExp(r'^\d{4}_\d{2}_\d{2}$');
+
+  static String _baseDateOfFeatureName(String name) => name.split(' #').first;
+
+  static bool _isPastDateKey(String dKey, String todayKey) =>
+      _dateKeyPattern.hasMatch(dKey) && dKey.compareTo(todayKey) < 0;
+
+  static bool _isNewerBlock(
+    ({int featureCount, int detailCount}) a,
+    ({int featureCount, int detailCount}) b,
+  ) {
+    if (a.detailCount != b.detailCount) return a.detailCount > b.detailCount;
+    return a.featureCount > b.featureCount;
+  }
+
+  /// リモート（Drive 等）の `gps_history.gpkg` と前日以前の確定データを双方向統合する。
+  ///
+  /// ルール:
+  /// - 当日分（`dateKey >= todayKey`）は一切読み書きしない（記録中の競合を完全に防ぐ）。
+  /// - 単位は `(device_id, dateKey)` ブロック。自分が書いた過去日ブロックをリモートへ追加し、
+  ///   他端末（または再インストール前の過去分）の過去日ブロックをローカルへ取り込む。
+  Future<({bool changedLocal, bool changedRemote, int importedDays, int exportedDays})>
+      mergePastDaysWith(String remoteGpkgPath) async {
+    if (_historyFile == null) {
+      return (changedLocal: false, changedRemote: false, importedDays: 0, exportedDays: 0);
+    }
+
+    if (_isInitialized && _rawBufferFile != null) {
+      await _checkAndRotateDay();
+    }
+    final todayKey = _currentDateKey ?? dateKey(DateTime.now());
+    final remoteFile = GeoPackageFile(
+      [p.basename(remoteGpkgPath)],
+      absolutePath: remoteGpkgPath,
+    );
+
+    var changedLocal = false;
+    var changedRemote = false;
+    var importedDays = 0;
+    var exportedDays = 0;
+
+    try {
+      if (!await File(remoteGpkgPath).exists()) {
+        await remoteFile.createEmptyDatabase();
+      }
+      await _ensureTracksLayerOn(remoteFile);
+      await _ensureDetailsTableOn(remoteFile);
+
+      final localIndex = await _collectPastDayBlocks(
+        _historyFile!,
+        todayKey,
+        fallbackDeviceId: _deviceId,
+      );
+      final remoteIndex = await _collectPastDayBlocks(
+        remoteFile,
+        todayKey,
+        fallbackDeviceId: '',
+      );
+
+      final importedKeys = <({String deviceId, String dateKey})>{};
+
+      // 1. リモート → ローカル（ローカルに未取得の過去日ブロックを取り込む）
+      for (final entry in remoteIndex.stats.entries) {
+        final key = entry.key;
+        final remoteStat = entry.value;
+        final localStat = localIndex.stats[key];
+        final shouldImport = localStat == null ||
+            (key.deviceId != _deviceId && _isNewerBlock(remoteStat, localStat));
+        if (!shouldImport) continue;
+
+        await _copyDayBlock(
+          from: remoteFile,
+          to: _historyFile!,
+          deviceId: key.deviceId,
+          dateKey: key.dateKey,
+          fromFallbackDeviceId: '',
+          fromFids: remoteIndex.fidsByBlock[key] ?? const [],
+          toFids: localIndex.fidsByBlock[key] ?? const [],
+        );
+        importedKeys.add(key);
+        importedDays++;
+        changedLocal = true;
+      }
+
+      // 2. ローカル → リモート（リモートに未反映の過去日ブロックを書き出す）
+      for (final entry in localIndex.stats.entries) {
+        final key = entry.key;
+        if (importedKeys.contains(key)) continue;
+        final localStat = entry.value;
+        final remoteStat = remoteIndex.stats[key];
+        final shouldExport =
+            remoteStat == null || _isNewerBlock(localStat, remoteStat);
+        if (!shouldExport) continue;
+
+        await _copyDayBlock(
+          from: _historyFile!,
+          to: remoteFile,
+          deviceId: key.deviceId,
+          dateKey: key.dateKey,
+          fromFallbackDeviceId: _deviceId,
+          fromFids: localIndex.fidsByBlock[key] ?? const [],
+          toFids: remoteIndex.fidsByBlock[key] ?? const [],
+        );
+        exportedDays++;
+        changedRemote = true;
+      }
+
+      if (changedRemote) {
+        await GeoPackageFile.prepareForHandOff(remoteGpkgPath);
+      }
+    } finally {
+      await remoteFile.dispose();
+    }
+
+    if (changedLocal) {
+      onConsolidated?.call();
+      notifyListeners();
+    }
+
+    return (
+      changedLocal: changedLocal,
+      changedRemote: changedRemote,
+      importedDays: importedDays,
+      exportedDays: exportedDays,
+    );
+  }
+
+  static Future<({
+    Map<({String deviceId, String dateKey}), ({int featureCount, int detailCount})> stats,
+    Map<({String deviceId, String dateKey}), List<int>> fidsByBlock,
+  })> _collectPastDayBlocks(
+    GeoPackageFile file,
+    String todayKey, {
+    required String fallbackDeviceId,
+  }) async {
+    final stats = <({String deviceId, String dateKey}), ({int featureCount, int detailCount})>{};
+    final fidsByBlock = <({String deviceId, String dateKey}), List<int>>{};
+    final layers = await file.getLayerNames();
+    if (layers.contains(_tracksLayerName)) {
+      final features = await file.getFeatures(_tracksLayerName);
+      for (final f in features) {
+        final name = f['name']?.toString();
+        if (name == null || name.isEmpty) continue;
+        final dKey = _baseDateOfFeatureName(name);
+        if (!_isPastDateKey(dKey, todayKey)) continue;
+        final rawDev = f['device_id']?.toString() ?? '';
+        final dev = rawDev.isEmpty ? fallbackDeviceId : rawDev;
+        if (dev.isEmpty) continue;
+        final k = (deviceId: dev, dateKey: dKey);
+        final prev = stats[k] ?? (featureCount: 0, detailCount: 0);
+        stats[k] = (featureCount: prev.featureCount + 1, detailCount: prev.detailCount);
+        final id = f[featureIdKey];
+        final fid = id is int ? id : int.tryParse(id?.toString() ?? '');
+        if (fid != null) {
+          (fidsByBlock[k] ??= <int>[]).add(fid);
+        }
+      }
+    }
+
+    final db = await file.getDatabase();
+    final rows = await db.rawQuery(
+      'SELECT device_id, track_date, COUNT(*) as cnt FROM $_detailsTableName '
+      'WHERE track_date < ? GROUP BY device_id, track_date',
+      [todayKey],
+    );
+    for (final r in rows) {
+      final dKey = r['track_date']?.toString() ?? '';
+      if (!_isPastDateKey(dKey, todayKey)) continue;
+      final rawDev = r['device_id']?.toString() ?? '';
+      final dev = rawDev.isEmpty ? fallbackDeviceId : rawDev;
+      if (dev.isEmpty) continue;
+      final cnt = (r['cnt'] as int?) ?? 0;
+      final k = (deviceId: dev, dateKey: dKey);
+      final prev = stats[k] ?? (featureCount: 0, detailCount: 0);
+      stats[k] = (featureCount: prev.featureCount, detailCount: prev.detailCount + cnt);
+    }
+    return (stats: stats, fidsByBlock: fidsByBlock);
+  }
+
+  static Future<void> _copyDayBlock({
+    required GeoPackageFile from,
+    required GeoPackageFile to,
+    required String deviceId,
+    required String dateKey,
+    required String fromFallbackDeviceId,
+    required List<int> fromFids,
+    required List<int> toFids,
+  }) async {
+    // 1. 既存の (deviceId, dateKey) フィーチャを to から削除
+    for (final fid in toFids) {
+      await to.removeFeature(_tracksLayerName, fid);
+    }
+
+    // 2. from の (deviceId, dateKey) フィーチャを to に追加
+    final toDb = await to.getDatabase();
+    for (final fid in fromFids) {
+      final detail = await from.getFeature(_tracksLayerName, fid);
+      if (detail == null) continue;
+      final coords = _lineCoords(detail[featureGeometryKey]);
+      if (coords.length < 2) continue;
+      final name = detail['name']?.toString() ?? dateKey;
+      final newFid = await to.addLine(
+        _tracksLayerName,
+        coords,
+        name: name,
+        description: detail['description']?.toString() ?? '',
+      );
+      if (newFid != null) {
+        await toDb.update(
+          _tracksLayerName,
+          {'device_id': deviceId},
+          where: 'fid = ?',
+          whereArgs: [newFid],
+        );
+      }
+    }
+
+    // 3. gps_track_details の (deviceId, dateKey) 行を入れ替え
+    final fromDb = await from.getDatabase();
+    final detailRows = await fromDb.query(
+      _detailsTableName,
+      where: 'track_date = ? AND (device_id = ? OR (? = ? AND (device_id IS NULL OR device_id = \'\')))',
+      whereArgs: [dateKey, deviceId, deviceId, fromFallbackDeviceId],
+      orderBy: 'point_index ASC',
+    );
+    await toDb.transaction((txn) async {
+      await txn.delete(
+        _detailsTableName,
+        where: 'track_date = ? AND device_id = ?',
+        whereArgs: [dateKey, deviceId],
+      );
+      final batch = txn.batch();
+      for (final row in detailRows) {
+        batch.insert(_detailsTableName, {
+          'track_date': dateKey,
+          'point_index': row['point_index'],
+          'timestamp': row['timestamp'],
+          'latitude': row['latitude'],
+          'longitude': row['longitude'],
+          'altitude': row['altitude'],
+          'accuracy': row['accuracy'],
+          'speed': row['speed'],
+          'bearing': row['bearing'],
+          'source_type': row['source_type'] ?? 'GPS',
+          'device_id': deviceId,
+        });
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
+  // ==============================
   // クエリ（ダイアログ用）
   // ==============================
 
-  /// 利用可能な日付キーのリストを取得（新しい順）
+  /// 利用可能な日付キーのリストを取得（新しい順）。
+  /// 同日に複数端末の記録がある場合は、他端末分に ` [<端末ID先頭4文字>]` を添えて区別できるようにする。
   Future<List<String>> getAvailableDates() async {
     if (_historyFile == null) return [];
 
     try {
-      final dateKeys = <String>{};
-
       final layers = await _historyFile!.getLayerNames();
-      if (layers.contains(_tracksLayerName)) {
-        final features =
-            await _historyFile!.getFeatures(_tracksLayerName);
-        for (final f in features) {
-          final name = f['name']?.toString();
-          if (name != null && name.isNotEmpty) {
-            dateKeys.add(name);
-          }
+      if (!layers.contains(_tracksLayerName)) return [];
+
+      final features = await _historyFile!.getFeatures(_tracksLayerName);
+      // 日付ごとにどの device_id があるかを集計
+      final devicesByDate = <String, Set<String>>{};
+      for (final f in features) {
+        final name = f['name']?.toString();
+        if (name == null || name.isEmpty) continue;
+        final dKey = _baseDateOfFeatureName(name);
+        final rawDev = f['device_id']?.toString() ?? '';
+        final dev = rawDev.isEmpty ? _deviceId : rawDev;
+        (devicesByDate[dKey] ??= <String>{}).add(dev);
+      }
+
+      final dateKeys = <String>{};
+      for (final f in features) {
+        final name = f['name']?.toString();
+        if (name == null || name.isEmpty) continue;
+        final dKey = _baseDateOfFeatureName(name);
+        final rawDev = f['device_id']?.toString() ?? '';
+        final dev = rawDev.isEmpty ? _deviceId : rawDev;
+        final hasMultipleDevices = (devicesByDate[dKey]?.length ?? 0) > 1;
+        if (hasMultipleDevices && dev != _deviceId && dev.isNotEmpty) {
+          final tag = dev.length > 4 ? dev.substring(0, 4) : dev;
+          dateKeys.add('$name [$tag]');
+        } else {
+          dateKeys.add(name);
         }
       }
 
-      final sorted = dateKeys.toList()
-        ..sort((a, b) => b.compareTo(a));
+      final sorted = dateKeys.toList()..sort((a, b) => b.compareTo(a));
       return sorted;
     } catch (e) {
       AppLogger.debug('$_logTag: 日付リスト取得エラー: $e');
@@ -848,14 +1206,20 @@ class GpsHistoryRecorder extends ChangeNotifier {
   }
 
   /// 特定日付の全ポイントを取得
-  /// 軌跡のフィーチャ名（`2026_09_12` / `2026_09_12 #2`）の区間の点。
+  /// 軌跡のフィーチャ名（`2026_09_12` / `2026_09_12 #2` / `2026_09_12 [a1b2]`）の区間の点。
   ///
-  /// 点の表は日付でしか引けないので、その日の点を記録と同じ規則（[segmentGap] 以上空いたら次の区間）で分けて返す。
-  /// ⚠ 以前は名前をそのまま日付として引いていて、2 本目以降の区間は 0 点、日付だけの区間はその日の全点になっていた
+  /// 点の表は日付＋端末ごとに引き、その日の点を記録と同じ規則（[segmentGap] 以上空いたら次の区間）で分けて返す。
   Future<List<GpsTrackPoint>> getPointsForDate(String name) async {
-    final dateKey = name.split(' #').first;
-    final index = segmentIndexOf(name, dateKey) ?? 1;
-    return segmentOf(await _pointsOfDay(dateKey), index);
+    var cleanName = name;
+    String? deviceTag;
+    final bracketIdx = name.lastIndexOf(' [');
+    if (bracketIdx > 0 && name.endsWith(']')) {
+      deviceTag = name.substring(bracketIdx + 2, name.length - 1);
+      cleanName = name.substring(0, bracketIdx);
+    }
+    final dateKey = cleanName.split(' #').first;
+    final index = segmentIndexOf(cleanName, dateKey) ?? 1;
+    return segmentOf(await _pointsOfDay(dateKey, deviceTag: deviceTag), index);
   }
 
   /// [points]（時刻順）を [segmentGap] で区切った [index] 本目（1 始まり）
@@ -872,17 +1236,54 @@ class GpsHistoryRecorder extends ChangeNotifier {
     return segment == index ? points.sublist(start) : const [];
   }
 
-  Future<List<GpsTrackPoint>> _pointsOfDay(String dateKey) async {
+  Future<List<GpsTrackPoint>> _pointsOfDay(
+    String dateKey, {
+    String? deviceTag,
+  }) async {
     if (_historyFile == null) return [];
 
     try {
       final db = await _historyFile!.getDatabase();
-      final rows = await db.query(
-        _detailsTableName,
-        where: 'track_date = ?',
-        whereArgs: [dateKey],
-        orderBy: 'point_index ASC',
-      );
+      // その日にどの device_id の点があるか確認し、1つの端末に絞って取得する（2台同時記録のジグザグ混線を防ぐ）
+      String? targetDeviceId;
+      if (deviceTag != null && deviceTag.isNotEmpty) {
+        final devRows = await db.rawQuery(
+          'SELECT DISTINCT device_id FROM $_detailsTableName WHERE track_date = ? AND device_id LIKE ?',
+          [dateKey, '$deviceTag%'],
+        );
+        targetDeviceId = devRows.firstOrNull?['device_id']?.toString();
+      } else {
+        final devRows = await db.rawQuery(
+          'SELECT DISTINCT device_id FROM $_detailsTableName WHERE track_date = ?',
+          [dateKey],
+        );
+        final devs = [
+          for (final r in devRows) (r['device_id']?.toString() ?? ''),
+        ];
+        if (devs.contains(_deviceId) || devs.contains('')) {
+          targetDeviceId = _deviceId;
+        } else if (devs.isNotEmpty) {
+          targetDeviceId = devs.first;
+        }
+      }
+
+      final List<Map<String, Object?>> rows;
+      if (targetDeviceId == null || targetDeviceId == _deviceId) {
+        rows = await db.query(
+          _detailsTableName,
+          where: 'track_date = ? AND (device_id IS NULL OR device_id = \'\' OR device_id = ?)',
+          whereArgs: [dateKey, _deviceId],
+          orderBy: 'point_index ASC',
+        );
+      } else {
+        rows = await db.query(
+          _detailsTableName,
+          where: 'track_date = ? AND device_id = ?',
+          whereArgs: [dateKey, targetDeviceId],
+          orderBy: 'point_index ASC',
+        );
+      }
+
       return [
         for (final row in rows)
           _trackPointFromRow(

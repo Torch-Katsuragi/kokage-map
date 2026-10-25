@@ -4,87 +4,87 @@
 
 #hero(
   "v0.13.0 — 2026/10/23",
-  [Consolidate tracks, shared folders & settings across devices],
-  [Turn on "Consolidate data across devices" in Settings → Drive Sync to keep finalized past GPS tracks, shared folders, and key settings in sync across your devices via `AppData/kmap` in My Drive.],
+  [Keep tracks and settings the same on all your devices],
+  [Turn on "Sync data across devices" under Settings → Drive Sync, and devices signed in to the same Google account share their GPS tracks up to yesterday, the folders in "共有" and some settings.],
   grid(
     columns: (auto, auto, auto, auto, auto), column-gutter: 6pt, align: horizon,
-    box(
-      phone(w: 58pt, h: 96pt, label: [Device A], mini-map(52pt, 82pt, road: map-red)),
-    ),
+    box(phone(w: 58pt, h: 96pt, label: [Device A], mini-map(52pt, 82pt, road: map-red))),
     arrow-lr(w: 22pt),
-    box(
-      cloud(w: 68pt, label: [AppData/kmap]),
-    ),
+    box(cloud(w: 68pt, label: [AppData/kmap])),
     arrow-lr(w: 22pt),
-    box(
-      phone(w: 58pt, h: 96pt, label: [Device B], mini-map(52pt, 82pt, road: map-red)),
-    ),
+    box(phone(w: 58pt, h: 96pt, label: [Device B], mini-map(52pt, 82pt, road: map-red))),
   ),
 )
 
 #scene(
-  [Two-way merge for finalized past GPS tracks],
-  [Only finalized tracks from previous days are merged both ways across devices. Today's active recording is never touched during sync.],
+  [Tracks up to yesterday go both ways],
+  [Today's track is not sent, so you can sync while still recording.],
   stack(dir: ttb, spacing: 5pt,
     grid(
       columns: (112pt, 112pt), column-gutter: 8pt, align: center,
       block(fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 6pt, width: 100%, align(left, {
-        text(size: 7.5pt, weight: "bold", fill: sub)[Device A (Phone)]
+        text(size: 7.5pt, weight: "bold", fill: sub)[Device A (phone)]
         v(4pt)
-        badge[Oct 21 Track (A)]
+        badge[Oct 21 (A)]
         v(3pt)
-        badge(ok: false)[Today: Recording…]
+        badge(ok: false)[Today, recording]
       })),
       block(fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 6pt, width: 100%, align(left, {
-        text(size: 7.5pt, weight: "bold", fill: sub)[Device B (Tablet)]
+        text(size: 7.5pt, weight: "bold", fill: sub)[Device B (tablet)]
         v(4pt)
-        badge[Oct 22 Track (B)]
+        badge[Oct 21 (B)]
         v(3pt)
-        badge[Oct 21 Track (B)]
+        badge[Oct 22 (B)]
       })),
     ),
     arrows-in(232pt, h: 22pt),
     cloud(w: 72pt, label: [AppData/kmap]),
     arrow-d(h: 14pt),
     block(fill: white, stroke: 1.2pt + accent, radius: 6pt, inset: 7pt, width: 210pt, align(left, {
-      text(size: 7.5pt, weight: "bold", fill: accent)[On both devices after sync]
+      text(size: 7.5pt, weight: "bold", fill: accent)[After syncing, on both devices]
       v(4pt)
       badge[Oct 21 (A)]; h(3pt); badge[Oct 21 (B)]; h(3pt); badge[Oct 22 (B)]
     })),
   ),
-  note: [Tracks recorded on the same day on multiple devices are preserved side by side as separate features keyed by device ID.],
+  note: [Tracks walked on the same day on two devices stay as separate lines, one per device.],
 )
 
 #scene(
-  [Keep Shared folders & settings in sync],
-  [Shared Drive folders added on one device are automatically cloned into `Shared/` on your other devices, and key settings are merged via 3-way diff.],
+  [Folders in "共有" follow too],
+  [A folder added to "共有" on Device A appears in "共有" on Device B at the next sync.],
   grid(
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
     stack(dir: ttb, spacing: 4pt,
-      caption[Added on Device A],
+      caption[Received on Device A],
       layer-panel(w: 104pt, header: "Layers", (
-        (0, "dir", [Shared], "ok"),
-        (1, "dir", [Forestry Team], "hi"),
-        (0, "layer", [My Map], "ok", rgb("#2e6b4f")),
+        (0, "dir", [共有], "ok"),
+        (1, "dir", [Forestry team], "hi"),
+        (0, "layer", [マイ地図], "ok", rgb("#2e6b4f")),
       )),
     ),
     arrow-r(w: 20pt),
     stack(dir: ttb, spacing: 4pt,
-      caption(fill: accent)[Auto-cloned on Device B],
+      caption(fill: accent)[Also on Device B],
       layer-panel(w: 104pt, header: "Layers", (
-        (0, "dir", [Shared], "ok"),
-        (1, "dir", [Forestry Team], "hi"),
-        (0, "layer", [My Map], "ok", rgb("#2e6b4f")),
+        (0, "dir", [共有], "ok"),
+        (1, "dir", [Forestry team], "hi"),
+        (0, "layer", [マイ地図], "ok", rgb("#2e6b4f")),
       )),
     ),
   ),
-  note: [Form-factor-dependent layout presets are excluded so phones and tablets keep their own button layouts.],
+  note: [A folder removed from "共有" stays on your other devices, and does not come back on the device you removed it from.],
 )
 
 #fixes(
-  "New",
-  [Two-way consolidation of finalized GPS tracks from previous days across devices (keeps today's active track untouched and preserves same-day tracks from multiple devices separately)],
-  [Automatically clone Drive shared folders added to `Shared/` on one device onto other devices (and propagate removals)],
-  [3-way merge of key settings (basemap, custom basemap URLs, GPS recording thresholds, location filter settings) while excluding device-size-dependent layout presets],
-  [Added an ON/OFF toggle and "Consolidate now" button in Settings → Drive Sync (also runs automatically during Wi-Fi auto-sync)],
+  "Settings that follow",
+  [Background maps (layering and maps added by URL), track recording, fix quality thresholds and the app language],
+  [Screen layout and UI size stay per device],
+  [If two devices change the same setting, the one that syncs later wins],
+  [Turning the switch on for a second device replaces these settings with the ones already on Drive],
+)
+
+#fixes(
+  "Good to know",
+  [Syncing happens when you tap "Sync Now" and during Wi-Fi auto-sync (on the web, only the settings are synced)],
+  [An AppData/kmap folder is created in My Drive. Do not delete or rename it],
 )

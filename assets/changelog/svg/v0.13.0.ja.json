@@ -1,5 +1,5 @@
 {
- "title": "複数端末で軌跡・共有リスト・設定をそろえる",
+ "title": "複数の端末で軌跡と設定をそろえる",
  "chunks": [
   {
    "file": "v0.13.0.ja.00.svg",
@@ -9,17 +9,22 @@
   {
    "file": "v0.13.0.ja.01.svg",
    "width": 252.0,
-   "height": 402.41
+   "height": 360.24
   },
   {
    "file": "v0.13.0.ja.02.svg",
    "width": 252.0,
-   "height": 263.62
+   "height": 221.45
   },
   {
    "file": "v0.13.0.ja.03.svg",
    "width": 252.0,
-   "height": 292.28
+   "height": 205.71
+  },
+  {
+   "file": "v0.13.0.ja.04.svg",
+   "width": 252.0,
+   "height": 165.89
   }
  ]
 }

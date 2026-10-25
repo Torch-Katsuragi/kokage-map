@@ -70,7 +70,7 @@
 )
 
 #fixes(
-  "Also in this release",
+  "Improvements & Changes",
   [Clusters now scale with the point size],
   [Gallery photos lost location and time],
   [Photo markers and counts were missing],

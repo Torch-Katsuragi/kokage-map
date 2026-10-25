@@ -23,7 +23,7 @@
 )
 
 #fixes(
-  "Also",
+  "Improvements & Changes",
   [Added Drive auto-sync check],
   [Fixed SymbolStyleLayer rendering],
   [Network switch no longer hides layers],

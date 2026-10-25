@@ -176,7 +176,7 @@
 )
 
 #fixes(
-  "Also changed",
+  "Improvements & Changes",
   [Zoom 13 and below: features baked in; 10,000 polygons stay smooth],
   [CLI and URL control: open, look, reload],
   [Map menu: "Reload project from disk"],
@@ -185,7 +185,7 @@
 )
 
 #fixes(
-  "Fixes",
+  "Bug Fixes",
   [3D terrain: no more seams between tiles],
   [Erased features could stay on the map],
   [GPS tracks split after a 10-minute gap],

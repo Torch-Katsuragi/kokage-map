@@ -4,8 +4,8 @@
 
 #hero(
   "v0.12.0 — 2026/10/11",
-  [Choose folders inside the app],
-  ["Choose a folder to open" on Home browses the folders inside your everyday map, styled like the layer panel, instead of the device's file picker. Places outside it are in the top-right menu.],
+  [In-app folder browser & direct loading of external formats],
+  ["Choose a folder to open" on Home browses folders inside your workspace using the same UI as the layer panel instead of the OS file picker. External folders remain accessible from the top-right menu.],
   box(width: 150pt, fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 0pt, clip: true, {
     box(width: 100%, fill: rgb("#424242"), inset: (x: 6pt, y: 5pt), align(left, text(size: 8pt, fill: white, weight: "bold")[KokageMap]))
     box(width: 100%, inset: (x: 6pt, y: 4pt), align(left, grid(columns: (10pt, 1fr), column-gutter: 4pt, align: horizon, box(width: 8pt, height: 6pt, fill: rgb("#ffc107"), radius: 1pt), text(size: 7pt)[共有])))
@@ -16,46 +16,46 @@
 )
 
 #fixes(
-  "Open files other than gpkg as they are",
-  [Shapefile, GeoJSON, KML, CSV, GPX and more in a folder show up as layers (read-only, read with the same GDAL as QGIS)],
-  [Rasters made in QGIS, such as GeoTIFF, show up as overlays],
-  [Editing asks right away "Convert to gpkg to edit?" and carries on after converting; the CRS is kept and the original is replaced after a check],
-  [Editing a gpkg with heights (Z) keeps them; moved and added vertices take the 3D terrain's elevation],
-  [In read-only shared folders: "Copy as gpkg to my folder"],
-  [QGIS projects reference the original files, and edits are read back],
+  "Direct Loading of Non-GeoPackage Formats",
+  [Load Shapefile, GeoJSON, KML, CSV, GPX, and more directly from a folder as read-only layers via GDAL],
+  [Display GeoTIFF and other rasters created in QGIS directly as map overlays],
+  [Prompt to convert read-only layers to GeoPackage on edit, preserving CRS and replacing the source files after verifying feature counts],
+  [Preserve Z (elevation) values when editing 3D GeoPackages; moved or added vertices sample elevation from the 3D terrain tiles],
+  [Support copying read-only shared layers as GeoPackage into your own folder for editing],
+  [Reference original files in QGIS projects (.qgs) and read back updated styles and Views],
 )
 
 #fixes(
-  "Getting files in and out",
-  [Folders get "Add files" (long-press and +, Android and web)],
-  [A GeoPackage left empty by a move is deleted],
-  [Drive sync now carries Shapefile sets, KML, CSV and more; upper-case extensions too],
-  [Export goes through GDAL like QGIS: every attribute, CRS kept],
+  "File Import & Export",
+  [Added "Add files" to folder long-press and + menus (Android and Web)],
+  [Automatically remove GeoPackage files left empty after moving layers],
+  [Sync Shapefile sets, KML, CSV, and other formats (including uppercase extensions) in Drive-linked folders],
+  [GDAL-powered export preserving all attributes and the source CRS by default],
 )
 
 #fixes(
-  "Lighter",
-  [Less battery drain while the map sits open],
-  [Memory no longer grows while panning],
-  [Faster loading of data with many areas],
+  "Performance",
+  [Reduced idle battery drain while the map screen is open],
+  [Fixed memory growth during continuous map panning],
+  [Faster loading for polygon-heavy datasets with immediate basemap display],
 )
 
 #fixes(
-  "Changed",
-  [Layer panel: tighter rows, only the eye at the right; long-press for the menu, swipe left to move],
-  [Layer rows show the type icon in its map color and the feature count],
-  [A path above the list takes you back to any level],
+  "UI & Usability",
+  [Redesigned layer panel with compact rows, single visibility toggle, long-press context menu, and left-swipe move],
+  [Display color-coded geometry type icons and feature counts on layer rows],
+  [Added clickable breadcrumb path navigation at the top of the layer panel],
 )
 
 #fixes(
-  "Safer",
-  [Asks before importing a received map, showing its folder and owner],
-  [Location sharing: leaves ended or expired rooms on its own],
-  [Location sharing: removed members cannot rejoin with the same code],
-  [A received map cannot write outside the app's folders],
+  "Security",
+  [Display folder name and owner for confirmation before importing maps received via QR or link],
+  [Location sharing: automatically leave ended or expired rooms and stop transmitting location],
+  [Location sharing: prevent removed members from rejoining with the same room code],
+  [Restrict extracted map paths to app-managed directories (path traversal protection)],
 )
 
 #fixes(
-  "Fixed",
-  [Areas without a fill disappeared between zoom 14 and 15 in data with many areas],
+  "Bug Fixes",
+  [Fixed unfilled polygons disappearing between zoom levels 14 and 15 in large datasets],
 )

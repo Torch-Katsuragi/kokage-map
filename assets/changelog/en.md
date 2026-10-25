@@ -12,7 +12,7 @@
 
 ## v0.12.1 — 2026/10/23
 
-### New
+### New Features
 
 - Table joins set up in QGIS (such as a stand-register CSV) are now read, and the joined fields appear in the attribute table (read-only), styling, labels, search and export. Joins are written back to the .qgs unchanged. CSV files without coordinate columns appear in the layer list as read-only tables
 - Layers styled in QGIS as categorized, graduated or rule-based (such as compartments colored by species or stand age) are now drawn feature by feature in the same colors as QGIS, in 2D and 3D. A legend appears in the layer list and the style screen. Colors are still changed in QGIS
@@ -28,7 +28,7 @@
 - Read-only files directly in a folder (Shapefile, GeoJSON, KML and others) can now be converted to gpkg all at once: long-press the folder → "Convert files inside to gpkg" (for the open folder, use the + button at the top right). Each file becomes a gpkg with the same name, and its original files are deleted only after the feature counts are checked. Files that do not match are left as they are and reported. CSV files without coordinate columns (tables), rasters and files in subfolders are not converted. In a read-only shared folder, the files are copied as gpkg to a folder of yours instead
 - TruPulse traverses now support a return pass for backsights: measure all forward legs to the last point, then walk back toward the start measuring each leg backwards. After the backsight at the last point, standing on the previous point and aiming further back averages that leg and moves the station back one point (the notification reads like "Backsight (return): P3 → P2"). Points further along move with it. Turning around at each station still works as before; there is no mode to switch
 
-### Fixed
+### Bug Fixes
 
 - JPEG2000 (.jp2) is removed from the supported formats; it could not actually be read (the decoder is not bundled)
 - The device compass heading (the heading fan, the level screen) and TruPulse azimuths were used as magnetic bearings against the true-north map, off by about 8° in the Kii Peninsula. They are now corrected to true north with the magnetic declination (WMM2025) for your position and date. Leave the TruPulse declination setting at 0
@@ -72,7 +72,7 @@
 - TruPulse backsight correction discarded the original foresight and backsight readings when averaging. They are now kept in `survey_fs_*` (foresight) and `survey_bs_*` (backsight) columns so they can be checked in QGIS. Inclination is now averaged from both readings (with the backsight sign reversed) and the vertical distance computed from it; previously the foresight inclination was used
 - Switching to another app (such as the camera) or locking the screen while walking with the map open and GPS track recording on could freeze the app when returning to Kokage Map. While in the background, 3D base texture re-baking and drawing new track points on the map are now paused and applied after the screen returns
 
-### Lighter
+### Performance
 
 - Downloading from Drive no longer re-downloads every file each time; only changed files are downloaded. A file that another device re-uploaded with the same contents no longer counts as changed
 - Auto-sync no longer rebuilds its Drive connection every cycle, and no longer reloads map layers when nothing changed
@@ -81,7 +81,7 @@
 
 ## v0.12.0 — 2026/10/11
 
-### Open files other than gpkg as they are
+### Direct Loading of Non-GeoPackage Formats
 
 - Shapefiles (.shp with their companion files), GeoJSON, KML/KMZ, CSV (with longitude/latitude columns), GPX, FlatGeobuf, GML, DXF and MapInfo (.tab, .mif) placed in a folder now show up as layers without importing. They are read with GDAL, the same library QGIS uses. They are read-only; visibility, style, labels, Views, the attribute table and export all work. A .shp without a .cpg is read as Shift_JIS (CP932), as the Japanese QGIS does. KML folders become separate layers, and files mixing points, lines and polygons get one layer per kind
 - Trying to draw or edit attributes asks right away "This layer is read-only. Convert it to gpkg to edit?". After converting you carry on editing (editing a shape reopens the same feature; with the pen, the converted layer is selected). Converting writes a gpkg with the same name in the same folder, checks that the feature counts match, and then deletes the original files. The coordinate system is kept (a plane-rectangular shapefile becomes a plane-rectangular gpkg), and style, View and visibility settings carry over
@@ -90,7 +90,7 @@
 - QGIS projects (.qgs) reference the original files, and Views and styles edited in QGIS are read back
 - Rasters made in QGIS and similar tools (GeoTIFF, JPEG2000, PNG/JPEG with a world file, VRT) placed in a folder now appear on the map as overlays. Any coordinate system works (including Japan Plane Rectangular), nodata is transparent, and numeric rasters such as DEMs are shown in grayscale, and paletted rasters keep their colors. Their position comes from the file, so they cannot be repositioned in the app. They are written to .qgs as the original files, and layers hidden in QGIS are read back as hidden. Deleting one also deletes its companion files such as the world file
 
-### Changed
+### Improvements & Changes
 
 - "Open another folder" on Home is now "Choose a folder to open". Instead of the device's file picker, you browse the folders inside your everyday map, styled like the layer panel. Places outside it are under "Another place on the device…" in the top-right menu
 - The layer panel is redone: tighter rows, and only the visibility eye at the right end. Long-press a row (right-click on a PC) for its menu; swipe it left to move it elsewhere
@@ -102,13 +102,13 @@
 - Drive-linked folders now also sync Shapefiles (with their companion files), GeoJSON, KML/KMZ, CSV, GPX, FlatGeobuf, GML, DXF and MapInfo. Files with upper-case extensions (such as IMG.JPG) were skipped; they now sync too
 - Projects saved in QGIS now bring back whether each GeoTIFF is shown or hidden. If the project uses GSI or OpenStreetMap tiles, they are added to your background maps (once). Rasters that can't be read (such as WMS) are listed with the reason and left in the QGIS project
 
-### Lighter
+### Performance
 
 - Less battery drain while the map sits open (it no longer redraws the whole map on every compass and GPS update)
 - Memory no longer keeps growing while you pan
 - Data with many areas opens faster, and the basemap shows while it loads
 
-### Safer
+### Security
 
 - When you receive a map by QR or link, the app now shows the folder name and its owner and asks before importing
 - Location sharing: you leave rooms automatically, and stop sending your position, once the host ends the room or it expires
@@ -116,17 +116,17 @@
 - File and folder names in a received map can no longer write outside the app's own folders
 - App settings are no longer included in device backups (they won't carry over to a new phone; your map data in Documents/KokageMap is unaffected)
 
-### Fixed
+### Bug Fixes
 
 - In data with many areas (such as forest compartments), areas without a fill disappeared at some in-between zoom levels (between 14 and 15). They now stay visible
 
 ## v0.11.1 — 2026/10/05
 
-### Fixed
+### Bug Fixes
 
 - Signing in with a Google account for the first time no longer shows "Sign-in failed" while the Drive permission screen is still open. If you back out of that screen, the app tells you how to get through it
 
-### Also changed
+### Improvements & Changes
 
 - The user guide and the tutorial's "Your own data" chapter now describe "Open my map" and receiving maps by QR
 - Jumping to your location with the layer panel open lands where the panel doesn't cover it
@@ -172,7 +172,7 @@
 - After each color change the guide has you close the layer list to see the map. Each chapter starts with the practice data clear of the guide card
 - The glow around the red frame that marks where to tap next is larger and easier to spot
 
-### Fixes
+### Bug Fixes
 
 - Newly drawn lines and areas used the default color instead of the layer's until the project was reopened
 - Changing a color and then quickly toggling visibility could leave patches in the old color
@@ -206,11 +206,11 @@
 - The info panel now shows the selected feature's shape faintly in the background
 - Map buttons are hidden while editing. The ← at the top left and the device back button stop editing (asking first if there are changes to discard)
 
-### Also changed
+### Improvements & Changes
 
 - On a phone in portrait, the layer list starts closed when the map opens
 
-### Fixes
+### Bug Fixes
 
 - Layers whose names contain spaces or quotes could not be written to
 - In the attribute table, cells other than the first in a row sometimes could not be edited
@@ -269,12 +269,12 @@
 - Bulk map download saves every stacked layer (contours included); only OpenStreetMap is skipped
 - Attributions moved to Maps & Tiles → Data sources (still shown on the map while OpenStreetMap is in use)
 
-### Usability
+### UI & Usability
 
 - The layer list now starts with a "System" folder, and the global folder has moved inside it. It holds device-side data that doesn't belong to the project. The folder stays where it was on disk, and its shown/hidden state carries over
 - The attribute form now saves when you leave a field or move to another record (previously only Enter saved, and input could be lost). Numeric columns open the number keyboard
 
-### Fixes
+### Bug Fixes
 
 - Android: slope coloring under Terrain look had no effect. Fixed
 - 3D terrain could show rectangular plateaus over rivers and lakes. Fixed
@@ -286,7 +286,7 @@
 
 ## v0.7.2 — 2026/09/13
 
-### Fixes
+### Bug Fixes
 
 - 3D terrain no longer borrows edge heights from coarser, interpolated neighbour tiles, which produced step-like seams
 - Features removed with the eraser could stay on the map. Fixed
@@ -295,7 +295,7 @@
 - Web: opening the map URL (`#/map`) without choosing a folder let you create a GeoPackage that was never saved anywhere. It now starts from the folder picker, and the layer list hides its add button until a folder is chosen
 - Web: rotating the map with a right-drag no longer pops up the browser context menu
 
-### Usability
+### UI & Usability
 
 - When zoomed out (zoom 13 and below), features are baked into the terrain image instead of being lifted as geometry, so 10,000 polygons stay smooth without clustering or dropped outlines. Zooming in switches back to draped geometry
 - New "Terrain look" settings: color the terrain by slope or elevation (pick your own three colors; blend it over the base map, or set 100% for terrain only) and draw contour lines from the elevation tiles. Both come from the terrain mesh itself, so they stay sharp when tilted
@@ -312,13 +312,13 @@
 
 ## v0.7.1 — 2026/09/12
 
-### Fixes
+### Bug Fixes
 
 - Features of a hidden View could stay on the map. Fixed
 - The current-location dot is now translucent so points and short lines beneath it stay visible
 - Elevation tiles load faster: the three GSI sources are fetched together and, when zooming in, the nearest level fills first. AWS tiles are only fetched where Japan has no coverage
 
-### Usability
+### UI & Usability
 
 - "Zoom to layer" was added to the layer ⋮ menu (double-tapping the row also works). It is the way in when your data is far from your location
 - Tapping "Selected folder" on the home screen reopens the map without picking the folder again
@@ -347,7 +347,7 @@
 
 - The web app opens in the same 3D map, drawn on the GPU through WebGL2. Controls match Android; with a mouse, left-drag pans, right-drag (or Ctrl + left) rotates and tilts, and the wheel zooms
 
-### Fixes
+### Bug Fixes
 
 - On a fresh install the app could quit right after you granted location access
 

@@ -98,13 +98,13 @@
 )
 
 #fixes(
-  "Also changed",
+  "Improvements & Changes",
   [The changelog is now illustrated, and each release folds],
   [Layers styled in QGIS by category or rule show "Style set in QGIS" on the style screen],
 )
 
 #fixes(
-  "Fixes",
+  "Bug Fixes",
   [Web: a GeoPackage could be overwritten empty right after opening a project],
   [Changing settings in a row could lose the earlier change],
   [Renaming a GeoPackage in a subfolder failed],

@@ -12,7 +12,7 @@
 /// 地図の上の点（フィーチャ）
 #let pt-mark(c: map-red, r: 2.6pt) = circle(radius: r, fill: c, stroke: 0.8pt + white)
 
-/// レイヤ一覧（下半分）と、1 行目の ⋮ から開いたメニュー（menu は足した項目の名前）。上半分は何も無い地図と現在位置
+/// レイヤ一覧（下半分）と、1 行目の ⋮ から開いたメニュー（menu は追加した項目の名前）。上半分は何も無い地図と現在位置
 #let layer-menu(w, h, title, rows, menu, mw: 52pt) = box(width: w, height: h, clip: true, {
   place(rect(width: w, height: h, fill: map-bg))
   place(dx: w * 0.6, dy: h * 0.14, loc-dot())
@@ -49,7 +49,7 @@
 #hero(
   "v0.7.1 — 2026/09/12",
   [遠くのデータへすぐ寄れる],
-  [レイヤの ⋮ メニューに「レイヤへ寄せる」を足しました。行のダブルタップでも寄ります。],
+  [レイヤの ⋮ メニューに「レイヤへ寄せる」を追加しました。行のダブルタップでも寄ります。],
   grid(
     columns: (auto, auto, auto), column-gutter: 10pt, align: horizon,
     phone(w: 72pt, h: 128pt, label: "⋮ から選ぶ",
@@ -102,14 +102,14 @@
 
 // ---- 細かな変更 ----
 #fixes(
-  "使い勝手",
+  "UI・操作性の改善",
   [「選択されたフォルダ」のタップで、そのまま地図へ戻る],
   [Drive フォルダ追加の画面も、英語表示に対応],
   [標高タイルの読み込みを速くした],
 )
 
 #fixes(
-  "直したこと",
-  [View を消したフィーチャが、地図に残ることがあった],
-  [QGIS が GeoPackage を「不明な版」と警告した],
+  "バグ修正",
+  [View を消したフィーチャが、地図に残る問題を修正],
+  [QGIS が GeoPackage を「不明な版」と警告を出す問題を修正],
 )

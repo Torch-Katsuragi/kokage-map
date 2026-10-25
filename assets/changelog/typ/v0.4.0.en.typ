@@ -74,7 +74,7 @@
 )
 
 #fixes(
-  "Faster data loading",
+  "Performance",
   [GeoPackage loading sped up],
   [maplibre now from official pub.dev],
   [Large files split up],

@@ -130,7 +130,7 @@
 
 // ---- Lists ----
 #fixes(
-  "Also changed",
+  "Improvements & Changes",
   [Now Kokage Map everywhere (the Drive folder `RootMap GIS Projects` is unchanged)],
   [The host can remove members],
   [Tracks walked out of coverage arrive later as thin lines],
@@ -144,7 +144,7 @@
 )
 
 #fixes(
-  "Fixed",
+  "Bug Fixes",
   [OpenStreetMap "Access blocked" tiles],
   [Launch sometimes not jumping to you],
   [Jumps stopping short of the target],

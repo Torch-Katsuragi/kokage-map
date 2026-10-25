@@ -172,7 +172,7 @@
 
 // ---- 細かな変更 ----
 #fixes(
-  "Usability",
+  "UI & Usability",
   [Label style: Settings → Layer style → Label],
   [The layer list button moved to the right edge],
   [Switching tools briefly shows the tool name],
@@ -181,7 +181,7 @@
 )
 
 #fixes(
-  "Fixes",
+  "Bug Fixes",
   [The Google account chooser appeared on every launch],
   [Deleted features sometimes stayed on the map],
   [Basemap tiles stayed blurry where a fetch had failed once (Settings → Basemap → Clear cache)],

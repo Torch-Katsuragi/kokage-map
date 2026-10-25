@@ -65,7 +65,7 @@
 )
 
 #fixes(
-  "Also in this release",
+  "Improvements & Changes",
   [Overlay images have their own detail panel],
   [Overlay transforms are much faster],
   [Fixed overlay images not showing offline],

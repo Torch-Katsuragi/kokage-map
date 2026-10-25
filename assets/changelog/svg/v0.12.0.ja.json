@@ -1,5 +1,5 @@
 {
- "title": "フォルダはアプリの中で選ぶ",
+ "title": "アプリ内フォルダブラウザと外部形式の直接読み込み",
  "chunks": [
   {
    "file": "v0.12.0.ja.00.svg",
@@ -9,27 +9,27 @@
   {
    "file": "v0.12.0.ja.01.svg",
    "width": 252.0,
-   "height": 318.25
+   "height": 330.99
   },
   {
    "file": "v0.12.0.ja.02.svg",
    "width": 252.0,
-   "height": 205.71
+   "height": 217.34
   },
   {
    "file": "v0.12.0.ja.03.svg",
    "width": 252.0,
-   "height": 144.75
+   "height": 179.61
   },
   {
    "file": "v0.12.0.ja.04.svg",
    "width": 252.0,
-   "height": 156.37
+   "height": 179.61
   },
   {
    "file": "v0.12.0.ja.05.svg",
    "width": 252.0,
-   "height": 170.85
+   "height": 217.34
   },
   {
    "file": "v0.12.0.ja.06.svg",

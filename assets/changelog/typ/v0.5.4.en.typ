@@ -99,7 +99,7 @@
 )
 
 #fixes(
-  "Also in this release",
+  "Improvements & Changes",
   [In-app user guide (AI-generated)],
   [Update banner and in-app update history],
   [Android navigation bar auto-hides],

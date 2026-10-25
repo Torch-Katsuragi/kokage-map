@@ -33,7 +33,7 @@
 )
 
 #fixes(
-  "Also",
+  "Improvements & Changes",
   [GPU-rendered photo markers],
   [Faster rendering on Windows],
   [Unified, responsive split-view settings],

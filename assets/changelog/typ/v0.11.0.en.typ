@@ -42,6 +42,6 @@
 )
 
 #fixes(
-  "Also",
+  "Improvements & Changes",
   [App folders (Global, practice) moved into .kokage (automatically on first launch)],
 )

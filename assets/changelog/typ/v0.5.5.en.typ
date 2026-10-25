@@ -33,6 +33,6 @@
 )
 
 #fixes(
-  "Also in this release",
+  "Improvements & Changes",
   [Feedback form pre-fills version and model],
 )

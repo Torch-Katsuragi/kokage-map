@@ -28,7 +28,7 @@
 )
 
 #fixes(
-  "Fixes",
+  "Bug Fixes",
   [Newly drawn features used the default color until reopening],
   [Quickly toggling visibility after a color change could leave old-color patches],
   [Area fills had gaps on ridges where the map showed through],

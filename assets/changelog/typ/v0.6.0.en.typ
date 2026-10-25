@@ -150,7 +150,7 @@
 
 // ---- Lists ----
 #fixes(
-  "Also changed",
+  "Improvements & Changes",
   [Switch / sign out of Google in Settings],
   ["Switch Account" in the Drive dialog, too],
   [Pending GPS points show at once],
@@ -161,7 +161,7 @@
 )
 
 #fixes(
-  "Fixed",
+  "Bug Fixes",
   [Freeze on rapid double-taps of layer tiles],
   [Broken GPS track continuity],
   [GeoPackage srsId always written as 4326],

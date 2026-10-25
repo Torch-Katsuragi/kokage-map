@@ -195,7 +195,7 @@
 )
 
 #fixes(
-  "Also changed",
+  "Improvements & Changes",
   [New columns on one side are aligned first],
   [Auto-sync uploads only files that changed],
   [Opens at the extent of all features],
@@ -208,7 +208,7 @@
 )
 
 #fixes(
-  "Fixes",
+  "Bug Fixes",
   [Android edits missed QGIS's spatial index],
   [Opening a downloaded file re-uploaded it],
   [Another path re-downloaded every file],

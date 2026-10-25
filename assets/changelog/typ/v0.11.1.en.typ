@@ -17,7 +17,7 @@
 )
 
 #fixes(
-  "Also",
+  "Improvements & Changes",
   [The user guide and the tutorial follow the new Home],
   [Jumping with the layer panel open lands outside the panel],
   [Removed an unused old map engine (less traffic at startup)],

@@ -97,13 +97,13 @@
 )
 
 #fixes(
-  "Also changed",
+  "Improvements & Changes",
   [The info panel shows the selected feature's shape faintly],
   [On a phone in portrait, the layer list starts closed when the map opens],
 )
 
 #fixes(
-  "Fixes",
+  "Bug Fixes",
   [Layers whose names contain spaces or quotes could not be written to],
   [In the attribute table, cells other than the first in a row sometimes could not be edited],
   [Opening the attribute table after selecting on the map did not highlight that row],

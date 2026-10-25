@@ -1,25 +1,25 @@
 {
- "title": "QGIS の色分け・表の結合・案内と計測",
+ "title": "QGIS の色分け・テーブル結合・案内と計測",
  "chunks": [
   {
    "file": "v0.12.1.ja.00.svg",
    "width": 252.0,
-   "height": 58.75
+   "height": 73.61
   },
   {
    "file": "v0.12.1.ja.01.svg",
    "width": 252.0,
-   "height": 532.34
+   "height": 583.28
   },
   {
    "file": "v0.12.1.ja.02.svg",
    "width": 252.0,
-   "height": 1883.1
+   "height": 1907.46
   },
   {
    "file": "v0.12.1.ja.03.svg",
    "width": 252.0,
-   "height": 219.21
+   "height": 254.07
   }
  ]
 }

@@ -158,7 +158,7 @@
 
 // ---- 細かな変更 ----
 #fixes(
-  "Also",
+  "Improvements & Changes",
   [Selecting and TruPulse work while tilted],
   [Drawing locks the view top-down],
   [Elevation: GSI DEM, AWS as fallback],
@@ -168,6 +168,6 @@
 )
 
 #fixes(
-  "Fixes",
+  "Bug Fixes",
   [New installs quit after location access],
 )

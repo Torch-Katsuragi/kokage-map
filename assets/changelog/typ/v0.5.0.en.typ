@@ -124,7 +124,7 @@
 )
 
 #fixes(
-  "Small but important fixes",
+  "Improvements & Changes",
   [Notification center in the app bar],
   [Custom path for the global folder],
   [GeoJSON import splits by geometry type],

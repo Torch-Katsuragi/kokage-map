@@ -102,14 +102,14 @@
 
 // ---- 細かな変更 ----
 #fixes(
-  "Usability",
+  "UI & Usability",
   [Tap "Selected folder" to reopen the map],
   [The Drive folder dialog is now translated],
   [Elevation tiles load faster],
 )
 
 #fixes(
-  "Fixes",
+  "Bug Fixes",
   [Hidden View features stayed on the map],
   [QGIS warned: unknown GeoPackage version],
 )

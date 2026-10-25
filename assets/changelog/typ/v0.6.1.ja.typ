@@ -145,7 +145,7 @@
 
 #fixes(
   "バグ修正",
-  [OpenStreetMap の「Access blocked」表示],
+  [OpenStreetMap の「Access blocked」エラーを修正],
   [起動時に現在地へ移動しない問題を修正],
   [地図が目的地の手前で止まる問題を修正],
   [パーティのダイアログが画面からはみ出す問題を修正],

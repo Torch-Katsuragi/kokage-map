@@ -4,6 +4,7 @@
     python tool/changelog/build.py                       # 全部
     python tool/changelog/build.py next.ja               # 1 本だけ
     python tool/changelog/build.py next.ja --preview DIR # 切れをつないだ PNG も DIR に書く（目で確かめる用）
+    python tool/changelog/build.py --pdf DIR             # 図解版の更新履歴を PDF で DIR に書き出す（単体＋全版まとめ）
 
 `<版>.<言語>.typ` の 1 ページが 1 切れ（lib.typ の fig・section がページを切る）。
 → `assets/changelog/svg/<版>.<言語>.NN.svg` と、切れの一覧 `<版>.<言語>.json`（ファイル名と幅・高さ）。
@@ -84,7 +85,56 @@ def hero_title(src: pathlib.Path) -> str:
     return re.sub(r"\s+", " ", title).strip()
 
 
-def build(src: pathlib.Path, preview: pathlib.Path | None) -> None:
+def _version_sort_key(src: pathlib.Path) -> tuple:
+    """`v0.13.0.ja.typ` -> (0, 13, 0) で降順ソートできるようにする（`next` は最上位）"""
+    ver = src.stem.rsplit(".", 1)[0]
+    if ver == "next":
+        return (9999, 9999, 9999)
+    nums = [int(x) for x in re.findall(r"\d+", ver)]
+    return tuple(nums)
+
+
+def _strip_preamble(typ_text: str) -> str:
+    """単体 `.typ` の先頭にある `#import "lib.typ": *` と `#show: page-setup...` を取り除く"""
+    lines = []
+    for line in typ_text.splitlines():
+        s = line.strip()
+        if s.startswith('#import "lib.typ"') or s.startswith("#show: page-setup"):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def build_combined_pdf(lang: str, pdf_dir: pathlib.Path) -> pathlib.Path:
+    """指定言語（`ja` / `en`）の全バージョンを新しい順に1冊のPDF（しおり付き）にまとめて書き出す"""
+    files = sorted(SRC.glob(f"*.{lang}.typ"), key=_version_sort_key, reverse=True)
+    if not files:
+        raise SystemExit(f"No .{lang}.typ files found in {SRC}")
+    show_line = '#show: page-setup.with(lang: "en")' if lang == "en" else "#show: page-setup"
+    parts = [
+        '#import "lib.typ": *',
+        show_line,
+    ]
+    for idx, f in enumerate(files):
+        if idx > 0:
+            parts.append("#pagebreak(weak: true)")
+        parts.append("#[")
+        parts.append(_strip_preamble(f.read_text(encoding="utf-8")))
+        parts.append("]")
+    tmp_src = SRC / f"_combined_{lang}.typ"
+    try:
+        tmp_src.write_text("\n".join(parts) + "\n", encoding="utf-8")
+        pdf_bytes = typst.compile(str(tmp_src), root=str(BASE), format="pdf", sys_inputs={"mode": "pdf"})
+    finally:
+        tmp_src.unlink(missing_ok=True)
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+    out_path = pdf_dir / f"changelog.{lang}.pdf"
+    out_path.write_bytes(pdf_bytes)
+    print(f"  PDF (all {len(files)} versions): {out_path} ({len(pdf_bytes) // 1024} KB)")
+    return out_path
+
+
+def build(src: pathlib.Path, preview: pathlib.Path | None, pdf_dir: pathlib.Path | None = None) -> None:
     pages = typst.compile(str(src), root=str(BASE), format="svg")
     if not isinstance(pages, list):
         pages = [pages]
@@ -118,11 +168,19 @@ def build(src: pathlib.Path, preview: pathlib.Path | None) -> None:
         sheet.convert("RGB").save(out)
         print(f"  {out}")
 
+    if pdf_dir:
+        pdf_dir.mkdir(parents=True, exist_ok=True)
+        pdf_bytes = typst.compile(str(src), root=str(BASE), format="pdf", sys_inputs={"mode": "pdf"})
+        out = pdf_dir / f"{src.stem}.pdf"
+        out.write_bytes(pdf_bytes)
+        print(f"  {out} ({len(pdf_bytes) // 1024} KB)")
+
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("names", nargs="*")
     ap.add_argument("--preview", type=pathlib.Path)
+    ap.add_argument("--pdf", type=pathlib.Path, help="図解版更新履歴の PDF 出力先ディレクトリ")
     ap.add_argument("--short-ids", action="store_true", help="書き出し済みの SVG の id だけ付け替える（Typst を回さない）")
     args = ap.parse_args()
     if args.short_ids:
@@ -132,7 +190,11 @@ def main() -> None:
     sources = [SRC / f"{n}.typ" for n in args.names] if args.names else sorted(p for p in SRC.glob("*.*.typ"))
     OUT.mkdir(parents=True, exist_ok=True)
     for src in sources:
-        build(src, args.preview)
+        build(src, args.preview, args.pdf if args.names else None)
+    if args.pdf:
+        langs = sorted({src.stem.rsplit(".", 1)[1] for src in sources if "." in src.stem})
+        for lang in langs:
+            build_combined_pdf(lang, args.pdf)
 
 
 if __name__ == "__main__":

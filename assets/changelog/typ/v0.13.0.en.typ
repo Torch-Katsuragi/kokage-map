@@ -1,11 +1,11 @@
-// Changelog (illustrated): v0.13.0. tool/changelog/build.py writes it out as SVG chunks
+// Changelog (illustrated): v0.13.0. Exported to chunked SVGs by tool/changelog/build.py
 #import "lib.typ": *
 #show: page-setup.with(lang: "en")
 
 #hero(
   "v0.13.0 — 2026/10/23",
-  [Keep GPS tracks, shared folders and settings in sync across devices],
-  [Turn on "Consolidate data across devices" under Settings → Drive Sync to keep past GPS tracks, your shared folder list and portable settings aligned across devices via `AppData/kmap` in My Drive.],
+  [Consolidate tracks, shared folders & settings across devices],
+  [Turn on "Consolidate data across devices" in Settings → Drive Sync to keep finalized past GPS tracks, shared folders, and key settings in sync across your devices via `AppData/kmap` in My Drive.],
   grid(
     columns: (auto, auto, auto, auto, auto), column-gutter: 6pt, align: horizon,
     box(
@@ -22,10 +22,69 @@
   ),
 )
 
+#scene(
+  [Two-way merge for finalized past GPS tracks],
+  [Only finalized tracks from previous days are merged both ways across devices. Today's active recording is never touched during sync.],
+  stack(dir: ttb, spacing: 5pt,
+    grid(
+      columns: (112pt, 112pt), column-gutter: 8pt, align: center,
+      block(fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 6pt, width: 100%, align(left, {
+        text(size: 7.5pt, weight: "bold", fill: sub)[Device A (Phone)]
+        v(4pt)
+        badge[Oct 21 Track (A)]
+        v(3pt)
+        badge(ok: false)[Today: Recording…]
+      })),
+      block(fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 6pt, width: 100%, align(left, {
+        text(size: 7.5pt, weight: "bold", fill: sub)[Device B (Tablet)]
+        v(4pt)
+        badge[Oct 22 Track (B)]
+        v(3pt)
+        badge[Oct 21 Track (B)]
+      })),
+    ),
+    arrows-in(232pt, h: 22pt),
+    cloud(w: 72pt, label: [AppData/kmap]),
+    arrow-d(h: 14pt),
+    block(fill: white, stroke: 1.2pt + accent, radius: 6pt, inset: 7pt, width: 210pt, align(left, {
+      text(size: 7.5pt, weight: "bold", fill: accent)[On both devices after sync]
+      v(4pt)
+      badge[Oct 21 (A)]; h(3pt); badge[Oct 21 (B)]; h(3pt); badge[Oct 22 (B)]
+    })),
+  ),
+  note: [Tracks recorded on the same day on multiple devices are preserved side by side as separate features keyed by device ID.],
+)
+
+#scene(
+  [Keep Shared folders & settings in sync],
+  [Shared Drive folders added on one device are automatically cloned into `Shared/` on your other devices, and key settings are merged via 3-way diff.],
+  grid(
+    columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
+    stack(dir: ttb, spacing: 4pt,
+      caption[Added on Device A],
+      layer-panel(w: 104pt, header: "Layers", (
+        (0, "dir", [Shared], "ok"),
+        (1, "dir", [Forestry Team], "hi"),
+        (0, "layer", [My Map], "ok", rgb("#2e6b4f")),
+      )),
+    ),
+    arrow-r(w: 20pt),
+    stack(dir: ttb, spacing: 4pt,
+      caption(fill: accent)[Auto-cloned on Device B],
+      layer-panel(w: 104pt, header: "Layers", (
+        (0, "dir", [Shared], "ok"),
+        (1, "dir", [Forestry Team], "hi"),
+        (0, "layer", [My Map], "ok", rgb("#2e6b4f")),
+      )),
+    ),
+  ),
+  note: [Form-factor-dependent layout presets are excluded so phones and tablets keep their own button layouts.],
+)
+
 #fixes(
   "New",
-  [Consolidate completed past-day GPS tracks across devices (today's active recording is untouched, and tracks recorded on the same day on multiple devices are kept separate)],
-  [Keep the `Shared/` Drive folder list uniform across devices by automatically cloning newly added shared folders and propagating removals],
-  [Sync portable settings (basemap layers, custom tile URLs, track recording filters and GNSS quality thresholds) via 3-way merge],
-  [Added an opt-in toggle and "Consolidate now" button under Settings → Drive Sync (also runs automatically during Wi-Fi auto-sync)],
+  [Two-way consolidation of finalized GPS tracks from previous days across devices (keeps today's active track untouched and preserves same-day tracks from multiple devices separately)],
+  [Automatically clone Drive shared folders added to `Shared/` on one device onto other devices (and propagate removals)],
+  [3-way merge of key settings (basemap, custom basemap URLs, GPS recording thresholds, location filter settings) while excluding device-size-dependent layout presets],
+  [Added an ON/OFF toggle and "Consolidate now" button in Settings → Drive Sync (also runs automatically during Wi-Fi auto-sync)],
 )

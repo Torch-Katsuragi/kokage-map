@@ -32,14 +32,23 @@
 // 英語は欧文の字を先に（BIZ UDPGothic だとアポストロフィの前後が空く）。和文が混じればそちらへ落ちる
 #let font-en = ("Segoe UI", "Noto Sans") + font-main
 
+#let is-pdf = sys.inputs.at("mode", default: "svg") == "pdf"
+#let app-bg = rgb("#f8f9ff")
+
 /// 英語のページは `#show: page-setup.with(lang: "en")`
 #let page-setup(lang: "ja", body) = {
   let font = if lang == "en" { font-en } else { font-main }
   // 下だけ少し空ける。Typst のページの高さは最後の行のベースラインまでなので、
   // 無いと切れの末尾で g・p・y の下が欠ける（2026-09-30）
-  set page(width: 252pt, height: auto, margin: (bottom: 5pt, rest: 0pt), fill: none)
+  set page(
+    width: if is-pdf { 284pt } else { 252pt },
+    height: auto,
+    margin: if is-pdf { (x: 16pt, y: 18pt) } else { (bottom: 5pt, rest: 0pt) },
+    fill: if is-pdf { app-bg } else { none },
+  )
   set text(font: font, size: 10.5pt, fill: ink, lang: lang)
   set par(leading: 0.65em, justify: false)
+  show heading: set block(above: 0pt, below: 0pt)
   show raw: set text(font: font, size: 1.08em, fill: accent)
   body
   // 次の版（md）の見出しとの間
@@ -55,9 +64,16 @@
 
 /// 版の頭。短い説明と絵。
 ///
-/// 版（version）と大きな一言（title）は描かない。アプリが版ごとに畳める見出しとして出す
-/// （build.py が title を一覧の json に入れる）。開いたときに見出しと図で同じ字が二度出ないように
+/// 版（version）と大きな一言（title）は SVG では描かない。アプリが版ごとに畳める見出しとして出す
+/// （build.py が title を一覧の json に入れる）。PDF 書き出しのときは見出しとして先頭に出す。
 #let hero(version, title, lead, visual, note: none) = {
+  if is-pdf {
+    block(width: 100%, below: 10pt, {
+      text(size: 8.5pt, weight: "bold", fill: accent)[#version]
+      v(4pt)
+      heading(level: 1, outlined: true, text(size: 15.5pt, weight: "bold", fill: ink)[#title])
+    })
+  }
   v(2pt)
   text(size: 10.5pt, fill: sub)[#lead]
   v(14pt)
@@ -65,11 +81,15 @@
   if note != none { _note(note) }
 }
 
-/// 1 つの変化。前の場面とはページを切る（＝切れ）
+/// 1 つの変化。前の場面とはページを切る（＝切れ）。PDF では同じ版のページに続けて並べる。
 #let scene(title, lead, visual, note: none) = {
-  pagebreak(weak: true)
+  if not is-pdf { pagebreak(weak: true) }
   v(30pt)
-  text(size: 15pt, weight: "bold")[#title]
+  if is-pdf {
+    heading(level: 2, outlined: true, text(size: 15pt, weight: "bold")[#title])
+  } else {
+    text(size: 15pt, weight: "bold")[#title]
+  }
   v(5pt)
   text(size: 10.5pt, fill: sub)[#lead]
   v(14pt)
@@ -219,7 +239,7 @@
 
 /// 最後の「細かな修正」: チェックの付いた短い行
 #let fixes(title, ..items) = {
-  pagebreak(weak: true)
+  if not is-pdf { pagebreak(weak: true) }
   v(30pt)
   text(size: 13pt, weight: "bold")[#title]
   v(8pt)

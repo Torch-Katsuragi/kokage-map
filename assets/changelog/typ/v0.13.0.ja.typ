@@ -22,6 +22,65 @@
   ),
 )
 
+#scene(
+  [過去の GPS 軌跡を双方向に統合],
+  [確定済みの前日以前の軌跡だけを端末間で双方向にマージします。記録中の「今日」の軌跡には触れないため、山の中で歩いている最中に同期が走っても安全です。],
+  stack(dir: ttb, spacing: 5pt,
+    grid(
+      columns: (112pt, 112pt), column-gutter: 8pt, align: center,
+      block(fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 6pt, width: 100%, align(left, {
+        text(size: 7.5pt, weight: "bold", fill: sub)[端末 A（スマホ）]
+        v(4pt)
+        badge[10/21 の軌跡 (A)]
+        v(3pt)
+        badge(ok: false)[今日 記録中…]
+      })),
+      block(fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 6pt, width: 100%, align(left, {
+        text(size: 7.5pt, weight: "bold", fill: sub)[端末 B（タブレット）]
+        v(4pt)
+        badge[10/22 の軌跡 (B)]
+        v(3pt)
+        badge[10/21 の軌跡 (B)]
+      })),
+    ),
+    arrows-in(232pt, h: 22pt),
+    cloud(w: 72pt, label: [AppData/kmap]),
+    arrow-d(h: 14pt),
+    block(fill: white, stroke: 1.2pt + accent, radius: 6pt, inset: 7pt, width: 210pt, align(left, {
+      text(size: 7.5pt, weight: "bold", fill: accent)[統合後のどちらの端末にも]
+      v(4pt)
+      badge[10/21 (A)]; h(3pt); badge[10/21 (B)]; h(3pt); badge[10/22 (B)]
+    })),
+  ),
+  note: [同じ日に 2 台の端末で歩いた場合も、端末 ID ごとに別々の地物として両方とも残ります。],
+)
+
+#scene(
+  [「共有」フォルダと設定もそろえる],
+  [片方の端末で受け取った Drive 共有フォルダは、もう片方の端末の `共有/` にも自動でクローンされます。背景地図や GPS 記録条件などの設定も 3-way マージでそろいます。],
+  grid(
+    columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
+    stack(dir: ttb, spacing: 4pt,
+      caption[端末 A で共有を追加],
+      layer-panel(w: 104pt, (
+        (0, "dir", [共有], "ok"),
+        (1, "dir", [北山村 施業班], "hi"),
+        (0, "layer", [マイ地図], "ok", rgb("#2e6b4f")),
+      )),
+    ),
+    arrow-r(w: 20pt),
+    stack(dir: ttb, spacing: 4pt,
+      caption(fill: accent)[端末 B にも自動で並ぶ],
+      layer-panel(w: 104pt, (
+        (0, "dir", [共有], "ok"),
+        (1, "dir", [北山村 施業班], "hi"),
+        (0, "layer", [マイ地図], "ok", rgb("#2e6b4f")),
+      )),
+    ),
+  ),
+  note: [スマホとタブレットで画面の大きさが違うため、ボタン配置プリセットなどの画面サイズ固有の設定は統合対象から除外しています。],
+)
+
 #fixes(
   "新しく",
   [前日以前の確定済み GPS 軌跡を端末間で双方向に統合する（記録中の当日分は触らず、同じ日に複数端末で歩いた軌跡も端末ごとに分けて残す）],

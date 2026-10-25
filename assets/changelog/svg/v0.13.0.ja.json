@@ -1,5 +1,5 @@
 {
- "title": "複数の端末で軌跡と設定をそろえる",
+ "title": "複数端末でのデータ統合に対応",
  "chunks": [
   {
    "file": "v0.13.0.ja.00.svg",
@@ -9,22 +9,22 @@
   {
    "file": "v0.13.0.ja.01.svg",
    "width": 252.0,
-   "height": 360.24
+   "height": 372.69
   },
   {
    "file": "v0.13.0.ja.02.svg",
    "width": 252.0,
-   "height": 221.45
+   "height": 248.76
   },
   {
    "file": "v0.13.0.ja.03.svg",
    "width": 252.0,
-   "height": 205.71
+   "height": 192.35
   },
   {
    "file": "v0.13.0.ja.04.svg",
    "width": 252.0,
-   "height": 165.89
+   "height": 178.63
   }
  ]
 }

@@ -2,13 +2,13 @@
 
 ## v0.13.0 — 2026/10/23
 
-### Keeping devices in step
+### New Features
 
-- Settings → Drive Sync has a new "Sync data across devices" switch. Turn it on and devices signed in to the same Google account, such as a phone and a tablet, share their GPS tracks up to yesterday, the folders in "共有" and some settings. This happens when you tap "Sync Now" and during Wi-Fi auto-sync. It is off by default (on the web, only the settings are synced)
-- GPS tracks up to yesterday from your other devices are added to this one, and this device's tracks are sent to Drive. Today's track is not sent, so you can sync while still recording. Tracks walked on the same day on two devices stay as separate lines, one per device
-- Drive folders in "共有" also appear in "共有" on your other devices. A folder you remove from "共有" does not come back on that device (it stays on the other devices)
-- The settings that follow are background maps (layering and maps added by URL), track recording, fix quality thresholds and the app language. Screen layout and UI size stay per device. If two devices change the same setting, the one that syncs later wins. Turning the switch on for a second device replaces these settings with the ones already on Drive
-- The data is kept in the AppData/kmap folder in My Drive. Do not delete or rename it
+- Cross-device data sync: Added a "Sync data across devices" toggle under Settings → Drive Sync (off by default). When enabled, past-day GPS tracks, shared folders in "共有", and core settings are synced across devices signed in to the same Google account. Sync runs when tapping "Sync Now" or during Wi-Fi auto-sync (on Web, only settings are synced)
+- Two-way merge for past-day GPS tracks: Imports past-day tracks from other devices and uploads local past-day tracks to Drive. Today's active recording is excluded from sync, so syncing while recording causes no conflicts. Tracks recorded on the same day across multiple devices are preserved as separate features per device
+- Auto-clone for shared folders in "共有": Google Drive shared folders added under "共有" on one device are automatically cloned into "共有" on your other devices on the next sync. Removing a folder from "共有" removes it from the sync list so it is not re-cloned on that device (existing folders on other devices remain intact)
+- Core settings sync: Syncs basemap layer configurations, custom tile URLs, GPS track recording thresholds, GNSS fix quality thresholds, and display language. Screen layout presets and UI scale remain independent per device. Enabling sync on a second device applies the settings currently on Drive; if two devices modify the same setting, the device that syncs later takes precedence
+- Sync data is stored in AppData/kmap in My Drive (do not delete or rename this folder)
 
 ## v0.12.1 — 2026/10/23
 

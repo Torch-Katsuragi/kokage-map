@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """更新履歴の図解（assets/changelog/typ/<版>.<言語>.typ）を、切れごとの SVG に書き出す。
+あわせて確認用の PDF / PNG を `.temp/changelog/` に常時出力する。
 
-    python tool/changelog/build.py                       # 全部
-    python tool/changelog/build.py next.ja               # 1 本だけ
-    python tool/changelog/build.py next.ja --preview DIR # 切れをつないだ PNG も DIR に書く（目で確かめる用）
-    python tool/changelog/build.py --pdf DIR             # 図解版の更新履歴を PDF で DIR に書き出す（単体＋全版まとめ）
+    python tool/changelog/build.py                       # 全部（SVG + .temp/changelog/ に PDF/PNG）
+    python tool/changelog/build.py v0.13.0.ja            # 1 本だけ（SVG + 単体PDF/PNG + 全版まとめPDF）
+    python tool/changelog/build.py --no-pdf              # SVG のみ（CI 等）
 
 `<版>.<言語>.typ` の 1 ページが 1 切れ（lib.typ の fig・section がページを切る）。
 → `assets/changelog/svg/<版>.<言語>.NN.svg` と、切れの一覧 `<版>.<言語>.json`（ファイル名と幅・高さ）。
 アプリは一覧を読んで高さを先に確保し、スクロールに合わせて切れを読み込む（継ぎ目を見せない）。
 版は `## 次のリリース` なら `next`、`## v0.7.4` なら `v0.7.4`（ChangelogService.figureSlug）。図解の無い版は md のまま出る。
 
-アプリは SVG を表示するだけで、Flutter に Typst は載せない。文字は形として焼き込まれるので、端末にフォントは
-要らない。`.typ` は assets/changelog/typ/ に置くがアプリには同梱しない（pubspec は svg/ だけ載せる）。
-typst（typst-py）が要る: `pip install typst`。
+確認用の PDF / PNG は `.temp/changelog/`（リポジトリ内・gitignore 済み）に出力する。
+※ Antigravity のチャットでリンクを提示する際は、`brain/<id>/` 配下に PDF を置くと Artifact ビューアが
+「Preview is not available for this file type」になるため、必ず `.temp/changelog/` 配下の PDF（VS Code PDF 拡張で開く）
+および PNG へのリンクを提示すること。
 """
 import argparse
-import io
 import json
 import pathlib
 import re
@@ -27,10 +27,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASE = ROOT / "assets" / "changelog"
 SRC = BASE / "typ"
 OUT = BASE / "svg"
-
-# プレビューの地（アプリの画面の色）
-APP_BG = (248, 249, 255)
-
+DEFAULT_PREVIEW_DIR = ROOT / ".temp" / "changelog"
 
 _LONG_FLOAT = re.compile(rb"-?\d+\.\d{3,}")
 
@@ -130,11 +127,11 @@ def build_combined_pdf(lang: str, pdf_dir: pathlib.Path) -> pathlib.Path:
     pdf_dir.mkdir(parents=True, exist_ok=True)
     out_path = pdf_dir / f"changelog.{lang}.pdf"
     out_path.write_bytes(pdf_bytes)
-    print(f"  PDF (all {len(files)} versions): {out_path} ({len(pdf_bytes) // 1024} KB)")
+    print(f"  PDF (all {len(files)} versions): {out_path.as_posix()} ({len(pdf_bytes) // 1024} KB)")
     return out_path
 
 
-def build(src: pathlib.Path, preview: pathlib.Path | None, pdf_dir: pathlib.Path | None = None) -> None:
+def build(src: pathlib.Path, out_dir: pathlib.Path | None = None) -> None:
     pages = typst.compile(str(src), root=str(BASE), format="svg")
     if not isinstance(pages, list):
         pages = [pages]
@@ -152,49 +149,48 @@ def build(src: pathlib.Path, preview: pathlib.Path | None, pdf_dir: pathlib.Path
     total = sum(len(p) for p in pages)
     print(f"{src.stem}: {len(pages)} 切れ・{total // 1024} KB")
 
-    if preview:
-        from PIL import Image
-
-        preview.mkdir(parents=True, exist_ok=True)
-        pngs = typst.compile(str(src), root=str(BASE), format="png", ppi=144)
-        imgs = [Image.open(io.BytesIO(b)).convert("RGBA") for b in (pngs if isinstance(pngs, list) else [pngs])]
-        pad = 32  # アプリの左右の余白（16dp）相当
-        sheet = Image.new("RGBA", (imgs[0].width + pad * 2, sum(i.height for i in imgs) + pad * 2), APP_BG + (255,))
-        y = pad
-        for im in imgs:
-            sheet.alpha_composite(im, (pad, y))
-            y += im.height
-        out = preview / f"{src.stem}.png"
-        sheet.convert("RGB").save(out)
-        print(f"  {out}")
-
-    if pdf_dir:
-        pdf_dir.mkdir(parents=True, exist_ok=True)
+    if out_dir:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        # PDF モード（見出し・背景色・余白ありの1ページ連続レイアウト）で単体 PDF と PNG を両方書き出す
         pdf_bytes = typst.compile(str(src), root=str(BASE), format="pdf", sys_inputs={"mode": "pdf"})
-        out = pdf_dir / f"{src.stem}.pdf"
-        out.write_bytes(pdf_bytes)
-        print(f"  {out} ({len(pdf_bytes) // 1024} KB)")
+        pdf_out = out_dir / f"{src.stem}.pdf"
+        pdf_out.write_bytes(pdf_bytes)
+        png_res = typst.compile(str(src), root=str(BASE), format="png", ppi=180, sys_inputs={"mode": "pdf"})
+        png_bytes = png_res[0] if isinstance(png_res, list) else png_res
+        png_out = out_dir / f"{src.stem}.png"
+        png_out.write_bytes(png_bytes)
+        print(f"  PDF: {pdf_out.as_posix()} ({len(pdf_bytes) // 1024} KB)")
+        print(f"  PNG: {png_out.as_posix()} ({len(png_bytes) // 1024} KB)")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("names", nargs="*")
-    ap.add_argument("--preview", type=pathlib.Path)
-    ap.add_argument("--pdf", type=pathlib.Path, help="図解版更新履歴の PDF 出力先ディレクトリ")
+    ap.add_argument("--preview", type=pathlib.Path, help="確認用 PDF/PNG の出力先（省略時は .temp/changelog）")
+    ap.add_argument("--pdf", type=pathlib.Path, help="--preview の別名")
+    ap.add_argument("--no-pdf", action="store_true", help="確認用 PDF/PNG の出力をスキップ")
     ap.add_argument("--short-ids", action="store_true", help="書き出し済みの SVG の id だけ付け替える（Typst を回さない）")
     args = ap.parse_args()
     if args.short_ids:
         for svg in sorted(OUT.glob("*.svg")):
             svg.write_bytes(_short_ids(svg.read_bytes()))
         return
+    out_dir = None if args.no_pdf else (args.pdf or args.preview or DEFAULT_PREVIEW_DIR)
     sources = [SRC / f"{n}.typ" for n in args.names] if args.names else sorted(p for p in SRC.glob("*.*.typ"))
     OUT.mkdir(parents=True, exist_ok=True)
+    # 名前指定がない場合は最新バージョンのみ単体 PDF/PNG を出し、全バージョンまとめ PDF は常に出す
+    latest_ver_prefix = None
+    if not args.names and sources:
+        newest = max(sources, key=_version_sort_key)
+        latest_ver_prefix = newest.stem.rsplit(".", 1)[0]
     for src in sources:
-        build(src, args.preview, args.pdf if args.names else None)
-    if args.pdf:
+        ver_prefix = src.stem.rsplit(".", 1)[0]
+        emit_single = out_dir if (args.names or ver_prefix == latest_ver_prefix) else None
+        build(src, emit_single)
+    if out_dir:
         langs = sorted({src.stem.rsplit(".", 1)[1] for src in sources if "." in src.stem})
         for lang in langs:
-            build_combined_pdf(lang, args.pdf)
+            build_combined_pdf(lang, out_dir)
 
 
 if __name__ == "__main__":

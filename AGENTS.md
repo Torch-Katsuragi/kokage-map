@@ -33,7 +33,7 @@ Flutter製の地図アプリ「こかげマップ」（Dart のパッケージ�
 - 削除: 一時ファイル、テスト用ダミー
 - 一時ファイル出力: `.temp/` に配置（`.gitignore` 済み）
 - .md系はObsidian記法（フロントマター、`[[リンク]]`）
-- commitの前にchangelog/内の更新履歴を全言語分更新
+- commitの前にchangelog/内の更新履歴を全言語分更新し、`python tool/changelog/build.py` で `.temp/changelog/` に出力される図解 PDF・PNG（`vX.Y.Z.ja.pdf` / `vX.Y.Z.ja.png` / `changelog.ja.pdf`）へのリンクを必ずチャットに提示してユーザーが見られるようにすること（※Antigravity の `brain/<id>/` 配下に PDF を置くと Artifact ビューアが非対応エラーになるため、必ず `.temp/changelog/` 配下のパスをリンクすること）
 
 ## 参照
 

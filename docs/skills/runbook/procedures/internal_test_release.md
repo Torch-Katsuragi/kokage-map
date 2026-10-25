@@ -15,7 +15,7 @@ Play Console の画面を触るのは API に無い項目だけ。
   図・節ごとに切った SVG と、その一覧 `<版>.<言語>.json` ができる。アプリは md の版の見出しと同じ名前の一覧を
   探し、切れを背景・枠なしで文章と同じ余白に並べる（継ぎ目を見せない。文章は読み上げ用）。無い言語・版は md のまま。
   `test/changelog_figure_test.dart` が名前の食い違いを拾う。書き方は `assets/changelog/typ/lib.typ` の部品と
-  typst スキルの図解ブリーフ（図は文章より伝わるものだけ）
+  typst スキルの図解ブリーフ（図は文章より伝わるものだけ）。`python tool/changelog/build.py` を回すと `.temp/changelog/` に確認用の単体 PDF・PNG（`vX.Y.Z.ja.pdf` / `vX.Y.Z.ja.png`）と全版まとめ PDF（`changelog.ja.pdf`）が常時出力されるので、更新履歴を書いたら必ず `.temp/changelog/` 配下のリンクをチャットに提示してユーザーが見られるようにする（※`brain/<id>/` 配下に PDF を置くと Antigravity の Artifact ビューアで開けないため `.temp/changelog/` をリンクする）
 - Play のリリースノートは 500 字上限。changelog の先頭エントリをそのまま渡すと途中で切れるので、
   `.temp/release/notes_ja.md` / `notes_en.md` に短く書いて `--notes-ja/--notes-en` に渡す（見出し無しなら全文が使われる）
 

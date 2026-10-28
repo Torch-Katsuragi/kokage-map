@@ -226,13 +226,20 @@ class FakeGoogleDrive implements GoogleDriveService {
   final Set<String> failDownloadFor = {};
 
   @override
-  Future<bool> downloadFile(String fileId, String localPath) async {
+  Future<bool> downloadFile(
+    String fileId,
+    String localPath, {
+    void Function(int chunkBytes)? onChunk,
+    void Function()? onRetryReset,
+  }) async {
     _count('downloadFile');
+    onRetryReset?.call();
     if (failDownloadFor.contains(fileId)) return false;
     final f = items[fileId];
     if (f == null || f.isFolder || f.trashed) return false;
     await File(localPath).parent.create(recursive: true);
     await File(localPath).writeAsBytes(f.bytes, flush: true);
+    onChunk?.call(f.bytes.length);
     return true;
   }
 

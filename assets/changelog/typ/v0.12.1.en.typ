@@ -5,17 +5,17 @@
 #hero(
   "v0.12.1 — 2026/10/23",
   [QGIS styling, table joins, point guidance & measure tool],
-  [Supports QGIS categorized, graduated, and rule-based styling, table joins (such as stand-register CSVs), and attribute form settings. Also adds point guidance, shared room pins, and a measure tool.],
+  [Supports QGIS categorized, graduated, and rule-based styling, table joins (such as external register CSVs), and attribute form settings. Also adds point guidance, shared room pins, and a measure tool.],
   [],
 )
 
 #fixes(
   "New Features",
-  [Read table joins configured in QGIS (such as stand-register CSVs) and display joined fields in the attribute table, styling, labels, search, and export],
-  [Render layers styled in QGIS by category, graduated range, or rule (e.g. compartments colored by species or age) in matching per-feature colors],
-  [Add custom XYZ tiles and WMS as background maps by URL (forest planning maps, CS relief maps, etc.), including those defined in .qgs files],
+  [Read table joins configured in QGIS (such as external register CSVs) and display joined fields in the attribute table, styling, labels, search, and export],
+  [Render layers styled in QGIS by category, graduated range, or rule (e.g. zones colored by category or value) in matching per-feature colors],
+  [Add custom XYZ tiles and WMS as background maps by URL (aerial imagery, CS relief maps, etc.), including those defined in .qgs files],
   [Point guidance from the info panel, map long-press, or member list, showing distance, bearing, elevation difference, heading arrow, and arrival notification],
-  [Shared room pins (meeting point, hazard tree, work site, note) placed via long-press and queued offline until reconnected],
+  [Shared room pins (meeting point, hazard, work site, note) placed via long-press and queued offline until reconnected],
   [Measure tool (distance and area), length/area/perimeter display in the info panel, and cross-layer attribute search in the layer panel],
   [Support QGIS attribute form widgets and constraints (value maps, dates, aliases, default values, required fields, tabs, and groups)],
   [Record per-vertex GNSS metadata (fix type, satellites, accuracy, averaging) in GPS surveys, with configurable quality thresholds (Settings → GPS & Positioning)],

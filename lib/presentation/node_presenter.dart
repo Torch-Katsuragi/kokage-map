@@ -22,6 +22,7 @@ import 'package:path/path.dart' as p;
 import '../core/node_types.dart';
 import '../i18n/strings.g.dart';
 import '../models/nodes/drive_folder_node.dart';
+import '../models/nodes/drive_folder_set_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/layer_tree_node.dart';
@@ -71,6 +72,7 @@ class NodePresenter {
     if (node is SysNode) return Icons.smartphone;
 
     // Drive連携フォルダはクラウドフォルダアイコン
+    if (node is DriveFolderSetNode) return Icons.folder_copy;
     if (node is DriveFolderNode) return Icons.cloud;
     if (node is DriveSubFolderNode) return Icons.folder;
     
@@ -118,7 +120,7 @@ class NodePresenter {
   /// ノードインスタンスに基づく色を取得
   /// グローバルノードは青色系、サブクラス固有の色がある場合はそれを返す
   static Color getColor(LayerTreeNode node) {
-    if (node is DriveFolderNode) {
+    if (node is DriveFolderNode || node is DriveFolderSetNode) {
       return cloudColor;
     }
 
@@ -201,7 +203,7 @@ class NodePresenter {
     );
     
     // DriveFolderNodeでない場合、または同期状態がない場合はベースアイコンのみ
-    if (node is! DriveFolderNode || syncStatus == null) {
+    if ((node is! DriveFolderNode && node is! DriveFolderSetNode) || syncStatus == null) {
       return baseIcon;
     }
     

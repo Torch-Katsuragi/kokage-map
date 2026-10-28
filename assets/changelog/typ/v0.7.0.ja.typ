@@ -19,7 +19,7 @@
   ridge(hz + (h - hz) * 0.25, 9pt, rgb("#b3c59d"))
   ridge(hz + (h - hz) * 0.5, 12pt, map-bg.darken(8%))
   if data {
-    // 手前の斜面に載った小班と路網
+    // 手前の斜面に載った区画と道路
     let c = map-comp.lighten(15%)
     let s = 0.6pt + map-comp.darken(35%)
     place(polygon(fill: c, stroke: s,
@@ -71,7 +71,7 @@
 #hero(
   "v0.7.0 — 2026/09/11",
   [地図が 3D になりました],
-  [林班・路線・写真・GPS 軌跡などが、地形の上に載ります。開いたときは、いつもどおり真上からの地図です。],
+  [区画・路線・写真・GPS 軌跡などが、地形の上に載ります。開いたときは、いつもどおり真上からの地図です。],
   phone(w: 88pt, h: 156pt, with-compass(82pt, terrain(82pt, 142pt))),
 )
 

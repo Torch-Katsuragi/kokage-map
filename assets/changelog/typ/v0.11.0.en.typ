@@ -16,7 +16,7 @@
     arrow-r(w: 20pt),
     layer-panel(w: 110pt, header: "Layers", (
       (0, "dir", [共有], "ok"),
-      (1, "dir", [組合 間伐調査], "ok"),
+      (1, "dir", [Field Survey], "ok"),
       (0, "layer", [マイ地図 / 点], "hi", rgb("#2e6b4f")),
     )),
   ),

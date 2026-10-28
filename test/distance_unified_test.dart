@@ -4,12 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/gnss_quality.dart';
 import 'package:root_maps/utils/geodesic.dart';
-import 'package:root_maps/utils/navigation_math.dart';
 
 void main() {
-  test('案内の距離: 対蹠点の近くでも落ちず、QGIS と同じ値', () {
-    expect(NavigationMath.distanceMeters(const LatLng(0, 0), const LatLng(0, 179.8)), closeTo(20000239.43772467, 0.001));
-    expect(NavigationMath.distanceMeters(const LatLng(34, 136), const LatLng(34.0001, 136)), closeTo(11.09223868892756, 1e-6));
+  test('Geodesic.distance: 対蹠点の近くでも落ちず、QGIS と同じ値', () {
+    expect(Geodesic.distance(const LatLng(0, 0), const LatLng(0, 179.8)), closeTo(20000239.43772467, 0.001));
+    expect(Geodesic.distance(const LatLng(34, 136), const LatLng(34.0001, 136)), closeTo(11.09223868892756, 1e-6));
   });
 
   test('緯度・経度 1° の長さは楕円体の上で（北緯 34°）', () {

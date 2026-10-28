@@ -19,6 +19,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
+import '../../services/google_drive/drive_transfer_registry.dart';
+import '../../services/google_drive/sync_progress.dart';
 
 /// 通知ドロップダウン一覧
 ///
@@ -223,6 +225,43 @@ class _NotificationPanelState extends State<_NotificationPanel> {
                 style: const TextStyle(fontSize: 11, color: Colors.grey),
               ),
             ),
+            // 進行中の転送進捗バー
+            if (n.transferKey != null)
+              ValueListenableBuilder<SyncProgress?>(
+                valueListenable:
+                    DriveTransferRegistry.instance.progressOf(n.transferKey!),
+                builder: (context, progress, _) {
+                  if (progress == null) return const SizedBox.shrink();
+                  final detail = _formatProgressDetail(progress);
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 26, top: 6, right: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: progress.fraction,
+                            minHeight: 4,
+                          ),
+                        ),
+                        if (detail.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            detail,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
             // 通知から押せる操作（一度だけ）
             if (n.onAction != null && n.actionLabel != null)
               Padding(
@@ -259,6 +298,24 @@ class _NotificationPanelState extends State<_NotificationPanel> {
         ),
       ),
     );
+  }
+
+  String _formatProgressDetail(SyncProgress progress) {
+    switch (progress.phase) {
+      case SyncPhase.scanning:
+        return t.drive.scanningFolder;
+      case SyncPhase.transferring:
+        final pct = progress.percent;
+        final bytes = progress.formattedBytes;
+        final file = progress.currentFileName;
+        return [
+          if (pct != null) '$pct%',
+          if (bytes != null) '($bytes)',
+          if (file != null && file.isNotEmpty) '· $file',
+        ].join(' ');
+      case SyncPhase.finalizing:
+        return t.drive.finalizingData;
+    }
   }
 
   String _formatTime(DateTime dt) {

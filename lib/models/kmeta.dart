@@ -524,6 +524,9 @@ class KMetaSync {
   /// 読み取り専用か
   final bool? isReadOnly;
 
+  /// JSONマニフェストによる共有フォルダセットか
+  final bool? isFolderSet;
+
   /// 最終同期日時
   final DateTime? lastSynced;
 
@@ -541,6 +544,7 @@ class KMetaSync {
     this.driveFolderName,
     this.driveUrl,
     this.isReadOnly,
+    this.isFolderSet,
     this.lastSynced,
     this.driveRevisionId,
     this.deviceId,
@@ -567,6 +571,7 @@ class KMetaSync {
       driveFolderName: json['driveFolderName'] as String?,
       driveUrl: json['driveUrl'] as String?,
       isReadOnly: json['isReadOnly'] as bool?,
+      isFolderSet: json['isFolderSet'] as bool?,
       lastSynced:
           json['lastSynced'] != null
               ? DateTime.tryParse(json['lastSynced'] as String)
@@ -584,6 +589,7 @@ class KMetaSync {
     if (driveFolderName != null) json['driveFolderName'] = driveFolderName;
     if (driveUrl != null) json['driveUrl'] = driveUrl;
     if (isReadOnly != null) json['isReadOnly'] = isReadOnly;
+    if (isFolderSet != null) json['isFolderSet'] = isFolderSet;
     if (lastSynced != null) json['lastSynced'] = lastSynced!.toIso8601String();
     if (driveRevisionId != null) json['driveRevisionId'] = driveRevisionId;
     if (deviceId != null) json['deviceId'] = deviceId;
@@ -599,6 +605,7 @@ class KMetaSync {
     driveFolderName: driveFolderName,
     driveUrl: driveUrl,
     isReadOnly: isReadOnly,
+    isFolderSet: isFolderSet,
   );
 
   /// 帳簿（端末ごとの状態）を含んでいるか
@@ -623,6 +630,7 @@ class KMetaSync {
     String? driveFolderName,
     String? driveUrl,
     bool? isReadOnly,
+    bool? isFolderSet,
     DateTime? lastSynced,
     String? driveRevisionId,
     String? deviceId,
@@ -633,6 +641,7 @@ class KMetaSync {
       driveFolderName: driveFolderName ?? this.driveFolderName,
       driveUrl: driveUrl ?? this.driveUrl,
       isReadOnly: isReadOnly ?? this.isReadOnly,
+      isFolderSet: isFolderSet ?? this.isFolderSet,
       lastSynced: lastSynced ?? this.lastSynced,
       driveRevisionId: driveRevisionId ?? this.driveRevisionId,
       deviceId: deviceId ?? this.deviceId,

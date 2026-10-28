@@ -57,11 +57,11 @@
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
     stack(dir: ttb, spacing: 4pt,
       layer-panel(w: 124pt, header: "Layers", (
-        (0, "layer", "Stands", "ok"),
-        (1, "layer", "species = 'cedar'", "hi", map-green),
-        (1, "layer", "species = 'cypress'", "ok", map-red),
+        (0, "layer", "Zones", "ok"),
+        (1, "layer", "status = 'done'", "hi", map-green),
+        (1, "layer", "status = 'todo'", "ok", map-red),
       )),
-      caption[Two views on Stands],
+      caption[Two views on Zones],
     ),
     arrow-r(w: 14pt),
     phone(w: 50pt, h: 88pt, box(width: 44pt, height: 74pt, {
@@ -83,7 +83,7 @@
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),
     phone(w: 50pt, h: 88pt, label: "Kokage Map", mini-map(44pt, 74pt, road: map-red, road-w: 2.2pt)),
-    stack(dir: ttb, spacing: 3pt, file-icon(accent, w: 14pt), text(size: 7pt, weight: "bold", fill: accent)[Stands.qgs], arrow-lr(w: 30pt)),
+    stack(dir: ttb, spacing: 3pt, file-icon(accent, w: 14pt), text(size: 7pt, weight: "bold", fill: accent)[Zones.qgs], arrow-lr(w: 30pt)),
     pc(label: "QGIS", w: 110pt, h: 78pt, mini-map(104pt, 63pt, road: map-red, road-w: 2.2pt)),
   ),
   note: [Print layouts and symbol details set in QGIS are kept. `.qgz` files can be read too. Opening the result in QGIS has not been verified yet; please report if it does not open.],

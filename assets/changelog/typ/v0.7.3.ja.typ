@@ -4,7 +4,7 @@
 
 // ---- この版だけの部品 ----
 
-/// 属性テーブル（画面の中）。rows は (小班, 状態, 直したか)
+/// 属性テーブル（画面の中）。rows は (区画, 状態, 直したか)
 #let attr-table(w, head, rows) = box(width: w, height: 100%, fill: white, {
   let cell(body, fill: white, bold: false, c: ink) = box(width: 100%, fill: fill, inset: (x: 2.5pt, y: 2.2pt),
     text(size: 6pt, weight: if bold { "bold" } else { "regular" }, fill: c)[#body])
@@ -85,7 +85,7 @@
   [2 台で直しても行ごとに合わさる],
   [同じ GeoPackage を 2 台で直しても、Drive 同期で行ごとに合わせます。別々の行を直したなら、両方の変更が残ります。],
   {
-    let head = ([小班], [状態])
+    let head = ([区画], [状態])
     stack(dir: ttb, spacing: 5pt,
       grid(
         columns: (96pt, 96pt), align: center,
@@ -180,8 +180,8 @@
       caption[これまで],
       layer-panel(w: 84pt, (
         (0, "dir", "グローバル", "ok"),
-        (0, "layer", "路網", "ok"),
-        (0, "layer", "小班", "ok", map-comp),
+        (0, "layer", "道路", "ok"),
+        (0, "layer", "区画", "ok", map-comp),
       )),
     ),
     arrow-r(w: 14pt),
@@ -190,8 +190,8 @@
       layer-panel(w: 84pt, (
         (0, "dir", "System", "hi"),
         (1, "dir", "グローバル", "ok"),
-        (0, "layer", "路網", "ok"),
-        (0, "layer", "小班", "ok", map-comp),
+        (0, "layer", "道路", "ok"),
+        (0, "layer", "区画", "ok", map-comp),
       )),
     ),
   ),

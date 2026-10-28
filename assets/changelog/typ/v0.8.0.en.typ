@@ -9,7 +9,7 @@
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),
     phone(label: "Kokage Map", mini-map(56pt, 98pt, road: map-red, road-w: 2.4pt)),
-    stack(dir: ttb, spacing: 3pt, file-icon(accent, w: 14pt), text(size: 7pt, weight: "bold", fill: accent)[Stands.qgs], arrow-lr(w: 30pt)),
+    stack(dir: ttb, spacing: 3pt, file-icon(accent, w: 14pt), text(size: 7pt, weight: "bold", fill: accent)[Zones.qgs], arrow-lr(w: 30pt)),
     pc(label: "QGIS", w: 110pt, h: 78pt, mini-map(104pt, 63pt, road: map-red, road-w: 2.4pt)),
   ),
 )
@@ -22,7 +22,7 @@
     block(fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 7pt, width: 100%, align(left, {
       text(size: 7pt, fill: sub, weight: "bold")[Before]
       v(4pt)
-      folder-icon(sub.lighten(30%)); h(3pt); text(size: 8.5pt, fill: sub)[Stands]
+      folder-icon(sub.lighten(30%)); h(3pt); text(size: 8.5pt, fill: sub)[Zones]
       v(3pt)
       h(6pt); file-icon(sub.lighten(20%)); h(3pt); text(size: 8pt, fill: sub)[.kmeta.json]
       v(5pt)
@@ -32,9 +32,9 @@
     block(fill: white, stroke: 1.2pt + accent, radius: 6pt, inset: 7pt, width: 100%, align(left, {
       text(size: 7pt, fill: accent, weight: "bold")[Now]
       v(4pt)
-      folder-icon(warm); h(3pt); text(size: 8.5pt, weight: "bold")[Stands]
+      folder-icon(warm); h(3pt); text(size: 8.5pt, weight: "bold")[Zones]
       v(3pt)
-      h(6pt); file-icon(accent); h(3pt); text(size: 8pt, fill: accent, weight: "bold")[Stands.qgs]
+      h(6pt); file-icon(accent); h(3pt); text(size: 8pt, fill: accent, weight: "bold")[Zones.qgs]
       v(5pt)
       badge[Opens in QGIS]; h(2pt); badge[Shareable]
     })),
@@ -53,7 +53,7 @@
         layer-panel(w: 84pt, header: "Layers", (
           (0, "layer", "Roads", "ok"),
           (0, "dir", "Area B", "lock"),
-          (1, "layer", "Stands", "lock"),
+          (1, "layer", "Zones", "lock"),
         )),
         caption[Subfolders were read-only],
       ),
@@ -63,9 +63,9 @@
         layer-panel(w: 84pt, header: "Layers", (
           (0, "layer", "Roads", "ok"),
           (0, "dir", "Area B", "ok"),
-          (1, "layer", "Stands", "hi", map-green),
+          (1, "layer", "Zones", "hi", map-green),
         )),
-        caption(fill: accent)[Change the stands' color],
+        caption(fill: accent)[Change the zones' color],
       ),
     ),
     grid(
@@ -84,7 +84,7 @@
     grid(
       columns: (96pt, 96pt), align: center,
       stack(dir: ttb, spacing: 4pt, bubble[Roads in red], phone(w: 44pt, h: 78pt, label: "Device A", mini-map(38pt, 64pt, road: map-red, road-w: 2.4pt))),
-      stack(dir: ttb, spacing: 4pt, bubble[Hide the stands], phone(w: 44pt, h: 78pt, label: "Device B", mini-map(38pt, 64pt, comps: false))),
+      stack(dir: ttb, spacing: 4pt, bubble[Hide the zones], phone(w: 44pt, h: 78pt, label: "Device B", mini-map(38pt, 64pt, comps: false))),
     ),
     arrows-in(192pt),
     cloud(w: 64pt, label: "Drive"),

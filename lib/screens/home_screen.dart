@@ -41,6 +41,7 @@ import '../providers/project_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/changelog_service.dart';
 import '../services/global_folder_locator.dart';
+import '../services/google_drive/drive_folder_set_service.dart';
 import '../services/google_drive/folder_lookup.dart';
 import '../services/google_drive/google_drive_service.dart';
 import '../services/party/party_invite.dart';
@@ -154,14 +155,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           );
           return null;
         }
+        if (GoogleDriveService.isJsonFileMetadata(info)) {
+          DriveFolderSetManifest? manifest;
+          try {
+            manifest = await DriveFolderSetService().fetchManifest(
+              driveId,
+              fallbackName: info.name,
+            );
+          } catch (_) {
+            _notify(t.drive.invalidFolderSetJson, NotificationLevel.error);
+            return null;
+          }
+          final setName = manifest.name ??
+              (info.name?.replaceAll(
+                    RegExp(r'\.json$', caseSensitive: false),
+                    '',
+                  ) ??
+                  driveId);
+          return receiveSharedFolderSetInBackground(
+            jsonDriveId: driveId,
+            setName: setName,
+            driveUrl: 'https://drive.google.com/file/d/$driveId/view',
+            preloadedManifest: manifest,
+            confirm: () => _confirmReceive(setName, info.owners?.firstOrNull),
+            notifications: ref.read(notificationCenterProvider.notifier),
+          );
+        }
+        if (!GoogleDriveService.isFolderMetadata(info)) {
+          _notify(t.drive.invalidUrl, NotificationLevel.error);
+          return null;
+        }
         final name = info.name ?? driveId;
-        return receiveSharedMap(
+        return receiveSharedMapInBackground(
           driveId: driveId,
           folderName: name,
           driveUrl: 'https://drive.google.com/drive/folders/$driveId',
           isReadOnly: !(info.capabilities?.canEdit ?? false),
           // リンクは外から届くので、知らない人のフォルダを黙って取り込まない
           confirm: () => _confirmReceive(name, info.owners?.firstOrNull),
+          notifications: ref.read(notificationCenterProvider.notifier),
         );
       });
 
@@ -200,11 +232,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Future<void> _receiveFromDialog() async {
     final result = await DriveUrlInputDialog.show(context);
     if (result == null || !mounted) return;
-    await _receiveAndOpen(() => receiveSharedMap(
+    if (result.isFolderSet) {
+      await _receiveAndOpen(() => receiveSharedFolderSetInBackground(
+            jsonDriveId: result.folderId,
+            setName: result.folderName,
+            driveUrl: result.url,
+            preloadedManifest: result.folderSetManifest,
+            notifications: ref.read(notificationCenterProvider.notifier),
+          ));
+      return;
+    }
+    await _receiveAndOpen(() => receiveSharedMapInBackground(
           driveId: result.folderId,
           folderName: result.folderName,
           driveUrl: result.url,
           isReadOnly: result.isReadOnly,
+          notifications: ref.read(notificationCenterProvider.notifier),
         ));
   }
 

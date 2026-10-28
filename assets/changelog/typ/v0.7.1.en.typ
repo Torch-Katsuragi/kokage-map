@@ -53,7 +53,7 @@
   grid(
     columns: (auto, auto, auto), column-gutter: 10pt, align: horizon,
     phone(w: 72pt, h: 128pt, label: "Pick it from ⋮",
-      layer-menu(66pt, 114pt, "Layers", ("Stands", "Roads", "Points"), "Zoom to layer", mw: 58pt)),
+      layer-menu(66pt, 114pt, "Layers", ("Zones", "Roads", "Points"), "Zoom to layer", mw: 58pt)),
     arrow-r(w: 22pt),
     phone(w: 72pt, h: 128pt, label: "Right where the data is", mini-map(66pt, 114pt)),
   ),

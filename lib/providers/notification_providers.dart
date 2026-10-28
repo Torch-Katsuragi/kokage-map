@@ -49,6 +49,44 @@ class NotificationCenter extends _$NotificationCenter {
     state = [notification, ...state.take(_maxNotifications - 1)];
   }
 
+  /// 進行中の転送通知を開始（既存の同一 [transferKey] 通知があれば先頭に更新して差し替え）
+  void startTransfer({
+    required String transferKey,
+    required String title,
+    String? detail,
+  }) {
+    final notification = AppNotification(
+      id: '${DateTime.now().microsecondsSinceEpoch}-${_seq++}',
+      title: title,
+      detail: detail,
+      level: NotificationLevel.info,
+      transferKey: transferKey,
+    );
+    final rest = state.where((n) => n.transferKey != transferKey);
+    state = [notification, ...rest.take(_maxNotifications - 1)];
+  }
+
+  /// 進行中の転送通知を完了（成功/失敗）通知に切り替えて先頭に配置する（自動トーストも再発火）
+  void completeTransfer({
+    required String transferKey,
+    required String title,
+    String? detail,
+    NotificationLevel level = NotificationLevel.success,
+    String? actionLabel,
+    Future<void> Function()? onAction,
+  }) {
+    final completed = AppNotification(
+      id: '${DateTime.now().microsecondsSinceEpoch}-${_seq++}',
+      title: title,
+      detail: detail,
+      level: level,
+      actionLabel: actionLabel,
+      onAction: onAction,
+    );
+    final rest = state.where((n) => n.transferKey != transferKey);
+    state = [completed, ...rest.take(_maxNotifications - 1)];
+  }
+
   void markAsRead(String id) {
     final idx = state.indexWhere((n) => n.id == id);
     if (idx == -1) return;

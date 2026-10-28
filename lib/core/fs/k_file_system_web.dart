@@ -371,8 +371,32 @@ class WebFileSystem implements KFileSystem {
   }
 
   @override
-  Future<void> writeAsBytes(String path, Uint8List bytes) =>
-      _write(path, bytes.toJS);
+
+  Future<void> writeAsBytes(String path, Uint8List bytes) => _write(path, bytes.toJS);
+
+  @override
+  Future<void> writeStream(
+    String path,
+    Stream<List<int>> stream, {
+    void Function(int chunkBytes)? onChunk,
+  }) async {
+    final handle = await _fileHandle(path, create: true);
+    if (handle == null) throw _notFound(path);
+    final writable = await handle.createWritable().toDart;
+    try {
+      await for (final chunk in stream) {
+        final data = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+        await writable.write(data.toJS).toDart;
+        onChunk?.call(data.length);
+      }
+      await writable.close().toDart;
+    } catch (_) {
+      try {
+        await writable.abort().toDart;
+      } catch (_) {}
+      rethrow;
+    }
+  }
 
   @override
   Future<void> writeAsString(String path, String contents) =>

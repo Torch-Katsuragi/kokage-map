@@ -23,10 +23,12 @@ import 'package:root_maps/utils/app_logger.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../core/hidden_dirs.dart';
 import '../../core/node_types.dart';
+import '../../services/google_drive/drive_transfer_registry.dart';
 import '../../services/google_drive/sync_base_store.dart';
 import '../../services/kmeta_service.dart';
 import '../kmeta.dart';
 import 'drive_folder_node.dart';
+import 'drive_folder_set_node.dart';
 import 'external_layer_node.dart';
 import 'geopackage_node.dart';
 import 'global_folder_node.dart';
@@ -260,7 +262,22 @@ class FolderNode extends LayerTreeNode {
       if (driveId == null) return null;
       
       AppLogger.debug('[FolderNode] Drive連携フォルダを検出: $folderName (driveId: $driveId)');
-      return createDriveFolderNodeFromMeta(folderName, meta, parent);
+      final node = createDriveFolderNodeFromMeta(folderName, meta, parent);
+      if (node is DriveFolderNode) {
+        if (DriveTransferRegistry.instance.isBusy(folderPath)) {
+          node.syncStatus = SyncStatus.syncing;
+        } else if (await DriveTransferRegistry.instance.hasClonePending(folderPath)) {
+          node.syncStatus = SyncStatus.remoteChanges;
+        }
+      }
+      if (node is DriveFolderSetNode) {
+        if (DriveTransferRegistry.instance.isBusy(folderPath)) {
+          node.syncStatus = SyncStatus.syncing;
+        } else if (await DriveTransferRegistry.instance.hasClonePending(folderPath)) {
+          node.syncStatus = SyncStatus.remoteChanges;
+        }
+      }
+      return node;
     } catch (e) {
       AppLogger.debug('[FolderNode] Drive連携チェックエラー: $e');
       return null;
@@ -277,6 +294,18 @@ class FolderNode extends LayerTreeNode {
     if (driveId == null) return null;
     
     final driveUrl = meta.sync.driveUrl ?? '';
+    if (meta.sync.isFolderSet == true) {
+      return DriveFolderSetNode(
+        folderName,
+        manifestFileId: driveId,
+        manifestUrl: driveUrl,
+        lastSynced: meta.sync.lastSynced,
+        driveRevisionId: meta.sync.driveRevisionId,
+        visible: true,
+        parent: parent,
+        children: [],
+      );
+    }
     final isReadOnly = meta.sync.isReadOnly ?? false;
     
     return DriveFolderNode(
@@ -299,6 +328,16 @@ class FolderNode extends LayerTreeNode {
       if (meta != null && meta.sync.isLinked) {
         final driveId = meta.sync.driveId;
         if (driveId != null) {
+          if (meta.sync.isFolderSet == true) {
+            return DriveFolderSetNode(
+              'Home',
+              manifestFileId: driveId,
+              manifestUrl: meta.sync.driveUrl ?? '',
+              lastSynced: meta.sync.lastSynced,
+              driveRevisionId: meta.sync.driveRevisionId,
+              visible: true,
+            );
+          }
           AppLogger.debug(
             '[FolderNode] ルートがDrive連携: driveId=$driveId',
           );

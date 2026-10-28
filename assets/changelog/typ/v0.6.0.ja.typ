@@ -106,7 +106,7 @@
     pc(w: 84pt, h: 58pt, label: "QGIS で作った", mini-map(78pt, 43pt)),
     stack(dir: ttb, spacing: 3pt,
       file-icon(accent, w: 14pt),
-      text(size: 7pt, weight: "bold", fill: accent)[小班.gpkg],
+      text(size: 7pt, weight: "bold", fill: accent)[区画.gpkg],
       badge(ok: false)[JGD2011 平面直角],
       arrow-r(w: 30pt),
     ),

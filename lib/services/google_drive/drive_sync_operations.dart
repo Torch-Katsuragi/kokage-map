@@ -27,6 +27,7 @@ import '../../core/platform_capabilities.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/drive_folder_node.dart';
+import '../../models/nodes/drive_folder_set_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/global_folder_node.dart';
@@ -72,6 +73,12 @@ class DriveSyncOperations {
     final localPath = node.getAbsoluteFilePath();
     if (localPath == null) return;
 
+    if (DriveTransferRegistry.instance.isBusy(localPath)) {
+      node.syncStatus = SyncStatus.syncing;
+      onStateChanged();
+      return;
+    }
+
     node.syncStatus = SyncStatus.syncing;
     onStateChanged();
 
@@ -95,8 +102,109 @@ class DriveSyncOperations {
     final localPath = node.getAbsoluteFilePath();
     if (localPath == null) return;
 
+    final registry = DriveTransferRegistry.instance;
+    if (registry.isBusy(localPath)) {
+      _notify(t.drive.syncInProgress, NotificationLevel.info);
+      return;
+    }
+
     if (!await ensureDriveAuthenticated(context)) {
       AppLogger.debug('[DriveSync] 認証できないので中断');
+      return;
+    }
+
+    final notifier = ref.read(notificationCenterProvider.notifier);
+    final transferKey = DriveTransferRegistry.normalizeKey(localPath);
+
+    // 未完了のクローン（.sync/clone.pending）がある場合はマージダイアログを開かず（誤Push防止）、
+    // 即座に Pull を再開して未取得のファイルを落とす
+    if (await registry.hasClonePending(localPath)) {
+      node.syncStatus = SyncStatus.syncing;
+      onStateChanged();
+      registry.beginTransfer(
+        localPath,
+        folderName: node.name,
+        showOsNotification: true,
+      );
+      notifier.startTransfer(
+        transferKey: transferKey,
+        title: t.drive.resumingClone,
+        detail: node.name,
+      );
+      try {
+        final result = await SyncEngine().pullFolder(
+          localPath,
+          showOsNotification: true,
+        );
+        if (result.success) {
+          registry.updateProgress(
+            localPath,
+            const SyncProgress.finalizing(),
+            folderName: node.name,
+            showOsNotification: true,
+          );
+          await _refreshAndNotify(ref, node);
+          onMapRefresh?.call();
+          node.syncStatus = SyncStatus.synced;
+          final doneTitle = t.drive.downloadCompleteTitle(name: node.name);
+          final doneDetail = t.drive.downloadCompleteDetail(
+            count: result.downloadedCount.toString(),
+          );
+          registry.endTransfer(
+            localPath,
+            driveId: node.driveId,
+            folderName: node.name,
+            success: true,
+            completionTitle: doneTitle,
+            completionBody: doneDetail,
+            showOsNotification: true,
+          );
+          notifier.completeTransfer(
+            transferKey: transferKey,
+            title: doneTitle,
+            detail: doneDetail,
+            level: NotificationLevel.success,
+          );
+        } else {
+          node.syncStatus = SyncStatus.error;
+          final errMsg = result.errorMessage ?? '';
+          registry.endTransfer(
+            localPath,
+            driveId: node.driveId,
+            folderName: node.name,
+            success: false,
+            completionTitle: t.drive.downloadFailedTitle(name: node.name),
+            completionBody: errMsg,
+            errorMessage: errMsg,
+            showOsNotification: true,
+          );
+          notifier.completeTransfer(
+            transferKey: transferKey,
+            title: t.drive.downloadFailedTitle(name: node.name),
+            detail: errMsg,
+            level: NotificationLevel.error,
+          );
+        }
+      } catch (e) {
+        node.syncStatus = SyncStatus.error;
+        registry.endTransfer(
+          localPath,
+          driveId: node.driveId,
+          folderName: node.name,
+          success: false,
+          completionTitle: t.drive.downloadFailedTitle(name: node.name),
+          completionBody: '$e',
+          errorMessage: '$e',
+          showOsNotification: true,
+        );
+        notifier.completeTransfer(
+          transferKey: transferKey,
+          title: t.drive.downloadFailedTitle(name: node.name),
+          detail: '$e',
+          level: NotificationLevel.error,
+        );
+      }
+      onStateChanged();
       return;
     }
 
@@ -173,7 +281,21 @@ class DriveSyncOperations {
       node.syncStatus = SyncStatus.syncing;
       onStateChanged();
 
-      final result = await syncEngine.executeMerge(localPath, decisions);
+      registry.beginTransfer(
+        localPath,
+        folderName: node.name,
+        showOsNotification: true,
+      );
+      notifier.startTransfer(
+        transferKey: transferKey,
+        title: t.drive.downloadingTitle(name: node.name),
+      );
+
+      final result = await syncEngine.executeMerge(
+        localPath,
+        decisions,
+        showOsNotification: true,
+      );
 
       if (result.success) {
         // 行単位で合わせられなかったファイルは衝突のまま（端末かクラウドを選び直してもらう）。
@@ -188,19 +310,35 @@ class DriveSyncOperations {
             result.deletedCount > 0 ||
             result.movedCount > 0 ||
             result.mergedCount > 0) {
+          registry.updateProgress(
+            localPath,
+            const SyncProgress.finalizing(),
+            folderName: node.name,
+            showOsNotification: true,
+          );
           await _refreshAndNotify(ref, node);
           onMapRefresh?.call();
           onStateChanged();
         }
 
-        _notify(
-          t.drive.syncComplete(
-            uploaded: result.uploadedCount.toString(),
-            downloaded: result.downloadedCount.toString(),
-            deleted: result.deletedCount.toString(),
-            moved: result.movedCount.toString(),
-          ),
-          NotificationLevel.success,
+        final doneMsg = t.drive.syncComplete(
+          uploaded: result.uploadedCount.toString(),
+          downloaded: result.downloadedCount.toString(),
+          deleted: result.deletedCount.toString(),
+          moved: result.movedCount.toString(),
+        );
+        registry.endTransfer(
+          localPath,
+          driveId: node.driveId,
+          folderName: node.name,
+          success: true,
+          completionTitle: doneMsg,
+          showOsNotification: true,
+        );
+        notifier.completeTransfer(
+          transferKey: transferKey,
+          title: doneMsg,
+          level: NotificationLevel.success,
         );
         notifyMerge(
           ref,
@@ -212,15 +350,44 @@ class DriveSyncOperations {
         );
       } else {
         node.syncStatus = SyncStatus.error;
-        _notify(
-          t.drive.syncError(error: result.errorMessage ?? ''),
-          NotificationLevel.error,
+        final errMsg = t.drive.syncError(error: result.errorMessage ?? '');
+        registry.endTransfer(
+          localPath,
+          driveId: node.driveId,
+          folderName: node.name,
+          success: false,
+          completionTitle: errMsg,
+          errorMessage: result.errorMessage,
+          showOsNotification: true,
+        );
+        notifier.completeTransfer(
+          transferKey: transferKey,
+          title: errMsg,
+          level: NotificationLevel.error,
         );
       }
     } catch (e) {
       if (progressShown && context.mounted) Navigator.of(context).pop();
       node.syncStatus = SyncStatus.error;
-      _notify(t.drive.syncError(error: e.toString()), NotificationLevel.error);
+      final errMsg = t.drive.syncError(error: e.toString());
+      if (registry.isBusy(localPath)) {
+        registry.endTransfer(
+          localPath,
+          driveId: node.driveId,
+          folderName: node.name,
+          success: false,
+          completionTitle: errMsg,
+          errorMessage: '$e',
+          showOsNotification: true,
+        );
+        notifier.completeTransfer(
+          transferKey: transferKey,
+          title: errMsg,
+          level: NotificationLevel.error,
+        );
+      } else {
+        _notify(errMsg, NotificationLevel.error);
+      }
     }
 
     onStateChanged();
@@ -361,10 +528,134 @@ class DriveSyncOperations {
     }
   }
 
+  /// 共有フォルダセット（JSON）のリスト再取得＆差分同期を実行
+  Future<void> syncFolderSet(
+    BuildContext context,
+    DriveFolderSetNode node,
+  ) async {
+    final localPath = node.getAbsoluteFilePath();
+    if (localPath == null) return;
+
+    final registry = DriveTransferRegistry.instance;
+    if (registry.isBusy(localPath)) {
+      _notify(t.drive.syncInProgress, NotificationLevel.info);
+      return;
+    }
+
+    if (!await ensureDriveAuthenticated(context)) {
+      return;
+    }
+
+    final notifier = ref.read(notificationCenterProvider.notifier);
+    final transferKey = DriveTransferRegistry.normalizeKey(localPath);
+
+    node.syncStatus = SyncStatus.syncing;
+    onStateChanged();
+
+    registry.beginTransfer(
+      localPath,
+      folderName: node.name,
+      showOsNotification: true,
+    );
+    notifier.startTransfer(
+      transferKey: transferKey,
+      title: t.drive.downloadingTitle(name: node.name),
+    );
+
+    try {
+      final result = await DriveFolderSetService().reconcileSet(
+        localSetPath: localPath,
+        manifestFileId: node.manifestFileId,
+        setNode: node,
+        showOsNotification: true,
+      );
+      if (result.success) {
+        await DriveFolderSetService.reloadFolderSetNode(node);
+        onMapRefresh?.call();
+        final hasFailures = result.failedItems.isNotEmpty;
+        node.syncStatus = hasFailures ? SyncStatus.error : SyncStatus.synced;
+        onStateChanged();
+
+        final hasChanges = result.addedCount > 0 || result.removedCount > 0;
+        final keptOnly = !hasChanges && !hasFailures && result.keptWithLocalChanges.isNotEmpty;
+        final doneMsg = hasFailures
+            ? t.drive.syncError(error: result.failedItems.join('、'))
+            : hasChanges
+                ? t.drive.folderSetUpdated(
+                    added: result.addedCount.toString(),
+                    removed: result.removedCount.toString(),
+                  )
+                : keptOnly
+                    ? t.drive.folderSetKeptLocalChanges(
+                        names: result.keptWithLocalChanges.join('、'),
+                      )
+                    : t.drive.noChanges;
+        registry.endTransfer(
+          localPath,
+          driveId: node.driveId,
+          folderName: node.name,
+          success: !hasFailures,
+          completionTitle: doneMsg,
+          showOsNotification: true,
+        );
+        notifier.completeTransfer(
+          transferKey: transferKey,
+          title: doneMsg,
+          level: (hasFailures || keptOnly) ? NotificationLevel.warning : NotificationLevel.success,
+        );
+
+        if ((hasChanges || hasFailures) && result.keptWithLocalChanges.isNotEmpty) {
+          _notify(
+            t.drive.folderSetKeptLocalChanges(
+              names: result.keptWithLocalChanges.join('、'),
+            ),
+            NotificationLevel.warning,
+          );
+        }
+      } else {
+        node.syncStatus = SyncStatus.error;
+        onStateChanged();
+        final errMsg = t.drive.syncError(error: result.errorMessage ?? '');
+        registry.endTransfer(
+          localPath,
+          driveId: node.driveId,
+          folderName: node.name,
+          success: false,
+          completionTitle: errMsg,
+          errorMessage: result.errorMessage,
+          showOsNotification: true,
+        );
+        notifier.completeTransfer(
+          transferKey: transferKey,
+          title: errMsg,
+          level: NotificationLevel.error,
+        );
+      }
+    } catch (e) {
+      node.syncStatus = SyncStatus.error;
+      onStateChanged();
+      final errMsg = t.drive.syncError(error: '$e');
+      registry.endTransfer(
+        localPath,
+        driveId: node.driveId,
+        folderName: node.name,
+        success: false,
+        completionTitle: errMsg,
+        errorMessage: '$e',
+        showOsNotification: true,
+      );
+      notifier.completeTransfer(
+        transferKey: transferKey,
+        title: errMsg,
+        level: NotificationLevel.error,
+      );
+    }
+  }
+
   /// Drive連携を解除（子ノード付きフォルダ用、ルート以外）
   Future<void> unlinkDriveFolder(
     BuildContext context,
-    DriveFolderNode node,
+    FolderNode node,
   ) async {
     final confirmed = await showConfirmDialog(
       context,
@@ -404,11 +695,17 @@ class DriveSyncOperations {
                 parent: parentNode,
                 children: [],
               );
+        for (final child in node.children) {
+          child.parent = replacement;
+          replacement.children.add(child);
+        }
+        node.children.clear();
         parentNode.children[index] = replacement;
         node.parent = null;
       }
     }
 
+    onMapRefresh?.call();
     onStateChanged();
 
     _notify(t.drive.unlinkSuccess, NotificationLevel.info);
@@ -417,7 +714,7 @@ class DriveSyncOperations {
   /// Drive連携フォルダをローカルから完全削除
   Future<void> deleteDriveFolder(
     BuildContext context,
-    DriveFolderNode node,
+    FolderNode node,
   ) async {
     final confirmed = await showConfirmDialog(
       context,
@@ -432,10 +729,11 @@ class DriveSyncOperations {
     if (folderPath == null) return;
 
     try {
+      await node.dispose();
       if (await fs.isDirectory(folderPath)) {
         await fs.delete(folderPath, recursive: true);
       }
-      node.parent?.removeChild(node);
+      onMapRefresh?.call();
       onStateChanged();
 
       _notify(
@@ -495,24 +793,39 @@ class DriveSyncOperations {
 
   /// ノードの同期状態を更新
   static void updateNodeSyncStatus(
-    DriveFolderNode node,
+    FolderNode node,
     FolderSyncStatus status,
   ) {
-    switch (status) {
+    final next = switch (status) {
+      FolderSyncStatus.synced => SyncStatus.synced,
+      FolderSyncStatus.localChanges => SyncStatus.localChanges,
+      FolderSyncStatus.remoteChanges => SyncStatus.remoteChanges,
+      FolderSyncStatus.conflict => SyncStatus.conflict,
+      FolderSyncStatus.notLinked || FolderSyncStatus.error => SyncStatus.error,
+    };
+    if (node is DriveFolderNode) {
+      node.syncStatus = next;
+    } else if (node is DriveFolderSetNode) {
+      node.syncStatus = next;
+    }
+  }
+  /*
       case FolderSyncStatus.synced:
+        break;
         node.syncStatus = SyncStatus.synced;
       case FolderSyncStatus.localChanges:
-        node.syncStatus = SyncStatus.localChanges;
+        break;
       case FolderSyncStatus.remoteChanges:
-        node.syncStatus = SyncStatus.remoteChanges;
+        break;
       case FolderSyncStatus.conflict:
-        node.syncStatus = SyncStatus.conflict;
+        break;
       case FolderSyncStatus.notLinked:
       case FolderSyncStatus.error:
         node.syncStatus = SyncStatus.error;
     }
   }
 
+  */
   /// 同期で落としたあとの更新: ツリーを読み直し、QGIS で保存された `.qgs` が届いていれば読み戻す。
   ///
   /// 読み戻しは開いたときにしか走らなかったので、QGIS で直した `.qgs` が Drive 越しに届いても、

@@ -94,6 +94,12 @@
             android:exported="false"
             android:stopWithTask="true"
             tools:replace="android:exported,android:stopWithTask" />
+
+        <!-- Google Drive 共有フォルダ転送用の dataSync フォアグラウンドサービス -->
+        <service
+            android:name=".DriveTransferService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
             
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

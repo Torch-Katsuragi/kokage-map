@@ -88,11 +88,18 @@ class RelayGoogleDrive implements GoogleDriveService {
       }));
 
   @override
-  Future<bool> downloadFile(String fileId, String localPath) async {
+  Future<bool> downloadFile(
+    String fileId,
+    String localPath, {
+    void Function(int chunkBytes)? onChunk,
+    void Function()? onRetryReset,
+  }) async {
     final b64 = await relay.call('download', {'id': fileId});
     if (b64 == null) return false;
+    final bytes = base64Decode(b64 as String);
     await File(localPath).parent.create(recursive: true);
-    await File(localPath).writeAsBytes(base64Decode(b64 as String), flush: true);
+    await File(localPath).writeAsBytes(bytes, flush: true);
+    onChunk?.call(bytes.length);
     return true;
   }
 

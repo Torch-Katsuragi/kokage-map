@@ -113,7 +113,7 @@ class _RoomPinDialogState extends State<_RoomPinDialog> {
   }
 }
 
-/// ピンをタップしたときのカード（誰が・いつ・一言、「ここへ案内」「書き換える」「消す」）
+/// ピンをタップしたときのカード（誰が・いつ・一言、「書き換える」「消す」）
 Future<void> showRoomPinCard(BuildContext context, RoomPinView view) {
   return showModalBottomSheet<void>(
     context: context,
@@ -178,20 +178,12 @@ class _RoomPinCard extends ConsumerWidget {
                 ],
               ),
             ],
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  icon: const Icon(Icons.near_me),
-                  label: Text(t.guidance.action),
-                  onPressed: () {
-                    notifier.guideTo(pin);
-                    Navigator.of(context).pop();
-                  },
-                ),
-                if (state.canEdit(pin)) ...[
+            if (state.canEdit(pin)) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
                   OutlinedButton.icon(
                     icon: const Icon(Icons.edit),
                     label: Text(t.party.pins.edit),
@@ -221,8 +213,8 @@ class _RoomPinCard extends ConsumerWidget {
                     },
                   ),
                 ],
-              ],
-            ),
+              ),
+            ],
           ],
         ),
       ),

@@ -23,9 +23,12 @@ import '../../../core/fs/k_file_system.dart';
 import '../../../core/platform_capabilities.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../models/nodes/drive_folder_node.dart';
+import '../../../models/nodes/drive_folder_set_node.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../presentation/node_presenter.dart';
 import '../../../providers/notification_providers.dart';
+import '../../../services/google_drive/drive_transfer_registry.dart';
+import '../../../services/google_drive/sync_progress.dart';
 import '../../dialogs/drive_qr_dialog.dart';
 import '../../external_layer_actions.dart';
 import '../add_files_action.dart';
@@ -40,8 +43,11 @@ class FolderTile extends ConsumerWidget {
   final VoidCallback? onRename;
   final Future<void> Function(BuildContext, DriveFolderNode, {required SyncMode mode})? onSyncMerge;
   final Future<void> Function(DriveFolderNode)? onRefreshSync;
-  final Future<void> Function(BuildContext, DriveFolderNode)? onUnlinkDrive;
-  final Future<void> Function(BuildContext, DriveFolderNode)? onDeleteDrive;
+  final Future<void> Function(BuildContext, DriveFolderSetNode)? onSyncFolderSet;
+  final Future<void> Function(BuildContext, FolderNode)? onUnlinkDrive;
+  final Future<void> Function(BuildContext, FolderNode)? onDeleteDrive;
+
+
 
   /// 名前変更・削除のメニューを出さない（「この端末」とグローバルフォルダ本体）。
   /// 実体の場所はアプリが決めているので、ツリーから動かしたり消したりさせない
@@ -60,6 +66,7 @@ class FolderTile extends ConsumerWidget {
     this.onRename,
     this.onSyncMerge,
     this.onRefreshSync,
+    this.onSyncFolderSet,
     this.onUnlinkDrive,
     this.onDeleteDrive,
     this.fixed = false,
@@ -77,6 +84,62 @@ class FolderTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dimmed = !node.isVisibleRecursive();
     final drive = node is DriveFolderNode ? node as DriveFolderNode : null;
+    final folderSet = node is DriveFolderSetNode ? node as DriveFolderSetNode : null;
+    final absPath = (drive ?? folderSet)?.getAbsoluteFilePath();
+
+    if ((drive != null || folderSet != null) && absPath != null && _canSync) {
+      return ValueListenableBuilder<SyncProgress?>(
+        valueListenable: DriveTransferRegistry.instance.progressOf(absPath),
+        builder: (context, progress, _) {
+          final rawStatus = drive?.syncStatus ?? folderSet!.syncStatus;
+          final effectiveStatus =
+              progress != null ? SyncStatus.syncing : rawStatus;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DrawerRow(
+                dimmed: dimmed,
+                leading: NodePresenter.buildIconWithSyncOverlay(
+                  node,
+                  size: 22,
+                  syncStatus: effectiveStatus,
+                ),
+                title: NodePresenter.getDisplayName(node),
+                selected: isDropTarget,
+                subtitle: isDropTarget
+                    ? Text(
+                        t.layerDrawer.folder.dropFilesHere,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : progress != null
+                    ? _buildProgressSubtitle(progress)
+                    : drive != null
+                    ? _buildSyncSubtitle(context, drive)
+                    : _buildFolderSetSubtitle(folderSet!),
+                eye: nodeVisibilityEye(ref, node),
+                onTap: onTap,
+                menu: () => _menuItems(drive, folderSet: folderSet, isBusy: progress != null),
+                onMenu: (v) => _onMenu(context, ref, v, drive, folderSet: folderSet),
+                onSwipeMove: onSwipeMove,
+              ),
+              if (progress != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: LinearProgressIndicator(
+                    value: progress.fraction,
+                    minHeight: 2,
+                  ),
+                ),
+            ],
+          );
+        },
+      );
+    }
+
     return DrawerRow(
       dimmed: dimmed,
       leading: drive != null && _canSync
@@ -94,13 +157,28 @@ class FolderTile extends ConsumerWidget {
               : Text(t.layerDrawer.folder.pcSyncDisabled, style: const TextStyle(fontSize: 13, color: Colors.grey)),
       eye: nodeVisibilityEye(ref, node),
       onTap: onTap,
-      menu: () => _menuItems(drive),
-      onMenu: (v) => _onMenu(context, ref, v, drive),
+      menu: () => _menuItems(drive, folderSet: folderSet),
+      onMenu: (v) => _onMenu(context, ref, v, drive, folderSet: folderSet),
       onSwipeMove: onSwipeMove,
     );
   }
 
-  List<RowMenuItem> _menuItems(DriveFolderNode? drive) {
+  List<RowMenuItem> _menuItems(
+    DriveFolderNode? drive, {
+    DriveFolderSetNode? folderSet,
+    bool isBusy = false,
+  }) {
+    if (folderSet != null) {
+      return [
+        if (!isBusy && _canSync)
+          RowMenuItem('refresh_set', t.layerDrawer.folder.refreshStatus, icon: Icons.refresh),
+        RowMenuItem('qr_set', t.driveQr.menu, icon: Icons.qr_code_2),
+        if (!isBusy && _canSync) ...[
+          RowMenuItem('unlink_set', t.layerDrawer.folder.unlinkDrive, icon: Icons.link_off, danger: true, dividerBefore: true),
+          RowMenuItem('delete_drive_set', t.layerDrawer.folder.deleteFolderAll, icon: Icons.delete_forever, danger: true),
+        ],
+      ];
+    }
     if (drive == null) {
       if (fixed) return const [];
       return [
@@ -115,6 +193,11 @@ class FolderTile extends ConsumerWidget {
       return [
         if (!drive.isReadOnly) RowMenuItem('add_files', t.layerDrawer.folder.addFiles, icon: Icons.note_add_outlined),
         _convertAllItem(drive),
+        RowMenuItem('qr', t.driveQr.menu, icon: Icons.qr_code_2),
+      ];
+    }
+    if (isBusy) {
+      return [
         RowMenuItem('qr', t.driveQr.menu, icon: Icons.qr_code_2),
       ];
     }
@@ -136,7 +219,13 @@ class FolderTile extends ConsumerWidget {
       ? RowMenuItem('convert_all', t.layerDrawer.folder.copyAll, icon: Icons.copy_all)
       : RowMenuItem('convert_all', t.layerDrawer.folder.convertAll, icon: Icons.transform);
 
-  Future<void> _onMenu(BuildContext context, WidgetRef ref, String value, DriveFolderNode? drive) async {
+  Future<void> _onMenu(
+    BuildContext context,
+    WidgetRef ref,
+    String value,
+    DriveFolderNode? drive, {
+    DriveFolderSetNode? folderSet,
+  }) async {
     switch (value) {
       case 'add_files':
         await pickAndAddFiles(ref, node);
@@ -163,6 +252,14 @@ class FolderTile extends ConsumerWidget {
         await onUnlinkDrive?.call(context, drive!);
       case 'delete_drive':
         await onDeleteDrive?.call(context, drive!);
+      case 'refresh_set':
+        await onSyncFolderSet?.call(context, folderSet!);
+      case 'qr_set':
+        await DriveQrDialog.show(context, folderName: folderSet!.name, driveUrl: folderSet.driveUrl);
+      case 'unlink_set':
+        await onUnlinkDrive?.call(context, folderSet!);
+      case 'delete_drive_set':
+        await onDeleteDrive?.call(context, folderSet!);
     }
   }
 
@@ -183,6 +280,42 @@ class FolderTile extends ConsumerWidget {
         ref.refreshMap();
       },
     );
+  }
+
+  Widget _buildProgressSubtitle(SyncProgress progress) {
+    final String label;
+    switch (progress.phase) {
+      case SyncPhase.scanning:
+        label = t.drive.scanningFolder;
+      case SyncPhase.transferring:
+        final pct = progress.percent;
+        final bytes = progress.formattedBytes;
+        final file = progress.currentFileName;
+        label = [
+          if (pct != null) '$pct%',
+          if (bytes != null) '($bytes)',
+          if (file != null && file.isNotEmpty) '· $file',
+          if (pct == null && bytes == null) t.layerDrawer.folder.syncing,
+        ].join(' ');
+      case SyncPhase.finalizing:
+        label = t.drive.finalizingData;
+    }
+    return Text(
+      label,
+      style: const TextStyle(fontSize: 12, color: Colors.blue),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  Widget _buildFolderSetSubtitle(DriveFolderSetNode setNode) {
+    final (text, color) = switch (setNode.syncStatus) {
+      SyncStatus.synced => (t.layerDrawer.folder.synced, Colors.green),
+      SyncStatus.syncing => (t.layerDrawer.folder.syncing, Colors.blue),
+      SyncStatus.error => (t.layerDrawer.folder.syncError, Colors.red),
+      _ => (t.layerDrawer.folder.driveLinked, Colors.grey),
+    };
+    return Text(text, style: TextStyle(fontSize: 13, color: color));
   }
 
   Widget _buildSyncSubtitle(BuildContext context, DriveFolderNode driveNode) {

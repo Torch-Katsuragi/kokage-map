@@ -54,7 +54,6 @@ import '../../../models/map_style_group.dart';
 import '../../../models/nodes/external_overlay_image_node.dart';
 import '../../../models/nodes/overlay_image_node.dart';
 import '../../../models/party/party_room.dart';
-import '../../../providers/guidance_providers.dart';
 import '../../../providers/party_providers.dart';
 import '../../../providers/room_pin_providers.dart';
 import '../../../providers/selection_providers.dart';
@@ -104,6 +103,7 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
     required this.mapBearingNotifier,
     required this.cameraTickNotifier,
     this.heading,
+    this.onUserCameraGesture,
   });
 
   final IMapState mapState;
@@ -127,6 +127,9 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   /// 地図面の登録 / 解除（組み上がったとき / 外れるとき）。登録先は [controller] に attach する
   final void Function(MapSurface? surface) onSurfaceChanged;
 
+  /// ユーザーが指・マウス・ホイールで地図を操作したとき
+  final VoidCallback? onUserCameraGesture;
+
   /// コンパス扇と画面外インジケータの追従用（map_page_state_base のもの）
   final ValueNotifier<double> mapBearingNotifier;
   final ValueNotifier<int> cameraTickNotifier;
@@ -134,9 +137,6 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   @override
   ConsumerState<TerrainMapLayer> createState() => _TerrainMapLayerState();
 }
-
-/// 地図の長押しメニューの項目
-enum _LongPressChoice { guide, pin }
 
 class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     with
@@ -754,7 +754,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
 
   void _onTapUp(TapUpDetails d) {
     // パーティの共有ピンに当たればそのカードを出す（描く・測るツールの間は地図の操作を優先）
-    if (_longPressGuides(ref.read(currentToolProvider).name)) {
+    if (_allowsRoomPinGesture(ref.read(currentToolProvider).name)) {
       final pin = _pinAt(d.localPosition);
       if (pin != null) {
         unawaited(showRoomPinCard(context, pin));
@@ -779,54 +779,35 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     return best;
   }
 
-  /// 長押しで「ここへ案内」を出すツール（描く・測るツールは長押しを自分で使うか、指を止めることがあるので外す）
-  static bool _longPressGuides(String toolName) => toolName == 'Pan' || toolName == 'Select';
+  /// 共有ピンの操作を受け付けるツール（描く・測るツールは長押しを自分で使うか、指を止めることがあるので外す）
+  static bool _allowsRoomPinGesture(String toolName) => toolName == 'Pan' || toolName == 'Select';
 
-  /// 地図の長押し: その地点への「ここへ案内」と、ルームに入っていれば「ピンを立てる」を出す
+  /// 地図の長押し: ルームに入っていれば「ピンを立てる」を出す
   Future<void> _onLongPressStart(LongPressStartDetails d) async {
+    if (!ref.read(roomPinsProvider).active) return;
     final p = unproject(d.localPosition);
     final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
     if (p == null || overlay is! RenderBox) return;
-    final inRoom = ref.read(roomPinsProvider).active;
-    final choice = await showMenu<_LongPressChoice>(
+    final ok = await showMenu<bool>(
       context: context,
       position: RelativeRect.fromRect(d.globalPosition & const Size(1, 1), Offset.zero & overlay.size),
       items: [
         PopupMenuItem(
-          value: _LongPressChoice.guide,
+          value: true,
           child: Row(
             children: [
-              Icon(Icons.near_me, size: 18, color: Colors.pink.shade700),
+              const Icon(Icons.push_pin, size: 18, color: Colors.deepOrange),
               const SizedBox(width: 8),
-              Text(t.guidance.action),
+              Text(t.party.pins.place),
             ],
           ),
         ),
-        if (inRoom)
-          PopupMenuItem(
-            value: _LongPressChoice.pin,
-            child: Row(
-              children: [
-                const Icon(Icons.push_pin, size: 18, color: Colors.deepOrange),
-                const SizedBox(width: 8),
-                Text(t.party.pins.place),
-              ],
-            ),
-          ),
       ],
     );
-    if (choice == null || !mounted) return;
-    switch (choice) {
-      case _LongPressChoice.guide:
-        ref.read(guidanceProvider.notifier).start(GuidanceTarget(
-              point: p,
-              label: '${t.guidance.mapPoint} ${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}',
-            ));
-      case _LongPressChoice.pin:
-        final r = await showRoomPinDialog(context);
-        if (r == null || !mounted) return;
-        await ref.read(roomPinsProvider.notifier).add(r.$1, p, text: r.$2);
-    }
+    if (ok != true || !mounted) return;
+    final r = await showRoomPinDialog(context);
+    if (r == null || !mounted) return;
+    await ref.read(roomPinsProvider.notifier).add(r.$1, p, text: r.$2);
   }
 
   // ── UI ──────────────────────────────────────────────
@@ -836,8 +817,6 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     ref.listen(partySessionProvider, (_, _) => _scheduleRefresh());
     ref.listen(roomPinsProvider, (_, _) => _scheduleRefresh());
     ref.listen(currentToolProvider, (_, next) => _onToolChanged(next.name));
-    // 地点への誘導: 行き先・今の位置が変わったら線を引き直す
-    ref.listen(guidanceProvider.select((g) => (g.target?.point, g.here)), (_, _) => _scheduleRefresh());
     // チュートリアル: 章に入るたびに 2D・北が上に戻す（1 章で 3D にすると、次の章も斜めの眺めで始まっていた）
     ref.listen(tutorialProvider, (prev, s) {
       if (s == null || s.menu || s.index != 0) return;
@@ -853,6 +832,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         final size = constraints.biggest;
         if (size != _size) {
           _size = size;
+          if (_size != Size.zero && _pendingFitCoordinates != null) {
+            final pendingCoords = _pendingFitCoordinates!;
+            final pendingPad = _pendingFitPadding;
+            _pendingFitCoordinates = null;
+            unawaited(fitCoordinates(pendingCoords, padding: pendingPad));
+          }
           _scheduleRefresh();
         }
         _painter.pixelRatio = MediaQuery.devicePixelRatioOf(context);
@@ -872,7 +857,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
                 onScaleUpdate: _onScaleUpdate,
                 onScaleEnd: _onScaleEnd,
                 onTapUp: _onTapUp,
-                onLongPressStart: _longPressGuides(toolName) && !_penLock ? _onLongPressStart : null,
+                onLongPressStart: _allowsRoomPinGesture(toolName) && !_penLock ? _onLongPressStart : null,
                 child: ClipRect(
                   child: ColoredBox(
                     // 最初に全面が揃うまでは透明にして後ろを見せる（入った直後の白い一瞬を消す）

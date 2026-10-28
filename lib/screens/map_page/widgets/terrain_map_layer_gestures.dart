@@ -87,6 +87,7 @@ mixin _TerrainGestures on ConsumerState<TerrainMapLayer> {
       ref.read(currentToolProvider).onScaleStart(d, widget.mapState);
       return;
     }
+    widget.onUserCameraGesture?.call();
     _toolDrag = false;
     _scaleStart = _camera.scale;
     _bearingStart = _camera.bearing;
@@ -170,6 +171,7 @@ mixin _TerrainGestures on ConsumerState<TerrainMapLayer> {
 
   /// 画面上の移動量 [delta] を方位・傾きに（1 本指・右ドラッグ・Ctrl + 左ドラッグで共通）。2D では方位だけ
   void _rotateBy(Offset delta) {
+    widget.onUserCameraGesture?.call();
     _camera.bearing += delta.dx * 0.006;
     if (!_flat) _camera.pitch = (_camera.pitch - delta.dy * 0.004).clamp(0.0, _maxPitch);
     _gesturing = true;
@@ -179,6 +181,7 @@ mixin _TerrainGestures on ConsumerState<TerrainMapLayer> {
   /// ホイール = 拡縮（カーソルの下を留める）
   void _onPointerSignal(PointerSignalEvent e) {
     if (e is! PointerScrollEvent || _size == Size.zero) return;
+    widget.onUserCameraGesture?.call();
     final dz = -e.scrollDelta.dy / 400; // 1 ノッチ ≒ 0.25 段
     _keepGroundUnder(e.localPosition, () => _camera.zoom = (_camera.zoom + dz).clamp(8, 22));
     _refresh();

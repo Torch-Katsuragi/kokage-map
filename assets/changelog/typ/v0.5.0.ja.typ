@@ -32,7 +32,7 @@
 #let warn-badge(body) = box(fill: rgb("#fdecea"), radius: 20pt, inset: (x: 5pt, y: 2.5pt),
   text(size: 7.5pt, weight: "bold", fill: map-red)[#body])
 
-// 重なった地物（区画・路網・点）。sel で選ばれているものを青く
+// 重なった地物（区画・道路・点）。sel で選ばれているものを青く
 #let pick-map(w, h, sel) = box(width: w, height: h, clip: true, radius: 3pt, {
   place(rect(width: w, height: h, fill: map-bg))
   place(dx: w * 0.14, dy: h * 0.16, rect(width: w * 0.62, height: h * 0.64, radius: 1pt,

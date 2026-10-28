@@ -71,6 +71,14 @@ abstract class KFileSystem {
 
   Future<void> writeAsBytes(String path, Uint8List bytes);
 
+  /// チャンクストリームを受け取り、一時ファイル（またはスワップ）経由でアトミックに書き込む。
+  /// チャンク到着ごとに [onChunk] へバイト数を通知する。
+  Future<void> writeStream(
+    String path,
+    Stream<List<int>> stream, {
+    void Function(int chunkBytes)? onChunk,
+  });
+
   Future<void> writeAsString(String path, String contents);
 
   /// ディレクトリを作る（親が無ければ再帰的に作る／既にあれば何もしない）

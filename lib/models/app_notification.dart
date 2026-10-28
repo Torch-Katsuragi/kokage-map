@@ -41,6 +41,11 @@ class AppNotification {
   final Future<void> Function()? onAction;
   bool actionDone = false;
 
+  /// バックグラウンド転送と紐づけるキー（[DriveTransferRegistry.normalizeKey] の値）。
+  /// 転送中は [DriveTransferRegistry.progressOf] を購読してライブ進捗バーを描画し、
+  /// 完了時に同じ枠を完了通知へ差し替える。
+  final String? transferKey;
+
   AppNotification({
     required this.id,
     required this.title,
@@ -50,6 +55,7 @@ class AppNotification {
     this.isRead = false,
     this.actionLabel,
     this.onAction,
+    this.transferKey,
   }) : timestamp = timestamp ?? DateTime.now();
 
   bool get isExpandable => detail != null && detail!.isNotEmpty;

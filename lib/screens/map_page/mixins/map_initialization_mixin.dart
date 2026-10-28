@@ -140,9 +140,11 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
           // ツリーを読み直し、QGIS で保存された .qgs が届いていれば読み戻す
           onRefreshNeeded: (node) async {
             final readBack = await DriveSyncOperations.refreshAfterSync(node);
-            if (readBack == null || !mounted) return;
-            notifyQgsReadBack(ref, readBack);
-            // 読み戻した View・スタイルで描き直す
+            if (!mounted) return;
+            if (readBack != null) {
+              notifyQgsReadBack(ref, readBack);
+            }
+            // 新規ダウンロードや同期で増えたレイヤのフィーチャ読込・再描画を必ず走らせる
             ref.read(featureRefreshTriggerProvider.notifier).trigger();
           },
           onMerged: (node, result) {
@@ -301,7 +303,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
           if (next == currentLocation && movedToCurrentLocationOnce) return;
           final first = currentLocation == null;
           locationNotifier.value = next;
-          feedGuidance();
           // ページを組み立て直すのは、最初に位置が取れたとき（ボタンの状態が変わる）と、現在位置の詳細パネルが開いているときだけ
           if (first || showsCurrentLocationDetail) triggerSetState(() {});
           {
@@ -431,12 +432,13 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     return null;
   }
 
-  /// 起動時のカメラ（ユーザー 2026-09-13。「GPS が無いと東京」をやめる）:
-  /// フィーチャがあれば全部が入る位置・ズームで始め、GPS の初回フィックスへは飛ばない。
-  /// 無ければ東京で始め、GPS が取れたときだけそこへ飛ぶ。CLI / URL で位置が指定されていればそちら（何もしない）。
-  /// GPS の初回フィックスがフィーチャの読み込みより先に来ても、ここで上書きする（フィーチャ優先）
+  /// 起動時の仮カメラ（GPS が無い場合のフォールバック）:
+  /// フィーチャがあれば全部が入る位置・ズームに一旦セットする。
+  /// ただし GPS の初回位置ジャンプ（[movedToCurrentLocationOnce]）が最優先であり、
+  /// すでに GPS 位置へジャンプ済みなら上書きしない。また、まだ GPS が取れていなければ
+  /// [movedToCurrentLocationOnce] を true にせず、後から GPS が取れた時点で現在位置へジャンプさせる。
   void fitToFeaturesAtStart() {
-    if (initialViewDecided) return;
+    if (initialViewDecided || movedToCurrentLocationOnce) return;
     final coords = <LatLng>[];
     final tree = ref.read(folderTreeProvider);
     if (tree != null) {
@@ -449,8 +451,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       return;
     }
     initialViewDecided = true;
-    movedToCurrentLocationOnce = true;
-    AppLogger.debug('[Init] フィーチャ ${coords.length} 点が入る範囲から始める');
+    AppLogger.debug('[Init] フィーチャ ${coords.length} 点が入る範囲から始める（GPS 取得時は現在位置へ移動）');
     mapController.fitCoordinates(coords, padding: const EdgeInsets.all(50));
   }
 

@@ -19,7 +19,7 @@
   radius: 3pt, inset: (x: 5pt, y: 3pt),
   text(size: 7.5pt, weight: "bold", fill: if fixed { ink } else { accent })[#body])
 
-/// 小班の区画にラベルを載せた地図
+/// 区画にラベルを載せた地図
 #let labeled-map(w, h, labels) = box(width: w, height: h, {
   place(mini-map(w, h))
   let cw = w * 0.42
@@ -67,11 +67,11 @@
     block(width: 124pt, fill: white, stroke: 0.6pt + line-c, radius: 5pt, inset: 6pt, align(left, {
       stack(dir: ttb, spacing: 5pt,
         text(size: 6.5pt, weight: "bold", fill: sub)[Pick columns],
-        [#check-box() #h(2pt) #text(size: 7.5pt)[Compartment]],
-        [#check-box() #h(2pt) #text(size: 7.5pt)[Stand]],
-        [#check-box(on: false) #h(2pt) #text(size: 7.5pt, fill: sub)[Species]],
+        [#check-box() #h(2pt) #text(size: 7.5pt)[Area]],
+        [#check-box() #h(2pt) #text(size: 7.5pt)[Zone]],
+        [#check-box(on: false) #h(2pt) #text(size: 7.5pt, fill: sub)[Category]],
         pad(top: 5pt, text(size: 6.5pt, weight: "bold", fill: sub)[Arrange]),
-        [#label-card[Compartment]#h(2pt)#label-card(fixed: true)[-]#h(2pt)#label-card[Stand]],
+        [#label-card[Area]#h(2pt)#label-card(fixed: true)[-]#h(2pt)#label-card[Zone]],
       )
     })),
     arrow-r(w: 18pt),

@@ -47,13 +47,13 @@
     phone(w: 62pt, h: 112pt, box(width: 56pt, height: 98pt, {
       place(mini-map(56pt, 98pt))
       place(rect(width: 56pt, height: 14pt, fill: white))
-      place(dx: 4pt, dy: 3.5pt, text(size: 5.5pt, weight: "bold")[Stands])
+      place(dx: 4pt, dy: 3.5pt, text(size: 5.5pt, weight: "bold")[Zones])
       place(dx: 40pt, dy: 1.5pt, sync-icon(r: 5.5pt))
     })),
     stack(dir: ttb, spacing: 6pt,
       bubble[Tap here to sync],
       block(width: 120pt, fill: white, stroke: 0.6pt + line-c, radius: 5pt, inset: 6pt, align(left, {
-        folder-icon(warm); h(3pt); text(size: 8.5pt, weight: "bold")[Stands]; h(1fr); sync-icon(r: 7pt)
+        folder-icon(warm); h(3pt); text(size: 8.5pt, weight: "bold")[Zones]; h(1fr); sync-icon(r: 7pt)
         v(4pt)
         text(size: 7.5pt, fill: sub)[Shows the sync status]
       })),

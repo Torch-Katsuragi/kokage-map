@@ -27,6 +27,7 @@ import '../../utils/app_logger.dart';
 import '../geodiff/geodiff.dart';
 import '../kmeta_service.dart';
 import '../qgis/qgs_meta_store.dart';
+import 'drive_transfer_registry.dart';
 import 'google_drive_service.dart';
 import 'gpkg_merger.dart';
 import 'gpkg_schema_aligner.dart';
@@ -34,6 +35,7 @@ import 'qgs_merger.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
+import 'sync_progress.dart';
 import 'sync_snapshot.dart';
 
 /// 1 回のマージの途中経過（帳簿・数・衝突）
@@ -108,12 +110,41 @@ class SyncConflictResolver {
     String localPath,
     List<MergeDecision> decisions, {
     SyncSnapshot? snapshot,
+    void Function(SyncProgress progress)? onProgress,
+    bool showOsNotification = false,
   }) async {
     _MergeRun? run;
+    final registry = DriveTransferRegistry.instance;
+    final managedExternally = registry.isBusy(localPath);
+    final throttler = ProgressThrottler((progress) {
+      registry.updateProgress(
+        localPath,
+        progress,
+        showOsNotification: showOsNotification,
+      );
+      onProgress?.call(progress);
+    });
+    if (!managedExternally) {
+      registry.beginTransfer(
+        localPath,
+        folderName: p.basename(localPath),
+        showOsNotification: showOsNotification,
+      );
+    }
+    throttler.add(const SyncProgress.scanning());
+
     try {
       final meta = await _kmetaService.getMeta(localPath);
       final driveId = meta.sync.driveId;
       if (driveId == null) {
+        if (!managedExternally) {
+          registry.endTransfer(
+            localPath,
+            success: false,
+            errorMessage: 'Drive連携されていません',
+            showOsNotification: false,
+          );
+        }
         return SyncResult.failure('Drive連携されていません');
       }
 
@@ -129,10 +160,38 @@ class SyncConflictResolver {
         AppLogger.error('[SyncEngine] ensureDriveFolders エラー: $e');
       }
 
+      final driveSizeMap = <String, int>{
+        for (final f in tree.files)
+          f.relativePath: int.tryParse(f.file.size ?? '') ?? 0,
+      };
+      final tracker = SyncByteTracker({
+        for (final d in decisions)
+          d.entry.relativePath: driveSizeMap[d.entry.relativePath] ?? 0,
+      });
+      throttler.add(tracker.snapshot(SyncPhase.transferring));
+
       AppLogger.debug('[SyncEngine] executeMerge開始: ${decisions.length}件の決定');
       for (final decision in decisions) {
-        await _apply(run, decision);
+        final relPath = decision.entry.relativePath;
+        final fileName = p.posix.basename(relPath);
+        await _apply(
+          run,
+          decision,
+          onChunk: (chunkBytes) {
+            tracker.addChunk(relPath, chunkBytes, fileName: fileName);
+            throttler.add(tracker.snapshot(SyncPhase.transferring));
+          },
+          onRetryReset: () {
+            tracker.resetFile(relPath);
+            throttler.add(tracker.snapshot(SyncPhase.transferring));
+          },
+        );
+        tracker.markCompleted(relPath, fileName: fileName);
+        throttler.add(tracker.snapshot(SyncPhase.transferring));
       }
+
+      throttler.flush();
+      throttler.add(tracker.snapshot(SyncPhase.finalizing));
 
       await _kmetaService.setDriveSync(
         localPath,
@@ -154,9 +213,25 @@ class SyncConflictResolver {
         '[SyncEngine] Merge完了: ${run.uploaded} uploaded, '
         '${run.downloaded} downloaded, ${run.deleted} deleted, ${run.moved} moved',
       );
+      if (!managedExternally) {
+        registry.endTransfer(
+          localPath,
+          driveId: driveId,
+          success: true,
+          showOsNotification: false,
+        );
+      }
       return run.toResult();
     } catch (e) {
       AppLogger.error('[SyncEngine] Merge エラー: $e');
+      if (!managedExternally) {
+        registry.endTransfer(
+          localPath,
+          success: false,
+          errorMessage: e.toString(),
+          showOsNotification: false,
+        );
+      }
       return SyncResult.failure(e.toString());
     } finally {
       run?.geodiff?.dispose();
@@ -164,7 +239,12 @@ class SyncConflictResolver {
   }
 
   /// 1 件の選択を反映する
-  Future<void> _apply(_MergeRun run, MergeDecision decision) async {
+  Future<void> _apply(
+    _MergeRun run,
+    MergeDecision decision, {
+    void Function(int chunkBytes)? onChunk,
+    void Function()? onRetryReset,
+  }) async {
     final entry = decision.entry;
     final relativePath = entry.relativePath;
     final localFilePath = _fileOps.relativePathToLocalPath(run.localPath, relativePath);
@@ -177,11 +257,11 @@ class SyncConflictResolver {
 
     switch (decision.choice) {
       case MergeChoice.merge:
-        await _merge(run, entry, localFilePath);
+        await _merge(run, entry, localFilePath, onChunk: onChunk, onRetryReset: onRetryReset);
       case MergeChoice.local:
         await _keepLocal(run, entry, localFilePath);
       case MergeChoice.remote:
-        await _takeRemote(run, entry, localFilePath);
+        await _takeRemote(run, entry, localFilePath, onChunk: onChunk, onRetryReset: onRetryReset);
     }
   }
 
@@ -310,12 +390,25 @@ class SyncConflictResolver {
 
   // ========== クラウドを採用 ==========
 
-  Future<void> _takeRemote(_MergeRun run, MergeFileEntry entry, String localFilePath) async {
+  Future<void> _takeRemote(
+    _MergeRun run,
+    MergeFileEntry entry,
+    String localFilePath, {
+    void Function(int chunkBytes)? onChunk,
+    void Function()? onRetryReset,
+  }) async {
     final relativePath = entry.relativePath;
     switch (entry.remoteChange) {
       case MergeChangeType.added:
       case MergeChangeType.modified:
-        await _downloadRemote(run, entry, localFilePath, createDir: true);
+        await _downloadRemote(
+          run,
+          entry,
+          localFilePath,
+          createDir: true,
+          onChunk: onChunk,
+          onRetryReset: onRetryReset,
+        );
       case MergeChangeType.deleted:
         await _deleteLocal(run, relativePath, localFilePath);
       case MergeChangeType.moved:
@@ -336,11 +429,25 @@ class SyncConflictResolver {
       case MergeChangeType.none:
         switch (entry.localChange) {
           case MergeChangeType.deleted:
-            await _downloadRemote(run, entry, localFilePath, createDir: true);
+            await _downloadRemote(
+              run,
+              entry,
+              localFilePath,
+              createDir: true,
+              onChunk: onChunk,
+              onRetryReset: onRetryReset,
+            );
           case MergeChangeType.added:
             await _deleteLocal(run, relativePath, localFilePath);
           case MergeChangeType.modified:
-            await _downloadRemote(run, entry, localFilePath, createDir: false);
+            await _downloadRemote(
+              run,
+              entry,
+              localFilePath,
+              createDir: false,
+              onChunk: onChunk,
+              onRetryReset: onRetryReset,
+            );
           case MergeChangeType.moved:
           case MergeChangeType.none:
             break;
@@ -354,11 +461,20 @@ class SyncConflictResolver {
     MergeFileEntry entry,
     String localFilePath, {
     required bool createDir,
+    void Function(int chunkBytes)? onChunk,
+    void Function()? onRetryReset,
   }) async {
     final fileId = entry.driveFileId;
     if (fileId == null) return;
     if (createDir) await fs.createDirectory(p.dirname(localFilePath));
-    if (!await _fileOps.downloadReplacing(fileId, localFilePath)) return;
+    if (!await _fileOps.downloadReplacing(
+      fileId,
+      localFilePath,
+      onChunk: onChunk,
+      onRetryReset: onRetryReset,
+    )) {
+      return;
+    }
     run.downloaded++;
     run.record(entry.relativePath, fileId, entry.remoteModifiedTime, remoteMd5: entry.remoteMd5);
     await SyncBaseStore.saveBase(run.localPath, entry.relativePath, geodiff: run.geodiff); // web では saveBase が何もしない
@@ -373,25 +489,38 @@ class SyncConflictResolver {
 
   // ========== 両方の変更を合わせる ==========
 
-  Future<void> _merge(_MergeRun run, MergeFileEntry entry, String localFilePath) async {
+  Future<void> _merge(
+    _MergeRun run,
+    MergeFileEntry entry,
+    String localFilePath, {
+    void Function(int chunkBytes)? onChunk,
+    void Function()? onRetryReset,
+  }) async {
     final relativePath = entry.relativePath;
     if (SyncBaseStore.isQgs(relativePath)) {
-      final merged = await _mergeWithRemote(run, entry, localFilePath, (base, theirs) async {
-        // この端末の設定の書き込み・自動更新と、読んで直して書く間を取り合わない
-        final r = await QgsFileLock.run(localFilePath, () async {
-          final r = await QgsMerger.merge(
-            base: await fs.readAsString(base),
-            mine: await fs.readAsString(localFilePath),
-            theirs: await fs.readAsString(theirs),
-          );
-          if (r != null) await QgsFileWriter.write(localFilePath, r.xml);
-          return r;
-        });
-        if (r == null) return null;
-        if (r.conflicts.isNotEmpty) AppLogger.debug('  設定の衝突（この端末の値を残した）: ${r.conflicts}');
-        _kmetaService.invalidateCache(p.dirname(localFilePath));
-        return [for (final c in r.conflicts) c.withDir(p.dirname(localFilePath))];
-      });
+      final merged = await _mergeWithRemote(
+        run,
+        entry,
+        localFilePath,
+        (base, theirs) async {
+          // この端末の設定の書き込み・自動更新と、読んで直して書く間を取り合わない
+          final r = await QgsFileLock.run(localFilePath, () async {
+            final r = await QgsMerger.merge(
+              base: await fs.readAsString(base),
+              mine: await fs.readAsString(localFilePath),
+              theirs: await fs.readAsString(theirs),
+            );
+            if (r != null) await QgsFileWriter.write(localFilePath, r.xml);
+            return r;
+          });
+          if (r == null) return null;
+          if (r.conflicts.isNotEmpty) AppLogger.debug('  設定の衝突（この端末の値を残した）: ${r.conflicts}');
+          _kmetaService.invalidateCache(p.dirname(localFilePath));
+          return [for (final c in r.conflicts) c.withDir(p.dirname(localFilePath))];
+        },
+        onChunk: onChunk,
+        onRetryReset: onRetryReset,
+      );
       if (merged == null) {
         AppLogger.debug('  → 設定を合わせられなかった。衝突のまま残す');
         run.failedMerges.add(relativePath);
@@ -404,24 +533,31 @@ class SyncConflictResolver {
     }
 
     final geodiff = run.geodiff ??= Geodiff();
-    final merged = await _mergeWithRemote(run, entry, localFilePath, (base, theirs) async {
-      // geodiff の SQLite が書く前に、アプリの接続を閉じる（次の getDatabase() で開き直る）
-      await GeoPackageConnection.closeAllFor(localFilePath);
-      // 片側だけが列を足していれば、3 つのスキーマをそろえてから（geodiff はスキーマの変更をまたげない）
-      final aligned = await GpkgSchemaAligner.align(base: base, theirs: theirs, mine: localFilePath);
-      if (aligned.added.isNotEmpty) AppLogger.debug('  列をそろえた: ${aligned.added}');
-      final r = await GpkgMerger(geodiff).rebase(base: base, theirs: theirs, mine: localFilePath);
-      if (!r.success) {
-        AppLogger.debug('  rebase 失敗: ${r.error}');
-        return null;
-      }
-      // geodiff は rtree_* / gpkg_* を触らない。QGIS が読む索引と範囲を実データに合わせる
-      final repaired = await GpkgIndexRepair.rebuildFile(localFilePath);
-      AppLogger.debug('  索引の焼き直し: $repaired テーブル');
-      // 焼き直したので、合わせる前の編集の印は済んだ（残すと見ただけの接続を閉じるときにもう一度書き直す）
-      GeoPackageConnection.clearWrites(localFilePath);
-      return [for (final c in r.conflicts) c.withFile(localFilePath)];
-    });
+    final merged = await _mergeWithRemote(
+      run,
+      entry,
+      localFilePath,
+      (base, theirs) async {
+        // geodiff の SQLite が書く前に、アプリの接続を閉じる（次の getDatabase() で開き直る）
+        await GeoPackageConnection.closeAllFor(localFilePath);
+        // 片側だけが列を足していれば、3 つのスキーマをそろえてから（geodiff はスキーマの変更をまたげない）
+        final aligned = await GpkgSchemaAligner.align(base: base, theirs: theirs, mine: localFilePath);
+        if (aligned.added.isNotEmpty) AppLogger.debug('  列をそろえた: ${aligned.added}');
+        final r = await GpkgMerger(geodiff).rebase(base: base, theirs: theirs, mine: localFilePath);
+        if (!r.success) {
+          AppLogger.debug('  rebase 失敗: ${r.error}');
+          return null;
+        }
+        // geodiff は rtree_* / gpkg_* を触らない。QGIS が読む索引と範囲を実データに合わせる
+        final repaired = await GpkgIndexRepair.rebuildFile(localFilePath);
+        AppLogger.debug('  索引の焼き直し: $repaired テーブル');
+        // 焼き直したので、合わせる前の編集の印は済んだ（残すと見ただけの接続を閉じるときにもう一度書き直す）
+        GeoPackageConnection.clearWrites(localFilePath);
+        return [for (final c in r.conflicts) c.withFile(localFilePath)];
+      },
+      onChunk: onChunk,
+      onRetryReset: onRetryReset,
+    );
     if (merged == null) {
       AppLogger.debug('  → 行単位で合わせられなかった。衝突のまま残す');
       run.failedMerges.add(relativePath);
@@ -443,8 +579,10 @@ class SyncConflictResolver {
     _MergeRun run,
     MergeFileEntry entry,
     String localFilePath,
-    Future<List<T>?> Function(String base, String theirs) combine,
-  ) async {
+    Future<List<T>?> Function(String base, String theirs) combine, {
+    void Function(int chunkBytes)? onChunk,
+    void Function()? onRetryReset,
+  }) async {
     final relativePath = entry.relativePath;
     final fileId = entry.driveFileId;
     if (fileId == null) return null;
@@ -456,7 +594,12 @@ class SyncConflictResolver {
     final tmp = SyncBaseStore.tmpPath(run.localPath, relativePath);
     try {
       await fs.createDirectory(p.dirname(tmp));
-      if (!await _driveService.downloadFile(fileId, tmp)) {
+      if (!await _driveService.downloadFile(
+        fileId,
+        tmp,
+        onChunk: onChunk,
+        onRetryReset: onRetryReset,
+      )) {
         AppLogger.debug('  リモートを落とせなかった');
         return null;
       }

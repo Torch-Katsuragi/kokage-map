@@ -57,11 +57,11 @@
     columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,
     stack(dir: ttb, spacing: 4pt,
       layer-panel(w: 112pt, (
-        (0, "layer", "小班", "ok"),
-        (1, "layer", "樹種 = 'スギ'", "hi", map-green),
-        (1, "layer", "樹種 = 'ヒノキ'", "ok", map-red),
+        (0, "layer", "区画", "ok"),
+        (1, "layer", "状態 = '調査済'", "hi", map-green),
+        (1, "layer", "状態 = '未調査'", "ok", map-red),
       )),
-      caption[小班に View を 2 枚],
+      caption[区画に View を 2 枚],
     ),
     arrow-r(w: 14pt),
     phone(w: 50pt, h: 88pt, box(width: 44pt, height: 74pt, {
@@ -83,7 +83,7 @@
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),
     phone(w: 50pt, h: 88pt, label: "こかげマップ", mini-map(44pt, 74pt, road: map-red, road-w: 2.2pt)),
-    stack(dir: ttb, spacing: 3pt, file-icon(accent, w: 14pt), text(size: 7pt, weight: "bold", fill: accent)[林小班.qgs], arrow-lr(w: 30pt)),
+    stack(dir: ttb, spacing: 3pt, file-icon(accent, w: 14pt), text(size: 7pt, weight: "bold", fill: accent)[調査区画.qgs], arrow-lr(w: 30pt)),
     pc(label: "QGIS", w: 110pt, h: 78pt, mini-map(104pt, 63pt, road: map-red, road-w: 2.2pt)),
   ),
   note: [QGIS で作った印刷レイアウトやシンボルの細部は消しません。`.qgz` も読めます。QGIS で実際に開けるかはまだ確かめていません。開かない場合はお知らせください。],

@@ -26,6 +26,8 @@ import '../../models/nodes/global_folder_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/sys_node.dart';
 import '../../presentation/node_presenter.dart';
+import '../../services/google_drive/drive_transfer_registry.dart';
+import '../../services/google_drive/sync_progress.dart';
 import '../../tutorial/tutorial.dart';
 
 enum AddAction {
@@ -100,8 +102,11 @@ class LayerDrawerTitleBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDrive = _isUnderDriveFolder;
     final bgColor = isDrive ? cloudColor : const Color(0xFF424242);
+    final driveNode =
+        currentNode is DriveFolderNode ? currentNode as DriveFolderNode : null;
+    final drivePath = driveNode?.getAbsoluteFilePath();
 
-    return Container(
+    final bar = Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       color: bgColor,
@@ -128,7 +133,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (currentNode.parent != null) _buildBreadcrumb(),
-                _buildTitle(isDrive),
+                _buildTitle(isDrive, drivePath: drivePath),
               ],
             ),
           ),
@@ -148,6 +153,26 @@ class LayerDrawerTitleBar extends StatelessWidget {
           ],
         ],
       ),
+    );
+
+    if (drivePath == null) return bar;
+
+    return ValueListenableBuilder<SyncProgress?>(
+      valueListenable: DriveTransferRegistry.instance.progressOf(drivePath),
+      builder: (context, progress, _) {
+        if (progress == null) return bar;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            bar,
+            LinearProgressIndicator(
+              value: progress.fraction,
+              minHeight: 2.5,
+              backgroundColor: bgColor,
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -174,7 +199,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
     );
   }
 
-  Widget _buildTitle(bool isDrive) {
+  Widget _buildTitle(bool isDrive, {String? drivePath}) {
     final showSyncLabel = currentNode is DriveFolderNode && syncStatus != null;
     if (!showSyncLabel) {
       return Text(
@@ -201,9 +226,43 @@ class LayerDrawerTitleBar extends StatelessWidget {
           ),
           overflow: TextOverflow.ellipsis,
         ),
-        Text(label, style: const TextStyle(fontSize: 11, color: Colors.black87)),
+        if (drivePath != null)
+          ValueListenableBuilder<SyncProgress?>(
+            valueListenable:
+                DriveTransferRegistry.instance.progressOf(drivePath),
+            builder: (context, progress, _) {
+              final text = progress != null
+                  ? _formatProgressLabel(progress)
+                  : label;
+              return Text(
+                text,
+                style: const TextStyle(fontSize: 11, color: Colors.black87),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              );
+            },
+          )
+        else
+          Text(label, style: const TextStyle(fontSize: 11, color: Colors.black87)),
       ],
     );
+  }
+
+  String _formatProgressLabel(SyncProgress progress) {
+    switch (progress.phase) {
+      case SyncPhase.scanning:
+        return t.drive.scanningFolder;
+      case SyncPhase.transferring:
+        final pct = progress.percent;
+        final bytes = progress.formattedBytes;
+        return [
+          if (pct != null) '$pct%',
+          if (bytes != null) '($bytes)',
+          if (pct == null && bytes == null) t.layerDrawer.titleBar.syncingLabel,
+        ].join(' ');
+      case SyncPhase.finalizing:
+        return t.drive.finalizingData;
+    }
   }
 
   Widget _buildCloudButton() {

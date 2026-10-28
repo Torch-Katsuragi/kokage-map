@@ -120,6 +120,7 @@ class GeoPackageTile extends ConsumerWidget {
         if (isExpanded) ...[
           for (final layerNode in layers)
             LayerTile(
+              key: GlobalObjectKey(layerNode),
               node: layerNode,
               currentDir: currentDir,
               depth: depth + 1,

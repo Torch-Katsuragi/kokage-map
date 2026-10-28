@@ -21,11 +21,13 @@ import 'package:googleapis/drive/v3.dart' as drive;
 import '../../i18n/strings.g.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
+import 'drive_transfer_registry.dart';
 import 'google_drive_service.dart';
 import 'gpkg_merger.dart';
 import 'qgs_merger.dart';
 import 'sync_conflict_resolver.dart';
 import 'sync_file_operations.dart';
+import 'sync_progress.dart';
 import 'sync_pull_handler.dart';
 import 'sync_push_handler.dart';
 import 'sync_snapshot.dart';
@@ -187,7 +189,18 @@ class SyncEngine {
       _pushHandler.pushFolder(localPath, snapshot: snapshot);
 
   /// DriveからプロジェクトをPull（ダウンロード）
-  Future<SyncResult> pull(String driveFolderId, String localPath) => _pullHandler.pull(driveFolderId, localPath);
+  Future<SyncResult> pull(
+    String driveFolderId,
+    String localPath, {
+    void Function(SyncProgress progress)? onProgress,
+    bool showOsNotification = false,
+  }) =>
+      _pullHandler.pull(
+        driveFolderId,
+        localPath,
+        onProgress: onProgress,
+        showOsNotification: showOsNotification,
+      );
 
   /// Driveフォルダをローカルにクローン
   Future<bool> cloneFromDrive({
@@ -196,6 +209,8 @@ class SyncEngine {
     required String folderName,
     required String driveUrl,
     required bool isReadOnly,
+    void Function(SyncProgress progress)? onProgress,
+    bool showOsNotification = true,
   }) =>
       _pullHandler.cloneFromDrive(
         driveId: driveId,
@@ -203,11 +218,23 @@ class SyncEngine {
         folderName: folderName,
         driveUrl: driveUrl,
         isReadOnly: isReadOnly,
+        onProgress: onProgress,
+        showOsNotification: showOsNotification,
       );
 
   /// フォルダ単位でPull（[snapshot] は同じフォルダの判定に使った材料）
-  Future<SyncResult> pullFolder(String localPath, {SyncSnapshot? snapshot}) =>
-      _pullHandler.pullFolder(localPath, snapshot: snapshot);
+  Future<SyncResult> pullFolder(
+    String localPath, {
+    SyncSnapshot? snapshot,
+    void Function(SyncProgress progress)? onProgress,
+    bool showOsNotification = false,
+  }) =>
+      _pullHandler.pullFolder(
+        localPath,
+        snapshot: snapshot,
+        onProgress: onProgress,
+        showOsNotification: showOsNotification,
+      );
 
   Future<({SyncSnapshot? snapshot, FolderSyncStatus? failure})> _take(String localPath) =>
       SyncSnapshot.take(localPath, driveService: _driveService, kmetaService: _kmetaService, fileOps: _fileOps);
@@ -218,6 +245,19 @@ class SyncEngine {
       return const FolderSyncStatusDetail(status: FolderSyncStatus.error);
     }
     try {
+      // 未完了クローンマーカーがある場合は、手元の途中状態ファイルをローカル変更や競合と誤認しないよう
+      // 常にリモート変更（Pull再開待ち）として扱う
+      if (await DriveTransferRegistry.instance.hasClonePending(localPath)) {
+        final taken = await _take(localPath);
+        if (taken.snapshot == null) {
+          return FolderSyncStatusDetail(status: taken.failure!);
+        }
+        return FolderSyncStatusDetail(
+          status: FolderSyncStatus.remoteChanges,
+          remoteAdded: taken.snapshot!.drive.files.length,
+          snapshot: taken.snapshot,
+        );
+      }
       final taken = await _take(localPath);
       final snapshot = taken.snapshot;
       if (snapshot == null) return FolderSyncStatusDetail(status: taken.failure!);
@@ -246,7 +286,25 @@ class SyncEngine {
         }
         s = taken.snapshot!;
       }
-      return await s.toMergeEntries();
+      final entries = await s.toMergeEntries();
+      if (await DriveTransferRegistry.instance.hasClonePending(localPath)) {
+        // クローン中断中のフォルダでは手元の追加・変更を Drive へ Push させない（リモートからの取得のみ）
+        return [
+          for (final e in entries)
+            if (e.driveFileId != null)
+              MergeFileEntry(
+                relativePath: e.relativePath,
+                localChange: MergeChangeType.none,
+                remoteChange: e.remoteChange == MergeChangeType.none
+                    ? MergeChangeType.added
+                    : e.remoteChange,
+                remoteModifiedTime: e.remoteModifiedTime,
+                driveFileId: e.driveFileId,
+                remoteMd5: e.remoteMd5,
+              ),
+        ];
+      }
+      return entries;
     } catch (e) {
       AppLogger.error('[SyncEngine] getMergeEntries エラー: $e');
       rethrow;
@@ -258,8 +316,16 @@ class SyncEngine {
     String localPath,
     List<MergeDecision> decisions, {
     SyncSnapshot? snapshot,
+    void Function(SyncProgress progress)? onProgress,
+    bool showOsNotification = false,
   }) =>
-      _conflictResolver.executeMerge(localPath, decisions, snapshot: snapshot);
+      _conflictResolver.executeMerge(
+        localPath,
+        decisions,
+        snapshot: snapshot,
+        onProgress: onProgress,
+        showOsNotification: showOsNotification,
+      );
 
   /// Driveのフォルダ構造をローカルに反映（空フォルダ含む）。作ったフォルダ数を返す。
   /// Drive の一覧を取れなければ投げる（「同期済み」にしない）

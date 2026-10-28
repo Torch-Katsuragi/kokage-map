@@ -25,6 +25,7 @@ import '../core/fs/safe_path.dart';
 import '../i18n/strings.g.dart';
 import '../models/geopackage/geopackage_file.dart';
 import '../models/nodes/drive_folder_node.dart';
+import '../models/nodes/drive_folder_set_node.dart';
 import '../models/nodes/external_layer_node.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/geopackage_node.dart';
@@ -73,6 +74,103 @@ class LayerDrawerService {
     };
     parent.addChild(child);
     return child;
+  }
+
+  /// Drive フォルダのクローン枠（ローカルフォルダ・`.sync/clone.pending`・`.qgs` 連携情報・`DriveFolderNode`）を
+  /// 即座に作成して親ノードに追加する（Option A: 即時アタッチ＆バックグラウンド転送用）。
+  static Future<({DriveFolderNode node, String localPath})?> prepareDriveCloneNode({
+    required FolderNode parent,
+    required String folderId,
+    required String folderName,
+    required String url,
+    required bool isReadOnly,
+  }) async {
+    final parentDir = parent.getAbsoluteFilePath();
+    if (parentDir == null) return null;
+
+    final name = toLocalFolderName(folderName, fallback: folderId);
+    final localPath = p.join(parentDir, name);
+    await _ensureAbsent(localPath, t.services.folderAlreadyExists);
+
+    await fs.createDirectory(localPath);
+    await DriveTransferRegistry.instance.markClonePending(localPath);
+
+    final saved = await KMetaService.instance.setDriveSync(
+      localPath,
+      driveId: folderId,
+      driveFolderName: name,
+      driveUrl: url,
+      isReadOnly: isReadOnly,
+    );
+    if (!saved) {
+      return null;
+    }
+
+    final node = DriveFolderNode(
+      name,
+      driveId: folderId,
+      driveUrl: url,
+      isReadOnly: isReadOnly,
+      syncStatus: SyncStatus.syncing,
+      visible: true,
+      parent: parent,
+    );
+    parent.addChild(node);
+    return (node: node, localPath: localPath);
+  }
+
+  /// Drive の共有フォルダセット（JSON）のローカル枠を作成して親ノードに追加する
+  static Future<({DriveFolderSetNode node, String localPath})?> prepareDriveFolderSetNode({
+    required FolderNode parent,
+    required String jsonDriveId,
+    required String setName,
+    required String url,
+  }) async {
+    final parentDir = parent.getAbsoluteFilePath();
+    if (parentDir == null) return null;
+
+    final name = toLocalFolderName(setName, fallback: jsonDriveId);
+    final localPath = p.join(parentDir, name);
+    await _ensureAbsent(localPath, t.services.folderAlreadyExists);
+
+    await fs.createDirectory(localPath);
+    await DriveTransferRegistry.instance.markClonePending(localPath);
+
+    final saved = await KMetaService.instance.setDriveSync(
+      localPath,
+      driveId: jsonDriveId,
+      driveFolderName: name,
+      driveUrl: url,
+      isReadOnly: true,
+      isFolderSet: true,
+    );
+    if (!saved) {
+      return null;
+    }
+
+    final node = DriveFolderSetNode(
+      name,
+      manifestFileId: jsonDriveId,
+      manifestUrl: url,
+      syncStatus: SyncStatus.syncing,
+      visible: true,
+      parent: parent,
+    );
+    parent.addChild(node);
+    return (node: node, localPath: localPath);
+  }
+
+  /// バックグラウンド等の Pull が完了した既存 [DriveFolderNode] の中身を再帰読込し、`.qgs` を読み戻す
+  static Future<QgsReadBackResult?> finalizeClonedNode(DriveFolderNode node) async {
+    await _reloadRecursive(node);
+    QgsReadBackResult? readBack;
+    try {
+      readBack = await const QgsReadBack().run(node);
+      if (readBack != null) await _reloadRecursive(node);
+    } on Object catch (e) {
+      AppLogger.debug('[LayerDrawer] クローンした ${node.name} の読み戻しに失敗: $e');
+    }
+    return readBack;
   }
 
   /// Drive フォルダをクローンして追加。失敗時は null。

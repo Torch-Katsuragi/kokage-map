@@ -70,11 +70,6 @@ tags: [features, gps, map]
   ドロワーに隠れている部分は「見えていない」扱い
 - 任意地点へのジャンプは `MapJumpMixin`（`lib/screens/map_page/mixins/map_jump_mixin.dart`）に集約。
   起動時の現在位置ジャンプ・ドロワー/属性テーブルからの移動・矢印タップはすべてここを通す
-- 地点への案内（「ここへ案内」）: 状態は `guidanceProvider`（`lib/providers/guidance_providers.dart`、メモリだけ。再起動で消える）、
-  計算は `NavigationMath`（`lib/utils/navigation_math.dart`）。位置は地図ページが既存の GPS 更新から `feedGuidance()` で流す（自前のタイマー無し）。
-  札は `GuidanceOverlay`、目標への線は 3D 地図面の動的シーン（`terrain_map_layer_scene.dart` の 2.5）。
-  高低差は標高タイル（`VertexZ.elevationLookup`）で目標と今の位置の両方を引く（GPS の高度は楕円体高なので使わない）。
-  到着は max(5 m, 精度) で通知センターへ 1 回、半径の 2 倍より離れたら再び知らせる
 
 ## 関連ドキュメント
 

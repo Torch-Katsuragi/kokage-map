@@ -21,6 +21,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
+import '../../services/google_drive/drive_transfer_registry.dart';
+import '../../services/google_drive/sync_progress.dart';
 import 'notification_popup.dart';
 
 /// AppBar用通知ベルアイコン（バッジ + 自動ポップアップ付き）
@@ -132,18 +134,42 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
       });
     });
 
-    return IconButton(
-      key: _bellKey,
-      icon: Badge(
-        isLabelVisible: unreadCount > 0,
-        label: Text(
-          unreadCount > 99 ? '99+' : '$unreadCount',
-          style: const TextStyle(fontSize: 10),
-        ),
-        child: const Icon(Icons.notifications_outlined),
-      ),
-      tooltip: t.notification.title,
-      onPressed: _togglePopup,
+    return ValueListenableBuilder<int>(
+      valueListenable: DriveTransferRegistry.instance.activeCount,
+      builder: (context, activeTransfers, _) {
+        return IconButton(
+          key: _bellKey,
+          icon: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Badge(
+                isLabelVisible: unreadCount > 0,
+                label: Text(
+                  unreadCount > 99 ? '99+' : '$unreadCount',
+                  style: const TextStyle(fontSize: 10),
+                ),
+                child: const Icon(Icons.notifications_outlined),
+              ),
+              if (activeTransfers > 0)
+                Positioned(
+                  bottom: -2,
+                  left: -2,
+                  right: -2,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: const SizedBox(
+                      height: 2.5,
+                      child: LinearProgressIndicator(),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          tooltip: t.notification.title,
+          onPressed: _togglePopup,
+        );
+      },
     );
   }
 }
@@ -245,18 +271,39 @@ class _NotificationToastState extends State<_NotificationToast>
                     left: BorderSide(color: n.level.color, width: 4),
                   ),
                 ),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(n.level.icon, color: n.level.color, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        n.title,
-                        style: const TextStyle(fontSize: 13),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    Row(
+                      children: [
+                        Icon(n.level.icon, color: n.level.color, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            n.title,
+                            style: const TextStyle(fontSize: 13),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
+                    if (n.transferKey != null)
+                      ValueListenableBuilder<SyncProgress?>(
+                        valueListenable: DriveTransferRegistry.instance
+                            .progressOf(n.transferKey!),
+                        builder: (context, progress, _) {
+                          if (progress == null) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: LinearProgressIndicator(
+                              value: progress.fraction,
+                              minHeight: 3,
+                            ),
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),

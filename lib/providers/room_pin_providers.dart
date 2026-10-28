@@ -33,7 +33,6 @@ import '../services/party/pin_outbox.dart';
 import '../services/party/pin_source.dart';
 import '../services/party/room_pin_store.dart';
 import '../services/party/rtdb_pin_source.dart';
-import 'guidance_providers.dart';
 import 'notification_providers.dart';
 import 'party_providers.dart';
 
@@ -143,8 +142,6 @@ class RoomPins extends Notifier<RoomPinsState> {
           title: t.party.pins.newNotice(name: (name == null || name.isEmpty) ? t.party.pins.someone : name, type: typeLabel(pin.type)),
           detail: pin.text.isEmpty ? null : pin.text,
           level: pin.type == RoomPinType.hazard ? NotificationLevel.warning : NotificationLevel.info,
-          actionLabel: t.guidance.action,
-          onAction: () async => guideTo(pin),
         );
   }
 
@@ -159,14 +156,6 @@ class RoomPins extends Notifier<RoomPinsState> {
 
   Future<void> delete(RoomPin pin) async {
     await _store?.delete(pin);
-  }
-
-  /// 「ここへ案内」
-  void guideTo(RoomPin pin) {
-    ref.read(guidanceProvider.notifier).start(GuidanceTarget(
-          point: LatLng(pin.lat, pin.lon),
-          label: pin.text.isEmpty ? typeLabel(pin.type) : '${typeLabel(pin.type)}: ${pin.text}',
-        ));
   }
 
   static String typeLabel(RoomPinType type) => switch (type) {

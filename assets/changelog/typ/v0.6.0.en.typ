@@ -106,7 +106,7 @@
     pc(w: 84pt, h: 58pt, label: "Made in QGIS", mini-map(78pt, 43pt)),
     stack(dir: ttb, spacing: 3pt,
       file-icon(accent, w: 14pt),
-      text(size: 7pt, weight: "bold", fill: accent)[Stands.gpkg],
+      text(size: 7pt, weight: "bold", fill: accent)[Zones.gpkg],
       badge(ok: false)[JGD2011 Plane Rect.],
       arrow-r(w: 30pt),
     ),

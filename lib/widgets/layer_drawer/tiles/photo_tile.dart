@@ -65,6 +65,7 @@ class PhotoTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isOverlay = node is OverlayImageNode;
+    final isSelected = ref.watch(selectedFeaturesProvider.select((s) => s.contains(node)));
     final dimmed = !node.isVisibleRecursive();
 
     // チュートリアルの案内先: 練習フォルダの写真（最初の 1 枚。鍵は 1 つしか付けられない）
@@ -72,6 +73,7 @@ class PhotoTile extends ConsumerWidget {
     final key = guiding && !isOverlay && _isFirstPracticePhoto(node) ? TutorialTargets.photoTile : null;
     return DrawerRow(
       key: key,
+      selected: isSelected,
       dimmed: dimmed,
       leading: Icon(isOverlay ? Icons.image_outlined : Icons.photo_camera_outlined, size: 20, color: dimmed ? Colors.black26 : Colors.purple),
       title: node.name,

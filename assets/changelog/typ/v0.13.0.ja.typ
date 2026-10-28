@@ -58,7 +58,7 @@
       caption[端末 A で共有を追加],
       layer-panel(w: 104pt, (
         (0, "dir", [共有], "ok"),
-        (1, "dir", [北山村 施業班], "hi"),
+        (1, "dir", [現地調査チーム], "hi"),
         (0, "layer", [マイ地図], "ok", rgb("#2e6b4f")),
       )),
     ),
@@ -67,7 +67,7 @@
       caption(fill: accent)[端末 B にも自動クローン],
       layer-panel(w: 104pt, (
         (0, "dir", [共有], "ok"),
-        (1, "dir", [北山村 施業班], "hi"),
+        (1, "dir", [現地調査チーム], "hi"),
         (0, "layer", [マイ地図], "ok", rgb("#2e6b4f")),
       )),
     ),

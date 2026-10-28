@@ -880,7 +880,11 @@ class GoogleDriveService {
 
   /// ファイルを [localPath] にダウンロード
   /// ファイルの中身をメモリ上にダウンロードする
-  Future<Uint8List?> downloadBytes(String fileId) => _call('ダウンロードエラー', null, (api) async {
+  Future<Uint8List?> downloadBytes(
+    String fileId, {
+    void Function(int chunkBytes)? onChunk,
+  }) =>
+      _call('ダウンロードエラー', null, (api) async {
         final response = await api.files.get(
           fileId,
           downloadOptions: drive.DownloadOptions.fullMedia,
@@ -891,23 +895,44 @@ class GoogleDriveService {
           return null;
         }
         final chunks = BytesBuilder(copy: false);
-        await response.stream.forEach(chunks.add);
+        await for (final chunk in response.stream) {
+          chunks.add(chunk);
+          onChunk?.call(chunk.length);
+        }
         return chunks.takeBytes();
       });
 
-  /// ファイルを [localPath] にダウンロード
-  Future<bool> downloadFile(String fileId, String localPath) async {
-    final bytes = await downloadBytes(fileId);
-    if (bytes == null) return false;
-    try {
-      await fs.writeAsBytes(localPath, bytes);
-      AppLogger.debug('[GoogleDriveService] ダウンロード完了: $localPath');
-      return true;
-    } catch (e) {
-      AppLogger.debug('[GoogleDriveService] ファイル書き込みエラー: $e');
-      return false;
-    }
-  }
+  /// ファイルを [localPath] にストリーミング＆アトミック書き込みでダウンロード
+  Future<bool> downloadFile(
+    String fileId,
+    String localPath, {
+    void Function(int chunkBytes)? onChunk,
+    void Function()? onRetryReset,
+  }) =>
+      _call('ダウンロードエラー', false, (api) async {
+        onRetryReset?.call();
+        final response = await api.files.get(
+          fileId,
+          downloadOptions: drive.DownloadOptions.fullMedia,
+          supportsAllDrives: true,
+        );
+        if (response is! drive.Media) {
+          AppLogger.debug('[GoogleDriveService] ダウンロード応答が不正');
+          return false;
+        }
+        try {
+          await fs.writeStream(
+            localPath,
+            response.stream,
+            onChunk: onChunk,
+          );
+          AppLogger.debug('[GoogleDriveService] ダウンロード完了: $localPath');
+          return true;
+        } catch (e) {
+          AppLogger.debug('[GoogleDriveService] ファイル書き込みエラー: $e');
+          return false;
+        }
+      });
 
   /// フォルダ直下のファイルとフォルダの一覧（共有フォルダにも届くよう共有ドライブも含める）
   ///
@@ -970,6 +995,16 @@ class GoogleDriveService {
         return isDriveId(folderId) ? folderId : null;
       }
       
+      // パターン1b: /file/d/{fileId} または /file/u/0/d/{fileId}（JSONマニフェスト等のファイル共有URL）
+      if (pathSegments.contains('file')) {
+        final dIndex = pathSegments.indexOf('d');
+        if (dIndex != -1 && dIndex + 1 < pathSegments.length) {
+          final fileId = pathSegments[dIndex + 1];
+          AppLogger.debug('[GoogleDriveService] ファイルID検出 (file/d): $fileId');
+          return isDriveId(fileId) ? fileId : null;
+        }
+      }
+
       // パターン2: /open?id={folderId} または /folderview?id={folderId}
       final idParam = uri.queryParameters['id'];
       if (idParam != null && idParam.isNotEmpty) {
@@ -985,6 +1020,19 @@ class GoogleDriveService {
     }
   }
 
+  /// Driveのメタデータがフォルダかどうか判定
+  static bool isFolderMetadata(drive.File file) =>
+      (file.mimeType ?? '') == 'application/vnd.google-apps.folder';
+
+  /// Driveのメタデータが共有フォルダセット用のJSONファイルかどうか判定
+  static bool isJsonFileMetadata(drive.File file) {
+    final mime = (file.mimeType ?? '').toLowerCase();
+    if (mime == 'application/vnd.google-apps.folder') return false;
+    if (mime == 'application/json') return true;
+    final name = (file.name ?? '').toLowerCase();
+    return name.endsWith('.json');
+  }
+
   /// フォルダ情報を取得。取れなければ null（理由が要るなら [lookupFolder]）
   Future<drive.File?> getFolderInfo(String folderId) async => (await lookupFolder(folderId)).folder;
 
@@ -997,7 +1045,7 @@ class GoogleDriveService {
     try {
       final result = await retryTransient(() => api.files.get(
             folderId,
-            $fields: 'id, name, modifiedTime, owners, capabilities',
+            $fields: 'id, name, mimeType, md5Checksum, modifiedTime, owners, capabilities',
             supportsAllDrives: true,
           ));
       return FolderLookup.found(result as drive.File);

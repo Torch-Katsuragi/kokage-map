@@ -84,7 +84,7 @@
   }
 })
 
-/// ラベルの付いた地図（小班 4 つに ラベル）
+/// ラベルの付いた地図（区画 4 つに ラベル）
 #let label-map(w, h, labels) = box(width: w, height: h, clip: true, {
   place(mini-map(w, h))
   for ((x, y), l) in ((0.05, 0.08), (0.52, 0.08), (0.05, 0.53), (0.52, 0.53)).zip(labels) {
@@ -141,7 +141,7 @@
   [Labels are composed in the style screen (layer / View) and work for line and polygon layers too. They go into `.qgs` as expressions.],
   stack(dir: ttb, spacing: 8pt,
     box(fill: white, stroke: 0.6pt + line-c, radius: 3pt, inset: (x: 6pt, y: 4pt),
-      text(size: 7.5pt)[`concat("compt", '-', "stand")`]),
+      text(size: 7.5pt)[`concat("area", '-', "zone")`]),
     arrow-d(),
     grid(
       columns: (auto, auto, auto), column-gutter: 8pt, align: horizon,

@@ -72,7 +72,6 @@ import '../../widgets/resizable_side_panel.dart';
 import 'map_page_state_base.dart';
 import 'mixins/index.dart';
 // Widgets
-import 'widgets/guidance_overlay.dart';
 import 'widgets/index.dart';
 import 'widgets/map_menu_button.dart';
 import 'widgets/measure_overlay.dart';
@@ -246,6 +245,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   void dispose() {
     LaunchRequest.incoming.removeListener(_onLaunchRequest);
     WidgetsBinding.instance.removeObserver(this);
+    _drawerScrollController.dispose();
     disposeAllServices();
     super.dispose();
   }
@@ -276,7 +276,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   @override
   void updateCurrentGpsInfo() {
     final info = gpsManager.currentInfo;
-    feedGuidance(info);
     final before = currentGpsInfo;
     // 表示に関わる値が同じなら組み立て直さない（フォアグラウンドサービスは同じ位置を毎秒送り直してくるので、
     // そのたびに地図ページ全体を組み立て直していた。2026-10-06）
@@ -338,6 +337,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   /// 属性の検索（レイヤ一覧の虫眼鏡）で選んだ地物: 選んで、形が見える範囲に収まるよう寄せる。
   /// 点は今のズームのまま寄せる（遠すぎれば 17 まで寄る）
   void _onSearchHit(FeatureNode feature) {
+    movedToCurrentLocationOnce = true;
+    initialViewDecided = true;
     ref.read(selectedFeaturesProvider.notifier).selectOnMap(feature);
     triggerSetState(() {});
     final coords = switch (feature) {
@@ -593,6 +594,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
               mapBearingNotifier: mapBearingNotifier,
               cameraTickNotifier: cameraTickNotifier,
               heading: headingNotifier,
+              onUserCameraGesture: () {
+                movedToCurrentLocationOnce = true;
+                initialViewDecided = true;
+              },
             ),
           ),
         // 編集中の形と取っ手（地図の場面には焼かず、カメラが動くたびに描き直す）
@@ -604,20 +609,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         ],
         _buildDrawingPreviewInfo(),
         if (!editing) _buildOffscreenLocationIndicator(),
-        // 地点への誘導の札（案内している間だけ中身が出る）。右上のコンパスと左上の読み込み表示を避けて上の中央に
-        if (!editing)
-          Positioned(
-            top: 8,
-            left: 56,
-            right: 64,
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 360),
-                child: GuidanceOverlay(heading: headingNotifier, mapBearing: mapBearingNotifier),
-              ),
-            ),
-          ),
         const ToolNameFlash(),
       ],
     );
@@ -788,7 +779,11 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   }
 
   /// 情報カードの高さ（下パネルのとき）
+  /// 情報カードの高さ（下パネルのとき）
   double infoPanelHeight = 240;
+
+  /// レイヤツリーのスクロールコントローラ
+  final ScrollController _drawerScrollController = ScrollController();
 
   /// 情報カードを地図の上に浮かせるか（下パネルの配置で、属性テーブルが開いている間だけ）
   bool _infoFloats(MapLayout layout) =>
@@ -798,8 +793,63 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       // 編集中は情報パネルの枠のまま編集に替わる
       ? const EditPanel()
       : selected.length == 1
-          ? FeatureDetailPanel(feature: selected.first)
+          ? FeatureDetailPanel(feature: selected.first, onOpenInTree: _openInLayerTree)
           : FeatureSetPanel(features: selected);
+
+  /// 情報パネルの「ツリーで開く」: 対象のフィーチャや写真が所属するフォルダへ移動し、
+  /// ドロワーが閉じていれば開いて対象のレイヤまたは写真を選択・スクロール表示する
+  void _openInLayerTree(LayerTreeNode target) {
+    final folder = target.ancestorOf<FolderNode>();
+    LayerTreeNode treeRowNode = target;
+    if (target is FeatureNode) {
+      final layer = target.parent;
+      treeRowNode = layer;
+      final gpkgPath = layer.geoPackageNode.geoPackageFile.getAbsolutePath();
+      if (gpkgPath != null) {
+        ref.read(expandedGeoPackagesProvider.notifier).addExpanded(gpkgPath);
+      }
+      ref.read(selectedLayerNodeProvider.notifier).select(layer);
+    }
+    final wasOpen = drawerOpen;
+    triggerSetState(() {
+      if (folder != null) currentNode = folder;
+      if (!drawerOpen) {
+        drawerOpen = true;
+        drawerWidth = 320;
+      }
+    });
+    if (!wasOpen) {
+      ref.read(tutorialProvider.notifier).report(const LayersPanelToggled(true));
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (GlobalObjectKey(treeRowNode).currentContext == null &&
+          _drawerScrollController.hasClients &&
+          folder != null) {
+        final directChild =
+            target is FeatureNode ? target.parent.geoPackageNode : target;
+        final idx = folder.children.indexOf(directChild);
+        if (idx > 0) {
+          final pos = _drawerScrollController.position;
+          _drawerScrollController.jumpTo(
+            (idx * 48.0).clamp(0.0, pos.maxScrollExtent),
+          );
+        }
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final ctx = GlobalObjectKey(treeRowNode).currentContext;
+        if (ctx != null && ctx.mounted) {
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.3,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    });
+  }
 
   /// 情報カードを下から出す（属性テーブルと同じ動き。下へ引き切ると選択解除）
   Widget _buildInfoBottomPanel(List<LayerTreeNode> selected) {
@@ -900,6 +950,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           onJumpTo: jumpTo,
           onStartAppendMode: startAppendMode,
           onFeatureFound: _onSearchHit,
+          scrollController: _drawerScrollController,
         ),
       ),
     );

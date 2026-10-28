@@ -21,10 +21,12 @@ import '../../i18n/strings.g.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
+import 'drive_transfer_registry.dart';
 import 'google_drive_service.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
 import 'sync_file_operations.dart';
+import 'sync_progress.dart';
 import 'sync_snapshot.dart';
 
 /// Pull（ダウンロード）処理ハンドラー
@@ -45,14 +47,37 @@ class SyncPullHandler {
   /// [driveFolderId] DriveフォルダID
   /// [localPath] ローカル保存先パス
   /// [snapshot] 同じ連携先の判定に使った材料（あれば Drive をたどり直さない）
+  /// [onProgress] 進捗コールバック（指定がなくても [DriveTransferRegistry] には常時配信される）
   Future<SyncResult> pull(
     String driveFolderId,
     String localPath, {
     SyncSnapshot? snapshot,
+    void Function(SyncProgress progress)? onProgress,
+    bool showOsNotification = false,
   }) async {
     if (!_driveService.isDriveApiAvailable) {
       return SyncResult.failure(t.drive.driveNotConnected);
     }
+
+    final registry = DriveTransferRegistry.instance;
+    final managedExternally = registry.isBusy(localPath);
+    final throttler = ProgressThrottler((progress) {
+      registry.updateProgress(
+        localPath,
+        progress,
+        showOsNotification: showOsNotification,
+      );
+      onProgress?.call(progress);
+    });
+
+    if (!managedExternally) {
+      registry.beginTransfer(
+        localPath,
+        folderName: localPath.split(RegExp(r'[/\\]')).last,
+        showOsNotification: showOsNotification,
+      );
+    }
+    throttler.add(const SyncProgress.scanning());
 
     try {
       if (!await fs.isDirectory(localPath)) {
@@ -62,6 +87,15 @@ class SyncPullHandler {
       final reuse = snapshot != null && snapshot.driveId == driveFolderId ? snapshot : null;
       final folderInfo = reuse?.folderInfo ?? await _driveService.getFolderInfo(driveFolderId);
       if (folderInfo == null) {
+        if (!managedExternally) {
+          registry.endTransfer(
+            localPath,
+            driveId: driveFolderId,
+            success: false,
+            errorMessage: t.drive.driveFolderNotFound,
+            showOsNotification: false,
+          );
+        }
         return SyncResult.failure(t.drive.driveFolderNotFound);
       }
 
@@ -73,18 +107,35 @@ class SyncPullHandler {
       final createdFolders = await _fileOps.ensureLocalDirs(localPath, tree.folderPaths);
 
       if (filesToDownload.isEmpty) {
+        throttler.add(const SyncProgress.finalizing());
         await _kmetaService.setDriveSync(
           localPath,
           driveId: driveFolderId,
           driveFolderName: folderInfo.name,
           lastSynced: DateTime.now(),
         );
+        await registry.clearClonePending(localPath);
+        if (!managedExternally) {
+          registry.endTransfer(
+            localPath,
+            driveId: driveFolderId,
+            folderName: folderInfo.name,
+            success: true,
+            showOsNotification: false,
+          );
+        }
         return SyncResult.success(downloadedCount: 0, createdFolderCount: createdFolders);
       }
 
       AppLogger.debug(
         '[SyncEngine] Pull開始: ${filesToDownload.length}ファイル ← ${folderInfo.name}',
       );
+
+      final tracker = SyncByteTracker({
+        for (final entry in filesToDownload)
+          entry.relativePath: int.tryParse(entry.file.size ?? '') ?? 0,
+      });
+      throttler.add(tracker.snapshot(SyncPhase.transferring));
 
       int downloadedCount = 0;
       int skippedCount = 0; // 変わっていないので落とさなかった数
@@ -95,38 +146,58 @@ class SyncPullHandler {
       await SyncFileOperations.runParallel(
         filesToDownload.map((driveEntry) => () async {
           final driveFile = driveEntry.file;
-          final localFilePath = _fileOps.relativePathToLocalPath(localPath, driveEntry.relativePath);
+          final relPath = driveEntry.relativePath;
+          final fileName = driveFile.name ?? relPath.split('/').last;
+          final localFilePath = _fileOps.relativePathToLocalPath(localPath, relPath);
 
-          final unchanged = await _unchangedSince(driveEntry, localFilePath, previous[driveEntry.relativePath]);
+          final unchanged = await _unchangedSince(driveEntry, localFilePath, previous[relPath]);
           if (unchanged != null) {
             skippedCount++;
-            syncedFiles[driveEntry.relativePath] = unchanged.record;
+            syncedFiles[relPath] = unchanged.record;
+            tracker.markCompleted(relPath, fileName: fileName);
+            throttler.add(tracker.snapshot(SyncPhase.transferring));
             // 帳簿で判定できず中身で同じと分かったもの：この時点を base にする（次から行単位で合わせられる）
-            if (unchanged.byContent) await SyncBaseStore.saveBase(localPath, driveEntry.relativePath);
+            if (unchanged.byContent) await SyncBaseStore.saveBase(localPath, relPath);
             return;
           }
 
-          if (await _fileOps.downloadReplacing(driveFile.id!, localFilePath)) {
+          if (await _fileOps.downloadReplacing(
+            driveFile.id!,
+            localFilePath,
+            onChunk: (chunkBytes) {
+              tracker.addChunk(relPath, chunkBytes, fileName: fileName);
+              throttler.add(tracker.snapshot(SyncPhase.transferring));
+            },
+            onRetryReset: () {
+              tracker.resetFile(relPath);
+              throttler.add(tracker.snapshot(SyncPhase.transferring));
+            },
+          )) {
             downloadedCount++;
-            syncedFiles[driveEntry.relativePath] = KMetaSyncFile(
+            tracker.markCompleted(relPath, fileName: fileName);
+            throttler.add(tracker.snapshot(SyncPhase.transferring));
+            syncedFiles[relPath] = KMetaSyncFile(
               driveFileId: driveFile.id!,
               lastSyncedTime: DateTime.now(),
               remoteModifiedTime: driveFile.modifiedTime,
               remoteMd5: driveFile.md5Checksum,
             );
-            await SyncBaseStore.saveBase(localPath, driveEntry.relativePath);
+            await SyncBaseStore.saveBase(localPath, relPath);
           } else {
             failedCount++;
             // 落とせなかったものは前の記録を残す。消すと次の判定で「帳簿に無い手元のファイル」になり、
             // push が Drive の新しい版を手元の古い版で上書きしていた
-            final before = previous[driveEntry.relativePath];
-            if (before != null) syncedFiles[driveEntry.relativePath] = before;
+            final before = previous[relPath];
+            if (before != null) syncedFiles[relPath] = before;
           }
         }),
         maxConcurrency: _downloadConcurrency,
       );
 
-      // Driveにないファイルをローカルから削除
+      throttler.flush();
+      throttler.add(tracker.snapshot(SyncPhase.finalizing));
+
+      // Driveにないファイルをローカルから削除（ただし失敗ファイルがある場合は安全のため保持）
       int deletedCount = 0;
       final driveFilePaths = filesToDownload.map((f) => f.relativePath).toSet();
       for (final entry in await _fileOps.listLocalSyncFiles(localPath)) {
@@ -146,9 +217,18 @@ class SyncPullHandler {
 
       // 落とそうとして 1 つも落ちなかったときだけ失敗（変わっていないものしか無い pull は成功）
       if (downloadedCount == 0 && failedCount > 0) {
-        return SyncResult.failure(
-          t.services.downloadFailed(count: failedCount.toString()),
-        );
+        final msg = t.services.downloadFailed(count: failedCount.toString());
+        if (!managedExternally) {
+          registry.endTransfer(
+            localPath,
+            driveId: driveFolderId,
+            folderName: folderInfo.name,
+            success: false,
+            errorMessage: msg,
+            showOsNotification: false,
+          );
+        }
+        return SyncResult.failure(msg);
       }
 
       await _kmetaService.setDriveSync(
@@ -159,6 +239,20 @@ class SyncPullHandler {
         files: syncedFiles,
       );
 
+      if (failedCount == 0) {
+        await registry.clearClonePending(localPath);
+      }
+
+      if (!managedExternally) {
+        registry.endTransfer(
+          localPath,
+          driveId: driveFolderId,
+          folderName: folderInfo.name,
+          success: true,
+          showOsNotification: false,
+        );
+      }
+
       return SyncResult.success(
         downloadedCount: downloadedCount,
         skippedCount: skippedCount,
@@ -167,7 +261,17 @@ class SyncPullHandler {
       );
     } catch (e, stack) {
       AppLogger.debug('[SyncEngine] Pullエラー: $e\n$stack');
-      return SyncResult.failure(t.services.downloadError(error: e.toString()));
+      final msg = t.services.downloadError(error: e.toString());
+      if (!managedExternally) {
+        registry.endTransfer(
+          localPath,
+          driveId: driveFolderId,
+          success: false,
+          errorMessage: msg,
+          showOsNotification: false,
+        );
+      }
+      return SyncResult.failure(msg);
     }
   }
 
@@ -219,40 +323,108 @@ class SyncPullHandler {
     required String folderName,
     required String driveUrl,
     required bool isReadOnly,
+    void Function(SyncProgress progress)? onProgress,
+    bool showOsNotification = true,
   }) async {
     AppLogger.debug('[SyncEngine] クローン開始: $folderName ($driveId)');
 
-    await fs.createDirectory(localPath);
-
-    // クローン固有のメタデータを先にセットアップ
-    // pull() 内の setDriveSync はマージ動作なのでこれらを上書きしない
-    final saved = await _kmetaService.setDriveSync(
-      localPath,
-      driveId: driveId,
-      driveUrl: driveUrl,
-      isReadOnly: isReadOnly,
-    );
-    if (!saved) {
-      AppLogger.error('[SyncEngine] クローン: フォルダ設定（.qgs）の初期化失敗');
-      return false;
+    final registry = DriveTransferRegistry.instance;
+    final managedExternally = registry.isBusy(localPath);
+    if (!managedExternally) {
+      registry.beginTransfer(
+        localPath,
+        folderName: folderName,
+        showOsNotification: showOsNotification,
+      );
     }
 
-    // あとは通常のダウンロード同期と同じ
-    final result = await pull(driveId, localPath);
+    try {
+      await fs.createDirectory(localPath);
+      await registry.markClonePending(localPath);
 
-    if (!result.success) {
-      AppLogger.error('[SyncEngine] クローン失敗: ${result.errorMessage}');
-      return false;
+      // クローン固有のメタデータを先にセットアップ
+      // pull() 内の setDriveSync はマージ動作なのでこれらを上書きしない
+      final saved = await _kmetaService.setDriveSync(
+        localPath,
+        driveId: driveId,
+        driveFolderName: folderName,
+        driveUrl: driveUrl,
+        isReadOnly: isReadOnly,
+      );
+      if (!saved) {
+        AppLogger.error('[SyncEngine] クローン: フォルダ設定（.qgs）の初期化失敗');
+        if (!managedExternally) {
+          registry.endTransfer(
+            localPath,
+            driveId: driveId,
+            folderName: folderName,
+            success: false,
+            showOsNotification: false,
+          );
+        }
+        return false;
+      }
+
+      // あとは通常のダウンロード同期と同じ
+      final result = await pull(
+        driveId,
+        localPath,
+        onProgress: onProgress,
+        showOsNotification: showOsNotification,
+      );
+
+      if (!result.success) {
+        AppLogger.error('[SyncEngine] クローン失敗: ${result.errorMessage}');
+        if (!managedExternally) {
+          registry.endTransfer(
+            localPath,
+            driveId: driveId,
+            folderName: folderName,
+            success: false,
+            errorMessage: result.errorMessage,
+            showOsNotification: false,
+          );
+        }
+        return false;
+      }
+
+      await registry.clearClonePending(localPath);
+      if (!managedExternally) {
+        registry.endTransfer(
+          localPath,
+          driveId: driveId,
+          folderName: folderName,
+          success: true,
+          showOsNotification: false,
+        );
+      }
+
+      AppLogger.debug(
+        '[SyncEngine] クローン完了: ${result.downloadedCount} ファイルダウンロード',
+      );
+      return true;
+    } catch (e) {
+      if (!managedExternally) {
+        registry.endTransfer(
+          localPath,
+          driveId: driveId,
+          folderName: folderName,
+          success: false,
+          errorMessage: e.toString(),
+          showOsNotification: false,
+        );
+      }
+      rethrow;
     }
-
-    AppLogger.debug(
-      '[SyncEngine] クローン完了: ${result.downloadedCount} ファイルダウンロード',
-    );
-    return true;
   }
 
   /// フォルダ単位でPull
-  Future<SyncResult> pullFolder(String localPath, {SyncSnapshot? snapshot}) async {
+  Future<SyncResult> pullFolder(
+    String localPath, {
+    SyncSnapshot? snapshot,
+    void Function(SyncProgress progress)? onProgress,
+    bool showOsNotification = false,
+  }) async {
     final meta = await _kmetaService.getMeta(localPath);
     final driveId = meta.sync.driveId;
 
@@ -260,6 +432,12 @@ class SyncPullHandler {
       return SyncResult.failure(t.drive.driveNotLinked);
     }
 
-    return pull(driveId, localPath, snapshot: snapshot);
+    return pull(
+      driveId,
+      localPath,
+      snapshot: snapshot,
+      onProgress: onProgress,
+      showOsNotification: showOsNotification,
+    );
   }
 }

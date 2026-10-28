@@ -26,10 +26,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/fs/k_file_system.dart';
 import '../../models/nodes/drive_folder_node.dart';
+import '../../models/nodes/drive_folder_set_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../utils/app_logger.dart';
 import '../projects_home.dart';
 import 'appdata_sync_service.dart';
+import 'drive_folder_set_service.dart';
+import 'drive_transfer_registry.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';
 import 'sync_snapshot.dart';
@@ -53,6 +56,7 @@ class AutoSyncService {
 
   Timer? _timer;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  StreamSubscription<DriveTransferCompletionEvent>? _transferCompletionSub;
   bool _isWifi = false;
   bool _isSyncing = false;
   bool _enabled = false;
@@ -87,6 +91,47 @@ class AutoSyncService {
     onSyncStatusChanged = onStatusChanged;
     onTreeRefreshNeeded = onRefreshNeeded;
     this.onMerged = onMerged;
+
+    unawaited(_transferCompletionSub?.cancel());
+    _transferCompletionSub = DriveTransferRegistry.instance.onTransferCompleted.listen((event) async {
+      if (!event.success) {
+        onSyncStatusChanged?.call();
+        return;
+      }
+      final currentRoot = rootNode;
+      if (currentRoot == null) return;
+      final normTarget = DriveTransferRegistry.normalizeKey(event.localPath);
+      final existing = _collectDriveFolders(currentRoot).where((n) {
+        final p = n.getAbsoluteFilePath();
+        return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
+      }).firstOrNull;
+      if (existing != null) {
+        existing.syncStatus = SyncStatus.synced;
+        await onTreeRefreshNeeded?.call(existing);
+        onSyncStatusChanged?.call();
+      } else {
+        await refreshSharedFolderTree();
+        final existingSet = _collectDriveFolderSets(currentRoot).where((n) {
+          final p = n.getAbsoluteFilePath();
+          return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
+        }).firstOrNull;
+        if (existingSet != null) {
+          existingSet.syncStatus = SyncStatus.synced;
+          await DriveFolderSetService.reloadFolderSetNode(existingSet);
+          onSyncStatusChanged?.call();
+          return;
+        }
+        final added = _collectDriveFolders(currentRoot).where((n) {
+          final p = n.getAbsoluteFilePath();
+          return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
+        }).firstOrNull;
+        if (added != null) {
+          added.syncStatus = SyncStatus.synced;
+          await onTreeRefreshNeeded?.call(added);
+          onSyncStatusChanged?.call();
+        }
+      }
+    });
 
     final prefs = await SharedPreferences.getInstance();
     _enabled = prefs.getBool(kAutoSyncEnabledKey) ?? true;
@@ -127,6 +172,8 @@ class AutoSyncService {
   /// 設定で止めるだけ（[setEnabled]）のときは使わない（入れ直したらそのまま同期を再開する）
   void detach() {
     stop();
+    _transferCompletionSub?.cancel();
+    _transferCompletionSub = null;
     rootNode = null;
     onSyncStatusChanged = null;
     onTreeRefreshNeeded = null;
@@ -168,7 +215,7 @@ class AutoSyncService {
   }
 
   /// メイン同期ロジック
-  /// ???????????????????????????????
+  /// `共有/` フォルダのツリーを再読み込みする
   Future<void> refreshSharedFolderTree() async {
     final root = rootNode;
     if (root == null) return;
@@ -210,6 +257,12 @@ class AutoSyncService {
         AppLogger.debug('[AutoSync] AppData sync error: $e');
       }
 
+      final folderSets = _collectDriveFolderSets(root);
+      for (final setNode in folderSets) {
+        if (!_isWifi) break;
+        await _syncFolderSet(setNode);
+      }
+
       final folders = _collectDriveFolders(root);
       if (folders.isEmpty) return;
 
@@ -239,6 +292,13 @@ class AutoSyncService {
   Future<void> _syncFolder(SyncEngine engine, DriveFolderNode node) async {
     final localPath = node.getAbsoluteFilePath();
     if (localPath == null) return;
+
+    // すでに手動・バックグラウンドクローン等で転送中のフォルダは二重実行しない
+    if (DriveTransferRegistry.instance.isBusy(localPath)) {
+      node.syncStatus = SyncStatus.syncing;
+      onSyncStatusChanged?.call();
+      return;
+    }
 
     try {
       final detail = await engine.checkSyncStatusDetail(localPath);
@@ -413,6 +473,60 @@ class AutoSyncService {
     if (hasRealConflict) {
       AppLogger.debug('[AutoSync] ${node.name}: file-level conflicts remain');
     }
+  }
+
+  /// 共有フォルダセット（JSON）の定期チェック＆差分同期
+  Future<void> _syncFolderSet(DriveFolderSetNode setNode) async {
+    final localPath = setNode.getAbsoluteFilePath();
+    if (localPath == null) return;
+    if (DriveTransferRegistry.instance.isBusy(localPath)) {
+      setNode.syncStatus = SyncStatus.syncing;
+      onSyncStatusChanged?.call();
+      return;
+    }
+    try {
+      final result = await DriveFolderSetService().reconcileSet(
+        localSetPath: localPath,
+        manifestFileId: setNode.manifestFileId,
+        setNode: setNode,
+      );
+      if (result.success) {
+        setNode.syncStatus =
+            result.failedItems.isEmpty ? SyncStatus.synced : SyncStatus.error;
+        if (result.addedCount > 0 || result.removedCount > 0) {
+          await DriveFolderSetService.reloadFolderSetNode(setNode);
+        }
+        onSyncStatusChanged?.call();
+      } else {
+        setNode.syncStatus = SyncStatus.error;
+        onSyncStatusChanged?.call();
+      }
+    } catch (e) {
+      AppLogger.debug('[AutoSync] FolderSet sync error (${setNode.name}): $e');
+      setNode.syncStatus = SyncStatus.error;
+      onSyncStatusChanged?.call();
+    }
+  }
+
+  /// ローカルパスに対応するツリー内の [DriveFolderSetNode] を探す
+  DriveFolderSetNode? findFolderSetByPath(String localPath) {
+    final currentRoot = rootNode;
+    if (currentRoot == null) return null;
+    final normTarget = DriveTransferRegistry.normalizeKey(localPath);
+    return _collectDriveFolderSets(currentRoot).where((n) {
+      final p = n.getAbsoluteFilePath();
+      return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
+    }).firstOrNull;
+  }
+
+  /// ツリーからDriveFolderSetNodeを再帰収集
+  List<DriveFolderSetNode> _collectDriveFolderSets(LayerTreeNode node) {
+    final result = <DriveFolderSetNode>[];
+    if (node is DriveFolderSetNode) result.add(node);
+    for (final child in node.children) {
+      result.addAll(_collectDriveFolderSets(child));
+    }
+    return result;
   }
 
   /// ツリーからDriveFolderNodeを再帰収集

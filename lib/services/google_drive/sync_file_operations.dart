@@ -220,10 +220,22 @@ class SyncFileOperations {
   ///
   /// この端末のリンク情報は、落とした `.qgs` で上書きしない。gpkg は開いている接続を閉じてから置き換え、
   /// 置き換えたあと一度開いて閉じる（[SyncBaseStore.settleAfterDownload]）。落とせなければ false
-  Future<bool> downloadReplacing(String fileId, String localFilePath) async {
+  Future<bool> downloadReplacing(
+    String fileId,
+    String localFilePath, {
+    void Function(int chunkBytes)? onChunk,
+    void Function()? onRetryReset,
+  }) async {
     final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
     await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
-    if (!await driveService.downloadFile(fileId, localFilePath)) return false;
+    if (!await driveService.downloadFile(
+      fileId,
+      localFilePath,
+      onChunk: onChunk,
+      onRetryReset: onRetryReset,
+    )) {
+      return false;
+    }
     await SyncBaseStore.settleAfterDownload(localFilePath);
     await KMetaService.instance.afterReplace(localFilePath, keepLink);
     return true;

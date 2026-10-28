@@ -19,7 +19,7 @@
   radius: 3pt, inset: (x: 5pt, y: 3pt),
   text(size: 7.5pt, weight: "bold", fill: if fixed { ink } else { accent })[#body])
 
-/// 小班の区画にラベルを載せた地図
+/// 区画にラベルを載せた地図
 #let labeled-map(w, h, labels) = box(width: w, height: h, {
   place(mini-map(w, h))
   let cw = w * 0.42
@@ -67,11 +67,11 @@
     block(width: 104pt, fill: white, stroke: 0.6pt + line-c, radius: 5pt, inset: 6pt, align(left, {
       stack(dir: ttb, spacing: 5pt,
         text(size: 6.5pt, weight: "bold", fill: sub)[列を選ぶ],
-        [#check-box() #h(2pt) #text(size: 7.5pt)[林班]],
-        [#check-box() #h(2pt) #text(size: 7.5pt)[小班]],
-        [#check-box(on: false) #h(2pt) #text(size: 7.5pt, fill: sub)[樹種]],
+        [#check-box() #h(2pt) #text(size: 7.5pt)[区域]],
+        [#check-box() #h(2pt) #text(size: 7.5pt)[区画]],
+        [#check-box(on: false) #h(2pt) #text(size: 7.5pt, fill: sub)[種別]],
         pad(top: 5pt, text(size: 6.5pt, weight: "bold", fill: sub)[並べる]),
-        [#label-card[林班]#h(2pt)#label-card(fixed: true)[-]#h(2pt)#label-card[小班]],
+        [#label-card[区域]#h(2pt)#label-card(fixed: true)[-]#h(2pt)#label-card[区画]],
       )
     })),
     arrow-r(w: 18pt),

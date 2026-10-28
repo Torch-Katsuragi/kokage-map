@@ -19,7 +19,6 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -27,7 +26,6 @@ import '../../../core/platform_capabilities.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../models/app_notification.dart';
 import '../../../models/party/party_room.dart';
-import '../../../providers/guidance_providers.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/party_providers.dart';
 import '../../../services/party/party_connection_monitor.dart';
@@ -505,20 +503,6 @@ class _PartyStatusSheet extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (battery != null) _BatteryBadge(percent: battery),
-          // その人の所へ案内（位置が届いている他のメンバーだけ。動けば行き先も付いて動く）
-          if (m.uid != session.selfUid ? session.peers[m.uid] : null case final peer?)
-            IconButton(
-              icon: Icon(Icons.near_me, size: 20, color: Colors.pink.shade700),
-              tooltip: t.guidance.action,
-              onPressed: () {
-                ref.read(guidanceProvider.notifier).start(GuidanceTarget(
-                      point: LatLng(peer.latitude, peer.longitude),
-                      label: m.name.isNotEmpty ? m.name : t.guidance.member,
-                      peerUid: m.uid,
-                    ));
-                Navigator.of(context).maybePop();
-              },
-            ),
           if (canKick)
             IconButton(
               icon: const Icon(Icons.person_remove_outlined, size: 20),

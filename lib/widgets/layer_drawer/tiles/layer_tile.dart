@@ -77,53 +77,58 @@ class LayerTile extends ConsumerWidget {
     final isArea = guiding && isPracticeLayer(node, PracticeProject.areaLayer);
     final dimmed = !node.isVisibleRecursive();
 
-    Widget row = DrawerRow(
-      depth: depth,
-      selected: isSelected,
-      dimmed: dimmed,
-      leading: LayerSwatch(layer: node, dimmed: dimmed),
-      title: node.name,
-      trailingInfo: '${node.featureCount}',
-      eye: KeyedSubtree(
-        key: isArea ? TutorialTargets.areaEye : null,
-        child: nodeVisibilityEye(
-          ref,
-          node,
-          onToggled: () => ref.read(tutorialProvider.notifier).report(LayerVisibilityToggled(node)),
-        ),
-      ),
-      onTap: () => ref.read(selectedLayerNodeProvider.notifier).select(node),
-      onDoubleTap: () => _zoomToLayer(ref),
-      menu: () => _menuItems(isArea),
-      onMenu: (v) => _onMenu(context, ref, v),
-      onSwipeMove: onSwipeMove == null ? null : () => onSwipeMove!(node),
-    );
-    if (guiding) {
-      row = KeyedSubtree(key: TutorialTargets.tileOf(node), child: row);
-      if (isArea) row = KeyedSubtree(key: TutorialTargets.areaLayerMenu, child: row);
-    }
+    return ValueListenableBuilder<int>(
+      valueListenable: node.featuresRevisionNotifier,
+      builder: (context, _, _) {
+        Widget row = DrawerRow(
+          depth: depth,
+          selected: isSelected,
+          dimmed: dimmed,
+          leading: LayerSwatch(layer: node, dimmed: dimmed),
+          title: node.name,
+          trailingInfo: '${node.featureCount}',
+          eye: KeyedSubtree(
+            key: isArea ? TutorialTargets.areaEye : null,
+            child: nodeVisibilityEye(
+              ref,
+              node,
+              onToggled: () => ref.read(tutorialProvider.notifier).report(LayerVisibilityToggled(node)),
+            ),
+          ),
+          onTap: () => ref.read(selectedLayerNodeProvider.notifier).select(node),
+          onDoubleTap: () => _zoomToLayer(ref),
+          menu: () => _menuItems(isArea),
+          onMenu: (v) => _onMenu(context, ref, v),
+          onSwipeMove: onSwipeMove == null ? null : () => onSwipeMove!(node),
+        );
+        if (guiding) {
+          row = KeyedSubtree(key: TutorialTargets.tileOf(node), child: row);
+          if (isArea) row = KeyedSubtree(key: TutorialTargets.areaLayerMenu, child: row);
+        }
 
-    // 既定の View しかないときは View の行を出さない（2026-10-02 に 09-12 の「既定 1 枚でも出す」を改めた）。
-    // 既定 View の見え方はレイヤのスタイルそのもので、レイヤの長押し →「スタイル」で変える。
-    // View を足すと、既定と足した View が並ぶ
-    final views = node.views;
-    if (views.isEmpty || (views.length == 1 && views.first.isDefaultView)) {
-      // QGIS の描き分けなら、行の下に小さな凡例
-      final def = node.kmetaStyleIfLoaded?.qgisRendererDef;
-      if (def == null) return row;
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [row, DrawerLegend(renderer: def, depth: depth, dimmed: dimmed)],
-      );
-    }
+        // 既定の View しかないときは View の行を出さない（2026-10-02 に 09-12 の「既定 1 枚でも出す」を改めた）。
+        // 既定 View の見え方はレイヤのスタイルそのもので、レイヤの長押し →「スタイル」で変える。
+        // View を足すと、既定と足した View が並ぶ
+        final views = node.views;
+        if (views.isEmpty || (views.length == 1 && views.first.isDefaultView)) {
+          // QGIS の描き分けなら、行の下に小さな凡例
+          final def = node.kmetaStyleIfLoaded?.qgisRendererDef;
+          if (def == null) return row;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [row, DrawerLegend(renderer: def, depth: depth, dimmed: dimmed)],
+          );
+        }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        row,
-        for (final view in views) ViewTile(key: ValueKey(view.viewKey), node: view, depth: depth + 1),
-      ],
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            row,
+            for (final view in views) ViewTile(key: ValueKey(view.viewKey), node: view, depth: depth + 1),
+          ],
+        );
+      },
     );
   }
 

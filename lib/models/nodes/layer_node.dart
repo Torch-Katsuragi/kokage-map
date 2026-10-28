@@ -20,7 +20,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
@@ -137,6 +137,9 @@ abstract class LayerNode extends LayerTreeNode {
   /// フィーチャのリストを抱えている側はこれを見て作り直す。
   int get featuresRevision => _featuresRevision;
   int _featuresRevision = 0;
+
+  /// [featuresRevision] の変更を UI（[LayerTile] 等）へ即時通知する Notifier
+  final ValueNotifier<int> featuresRevisionNotifier = ValueNotifier<int>(0);
 
   /// このレイヤの View（＝見せ方）。
   ///
@@ -769,6 +772,7 @@ abstract class LayerNode extends LayerTreeNode {
       await _loadColumnSqlTypes();
       // フィーチャが入れ替わったので、どれがどの View のものかも取り直す
       await refreshStyleGroups();
+      featuresRevisionNotifier.value = _featuresRevision;
       _updateChildrenCompleter!.complete();
     } catch (e) {
       _updateChildrenCompleter!.completeError(e);

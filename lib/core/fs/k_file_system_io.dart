@@ -23,6 +23,8 @@ library;
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as p;
+
 import 'k_file_system.dart';
 
 KFileSystem createKFileSystem() => const IoFileSystem();
@@ -67,6 +69,48 @@ class IoFileSystem implements KFileSystem {
   @override
   Future<void> writeAsBytes(String path, Uint8List bytes) async {
     await File(path).writeAsBytes(bytes);
+  }
+
+  @override
+  Future<void> writeStream(
+    String path,
+    Stream<List<int>> stream, {
+    void Function(int chunkBytes)? onChunk,
+  }) async {
+    final parent = Directory(p.dirname(path));
+    if (!await parent.exists()) {
+      await parent.create(recursive: true);
+    }
+    // 同一ディレクトリ内の隠し一時ファイル（.sync や LayerDrawer の列挙から除外される）に書き、
+    // 完走後に rename でアトミックに置換する
+    final partPath = p.join(
+      p.dirname(path),
+      '.${p.basename(path)}.${DateTime.now().microsecondsSinceEpoch}.part',
+    );
+    final partFile = File(partPath);
+    final sink = partFile.openWrite();
+    var completed = false;
+    try {
+      await for (final chunk in stream) {
+        sink.add(chunk);
+        onChunk?.call(chunk.length);
+      }
+      await sink.flush();
+      await sink.close();
+      completed = true;
+      await partFile.rename(path);
+    } finally {
+      if (!completed) {
+        try {
+          await sink.close();
+        } catch (_) {}
+      }
+      try {
+        if (await partFile.exists()) {
+          await partFile.delete();
+        }
+      } catch (_) {}
+    }
   }
 
   @override

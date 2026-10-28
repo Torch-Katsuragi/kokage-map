@@ -153,7 +153,7 @@
 
 // ---- 地図の絵 ----
 
-/// 小さな地図: 小班（区画 4 つ）と路網（曲線 1 本）。見せ方を引数で変える
+/// 小さな地図: 区画 4 つと道路（曲線 1 本）。見せ方を引数で変える
 #let mini-map(w, h, road: map-road, road-w: 2pt, comps: true, comp: map-comp) = box(width: w, height: h, clip: true, {
   place(rect(width: w, height: h, fill: map-bg))
   if comps {

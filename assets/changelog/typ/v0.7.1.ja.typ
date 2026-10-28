@@ -53,7 +53,7 @@
   grid(
     columns: (auto, auto, auto), column-gutter: 10pt, align: horizon,
     phone(w: 72pt, h: 128pt, label: "⋮ から選ぶ",
-      layer-menu(66pt, 114pt, "レイヤ", ("小班", "路網", "測点"), "レイヤへ寄せる")),
+      layer-menu(66pt, 114pt, "レイヤ", ("区画", "道路", "測点"), "レイヤへ寄せる")),
     arrow-r(w: 22pt),
     phone(w: 72pt, h: 128pt, label: "データのある所へ", mini-map(66pt, 114pt)),
   ),

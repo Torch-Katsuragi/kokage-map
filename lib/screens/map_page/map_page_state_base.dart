@@ -31,7 +31,6 @@ import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
-import '../../providers/guidance_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../services/basemap_service.dart';
 import '../../services/geometry_conversion_service.dart';
@@ -77,8 +76,9 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 初回の現在位置移動フラグ
   bool movedToCurrentLocationOnce = false;
 
-  /// 起動時のカメラが決まったか（CLI / URL の位置指定、またはフィーチャ全体への寄せ）。
-  /// 決まっていない間だけ、GPS の初回フィックスで現在位置へ飛ぶ（フィーチャが無いプロジェクト＝東京から始まる場合）
+  /// 起動時の仮カメラが決まったか（CLI / URL の位置指定、またはフィーチャ全体への寄せ）。
+  /// GPS の初回フィックスによる現在位置ジャンプは [movedToCurrentLocationOnce] で管理し、
+  /// フィーチャ全体への寄せよりも GPS 位置ジャンプが優先される。
   bool initialViewDecided = false;
 
   /// 地図面の窓口。地図面（`TerrainMapLayer`）が組み上がると attach される
@@ -236,18 +236,6 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   // =============================================
   // ヘルパーメソッド
   // =============================================
-
-  /// 地点への誘導に今の位置を流す（GPS の更新ごと。新しいタイマーやストリームは持たない）。
-  /// GPS 管理サービスの位置（外部 GNSS も含む）を優先し、無ければ地図の現在位置
-  void feedGuidance([GpsInfo? info]) {
-    final gps = info ?? gpsManager.currentInfo;
-    final here = gps.positionOr(currentLocation);
-    if (here == null) return;
-    final accuracy = gps.isActive ? gps.accuracy : null;
-    // 進行方向は歩いているときだけ（止まっていると GPS の方位は当てにならない）
-    final course = (gps.speed ?? 0) >= 0.5 ? gps.bearing : null;
-    ref.read(guidanceProvider.notifier).updatePosition(here, accuracy: accuracy, courseDeg: course);
-  }
 
   /// setStateのラッパー（Mixinから呼び出し用）
   void triggerSetState(VoidCallback fn) {

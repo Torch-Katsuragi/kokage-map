@@ -211,6 +211,7 @@ class AppDataSyncService extends ChangeNotifier {
             folderName: r.folderName,
             driveUrl: r.driveUrl,
             isReadOnly: entry.isReadOnly,
+          isFolderSet: entry.isFolderSet,
           );
           shouldUpload = true;
         }
@@ -557,6 +558,7 @@ class AppDataSyncService extends ChangeNotifier {
           folderName: entry.folderName,
           driveUrl: entry.driveUrl,
           isReadOnly: entry.isReadOnly,
+          isFolderSet: entry.isFolderSet,
         );
         if (path != null) cloned++;
       } catch (e) {

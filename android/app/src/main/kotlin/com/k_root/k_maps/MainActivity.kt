@@ -23,9 +23,12 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "com.k_root.k_maps/media_copy"
         private const val LAUNCH_CHANNEL = "com.k_root.k_maps/launch"
+        private const val SYNC_NOTIFICATION_CHANNEL = "com.k_root.k_maps/sync_notification"
+        private const val REQ_POST_NOTIFICATIONS = 4102
     }
 
     private var launchChannel: MethodChannel? = null
+    private var askedNotificationPermission = false
 
     /// 起動時に届いた共有リンク（App Links の `https://kokage-map.sleeptree.jp/open?drive=...`）。Dart が取りに来るまで持つ
     private var pendingLink: String? = null
@@ -76,6 +79,22 @@ class MainActivity : FlutterActivity() {
             
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager?.createNotificationChannel(channel)
+            DriveTransferService.ensureChannel(this)
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (askedNotificationPermission) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                askedNotificationPermission = true
+                requestPermissions(
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    REQ_POST_NOTIFICATIONS,
+                )
+            }
         }
     }
 
@@ -122,6 +141,52 @@ class MainActivity : FlutterActivity() {
                         } catch (e: Exception) {
                             result.success(null)
                         }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SYNC_NOTIFICATION_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "showProgress" -> {
+                        requestNotificationPermissionIfNeeded()
+                        val id = call.argument<Int>("id") ?: 2000
+                        val title = call.argument<String>("title") ?: "ダウンロード中"
+                        val body = call.argument<String>("body") ?: ""
+                        val progress = call.argument<Int>("progress") ?: 0
+                        val max = call.argument<Int>("max") ?: 100
+                        val indeterminate = call.argument<Boolean>("indeterminate") ?: false
+                        DriveTransferService.showProgress(
+                            this,
+                            id = id,
+                            title = title,
+                            body = body,
+                            progress = progress,
+                            max = max,
+                            indeterminate = indeterminate,
+                        )
+                        result.success(null)
+                    }
+                    "showComplete" -> {
+                        val id = call.argument<Int>("id") ?: 2000
+                        val title = call.argument<String>("title") ?: "ダウンロード完了"
+                        val body = call.argument<String>("body") ?: ""
+                        val isError = call.argument<Boolean>("isError") ?: false
+                        val stopService = call.argument<Boolean>("stopService") ?: true
+                        DriveTransferService.showComplete(
+                            this,
+                            id = id,
+                            title = title,
+                            body = body,
+                            isError = isError,
+                            stopService = stopService,
+                        )
+                        result.success(null)
+                    }
+                    "stopIfIdle" -> {
+                        DriveTransferService.stopIfIdle(this)
+                        result.success(null)
                     }
                     else -> result.notImplemented()
                 }

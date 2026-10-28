@@ -4,7 +4,7 @@
 
 // ---- この版だけの部品 ----
 
-/// 属性テーブル（画面の中）。rows は (小班, 状態, 直したか)
+/// 属性テーブル（画面の中）。rows は (区画, 状態, 直したか)
 #let attr-table(w, head, rows) = box(width: w, height: 100%, fill: white, {
   let cell(body, fill: white, bold: false, c: ink) = box(width: 100%, fill: fill, inset: (x: 2.5pt, y: 2.2pt),
     text(size: 6pt, weight: if bold { "bold" } else { "regular" }, fill: c)[#body])
@@ -85,7 +85,7 @@
   [Two devices, merged row by row],
   [When two devices edit the same GeoPackage, Drive sync merges the changes row by row. Edits to different rows are both kept.],
   {
-    let head = ([Stand], [Status])
+    let head = ([Zone], [Status])
     stack(dir: ttb, spacing: 5pt,
       grid(
         columns: (96pt, 96pt), align: center,
@@ -177,7 +177,7 @@
       layer-panel(w: 84pt, header: "Layers", (
         (0, "dir", "Global", "ok"),
         (0, "layer", "Roads", "ok"),
-        (0, "layer", "Stands", "ok", map-comp),
+        (0, "layer", "Zones", "ok", map-comp),
       )),
     ),
     arrow-r(w: 14pt),
@@ -187,7 +187,7 @@
         (0, "dir", "System", "hi"),
         (1, "dir", "Global", "ok"),
         (0, "layer", "Roads", "ok"),
-        (0, "layer", "Stands", "ok", map-comp),
+        (0, "layer", "Zones", "ok", map-comp),
       )),
     ),
   ),

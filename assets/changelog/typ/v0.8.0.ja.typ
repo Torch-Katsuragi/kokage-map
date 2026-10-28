@@ -10,7 +10,7 @@
   grid(
     columns: (auto, 1fr, auto), align: (center + horizon, center + horizon, center + horizon),
     phone(label: "こかげマップ", mini-map(56pt, 98pt, road: map-red, road-w: 2.4pt)),
-    stack(dir: ttb, spacing: 3pt, file-icon(accent, w: 14pt), text(size: 7pt, weight: "bold", fill: accent)[林小班.qgs], arrow-lr(w: 30pt)),
+    stack(dir: ttb, spacing: 3pt, file-icon(accent, w: 14pt), text(size: 7pt, weight: "bold", fill: accent)[調査区画.qgs], arrow-lr(w: 30pt)),
     pc(label: "QGIS", w: 110pt, h: 78pt, mini-map(104pt, 63pt, road: map-red, road-w: 2.4pt)),
   ),
 )
@@ -24,7 +24,7 @@
     block(fill: white, stroke: 0.6pt + line-c, radius: 6pt, inset: 7pt, width: 100%, align(left, {
       text(size: 7pt, fill: sub, weight: "bold")[これまで]
       v(4pt)
-      folder-icon(sub.lighten(30%)); h(3pt); text(size: 8.5pt, fill: sub)[林小班]
+      folder-icon(sub.lighten(30%)); h(3pt); text(size: 8.5pt, fill: sub)[調査区画]
       v(3pt)
       h(6pt); file-icon(sub.lighten(20%)); h(3pt); text(size: 8pt, fill: sub)[.kmeta.json]
       v(5pt)
@@ -34,9 +34,9 @@
     block(fill: white, stroke: 1.2pt + accent, radius: 6pt, inset: 7pt, width: 100%, align(left, {
       text(size: 7pt, fill: accent, weight: "bold")[これから]
       v(4pt)
-      folder-icon(warm); h(3pt); text(size: 8.5pt, weight: "bold")[林小班]
+      folder-icon(warm); h(3pt); text(size: 8.5pt, weight: "bold")[調査区画]
       v(3pt)
-      h(6pt); file-icon(accent); h(3pt); text(size: 8pt, fill: accent, weight: "bold")[林小班.qgs]
+      h(6pt); file-icon(accent); h(3pt); text(size: 8pt, fill: accent, weight: "bold")[調査区画.qgs]
       v(5pt)
       badge[QGIS で開ける]; h(2pt); badge[共有できる]
     })),
@@ -54,9 +54,9 @@
       stack(dir: ttb, spacing: 4pt,
         caption[これまで],
         layer-panel(w: 84pt, (
-          (0, "layer", "路網", "ok"),
+          (0, "layer", "道路", "ok"),
           (0, "dir", "区域B", "lock"),
-          (1, "layer", "小班", "lock"),
+          (1, "layer", "区画", "lock"),
         )),
         caption[子フォルダは読み取り専用],
       ),
@@ -64,11 +64,11 @@
       stack(dir: ttb, spacing: 4pt,
         caption(fill: accent)[これから],
         layer-panel(w: 84pt, (
-          (0, "layer", "路網", "ok"),
+          (0, "layer", "道路", "ok"),
           (0, "dir", "区域B", "ok"),
-          (1, "layer", "小班", "hi", map-green),
+          (1, "layer", "区画", "hi", map-green),
         )),
-        caption(fill: accent)[小班の色を変える],
+        caption(fill: accent)[区画の色を変える],
       ),
     ),
     grid(
@@ -87,8 +87,8 @@
   stack(dir: ttb, spacing: 5pt,
     grid(
       columns: (96pt, 96pt), align: center,
-      stack(dir: ttb, spacing: 4pt, bubble[路網を赤に], phone(w: 44pt, h: 78pt, label: "端末A", mini-map(38pt, 64pt, road: map-red, road-w: 2.4pt))),
-      stack(dir: ttb, spacing: 4pt, bubble[小班を隠す], phone(w: 44pt, h: 78pt, label: "端末B", mini-map(38pt, 64pt, comps: false))),
+      stack(dir: ttb, spacing: 4pt, bubble[道路を赤に], phone(w: 44pt, h: 78pt, label: "端末A", mini-map(38pt, 64pt, road: map-red, road-w: 2.4pt))),
+      stack(dir: ttb, spacing: 4pt, bubble[区画を隠す], phone(w: 44pt, h: 78pt, label: "端末B", mini-map(38pt, 64pt, comps: false))),
     ),
     arrows-in(192pt),
     cloud(w: 64pt, label: "Drive"),

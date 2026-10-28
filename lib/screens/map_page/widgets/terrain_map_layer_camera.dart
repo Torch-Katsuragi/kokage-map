@@ -179,9 +179,18 @@ mixin _TerrainCameraControl on ConsumerState<TerrainMapLayer> implements MapSurf
     await _animateTo(centerX: x, centerY: y, zoom: zoom, bearing: b, pitch: p);
   }
 
+  List<LatLng>? _pendingFitCoordinates;
+  EdgeInsets _pendingFitPadding = EdgeInsets.zero;
+
   @override
   Future<void> fitCoordinates(List<LatLng> coordinates, {EdgeInsets padding = EdgeInsets.zero}) async {
     if (coordinates.isEmpty) return;
+    if (_size == Size.zero) {
+      _pendingFitCoordinates = coordinates;
+      _pendingFitPadding = padding;
+      return;
+    }
+    _pendingFitCoordinates = null;
     var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;
     for (final c in coordinates) {
       final x = WebMercator.xFromLon(c.longitude);
@@ -192,7 +201,6 @@ mixin _TerrainCameraControl on ConsumerState<TerrainMapLayer> implements MapSurf
       if (y > maxY) maxY = y;
     }
     final center = LatLng(WebMercator.latFromY((minY + maxY) / 2), WebMercator.lonFromX((minX + maxX) / 2));
-    if (_size == Size.zero) return jumpTo(center, _camera.zoom);
     // 1 点なら寄るだけ。幅は真上から見た Mercator m（傾いていると画面の地面は広いので余裕がある）
     final spanX = math.max(maxX - minX, 20.0);
     final spanY = math.max(maxY - minY, 20.0);

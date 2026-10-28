@@ -18,6 +18,7 @@
 /// 可視切り替え・リネーム・削除などの操作を提供するUI。
 library;
 
+import 'dart:async';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +31,7 @@ import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/drive_folder_node.dart';
+import '../../models/nodes/drive_folder_set_node.dart';
 import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/external_overlay_image_node.dart';
 import '../../models/nodes/feature_node.dart';
@@ -47,6 +49,7 @@ import '../../providers/project_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../screens/gallery_import_screen.dart';
 import '../../services/external/external_layer_cache.dart';
+import '../../services/google_drive/index.dart';
 import '../../services/kmeta_service.dart';
 import '../../services/layer_drawer_service.dart';
 import '../../services/qgis/qgs_read_back_notice.dart';
@@ -74,7 +77,11 @@ class LayerDrawer extends ConsumerStatefulWidget {
   final void Function(FeatureNode feature)? onStartAppendMode;
 
   /// 属性の検索で地物を選んだ（選んで、そこへ飛ぶ）
+  /// 属性の検索で地物を選んだ（選んで、そこへ飛ぶ）
   final void Function(FeatureNode feature)? onFeatureFound;
+
+  /// リストのスクロール制御（「レイヤツリーで開く」の画面外ジャンプ用）
+  final ScrollController? scrollController;
 
   const LayerDrawer({
     super.key,
@@ -83,6 +90,7 @@ class LayerDrawer extends ConsumerStatefulWidget {
     required this.onDirChanged,
     this.onJumpTo,
     this.onStartAppendMode,
+    this.scrollController,
   });
 
   @override
@@ -99,6 +107,9 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
   /// フォルダの行の位置を引くための鍵（落とした位置の下の行を探す）
   final _folderKeys = Expando<GlobalKey>();
+
+  /// 現在のフォルダで既に展開同期済みの GeoPackage パス（バックグラウンド同期で後から増えた gpkg を自動展開する）
+  final Set<String> _knownGpkgPaths = {};
 
   @override
   void triggerMapRefresh() => ref.refreshMap();
@@ -117,6 +128,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
   void didUpdateWidget(LayerDrawer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentNode != widget.currentNode) {
+      _knownGpkgPaths.clear();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _syncExpansionState(reset: true);
       });
@@ -125,6 +137,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
   void _syncExpansionState({required bool reset}) {
     final paths = _collectGpkgPaths(widget.currentNode);
+    _knownGpkgPaths.addAll(paths);
     final notifier = ref.read(expandedGeoPackagesProvider.notifier);
     if (reset) {
       notifier.resetAndExpandAll(paths);
@@ -267,6 +280,18 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       return Center(child: Text(t.layerDrawer.directoryNotFound));
     }
 
+    final newGpkgPaths = _collectGpkgPaths(widget.currentNode)
+        .where((p) => !_knownGpkgPaths.contains(p))
+        .toList();
+    if (newGpkgPaths.isNotEmpty) {
+      _knownGpkgPaths.addAll(newGpkgPaths);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(expandedGeoPackagesProvider.notifier).expandAll(newGpkgPaths);
+        }
+      });
+    }
+
     final parent = widget.currentNode!.parent;
     final driveRoot = LayerDrawerService.findDriveRoot(widget.currentNode);
     // ⚠ パスを解決できないフォルダ（プロジェクト未設定の仮ルート `Home`。web の地図プレビューや
@@ -323,6 +348,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
                     : null,
               ),
               child: ListView.builder(
+                controller: widget.scrollController,
                 itemCount: widget.currentNode!.children.length,
                 itemBuilder: (_, i) => _buildNodeTile(widget.currentNode!.children[i]),
               ),
@@ -338,7 +364,8 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       // 「この端末」とグローバルフォルダ本体は、名前変更・削除・ドラッグの対象にしない
       final fixed = node is SysNode || node is GlobalFolderNode;
       final drive = node is DriveFolderNode;
-      final movable = !drive && !fixed;
+      final folderSet = node is DriveFolderSetNode;
+      final movable = !drive && !folderSet && !fixed;
       return FolderTile(
         key: _folderKeys[node] ??= GlobalKey(),
         node: node,
@@ -348,13 +375,17 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         onRename: movable ? () => _renameFolder(context, node) : null,
         onSyncMerge: drive ? openSyncMergeDialog : null,
         onRefreshSync: drive ? refreshSyncStatus : null,
-        onUnlinkDrive: drive ? unlinkDriveFolder : null,
-        onDeleteDrive: drive ? deleteDriveFolder : null,
+        onSyncFolderSet: folderSet ? syncFolderSet : null,
+        onUnlinkDrive: (drive || folderSet) ? unlinkDriveFolder : null,
+        onDeleteDrive: (drive || folderSet) ? deleteDriveFolder : null,
+
+
         onSwipeMove: movable ? () => _swipeMove(node) : null,
       );
     }
     if (node is ImageNode) {
       return PhotoTile(
+        key: GlobalObjectKey(node),
         node: node,
         onRename: () => _renamePhoto(context, node),
         onJumpTo: widget.onJumpTo,
@@ -587,7 +618,8 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
   }
 
   Future<void> _addFolder(BuildContext context) async {
-    final isUnderDrive = LayerDrawerService.findDriveRoot(widget.currentNode) != null;
+    final isUnderDrive = LayerDrawerService.findDriveRoot(widget.currentNode) != null ||
+        widget.currentNode is DriveFolderSetNode;
     final typeResult = await AddFolderTypeDialog.show(context, allowDrive: !isUnderDrive);
     if (typeResult == null) return;
     if (typeResult.type == AddFolderType.local) {
@@ -607,27 +639,259 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     final urlResult = await DriveUrlInputDialog.show(context);
     if (urlResult == null) return;
 
-    ref.notify(t.layerDrawer.cloningDrive(name: urlResult.folderName));
+    final parentNode = widget.currentNode as FolderNode;
+    final notifier = ref.read(notificationCenterProvider.notifier);
+
+    if (urlResult.isFolderSet) {
+      await _addDriveFolderSet(urlResult, parentNode, notifier);
+      return;
+    }
 
     try {
-      final cloned = await LayerDrawerService.cloneDriveFolder(
-        parent: widget.currentNode as FolderNode,
+      // Option A: 即座に空フォルダ + clone.pending + DriveFolderNode(syncing) をツリーへ追加し、
+      // バックグラウンドで Pull しながら FolderTile と通知ベルに進捗バーを出す
+      final prepared = await LayerDrawerService.prepareDriveCloneNode(
+        parent: parentNode,
         folderId: urlResult.folderId,
         folderName: urlResult.folderName,
         url: urlResult.url,
         isReadOnly: urlResult.isReadOnly,
       );
-
-      if (cloned != null) {
-        triggerMapRefresh();
-        ref.notify(t.layerDrawer.cloneSuccess(name: urlResult.folderName), level: NotificationLevel.success);
-        final readBack = cloned.readBack;
-        if (readBack != null) notifyQgsReadBack(ref, readBack);
-      } else {
+      if (prepared == null) {
         ref.notify(t.layerDrawer.cloneFailed, level: NotificationLevel.error);
+        return;
       }
+
+      final node = prepared.node;
+      final localPath = prepared.localPath;
+      final transferKey = DriveTransferRegistry.normalizeKey(localPath);
+      final registry = DriveTransferRegistry.instance;
+
+      registry.beginTransfer(
+        localPath,
+        folderName: node.name,
+        showOsNotification: true,
+      );
+      notifier.startTransfer(
+        transferKey: transferKey,
+        title: t.drive.downloadingTitle(name: node.name),
+      );
+      triggerMapRefresh();
+
+      // バックグラウンドで Pull → QgsReadBack → 完了通知へ切り替え
+      unawaited(Future(() async {
+        try {
+          final result = await SyncEngine().pull(
+            urlResult.folderId,
+            localPath,
+            showOsNotification: true,
+          );
+          if (!result.success) {
+            node.syncStatus = SyncStatus.error;
+            final errMsg = result.errorMessage ?? t.layerDrawer.cloneFailed;
+            registry.endTransfer(
+              localPath,
+              driveId: urlResult.folderId,
+              folderName: node.name,
+              success: false,
+              completionTitle: t.drive.downloadFailedTitle(name: node.name),
+              completionBody: errMsg,
+              errorMessage: errMsg,
+              showOsNotification: true,
+            );
+            notifier.completeTransfer(
+              transferKey: transferKey,
+              title: t.drive.downloadFailedTitle(name: node.name),
+              detail: errMsg,
+              level: NotificationLevel.error,
+            );
+            if (mounted) triggerMapRefresh();
+            return;
+          }
+
+          registry.updateProgress(
+            localPath,
+            const SyncProgress.finalizing(),
+            folderName: node.name,
+            showOsNotification: true,
+          );
+          final readBack = await LayerDrawerService.finalizeClonedNode(node);
+          node.syncStatus = SyncStatus.synced;
+
+          final doneTitle = t.drive.downloadCompleteTitle(name: node.name);
+          final doneDetail = t.drive.downloadCompleteDetail(
+            count: result.downloadedCount.toString(),
+          );
+          registry.endTransfer(
+            localPath,
+            driveId: urlResult.folderId,
+            folderName: node.name,
+            success: true,
+            completionTitle: doneTitle,
+            completionBody: doneDetail,
+            showOsNotification: true,
+          );
+          notifier.completeTransfer(
+            transferKey: transferKey,
+            title: doneTitle,
+            detail: doneDetail,
+            level: NotificationLevel.success,
+          );
+          if (mounted) {
+            triggerMapRefresh();
+            if (readBack != null) notifyQgsReadBack(ref, readBack);
+          }
+        } catch (e) {
+          AppLogger.error('[LayerDrawer] Driveフォルダクローンエラー: $e');
+          node.syncStatus = SyncStatus.error;
+          registry.endTransfer(
+            localPath,
+            driveId: urlResult.folderId,
+            folderName: node.name,
+            success: false,
+            completionTitle: t.drive.downloadFailedTitle(name: node.name),
+            completionBody: '$e',
+            errorMessage: '$e',
+            showOsNotification: true,
+          );
+          notifier.completeTransfer(
+            transferKey: transferKey,
+            title: t.drive.downloadFailedTitle(name: node.name),
+            detail: '$e',
+            level: NotificationLevel.error,
+          );
+          if (mounted) triggerMapRefresh();
+        }
+      }));
     } catch (e) {
-      AppLogger.error('[LayerDrawer] Driveフォルダクローンエラー: $e');
+      AppLogger.error('[LayerDrawer] Driveフォルダ準備エラー: $e');
+      ref.notify(t.common.errorOccurred(error: '$e'), level: NotificationLevel.error);
+    }
+  }
+
+  Future<void> _addDriveFolderSet(
+    DriveUrlInputResult urlResult,
+    FolderNode parentNode,
+    NotificationCenter notifier,
+  ) async {
+    try {
+      final prepared = await LayerDrawerService.prepareDriveFolderSetNode(
+        parent: parentNode,
+        jsonDriveId: urlResult.folderId,
+        setName: urlResult.folderName,
+        url: urlResult.url,
+      );
+      if (prepared == null) {
+        ref.notify(t.layerDrawer.cloneFailed, level: NotificationLevel.error);
+        return;
+      }
+
+      final node = prepared.node;
+      final localPath = prepared.localPath;
+      final transferKey = DriveTransferRegistry.normalizeKey(localPath);
+      final registry = DriveTransferRegistry.instance;
+
+      registry.beginTransfer(
+        localPath,
+        folderName: node.name,
+        showOsNotification: true,
+      );
+      notifier.startTransfer(
+        transferKey: transferKey,
+        title: t.drive.downloadingTitle(name: node.name),
+      );
+      triggerMapRefresh();
+
+      unawaited(Future(() async {
+        try {
+          final result = await DriveFolderSetService().reconcileSet(
+            localSetPath: localPath,
+            manifestFileId: urlResult.folderId,
+            setNode: node,
+            preloadedManifest: urlResult.folderSetManifest,
+            showOsNotification: true,
+          );
+          if (!result.success) {
+            node.syncStatus = SyncStatus.error;
+            final errMsg = result.errorMessage ?? t.layerDrawer.cloneFailed;
+            registry.endTransfer(
+              localPath,
+              driveId: urlResult.folderId,
+              folderName: node.name,
+              success: false,
+              completionTitle: t.drive.downloadFailedTitle(name: node.name),
+              completionBody: errMsg,
+              errorMessage: errMsg,
+              showOsNotification: true,
+            );
+            notifier.completeTransfer(
+              transferKey: transferKey,
+              title: t.drive.downloadFailedTitle(name: node.name),
+              detail: errMsg,
+              level: NotificationLevel.error,
+            );
+            if (mounted) triggerMapRefresh();
+            return;
+          }
+
+          await DriveFolderSetService.reloadFolderSetNode(node);
+          node.syncStatus = SyncStatus.synced;
+
+          final doneTitle = t.drive.downloadCompleteTitle(name: node.name);
+          final doneDetail = t.drive.folderSetUpdated(
+            added: result.addedCount.toString(),
+            removed: result.removedCount.toString(),
+          );
+          registry.endTransfer(
+            localPath,
+            driveId: urlResult.folderId,
+            folderName: node.name,
+            success: true,
+            completionTitle: doneTitle,
+            completionBody: doneDetail,
+            showOsNotification: true,
+          );
+          notifier.completeTransfer(
+            transferKey: transferKey,
+            title: doneTitle,
+            detail: doneDetail,
+            level: NotificationLevel.success,
+          );
+          if (mounted) {
+            triggerMapRefresh();
+            if (result.keptWithLocalChanges.isNotEmpty) {
+              ref.notify(
+                t.drive.folderSetKeptLocalChanges(
+                  names: result.keptWithLocalChanges.join('、'),
+                ),
+                level: NotificationLevel.warning,
+              );
+            }
+          }
+        } catch (e) {
+          AppLogger.error('[LayerDrawer] Driveフォルダセット同期エラー: $e');
+          node.syncStatus = SyncStatus.error;
+          registry.endTransfer(
+            localPath,
+            driveId: urlResult.folderId,
+            folderName: node.name,
+            success: false,
+            completionTitle: t.drive.downloadFailedTitle(name: node.name),
+            completionBody: '$e',
+            errorMessage: '$e',
+            showOsNotification: true,
+          );
+          notifier.completeTransfer(
+            transferKey: transferKey,
+            title: t.drive.downloadFailedTitle(name: node.name),
+            detail: '$e',
+            level: NotificationLevel.error,
+          );
+          if (mounted) triggerMapRefresh();
+        }
+      }));
+    } catch (e) {
+      AppLogger.error('[LayerDrawer] Driveフォルダセット準備エラー: $e');
       ref.notify(t.common.errorOccurred(error: '$e'), level: NotificationLevel.error);
     }
   }

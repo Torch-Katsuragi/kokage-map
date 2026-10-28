@@ -42,11 +42,19 @@ class DriveUrlInputResult {
   /// 読み取り専用か
   final bool isReadOnly;
 
+  /// JSONで定義された共有フォルダセットか
+  final bool isFolderSet;
+
+  /// フォルダセットの場合のマニフェスト（検証時に取得済みの場合）
+  final DriveFolderSetManifest? folderSetManifest;
+
   const DriveUrlInputResult({
     required this.folderId,
     required this.folderName,
     required this.url,
     required this.isReadOnly,
+    this.isFolderSet = false,
+    this.folderSetManifest,
   });
 }
 
@@ -97,6 +105,8 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
   String? _folderName;
   String? _folderId;
   bool? _isReadOnly;
+  bool _isFolderSet = false;
+  DriveFolderSetManifest? _folderSetManifest;
 
   @override
   void initState() {
@@ -165,6 +175,8 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
       _folderName = null;
       _folderId = null;
       _isReadOnly = null;
+      _isFolderSet = false;
+      _folderSetManifest = null;
       _isLoading = false;
     });
   }
@@ -195,11 +207,36 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
 
       // 権限を確認（編集可能かどうか）
       final canEdit = folderInfo.capabilities?.canEdit ?? false;
+      final isJsonSet = GoogleDriveService.isJsonFileMetadata(folderInfo);
+      if (!isJsonSet && !GoogleDriveService.isFolderMetadata(folderInfo)) {
+        return _clearFolder(t.drive.invalidUrl);
+      }
+      DriveFolderSetManifest? manifest;
+      if (isJsonSet) {
+        try {
+          manifest = await DriveFolderSetService(driveService: _driveService)
+              .fetchManifest(folderId, fallbackName: folderInfo.name);
+        } catch (e) {
+          if (seq != _validateSeq || !mounted) return;
+          AppLogger.error('[DriveUrlInputDialog] JSON解析エラー: $e');
+          return _clearFolder(t.drive.invalidFolderSetJson);
+        }
+        if (seq != _validateSeq || !mounted) return;
+      }
 
       setState(() {
         _folderId = folderId;
-        _folderName = folderInfo.name ?? 'Unknown';
-        _isReadOnly = !canEdit;
+        _folderName = isJsonSet
+            ? (manifest?.name ??
+                (folderInfo.name?.replaceAll(
+                      RegExp(r'\.json$', caseSensitive: false),
+                      '',
+                    ) ??
+                    'Unknown'))
+            : (folderInfo.name ?? 'Unknown');
+        _isReadOnly = isJsonSet ? true : !canEdit;
+        _isFolderSet = isJsonSet;
+        _folderSetManifest = manifest;
         _errorMessage = null;
         _canRetry = false;
         _isLoading = false;
@@ -222,6 +259,8 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
         folderName: _folderName!,
         url: _urlController.text.trim(),
         isReadOnly: _isReadOnly ?? true,
+        isFolderSet: _isFolderSet,
+        folderSetManifest: _folderSetManifest,
       ),
     );
   }
@@ -343,7 +382,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                       const Icon(Icons.check_circle, color: Colors.green, size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        t.drive.folderDetected,
+                        _isFolderSet ? t.drive.folderSetDetected : t.drive.folderDetected,
                         style: const TextStyle(
                           color: Colors.green,
                           fontWeight: FontWeight.bold,
@@ -355,7 +394,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                   Row(
                     children: [
                       Icon(
-                        Icons.folder,
+                        _isFolderSet ? Icons.folder_copy : Icons.folder,
                         color: Colors.blue.shade700,
                         size: 20,
                       ),
@@ -487,7 +526,9 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
 
   /// 読み取り専用か編集可か
   String get _accessLabel =>
-      _isReadOnly == true ? t.drive.readOnly : t.drive.editable;
+      _isFolderSet
+          ? t.drive.folderSetCount(count: _folderSetManifest?.items.length ?? 0)
+          : (_isReadOnly == true ? t.drive.readOnly : t.drive.editable);
 
   /// QRコード検出時の処理
   void _onQrDetected(BarcodeCapture capture) {
@@ -498,7 +539,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
       if (value == null) continue;
       
       // Google Drive URLかチェック
-      if (value.contains('drive.google.com')) {
+      if (GoogleDriveService.extractFolderIdFromUrl(value) != null) {
         _validateDebounce?.cancel();
         _urlController.text = value;
         _validateUrl();

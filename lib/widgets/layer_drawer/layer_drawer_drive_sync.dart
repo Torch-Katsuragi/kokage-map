@@ -20,6 +20,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/nodes/drive_folder_node.dart';
+import '../../models/nodes/drive_folder_set_node.dart';
+import '../../models/nodes/folder_node.dart';
 import '../../services/google_drive/drive_sync_operations.dart';
 import '../../widgets/layer_drawer/sync_merge_dialog.dart';
 import 'layer_drawer.dart';
@@ -45,11 +47,17 @@ mixin LayerDrawerDriveSync on ConsumerState<LayerDrawer> {
   }) =>
       syncOps.openSyncMergeDialog(context, node, mode: mode);
 
+  Future<void> syncFolderSet(
+    BuildContext context,
+    DriveFolderSetNode node,
+  ) =>
+      syncOps.syncFolderSet(context, node);
+
   Future<void> unlinkDriveFolder(
-          BuildContext context, DriveFolderNode node) =>
+          BuildContext context, FolderNode node) =>
       syncOps.unlinkDriveFolder(context, node);
 
   Future<void> deleteDriveFolder(
-          BuildContext context, DriveFolderNode node) =>
+          BuildContext context, FolderNode node) =>
       syncOps.deleteDriveFolder(context, node);
 }

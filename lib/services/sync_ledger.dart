@@ -78,6 +78,7 @@ class SyncLedgerEntry {
     driveFolderName: sync.driveFolderName,
     driveUrl: sync.driveUrl,
     isReadOnly: sync.isReadOnly,
+    isFolderSet: sync.isFolderSet,
     lastSynced: lastSynced,
     driveRevisionId: driveRevisionId,
     deviceId: deviceId,

@@ -58,7 +58,7 @@
       caption[Added on Device A],
       layer-panel(w: 104pt, header: "Layers", (
         (0, "dir", [共有], "ok"),
-        (1, "dir", [Forestry Team], "hi"),
+        (1, "dir", [Field Survey Team], "hi"),
         (0, "layer", [マイ地図], "ok", rgb("#2e6b4f")),
       )),
     ),
@@ -67,7 +67,7 @@
       caption(fill: accent)[Auto-cloned on Device B],
       layer-panel(w: 104pt, header: "Layers", (
         (0, "dir", [共有], "ok"),
-        (1, "dir", [Forestry Team], "hi"),
+        (1, "dir", [Field Survey Team], "hi"),
         (0, "layer", [マイ地図], "ok", rgb("#2e6b4f")),
       )),
     ),

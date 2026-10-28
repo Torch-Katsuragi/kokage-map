@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/party/party_room.dart';
 import 'package:root_maps/models/party/room_pin.dart';
-import 'package:root_maps/providers/guidance_providers.dart';
 import 'package:root_maps/providers/notification_providers.dart';
 import 'package:root_maps/providers/party_providers.dart';
 import 'package:root_maps/providers/room_pin_providers.dart';
@@ -86,7 +85,7 @@ void main() {
     expect(container.read(roomPinsProvider).canEdit(others), isTrue);
   });
 
-  test('他のメンバーのピンは通知センターに出て、そこから案内できる', () async {
+  test('他のメンバーのピンは通知センターに出る', () async {
     session.set(inRoom(conn: PartyConnectionState.online));
     await pumpEventQueue();
     final source = sources['AB23CD45']!..emit();
@@ -97,8 +96,6 @@ void main() {
     final n = container.read(notificationCenterProvider).single;
     expect(n.title, contains('班長'));
     expect(n.detail, '倒れかけ');
-    await n.onAction!();
-    expect(container.read(guidanceProvider).target?.point, const LatLng(33.9, 135.9));
   });
 
   test('退出（終了・失効・キックも同じ）でピンが消え、ソースも畳む', () async {

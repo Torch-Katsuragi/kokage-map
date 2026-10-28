@@ -43,11 +43,11 @@ import '../widgets/info_panel_card.dart';
 import '../widgets/long_press_delete_button.dart';
 import '../widgets/photo_viewer.dart';
 import 'external_layer_actions.dart';
-import 'guide_here_button.dart';
 
 class FeatureDetailPanel extends ConsumerWidget {
   final dynamic feature;
-  const FeatureDetailPanel({super.key, required this.feature});
+  final void Function(LayerTreeNode target)? onOpenInTree;
+  const FeatureDetailPanel({super.key, required this.feature, this.onOpenInTree});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -124,6 +124,10 @@ class FeatureDetailPanel extends ConsumerWidget {
           ),
           // 削除ボタン
           const SizedBox(height: 12),
+          if (onOpenInTree != null) ...[
+            _openInTreeButton(feature as LayerTreeNode),
+            const SizedBox(height: 8),
+          ],
           _deleteButton(ref),
         ],
       );
@@ -185,15 +189,17 @@ class FeatureDetailPanel extends ConsumerWidget {
             '${(photo.metadata.fileSize / (1024 * 1024)).toStringAsFixed(1)} MB',
             style: _small,
           ),
-          // 位置がある写真は点と同じく「ここへ案内」と Google Maps のリンク（長押しで開く）
+          // 位置がある写真は点と同じく Google Maps のリンク（長押しで開く）
           if (photo.hasLocation) ...[
             const SizedBox(height: 12),
-            GuideHereButton.point(point: photo.location!, label: photo.name),
-            const SizedBox(height: 8),
             _googleMapsButton(ref, photo.location!.latitude, photo.location!.longitude),
           ],
           // 削除ボタン
           const SizedBox(height: 12),
+          if (onOpenInTree != null) ...[
+            _openInTreeButton(feature as LayerTreeNode),
+            const SizedBox(height: 8),
+          ],
           _deleteButton(ref),
         ],
       );
@@ -246,19 +252,13 @@ class FeatureDetailPanel extends ConsumerWidget {
           ),
       ];
 
-      // 「ここへ案内」（点・線・面）
-      children.addAll([
-        const SizedBox(height: 12),
-        GuideHereButton.feature(feature: node, label: _guidanceLabel(node)),
-      ]);
-
       // Point は Google Maps のリンクをコピー（長押しで開く。開くのは隠し機能扱い）
       if (feature is PointFeatureNode) {
         final point = (feature as PointFeatureNode).point;
         final lat = point.latitude;
         final lng = point.longitude;
         children.addAll([
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           _googleMapsButton(ref, lat, lng),
         ]);
       }
@@ -266,6 +266,10 @@ class FeatureDetailPanel extends ConsumerWidget {
       // 全フィーチャ共通: 削除ボタンを追加
       children.addAll([
         const SizedBox(height: 12),
+        if (onOpenInTree != null) ...[
+          _openInTreeButton(node),
+          const SizedBox(height: 8),
+        ],
         _deleteButton(ref, key: TutorialTargets.deleteButton),
       ]);
 
@@ -300,18 +304,6 @@ class FeatureDetailPanel extends ConsumerWidget {
 
   static const _small = TextStyle(fontSize: 11);
 
-  /// 案内の見出し: 地物の表示名（無ければ種類）
-  static String _guidanceLabel(FeatureNode node) {
-    final name = featureDisplayName(node);
-    if (name != null && name.trim().isNotEmpty) return name;
-    return switch (node) {
-      PointFeatureNode() => t.featureDetail.typePoint,
-      LineFeatureNode() => t.featureDetail.typeLine,
-      PolygonFeatureNode() => t.featureDetail.typePolygon,
-      _ => t.featureDetail.typeFeature,
-    };
-  }
-
   /// 「名前: 値」の 1 行（値は折り返す）
   static Widget _labelRow(String label, String value, {TextStyle? style}) => Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,6 +324,23 @@ class FeatureDetailPanel extends ConsumerWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green.shade50,
             foregroundColor: Colors.green.shade700,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+          ),
+        ),
+      );
+
+  /// 長押しで消すボタン
+  /// レイヤツリーでそのフィーチャ・写真がある場所を開くボタン
+  Widget _openInTreeButton(LayerTreeNode target) => SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: () => onOpenInTree?.call(target),
+          icon: const Icon(Icons.account_tree_outlined, size: 16),
+          label: Text(t.featureDetail.openInTree),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue.shade50,
+            foregroundColor: Colors.blue.shade700,
             elevation: 0,
             padding: const EdgeInsets.symmetric(vertical: 8),
           ),

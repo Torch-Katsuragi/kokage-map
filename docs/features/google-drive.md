@@ -1,4 +1,4 @@
-﻿---
+---
 title: Google Drive連携
 tags: [features, google-drive, sync]
 ---
@@ -82,8 +82,8 @@ Drive連携フォルダの ⋮ →「QRコードで渡す」で QR を出す（2
 
 1. 受け取る側がスマホのカメラで読む。アプリが入っていれば App Links でアプリが開く
    （`web/.well-known/assetlinks.json` で検証。Play 署名・アップロード鍵・開発用の debug 鍵）
-2. ホームが Google の無音復元 → だめならサインイン → フォルダ情報 → いつもの地図の `共有/<フォルダ名>` に clone して開く。
-   同じ Drive フォルダが取り込み済みなら開くだけ。開いた地図は取り込んだ地図の範囲へ寄る
+2. ホームが Google の無音復元 → だめならサインイン → フォルダ情報（`lookupFolder`）を確認 → いつもの地図の `共有/<フォルダ名>` と `.sync/clone.pending` を即座に用意して先に地図を開き、実データのダウンロードはバックグラウンドで進める。
+   同じ Drive フォルダが取り込み済みなら開くだけ（未完了マーカー `.sync/clone.pending` が残っていればバックグラウンドでダウンロードを再開）。ダウンロード完了時は通知が切り替わり「地図で見る」アクションで取り込んだ地図の範囲へ寄る
 3. アプリが無いスマホ・PC では `/open/` のページがテスター募集ページ（`/beta/`）へ移る。**製品版では Play のページへ替える**
 4. ホームの「QR で受け取る」（アプリのカメラ・URL 貼り付け）でも同じ。前からの QR（Drive の URL そのもの）も読める
 
@@ -492,16 +492,33 @@ Drive APIを使用してリビジョンを管理：
 └─────────────────────────────────┘
 ```
 
-### 進捗表示
+### 進捗表示とバックグラウンド転送
 
-```
-┌─────────────────────────────────┐
-│  Syncing...                     │
-│  ████████░░░░░░░░░░░░  40%      │
-│                                 │
-│  Uploading: data.gpkg (2/5)     │
-└─────────────────────────────────┘
-```
+Drive連携フォルダの追加（クローン）・QR共有受取・マージ同期では、`SyncProgress` による3フェーズのバイト加重進捗と、`DriveTransferRegistry` によるバックグラウンド転送・進捗〜完了通知の切り替えを行う。
+
+#### 3フェーズ進捗 (`SyncProgress`)
+
+| フェーズ | `SyncPhase` | プログレスバー | 表示内容 |
+|---------|------------|---------------|----------|
+| 1. 走査 | `scanning` | Indeterminate | リモートツリー走査・ローカルハッシュ計算（「フォルダ構成を確認中...」） |
+| 2. 転送 | `transferring` | Determinate (`transferredBytes / totalBytes`) | ストリーミング転送（例: `45% · 12.4 / 27.5 MB · trail.gpkg`）。サイズ不明時はファイル数比率にフォールバック |
+| 3. 反映 | `finalizing` | Indeterminate | SQLite settle・`.sync/base/` 保存・`QgsReadBack`・レイヤ再読込（「地図データを展開・反映中...」） |
+
+- `SyncByteTracker`: ファイル単位の受信/送信バイト数を追跡し、リトライ時は `resetFile(key)` で巻き戻すことで 100% 超過を防ぐ。スキップされた同内容ファイルは満額計上する。
+- `ProgressThrottler`: UI/通知の更新頻度を 150ms 間隔に間引く（フェーズ遷移時と 100% 到達時は即時通知）。
+- `KFileSystem.writeStream`: ダウンロード時は `<path>.part` にストリーム書き込みし、完了後にアトミックにリネームする。
+
+#### バックグラウンド転送と通知切り替え
+
+1. **即時ツリー反映（Option A）**:
+   - レイヤドロワーでの Drive フォルダ追加およびホーム画面での QR 共有受取では、リモートフォルダの存在確認直後にローカルフォルダ・リンク設定付き `.qgs`・`.sync/clone.pending` マーカーを作成し、即座にツリー表示または地図画面へ遷移する。
+2. **`.sync/clone.pending` による安全性保証**:
+   - 初回クローン開始時に `.sync/clone.pending` を作成し、`pullFolder` 成功時に削除する。
+   - マーカーが存在する間は `SyncEngine.checkStatus` / `AutoSyncService` が `SyncStatus.remoteChanges`（ダウンロード再開待ち）として扱い、未完了の空フォルダがリモートへ誤って Push されるのを防ぐ。
+3. **進捗通知 → 完了通知の切り替え**:
+   - **アプリ内通知 (`NotificationCenter`)**: `startTransfer(transferKey: ...)` で進行中通知（ライブ進捗バー付き）を発行し、完了時に `completeTransfer` で同一通知アイテムを完了/失敗通知に切り替え、トーストを再ポップアップする。
+   - **Android システム通知 (`DriveTransferService`)**: `foregroundServiceType="dataSync"` の Foreground Service + `PARTIAL_WAKE_LOCK`（最大30分）により、アプリがバックグラウンドに移ってもダウンロードを継続し、OS 通知シェードの進捗バー通知を完了時に完了通知へ切り替える。
+   - **インライン表示**: `FolderTile` および `LayerDrawerTitleBar` が `DriveTransferRegistry.instance.progressOf(localPath)` を購読し、2px のプログレスバーと転送状況サブタイトルを表示する。転送中は対象フォルダの破壊的操作メニューを無効化する。
 
 ---
 

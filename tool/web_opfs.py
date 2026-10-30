@@ -15,10 +15,10 @@ web 版はふつう File System Access API でフォルダを選ぶが、その�
 アプリのページ（例 http://localhost:8099）の中で（DevTools のコンソールか、ブラウザを動かす道具から）:
 
     const m = await import('http://localhost:8098/web_opfs.js');
-    await m.seed('http://localhost:8098', 'Kitayama-2026');   // 空にしてから丸ごと入れる
-    location.hash = '#/map?project=opfs:Kitayama-2026';        // 開く（起動時の URL に書いてもよい）
-    await m.list('Kitayama-2026');                             // 確認
-    await m.read('Kitayama-2026/Kitayama-2026.qgs');
+    await m.seed('http://localhost:8098', 'Survey-2026');     // 空にしてから丸ごと入れる
+    location.hash = '#/map?project=opfs:Survey-2026';          // 開く（起動時の URL に書いてもよい）
+    await m.list('Survey-2026');                               // 確認
+    await m.read('Survey-2026/Survey-2026.qgs');
 
 ⚠ OPFS はサイト（origin）ごと。localhost:8099 に入れたものは本番のドメインからは見えない。
 """

@@ -30,6 +30,7 @@ import 'core/launch_request.dart';
 import 'core/native_licenses.dart';
 import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
+import 'devices/trupulse/trupulse_providers.dart';
 import 'i18n/strings.g.dart';
 import 'models/app_notification.dart';
 import 'models/geopackage/geopackage_connection.dart';
@@ -275,6 +276,7 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     await ref.read(mapLayoutPresetSettingProvider.notifier).load();
     await ref.read(gnssQualityGateSettingProvider.notifier).load();
     await ref.read(trackRecordingSettingProvider.notifier).load();
+    await ref.read(backsightToleranceSettingProvider.notifier).load();
 
     // シングルトンサービスにRefを注入（プロバイダ初回読み込みでsetRef()が呼ばれる）
     ref.read(drawingStateProvider);

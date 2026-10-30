@@ -23,6 +23,7 @@ import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../devices/base/device_service.dart';
+import '../devices/trupulse/trupulse_detail_screen.dart';
 import '../devices/trupulse/trupulse_providers.dart';
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
@@ -209,6 +210,9 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
                       ),
                   ],
           ),
+
+          // Backsight tolerance settings
+          const TruPulseBacksightToleranceSection(),
 
           // Help
           SettingsSection(

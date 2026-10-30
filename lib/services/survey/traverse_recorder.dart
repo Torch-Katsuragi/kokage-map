@@ -135,6 +135,85 @@ class TraverseShot {
   });
 }
 
+/// 前視と後視の較差（方位角・水平距離・傾斜角の差）
+class BacksightDelta {
+  /// 方位角の差（度、0〜180）。前視 AZ と (後視 AZ + 180°) の差
+  final double azDeg;
+
+  /// 水平距離の差（m、絶対値）
+  final double hdM;
+
+  /// 傾斜角の差（度、絶対値）。前視 INC と (−後視 INC) の差
+  final double? incDeg;
+
+  const BacksightDelta({
+    required this.azDeg,
+    required this.hdM,
+    this.incDeg,
+  });
+}
+
+/// 後視時の許容誤差基準（前視と後視の較差の上限）
+///
+/// 基準を超える較差があった場合でも後視平均は適用しつつ、警告音（ピポ↓ーン）と
+/// 警告表示で再計測の判断を促す。
+class BacksightTolerance {
+  /// 方位角差の上限（度）。null なら角度差を判定しない
+  final double? maxAzDeg;
+
+  /// 水平距離差の上限（m）。null なら距離差を判定しない
+  final double? maxHdM;
+
+  const BacksightTolerance({
+    this.maxAzDeg = 2.0,
+    this.maxHdM = 0.5,
+  });
+
+  static const defaults = BacksightTolerance(maxAzDeg: 2.0, maxHdM: 0.5);
+  static const off = BacksightTolerance(maxAzDeg: null, maxHdM: null);
+
+  static const List<double> azOptions = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0];
+  static const List<double> hdOptions = [0.1, 0.2, 0.3, 0.5, 1.0, 2.0];
+
+  bool get isActive => maxAzDeg != null || maxHdM != null;
+
+  /// [delta] が許容基準を超えているか
+  bool isExceededBy(BacksightDelta? delta) {
+    if (delta == null) return false;
+    if (maxAzDeg != null && delta.azDeg > maxAzDeg!) return true;
+    if (maxHdM != null && delta.hdM > maxHdM!) return true;
+    return false;
+  }
+
+  BacksightTolerance copyWith({
+    double? Function()? maxAzDeg,
+    double? Function()? maxHdM,
+  }) =>
+      BacksightTolerance(
+        maxAzDeg: maxAzDeg != null ? maxAzDeg() : this.maxAzDeg,
+        maxHdM: maxHdM != null ? maxHdM() : this.maxHdM,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'maxAzDeg': maxAzDeg,
+        'maxHdM': maxHdM,
+      };
+
+  static BacksightTolerance fromJson(Map<dynamic, dynamic> j) => BacksightTolerance(
+        maxAzDeg: j.containsKey('maxAzDeg') ? (j['maxAzDeg'] as num?)?.toDouble() : defaults.maxAzDeg,
+        maxHdM: j.containsKey('maxHdM') ? (j['maxHdM'] as num?)?.toDouble() : defaults.maxHdM,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is BacksightTolerance &&
+      other.maxAzDeg == maxAzDeg &&
+      other.maxHdM == maxHdM;
+
+  @override
+  int get hashCode => Object.hash(maxAzDeg, maxHdM);
+}
+
 class TraverseRecorder {
   /// 後視とみなす距離（前視 HD の 15%、1〜5 m）
   static double backsightThreshold(double forwardHd) => (forwardHd * 0.15).clamp(1.0, 5.0);
@@ -143,6 +222,35 @@ class TraverseRecorder {
   static bool isBacksighted(PointFeatureNode p) {
     final v = p.turfFeature.properties?['survey_backsight'];
     return v == true || v == 'true' || v == 1 || v == '1';
+  }
+
+  /// 後視補正済みの点 [p] について、前視と後視の較差（角度・距離の差）を返す。
+  /// 後視補正されていない点や生の値（`survey_fs_*` / `survey_bs_*`）が無い古い点は null
+  static BacksightDelta? backsightDeltaOf(PointFeatureNode? p) {
+    if (p == null || !isBacksighted(p)) return null;
+    final props = p.turfFeature.properties;
+    if (props == null) return null;
+    if (props['survey_fs_az'] == null || props['survey_bs_az'] == null) return null;
+    if (props['survey_fs_hd'] == null || props['survey_bs_hd'] == null) return null;
+
+    final fsAz = surveyNumber(props['survey_fs_az']);
+    final bsAz = surveyNumber(props['survey_bs_az']);
+    final fsHd = surveyNumber(props['survey_fs_hd']);
+    final bsHd = surveyNumber(props['survey_bs_hd']);
+
+    // 後視は逆向きなので +180° した向きと前視 AZ の角度差（0〜180°）
+    final reversedBsAz = (bsAz + 180) % 360;
+    final azDiff = ((fsAz - reversedBsAz + 540) % 360 - 180).abs();
+    final hdDiff = (fsHd - bsHd).abs();
+
+    double? incDiff;
+    if (props['survey_fs_inc'] != null && props['survey_bs_inc'] != null) {
+      final fsInc = surveyNumber(props['survey_fs_inc']);
+      final bsInc = surveyNumber(props['survey_bs_inc']);
+      incDiff = (fsInc - (-bsInc)).abs();
+    }
+
+    return BacksightDelta(azDeg: azDiff, hdM: hdDiff, incDeg: incDiff);
   }
 
   /// [station] に立って測った [m] を記録する。書けなかったときは null

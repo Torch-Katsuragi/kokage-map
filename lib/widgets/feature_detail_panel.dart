@@ -37,6 +37,7 @@ import '../providers/project_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/qgis_form_options.dart';
+import '../services/survey/traverse_recorder.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/geodesic.dart';
 import '../widgets/info_panel_card.dart';
@@ -227,6 +228,15 @@ class FeatureDetailPanel extends ConsumerWidget {
           (t.featureDetail.perimeterLabel, Geodesic.formatLength(node.perimeter)),
         ],
         ...node.computedInfo,
+        if (node is PointFeatureNode)
+          if (TraverseRecorder.backsightDeltaOf(node) case final d?)
+            (
+              '${t.trupulse.backsightCorrected}: ',
+              t.trupulse.backsightDiff(
+                azDelta: d.azDeg.toStringAsFixed(1),
+                hdDelta: d.hdM.toStringAsFixed(2),
+              ),
+            ),
       ];
 
       final children = <Widget>[

@@ -20,8 +20,8 @@ VERTS = int(sys.argv[2]) if len(sys.argv) > 2 else 40
 OUT = sys.argv[3] if len(sys.argv) > 3 else "load_test.gpkg"
 LAYER = sys.argv[4] if len(sys.argv) > 4 else "load_test"
 
-# 北山村役場付近を中心に格子状配置
-BASE_LON, BASE_LAT = 135.78, 33.92
+# 基準座標を中心に格子状配置
+BASE_LON, BASE_LAT = 139.24, 35.63
 COLS = 100
 STEP = 0.0020
 R = 0.0008
@@ -40,7 +40,7 @@ for i in range(COUNT):
     rows.append(
         {
             "geometry": Polygon(coords),
-            "name": f"林小班{i:05d}",
+            "name": f"区画{i:05d}",
             "description": f"負荷確認用ポリゴン {i}",
             "area_ha": round(math.pi * r * r * 1_000_000, 3),
         }

@@ -16,7 +16,12 @@
 /// TruPulse固有のRiverpodプロバイダー
 library;
 
+import 'dart:convert';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../services/survey/traverse_recorder.dart';
 import 'trupulse_service.dart';
 import 'trupulse_tool.dart';
 
@@ -35,3 +40,30 @@ TruPulseService trupulseService(Ref ref) {
 @Riverpod(keepAlive: true)
 TruPulseTool trupulseTool(Ref ref) =>
     TruPulseTool(ref, ref.read(trupulseServiceProvider));
+
+/// 後視時の許容誤差基準（角度差・距離差の上限）。SharedPreferences に JSON で永続化
+@Riverpod(keepAlive: true)
+class BacksightToleranceSetting extends _$BacksightToleranceSetting {
+  static const _key = 'trupulse_backsight_tolerance';
+
+  @override
+  BacksightTolerance build() => BacksightTolerance.defaults;
+
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key);
+      if (raw != null) {
+        state = BacksightTolerance.fromJson(jsonDecode(raw) as Map);
+      }
+    } catch (_) {
+      state = BacksightTolerance.defaults;
+    }
+  }
+
+  Future<void> set(BacksightTolerance value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(value.toJson()));
+  }
+}

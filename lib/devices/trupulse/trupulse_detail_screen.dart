@@ -23,9 +23,12 @@ library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../i18n/strings.g.dart';
+import '../../services/survey/traverse_recorder.dart';
 import '../../widgets/settings_widgets.dart';
 import 'trupulse_calibration_guide.dart';
+import 'trupulse_providers.dart';
 import 'trupulse_service.dart';
 
 class TruPulseDetailScreen extends StatefulWidget {
@@ -99,6 +102,7 @@ class _TruPulseDetailScreenState extends State<TruPulseDetailScreen> {
       body: SettingsBody(
         sections: [
           _buildInfoSection(),
+          const TruPulseBacksightToleranceSection(),
           _buildTerminalSection(),
           _buildCalibrationSection(connected),
           _buildMeasurementModeSection(connected),
@@ -539,4 +543,68 @@ enum _MeasurementMode {
         az => t.trupulse.mode.azDesc,
         ml => t.trupulse.mode.mlDesc,
       };
+}
+
+// ========== Backsight tolerance settings ==========
+
+/// 後視の許容誤差基準セクション（TruPulse詳細画面・外部計測機器設定画面で共用）
+class TruPulseBacksightToleranceSection extends ConsumerWidget {
+  const TruPulseBacksightToleranceSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tolerance = ref.watch(backsightToleranceSettingProvider);
+    final tl = t.trupulse.tolerance;
+    void set(BacksightTolerance value) =>
+        ref.read(backsightToleranceSettingProvider.notifier).set(value);
+
+    Widget dropdown(
+      double? value,
+      List<double> options,
+      String Function(double) label,
+      ValueChanged<double?> onChanged,
+    ) {
+      final effectiveOptions =
+          value != null && !options.contains(value) ? [...options, value] : options;
+      return DropdownButton<double?>(
+        value: value,
+        onChanged: onChanged,
+        items: [
+          DropdownMenuItem<double?>(child: Text(tl.none)),
+          for (final o in effectiveOptions)
+            DropdownMenuItem<double?>(value: o, child: Text(label(o))),
+        ],
+      );
+    }
+
+    return SettingsSection(
+      title: tl.title,
+      icon: Icons.compare_arrows,
+      iconColor: Colors.teal,
+      collapsible: true,
+      children: [
+        SettingsDescription(tl.description),
+        SettingsTile(
+          title: tl.maxAzDiff,
+          subtitle: tl.maxAzDiffDesc,
+          trailing: dropdown(
+            tolerance.maxAzDeg,
+            BacksightTolerance.azOptions,
+            (v) => '${v.toStringAsFixed(1)}°',
+            (v) => set(tolerance.copyWith(maxAzDeg: () => v)),
+          ),
+        ),
+        SettingsTile(
+          title: tl.maxHdDiff,
+          subtitle: tl.maxHdDiffDesc,
+          trailing: dropdown(
+            tolerance.maxHdM,
+            BacksightTolerance.hdOptions,
+            (v) => '${v.toStringAsFixed(1)} m',
+            (v) => set(tolerance.copyWith(maxHdM: () => v)),
+          ),
+        ),
+      ],
+    );
+  }
 }

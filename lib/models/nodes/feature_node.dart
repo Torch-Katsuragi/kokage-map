@@ -560,7 +560,8 @@ abstract class FeatureNode extends LayerTreeNode {
   static T _adopt<T extends FeatureNode>(T node) {
     node.parent
       ..addChild(node)
-      ..addFeatureToMap(node._rowId, node.turfFeature);
+      ..addFeatureToMap(node._rowId, node.turfFeature)
+      ..notifyFeatureCountChanged();
     AppLogger.debug('[DEBUG] $T: DB保存完了 - ${node.name} (rowId: ${node._rowId})');
     return node;
   }

@@ -561,7 +561,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _scheduleRefresh();
   }
 
+  bool _wasLoading = false;
+
   void _onWorldChanged() {
+    final loading = _world.pendingCount > 0;
+    if (loading != _wasLoading && mounted) {
+      _wasLoading = loading;
+      setState(() {});
+    }
     _scheduleRefresh();
     _scheduleBakeCheck();
   }
@@ -584,6 +591,11 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     final plan = _planner.plan(_camera, _size, gesturing: _gesturing);
     final planMs = sw.elapsedMilliseconds;
     _lastPlan = plan;
+    final nowLoading = _world.pendingCount > 0;
+    if (nowLoading != _wasLoading && mounted) {
+      _wasLoading = nowLoading;
+      setState(() {});
+    }
     if (_world.revision != _worldRevisionSeen) {
       // タイルの出入り: 消えたタイルのぶんだけ捨てる（縁が変わったタイルはキーが変わるので自然に入れ替わる）
       _pruneScenes();
@@ -842,6 +854,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
         }
         _painter.pixelRatio = MediaQuery.devicePixelRatioOf(context);
         final loading = _world.pendingCount > 0;
+        _wasLoading = loading;
         return Stack(
           children: [
             Positioned.fill(

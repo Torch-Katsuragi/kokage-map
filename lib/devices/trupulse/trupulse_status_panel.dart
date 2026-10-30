@@ -20,11 +20,13 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../services/survey/survey_chain_resolver.dart';
 import '../../services/survey/traverse_recorder.dart';
 import 'trupulse_detail_screen.dart';
+import 'trupulse_providers.dart';
 import 'trupulse_tool.dart';
 
 /// 閉合比の警告閾値（1/N の N がこの値以下で警告）
@@ -40,17 +42,19 @@ String _stationText(PointFeatureNode? stn) {
       '${stn.point.longitude.toStringAsFixed(5)})';
 }
 
-class TruPulseStatusPanel extends StatelessWidget {
+class TruPulseStatusPanel extends ConsumerWidget {
   final TruPulseTool tool;
 
   const TruPulseStatusPanel({super.key, required this.tool});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final service = tool.service;
     final stn = tool.station;
     final lastM = service.lastMeasurement;
     final chain = tool.currentChain;
+    final tolerance = ref.watch(backsightToleranceSettingProvider);
+    final delta = TraverseRecorder.backsightDeltaOf(stn);
 
     return Positioned(
       right: 8,
@@ -94,9 +98,12 @@ class TruPulseStatusPanel extends StatelessWidget {
                 // Station info
                 _InfoRow(label: 'STN', value: _stationText(stn)),
                 if (_isBacksightCorrected(stn))
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2),
-                    child: _BacksightBadge(),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: _BacksightBadge(
+                      delta: delta,
+                      isWarning: tolerance.isExceededBy(delta),
+                    ),
                   ),
 
                 // Latest measurement
@@ -245,26 +252,59 @@ class _MeasChip extends StatelessWidget {
 }
 
 class _BacksightBadge extends StatelessWidget {
-  const _BacksightBadge();
+  final BacksightDelta? delta;
+  final bool isWarning;
+  const _BacksightBadge({this.delta, this.isWarning = false});
 
   @override
   Widget build(BuildContext context) {
+    final d = delta;
+    final bgColor = isWarning ? Colors.orange.shade50 : Colors.green.shade50;
+    final borderColor = isWarning ? Colors.orange.shade300 : Colors.green.shade300;
+    final iconColor = isWarning ? Colors.orange.shade800 : Colors.green.shade700;
+    final titleColor = isWarning ? Colors.orange.shade900 : Colors.green.shade800;
+    final diffColor = isWarning ? Colors.orange.shade900 : Colors.green.shade900;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.green.shade50,
+        color: bgColor,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.green.shade300),
+        border: Border.all(color: borderColor),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.check_circle, size: 10, color: Colors.green.shade700),
-          const SizedBox(width: 3),
-          Text(
-            t.trupulse.backsightCorrected,
-            style: TextStyle(fontSize: 9, color: Colors.green.shade800),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isWarning ? Icons.warning_amber : Icons.check_circle,
+                size: 10,
+                color: iconColor,
+              ),
+              const SizedBox(width: 3),
+              Text(
+                t.trupulse.backsightCorrected,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: titleColor,
+                ),
+              ),
+            ],
           ),
+          if (d != null) ...[
+            const SizedBox(height: 1),
+            Text(
+              t.trupulse.backsightDiff(
+                azDelta: d.azDeg.toStringAsFixed(1),
+                hdDelta: d.hdM.toStringAsFixed(2),
+              ),
+              style: TextStyle(fontSize: 9, color: diffColor),
+            ),
+          ],
         ],
       ),
     );

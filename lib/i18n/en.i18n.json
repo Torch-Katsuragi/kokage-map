@@ -689,7 +689,7 @@
       "viewName": "View name",
       "editFilter": "Edit filter",
       "filterTitle": "Filter",
-      "filterHint": "SQL WHERE clause (e.g. species = 'cedar')",
+      "filterHint": "SQL WHERE clause (e.g. status = 'done')",
       "filterHelp": "Leave empty for no filtering. Same syntax as a QGIS subset string.",
       "duplicate": "Duplicate",
       "delete": "Delete",
@@ -763,7 +763,7 @@
     "search": {
       "button": "Search attributes",
       "title": "Search attributes",
-      "hint": "Compartment number, name, ...",
+      "hint": "Zone number, name, ...",
       "scope": "Searches the attributes of visible layers",
       "noHits": "No matches",
       "truncated": "Too many matches; showing the first $n",
@@ -785,7 +785,7 @@
     "includeGnssQuality": "Include GNSS quality",
     "includeGnssQualityDesc": "GPS survey fix type, satellites, accuracy and averaging count (gnss_fix, gnss_sats, gnss_hacc, gnss_avg_n). Lines and polygons use the worst vertex",
     "includeJoinedFields": "Include joined table fields",
-    "includeJoinedFieldsDesc": "Adds the fields of joined tables such as a stand register (${count} fields)",
+    "includeJoinedFieldsDesc": "Adds the fields of joined tables such as a master table (${count} fields)",
     "crsTitle": "Coordinate Reference System (CRS)",
     "crsKeep": "unchanged",
     "crsWgs84Only": "$format is always written in WGS 84 (EPSG:4326), as the format requires",
@@ -1183,9 +1183,15 @@
     "closureError": "Closure Error",
     "closureRatio": "Closure Ratio",
     "backsightCorrected": "Backsight corrected",
+    "backsightPending": "Backsight pending (shoot back / forward for new pt)",
+    "backsightDiff": "FS-BS diff: AZ ${azDelta}° / HD ${hdDelta}m",
     "backsightApplied": "Backsight correction applied",
     "backsightReverse": "Backsight (return): ${from} → ${to}",
-    "backsightDetail": "AZ ${azDelta}° / HD ${hdDelta}m corrected",
+    "backsightDetail": "FS-BS diff AZ ${azDelta}° / HD ${hdDelta}m (averaged)",
+    "noStationSet": "No station point is set",
+    "noPointLayerSelected": "Please select a point layer",
+    "stationLayerMismatch": "Please select the station's layer (${layer})",
+    "layerInvisible": "Cannot record because layer \"${layer}\" is hidden",
     "detail": {
       "refreshInfo": "Refresh Info",
       "deviceInfo": "Device Info",
@@ -1276,6 +1282,17 @@
     "panel": {
       "point": "Point",
       "tapToSetStation": "Tap a point to set station"
+    },
+    "backsightWarning": "Backsight applied (tolerance exceeded)",
+    "backsightReverseWarning": "Backsight (return, tolerance exceeded): ${from} → ${to}",
+    "tolerance": {
+      "title": "Backsight Tolerance",
+      "description": "Plays a warning tone and highlights in orange when the foresight–backsight difference exceeds these limits (averaging is still applied).",
+      "maxAzDiff": "Max angle difference",
+      "maxAzDiffDesc": "Difference between foresight AZ and backsight AZ (+180°)",
+      "maxHdDiff": "Max distance difference",
+      "maxHdDiffDesc": "Difference between foresight HD and backsight HD",
+      "none": "Off"
     }
   },
   "basemapExtra": {
@@ -1790,7 +1807,7 @@
     "fieldToken": "Column value",
     "textToken": "Fixed text (tap to edit)",
     "fixedText": "Fixed text",
-    "fixedTextHint": "e.g. Compartment, /, ha",
+    "fixedTextHint": "e.g. Zone, /, ha",
     "addText": "Add text",
     "preview": "Preview (first feature)"
   },

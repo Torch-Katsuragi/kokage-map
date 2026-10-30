@@ -4,7 +4,7 @@
 データはローカルの .gpkg / .kmeta.json / .qgs なので、編集は QGIS の API や sqlite で直接やり、
 アプリには「開いて」「ここを見せて」「読み直して」だけ頼む。その頼み方を包んだもの。
 
-    python tool/kokage.py open --project /sdcard/FieldSurvey/Kitayama-2026 --at 33.8985,135.5718,15
+    python tool/kokage.py open --project /sdcard/FieldSurvey/Survey-2026 --at 35.6312,139.2407,15
     python tool/kokage.py open --at 33.8985,135.5718,16 --bearing 30 --pitch 45
     python tool/kokage.py reload                      # 起動中のアプリにディスクから読み直させる
     python tool/kokage.py url --at 33.8985,135.5718,15  # web 版の URL を出すだけ

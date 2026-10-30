@@ -221,4 +221,22 @@ void main() {
     expect(TraverseRecorder.backsightThreshold(20), closeTo(3.0, 1e-9));
     expect(TraverseRecorder.backsightThreshold(100), 5.0);
   });
+
+  test('backsightDeltaOf が前視・後視の差（角度・距離・傾斜角）を返す', () async {
+    // 起点 P0 は後視対象ではない
+    expect(TraverseRecorder.backsightDeltaOf(p0), isNull);
+
+    // P0 -> P1 を前視（AZ 90°, HD 50.0m, INC 4°）
+    final p1 = (await _record(p0, _shot(90, 50, inc: 4))).point;
+    expect(TraverseRecorder.backsightDeltaOf(p1), isNull);
+
+    // P1 -> P0 を後視（AZ 271.2° → 逆向き 91.2°, HD 50.35m, INC -4.5°）
+    await _record(p1, _shot(271.2, 50.35, inc: -4.5, t: 1));
+
+    final delta = TraverseRecorder.backsightDeltaOf(p1);
+    expect(delta, isNotNull);
+    expect(delta!.azDeg, closeTo(1.2, 1e-9));
+    expect(delta.hdM, closeTo(0.35, 1e-9));
+    expect(delta.incDeg, closeTo(0.5, 1e-9));
+  });
 }

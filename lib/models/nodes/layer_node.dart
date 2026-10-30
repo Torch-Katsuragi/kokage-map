@@ -660,6 +660,13 @@ abstract class LayerNode extends LayerTreeNode {
     return node;
   }
 
+  /// 地物の増減（[FeatureNode] の追加・削除）を [featuresRevision] と [featuresRevisionNotifier] に知らせる
+  void notifyFeatureCountChanged() {
+    if (_isDisposed) return;
+    _featuresRevision++;
+    featuresRevisionNotifier.value = _featuresRevision;
+  }
+
   /// FeatureNodeを安全に削除するメソッド
   void removeFeature(FeatureNode feature) {
     if (_isDisposed) {
@@ -669,6 +676,7 @@ abstract class LayerNode extends LayerTreeNode {
     super.removeChild(feature);
     // _featureMapからも削除
     _removeFeatureFromMap(feature.rowId);
+    notifyFeatureCountChanged();
   }
 
   /// コンストラクタ

@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// チュートリアル用の練習プロジェクト（小班 2 つ・路網 1 本・空の調査点）
+// チュートリアル用の練習プロジェクト（エリア 2 つ・ルート 1 本・空の測点）
 //
 // 自分のデータが無くても始められるように、開くたびに作り直す。
 // 置き場所は共有フォルダ（Global）の隣。Android なら Documents/KokageMap/練習 で、利用者からも見える。
@@ -40,7 +40,7 @@ class PracticeProject {
 
   String get gpkgPath => p.join(dir, '${t.tutorial.practice.gpkg}.gpkg');
 
-  // 林業に寄せない一般的な名前にする（ユーザー 2026-10-01「エリアとか測点とか」）
+  // 特定の業種に寄せない一般的な名前にする（ユーザー 2026-10-01「エリアとか測点とか」）
   static String get areaLayer => t.tutorial.practice.area;
   static String get routeLayer => t.tutorial.practice.route;
   static String get pointsLayer => t.tutorial.practice.points;
@@ -89,25 +89,25 @@ class PracticeProject {
 
     await gpkg.addLayer(areaLayer, GeometryType.polygon);
     await gpkg.addAttributeColumns(areaLayer, fields);
-    // 尾根を挟んで東西に並ぶ 2 つのエリア（おおよそ 250m 四方。北山村の大沼の南東の山）
+    // 尾根を挟んで東西に並ぶ 2 つのエリア（おおよそ 250m 四方）
     await gpkg.addPolygonWithAttributes(areaLayer, [
       const [
-        LatLng(33.9312, 135.9707), LatLng(33.9316, 135.9736), LatLng(33.9291, 135.9741),
-        LatLng(33.9278, 135.9723), LatLng(33.9287, 135.9703), LatLng(33.9312, 135.9707),
+        LatLng(35.6312, 139.2407), LatLng(35.6316, 139.2436), LatLng(35.6291, 139.2441),
+        LatLng(35.6278, 139.2423), LatLng(35.6287, 139.2403), LatLng(35.6312, 139.2407),
       ],
     ], {'name': pr.areaA, pr.memo: pr.memoExample});
     await gpkg.addPolygonWithAttributes(areaLayer, [
       const [
-        LatLng(33.9316, 135.9736), LatLng(33.9309, 135.9772), LatLng(33.9282, 135.9768),
-        LatLng(33.9274, 135.9747), LatLng(33.9291, 135.9741), LatLng(33.9316, 135.9736),
+        LatLng(35.6316, 139.2436), LatLng(35.6309, 139.2472), LatLng(35.6282, 139.2468),
+        LatLng(35.6274, 139.2447), LatLng(35.6291, 139.2441), LatLng(35.6316, 139.2436),
       ],
     ], {'name': pr.areaB, pr.memo: ''});
 
     await gpkg.addLayer(routeLayer, GeometryType.linestring);
     await gpkg.addAttributeColumns(routeLayer, fields);
     await gpkg.addLineWithAttributes(routeLayer, const [
-      LatLng(33.9260, 135.9695), LatLng(33.9275, 135.9715), LatLng(33.9278, 135.9735),
-      LatLng(33.9272, 135.9757), LatLng(33.9280, 135.9780),
+      LatLng(35.6260, 139.2395), LatLng(35.6275, 139.2415), LatLng(35.6278, 139.2435),
+      LatLng(35.6272, 139.2457), LatLng(35.6280, 139.2480),
     ], {'name': pr.route1});
 
     await gpkg.addLayer(pointsLayer, GeometryType.point);

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.14.1 — 2026/10/30
+
+### New Features & Improvements
+
+- Foresight–backsight difference display in TruPulse survey: Backsight-corrected points now display the angle and horizontal distance difference (`FS-BS diff: AZ X.X° / HD X.XXm`) on the status panel badge and in the feature info panel
+- Configurable backsight tolerance & warning sound: Added "Backsight Tolerance" settings (Max angle difference: default 2.0°, Max distance difference: default 0.5 m) to the TruPulse detail screen and Settings → External Devices
+- Distinct audio feedback for survey shots: Foresight (new point) plays a single beep, backsight within tolerance plays an ascending two-note chime, backsight exceeding tolerance plays a descending two-note tone (with orange warning badge), and rejected shots play a low buzzer
+
+### Bug Fixes
+
+- Fixed an issue in TruPulse survey where taking a shot without the station's point layer selected (or while the layer was hidden) could draw a leg without recording to the selected layer. Setting a station now automatically selects its point layer, and shots are blocked with a buzzer and warning notification if the station's point layer is not selected and visible
+- Fixed an issue where the feature count badge in the layer tree and open attribute tables did not immediately refresh when points were added or deleted during surveying
+
 ## v0.14.0 — 2026/10/28
 
 ### New Features

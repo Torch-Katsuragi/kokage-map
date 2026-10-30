@@ -51,6 +51,7 @@ import '../../widgets/radial_action_menu.dart';
 import '../base/device_tool.dart';
 import 'trupulse_detail_screen.dart';
 import 'trupulse_measurement.dart';
+import 'trupulse_providers.dart';
 import 'trupulse_service.dart';
 import 'trupulse_status_panel.dart';
 
@@ -90,6 +91,17 @@ class TruPulseTool extends DeviceTool {
   LatLng? get stationPosition => _station?.point;
   PointFeatureNode? get station => _station;
 
+  @visibleForTesting
+  set debugStation(PointFeatureNode? stn) => _station = stn;
+
+  String? _lastPlayedAsset;
+
+  @visibleForTesting
+  String? get debugLastPlayedAsset => _lastPlayedAsset;
+
+  @visibleForTesting
+  void debugClearLastPlayedAsset() => _lastPlayedAsset = null;
+
   IMapState? _mapState;
 
   static const double _hitRadius = 30.0;
@@ -121,17 +133,67 @@ class TruPulseTool extends DeviceTool {
   // Measurement → point creation
   // =========================================================
 
+  Future<void> _playSound(String assetPath) async {
+    _lastPlayedAsset = assetPath;
+    try {
+      await _player.setPlaybackRate(1.0);
+      await _player.play(AssetSource(assetPath));
+    } catch (e) {
+      AppLogger.debug('[TruPulseTool] Sound playback failed ($assetPath): $e');
+    }
+  }
+
+  Future<void> _rejectMeasurement(String title, {String? detail}) async {
+    _ref.read(notificationCenterProvider.notifier).add(
+      title: title,
+      detail: detail,
+      level: NotificationLevel.warning,
+    );
+    await _playSound('sounds/survey_error.wav');
+  }
+
   Future<void> _onMeasurement(TruPulseMeasurement m) async {
     AppLogger.debug('[TruPulseTool] _onMeasurement called: $m');
     try {
-      if (_station == null || _mapState == null) {
-        AppLogger.debug('[TruPulseTool] Station or mapState not set');
+      if (_station == null || _station!.isDisposed) {
+        AppLogger.debug('[TruPulseTool] Station not set');
+        await _rejectMeasurement(
+          t.trupulse.noStationSet,
+          detail: t.trupulse.panel.tapToSetStation,
+        );
         return;
       }
 
       final stn = _station!;
+      final stnLayer = stn.parent;
+      final selectedLayer = _ref.read(selectedLayerNodeProvider);
+
+      // ポイントレイヤが選択されていない状態での誤記録を防ぐ
+      if (selectedLayer is! PointLayerNode) {
+        AppLogger.debug('[TruPulseTool] Point layer not selected (selected: ${selectedLayer?.name})');
+        await _rejectMeasurement(t.trupulse.noPointLayerSelected);
+        return;
+      }
+
+      // 選択中のポイントレイヤが器械点のレイヤと異なる場合も誤記録を防ぐ
+      if (selectedLayer != stnLayer) {
+        AppLogger.debug('[TruPulseTool] Selected layer (${selectedLayer.name}) != station layer (${stnLayer.name})');
+        await _rejectMeasurement(t.trupulse.stationLayerMismatch(layer: stnLayer.name));
+        return;
+      }
+
+      // 非表示レイヤには記録しない
+      if (!stnLayer.isVisibleRecursive()) {
+        AppLogger.debug('[TruPulseTool] Station layer is invisible: ${stnLayer.name}');
+        await _rejectMeasurement(t.trupulse.layerInvisible(layer: stnLayer.name));
+        return;
+      }
+
       // 読み取り専用レイヤ（shp・GeoJSON など）の点を基準点にしていても書き込まない
-      if (refuseReadOnlyEditBy(_ref.read, stn)) return;
+      if (refuseReadOnlyEditBy(_ref.read, stn)) {
+        await _playSound('sounds/survey_error.wav');
+        return;
+      }
 
       final shot = await TraverseRecorder.record(
         stn,
@@ -140,6 +202,7 @@ class TruPulseTool extends DeviceTool {
       );
       if (shot == null) {
         AppLogger.debug('[TruPulseTool] Failed to record measurement');
+        await _playSound('sounds/survey_error.wav');
         return;
       }
 
@@ -148,10 +211,14 @@ class TruPulseTool extends DeviceTool {
       _ref.read(featureRefreshTriggerProvider.notifier).trigger();
       _mapState?.refreshFeatures();
       _notifyUI();
-      if (shot.kind != TraverseShotKind.forward) _notifyBacksight(shot);
-      // 後視は低い音で鳴らし分ける
-      await _player.setPlaybackRate(shot.kind == TraverseShotKind.forward ? 1.0 : 0.7);
-      await _player.play(AssetSource('sounds/point_created.wav'));
+      if (shot.kind != TraverseShotKind.forward) {
+        final exceeded = _notifyBacksight(shot);
+        await _playSound(
+          exceeded ? 'sounds/backsight_warning.wav' : 'sounds/backsight_applied.wav',
+        );
+      } else {
+        await _playSound('sounds/point_created.wav');
+      }
 
       AppLogger.debug(
         '[TruPulseTool] ${shot.kind.name}: '
@@ -163,26 +230,43 @@ class TruPulseTool extends DeviceTool {
     }
   }
 
-  /// 後視補正の通知。戻りなら「後視（戻り）: P3 → P2」のように立っている点と測った点を出す
-  void _notifyBacksight(TraverseShot shot) {
-    final adopted = shot.adopted!;
-    final azDelta = ((adopted.az - shot.forwardAz! + 540) % 360 - 180).abs();
-    final hdDelta = (adopted.hd - shot.forwardHd!).abs();
+  /// 後視補正の通知。許容誤差基準を超えていれば true を返し警告として通知する
+  bool _notifyBacksight(TraverseShot shot) {
+    final delta = TraverseRecorder.backsightDeltaOf(shot.point);
+    final double azDelta;
+    final double hdDelta;
+    if (delta != null) {
+      azDelta = delta.azDeg;
+      hdDelta = delta.hdM;
+    } else {
+      final adopted = shot.adopted!;
+      azDelta = ((adopted.az - shot.forwardAz! + 540) % 360 - 180).abs() * 2;
+      hdDelta = (adopted.hd - shot.forwardHd!).abs() * 2;
+    }
+    final effectiveDelta = delta ?? BacksightDelta(azDeg: azDelta, hdM: hdDelta);
+    final tolerance = _ref.read(backsightToleranceSettingProvider);
+    final exceeded = tolerance.isExceededBy(effectiveDelta);
+
     final detail = t.trupulse.backsightDetail(
       azDelta: azDelta.toStringAsFixed(1),
       hdDelta: hdDelta.toStringAsFixed(2),
     );
-    final title = shot.kind == TraverseShotKind.reverseBacksight
-        ? t.trupulse.backsightReverse(
-            from: _pointLabel(shot.point),
-            to: shot.legStation != null ? _pointLabel(shot.legStation!) : '?',
-          )
-        : t.trupulse.backsightApplied;
+    final fromLabel = _pointLabel(shot.point);
+    final toLabel = shot.legStation != null ? _pointLabel(shot.legStation!) : '?';
+    final String title;
+    if (shot.kind == TraverseShotKind.reverseBacksight) {
+      title = exceeded
+          ? t.trupulse.backsightReverseWarning(from: fromLabel, to: toLabel)
+          : t.trupulse.backsightReverse(from: fromLabel, to: toLabel);
+    } else {
+      title = exceeded ? t.trupulse.backsightWarning : t.trupulse.backsightApplied;
+    }
     _ref.read(notificationCenterProvider.notifier).add(
       title: title,
       detail: detail,
-      level: NotificationLevel.success,
+      level: exceeded ? NotificationLevel.warning : NotificationLevel.success,
     );
+    return exceeded;
   }
 
   /// 点の呼び名。名前があれば名前、なければ導線の順番（起点 P0、続いて P1, P2, …）
@@ -241,6 +325,10 @@ class TruPulseTool extends DeviceTool {
           color: Colors.blue.shade100,
           onTap: () {
             _station = target;
+            final layer = target.parent;
+            if (_ref.read(selectedLayerNodeProvider) != layer) {
+              _ref.read(selectedLayerNodeProvider.notifier).select(layer);
+            }
             AppLogger.debug('[TruPulseTool] Station set: ${target.name}');
             _notifyUI();
           },

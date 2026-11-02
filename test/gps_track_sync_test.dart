@@ -113,7 +113,7 @@ void main() {
 
     final track = route.children.whereType<LineFeatureNode>().single;
     final before = coordsOf(track);
-    const added = LatLng(33.9285, 135.9800);
+    final added = LatLng(before.last.latitude + 0.0005, before.last.longitude + 0.001);
     final r = await syncConsolidatedTrack(
       layer: route,
       featureId: track.rowId,
@@ -161,7 +161,7 @@ void main() {
     final before = coordsOf(track);
     final whole = turf.LineString(coordinates: [for (final q in before) turf.Position(q.longitude, q.latitude)]);
 
-    const added = LatLng(33.9290, 135.9810);
+    final added = LatLng(before.last.latitude + 0.001, before.last.longitude + 0.002);
     route.addFeatureToMap(
       track.rowId,
       turf.Feature(

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.15.0 — 2026/11/02
+
+### New Features
+
+- "Advanced 3D Map" (automatic synthesis of 0.25 m–1 m high-resolution DEMs across Japan): Added an "Advanced 3D Map (High-Res DEM)" toggle under Settings → 3D Terrain (off by default). When enabled, regional high-resolution DEMs (0.25 m–1 m mesh across 25 regions from the G-Spatial Information Center and local governments) are automatically selected and composited by location, seamlessly falling back to GSI elevation tiles (DEM1A → DEM5A/B/C → DEM10B) outside coverage or in data gaps. Mountain roads, terraces, and fine micro-topography are rendered in sharp relief
+- Added real-time elevation tile conversion from Wakayama Prefecture's 1 m grid point cloud data (Potree 2.0 octree), bringing 1 m resolution terrain across Wakayama Prefecture
+
+### Improvements & Changes
+
+- Smoother 3D terrain LOD transitions (atomic 2×2 quad swaps): Separated the tile loading space from the display space so parent tiles remain visible until all four (2×2) child tiles finish baking, swapping each quadrant atomically to prevent coarse and fine meshes from overlapping during zoom or pan
+- Background map preview in Layer Style Settings: The style preview now renders over a GSI standard map background and adapts to the layer's geometry type (point, line, or polygon), making it easy to judge color contrast and opacity against a real map
+- Auto-collapsing dependent settings: Sub-options under Layer Style Settings (labels, vertex points, polygon borders, clustering), 3D Terrain coloring, Drive auto-sync, and GNSS quality thresholds now collapse when their parent toggle is off and expand smoothly when turned on
+
+### Bug Fixes
+
+- Fixed an issue where changing "Opacity" in Layer Style Settings did not take effect on the map. Layer-level opacity edits now propagate to existing View styles and the active current-day GPS track
+- Sanitized invalid filename characters (`_` replacement) when exporting CSV files from the attribute table
+
 ## v0.14.1 — 2026/10/30
 
 ### New Features & Improvements

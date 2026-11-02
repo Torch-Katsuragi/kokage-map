@@ -50,6 +50,7 @@ fi
 mkdir -p build-x64 && pushd build-x64 >/dev/null
 [ -f libgpkg.tar.gz ] || curl -fsSL -o libgpkg.tar.gz "$LIBGPKG_URL"
 verify_sha256 libgpkg.tar.gz "$LIBGPKG_SHA256"
+mkdir -p external && tar xzf libgpkg.tar.gz -C external
 cmake -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED=ON -DBUILD_STATIC=OFF -DBUILD_TOOLS=OFF -DENABLE_TESTS=OFF -DWITH_POSTGRESQL=OFF -DPEDANTIC=OFF \
   -DSQLite3_INCLUDE_DIR="$W/$SQL_DIR" -DSQLite3_LIBRARY="$W/sqlite-x64/libsqlite3.a" \

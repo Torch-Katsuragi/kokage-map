@@ -43,9 +43,11 @@ for /f %%h in ('git -C geodiff rev-parse HEAD') do set GOT_SHA=%%h
 if not "%GOT_SHA%"=="%GEODIFF_SHA%" (echo geodiff が %GEODIFF_SHA% ではない。作業dirの geodiff を消して焼き直す & exit /b 1)
 if not exist build-x64 mkdir build-x64
 cd build-x64
-rem libgpkg は geodiff の CMake が取りにいく。先に落として照合しておくと CMake は取得を飛ばす
+rem libgpkg は geodiff の CMake が取りにいく。先に落として照合・展開しておくと CMake は取得を飛ばす
 if not exist libgpkg.tar.gz curl -fsSL -o libgpkg.tar.gz %LIBGPKG_URL% || exit /b 1
 call :verify libgpkg.tar.gz %LIBGPKG_SHA256% || exit /b 1
+if not exist external mkdir external
+tar xzf libgpkg.tar.gz -C external || exit /b 1
 "%CM%" -G Ninja -DCMAKE_MAKE_PROGRAM="%NJ%" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl ^
   -DBUILD_SHARED=ON -DBUILD_STATIC=OFF -DBUILD_TOOLS=OFF -DENABLE_TESTS=OFF -DWITH_POSTGRESQL=OFF -DPEDANTIC=OFF ^
   -DSQLite3_INCLUDE_DIR="%W%\%SQL_DIR%" -DSQLite3_LIBRARY="%W%\sqlite-x64\sqlite3.lib" ^

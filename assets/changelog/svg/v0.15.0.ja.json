@@ -1,0 +1,30 @@
+{
+ "title": "細かな道や微地形まで見える「高度な3D地図」",
+ "chunks": [
+  {
+   "file": "v0.15.0.ja.00.svg",
+   "width": 252.0,
+   "height": 202.68
+  },
+  {
+   "file": "v0.15.0.ja.01.svg",
+   "width": 252.0,
+   "height": 271.53
+  },
+  {
+   "file": "v0.15.0.ja.02.svg",
+   "width": 252.0,
+   "height": 265.53
+  },
+  {
+   "file": "v0.15.0.ja.03.svg",
+   "width": 252.0,
+   "height": 235.65
+  },
+  {
+   "file": "v0.15.0.ja.04.svg",
+   "width": 252.0,
+   "height": 191.36
+  }
+ ]
+}

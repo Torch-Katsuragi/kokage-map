@@ -65,6 +65,7 @@ fi
 mkdir -p "build-$ABI" && pushd "build-$ABI" >/dev/null
 [ -f libgpkg.tar.gz ] || curl -fsSL -o libgpkg.tar.gz "$LIBGPKG_URL"
 verify_sha256 libgpkg.tar.gz "$LIBGPKG_SHA256"
+mkdir -p external && tar xzf libgpkg.tar.gz -C external
 "$CMAKE" -G Ninja -DCMAKE_MAKE_PROGRAM="$(cygpath -m "$NINJA")" \
   -DCMAKE_TOOLCHAIN_FILE="$(cygpath -m "$NDK/build/cmake/android.toolchain.cmake")" \
   -DANDROID_ABI="$ABI" -DANDROID_PLATFORM="android-$API" -DCMAKE_BUILD_TYPE=Release \

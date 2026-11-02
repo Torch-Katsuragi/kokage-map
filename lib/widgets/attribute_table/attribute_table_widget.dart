@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trina_grid/trina_grid.dart';
 
+import '../../core/fs/safe_path.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/feature_node.dart';
@@ -417,7 +418,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   Future<void> _handleCsvExport() async {
     try {
       final bytes = await _controller.exportCsvBytes();
-      final layerName = widget.layer.layerName;
+      final layerName = toLocalFolderName(widget.layer.layerName, fallback: 'layer');
       final timestamp = DateTime.now()
           .toIso8601String()
           .replaceAll(':', '-')

@@ -182,22 +182,29 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                       await AutoSyncService.instance.setEnabled(v);
                     },
                   ),
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(Icons.timer, color: Colors.blueGrey),
-                    title: Text(tr.interval),
-                    subtitle: Text(tr.everyMinutes(minutes: _intervalMinutes)),
-                    trailing: DropdownButton<int>(
-                      value: _intervalMinutes,
-                      underline: const SizedBox.shrink(),
-                      items: [
-                        for (final m in _intervalChoices)
-                          DropdownMenuItem(
-                            value: m,
-                            child: Text(tr.minutes(count: m)),
+                  SettingsCollapsibleChild(
+                    visible: _autoSyncEnabled,
+                    child: Column(
+                      children: [
+                        const Divider(),
+                        ListTile(
+                          leading: const Icon(Icons.timer, color: Colors.blueGrey),
+                          title: Text(tr.interval),
+                          subtitle: Text(tr.everyMinutes(minutes: _intervalMinutes)),
+                          trailing: DropdownButton<int>(
+                            value: _intervalMinutes,
+                            underline: const SizedBox.shrink(),
+                            items: [
+                              for (final m in _intervalChoices)
+                                DropdownMenuItem(
+                                  value: m,
+                                  child: Text(tr.minutes(count: m)),
+                                ),
+                            ],
+                            onChanged: _setInterval,
                           ),
+                        ),
                       ],
-                      onChanged: _setInterval,
                     ),
                   ),
                 ],
@@ -217,27 +224,34 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                       await _appDataSync.setEnabled(v);
                     },
                   ),
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(Icons.history, color: Colors.blueGrey),
-                    title: Text(
-                      _appDataLastSynced != null
-                          ? tr.appDataLastSynced(
-                              time: _formatDateTime(_appDataLastSynced!),
-                            )
-                          : tr.appDataNeverSynced,
-                    ),
-                    trailing: _appDataSync.isSyncing
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : OutlinedButton.icon(
-                            onPressed: _runAppDataSyncNow,
-                            icon: const Icon(Icons.sync, size: 18),
-                            label: Text(tr.appDataSyncNow),
+                  SettingsCollapsibleChild(
+                    visible: _appDataSyncEnabled,
+                    child: Column(
+                      children: [
+                        const Divider(),
+                        ListTile(
+                          leading: const Icon(Icons.history, color: Colors.blueGrey),
+                          title: Text(
+                            _appDataLastSynced != null
+                                ? tr.appDataLastSynced(
+                                    time: _formatDateTime(_appDataLastSynced!),
+                                  )
+                                : tr.appDataNeverSynced,
                           ),
+                          trailing: _appDataSync.isSyncing
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : OutlinedButton.icon(
+                                  onPressed: _runAppDataSyncNow,
+                                  icon: const Icon(Icons.sync, size: 18),
+                                  label: Text(tr.appDataSyncNow),
+                                ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

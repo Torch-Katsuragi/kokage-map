@@ -226,6 +226,7 @@ class QgsProjectBuilder {
   static final _saveTimePatterns = [
     RegExp('saveDateTime="[^"]*"'),
     RegExp('(<savedAt[^>]*>)[^<]*(</savedAt>)'),
+    RegExp('(<properties[^>]*name="savedAt"[^>]*>)[^<]*(</properties>)'),
   ];
 
   /// 保存時刻（root の `saveDateTime` と印の `savedAt`）を伏せた本文

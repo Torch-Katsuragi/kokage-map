@@ -35,9 +35,15 @@ class MapStyleGroup {
     required this.outlineOpacity,
     required this.borderWidth,
     required this.lineHex,
+    this.lineOpacity = 1.0,
     required this.lineWidth,
     required this.pointHex,
+    this.pointOpacity = 1.0,
     required this.pointSize,
+    this.labelFontSize = 12.0,
+    this.labelHex = '#000000',
+    this.labelHaloHex = '#ffffff',
+    this.labelOpacity = 1.0,
   });
 
   /// フィーチャの `k-style` 属性と突き合わせるキー（View のキー）
@@ -48,9 +54,15 @@ class MapStyleGroup {
   final double outlineOpacity;
   final double borderWidth;
   final String lineHex;
+  final double lineOpacity;
   final double lineWidth;
   final String pointHex;
+  final double pointOpacity;
   final double pointSize;
+  final double labelFontSize;
+  final String labelHex;
+  final String labelHaloHex;
+  final double labelOpacity;
 
   @override
   bool operator ==(Object other) =>
@@ -62,13 +74,35 @@ class MapStyleGroup {
       other.outlineOpacity == outlineOpacity &&
       other.borderWidth == borderWidth &&
       other.lineHex == lineHex &&
+      other.lineOpacity == lineOpacity &&
       other.lineWidth == lineWidth &&
       other.pointHex == pointHex &&
-      other.pointSize == pointSize;
+      other.pointOpacity == pointOpacity &&
+      other.pointSize == pointSize &&
+      other.labelFontSize == labelFontSize &&
+      other.labelHex == labelHex &&
+      other.labelHaloHex == labelHaloHex &&
+      other.labelOpacity == labelOpacity;
 
   @override
-  int get hashCode => Object.hash(key, fillHex, fillOpacity, outlineHex,
-      outlineOpacity, borderWidth, lineHex, lineWidth, pointHex, pointSize);
+  int get hashCode => Object.hash(
+        key,
+        fillHex,
+        fillOpacity,
+        outlineHex,
+        outlineOpacity,
+        borderWidth,
+        lineHex,
+        lineOpacity,
+        lineWidth,
+        pointHex,
+        pointOpacity,
+        pointSize,
+        labelFontSize,
+        labelHex,
+        labelHaloHex,
+        labelOpacity,
+      );
 }
 
 /// Flutter の色を `#RRGGBB`（不透明度は別フィールド）に

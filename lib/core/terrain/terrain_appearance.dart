@@ -40,6 +40,9 @@ enum TerrainColorMode {
 class TerrainAppearance {
   TerrainAppearance._();
 
+  /// 高度な 3D 地図（地域ごとの最高精度 0.25m〜1m DEM・原典グリッドを優先使用）
+  static bool highPrecision = false;
+
   static TerrainColorMode colorMode = TerrainColorMode.none;
 
   /// 色分けを基図にどれだけ被せるか（0 = 基図のまま、1 = 色分けだけ＝基図なし）

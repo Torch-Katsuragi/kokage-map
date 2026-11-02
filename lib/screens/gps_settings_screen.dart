@@ -673,11 +673,14 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
             (v) => set(gate.copyWith(minSatellites: () => v)),
           ),
         ),
-        SettingsSwitchTile(
-          title: g.strict,
-          subtitle: g.strictDesc,
-          value: gate.strict,
-          onChanged: gate.isActive ? (v) => set(gate.copyWith(strict: v)) : null,
+        SettingsCollapsibleChild(
+          visible: gate.isActive,
+          child: SettingsSwitchTile(
+            title: g.strict,
+            subtitle: g.strictDesc,
+            value: gate.strict,
+            onChanged: gate.isActive ? (v) => set(gate.copyWith(strict: v)) : null,
+          ),
         ),
       ],
     );

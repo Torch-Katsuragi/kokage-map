@@ -32,6 +32,7 @@ import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/view_node.dart';
 import '../models/qgis_renderer.dart';
+import '../providers/ui_state_providers.dart';
 import '../services/kmeta_service.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
@@ -57,6 +58,7 @@ DoubleDef _opacityDef({
   required String title,
   required double defaultValue,
   required double? Function(KMetaLayerStyle) kmetaGetter,
+  bool Function(SettingsStore store)? visibleWhen,
 }) =>
     DoubleDef(
       key: key,
@@ -67,6 +69,7 @@ DoubleDef _opacityDef({
       divisions: 10,
       formatter: _percent,
       kmetaGetter: kmetaGetter,
+      visibleWhen: visibleWhen,
     );
 
 /// 頂点に点を描くか（線・面）
@@ -79,7 +82,7 @@ SwitchDef _vertexPointsEnabledDef(String key, String description) => SwitchDef(
     );
 
 /// 頂点の点の大きさ（線の太さに対する倍率。線・面）
-DoubleDef _vertexPointSizeFactorDef(String key) => DoubleDef(
+DoubleDef _vertexPointSizeFactorDef(String key, SwitchDef enabledDef) => DoubleDef(
       key: key,
       title: t.styleScreen.vertexPointSizeFactor,
       defaultValue: 2.0,
@@ -87,6 +90,7 @@ DoubleDef _vertexPointSizeFactorDef(String key) => DoubleDef(
       max: 6.0,
       divisions: 55,
       formatter: _times,
+      visibleWhen: (s) => s.getBool(enabledDef),
     );
 
 // --- Point ---
@@ -106,6 +110,12 @@ final pointColorDef = ColorDef(
   defaultArgb: 0xFFF44336,
   kmetaGetter: (k) => k.pointColor,
 );
+final pointOpacityDef = _opacityDef(
+  key: 'layer_style_point_opacity',
+  title: t.styleScreen.pointOpacity,
+  defaultValue: 1.0,
+  kmetaGetter: (k) => k.pointOpacity,
+);
 
 // --- Line ---
 final lineWidthDef = DoubleDef(
@@ -124,11 +134,20 @@ final lineColorDef = ColorDef(
   defaultArgb: 0xFF4CAF50,
   kmetaGetter: (k) => k.lineColor,
 );
+final lineOpacityDef = _opacityDef(
+  key: 'layer_style_line_opacity',
+  title: t.styleScreen.lineOpacity,
+  defaultValue: 1.0,
+  kmetaGetter: (k) => k.lineOpacity,
+);
 final lineVertexPointsEnabledDef = _vertexPointsEnabledDef(
   'layer_style_line_vertex_points_enabled',
   t.styleScreen.drawVertexPointsLineDesc,
 );
-final lineVertexPointSizeFactorDef = _vertexPointSizeFactorDef('layer_style_line_vertex_point_size_factor');
+final lineVertexPointSizeFactorDef = _vertexPointSizeFactorDef(
+  'layer_style_line_vertex_point_size_factor',
+  lineVertexPointsEnabledDef,
+);
 
 // --- Polygon ---
 final polygonBorderWidthDef = DoubleDef(
@@ -146,6 +165,7 @@ final polygonBorderColorDef = ColorDef(
   title: t.styleScreen.borderColor,
   defaultArgb: 0xFF000000,
   kmetaGetter: (k) => k.polygonBorderColor,
+  visibleWhen: (s) => s.getDouble(polygonBorderWidthDef) > 0,
 );
 final polygonFillColorDef = ColorDef(
   key: 'layer_style_polygon_fill_color',
@@ -164,12 +184,16 @@ final polygonBorderOpacityDef = _opacityDef(
   title: t.styleScreen.borderOpacity,
   defaultValue: 1.0,
   kmetaGetter: (k) => k.polygonBorderOpacity,
+  visibleWhen: (s) => s.getDouble(polygonBorderWidthDef) > 0,
 );
 final polygonVertexPointsEnabledDef = _vertexPointsEnabledDef(
   'layer_style_polygon_vertex_points_enabled',
   t.styleScreen.drawVertexPointsPolygonDesc,
 );
-final polygonVertexPointSizeFactorDef = _vertexPointSizeFactorDef('layer_style_polygon_vertex_point_size_factor');
+final polygonVertexPointSizeFactorDef = _vertexPointSizeFactorDef(
+  'layer_style_polygon_vertex_point_size_factor',
+  polygonVertexPointsEnabledDef,
+);
 
 // --- Label ---
 final labelEnabledDef = SwitchDef(
@@ -193,6 +217,7 @@ final labelExpressionTileDef = CustomDef(
   key: 'layer_style_label_expression_tile',
   title: t.styleScreen.labelExpression,
   builder: _buildLabelExpressionTile,
+  visibleWhen: (s) => s.getBool(labelEnabledDef),
 );
 final labelFontSizeDef = DoubleDef(
   key: 'layer_style_label_font_size',
@@ -203,24 +228,28 @@ final labelFontSizeDef = DoubleDef(
   divisions: 16,
   formatter: _px,
   kmetaGetter: (k) => k.labelFontSize,
+  visibleWhen: (s) => s.getBool(labelEnabledDef),
 );
 final labelColorDef = ColorDef(
   key: 'layer_style_label_color',
   title: t.styleScreen.textColor,
   defaultArgb: 0xFF000000,
   kmetaGetter: (k) => k.labelColor,
+  visibleWhen: (s) => s.getBool(labelEnabledDef),
 );
 final labelHaloColorDef = ColorDef(
   key: 'layer_style_label_halo_color',
   title: t.styleScreen.haloColor,
   defaultArgb: 0xFFFFFFFF,
   kmetaGetter: (k) => k.labelHaloColor,
+  visibleWhen: (s) => s.getBool(labelEnabledDef),
 );
 final labelOpacityDef = _opacityDef(
   key: 'layer_style_label_opacity',
   title: t.styleScreen.labelOpacity,
   defaultValue: 1.0,
   kmetaGetter: (k) => k.labelOpacity,
+  visibleWhen: (s) => s.getBool(labelEnabledDef),
 );
 
 // --- Clustering (グローバル専用) ---
@@ -238,6 +267,7 @@ final clusteringDisableZoomDef = IntDef(
   min: 14,
   max: 20,
   formatter: (v) => t.styleScreen.zoomN(n: v),
+  visibleWhen: (s) => s.getBool(clusteringEnabledDef),
 );
 
 // --- Selection (グローバル専用) ---
@@ -275,15 +305,18 @@ final layerStyleSettings = SettingsStore([
     id: StyleSection.point,
     title: t.styleScreen.point,
     icon: Icons.place,
-    items: [pointSizeDef, pointColorDef],
+    initiallyExpanded: true,
+    items: [pointSizeDef, pointColorDef, pointOpacityDef],
   ),
   SettingSectionDef(
     id: StyleSection.line,
     title: t.styleScreen.line,
     icon: Icons.show_chart,
+    initiallyExpanded: true,
     items: [
       lineWidthDef,
       lineColorDef,
+      lineOpacityDef,
       lineVertexPointsEnabledDef,
       lineVertexPointSizeFactorDef,
     ],
@@ -292,6 +325,7 @@ final layerStyleSettings = SettingsStore([
     id: StyleSection.polygon,
     title: t.styleScreen.polygon,
     icon: Icons.crop_square,
+    initiallyExpanded: true,
     items: [
       polygonBorderWidthDef,
       polygonBorderColorDef,
@@ -470,11 +504,26 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
   /// [_qgisRenderer] の中身（凡例に出す。保存のときも消さずに持ち回る）
   QgisRenderer? _qgisRendererDef;
 
+  /// レイヤ自体には描き分けが無く、配下の View から借りて表示しているか
+  bool _rendererFromView = false;
+
+  ProviderContainer? _container;
+
   @override
   void initState() {
     super.initState();
     // 組み立ての最中にプロバイダを変えられないので、描き終えてから
     WidgetsBinding.instance.addPostFrameCallback((_) => _tutorialReport(StyleScreenOpened(view: widget.isViewMode ? widget.targetView : null)));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    try {
+      _container = ProviderScope.containerOf(context, listen: false);
+    } catch (_) {
+      _container = null;
+    }
   }
 
   String get _title =>
@@ -491,7 +540,6 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
   bool _sectionFilter(SettingSectionDef section) {
     if (_isGlobalMode) return true;
     final layer = widget.targetLayer;
-    if (_qgisRenderer != null && section.id != StyleSection.label) return false;
     return switch (section.id) {
       StyleSection.point => layer is PointLayerNode,
       StyleSection.line => layer is LineLayerNode,
@@ -499,6 +547,15 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       StyleSection.label => true,
       _ => false,
     };
+  }
+
+  /// QGIS 描き分けのレイヤでは、点・線・面の節のうち「濃さ（不透明度）」だけ編集できるようにする
+  bool _itemFilter(SettingSectionDef section, SettingDef item) {
+    if (_isGlobalMode || _qgisRenderer == null || section.id == StyleSection.label) return true;
+    return identical(item, pointOpacityDef) ||
+        identical(item, lineOpacityDef) ||
+        identical(item, polygonFillOpacityDef) ||
+        identical(item, polygonBorderOpacityDef);
   }
 
   /// KMeta初期化（個別レイヤーモード）
@@ -517,8 +574,20 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     } else if (widget.isLayerMode) {
       final meta = await KMetaService.instance.getMeta(widget.folderPath!);
       final style = meta.getLayerStyle(widget.targetLayer!.layerKey);
-      _setQgisRenderer(style?.qgisRenderer, style?.qgisRendererDef);
-      layerStyleSettings.loadOverlay(style);
+      final views = widget.targetLayer!.views;
+      final fallbackViewStyle =
+          views.where((v) => !v.isDefaultView && v.visible && v.style != null).firstOrNull?.style ??
+          views.where((v) => !v.isDefaultView && v.style != null).firstOrNull?.style;
+      final effective = style == null
+          ? fallbackViewStyle
+          : (fallbackViewStyle == null ? style : style.mergeWith(fallbackViewStyle));
+      _layerStyle = effective;
+      _rendererFromView = style?.qgisRenderer == null && fallbackViewStyle?.qgisRenderer != null;
+      _setQgisRenderer(
+        style?.qgisRenderer ?? fallbackViewStyle?.qgisRenderer,
+        style?.qgisRenderer != null ? style?.qgisRendererDef : fallbackViewStyle?.qgisRendererDef,
+      );
+      layerStyleSettings.loadOverlay(effective);
     } else {
       layerStyleSettings.clearOverlay();
     }
@@ -537,17 +606,31 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     ProviderScope.containerOf(context, listen: false).read(tutorialProvider.notifier).report(e);
   }
 
+  void _notifyMapRefresh() {
+    try {
+      final c = _container ?? (mounted ? ProviderScope.containerOf(context, listen: false) : null);
+      c?.read(featureRefreshTriggerProvider.notifier).trigger();
+    } catch (_) {
+      // ProviderScope が無い単体テスト環境では何もしない
+    }
+  }
+
   /// 値変更時のKMeta自動保存
   void _onValueChanged() {
-    if (!widget.isLayerMode) return;
+    if (!widget.isLayerMode) {
+      _notifyMapRefresh();
+      return;
+    }
     _saveToKMeta();
   }
 
   KMetaLayerStyle _styleFromStore() => KMetaLayerStyle(
         pointSize: layerStyleSettings.getDouble(pointSizeDef),
         pointColor: layerStyleSettings.getColor(pointColorDef),
+        pointOpacity: layerStyleSettings.getDouble(pointOpacityDef),
         lineWidth: layerStyleSettings.getDouble(lineWidthDef),
         lineColor: layerStyleSettings.getColor(lineColorDef),
+        lineOpacity: layerStyleSettings.getDouble(lineOpacityDef),
         polygonBorderWidth: layerStyleSettings.getDouble(polygonBorderWidthDef),
         polygonBorderColor: layerStyleSettings.getColor(polygonBorderColorDef),
         polygonFillColor: layerStyleSettings.getColor(polygonFillColorDef),
@@ -560,8 +643,8 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
         labelHaloColor: layerStyleSettings.getColor(labelHaloColorDef),
         labelOpacity: layerStyleSettings.getDouble(labelOpacityDef),
         // QGIS 側の描き分けの印は、ラベルを変えても消さない
-        qgisRenderer: widget.isViewMode ? null : _qgisRenderer,
-        qgisRendererDef: widget.isViewMode ? null : _qgisRendererDef,
+        qgisRenderer: (widget.isViewMode || _rendererFromView) ? null : _qgisRenderer,
+        qgisRendererDef: (widget.isViewMode || _rendererFromView) ? null : _qgisRendererDef,
       );
 
   /// [full] のうち [base] と同じ項目を null にする（View はレイヤと違う項目だけ持つ）
@@ -571,8 +654,10 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     return KMetaLayerStyle(
       pointSize: d(full.pointSize, base.pointSize),
       pointColor: d(full.pointColor, base.pointColor),
+      pointOpacity: d(full.pointOpacity, base.pointOpacity),
       lineWidth: d(full.lineWidth, base.lineWidth),
       lineColor: d(full.lineColor, base.lineColor),
+      lineOpacity: d(full.lineOpacity, base.lineOpacity),
       polygonBorderWidth: d(full.polygonBorderWidth, base.polygonBorderWidth),
       polygonBorderColor: d(full.polygonBorderColor, base.polygonBorderColor),
       polygonFillColor: d(full.polygonFillColor, base.polygonFillColor),
@@ -601,20 +686,47 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       await widget.targetLayer!.persistViews();
       widget.targetLayer!.folderNode?.invalidateMetaCache();
       await widget.targetLayer!.refreshStyleGroups();
+      _notifyMapRefresh();
       AppLogger.debug('[LayerStyle] View設定を保存: ${widget.targetView!.viewKey}（差分 ${diff.isEmpty ? '無し' : 'あり'}）');
       _tutorialReport(StyleSaved(widget.targetLayer, view: widget.targetView));
       return;
     }
 
+    final prev = _layerStyle;
+    _layerStyle = style;
     await KMetaService.instance.setLayerStyle(
       widget.folderPath!,
       widget.targetLayer!.layerKey,
       style,
     );
+    var viewsChanged = false;
+    for (final v in widget.targetLayer!.views) {
+      final vs = v.style;
+      if (v.isDefaultView || vs == null) continue;
+      final next = vs.copyWith(
+        pointOpacity: style.pointOpacity != prev?.pointOpacity ? style.pointOpacity : vs.pointOpacity,
+        lineOpacity: style.lineOpacity != prev?.lineOpacity ? style.lineOpacity : vs.lineOpacity,
+        polygonFillOpacity:
+            style.polygonFillOpacity != prev?.polygonFillOpacity ? style.polygonFillOpacity : vs.polygonFillOpacity,
+        polygonBorderOpacity:
+            style.polygonBorderOpacity != prev?.polygonBorderOpacity
+                ? style.polygonBorderOpacity
+                : vs.polygonBorderOpacity,
+        labelOpacity: style.labelOpacity != prev?.labelOpacity ? style.labelOpacity : vs.labelOpacity,
+      );
+      if (next != vs) {
+        v.style = next;
+        viewsChanged = true;
+      }
+    }
+    if (viewsChanged) {
+      await widget.targetLayer!.persistViews();
+    }
     widget.targetLayer!.folderNode?.invalidateMetaCache();
     widget.targetLayer!.invalidateKmetaStyleCache();
     // スタイルを変えたら「どのフィーチャがどのグループか」も取り直す
     await widget.targetLayer!.refreshStyleGroups();
+    _notifyMapRefresh();
     AppLogger.debug(
       '[LayerStyle] レイヤー固有設定を保存: ${widget.targetLayer!.layerKey}',
     );
@@ -641,11 +753,13 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       widget.targetLayer!.folderNode?.invalidateMetaCache();
       await widget.targetLayer!.refreshStyleGroups();
       layerStyleSettings.loadOverlay(_layerStyle);
+      _notifyMapRefresh();
       AppLogger.debug('[LayerStyle] View をレイヤに従わせた: ${widget.targetView!.viewKey}');
       return;
     }
     if (_isGlobalMode) {
       await layerStyleSettings.resetAll();
+      _notifyMapRefresh();
     } else {
       // KMetaからレイヤー固有スタイルを削除
       final rawMeta =
@@ -656,7 +770,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       );
       updatedLayers.remove(widget.targetLayer!.layerKey);
       // QGIS 側の描き分けの印は残す（戻しても `.qgs` のレンダラは QGIS のまま）
-      if (_qgisRenderer != null) {
+      if (_qgisRenderer != null && !_rendererFromView) {
         updatedLayers[widget.targetLayer!.layerKey] =
             KMetaLayerStyle(qgisRenderer: _qgisRenderer, qgisRendererDef: _qgisRendererDef);
       }
@@ -669,15 +783,20 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
         rawMeta.copyWith(styles: updatedStyles),
       );
       widget.targetLayer!.invalidateKmetaStyleCache();
+      await widget.targetLayer!.refreshStyleGroups();
       // overlayをグローバル値にリセット
       layerStyleSettings.loadOverlay(null);
+      _notifyMapRefresh();
     }
     AppLogger.debug('[LayerStyle] 設定をリセットしました');
   }
 
   @override
   void dispose() {
-    if (widget.isLayerMode) layerStyleSettings.clearOverlay();
+    if (widget.isLayerMode) {
+      layerStyleSettings.clearOverlay();
+      _notifyMapRefresh();
+    }
     super.dispose();
   }
 
@@ -694,6 +813,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
         onReset: _resetSettings,
         onValueChanged: _onValueChanged,
         sectionFilter: _sectionFilter,
+        itemFilter: _itemFilter,
         customSections: (store) => [
           if (_qgisRenderer != null)
             ListTile(
@@ -729,6 +849,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
 
   /// プレビューセクション
   Widget _buildPreviewSection(SettingsStore store) {
+    final layer = widget.targetLayer;
     return SettingsSection(
       title: t.styleScreen.preview,
       icon: Icons.preview,
@@ -736,21 +857,47 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       collapsible: true,
       initiallyExpanded: true,
       children: [
-        SizedBox(
-          height: 100,
-          child: CustomPaint(
-            painter: _StylePreviewPainter(
-              pointColor: store.getColor(pointColorDef),
-              pointSize: store.getDouble(pointSizeDef),
-              lineColor: store.getColor(lineColorDef),
-              lineWidth: store.getDouble(lineWidthDef),
-              polygonBorderColor: store.getColor(polygonBorderColorDef),
-              polygonBorderWidth: store.getDouble(polygonBorderWidthDef),
-              polygonFillColor: store.getColor(polygonFillColorDef),
-              polygonFillOpacity: store.getDouble(polygonFillOpacityDef),
-              polygonBorderOpacity: store.getDouble(polygonBorderOpacityDef),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              height: 120,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(
+                    'assets/user_guide/gsi_preview.png',
+                    fit: BoxFit.cover,
+                    alignment: Alignment.center,
+                  ),
+                  CustomPaint(
+                    painter: _StylePreviewPainter(
+                      showPoint: _isGlobalMode || layer is PointLayerNode,
+                      showLine: _isGlobalMode || layer is LineLayerNode,
+                      showPolygon: _isGlobalMode || layer is PolygonLayerNode,
+                      pointColor: store.getColor(pointColorDef),
+                      pointOpacity: store.getDouble(pointOpacityDef),
+                      pointSize: store.getDouble(pointSizeDef),
+                      lineColor: store.getColor(lineColorDef),
+                      lineOpacity: store.getDouble(lineOpacityDef),
+                      lineWidth: store.getDouble(lineWidthDef),
+                      polygonBorderColor: store.getColor(polygonBorderColorDef),
+                      polygonBorderWidth: store.getDouble(polygonBorderWidthDef),
+                      polygonFillColor: store.getColor(polygonFillColorDef),
+                      polygonFillOpacity: store.getDouble(polygonFillOpacityDef),
+                      polygonBorderOpacity: store.getDouble(polygonBorderOpacityDef),
+                      labelEnabled: store.getBool(labelEnabledDef),
+                      labelFontSize: store.getDouble(labelFontSizeDef),
+                      labelColor: store.getColor(labelColorDef),
+                      labelHaloColor: store.getColor(labelHaloColorDef),
+                      labelOpacity: store.getDouble(labelOpacityDef),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            size: const Size(double.infinity, 100),
           ),
         ),
       ],
@@ -763,97 +910,184 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
 // ============================================================
 
 class _StylePreviewPainter extends CustomPainter {
+  final bool showPoint;
+  final bool showLine;
+  final bool showPolygon;
   final Color pointColor;
+  final double pointOpacity;
   final double pointSize;
   final Color lineColor;
+  final double lineOpacity;
   final double lineWidth;
   final Color polygonBorderColor;
   final double polygonBorderWidth;
   final Color polygonFillColor;
   final double polygonFillOpacity;
   final double polygonBorderOpacity;
+  final bool labelEnabled;
+  final double labelFontSize;
+  final Color labelColor;
+  final Color labelHaloColor;
+  final double labelOpacity;
 
   _StylePreviewPainter({
+    this.showPoint = true,
+    this.showLine = true,
+    this.showPolygon = true,
     required this.pointColor,
+    required this.pointOpacity,
     required this.pointSize,
     required this.lineColor,
+    required this.lineOpacity,
     required this.lineWidth,
     required this.polygonBorderColor,
     required this.polygonBorderWidth,
     required this.polygonFillColor,
     required this.polygonFillOpacity,
     required this.polygonBorderOpacity,
+    required this.labelEnabled,
+    required this.labelFontSize,
+    required this.labelColor,
+    required this.labelHaloColor,
+    required this.labelOpacity,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    final allThree = showPoint && showLine && showPolygon;
+    final polyCx = allThree ? size.width * 0.75 : size.width * 0.5;
+    final polyCy = size.height * 0.5;
+
     // ポリゴン（六角形）
-    final polygonPath = Path();
-    final cx = size.width * 0.75;
-    final cy = size.height * 0.5;
-    const r = 35.0;
-    for (int i = 0; i < 6; i++) {
-      final angle = (i * 60 - 90) * math.pi / 180;
-      final x = cx + r * math.cos(angle);
-      final y = cy + r * math.sin(angle);
-      if (i == 0) {
-        polygonPath.moveTo(x, y);
-      } else {
-        polygonPath.lineTo(x, y);
+    if (showPolygon) {
+      final polygonPath = Path();
+      final rx = allThree ? 35.0 : 64.0;
+      final ry = allThree ? 35.0 : 42.0;
+      for (int i = 0; i < 6; i++) {
+        final angle = (i * 60 - 90) * math.pi / 180;
+        final x = polyCx + rx * math.cos(angle);
+        final y = polyCy + ry * math.sin(angle);
+        if (i == 0) {
+          polygonPath.moveTo(x, y);
+        } else {
+          polygonPath.lineTo(x, y);
+        }
       }
+      polygonPath.close();
+      canvas.drawPath(
+        polygonPath,
+        Paint()
+          ..color = polygonFillColor.withValues(alpha: polygonFillOpacity)
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawPath(
+        polygonPath,
+        Paint()
+          ..color = polygonBorderColor.withValues(alpha: polygonBorderOpacity)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = polygonBorderWidth,
+      );
     }
-    polygonPath.close();
-    canvas.drawPath(
-      polygonPath,
-      Paint()
-        ..color = polygonFillColor.withValues(alpha: polygonFillOpacity)
-        ..style = PaintingStyle.fill,
-    );
-    canvas.drawPath(
-      polygonPath,
-      Paint()
-        ..color = polygonBorderColor.withValues(alpha: polygonBorderOpacity)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = polygonBorderWidth,
-    );
 
     // ライン
-    final linePath = Path()
-      ..moveTo(size.width * 0.35, size.height * 0.7)
-      ..quadraticBezierTo(
-        size.width * 0.5,
-        size.height * 0.2,
-        size.width * 0.65,
-        size.height * 0.5,
+    if (showLine) {
+      final linePath = Path();
+      if (allThree) {
+        linePath
+          ..moveTo(size.width * 0.35, size.height * 0.7)
+          ..quadraticBezierTo(
+            size.width * 0.5,
+            size.height * 0.2,
+            size.width * 0.65,
+            size.height * 0.5,
+          );
+      } else {
+        linePath
+          ..moveTo(size.width * 0.12, size.height * 0.75)
+          ..cubicTo(
+            size.width * 0.38,
+            size.height * 0.15,
+            size.width * 0.62,
+            size.height * 0.85,
+            size.width * 0.88,
+            size.height * 0.25,
+          );
+      }
+      canvas.drawPath(
+        linePath,
+        Paint()
+          ..color = lineColor.withValues(alpha: lineOpacity)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = lineWidth
+          ..strokeCap = StrokeCap.round,
       );
-    canvas.drawPath(
-      linePath,
-      Paint()
-        ..color = lineColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = lineWidth
-        ..strokeCap = StrokeCap.round,
-    );
+    }
 
     // ポイント
-    canvas.drawCircle(
-      Offset(size.width * 0.15, size.height * 0.5),
-      pointSize / 2,
-      Paint()
-        ..color = pointColor
-        ..style = PaintingStyle.fill,
-    );
+    if (showPoint) {
+      final pointPaint = Paint()
+        ..color = pointColor.withValues(alpha: pointOpacity)
+        ..style = PaintingStyle.fill;
+      if (allThree) {
+        canvas.drawCircle(
+          Offset(size.width * 0.15, size.height * 0.5),
+          pointSize / 2,
+          pointPaint,
+        );
+      } else {
+        for (final pos in [
+          Offset(size.width * 0.25, size.height * 0.62),
+          Offset(size.width * 0.50, size.height * 0.45),
+          Offset(size.width * 0.75, size.height * 0.55),
+        ]) {
+          canvas.drawCircle(pos, pointSize / 2, pointPaint);
+        }
+      }
+    }
+
+    // ラベル
+    if (labelEnabled && labelOpacity > 0) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: 'ABC',
+          style: TextStyle(
+            fontSize: labelFontSize,
+            color: labelColor.withValues(alpha: labelOpacity),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final labelCx = allThree ? polyCx : size.width * 0.5;
+      final labelCy = allThree ? polyCy : size.height * 0.5;
+      final origin = Offset(labelCx - tp.width / 2, labelCy - tp.height / 2);
+      final box = Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(box, const Radius.circular(3)),
+        Paint()..color = labelHaloColor.withValues(alpha: 0.85 * labelOpacity),
+      );
+      tp.paint(canvas, origin);
+    }
   }
 
   @override
   bool shouldRepaint(covariant _StylePreviewPainter old) =>
+      old.showPoint != showPoint ||
+      old.showLine != showLine ||
+      old.showPolygon != showPolygon ||
       old.pointColor != pointColor ||
+      old.pointOpacity != pointOpacity ||
       old.pointSize != pointSize ||
       old.lineColor != lineColor ||
+      old.lineOpacity != lineOpacity ||
       old.lineWidth != lineWidth ||
       old.polygonBorderColor != polygonBorderColor ||
       old.polygonBorderWidth != polygonBorderWidth ||
       old.polygonFillColor != polygonFillColor ||
       old.polygonFillOpacity != polygonFillOpacity ||
-      old.polygonBorderOpacity != polygonBorderOpacity;
+      old.polygonBorderOpacity != polygonBorderOpacity ||
+      old.labelEnabled != labelEnabled ||
+      old.labelFontSize != labelFontSize ||
+      old.labelColor != labelColor ||
+      old.labelHaloColor != labelHaloColor ||
+      old.labelOpacity != labelOpacity;
 }

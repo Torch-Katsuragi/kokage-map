@@ -619,7 +619,7 @@ class BaseMapService extends ChangeNotifier {
       _coalesce('tile:${provider.id}/$z/$x/$y', () => _getTileUncoalesced(provider, z, x, y));
 
   Future<Uint8List?> _getTileUncoalesced(BaseMapProvider provider, int z, int x, int y) async {
-    if (provider.type == BaseMapType.generated) {
+    if (provider.type == BaseMapType.generated || _generators.containsKey(provider.id)) {
       return z < provider.minZoom || z > provider.maxZoom ? null : _getGeneratedTile(provider, z, x, y);
     }
     // プロバイダーの最大ズームレベルを超えている場合は取りに行かず直接フォールバック

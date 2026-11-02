@@ -32,8 +32,14 @@ sealed class SettingDef {
   final String key;
   final String title;
   final String? description;
+  final bool Function(SettingsStore store)? visibleWhen;
 
-  const SettingDef({required this.key, required this.title, this.description});
+  const SettingDef({
+    required this.key,
+    required this.title,
+    this.description,
+    this.visibleWhen,
+  });
 }
 
 /// double値スライダー設定
@@ -49,6 +55,7 @@ class DoubleDef extends SettingDef {
     required super.key,
     required super.title,
     super.description,
+    super.visibleWhen,
     required this.defaultValue,
     required this.min,
     required this.max,
@@ -70,6 +77,7 @@ class SwitchDef extends SettingDef {
     required super.key,
     required super.title,
     super.description,
+    super.visibleWhen,
     required this.defaultValue,
     this.icon,
     this.kmetaGetter,
@@ -85,6 +93,7 @@ class ColorDef extends SettingDef {
     required super.key,
     required super.title,
     super.description,
+    super.visibleWhen,
     required this.defaultArgb,
     this.kmetaGetter,
   });
@@ -103,6 +112,7 @@ class IntDef extends SettingDef {
     required super.key,
     required super.title,
     super.description,
+    super.visibleWhen,
     required this.defaultValue,
     required this.min,
     required this.max,
@@ -127,6 +137,7 @@ class CustomDef extends SettingDef {
     required super.key,
     required super.title,
     super.description,
+    super.visibleWhen,
     required this.builder,
   });
 }
@@ -140,6 +151,7 @@ class StringDef extends SettingDef {
     required super.key,
     required super.title,
     super.description,
+    super.visibleWhen,
     required this.defaultValue,
     this.kmetaGetter,
   });

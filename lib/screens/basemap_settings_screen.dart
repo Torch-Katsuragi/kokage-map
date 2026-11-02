@@ -24,7 +24,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 
-import '../core/terrain/dem_tiles.dart' show DemTileSource;
+import '../core/terrain/dem_tiles.dart' show DemTileSource;
+import '../core/terrain/terrain_appearance.dart';
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
 import '../models/basemap_layer.dart';
@@ -609,7 +610,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
       for (final (p, _) in _baseMapService.activeLayers)
         if (p.attribution.isNotEmpty) p.attribution else if (p.isCustom) p.name,
     };
-    final dems = {for (final s in DemTileSource.defaultCascade) s.attribution};
+    final dems = {for (final s in DemTileSource.cascadeFor(highPrecision: TerrainAppearance.highPrecision)) s.attribution};
     return SettingsSection(
       title: t.basemap.sources.title,
       icon: Icons.public,

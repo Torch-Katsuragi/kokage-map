@@ -1126,6 +1126,11 @@ class _ViewRenderer {
     final evaluator = def?.evaluator;
     if (def == null || evaluator == null) return null;
     final classKeys = <String>[];
+    double? overrideOpacity(double? styleOp, double? symbolOp) {
+      if (symbolOp == 0) return 0; // QGIS で style=no（塗り・線なし）の分類は透明のまま保つ
+      return styleOp ?? symbolOp;
+    }
+
     for (var i = 0; i < def.classes.length; i++) {
       final symbol = def.classes[i].style;
       if (symbol == null) {
@@ -1133,7 +1138,12 @@ class _ViewRenderer {
         continue;
       }
       final k = '$key#$i';
-      groups[k] = symbol.mergeWith(style);
+      groups[k] = symbol.mergeWith(style).copyWith(
+        pointOpacity: overrideOpacity(style.pointOpacity, symbol.pointOpacity),
+        lineOpacity: overrideOpacity(style.lineOpacity, symbol.lineOpacity),
+        polygonFillOpacity: overrideOpacity(style.polygonFillOpacity, symbol.polygonFillOpacity),
+        polygonBorderOpacity: overrideOpacity(style.polygonBorderOpacity, symbol.polygonBorderOpacity),
+      );
       ranks[k] = rank;
       classKeys.add(k);
     }

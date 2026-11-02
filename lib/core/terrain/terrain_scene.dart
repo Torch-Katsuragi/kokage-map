@@ -33,6 +33,8 @@ class TerrainFeatureStyle {
     required this.outlineWidth,
     required this.pointColor,
     required this.pointSize,
+    this.labelTextStyle,
+    this.labelHaloColor,
   });
 
   final Color lineColor;
@@ -42,6 +44,8 @@ class TerrainFeatureStyle {
   final double outlineWidth;
   final Color pointColor;
   final double pointSize;
+  final TextStyle? labelTextStyle;
+  final Color? labelHaloColor;
 
   static const fallback = TerrainFeatureStyle(
     lineColor: Color(0xFF1E88E5),
@@ -62,6 +66,8 @@ class TerrainFeatureStyle {
         outlineWidth: outlineWidth,
         pointColor: pointColor,
         pointSize: pointSize,
+        labelTextStyle: labelTextStyle,
+        labelHaloColor: labelHaloColor,
       );
 
   /// `#RRGGBB` と不透明度から色を作る（MapStyleGroup の形）
@@ -174,7 +180,17 @@ class TerrainSceneBuilder {
       if (!inside(at)) return;
       final text = f.properties[labelProp];
       if (text is! String || text.isEmpty) return;
-      labels.add(TerrainLabel(x: at.dx, y: at.dy, text: text, style: labelTextStyle, markerGap: markerGap));
+      final fStyle = _styleOf(f);
+      final textStyle = fStyle.labelTextStyle ?? labelTextStyle;
+      if ((textStyle.color?.a ?? 1.0) <= 0) return;
+      labels.add(TerrainLabel(
+        x: at.dx,
+        y: at.dy,
+        text: text,
+        style: textStyle,
+        haloColor: fStyle.labelHaloColor,
+        markerGap: markerGap,
+      ));
     }
 
     for (final f in lines) {
@@ -182,9 +198,11 @@ class TerrainSceneBuilder {
       for (final chain in chainsOf(f.geometry)) {
         final pts = _toLocal(chain);
         if (pts.length < 2 || !bboxHits(pts)) continue;
-        final pieces = clipRect == null ? [pts] : clipPolylineToRect(pts, clipRect);
-        for (final piece in pieces) {
-          outLines.add(LiftedPolyline.lift(piece, mesh, color: style.lineColor, widthPx: style.lineWidth));
+        if (style.lineColor.a > 0 && style.lineWidth > 0) {
+          final pieces = clipRect == null ? [pts] : clipPolylineToRect(pts, clipRect);
+          for (final piece in pieces) {
+            outLines.add(LiftedPolyline.lift(piece, mesh, color: style.lineColor, widthPx: style.lineWidth));
+          }
         }
         label(_midpointAlong(pts), f);
       }
@@ -201,13 +219,15 @@ class TerrainSceneBuilder {
         if (fillRing.length >= 3 && style.fillColor.a > 0) {
           outPolys.add(LiftedPolygon.lift(fillRing, mesh, color: style.fillColor, clipCells: polygonClipCells));
         }
-        for (final ring in rings) {
-          final pts = _toLocal(ring);
-          if (pts.length < 2) continue;
-          if ((pts.first - pts.last).distance > 1e-6) pts.add(pts.first);
-          final pieces = clipRect == null ? [pts] : clipPolylineToRect(pts, clipRect);
-          for (final piece in pieces) {
-            outlines.add(LiftedPolyline.lift(piece, mesh, color: style.outlineColor, widthPx: style.outlineWidth));
+        if (style.outlineColor.a > 0 && style.outlineWidth > 0) {
+          for (final ring in rings) {
+            final pts = _toLocal(ring);
+            if (pts.length < 2) continue;
+            if ((pts.first - pts.last).distance > 1e-6) pts.add(pts.first);
+            final pieces = clipRect == null ? [pts] : clipPolylineToRect(pts, clipRect);
+            for (final piece in pieces) {
+              outlines.add(LiftedPolyline.lift(piece, mesh, color: style.outlineColor, widthPx: style.outlineWidth));
+            }
           }
         }
         var cx = 0.0;
@@ -225,7 +245,9 @@ class TerrainSceneBuilder {
       if (g == null) continue;
       final p = _toLocalPosition(g.position);
       if (!inside(p)) continue;
-      outPoints.add(TerrainPoint(x: p.dx, y: p.dy, color: style.pointColor, sizePx: style.pointSize));
+      if (style.pointColor.a > 0 && style.pointSize > 0) {
+        outPoints.add(TerrainPoint(x: p.dx, y: p.dy, color: style.pointColor, sizePx: style.pointSize));
+      }
       label(p, f, markerGap: style.pointSize + 2);
     }
     return TerrainScene(lines: outLines, polygons: outPolys, outlines: outlines, points: outPoints, labels: labels);

@@ -162,6 +162,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   late final TerrainCamera _camera;
   @override
   late final TerrainWorld _world;
+  @override
   late final TerrainFramePlanner _planner;
   @override
   late final TerrainWorldPainter _painter;
@@ -201,9 +202,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   }
 
   /// 等高線タイルを作る（`contour_tiles.dart`）。テクスチャの段 z の 1 段下の DEM タイルの、該当する 1/4 を描く。
-  /// DEM の段が足りなければ（z > 18）さらに上の段から
+  /// DEM の段が足りなければ（その場所のソース上限を超える段なら）さらに上の段から
   Future<Uint8List?> _renderContourTile(int z, int x, int y) async {
-    final zDem = math.min(z - 1, _world.maxZoom);
+    final zDem = math.min(z - 1, _world.maxZoomForTile(z, x, y));
     final k = z - zDem;
     if (zDem < _world.minZoom || k < 1 || k > 4) return null;
     final key = TileKey(zDem, x >> k, y >> k);
@@ -301,8 +302,9 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _attribution = _osmAttribution();
     widget.baseMapService.addListener(_onBasemapChanged);
     widget.baseMapService.registerTileGenerator(BaseMapProvider.contourOverlay.id, _renderContourTile);
+    final hp = TerrainAppearance.highPrecision;
     _world = TerrainWorld(
-      demSources: DemTileSource.defaultCascade,
+      demSources: DemTileSource.cascadeFor(highPrecision: hp),
       // 標高タイルは背景地図と同じ MBTiles キャッシュに入る（Z 付きレイヤの頂点の標高も同じ取り方: dem_elevation.dart）
       demFetcher: baseMapDemFetcher(widget.baseMapService),
       // 基図は設定で変わりうるので、取りに行くたびに今のものを見る
@@ -312,11 +314,12 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
       },
       imageCache: _tileImages,
     )
+      ..highPrecision = hp
       ..textureLayers = _layerFetchers
       ..addListener(_onWorldChanged)
       ..textureDecorator = _decorateTexture
       ..onTextureApplied = _onTextureApplied;
-    _planner = TerrainFramePlanner(_world);
+    _planner = TerrainFramePlanner(_world)..setHighPrecision(hp);
     _painter = TerrainWorldPainter(
       camera: _camera,
       tiles: const [],
@@ -588,7 +591,15 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _meshSw.reset();
     _frameMs = DateTime.now().millisecondsSinceEpoch;
     _camera.viewport = _size;
-    final plan = _planner.plan(_camera, _size, gesturing: _gesturing);
+    final plan = _planner.plan(
+      _camera,
+      _size,
+      gesturing: _gesturing,
+      isTileDisplayReady: (tile, step) => tile.builders.isNotEmpty,
+      onWarmTile: (tile, step) {
+        tile.builderFor(step, chunkSize: _world.chunkSize, skirtDepth: _skirtOf(tile)).then((_) => _scheduleRefresh());
+      },
+    );
     final planMs = sw.elapsedMilliseconds;
     _lastPlan = plan;
     final nowLoading = _world.pendingCount > 0;

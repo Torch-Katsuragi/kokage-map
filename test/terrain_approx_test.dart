@@ -21,6 +21,7 @@ import 'package:image/image.dart' as img;
 import 'package:root_maps/core/terrain/dem_grid.dart';
 import 'package:root_maps/core/terrain/dem_tiles.dart';
 import 'package:root_maps/core/terrain/terrain_world.dart';
+import 'package:root_maps/core/terrain/wakayama_potree_dem.dart';
 import 'package:root_maps/core/terrain/web_mercator.dart';
 
 DemGrid _dem(TileKey key, double Function(int c, int r) f) {
@@ -36,9 +37,9 @@ DemGrid _dem(TileKey key, double Function(int c, int r) f) {
 }
 
 void main() {
-  group('DemTileSource.decode（地理院 PNG）', () {
+  group('DemTileSource.decode（地理院 PNG・RGBA 透明 NoData）', () {
     const gsi = DemTileSource.gsiDem1a;
-    test('正・負・無効', () {
+    test('正・負・無効・透明ピクセル（alpha=0）', () {
       // x = 12345 → 123.45m
       expect(gsi.decode(0, 0x30, 0x39), closeTo(123.45, 1e-6));
       // x = 2^24 - 500 → -5.00m
@@ -46,8 +47,11 @@ void main() {
       expect(gsi.decode((x >> 16) & 255, (x >> 8) & 255, x & 255), closeTo(-5.0, 1e-6));
       // (128, 0, 0) = 無効
       expect(gsi.decode(128, 0, 0).isNaN, isTrue);
+      // 地域別 DEM タイルの範囲外ピクセル（RGBA = 0,0,0,0）は 0.00m ではなく NaN になる
+      expect(gsi.decode(0, 0, 0, 0).isNaN, isTrue);
       // Terrarium は従来どおり
       expect(DemTileSource.aws.decode(128, 100, 0), closeTo(100, 1e-6));
+      expect(DemTileSource.aws.decode(0, 0, 0, 0).isNaN, isTrue);
     });
   });
 
@@ -96,15 +100,19 @@ void main() {
 
   group('TerrainWorld のソースの重ね合わせ', () {
     // 地理院 PNG（x = 2^16R + 2^8G + B、0.01m）。左半分が無効 (128,0,0)、右半分 200m のタイル
-    Uint8List gsiTile({required bool leftInvalid, required double height}) {
-      final im = img.Image(width: 256, height: 256);
+    Uint8List gsiTile({required bool leftInvalid, required double height, bool transparentInvalid = false}) {
+      final im = img.Image(width: 256, height: 256, numChannels: 4);
       final x = (height * 100).round();
       for (var y = 0; y < 256; y++) {
         for (var c = 0; c < 256; c++) {
           if (leftInvalid && c < 128) {
-            im.setPixelRgb(c, y, 128, 0, 0);
+            if (transparentInvalid) {
+              im.setPixelRgba(c, y, 0, 0, 0, 0);
+            } else {
+              im.setPixelRgba(c, y, 128, 0, 0, 255);
+            }
           } else {
-            im.setPixelRgb(c, y, (x >> 16) & 255, (x >> 8) & 255, x & 255);
+            im.setPixelRgba(c, y, (x >> 16) & 255, (x >> 8) & 255, x & 255, 255);
           }
         }
       }
@@ -143,6 +151,71 @@ void main() {
       await world2.debugLoadDem(const TileKey(15, 1, 1));
       await world2.debugLoadDem(const TileKey(15, 1, 1));
       expect(fetches.where((f) => f == 'gsi_dem1a_png').length, 1, reason: '404 は 1 回だけ');
+    });
+
+    test('高度な3D地図: 地域別 bbox フィルタと RGBA 透明 NoData のフォールバック合成', () async {
+      // 和歌山県北山村（z17/115035/52382）のタイルでは東京・静岡のソースは bbox 外なので呼ばれない
+      final regionalFine = gsiTile(leftInvalid: true, height: 320, transparentInvalid: true);
+      final gsiFallback = gsiTile(leftInvalid: false, height: 310);
+      final requested = <String>[];
+      final world = TerrainWorld(
+        demSources: DemTileSource.highPrecisionCascade,
+        demFetcher: (s, z, x, y) async {
+          requested.add(s.id);
+          if (s == DemTileSource.wakayama1gPotree) return regionalFine;
+          if (s == DemTileSource.gsiDem1a) return gsiFallback;
+          return null;
+        },
+        textureFetcher: (z, x, y) async => null,
+      )..highPrecision = true;
+
+      final dem = await world.debugLoadDem(const TileKey(17, 115035, 52382));
+      expect(dem, isNotNull);
+      expect(requested, ['wakayama_1g_potree', 'gsi_dem1a_png'], reason: 'bbox 外の都県ソースは一切呼ばれない');
+      expect(dem!.heights[128 * 256 + 10], closeTo(310, 0.01), reason: '透明ピクセル (A=0) は DEM1A で埋まる');
+      expect(dem.heights[128 * 256 + 200], closeTo(320, 0.01), reason: '有効ピクセルは和歌山 1m グリッドの値');
+
+      // 場所ごとの maxZoom: 東京駅は z19、静岡は z18、北山村は z17
+      expect(
+        world.maxZoomForPoint(WebMercator.xFromLon(139.767), WebMercator.yFromLat(35.681)),
+        19,
+      );
+      expect(
+        world.maxZoomForPoint(WebMercator.xFromLon(138.383), WebMercator.yFromLat(34.975)),
+        18,
+      );
+      expect(
+        world.maxZoomForPoint(WebMercator.xFromLon(135.952), WebMercator.yFromLat(33.965)),
+        17,
+      );
+    });
+  });
+
+  group('和歌山県 1m グリッド（EPSG:6674 河瀬投影・図郭解決・1px 孤立スパイク除去）', () {
+    test('EPSG:6674 座標変換と 1:2,500 国土基本図の図郭コード解決', () {
+      final (eMin, nMin) = lonLatToEpsg6674(135.9460, 33.9610);
+      final (eMax, nMax) = lonLatToEpsg6674(135.9585, 33.9705);
+      // 北山村大沼周辺: 東向き約 -5.0km〜-3.8km、北向き約 -226.2km〜-225.1km
+      expect(eMin, closeTo(-4991.5, 5.0));
+      expect(nMin, closeTo(-226183.3, 5.0));
+      final meshes = epsg6674ToWakayamaMeshes(eMin, nMin, eMax, nMax);
+      expect(meshes, ['06RD582', '06RD591']);
+    });
+
+    test('despikeIsolated1px: 1px の孤立針スパイクだけ除去し、線状の堰堤・法肩は保持する', () {
+      const w = 7, h = 7;
+      final grid = Float32List(w * h)..fillRange(0, w * h, 100.0);
+      // (2, 2) に 1px 孤立スパイク (+12m)
+      grid[2 * w + 2] = 112.0;
+      // 5 行目に線状の砂防堰堤・擁壁の段差 (+8m が横に貫通して連なる)
+      for (var c = 0; c < w; c++) {
+        grid[5 * w + c] = 108.0;
+      }
+      final cleaned = despikeIsolated1px(grid, w, h);
+      expect(cleaned[2 * w + 2], closeTo(100.0, 1e-5), reason: '1px 孤立スパイクは周囲の中央値に戻る');
+      for (var c = 1; c < w - 1; c++) {
+        expect(cleaned[5 * w + c], closeTo(108.0, 1e-5), reason: '隣接点がある構造物の角は削られない');
+      }
     });
   });
 

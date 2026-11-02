@@ -43,10 +43,12 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
     final d = _defaultStyle();
     return [
       '${d.fillColor.toARGB32()} ${d.outlineColor.toARGB32()} ${d.lineColor.toARGB32()} ${d.pointColor.toARGB32()} '
-          '${d.outlineWidth} ${d.lineWidth} ${d.pointSize}',
+          '${d.outlineWidth} ${d.lineWidth} ${d.pointSize} '
+          '${d.labelTextStyle?.fontSize} ${d.labelTextStyle?.color?.toARGB32()} ${d.labelHaloColor?.toARGB32()}',
       for (final g in widget.scene.styleGroups)
         '${g.key} ${g.fillHex} ${g.fillOpacity} ${g.outlineHex} ${g.outlineOpacity} ${g.borderWidth} '
-            '${g.lineHex} ${g.lineWidth} ${g.pointHex} ${g.pointSize}',
+            '${g.lineHex} ${g.lineWidth} ${g.lineOpacity} ${g.pointHex} ${g.pointSize} ${g.pointOpacity} '
+            '${g.labelFontSize} ${g.labelHex} ${g.labelHaloHex} ${g.labelOpacity}',
     ].join('|');
   }
 

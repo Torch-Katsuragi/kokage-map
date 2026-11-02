@@ -110,12 +110,50 @@ class _SettingsSectionState extends State<SettingsSection> {
                 ),
               ),
             ),
-            if (!widget.collapsible || _expanded) ...[
-              const SizedBox(height: 12),
-              ...widget.children,
-            ],
+            ClipRect(
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: (!widget.collapsible || _expanded)
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 12),
+                          ...widget.children,
+                        ],
+                      )
+                    : const SizedBox(width: double.infinity, height: 0),
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// トグル等の条件に応じて項目をアニメーション付きで折りたたみ・展開するラッパー
+class SettingsCollapsibleChild extends StatelessWidget {
+  final bool visible;
+  final Widget child;
+
+  const SettingsCollapsibleChild({
+    super.key,
+    required this.visible,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        alignment: Alignment.topCenter,
+        child: visible
+            ? child
+            : const SizedBox(width: double.infinity, height: 0),
       ),
     );
   }
@@ -605,6 +643,9 @@ class DataDrivenSettingsScreen extends StatefulWidget {
   /// セクションフィルタ（表示するセクションを制御）
   final bool Function(SettingSectionDef)? sectionFilter;
 
+  /// 項目フィルタ（表示する設定項目を制御）
+  final bool Function(SettingSectionDef, SettingDef)? itemFilter;
+
   const DataDrivenSettingsScreen({
     super.key,
     required this.title,
@@ -615,6 +656,7 @@ class DataDrivenSettingsScreen extends StatefulWidget {
     this.onInit,
     this.onValueChanged,
     this.sectionFilter,
+    this.itemFilter,
   });
 
   @override
@@ -684,6 +726,10 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
   }
 
   Widget _buildSection(SettingSectionDef section) {
+    final items = [
+      for (final item in section.items)
+        if (widget.itemFilter?.call(section, item) ?? true) item,
+    ];
     return SettingsSection(
       key: TutorialTargets.settingSection(section.id),
       title: section.title,
@@ -699,10 +745,17 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
           ),
           const SizedBox(height: 8),
         ],
-        for (int i = 0; i < section.items.length; i++) ...[
-          if (i > 0) const Divider(),
-          _buildSettingTile(section.items[i]),
-        ],
+        for (int i = 0; i < items.length; i++)
+          SettingsCollapsibleChild(
+            visible: items[i].visibleWhen?.call(_store) ?? true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (i > 0) const Divider(),
+                _buildSettingTile(items[i]),
+              ],
+            ),
+          ),
       ],
     );
   }

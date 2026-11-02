@@ -171,7 +171,7 @@ void main() {
   });
 
   group('coverSet（手持ちで最良の被覆）', () {
-    test('理想の段が無ければ親で埋め、同じ親は 1 回だけ。子があれば子で埋める', () {
+    test('理想の段が無ければ親で埋め、子がすべて揃って表示準備ができるまで親と子を重ねない', () {
       final w = TerrainWorld(
         demSources: const [DemTileSource.aws],
         demFetcher: (s, z, x, y) async => null,
@@ -184,11 +184,37 @@ void main() {
       final cam = TerrainCamera(centerX: 0, centerY: 0, scale: 1);
       final cover = w.coverSet(range, cam);
       expect(cover.map((t) => t.key).toList(), [parent]);
-      // 子が 1 枚届いたら、その場所は子、残りは親
+      // 子が 1 枚だけ届いても、残り 3 枚が欠けている間は親のまま維持して重ね描きを防ぐ
       w.addTileForTest(fakeTile(const TileKey(13, 200, 200), 0));
       final cover2 = w.coverSet(range, cam).map((t) => t.key).toList();
-      expect(cover2, containsAll([parent, const TileKey(13, 200, 200)]));
-      expect(cover2.length, 2);
+      expect(cover2, [parent]);
+      // 残り 3 枚も揃ったら親から子 4 枚へ一括スワップする
+      w.addTileForTest(fakeTile(const TileKey(13, 201, 200), 0));
+      w.addTileForTest(fakeTile(const TileKey(13, 200, 201), 0));
+      w.addTileForTest(fakeTile(const TileKey(13, 201, 201), 0));
+      final readyKeys = <TileKey>{parent, const TileKey(13, 200, 200), const TileKey(13, 201, 200), const TileKey(13, 200, 201)};
+      final warmed = <TileKey>{};
+      // 4 枚揃っていても 1 枚（201,201）のメッシュが未構築なら裏でウォームアップしつつ親を表示
+      final coverWarming = w
+          .coverSet(
+            range,
+            cam,
+            isTileDisplayReady: (t) => readyKeys.contains(t.key),
+            onWarmTile: (t) => warmed.add(t.key),
+          )
+          .map((t) => t.key)
+          .toList();
+      expect(coverWarming, [parent]);
+      expect(warmed, {const TileKey(13, 201, 201)});
+      // 4 枚すべてのメッシュ準備が完了したら子 4 枚に切り替わる
+      readyKeys.add(const TileKey(13, 201, 201));
+      final coverReady = w.coverSet(range, cam, isTileDisplayReady: (t) => readyKeys.contains(t.key)).map((t) => t.key).toList();
+      expect(coverReady.toSet(), {
+        const TileKey(13, 200, 200),
+        const TileKey(13, 201, 200),
+        const TileKey(13, 200, 201),
+        const TileKey(13, 201, 201),
+      });
       // 理想が z12 で無く、子（z13）だけあるとき
       final w2 = TerrainWorld(
         demSources: const [DemTileSource.aws],

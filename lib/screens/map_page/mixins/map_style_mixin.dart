@@ -25,13 +25,19 @@ import '../../layer_style_settings_screen.dart'
         layerStyleSettings,
         pointSizeDef,
         pointColorDef,
+        pointOpacityDef,
         lineWidthDef,
         lineColorDef,
+        lineOpacityDef,
         polygonBorderWidthDef,
         polygonBorderColorDef,
         polygonFillColorDef,
         polygonFillOpacityDef,
-        polygonBorderOpacityDef;
+        polygonBorderOpacityDef,
+        labelFontSizeDef,
+        labelColorDef,
+        labelHaloColorDef,
+        labelOpacityDef;
 import '../map_page_state_base.dart';
 
 mixin MapStyleMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
@@ -73,11 +79,21 @@ mixin MapStyleMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
             lineHex: colorToHex(
               style.resolveColor(lineColorDef, kmeta),
             ),
+            lineOpacity: style.resolveDouble(lineOpacityDef, kmeta),
             lineWidth: style.resolveDouble(lineWidthDef, kmeta),
             pointHex: colorToHex(
               style.resolveColor(pointColorDef, kmeta),
             ),
+            pointOpacity: style.resolveDouble(pointOpacityDef, kmeta),
             pointSize: style.resolveDouble(pointSizeDef, kmeta),
+            labelFontSize: style.resolveDouble(labelFontSizeDef, kmeta),
+            labelHex: colorToHex(
+              style.resolveColor(labelColorDef, kmeta),
+            ),
+            labelHaloHex: colorToHex(
+              style.resolveColor(labelHaloColorDef, kmeta),
+            ),
+            labelOpacity: style.resolveDouble(labelOpacityDef, kmeta),
           ),
         );
       }

@@ -28,9 +28,11 @@ typedef _SceneBuilderFor = TerrainSceneBuilder Function(
 /// 鍵が変わるたびに作り直す。スタイルの組み立てとフィーチャの bbox 索引もここ（焼き込みと共用）
 mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
   TerrainWorld get _world;
+  TerrainFramePlanner get _planner;
   bool get _gesturing;
   FeatureBakeLedger get _bakes;
   int? get _bakedContentRevision;
+  String _styleSignature();
   void _scheduleRefresh();
 
   final Map<_SceneKey, _TileScene> _scenes = {};
@@ -101,8 +103,15 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     _dynamicScenes.removeWhere((k, _) => !_world.has(k.$1));
   }
 
-  /// 地形の見た目（色分け）の設定が変わった。合成を捨てる
+  /// 地形の見た目（精度・色分け）の設定が変わった。合成を捨てる
   void _onAppearanceChanged() {
+    final hp = TerrainAppearance.highPrecision;
+    if (_world.highPrecision != hp) {
+      _planner.setHighPrecision(hp);
+      _world.setHighPrecision(hp);
+      _TerrainMapLayerState._tileImages.clear();
+      unawaited(widget.baseMapService.clearCache(providerId: BaseMapProvider.contourOverlay.cacheId));
+    }
     _scenes.clear();
     _scheduleRefresh();
   }
@@ -113,13 +122,18 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
   // ── スタイル ─────────────────────────────────────
 
   TerrainFeatureStyle _styleFromGroup(MapStyleGroup g) => TerrainFeatureStyle(
-        lineColor: TerrainFeatureStyle.fromHex(g.lineHex),
+        lineColor: TerrainFeatureStyle.fromHex(g.lineHex, g.lineOpacity),
         lineWidth: g.lineWidth,
         fillColor: TerrainFeatureStyle.fromHex(g.fillHex, g.fillOpacity),
         outlineColor: TerrainFeatureStyle.fromHex(g.outlineHex, g.outlineOpacity),
         outlineWidth: g.borderWidth,
-        pointColor: TerrainFeatureStyle.fromHex(g.pointHex),
+        pointColor: TerrainFeatureStyle.fromHex(g.pointHex, g.pointOpacity),
         pointSize: g.pointSize,
+        labelTextStyle: TextStyle(
+          fontSize: g.labelFontSize,
+          color: TerrainFeatureStyle.fromHex(g.labelHex, g.labelOpacity),
+        ),
+        labelHaloColor: TerrainFeatureStyle.fromHex(g.labelHaloHex),
       );
 
   /// View 固有スタイルをキーで引ける形に
@@ -129,13 +143,18 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
   TerrainFeatureStyle _defaultStyle() {
     final s = layerStyleSettings;
     return TerrainFeatureStyle(
-      lineColor: s.getColor(lineColorDef),
+      lineColor: s.getColor(lineColorDef).withValues(alpha: s.getDouble(lineOpacityDef)),
       lineWidth: s.getDouble(lineWidthDef),
       fillColor: s.getColor(polygonFillColorDef).withValues(alpha: s.getDouble(polygonFillOpacityDef)),
       outlineColor: s.getColor(polygonBorderColorDef).withValues(alpha: s.getDouble(polygonBorderOpacityDef)),
       outlineWidth: s.getDouble(polygonBorderWidthDef),
-      pointColor: s.getColor(pointColorDef),
+      pointColor: s.getColor(pointColorDef).withValues(alpha: s.getDouble(pointOpacityDef)),
       pointSize: s.getDouble(pointSizeDef),
+      labelTextStyle: TextStyle(
+        fontSize: s.getDouble(labelFontSizeDef),
+        color: s.getColor(labelColorDef).withValues(alpha: s.getDouble(labelOpacityDef)),
+      ),
+      labelHaloColor: s.getColor(labelHaloColorDef),
     );
   }
 
@@ -178,7 +197,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     final cacheKey = (tile.key, step, tile.borderMask, tile.sourceZoom);
     final staticKey = <Object?>[
       g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images, g.selectedImages,
-      g.lineVertices, g.polygonVertices,
+      g.lineVertices, g.polygonVertices, _styleSignature(),
     ];
     final drawing = GlobalDrawingState.instance;
     final tool = ref.read(currentToolProvider);
@@ -195,7 +214,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     final dynamicKey = <Object?>[
       track.length, session, pins, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview,
       overlayFrameKey, tool is OverlayTransformTool ? tool.rotationHandlePosition : null,
-      deviceLines.length, deviceStation, headingKey, tool.name,
+      deviceLines.length, deviceStation, headingKey, tool.name, _styleSignature(),
     ];
     final key = <Object?>[...staticKey, ...dynamicKey];
     final cached = _scenes[cacheKey];
@@ -208,7 +227,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     final clipCells = math.max(4, (20 / (dem.cellSize * step)).round());
     final labelStyle = TextStyle(
       fontSize: layerStyleSettings.getDouble(labelFontSizeDef),
-      color: layerStyleSettings.getColor(labelColorDef),
+      color: layerStyleSettings.getColor(labelColorDef).withValues(alpha: layerStyleSettings.getDouble(labelOpacityDef)),
     );
     TerrainSceneBuilder builder(Map<String, TerrainFeatureStyle> styles, TerrainFeatureStyle def, String labelProp) =>
         TerrainSceneBuilder(
@@ -506,13 +525,17 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
       labels.addAll(s.labels);
     }
 
-    // 1. 今日の GPS 軌跡（青緑・細め）
+    // 1. 今日の GPS 軌跡（青緑・細め。gps_tracks レイヤにスタイル設定があればそれに合わせる）
     if (track.length >= 2) {
+      final gpsGroup = widget.scene.styleGroups.where((g) => g.key.contains('|gps_history.gpkg/gps_tracks/')).firstOrNull;
+      final gpsStyle = gpsGroup != null
+          ? _styleFromGroup(gpsGroup)
+          : const TerrainFeatureStyle(
+              lineColor: Color(0xCC00897B), lineWidth: 3, fillColor: Color(0x00000000),
+              outlineColor: Color(0x00000000), outlineWidth: 0, pointColor: Color(0xFF00897B), pointSize: 4,
+            );
       add(
-        builder(const {}, const TerrainFeatureStyle(
-          lineColor: Color(0xCC00897B), lineWidth: 3, fillColor: Color(0x00000000),
-          outlineColor: Color(0x00000000), outlineWidth: 0, pointColor: Color(0xFF00897B), pointSize: 4,
-        ), '__no_label__').build(
+        builder(const {}, gpsStyle, '__no_label__').build(
           lines: [
             _lineFeature(track),
           ],

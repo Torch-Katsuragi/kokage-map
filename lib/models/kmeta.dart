@@ -35,8 +35,10 @@ const int kMetaSchemaVersion = 2;
 class KMetaLayerStyle {
   final double? pointSize;
   final Color? pointColor;
+  final double? pointOpacity;
   final double? lineWidth;
   final Color? lineColor;
+  final double? lineOpacity;
   final double? polygonBorderWidth;
   final Color? polygonBorderColor;
   final Color? polygonFillColor;
@@ -63,8 +65,10 @@ class KMetaLayerStyle {
   const KMetaLayerStyle({
     this.pointSize,
     this.pointColor,
+    this.pointOpacity,
     this.lineWidth,
     this.lineColor,
+    this.lineOpacity,
     this.polygonBorderWidth,
     this.polygonBorderColor,
     this.polygonFillColor,
@@ -83,8 +87,10 @@ class KMetaLayerStyle {
   KMetaLayerStyle copyWith({
     double? pointSize,
     Color? pointColor,
+    double? pointOpacity,
     double? lineWidth,
     Color? lineColor,
+    double? lineOpacity,
     double? polygonBorderWidth,
     Color? polygonBorderColor,
     Color? polygonFillColor,
@@ -102,8 +108,10 @@ class KMetaLayerStyle {
       KMetaLayerStyle(
         pointSize: pointSize ?? this.pointSize,
         pointColor: pointColor ?? this.pointColor,
+        pointOpacity: pointOpacity ?? this.pointOpacity,
         lineWidth: lineWidth ?? this.lineWidth,
         lineColor: lineColor ?? this.lineColor,
+        lineOpacity: lineOpacity ?? this.lineOpacity,
         polygonBorderWidth: polygonBorderWidth ?? this.polygonBorderWidth,
         polygonBorderColor: polygonBorderColor ?? this.polygonBorderColor,
         polygonFillColor: polygonFillColor ?? this.polygonFillColor,
@@ -124,8 +132,10 @@ class KMetaLayerStyle {
     return KMetaLayerStyle(
       pointSize: (json['pointSize'] as num?)?.toDouble(),
       pointColor: _parseColor(json['pointColor']),
+      pointOpacity: (json['pointOpacity'] as num?)?.toDouble(),
       lineWidth: (json['lineWidth'] as num?)?.toDouble(),
       lineColor: _parseColor(json['lineColor']),
+      lineOpacity: (json['lineOpacity'] as num?)?.toDouble(),
       polygonBorderWidth: (json['polygonBorderWidth'] as num?)?.toDouble(),
       polygonBorderColor: _parseColor(json['polygonBorderColor']),
       polygonFillColor: _parseColor(json['polygonFillColor']),
@@ -146,8 +156,10 @@ class KMetaLayerStyle {
   Map<String, dynamic> toJson() => {
     if (pointSize != null) 'pointSize': pointSize,
     if (pointColor != null) 'pointColor': _colorToHex(pointColor!),
+    if (pointOpacity != null) 'pointOpacity': pointOpacity,
     if (lineWidth != null) 'lineWidth': lineWidth,
     if (lineColor != null) 'lineColor': _colorToHex(lineColor!),
+    if (lineOpacity != null) 'lineOpacity': lineOpacity,
     if (polygonBorderWidth != null) 'polygonBorderWidth': polygonBorderWidth,
     if (polygonBorderColor != null) 'polygonBorderColor': _colorToHex(polygonBorderColor!),
     if (polygonFillColor != null) 'polygonFillColor': _colorToHex(polygonFillColor!),
@@ -169,8 +181,10 @@ class KMetaLayerStyle {
     return KMetaLayerStyle(
       pointSize: pointSize ?? parent.pointSize,
       pointColor: pointColor ?? parent.pointColor,
+      pointOpacity: pointOpacity ?? parent.pointOpacity,
       lineWidth: lineWidth ?? parent.lineWidth,
       lineColor: lineColor ?? parent.lineColor,
+      lineOpacity: lineOpacity ?? parent.lineOpacity,
       polygonBorderWidth: polygonBorderWidth ?? parent.polygonBorderWidth,
       polygonBorderColor: polygonBorderColor ?? parent.polygonBorderColor,
       polygonFillColor: polygonFillColor ?? parent.polygonFillColor,
@@ -192,8 +206,10 @@ class KMetaLayerStyle {
   bool get isEmpty =>
       pointSize == null &&
       pointColor == null &&
+      pointOpacity == null &&
       lineWidth == null &&
       lineColor == null &&
+      lineOpacity == null &&
       polygonBorderWidth == null &&
       polygonBorderColor == null &&
       polygonFillColor == null &&

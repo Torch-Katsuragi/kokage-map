@@ -70,27 +70,42 @@ List<TileKey> _refChildren(TileKey key, TerrainCamera camera) =>
     _refIdeal(TileRange(z: key.z + 1, x0: key.x * 2, y0: key.y * 2, x1: key.x * 2 + 1, y1: key.y * 2 + 1), camera);
 
 List<TileKey> _refCoverSet(Set<TileKey> have, TileRange range, TerrainCamera camera, {int maxAncestorLevels = 8}) {
+  final rawAncestors = <TileKey>{};
+  for (var y = range.y0; y <= range.y1; y++) {
+    for (var x = range.x0; x <= range.x1; x++) {
+      final key = TileKey(range.z, x, y);
+      if (have.contains(key)) continue;
+      var k = key;
+      for (var i = 0; i < maxAncestorLevels && k.z > 0; i++) {
+        k = k.parent;
+        if (have.contains(k)) {
+          rawAncestors.add(k);
+          break;
+        }
+      }
+    }
+  }
+
   final out = <TileKey>[];
   void emit(TileKey k) {
     if (!out.contains(k)) out.add(k);
   }
 
   for (final key in _refIdeal(range, camera)) {
-    if (have.contains(key)) {
-      emit(key);
-      continue;
-    }
     var k = key;
-    TileKey? ancestor;
+    TileKey? coarsestAncestor;
     for (var i = 0; i < maxAncestorLevels && k.z > 0; i++) {
       k = k.parent;
-      if (have.contains(k)) {
-        ancestor = k;
-        break;
+      if (rawAncestors.contains(k)) {
+        coarsestAncestor = k;
       }
     }
-    if (ancestor != null) {
-      emit(ancestor);
+    if (coarsestAncestor != null) {
+      emit(coarsestAncestor);
+      continue;
+    }
+    if (have.contains(key)) {
+      emit(key);
       continue;
     }
     for (final c in _refChildren(key, camera)) {

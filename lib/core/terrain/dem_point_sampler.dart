@@ -18,23 +18,28 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 
 import 'dem_tiles.dart';
+import 'terrain_appearance.dart';
 import 'terrain_worker.dart';
 import 'terrain_world.dart' show DemFetcher;
 import 'web_mercator.dart';
 
 /// 緯度経度の点ごとに標高を引く（3D 地形と同じ標高タイル・同じ取り方）
 ///
-/// ソースは細かい方から試す（[DemTileSource.defaultCascade]: DEM1A → DEM5A → DEM10B → AWS）。
+/// ソースは細かい方から試す（[DemTileSource.defaultCascade] または [DemTileSource.highPrecisionCascade]）。
 /// 各ソースの最大ズームのタイルを 1 枚ずつ取り、タイル内を双一次補間する。無効値（海・整備範囲外）や
 /// 取れないタイルは次のソースへ。どれでも取れない点は null。
 ///
 /// タイルは [DemFetcher]（アプリでは `BaseMapService.getTile`: キャッシュ → ネット）で取るので、
 /// 3D で見た辺りならオフラインでも引ける。PNG の展開は [TerrainWorker] で（UI を止めない）
 class DemPointSampler {
-  DemPointSampler({required this.fetch, this.sources = DemTileSource.defaultCascade, this.cacheTiles = 16});
+  DemPointSampler({required this.fetch, List<DemTileSource>? sources, this.cacheTiles = 16})
+      : _explicitSources = sources != null ? List.unmodifiable(sources) : null;
 
   final DemFetcher fetch;
-  final List<DemTileSource> sources;
+  final List<DemTileSource>? _explicitSources;
+
+  List<DemTileSource> get sources =>
+      _explicitSources ?? DemTileSource.cascadeFor(highPrecision: TerrainAppearance.highPrecision);
 
   /// 展開したタイルを何枚覚えておくか（続けて保存する地物は同じ辺り）
   final int cacheTiles;
@@ -48,15 +53,19 @@ class DemPointSampler {
     for (final s in sources) {
       if (pending.isEmpty) break;
       final z = s.maxZoom;
-      // タイルごとにまとめる
+      // タイルごとにまとめる（範囲外の点は飛ばして次のソースへ）
       final byTile = <(int, int), List<int>>{};
+      final next = <int>[];
       for (final i in pending) {
         final (lon, lat) = points[i];
+        if (!s.coversPoint(lon, lat)) {
+          next.add(i);
+          continue;
+        }
         final fx = WebMercator.tileXFraction(lon, z);
         final fy = WebMercator.tileYFraction(lat, z);
         byTile.putIfAbsent((fx.floor(), fy.floor()), () => []).add(i);
       }
-      final next = <int>[];
       for (final MapEntry(key: (tx, ty), value: idx) in byTile.entries) {
         final h = await _tile(s, z, tx, ty);
         for (final i in idx) {
@@ -119,10 +128,11 @@ Float32List? _decodeTile((Uint8List, DemEncoding) a) {
   if (decoded == null) return null;
   const n = WebMercator.tileSize;
   if (decoded.width != n || decoded.height != n) return null;
-  final rgb = decoded.convert(format: img.Format.uint8, numChannels: 3).toUint8List();
+  final rgba = decoded.convert(format: img.Format.uint8, numChannels: 4).toUint8List();
   final out = Float32List(n * n);
   for (var i = 0; i < n * n; i++) {
-    out[i] = DemTileSource.decodeWith(encoding, rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+    final p = i * 4;
+    out[i] = DemTileSource.decodeWith(encoding, rgba[p], rgba[p + 1], rgba[p + 2], rgba[p + 3]);
   }
   return out;
 }

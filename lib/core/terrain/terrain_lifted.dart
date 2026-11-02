@@ -452,8 +452,15 @@ class LiftedSegments {
 /// 地形に乗せるラベル（ビルボード）
 class TerrainLabel {
   /// [painter] を渡さなければ [text] と [style] から**描くときに**作る（1 万ラベルの layout を貼り付け時にやらない）
-  TerrainLabel({required this.x, required this.y, TextPainter? painter, String? text, this.style, this.markerGap})
-      : _painter = painter,
+  TerrainLabel({
+    required this.x,
+    required this.y,
+    TextPainter? painter,
+    String? text,
+    this.style,
+    this.haloColor,
+    this.markerGap,
+  })  : _painter = painter,
         text = text ?? painter?.text?.toPlainText() ?? '';
 
   /// DEM 原点基準の Mercator m
@@ -461,6 +468,9 @@ class TerrainLabel {
   final double y;
   final String text;
   final TextStyle? style;
+
+  /// ラベルの背景（縁取り）の色。省略時は白
+  final Color? haloColor;
 
   /// 点の印に付くラベル: 印の半径＋すき間（論理 px）。印があるので位置の黒点は打たず、ラベルを印の上に離して置く。
   /// null は面・線のラベル（重心や中点に黒点を打ち、その上に置く）

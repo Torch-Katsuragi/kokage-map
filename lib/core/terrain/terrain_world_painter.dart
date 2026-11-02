@@ -606,6 +606,7 @@ class TerrainWorldPainter extends CustomPainter {
         if (h == 2) continue;
         final pt = pts[i];
         pointPaint.color = pt.color;
+        pointEdge.color = Colors.white.withValues(alpha: pt.color.a);
         canvas.drawCircle(sp, pt.sizePx, pointPaint);
         canvas.drawCircle(sp, pt.sizePx, pointEdge);
       }
@@ -721,6 +722,9 @@ class TerrainWorldPainter extends CustomPainter {
         }
         if (!labelViewport.contains(sp)) continue;
         final label = labels[k];
+        final alpha = label.style?.color?.a ?? 1.0;
+        if (alpha <= 0) continue;
+        dotPaint.color = Colors.black.withValues(alpha: 0.54 * alpha);
         // 置けないラベルは位置に黒点だけ（点の印に付くラベルは印があるので打たない）
         final dot = label.markerGap == null;
         if (collideLabels && placed.length >= maxPlaced) {
@@ -753,6 +757,8 @@ class TerrainWorldPainter extends CustomPainter {
         }
         placed.add(box);
         visibleLabels.add(base + k);
+        boxPaint.color = (label.haloColor ?? Colors.white).withValues(alpha: 0.85 * alpha);
+        anchorPaint.color = Colors.black.withValues(alpha: alpha);
         canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(3)), boxPaint);
         tp.paint(canvas, origin);
         if (dot) canvas.drawCircle(sp, 2.5, anchorPaint);

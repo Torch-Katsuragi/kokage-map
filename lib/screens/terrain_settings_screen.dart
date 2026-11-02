@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// こかげマップ: 地形の見た目の設定（色分け・等高線）。値は `TerrainAppearance` に写して描画側が読む
+// こかげマップ: 地形の見た目の設定（精度・色分け・等高線）。値は `TerrainAppearance` に写して描画側が読む
 
 import 'package:flutter/material.dart';
 
@@ -21,6 +21,14 @@ import '../core/settings_schema.dart';
 import '../core/terrain/terrain_appearance.dart';
 import '../i18n/strings.g.dart';
 import '../widgets/settings_widgets.dart';
+
+final terrainHighPrecisionDef = SwitchDef(
+  key: 'terrain_high_precision',
+  title: t.terrainSettings.highPrecision,
+  description: t.terrainSettings.highPrecisionDesc,
+  defaultValue: false,
+  icon: Icons.terrain,
+);
 
 final terrainColorModeDef = IntDef(
   key: 'terrain_color_mode',
@@ -44,10 +52,26 @@ final terrainColorStrengthDef = DoubleDef(
   max: 1,
   divisions: 10,
   formatter: (v) => '${(v * 100).toInt()}%',
+  visibleWhen: (s) => s.getInt(terrainColorModeDef) != 0,
 );
-final terrainColorLowDef = ColorDef(key: 'terrain_color_low', title: t.terrainSettings.colorLow, defaultArgb: 0xFF2E7D32);
-final terrainColorMidDef = ColorDef(key: 'terrain_color_mid', title: t.terrainSettings.colorMid, defaultArgb: 0xFFFFF176);
-final terrainColorHighDef = ColorDef(key: 'terrain_color_high', title: t.terrainSettings.colorHigh, defaultArgb: 0xFFB71C1C);
+final terrainColorLowDef = ColorDef(
+  key: 'terrain_color_low',
+  title: t.terrainSettings.colorLow,
+  defaultArgb: 0xFF2E7D32,
+  visibleWhen: (s) => s.getInt(terrainColorModeDef) != 0,
+);
+final terrainColorMidDef = ColorDef(
+  key: 'terrain_color_mid',
+  title: t.terrainSettings.colorMid,
+  defaultArgb: 0xFFFFF176,
+  visibleWhen: (s) => s.getInt(terrainColorModeDef) != 0,
+);
+final terrainColorHighDef = ColorDef(
+  key: 'terrain_color_high',
+  title: t.terrainSettings.colorHigh,
+  defaultArgb: 0xFFB71C1C,
+  visibleWhen: (s) => s.getInt(terrainColorModeDef) != 0,
+);
 final terrainSlopeMaxDef = DoubleDef(
   key: 'terrain_slope_max',
   title: t.terrainSettings.slopeMax,
@@ -57,8 +81,19 @@ final terrainSlopeMaxDef = DoubleDef(
   max: 80,
   divisions: 14,
   formatter: (v) => '${v.toInt()}°',
+  visibleWhen: (s) => s.getInt(terrainColorModeDef) == 1,
 );
 final terrainSettings = SettingsStore([
+  SettingSectionDef(
+    id: 'quality',
+    title: t.terrainSettings.qualitySection,
+    icon: Icons.terrain,
+    iconColor: Colors.teal,
+    initiallyExpanded: true,
+    items: [
+      terrainHighPrecisionDef,
+    ],
+  ),
   SettingSectionDef(
     id: 'color',
     title: t.terrainSettings.colorSection,
@@ -78,6 +113,7 @@ final terrainSettings = SettingsStore([
 /// ストアの値を描画側のスナップショットに写す（起動時と変更のたび）
 void syncTerrainAppearance() {
   final s = terrainSettings;
+  TerrainAppearance.highPrecision = s.getBool(terrainHighPrecisionDef);
   TerrainAppearance.colorMode = TerrainColorMode.values[s.getInt(terrainColorModeDef).clamp(0, 2)];
   TerrainAppearance.colorStrength = s.getDouble(terrainColorStrengthDef);
   TerrainAppearance.low = s.getColor(terrainColorLowDef);

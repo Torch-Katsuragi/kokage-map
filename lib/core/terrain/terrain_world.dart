@@ -351,8 +351,21 @@ class TerrainWorld extends ChangeNotifier {
   /// タイル 1 枚の読み込み（DEM とテクスチャ）。テストでは擬似タイルを遅延つきで返す
   final TileLoader? _tileLoader;
 
-  /// 標高タイルの出どころ。細かい方から順に試す（[DemTileSource.defaultCascade]）
-  final List<DemTileSource> demSources;
+  /// 標高タイルの出どころ。細かい方から順に試す（[DemTileSource.defaultCascade] または [DemTileSource.highPrecisionCascade]）
+  List<DemTileSource> demSources;
+
+  /// 高度な 3D 地図モードが有効か
+  bool highPrecision = false;
+
+  /// 高度な 3D 地図モードを切り替える（保持中のタイルを破棄して新しいソースで再取得する）
+  void setHighPrecision(bool enabled) {
+    if (highPrecision == enabled) return;
+    highPrecision = enabled;
+    demSources = DemTileSource.cascadeFor(highPrecision: enabled);
+    _demLru.clear();
+    _failedAt.clear();
+    clear();
+  }
 
   /// (ソース, z, x, y) → PNG のバイト列。無ければ null
   final DemFetcher demFetcher;
@@ -379,6 +392,26 @@ class TerrainWorld extends ChangeNotifier {
   /// 段の範囲は連なり全体で見る（一番細かいソースの maxZoom まで）
   int get minZoom => demSources.map((s) => s.minZoom).reduce(math.min);
   int get maxZoom => demSources.map((s) => s.maxZoom).reduce(math.max);
+
+  /// 指定の Mercator 座標 (x, y) をカバーするソースの最大ズーム
+  int maxZoomForPoint(double x, double y) {
+    final lon = WebMercator.lonFromX(x);
+    final lat = WebMercator.latFromY(y);
+    var hi = minZoom;
+    for (final s in demSources) {
+      if (s.maxZoom > hi && s.coversPoint(lon, lat)) hi = s.maxZoom;
+    }
+    return hi;
+  }
+
+  /// 指定の XYZ タイルをカバーするソースの最大ズーム
+  int maxZoomForTile(int z, int x, int y) {
+    var hi = minZoom;
+    for (final s in demSources) {
+      if (s.maxZoom > hi && s.coversTile(z, x, y)) hi = s.maxZoom;
+    }
+    return hi;
+  }
   final TileFetcher textureFetcher;
 
   /// テクスチャの層（下から上へ。等高線も 1 層）。設定の背景地図レイヤをそのまま渡す。取りに行くたびに今のものを見る。
@@ -444,9 +477,12 @@ class TerrainWorld extends ChangeNotifier {
   int get loadedCount => _tiles.length;
   int get pendingCount => _inFlight.length + _queue.length;
 
-  /// 表示ズームから DEM のズーム（1 段荒い = 1 セルが画面 2px）
-  int demZoomFor(double zoom) =>
-      (zoom.round() - 1).clamp(minZoom, maxZoom);
+  /// 表示ズームから DEM のズーム（既定は 1 段荒い = 1 セルが画面 2px。高精度時は表示ズームそのまままで許容）
+  int demZoomFor(double zoom, {double? x, double? y}) {
+    final hi = (x != null && y != null) ? maxZoomForPoint(x, y) : maxZoom;
+    final target = highPrecision ? zoom.round() : zoom.round() - 1;
+    return target.clamp(minZoom, hi);
+  }
 
   TerrainTile? tile(TileKey key) {
     final t = _tiles[key];
@@ -717,9 +753,10 @@ class TerrainWorld extends ChangeNotifier {
     return merged;
   }
 
-  /// 期限内に「無かった」と覚えていない、[key] の段を持つソースか
+  /// 期限内に「無かった」と覚えていない、[key] の段と範囲を持つソースか
   bool _usable(DemTileSource s, TileKey key, int nowMs) {
     if (key.z < s.minZoom || key.z > s.maxZoom) return false;
+    if (!s.coversTile(key.z, key.x, key.y)) return false;
     final missedAt = _missing[_missingKey(s, key)];
     return missedAt == null || nowMs - missedAt >= _missingTtlMs;
   }
@@ -968,14 +1005,84 @@ class TerrainWorld extends ChangeNotifier {
 
   /// 理想の範囲を「手持ちで最良のタイル」で埋めて描画順（奥 → 手前）で返す
   ///
-  /// 理想のタイルが無ければ、読み込み済みの親（[maxAncestorLevels] 段まで）か、
-  /// 読み込み済みの子（1 段）で埋める。ズームが変わった瞬間に何も無くなるのを防ぐ
-  /// （タイル地図エンジンの「親子で保持」と同じ）。同じ親は 1 回だけ、最初に出会った位置で描く
-  /// （親の領域は子の領域の和なので、奥 → 手前の順序を壊さない）。
-  List<TerrainTile> coverSet(TileRange range, TerrainCamera camera, {int maxAncestorLevels = 8}) {
+  /// ロード空間（[_tiles]）と表示空間（返り値）を分け、粗い親タイルと細かい子タイルが
+  /// 同じ区域に重なって描かれる（Z ファイティング・テクスチャ乱れ）のを防ぐ:
+  /// 1. 親の領域内の理想タイルがすべてロード空間に揃うまでは親タイルを表示し、到着済みの子は隠す。
+  /// 2. 領域内の子がすべて揃ったら、[onWarmTile] で子のメッシュ構築を裏で進め、
+  ///    [isTileDisplayReady] がすべて満たされた時点で親から子へ領域単位で一括スワップする。
+  List<TerrainTile> coverSet(
+    TileRange range,
+    TerrainCamera camera, {
+    int maxAncestorLevels = 8,
+    bool Function(TerrainTile tile)? isTileDisplayReady,
+    void Function(TerrainTile tile)? onWarmTile,
+  }) {
     final order = _ScanOrder.of(camera);
     final out = <TerrainTile>[];
-    // 重なりうるのは親だけ（理想の段は 1 枚ずつ、子・孫はそれぞれ理想の 1 枚の内側）。出した親を覚えて 2 度出さない
+
+    // 第 1 段階: まだロード空間（_tiles）に届いていない理想タイルを覆う親を集める。
+    // 同じ親の下にある兄弟が 1 枚でも欠けている間は、届いている兄弟のメッシュ構築もまだ走らせない
+    // （隣の兄弟が届いた瞬間に updateBorder で builders がクリアされて無駄になるため）。
+    final missingAncestors = <TileKey>{};
+    for (var y = range.y0; y <= range.y1; y++) {
+      for (var x = range.x0; x <= range.x1; x++) {
+        final key = TileKey(range.z, x, y);
+        if (_tiles.containsKey(key)) continue;
+        final ancestor = _ancestorOf(key, maxAncestorLevels);
+        if (ancestor != null) {
+          missingAncestors.add(ancestor.key);
+        }
+      }
+    }
+
+    bool hasAncestorIn(TileKey key, Set<TileKey> set) {
+      if (set.isEmpty) return false;
+      var k = key;
+      for (var i = 0; i < maxAncestorLevels && k.z > 0; i++) {
+        k = k.parent;
+        if (set.contains(k)) return true;
+      }
+      return false;
+    }
+
+    // 第 2 段階: 親の領域内のタイルがすべてロード空間に揃った区域について、
+    // 表示準備（メッシュ構築）が未完了なら裏でウォームアップを走らせ、完了するまで表示空間は親を維持する。
+    final warmingAncestors = <TileKey>{};
+    if (isTileDisplayReady != null) {
+      for (var y = range.y0; y <= range.y1; y++) {
+        for (var x = range.x0; x <= range.x1; x++) {
+          final key = TileKey(range.z, x, y);
+          if (hasAncestorIn(key, missingAncestors)) continue;
+          final exact = _tiles[key];
+          if (exact != null && !isTileDisplayReady(exact)) {
+            onWarmTile?.call(exact);
+            final ancestor = _ancestorOf(key, maxAncestorLevels, where: isTileDisplayReady);
+            if (ancestor != null) {
+              warmingAncestors.add(ancestor.key);
+            }
+          }
+        }
+      }
+    }
+
+    final rawAncestors = <TileKey>{...missingAncestors, ...warmingAncestors};
+
+    // key を覆う rawAncestors のうち最も粗い（z が小さい）親を返す。
+    // これにより、ある親 A が選ばれる区域では A の子孫（中間の親や細かい子）が一切混ざらず、
+    // 表示空間のタイル集合が完全に互いに素な四分木分割になる。
+    TerrainTile? coveringAncestor(TileKey key) {
+      if (rawAncestors.isEmpty) return null;
+      var k = key;
+      TileKey? coarsest;
+      for (var i = 0; i < maxAncestorLevels && k.z > 0; i++) {
+        k = k.parent;
+        if (rawAncestors.contains(k)) {
+          coarsest = k;
+        }
+      }
+      return coarsest == null ? null : _tiles[coarsest];
+    }
+
     Set<TileKey>? emittedAncestors;
     void use(TerrainTile t) {
       t.lastUsed = ++_clock;
@@ -996,15 +1103,15 @@ class TerrainWorld extends ChangeNotifier {
     }
 
     order.scanRange(range, (key) {
-      final exact = _tiles[key];
-      if (exact != null) {
-        use(exact);
-        return;
-      }
-      final ancestor = _ancestorOf(key, maxAncestorLevels);
+      final ancestor = coveringAncestor(key);
       if (ancestor != null) {
         ancestor.lastUsed = ++_clock;
         if ((emittedAncestors ??= <TileKey>{}).add(ancestor.key)) out.add(ancestor);
+        return;
+      }
+      final exact = _tiles[key];
+      if (exact != null) {
+        use(exact);
         return;
       }
       order.scanChildren(key, useChild);
@@ -1033,12 +1140,12 @@ class TerrainWorld extends ChangeNotifier {
   }
 
   /// 読み込み済みの一番近い親（[maxLevels] 段まで）
-  TerrainTile? _ancestorOf(TileKey key, int maxLevels) {
+  TerrainTile? _ancestorOf(TileKey key, int maxLevels, {bool Function(TerrainTile tile)? where}) {
     var k = key;
     for (var i = 0; i < maxLevels && k.z > 0; i++) {
       k = k.parent;
       final t = _tiles[k];
-      if (t != null) return t;
+      if (t != null && (where == null || where(t))) return t;
     }
     return null;
   }

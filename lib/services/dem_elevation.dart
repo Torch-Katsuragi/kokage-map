@@ -19,13 +19,14 @@ import 'package:flutter/material.dart';
 import '../core/terrain/dem_point_sampler.dart';
 import '../core/terrain/dem_tiles.dart';
 import '../core/terrain/terrain_world.dart' show DemFetcher;
+import '../core/terrain/wakayama_potree_dem.dart';
 import '../models/basemap_provider.dart';
 import '../models/geopackage/vertex_z.dart';
 import 'basemap_service.dart';
 
 /// 標高タイルのソースごとの擬似プロバイダ（背景地図と同じ MBTiles キャッシュに入る。祖先フォールバックはしない）
 final Map<String, BaseMapProvider> demTileProviders = {
-  for (final s in DemTileSource.defaultCascade)
+  for (final s in DemTileSource.allSources)
     s.id: BaseMapProvider(
       id: s.id,
       name: s.id,
@@ -39,9 +40,19 @@ final Map<String, BaseMapProvider> demTileProviders = {
     ),
 };
 
-/// [service] のタイルキャッシュ → ネットで標高タイルを取る
-DemFetcher baseMapDemFetcher(BaseMapService service) =>
-    (source, z, x, y) => service.getTile(demTileProviders[source.id]!, z, x, y);
+/// [service] のタイルキャッシュ → ネット（または Potree 2.0 展開器）で標高タイルを取る
+DemFetcher baseMapDemFetcher(BaseMapService service) {
+  service.registerTileGenerator(
+    DemTileSource.wakayama1gPotree.id,
+    WakayamaPotreeDemGenerator.instance.generateTile,
+  );
+  return (source, z, x, y) {
+    if (!source.coversTile(z, x, y)) return Future.value(null);
+    final provider = demTileProviders[source.id];
+    if (provider == null) return Future.value(null);
+    return service.getTile(provider, z, x, y);
+  };
+}
 
 /// Z 付きレイヤへ書く頂点の標高を、3D 地形と同じ標高タイルから引くようにする（地図の初期化で 1 回）
 void installDemElevationLookup(BaseMapService service) {

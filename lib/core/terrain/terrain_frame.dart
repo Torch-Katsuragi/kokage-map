@@ -73,15 +73,22 @@ class TerrainFramePlanner {
   });
 
   final TerrainWorld world;
-  final int staticCellBudget;
+  int staticCellBudget;
   final int gestureCellBudget;
   final int ancestorLevels;
   final int prefetchMargin;
 
   /// 画面に掛かる理想タイルの上限。超えるなら段を下げる（傾けるほど画面が広いので粗くなる）
-  final int maxCoreTiles;
+  int maxCoreTiles;
 
   int? _lastZoom;
+
+  /// 高度な 3D 地図の有効・無効に応じてメッシュ分割予算とコアタイル上限を切り替える
+  void setHighPrecision(bool enabled) {
+    staticCellBudget = enabled ? 500000 : 100000;
+    maxCoreTiles = enabled ? 14 : 10;
+    _lastZoom = null;
+  }
 
   /// 画面に掛かるタイル枚数の見積もり（段 [z]）。**回転に依らない**
   ///
@@ -98,7 +105,7 @@ class TerrainFramePlanner {
   /// 理想の段: 表示ズーム −1 から始め、画面に掛かるタイルが [maxCoreTiles] を超える間は下げる。
   /// 前回の段と 1 つ違いで枚数が許容内なら前回を使う（境目で往復しない）
   int demZoomFor(TerrainCamera camera, Size size) {
-    var z = world.demZoomFor(camera.zoom);
+    var z = world.demZoomFor(camera.zoom, x: camera.centerX, y: camera.centerY);
     while (z > world.minZoom && visibleTileCount(camera, size, z) > maxCoreTiles) {
       z--;
     }
@@ -140,10 +147,22 @@ class TerrainFramePlanner {
     return r == null ? 600 : (r.$2 - r.$1).clamp(100, 2000).toDouble();
   }
 
-  TerrainFramePlan plan(TerrainCamera camera, Size size, {bool gesturing = false}) {
+  TerrainFramePlan plan(
+    TerrainCamera camera,
+    Size size, {
+    bool gesturing = false,
+    bool Function(TerrainTile tile, int step)? isTileDisplayReady,
+    void Function(TerrainTile tile, int step)? onWarmTile,
+  }) {
     final sw = Stopwatch()..start();
     final bounds = world.groundBounds(camera, size, heightRange: _screenHeightRange());
     final zD = demZoomFor(camera, size);
+    final baseStep = stepFor(visibleTileCount(camera, size, zD), gesturing: gesturing);
+    int stepOf(TerrainTile tile) {
+      final diff = zD - tile.key.z;
+      return diff >= 0 ? math.max(1, baseStep >> diff) : math.min(16, baseStep << -diff);
+    }
+
     final range = TerrainWorld.tileRangeFor(bounds, zD);
     final prefetch = TerrainWorld.tileRangeFor(bounds, zD, margin: prefetchMargin);
     // 読み込み順: 1 段上の親（核の範囲だけ）→ 理想の段の核 → 1 周り外 → さらに上の親（余白つき、近い段から）。
@@ -167,14 +186,20 @@ class TerrainFramePlanner {
     }
     // 寄る方向の先読み: 手が空いているときだけ、画面の内側半分（1 段寄ったときに見える範囲）を 1 段細かい段で読んでおく
     final inner = Rect.fromCenter(center: bounds.center, width: bounds.width / 2, height: bounds.height / 2);
-    final children = zD < world.maxZoom ? TerrainWorld.tileRangeFor(inner, zD + 1) : null;
+    final maxZHere = world.maxZoomForPoint(camera.centerX, camera.centerY);
+    final children = zD < maxZHere ? TerrainWorld.tileRangeFor(inner, zD + 1) : null;
     if (children != null && world.pendingCount == 0) {
       world.ensure(children, centerX: camera.centerX, centerY: camera.centerY, replaceQueue: false);
     }
     final tEnsure = sw.elapsedMilliseconds;
     world.trim(keep: prefetch, ancestorLevels: ancestorLevels, alsoKeep: [?children]);
     final tTrim = sw.elapsedMilliseconds;
-    final tiles = world.coverSet(range, camera);
+    final tiles = world.coverSet(
+      range,
+      camera,
+      isTileDisplayReady: isTileDisplayReady == null ? null : (t) => isTileDisplayReady(t, stepOf(t)),
+      onWarmTile: onWarmTile == null ? null : (t) => onWarmTile(t, stepOf(t)),
+    );
     _lastTiles = tiles;
     final tCover = sw.elapsedMilliseconds;
     final coverage = world.coverage(range);
@@ -183,7 +208,7 @@ class TerrainFramePlanner {
       demZoom: zD,
       range: range,
       prefetch: prefetch,
-      baseStep: stepFor(visibleTileCount(camera, size, zD), gesturing: gesturing),
+      baseStep: baseStep,
       tiles: tiles,
       coverage: coverage,
     );

@@ -209,7 +209,9 @@ int paintFeatures(
   for (final i in indexesIn(polylines, merc)) {
     final f = polylines[i];
     final st = styleOf(f);
-    canvas.drawPath(frame.linePath(f.geometry), stroke..color = st.lineColor..strokeWidth = math.max(1.5, st.lineWidth));
+    if (st.lineColor.a > 0 && st.lineWidth > 0) {
+      canvas.drawPath(frame.linePath(f.geometry), stroke..color = st.lineColor..strokeWidth = math.max(1.5, st.lineWidth));
+    }
     n++;
   }
   for (final f in markers) {
@@ -219,7 +221,9 @@ int paintFeatures(
     final y = WebMercator.yFromLat(pos.y);
     if (x < merc.left || x > merc.right || y < merc.top || y > merc.bottom) continue;
     final st = styleOf(f);
-    canvas.drawCircle(frame.ofPosition(pos), math.max(2.0, st.pointSize), fill..color = st.pointColor);
+    if (st.pointColor.a > 0 && st.pointSize > 0) {
+      canvas.drawCircle(frame.ofPosition(pos), math.max(2.0, st.pointSize), fill..color = st.pointColor);
+    }
     n++;
   }
   return n;

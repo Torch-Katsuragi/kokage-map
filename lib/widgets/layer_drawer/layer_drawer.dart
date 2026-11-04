@@ -296,7 +296,9 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     final driveRoot = LayerDrawerService.findDriveRoot(widget.currentNode);
     // ⚠ パスを解決できないフォルダ（プロジェクト未設定の仮ルート `Home`。web の地図プレビューや
     //   `#/map` 直開き）には何も作らせない。作れてしまうと web では IndexedDB にだけ残る幽霊 gpkg になる
-    final canAddHere = widget.currentNode is FolderNode && widget.currentNode!.getAbsoluteFilePath() != null;
+    final canAddHere = widget.currentNode is FolderNode &&
+        widget.currentNode is! DriveFolderSetNode &&
+        widget.currentNode!.getAbsoluteFilePath() != null;
     final titleBar = LayerDrawerTitleBar(
       title: NodePresenter.getDisplayName(widget.currentNode!),
       currentNode: widget.currentNode!,

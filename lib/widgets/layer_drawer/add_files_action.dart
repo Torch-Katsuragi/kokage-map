@@ -22,6 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
+import '../../models/nodes/drive_folder_set_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../presentation/node_presenter.dart';
@@ -34,7 +35,9 @@ import 'common_dialogs.dart';
 
 /// [folder] にファイルを足してよいか（読み取り専用の Drive 共有の中には足さない）
 bool canAddFilesTo(FolderNode folder) =>
-    folder.getAbsoluteFilePath() != null && !(LayerDrawerService.findDriveRoot(folder)?.isReadOnly ?? false);
+    folder is! DriveFolderSetNode &&
+    folder.getAbsoluteFilePath() != null &&
+    !(LayerDrawerService.findDriveRoot(folder)?.isReadOnly ?? false);
 
 /// ファイルを選ばせて [folder] に写す（何でも・いくつでも）
 Future<void> pickAndAddFiles(WidgetRef ref, FolderNode folder) async {

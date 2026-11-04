@@ -299,6 +299,7 @@ class FolderNode extends LayerTreeNode {
         folderName,
         manifestFileId: driveId,
         manifestUrl: driveUrl,
+        isReadOnly: parent is DriveFolderSetNode && (meta.sync.isReadOnly ?? false),
         lastSynced: meta.sync.lastSynced,
         driveRevisionId: meta.sync.driveRevisionId,
         visible: true,

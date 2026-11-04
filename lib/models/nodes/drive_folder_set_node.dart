@@ -49,10 +49,15 @@ class DriveFolderSetNode extends FolderNode {
   /// Drive上のJSONファイルのMD5またはリビジョンID
   String? driveRevisionId;
 
+  /// 親セットから読み取り専用（`readOnly: true`）として指定されているか。
+  /// true の場合、このセット配下の子フォルダ・孫セットもすべて読み取り専用になる。
+  bool isReadOnly;
+
   DriveFolderSetNode(
     super.name, {
     required this.manifestFileId,
     required this.manifestUrl,
+    this.isReadOnly = false,
     this.syncStatus = SyncStatus.unknown,
     this.lastSynced,
     this.driveRevisionId,

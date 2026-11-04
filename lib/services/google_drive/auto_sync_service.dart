@@ -257,7 +257,9 @@ class AutoSyncService {
         AppLogger.debug('[AutoSync] AppData sync error: $e');
       }
 
-      final folderSets = _collectDriveFolderSets(root);
+      // 子セット（親が DriveFolderSetNode のもの）は親セットの reconcileSet 内で再帰的に同期されるため、ルートセットのみ走査する
+      final folderSets = _collectDriveFolderSets(root)
+          .where((n) => n.parent is! DriveFolderSetNode);
       for (final setNode in folderSets) {
         if (!_isWifi) break;
         await _syncFolderSet(setNode);

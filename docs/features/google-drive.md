@@ -93,6 +93,47 @@ Drive連携フォルダの ⋮ →「QRコードで渡す」で QR を出す（2
 > [!WARNING] オープンベータの前に
 > `assetlinks.json` の debug 鍵を外し、`web/open/index.html` の行き先を Play に替える。
 
+### JSON共有フォルダセット（プリセット・入れ子対応）
+
+複数のDrive共有フォルダや下位プリセットJSONをまとめたマニフェスト（`.json`ファイル）のDrive共有リンク（またはQRコード）を読み込むことで、`共有/<セット名>/` 配下にツリー構造として一括展開・自動追従できる（`DriveFolderSetNode` / `DriveFolderSetService`）。
+
+#### JSONフォーマット（単一統一形式・Compositeパターン）
+
+どのJSONファイルも「単独のトップレベルプリセット」としても「親JSONから参照される子プリセット」としてもそのまま利用できる。`presets`（別名 `sets` / `children`）と `folders`（別名 `dirs` / `urls` / `items`）は分けて書いても、`folders` 配列にフォルダURLとJSONファイルURLを混在させてもよい（取得したDriveメタデータの `mimeType` / 拡張子 `.json` で自動判別）。
+
+```json
+{
+  "name": "北山村_全体地図",
+  "presets": [
+    "https://drive.google.com/file/d/<子プリセットJSONのID>/view?usp=sharing",
+    {
+      "preset": "https://drive.google.com/file/d/<別の子プリセットJSONのID>/view?usp=sharing",
+      "readOnly": true
+    }
+  ],
+  "folders": [
+    "https://drive.google.com/drive/folders/<DriveフォルダID>?usp=sharing",
+    {
+      "url": "https://drive.google.com/drive/folders/<読み取り専用フォルダID>",
+      "readOnly": true
+    }
+  ]
+}
+```
+
+#### 安全ガード（循環参照・重複・誤削除防止）
+
+1. **ツリー横断 `visitedDriveIds` による循環参照・重複排除（先勝ち）**:
+   ルートセットから展開されるツリー全体で一度登場した `driveId`（JSONファイルIDおよびフォルダID）を記録し、自己参照・相互参照ループ（`A.json → B.json → A.json`）やダイヤモンド参照による同一フォルダの二重クローンを防止する。
+2. **深さ上限・総数上限ガード**:
+   最大ネスト深さ `kMaxSetDepth = 5`、1ツリーあたりの最大アイテム総数 `kMaxSetTotalItems = 100` を超える項目は自動スキップする。
+3. **`readOnly` の単調継承**:
+   親JSON側で子JSONエントリに `"readOnly": true` が指定された場合、子JSON内の各項目が `"readOnly": false` であっても配下の全フォルダ・孫セットに読み取り専用が強制継承される。
+4. **子セット除外時の再帰的ローカル変更保護**:
+   親JSONから子JSONが削除された際、子セット配下の全子孫 `DriveFolderNode` を再帰検査し、1つでも未送信のローカル変更がある場合は子セットの削除を保留して保護する。
+5. **親MD5未変更時の子セット再帰チェック**:
+   親JSON自体の `md5Checksum` が前回同期時から変わっていなくても、既存の子セット（`DriveFolderSetNode`）を辿って子JSON側の更新有無を確認する。
+
 ### コスト
 
 | 項目 | コスト |

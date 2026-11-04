@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.1 — 2026/11/04
+
+### New Features & Improvements
+
+- Hierarchical shared folder sets (combining JSON presets): You can now nest shared folder set JSON files inside another JSON preset, organizing shared folders into multi-level folder hierarchies in the layer tree—such as combining per-zone or per-team presets into a single project-wide preset
+- Use the same JSON standalone or as part of a larger preset: Each child JSON preset still works on its own via its shared link or QR code. Coordinators can open the top-level preset for the entire site while field teams open only their zone's preset, using the exact same JSON files
+- Read-only mode per child preset: Marking a child preset `readOnly: true` in a parent JSON imports all folders inside that preset as read-only, making it easy to bundle your own editable work zone alongside reference-only zones from other teams
+
 ## v0.15.0 — 2026/11/02
 
 ### New Features

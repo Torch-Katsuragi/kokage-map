@@ -80,7 +80,7 @@ void main() {
     expect(find.byType(SvgPicture), findsWidgets);
     // 図の版の本文は画面に文字として出さないが、読み上げでは読める
     // いちばん新しい版（開いている）の 1 行。版を足したら差し替える
-    const line = '「高度な3D地図」（全国 0.25 m〜1 m 級 高精細 DEM の自動合成）を追加';
+    const line = '共有フォルダセット（JSON）を階層化して組み合わせられるように変更';
     expect(find.textContaining(line, findRichText: true), findsNothing);
     expect(find.bySemanticsLabel(RegExp(line)), findsOneWidget);
     // 版ごとに畳む。開いているのはいちばん新しい版だけ

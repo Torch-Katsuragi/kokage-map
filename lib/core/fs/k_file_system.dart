@@ -67,6 +67,13 @@ abstract class KFileSystem {
 
   Future<Uint8List> readAsBytes(String path);
 
+  /// ファイル先頭から最大 [maxBytes] バイトと、ファイル全体のバイト長を返す。
+  /// EXIF ヘッダ解析など、巨大ファイル全体を読まずに先頭だけ見たい場面で使う。
+  Future<({Uint8List bytes, int fileSize})> readHeaderBytes(
+    String path,
+    int maxBytes,
+  );
+
   Future<String> readAsString(String path);
 
   Future<void> writeAsBytes(String path, Uint8List bytes);

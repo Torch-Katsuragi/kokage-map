@@ -79,6 +79,7 @@ class SyncLedgerEntry {
     driveUrl: sync.driveUrl,
     isReadOnly: sync.isReadOnly,
     isFolderSet: sync.isFolderSet,
+    setMembers: sync.setMembers,
     lastSynced: lastSynced,
     driveRevisionId: driveRevisionId,
     deviceId: deviceId,
@@ -189,5 +190,28 @@ class SyncLedger {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('$_prefix$key');
     } on Object catch (_) {}
+  }
+
+  /// 登録されているすべての帳簿エントリを返す（ローカルシード索引の構築用）
+  Future<List<SyncLedgerEntry>> readAllEntries() async {
+    final result = <String, SyncLedgerEntry>{..._cache};
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final fullKey in prefs.getKeys()) {
+        if (!fullKey.startsWith(_prefix)) continue;
+        final shortKey = fullKey.substring(_prefix.length);
+        if (result.containsKey(shortKey)) continue;
+        final raw = prefs.getString(fullKey);
+        if (raw == null) continue;
+        try {
+          final entry = SyncLedgerEntry.fromJson(
+            jsonDecode(raw) as Map<String, dynamic>,
+          );
+          _cache[shortKey] = entry;
+          result[shortKey] = entry;
+        } on Object catch (_) {}
+      }
+    } on Object catch (_) {}
+    return result.values.toList();
   }
 }

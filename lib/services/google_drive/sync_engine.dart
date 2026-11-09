@@ -192,12 +192,14 @@ class SyncEngine {
   Future<SyncResult> pull(
     String driveFolderId,
     String localPath, {
+    drive.File? preloadedFolderInfo,
     void Function(SyncProgress progress)? onProgress,
     bool showOsNotification = false,
   }) =>
       _pullHandler.pull(
         driveFolderId,
         localPath,
+        preloadedFolderInfo: preloadedFolderInfo,
         onProgress: onProgress,
         showOsNotification: showOsNotification,
       );
@@ -209,6 +211,7 @@ class SyncEngine {
     required String folderName,
     required String driveUrl,
     required bool isReadOnly,
+    drive.File? preloadedFolderInfo,
     void Function(SyncProgress progress)? onProgress,
     bool showOsNotification = true,
   }) =>
@@ -218,6 +221,7 @@ class SyncEngine {
         folderName: folderName,
         driveUrl: driveUrl,
         isReadOnly: isReadOnly,
+        preloadedFolderInfo: preloadedFolderInfo,
         onProgress: onProgress,
         showOsNotification: showOsNotification,
       );

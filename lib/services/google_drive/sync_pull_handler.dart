@@ -16,11 +16,14 @@
 // Root Maps: 同期Pullハンドラー
 // Google Drive→ローカルへのPull（ダウンロード）処理を担当
 
+import 'package:googleapis/drive/v3.dart' as gdrive;
+
 import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
+import 'drive_dir_store.dart';
 import 'drive_transfer_registry.dart';
 import 'google_drive_service.dart';
 import 'sync_base_store.dart';
@@ -37,6 +40,18 @@ class SyncPullHandler {
 
   static const int _downloadConcurrency = 5;
 
+  /// GIS ファイル（.qgs / .gpkg / .tif / .shp 等）を写真（.jpg / .png）より先にダウンロードするための優先度
+  static int _downloadPriority(String relativePath) {
+    final lower = relativePath.toLowerCase();
+    if (lower.endsWith('.qgs') || lower.endsWith('.gpkg')) return 0;
+    if (lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png')) {
+      return 2;
+    }
+    return 1;
+  }
+
   SyncPullHandler({
     required this._driveService,
     required this._kmetaService,
@@ -47,11 +62,13 @@ class SyncPullHandler {
   /// [driveFolderId] DriveフォルダID
   /// [localPath] ローカル保存先パス
   /// [snapshot] 同じ連携先の判定に使った材料（あれば Drive をたどり直さない）
+  /// [preloadedFolderInfo] 呼び出し元で取得済みのフォルダ情報（あれば `getFolderInfo` を省く）
   /// [onProgress] 進捗コールバック（指定がなくても [DriveTransferRegistry] には常時配信される）
   Future<SyncResult> pull(
     String driveFolderId,
     String localPath, {
     SyncSnapshot? snapshot,
+    gdrive.File? preloadedFolderInfo,
     void Function(SyncProgress progress)? onProgress,
     bool showOsNotification = false,
   }) async {
@@ -85,7 +102,9 @@ class SyncPullHandler {
       }
 
       final reuse = snapshot != null && snapshot.driveId == driveFolderId ? snapshot : null;
-      final folderInfo = reuse?.folderInfo ?? await _driveService.getFolderInfo(driveFolderId);
+      final folderInfo = reuse?.folderInfo ??
+          preloadedFolderInfo ??
+          await _driveService.getFolderInfo(driveFolderId);
       if (folderInfo == null) {
         if (!managedExternally) {
           registry.endTransfer(
@@ -100,7 +119,11 @@ class SyncPullHandler {
       }
 
       final tree = reuse?.drive ?? await _fileOps.listDriveTree(driveFolderId);
-      final filesToDownload = tree.files;
+      final filesToDownload = List<DriveFileEntry>.of(tree.files)
+        ..sort(
+          (a, b) => _downloadPriority(a.relativePath)
+              .compareTo(_downloadPriority(b.relativePath)),
+        );
 
       // Driveに存在する全サブフォルダをローカルに作成（空フォルダ含む）。
       // ファイルの置き場所はどれもこのどれか（か根）なので、並列DL中にフォルダを作り合わない
@@ -154,6 +177,13 @@ class SyncPullHandler {
           if (unchanged != null) {
             skippedCount++;
             syncedFiles[relPath] = unchanged.record;
+            if (driveFile.id != null) {
+              LocalSyncSeedIndex.instance.registerSeededFile(
+                driveFileId: driveFile.id!,
+                remoteMd5: driveFile.md5Checksum,
+                localFilePath: localFilePath,
+              );
+            }
             tracker.markCompleted(relPath, fileName: fileName);
             throttler.add(tracker.snapshot(SyncPhase.transferring));
             // 帳簿で判定できず中身で同じと分かったもの：この時点を base にする（次から行単位で合わせられる）
@@ -164,6 +194,8 @@ class SyncPullHandler {
           if (await _fileOps.downloadReplacing(
             driveFile.id!,
             localFilePath,
+            remoteMd5: driveFile.md5Checksum,
+            remoteSize: int.tryParse(driveFile.size ?? ''),
             onChunk: (chunkBytes) {
               tracker.addChunk(relPath, chunkBytes, fileName: fileName);
               throttler.add(tracker.snapshot(SyncPhase.transferring));
@@ -323,6 +355,7 @@ class SyncPullHandler {
     required String folderName,
     required String driveUrl,
     required bool isReadOnly,
+    gdrive.File? preloadedFolderInfo,
     void Function(SyncProgress progress)? onProgress,
     bool showOsNotification = true,
   }) async {
@@ -369,6 +402,7 @@ class SyncPullHandler {
       final result = await pull(
         driveId,
         localPath,
+        preloadedFolderInfo: preloadedFolderInfo,
         onProgress: onProgress,
         showOsNotification: showOsNotification,
       );

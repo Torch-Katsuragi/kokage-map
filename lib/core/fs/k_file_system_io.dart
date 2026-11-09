@@ -64,6 +64,24 @@ class IoFileSystem implements KFileSystem {
   Future<Uint8List> readAsBytes(String path) => File(path).readAsBytes();
 
   @override
+  Future<({Uint8List bytes, int fileSize})> readHeaderBytes(
+    String path,
+    int maxBytes,
+  ) async {
+    final file = File(path);
+    final size = await file.length();
+    if (size <= maxBytes) {
+      final bytes = await file.readAsBytes();
+      return (bytes: bytes, fileSize: size);
+    }
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in file.openRead(0, maxBytes)) {
+      builder.add(chunk);
+    }
+    return (bytes: builder.takeBytes(), fileSize: size);
+  }
+
+  @override
   Future<String> readAsString(String path) => File(path).readAsString();
 
   @override

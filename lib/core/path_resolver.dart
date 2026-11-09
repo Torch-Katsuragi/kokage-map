@@ -113,3 +113,28 @@ class _CustomGlobalPathResolver extends GlobalPathResolver {
   @override
   String? get rootPath => _customRootPath;
 }
+
+/// 任意の物理ディレクトリ（[targetPath]）を直接マウントするためのパスリゾルバ。
+///
+/// 共有フォルダセット（[DriveFolderSetNode]）から、辞書（`DriveDirStore`）で管理される
+/// 別ディレクトリの [DriveFolderNode] 実体を参照渡しでマウントする際に使用する。
+/// [LayerTreeNode.getAbsolutePathSegments] は自身に `_pathResolver` を持つノードを起点として
+/// セグメント収集を止めるため、このリゾルバを持つノード自身は `segments == []` → [targetPath]、
+/// 配下の子孫ノードは `[targetPath, ...segments]` へと透過的に解決される。
+class DirectPathResolver extends PathResolver {
+  final String targetPath;
+
+  @override
+  final bool isGlobal;
+
+  DirectPathResolver(this.targetPath, {this.isGlobal = false});
+
+  @override
+  String? get rootPath => targetPath;
+
+  @override
+  String? resolvePath(List<String> segments) {
+    if (segments.isEmpty) return targetPath;
+    return p.joinAll([targetPath, ...segments]);
+  }
+}

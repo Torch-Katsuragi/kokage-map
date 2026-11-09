@@ -83,6 +83,10 @@ class DriveSyncOperations {
     onStateChanged();
 
     try {
+      final driveService = GoogleDriveService();
+      if (!driveService.isDriveApiAvailable) {
+        await driveService.restoreSessionSilently(userGesture: false);
+      }
       final syncEngine = SyncEngine();
       final detail = await syncEngine.checkSyncStatusDetail(localPath);
       updateNodeSyncStatus(node, detail.status);
@@ -570,10 +574,10 @@ class DriveSyncOperations {
         showOsNotification: true,
       );
       if (result.success) {
-        await DriveFolderSetService.reloadFolderSetNode(node);
-        onMapRefresh?.call();
         final hasFailures = result.failedItems.isNotEmpty;
         node.syncStatus = hasFailures ? SyncStatus.error : SyncStatus.synced;
+        await DriveFolderSetService.reloadFolderSetNode(node);
+        onMapRefresh?.call();
         onStateChanged();
 
         final hasChanges = result.addedCount > 0 || result.removedCount > 0;
@@ -729,9 +733,69 @@ class DriveSyncOperations {
     if (folderPath == null) return;
 
     try {
+      final parentNode = node.parent;
+      final parentSet = parentNode is DriveFolderSetNode ? parentNode : null;
+      final parentSetPath = parentSet?.getAbsoluteFilePath();
+
+      // DriveFolderSetNode を削除する場合、配下の参照メンバー一覧を先に控えておく
+      final descendantFolders = <DriveFolderNode>[];
+      if (node is DriveFolderSetNode) {
+        void collectDriveNodes(LayerTreeNode n) {
+          for (final c in n.children) {
+            if (c is DriveFolderNode) {
+              descendantFolders.add(c);
+            } else if (c is DriveFolderSetNode) {
+              collectDriveNodes(c);
+            }
+          }
+        }
+        collectDriveNodes(node);
+      }
+
       await node.dispose();
-      if (await fs.isDirectory(folderPath)) {
-        await fs.delete(folderPath, recursive: true);
+
+      if (parentSet != null && parentSetPath != null && node is DriveFolderNode) {
+        // 親セットの setMembers から除外
+        final setMeta = await KMetaService.instance.getMeta(parentSetPath);
+        final nextMembers = setMeta.sync.setMembers
+            .where((m) => m.driveId != node.driveId)
+            .toList();
+        await KMetaService.instance.setDriveSync(
+          parentSetPath,
+          setMembers: nextMembers,
+        );
+        await DriveDirStore.instance.deletePhysicalIfUnreferenced(
+          driveId: node.driveId,
+          targetPath: folderPath,
+          excludingSetPath: parentSetPath,
+          searchRoots: [p.dirname(parentSetPath)],
+        );
+      } else if (node is DriveFolderSetNode) {
+        if (await fs.isDirectory(folderPath)) {
+          await fs.delete(folderPath, recursive: true);
+        }
+        final searchRoot = p.dirname(folderPath);
+        for (final childDrive in descendantFolders) {
+          final childPath = childDrive.getAbsoluteFilePath();
+          if (childPath != null) {
+            await DriveDirStore.instance.deletePhysicalIfUnreferenced(
+              driveId: childDrive.driveId,
+              targetPath: childPath,
+              excludingSetPath: folderPath,
+              searchRoots: [searchRoot],
+            );
+          }
+        }
+      } else {
+        if (await fs.isDirectory(folderPath)) {
+          await fs.delete(folderPath, recursive: true);
+        }
+        if (node is DriveFolderNode) {
+          await DriveDirStore.instance.unregister(
+            node.driveId,
+            ifPathMatches: folderPath,
+          );
+        }
       }
       onMapRefresh?.call();
       onStateChanged();

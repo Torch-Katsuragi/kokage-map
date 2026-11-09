@@ -365,6 +365,22 @@ class WebFileSystem implements KFileSystem {
   }
 
   @override
+  Future<({Uint8List bytes, int fileSize})> readHeaderBytes(
+    String path,
+    int maxBytes,
+  ) async {
+    final file = await _file(path) ?? (throw _notFound(path));
+    final size = file.size;
+    if (size <= maxBytes) {
+      final buffer = await file.arrayBuffer().toDart;
+      return (bytes: buffer.toDart.asUint8List(), fileSize: size);
+    }
+    final slice = file.slice(0, maxBytes);
+    final buffer = await slice.arrayBuffer().toDart;
+    return (bytes: buffer.toDart.asUint8List(), fileSize: size);
+  }
+
+  @override
   Future<String> readAsString(String path) async {
     final file = await _file(path) ?? (throw _notFound(path));
     return (await file.text().toDart).toDart;

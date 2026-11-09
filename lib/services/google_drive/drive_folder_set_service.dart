@@ -23,6 +23,7 @@ import 'package:path/path.dart' as p;
 import '../../core/fs/k_file_system.dart';
 import '../../core/fs/safe_path.dart';
 import '../../core/shared_link.dart';
+import '../../models/kmeta.dart';
 import '../../models/nodes/drive_folder_node.dart';
 import '../../models/nodes/drive_folder_set_node.dart';
 import '../../models/nodes/folder_node.dart';
@@ -32,9 +33,12 @@ import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import '../qgis/qgs_read_back.dart';
 import 'auto_sync_service.dart';
+import 'drive_dir_store.dart';
 import 'drive_transfer_registry.dart';
+import 'folder_lookup.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';
+import 'sync_file_operations.dart';
 
 /// JSONマニフェスト内の1フォルダ項目
 class DriveFolderSetItem {
@@ -229,10 +233,15 @@ class FolderSetSyncResult {
 /// ツリー展開全体で共有する走査コンテキスト（循環遮断・重複排除・総件数制限）
 class _ReconcileContext {
   final Set<String> visitedDriveIds;
+  final String rootSetPath;
+  final List<String> searchRoots;
   int processedItemCount = 0;
 
-  _ReconcileContext({Set<String>? initialVisitedIds})
-      : visitedDriveIds = {...?initialVisitedIds};
+  _ReconcileContext({
+    Set<String>? initialVisitedIds,
+    required this.rootSetPath,
+    required this.searchRoots,
+  }) : visitedDriveIds = {...?initialVisitedIds};
 }
 
 /// Drive共有フォルダセットの取得・差分調整サービス
@@ -307,6 +316,7 @@ class DriveFolderSetService {
     required bool showOsNotification,
     required bool forceReadOnly,
   }) async {
+    await LocalSyncSeedIndex.instance.refreshFromLedgers();
     final init = await _buildInitialState(
       localSetPath: localSetPath,
       setNode: setNode,
@@ -320,13 +330,22 @@ class DriveFolderSetService {
       showOsNotification: showOsNotification,
       forceReadOnly: init.forceReadOnly,
       depth: init.depth,
-      context: _ReconcileContext(initialVisitedIds: init.visitedIds),
+      context: _ReconcileContext(
+        initialVisitedIds: init.visitedIds,
+        rootSetPath: init.rootSetPath,
+        searchRoots: [p.dirname(init.rootSetPath)],
+      ),
     );
   }
 
   /// 途中の子セットから直接 `reconcileSet` が呼ばれた場合でも、
   /// 祖先との循環参照・兄弟枝との重複・親からの `readOnly` 継承・現在の深さを正確に復元する
-  Future<({Set<String> visitedIds, bool forceReadOnly, int depth})> _buildInitialState({
+  Future<({
+    Set<String> visitedIds,
+    bool forceReadOnly,
+    int depth,
+    String rootSetPath,
+  })> _buildInitialState({
     required String localSetPath,
     required DriveFolderSetNode? setNode,
     required bool forceReadOnly,
@@ -362,6 +381,7 @@ class DriveFolderSetService {
       }
     }
 
+    final rootSetPath = ancestorPaths.isNotEmpty ? ancestorPaths.last : localSetPath;
     if (ancestorPaths.isNotEmpty) {
       // 自身が子セットなら自身の KMetaSync.isReadOnly も反映
       try {
@@ -393,6 +413,7 @@ class DriveFolderSetService {
       visitedIds: visitedIds,
       forceReadOnly: effectiveReadOnly,
       depth: depth,
+      rootSetPath: rootSetPath,
     );
   }
 
@@ -414,6 +435,11 @@ class DriveFolderSetService {
       if (raw != null && raw.sync.isLinked && raw.sync.isFolderSet != true) {
         // 通常の DriveFolderNode の内部には入らない
         return;
+      }
+      for (final member in raw?.sync.setMembers ?? const <KMetaFolderSetMember>[]) {
+        if (member.driveId.isNotEmpty) {
+          outIds.add(member.driveId);
+        }
       }
       for (final entry in await fs.list(currentDir)) {
         if (!entry.isDirectory || entry.name.startsWith('.')) continue;
@@ -456,11 +482,37 @@ class DriveFolderSetService {
 
       await fs.createDirectory(localSetPath);
 
-      // 現在の直下サブフォルダの Drive 連携状態を集める
+      final currentSetMeta = await KMetaService.instance.getMeta(localSetPath);
+
+      // 現在の直下サブフォルダおよび KMetaSync.setMembers（参照マウント）の Drive 連携状態を集める
       final existingByDriveId = <String, String>{};
       final existingNameByPath = <String, String>{};
       final existingIsSetByDriveId = <String, bool>{};
+      final existingMemberByDriveId = <String, KMetaFolderSetMember>{};
       var anySubfolderPending = false;
+
+      for (final member in currentSetMeta.sync.setMembers) {
+        if (member.driveId.isEmpty) continue;
+        String? targetPath = member.targetPath;
+        if (targetPath == null || !await fs.isDirectory(targetPath)) {
+          targetPath = await DriveDirStore.instance.findExistingPath(
+            member.driveId,
+            searchRoots: context.searchRoots,
+          );
+        }
+        if (targetPath == null || !await fs.isDirectory(targetPath)) continue;
+        await DriveDirStore.instance.register(member.driveId, targetPath);
+        if (await registry.hasClonePending(targetPath)) {
+          anySubfolderPending = true;
+        }
+        existingByDriveId[member.driveId] = targetPath;
+        existingNameByPath[targetPath] =
+            member.name.isNotEmpty ? member.name : p.basename(targetPath);
+        existingIsSetByDriveId[member.driveId] = false;
+        existingMemberByDriveId[member.driveId] =
+            member.copyWith(targetPath: targetPath);
+      }
+
       for (final entry in await fs.list(localSetPath)) {
         if (!entry.isDirectory || entry.name.startsWith('.')) continue;
         try {
@@ -470,9 +522,21 @@ class DriveFolderSetService {
           final meta = await KMetaService.instance.getMeta(entry.path);
           final id = meta.sync.driveId;
           if (id != null && id.isNotEmpty) {
+            final isSubSet = meta.sync.isFolderSet == true;
             existingByDriveId[id] = entry.path;
             existingNameByPath[entry.path] = entry.name;
-            existingIsSetByDriveId[id] = meta.sync.isFolderSet == true;
+            existingIsSetByDriveId[id] = isSubSet;
+            if (!isSubSet) {
+              await DriveDirStore.instance.register(id, entry.path);
+              existingMemberByDriveId[id] = KMetaFolderSetMember(
+                driveId: id,
+                name: entry.name,
+                driveUrl: meta.sync.driveUrl ??
+                    'https://drive.google.com/drive/folders/$id',
+                isReadOnly: meta.sync.isReadOnly ?? false,
+                targetPath: entry.path,
+              );
+            }
           }
         } catch (_) {}
       }
@@ -484,7 +548,6 @@ class DriveFolderSetService {
           remoteMd5 != null &&
           !anySubfolderPending &&
           !await registry.hasClonePending(localSetPath)) {
-        final currentSetMeta = await KMetaService.instance.getMeta(localSetPath);
         if (currentSetMeta.sync.driveRevisionId == remoteMd5 &&
             existingByDriveId.isNotEmpty) {
           // 直下の通常フォルダの ID を先に visited に登録してから子セットを再帰チェック
@@ -580,6 +643,9 @@ class DriveFolderSetService {
       var removedCount = 0;
       final keptWithLocalChanges = <String>[];
       final failedItems = <String>[];
+      final updatedMembers = <String, KMetaFolderSetMember>{
+        ...existingMemberByDriveId,
+      };
 
       // JSONにパース不能な項目が混じっている場合や、既存フォルダがあるのにJSONが空配列になった場合は
       // 記載ミスによる全消去事故を防ぐため削除フェーズをスキップする
@@ -599,6 +665,7 @@ class DriveFolderSetService {
             final canDeleteSubSet = await _canSafelyDeleteSubSet(
               subPath,
               keptWithLocalChanges,
+              searchRoots: context.searchRoots,
             );
             if (!canDeleteSubSet) {
               AppLogger.debug(
@@ -606,6 +673,10 @@ class DriveFolderSetService {
               );
               continue;
             }
+            final subMembersToCleanup = await _collectSubSetMembers(
+              subPath,
+              searchRoots: context.searchRoots,
+            );
             if (effectiveSetNode != null) {
               final childSetNode = effectiveSetNode.children
                   .whereType<DriveFolderSetNode>()
@@ -617,6 +688,16 @@ class DriveFolderSetService {
             }
             if (await fs.exists(subPath)) {
               await fs.delete(subPath, recursive: true);
+            }
+            for (final m in subMembersToCleanup) {
+              if (m.targetPath != null) {
+                await DriveDirStore.instance.deletePhysicalIfUnreferenced(
+                  driveId: m.driveId,
+                  targetPath: m.targetPath!,
+                  excludingSetPath: subPath,
+                  searchRoots: context.searchRoots,
+                );
+              }
             }
             removedCount++;
             continue;
@@ -652,21 +733,40 @@ class DriveFolderSetService {
             }
           }
 
-          if (await fs.exists(subPath)) {
-            await fs.delete(subPath, recursive: true);
-          }
+          updatedMembers.remove(driveId);
+          await DriveDirStore.instance.deletePhysicalIfUnreferenced(
+            driveId: driveId,
+            targetPath: subPath,
+            excludingSetPath: localSetPath,
+            searchRoots: context.searchRoots,
+          );
           removedCount++;
         }
       }
 
-      // 2. JSONにあるフォルダ・子セットを追加・設定更新
+      // 2. 新規項目のメタデータ（lookupFolder）を事前に並列取得（最大4並列）
+      final itemsNeedingLookup = desiredItems
+          .where((item) => !existingByDriveId.containsKey(item.driveId))
+          .toList();
+      final lookupByDriveId = <String, FolderLookup>{};
+      if (itemsNeedingLookup.isNotEmpty) {
+        await SyncFileOperations.runParallel(
+          itemsNeedingLookup.map((item) => () async {
+            lookupByDriveId[item.driveId] =
+                await _driveService.lookupFolder(item.driveId);
+          }),
+          maxConcurrency: 4,
+        );
+      }
+
+      // 3. JSONにあるフォルダ・子セットを追加・設定更新
       for (final item in desiredItems) {
         final itemEffectiveReadOnly = forceReadOnly || item.readOnly;
         final existingPath = existingByDriveId[item.driveId];
         if (existingPath != null) {
           if (registry.isBusy(existingPath)) continue;
 
-          // 2a. 既存が子セット（DriveFolderSetNode）の場合: 再帰的に reconcile
+          // 3a. 既存が子セット（DriveFolderSetNode）の場合: 再帰的に reconcile
           if (existingIsSetByDriveId[item.driveId] == true) {
             if (depth >= kMaxSetDepth) {
               AppLogger.debug(
@@ -712,35 +812,56 @@ class DriveFolderSetService {
             continue;
           }
 
-          // 2b. 既存が通常の DriveFolderNode の場合: 未完了クローンなら再開
+          // 3b. 既存が通常の DriveFolderNode の場合: 未完了クローンなら再開
           if (await registry.hasClonePending(existingPath)) {
-            final pullRes = await _syncEngine.pull(
-              item.driveId,
-              existingPath,
-              showOsNotification: showOsNotification,
-            );
-            if (pullRes.success) {
-              addedCount++;
-            } else {
-              failedItems.add(p.basename(existingPath));
+            registry.bindParentTransfer(existingPath, context.rootSetPath);
+            try {
+              final pullRes = await _syncEngine.pull(
+                item.driveId,
+                existingPath,
+                showOsNotification: showOsNotification,
+              );
+              if (pullRes.success) {
+                addedCount++;
+              } else {
+                failedItems.add(
+                  existingNameByPath[existingPath] ?? p.basename(existingPath),
+                );
+              }
+            } finally {
+              registry.unbindParentTransfer(existingPath);
             }
           }
           final meta = await KMetaService.instance.getMeta(existingPath);
+          var resolvedRo = meta.sync.isReadOnly ?? false;
           if (itemEffectiveReadOnly) {
+            resolvedRo = true;
             if (meta.sync.isReadOnly != true) {
               await KMetaService.instance.setDriveSync(existingPath, isReadOnly: true);
             }
           } else if (meta.sync.isReadOnly == true) {
             final lookup = await _driveService.lookupFolder(item.driveId);
             if (lookup.folder?.capabilities?.canEdit == true) {
+              resolvedRo = false;
               await KMetaService.instance.setDriveSync(existingPath, isReadOnly: false);
             }
           }
+          final prevMember = updatedMembers[item.driveId];
+          updatedMembers[item.driveId] = KMetaFolderSetMember(
+            driveId: item.driveId,
+            name: prevMember?.name ??
+                existingNameByPath[existingPath] ??
+                p.basename(existingPath),
+            driveUrl: item.driveUrl,
+            isReadOnly: resolvedRo,
+            targetPath: existingPath,
+          );
           continue;
         }
 
-        // 新規項目: Drive からメタデータを取得して「子JSONセット」か「Driveフォルダ」かを判別
-        final lookup = await _driveService.lookupFolder(item.driveId);
+        // 新規項目: 事前取得したメタデータから「子JSONセット」か「Driveフォルダ」かを判別
+        final lookup =
+            lookupByDriveId[item.driveId] ?? await _driveService.lookupFolder(item.driveId);
         final info = lookup.folder;
         if (info == null) {
           AppLogger.debug('[DriveFolderSet] 対象が見つかりません: ${item.driveId}');
@@ -748,7 +869,7 @@ class DriveFolderSetService {
           continue;
         }
 
-        // 2c. 新規の子JSONセット（入れ子プリセット）
+        // 3c. 新規の子JSONセット（入れ子プリセット）
         if (GoogleDriveService.isJsonFileMetadata(info)) {
           if (depth >= kMaxSetDepth) {
             AppLogger.debug(
@@ -815,7 +936,7 @@ class DriveFolderSetService {
           continue;
         }
 
-        // 2d. 新規の通常 Drive フォルダ
+        // 3d. 新規の通常 Drive フォルダ
         if (!GoogleDriveService.isFolderMetadata(info)) {
           AppLogger.debug('[DriveFolderSet] 対象がフォルダでもJSONでもありません: ${item.driveId}');
           failedItems.add(info.name ?? item.driveId);
@@ -823,28 +944,68 @@ class DriveFolderSetService {
         }
 
         final baseName = toLocalFolderName(info.name ?? item.driveId, fallback: item.driveId);
-        var childPath = p.join(localSetPath, baseName);
-        for (var n = 2; await fs.exists(childPath); n++) {
-          childPath = p.join(localSetPath, '$baseName $n');
-        }
         final isReadOnly = itemEffectiveReadOnly || !(info.capabilities?.canEdit ?? false);
 
-        final ok = await _syncEngine.cloneFromDrive(
-          driveId: item.driveId,
-          localPath: childPath,
-          folderName: p.basename(childPath),
-          driveUrl: item.driveUrl,
-          isReadOnly: isReadOnly,
-          showOsNotification: showOsNotification,
+        // Tier 1: DriveDirStore に同一 driveId の完了済み実体があればダウンロードせず参照マウント
+        final reusedPath = await DriveDirStore.instance.findExistingPath(
+          item.driveId,
+          searchRoots: context.searchRoots,
         );
+        if (reusedPath != null && !await registry.hasClonePending(reusedPath)) {
+          AppLogger.debug(
+            '[DriveFolderSet] 既存の共有フォルダ実体を参照マウント: ${item.driveId} -> $reusedPath',
+          );
+          await DriveDirStore.instance.register(item.driveId, reusedPath);
+          updatedMembers[item.driveId] = KMetaFolderSetMember(
+            driveId: item.driveId,
+            name: baseName,
+            driveUrl: item.driveUrl,
+            isReadOnly: isReadOnly,
+            targetPath: reusedPath,
+          );
+          addedCount++;
+          continue;
+        }
+
+        // 新規クローン: `.kokage/drive_store/<driveId>/<folderName>` に実体を配置し、辞書と setMembers に登録
+        final targetPath = reusedPath ??
+            await DriveDirStore.instance.allocateStorePath(
+              driveId: item.driveId,
+              folderName: baseName,
+              contextPath: context.rootSetPath,
+            );
+
+        registry.bindParentTransfer(targetPath, context.rootSetPath);
+        bool ok = false;
+        try {
+          ok = await _syncEngine.cloneFromDrive(
+            driveId: item.driveId,
+            localPath: targetPath,
+            folderName: baseName,
+            driveUrl: item.driveUrl,
+            isReadOnly: isReadOnly,
+            preloadedFolderInfo: info,
+            showOsNotification: showOsNotification,
+          );
+        } finally {
+          registry.unbindParentTransfer(targetPath);
+        }
         if (ok) {
+          await DriveDirStore.instance.register(item.driveId, targetPath);
+          updatedMembers[item.driveId] = KMetaFolderSetMember(
+            driveId: item.driveId,
+            name: baseName,
+            driveUrl: item.driveUrl,
+            isReadOnly: isReadOnly,
+            targetPath: targetPath,
+          );
           addedCount++;
         } else {
           failedItems.add(info.name ?? item.driveId);
         }
       }
 
-      // 3. セット自体のメタデータ更新と未完了マーカー解除（全件成功時のみ）
+      // 4. セット自体のメタデータ更新と未完了マーカー解除（全件成功時のみ）
       if (failedItems.isEmpty) {
         await registry.clearClonePending(localSetPath);
       }
@@ -852,6 +1013,7 @@ class DriveFolderSetService {
         localSetPath,
         driveId: manifestFileId,
         isFolderSet: true,
+        setMembers: updatedMembers.values.toList(),
         lastSynced: DateTime.now(),
         driveRevisionId: failedItems.isEmpty ? remoteMd5 : null,
       );
@@ -886,17 +1048,58 @@ class DriveFolderSetService {
     }
   }
 
-  /// 子セット（[subSetPath]）配下のすべての [DriveFolderNode] を再帰検査し、
+  /// 子セット（[subSetPath]）配下のすべての [DriveFolderNode]（参照マウントを含む）を再帰検査し、
   /// 1つでも転送中または未送信のローカル変更がある（もしくは状態確認できない）フォルダがあれば
   /// [keptWithLocalChanges] に名前を追加して false を返す。すべて安全に削除できる場合のみ true を返す。
   Future<bool> _canSafelyDeleteSubSet(
     String subSetPath,
-    List<String> keptWithLocalChanges,
-  ) async {
+    List<String> keptWithLocalChanges, {
+    List<String> searchRoots = const [],
+  }) async {
     final registry = DriveTransferRegistry.instance;
     if (registry.isBusy(subSetPath)) return false;
 
     var allSafe = true;
+    final checkedPaths = <String>{};
+
+    Future<void> checkFolder(String folderPath, String displayName) async {
+      final norm = DriveTransferRegistry.normalizeKey(folderPath);
+      if (!checkedPaths.add(norm)) return;
+      if (registry.isBusy(folderPath)) {
+        allSafe = false;
+        return;
+      }
+      var folderSafe = false;
+      if (await registry.hasClonePending(folderPath)) {
+        folderSafe = true;
+      } else {
+        final detail = await _syncEngine.checkSyncStatusDetail(folderPath);
+        folderSafe = (detail.status == FolderSyncStatus.synced ||
+                detail.status == FolderSyncStatus.remoteChanges) &&
+            detail.localAdded == 0 &&
+            detail.localModified == 0 &&
+            detail.localDeleted == 0;
+      }
+      if (!folderSafe) {
+        keptWithLocalChanges.add(displayName);
+        allSafe = false;
+      }
+    }
+
+    try {
+      final subSetMeta = await KMetaService.instance.getMeta(subSetPath);
+      for (final member in subSetMeta.sync.setMembers) {
+        final mPath = member.targetPath ??
+            await DriveDirStore.instance.findExistingPath(
+              member.driveId,
+              searchRoots: searchRoots,
+            );
+        if (mPath == null || !await fs.isDirectory(mPath)) continue;
+        final name = member.name.isNotEmpty ? member.name : p.basename(mPath);
+        await checkFolder(mPath, name);
+      }
+    } catch (_) {}
+
     for (final entry in await fs.list(subSetPath)) {
       if (!entry.isDirectory || entry.name.startsWith('.')) continue;
       if (registry.isBusy(entry.path)) {
@@ -910,31 +1113,50 @@ class DriveFolderSetService {
           final childSafe = await _canSafelyDeleteSubSet(
             entry.path,
             keptWithLocalChanges,
+            searchRoots: searchRoots,
           );
           if (!childSafe) allSafe = false;
           continue;
         }
-        var folderSafe = false;
-        if (await registry.hasClonePending(entry.path)) {
-          folderSafe = true;
-        } else {
-          final detail = await _syncEngine.checkSyncStatusDetail(entry.path);
-          folderSafe = (detail.status == FolderSyncStatus.synced ||
-                  detail.status == FolderSyncStatus.remoteChanges) &&
-              detail.localAdded == 0 &&
-              detail.localModified == 0 &&
-              detail.localDeleted == 0;
-        }
-        if (!folderSafe) {
-          keptWithLocalChanges.add(entry.name);
-          allSafe = false;
-        }
+        await checkFolder(entry.path, entry.name);
       } catch (_) {
         keptWithLocalChanges.add(entry.name);
         allSafe = false;
       }
     }
     return allSafe;
+  }
+
+  /// 削除される子セット（[subSetPath]）配下の参照メンバー一覧を再帰収集する
+  Future<List<KMetaFolderSetMember>> _collectSubSetMembers(
+    String subSetPath, {
+    List<String> searchRoots = const [],
+  }) async {
+    final out = <KMetaFolderSetMember>[];
+    try {
+      final meta = await KMetaService.instance.getMeta(subSetPath);
+      for (final member in meta.sync.setMembers) {
+        final mPath = member.targetPath ??
+            await DriveDirStore.instance.findExistingPath(
+              member.driveId,
+              searchRoots: searchRoots,
+            );
+        out.add(member.copyWith(targetPath: mPath));
+      }
+      for (final entry in await fs.list(subSetPath)) {
+        if (!entry.isDirectory || entry.name.startsWith('.')) continue;
+        final childMeta = await KMetaService.instance.getMeta(entry.path);
+        if (childMeta.sync.isFolderSet == true) {
+          out.addAll(
+            await _collectSubSetMembers(
+              entry.path,
+              searchRoots: searchRoots,
+            ),
+          );
+        }
+      }
+    } catch (_) {}
+    return out;
   }
 
   /// [setNode] 配下の子ノードを再帰的に読み込み、子セット内も含めた全子孫 [DriveFolderNode] の `.qgs` を読み戻す
@@ -967,11 +1189,14 @@ class DriveFolderSetService {
   static Future<void> _reloadRecursive(LayerTreeNode node) async {
     await node.updateChildren();
     for (final child in node.children) {
-      if (child is DriveFolderSetNode &&
-          child.syncStatus == SyncStatus.unknown &&
-          node is DriveFolderSetNode &&
-          node.syncStatus == SyncStatus.synced) {
-        child.syncStatus = SyncStatus.synced;
+      if (node is DriveFolderSetNode &&
+          node.syncStatus == SyncStatus.synced &&
+          (child is DriveFolderSetNode || child is DriveFolderNode)) {
+        if (child is DriveFolderSetNode && child.syncStatus == SyncStatus.unknown) {
+          child.syncStatus = SyncStatus.synced;
+        } else if (child is DriveFolderNode && child.syncStatus == SyncStatus.unknown) {
+          child.syncStatus = SyncStatus.synced;
+        }
       }
       if (child is FolderNode || child is GeoPackageNode) {
         await _reloadRecursive(child);

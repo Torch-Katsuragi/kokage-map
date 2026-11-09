@@ -23,20 +23,20 @@
           text(size: 6.5pt, weight: "bold", fill: ink)[北部エリア.json],
         )
         v(3pt)
-        text(size: 6.2pt, fill: sub)[・A工区\_施業図#linebreak()・A工区\_写真]
+        text(size: 6.2pt, fill: sub)[・Aエリア\_調査図#linebreak()・Aエリア\_写真]
       })),
     ),
     arrow-r(w: 16pt),
     layer-panel(w: 120pt, header: "レイヤツリー", (
       (0, "dir", [全体地図], "hi"),
       (1, "dir", [北部エリア], "lock"),
-      (2, "dir", [A工区\_施業図], "lock"),
-      (2, "dir", [A工区\_写真], "lock"),
+      (2, "dir", [Aエリア\_調査図], "lock"),
+      (2, "dir", [Aエリア\_写真], "lock"),
       (1, "dir", [南部エリア], "ok"),
       (1, "dir", [共通ベースマップ], "ok"),
     )),
   ),
-  note: [全体を統括する人は「全体地図.json」、担当工区だけ見たい人は「北部エリア.json」のリンクを読むだけで、それぞれの立場で必要な構成が揃います。],
+  note: [全体を統括する人は「全体地図.json」、担当エリアだけ見たい人は「北部エリア.json」のリンクを読むだけで、それぞれの立場で必要な構成が揃います。],
 )
 
 #fixes(

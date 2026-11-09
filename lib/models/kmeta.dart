@@ -526,6 +526,66 @@ class KMetaSyncFile {
   }
 }
 
+/// 共有フォルダセット（JSON）が参照マウントするメンバーフォルダ情報
+class KMetaFolderSetMember {
+  /// DriveフォルダID
+  final String driveId;
+
+  /// フォルダセット内でのローカル表示名
+  final String name;
+
+  /// 元のDrive共有URL
+  final String driveUrl;
+
+  /// 読み取り専用か
+  final bool isReadOnly;
+
+  /// 実体ディレクトリのパス（DriveDirStore 上のパス等）
+  final String? targetPath;
+
+  const KMetaFolderSetMember({
+    required this.driveId,
+    required this.name,
+    required this.driveUrl,
+    this.isReadOnly = false,
+    this.targetPath,
+  });
+
+  factory KMetaFolderSetMember.fromJson(Map<String, dynamic> json) {
+    return KMetaFolderSetMember(
+      driveId: (json['driveId'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      driveUrl: (json['driveUrl'] as String?) ?? '',
+      isReadOnly: (json['isReadOnly'] as bool?) ?? false,
+      targetPath: json['targetPath'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'driveId': driveId,
+        'name': name,
+        'driveUrl': driveUrl,
+        'isReadOnly': isReadOnly,
+        if (targetPath != null) 'targetPath': targetPath,
+      };
+
+  KMetaFolderSetMember copyWith({
+    String? driveId,
+    String? name,
+    String? driveUrl,
+    bool? isReadOnly,
+    String? targetPath,
+  }) {
+    return KMetaFolderSetMember(
+      driveId: driveId ?? this.driveId,
+      name: name ?? this.name,
+      driveUrl: driveUrl ?? this.driveUrl,
+      isReadOnly: isReadOnly ?? this.isReadOnly,
+      targetPath: targetPath ?? this.targetPath,
+    );
+  }
+}
+
 /// 同期設定（Google Drive連携用）
 class KMetaSync {
   /// Google DriveのフォルダID
@@ -542,6 +602,9 @@ class KMetaSync {
 
   /// JSONマニフェストによる共有フォルダセットか
   final bool? isFolderSet;
+
+  /// 共有フォルダセットが参照するメンバー一覧（`.qgs` に保存されるリンク情報）
+  final List<KMetaFolderSetMember> setMembers;
 
   /// 最終同期日時
   final DateTime? lastSynced;
@@ -561,6 +624,7 @@ class KMetaSync {
     this.driveUrl,
     this.isReadOnly,
     this.isFolderSet,
+    this.setMembers = const [],
     this.lastSynced,
     this.driveRevisionId,
     this.deviceId,
@@ -582,15 +646,23 @@ class KMetaSync {
       }
     }
 
+    final membersJson = json['setMembers'] as List<dynamic>?;
+    final setMembers = <KMetaFolderSetMember>[
+      if (membersJson != null)
+        for (final item in membersJson)
+          if (item is Map<String, dynamic>) KMetaFolderSetMember.fromJson(item),
+    ];
+
     return KMetaSync(
       driveId: json['driveId'] as String?,
       driveFolderName: json['driveFolderName'] as String?,
       driveUrl: json['driveUrl'] as String?,
       isReadOnly: json['isReadOnly'] as bool?,
       isFolderSet: json['isFolderSet'] as bool?,
+      setMembers: setMembers,
       lastSynced:
           json['lastSynced'] != null
-              ? DateTime.tryParse(json['lastSynced'] as String)
+               ? DateTime.tryParse(json['lastSynced'] as String)
               : null,
       driveRevisionId: json['driveRevisionId'] as String?,
       deviceId: json['deviceId'] as String?,
@@ -606,6 +678,9 @@ class KMetaSync {
     if (driveUrl != null) json['driveUrl'] = driveUrl;
     if (isReadOnly != null) json['isReadOnly'] = isReadOnly;
     if (isFolderSet != null) json['isFolderSet'] = isFolderSet;
+    if (setMembers.isNotEmpty) {
+      json['setMembers'] = [for (final m in setMembers) m.toJson()];
+    }
     if (lastSynced != null) json['lastSynced'] = lastSynced!.toIso8601String();
     if (driveRevisionId != null) json['driveRevisionId'] = driveRevisionId;
     if (deviceId != null) json['deviceId'] = deviceId;
@@ -622,6 +697,7 @@ class KMetaSync {
     driveUrl: driveUrl,
     isReadOnly: isReadOnly,
     isFolderSet: isFolderSet,
+    setMembers: setMembers,
   );
 
   /// 帳簿（端末ごとの状態）を含んでいるか
@@ -632,6 +708,7 @@ class KMetaSync {
   bool get isEmpty =>
       driveId == null &&
       driveFolderName == null &&
+      setMembers.isEmpty &&
       lastSynced == null &&
       driveRevisionId == null &&
       deviceId == null &&
@@ -647,6 +724,7 @@ class KMetaSync {
     String? driveUrl,
     bool? isReadOnly,
     bool? isFolderSet,
+    List<KMetaFolderSetMember>? setMembers,
     DateTime? lastSynced,
     String? driveRevisionId,
     String? deviceId,
@@ -658,6 +736,7 @@ class KMetaSync {
       driveUrl: driveUrl ?? this.driveUrl,
       isReadOnly: isReadOnly ?? this.isReadOnly,
       isFolderSet: isFolderSet ?? this.isFolderSet,
+      setMembers: setMembers ?? this.setMembers,
       lastSynced: lastSynced ?? this.lastSynced,
       driveRevisionId: driveRevisionId ?? this.driveRevisionId,
       deviceId: deviceId ?? this.deviceId,

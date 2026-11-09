@@ -131,6 +131,41 @@ class DriveTransferService : Service() {
             } catch (_: Exception) {}
         }
 
+        fun cancelNotification(
+            context: Context,
+            id: Int,
+            stopService: Boolean,
+        ) {
+            val nm = context.getSystemService(NotificationManager::class.java)
+            if (stopService) {
+                stopIfIdle(context)
+            }
+            nm?.cancel(id)
+        }
+
+        fun cancelAllProgress(context: Context) {
+            stopIfIdle(context)
+            val nm = context.getSystemService(NotificationManager::class.java) ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                try {
+                    for (sbn in nm.activeNotifications) {
+                        val notif = sbn.notification ?: continue
+                        val isSyncChannel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            notif.channelId == CHANNEL_ID
+                        } else {
+                            sbn.id >= 2000
+                        }
+                        val isOngoing = (notif.flags and Notification.FLAG_ONGOING_EVENT) != 0
+                        if (isSyncChannel && isOngoing) {
+                            nm.cancel(sbn.id)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("DriveTransferService", "cancelAllProgress failed: $e")
+                }
+            }
+        }
+
         private fun contentPendingIntent(context: Context): PendingIntent {
             val launchIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP

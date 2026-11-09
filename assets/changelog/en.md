@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.15.2 — 2026/11/09
+
+### Improvements & Changes
+
+- Shared folder deduplication & reference mounting across JSON presets: When multiple JSON presets or existing shared folders reference the same Google Drive folder, the app now mounts the single local directory from `.kokage/drive_store` (or the existing shared folder) without re-downloading duplicate copies
+- MD5-verified local file seeding: When cloning a folder whose files already exist locally inside another synced folder with matching file size and MD5 checksum, files are seeded directly from local storage without network transfer
+- Faster shared folder cloning & sync: Added parallel folder metadata prefetching, prioritized GIS files (`.qgs`, `.gpkg`, `.tif`, etc.) ahead of photos during downloads, optimized photo EXIF GPS parsing to read only the first 64 KB header, and deferred periodic auto-sync while transfers are active
+
+### Bug Fixes
+
+- Fixed an issue where automatic sync of shared folders on app launch or project open could be skipped while Google Drive session restoration was still in progress, requiring a manual "Refresh status" to start syncing
+- Fixed an issue on Android where child folder "Syncing..." notifications could remain in the system notification shade after a shared folder set finished syncing
+
 ## v0.15.1 — 2026/11/04
 
 ### New Features & Improvements

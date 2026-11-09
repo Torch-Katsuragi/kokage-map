@@ -24,6 +24,7 @@ import '../../core/fs/k_file_system.dart';
 import '../../core/fs/safe_path.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
+import 'drive_dir_store.dart';
 import 'google_drive_service.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
@@ -218,23 +219,41 @@ class SyncFileOperations {
 
   /// Drive のファイルを落として手元の [localFilePath] を置き換える。
   ///
+  /// 既存の他共有フォルダに同一ファイル（`driveFileId` または `remoteMd5` 一致）があれば
+  /// [LocalSyncSeedIndex] で MD5 検証付きローカルコピーを行い、ネットワーク通信を省く。
   /// この端末のリンク情報は、落とした `.qgs` で上書きしない。gpkg は開いている接続を閉じてから置き換え、
   /// 置き換えたあと一度開いて閉じる（[SyncBaseStore.settleAfterDownload]）。落とせなければ false
   Future<bool> downloadReplacing(
     String fileId,
     String localFilePath, {
+    String? remoteMd5,
+    int? remoteSize,
     void Function(int chunkBytes)? onChunk,
     void Function()? onRetryReset,
   }) async {
     final keepLink = await KMetaService.instance.linkBeforeReplace(localFilePath);
     await SyncBaseStore.releaseBeforeOverwrite(localFilePath);
-    if (!await driveService.downloadFile(
-      fileId,
-      localFilePath,
-      onChunk: onChunk,
-      onRetryReset: onRetryReset,
-    )) {
-      return false;
+    final seeded = await LocalSyncSeedIndex.instance.trySeedToFile(
+      driveFileId: fileId,
+      remoteMd5: remoteMd5,
+      remoteSize: remoteSize,
+      targetFilePath: localFilePath,
+      onChunkBytes: onChunk,
+    );
+    if (!seeded) {
+      if (!await driveService.downloadFile(
+        fileId,
+        localFilePath,
+        onChunk: onChunk,
+        onRetryReset: onRetryReset,
+      )) {
+        return false;
+      }
+      LocalSyncSeedIndex.instance.registerSeededFile(
+        driveFileId: fileId,
+        remoteMd5: remoteMd5,
+        localFilePath: localFilePath,
+      );
     }
     await SyncBaseStore.settleAfterDownload(localFilePath);
     await KMetaService.instance.afterReplace(localFilePath, keepLink);

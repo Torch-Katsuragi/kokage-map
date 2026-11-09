@@ -90,6 +90,78 @@ void main() {
         await tempDir.delete(recursive: true);
       }
     });
+
+    test('aggregates bound child transfer progress into parent without zombie busy state or duplicate completion events', () async {
+      const parentPath = r'C:\temp\map_project\共有\プリセットA';
+      const childStorePath = r'C:\temp\map_project\.kokage\drive_store\id_1\子フォルダ1';
+
+      final completedEvents = <DriveTransferCompletionEvent>[];
+      final sub = registry.onTransferCompleted.listen(completedEvents.add);
+      try {
+        registry.beginTransfer(
+          parentPath,
+          folderName: 'プリセットA',
+          initial: const SyncProgress.scanning(currentFileName: 'プリセット確認中'),
+          showOsNotification: false,
+        );
+        registry.bindParentTransfer(childStorePath, parentPath);
+
+        registry.beginTransfer(
+          childStorePath,
+          folderName: '子フォルダ1',
+          initial: const SyncProgress.scanning(),
+          showOsNotification: false,
+        );
+        // 子転送は親へ集約されるため activeCount は増えず 1 のまま
+        expect(registry.activeCount.value, 1);
+        expect(registry.isBusy(childStorePath), isTrue);
+        expect(registry.isBusy(parentPath), isTrue);
+
+        registry.updateProgress(
+          childStorePath,
+          const SyncProgress(
+            phase: SyncPhase.transferring,
+            transferredBytes: 30,
+            totalBytes: 100,
+            currentFileName: 'layer.gpkg',
+          ),
+          showOsNotification: false,
+        );
+        // updateProgress でも activeCount が増えないこと
+        expect(registry.activeCount.value, 1);
+        expect(
+          registry.progressOf(parentPath).value?.currentFileName,
+          '子フォルダ1 / layer.gpkg',
+        );
+
+        registry.endTransfer(
+          childStorePath,
+          success: true,
+          showOsNotification: false,
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(completedEvents, isEmpty);
+        expect(registry.isBusy(parentPath), isTrue);
+
+        registry.unbindParentTransfer(childStorePath);
+        registry.endTransfer(
+          parentPath,
+          success: true,
+          showOsNotification: false,
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(registry.isBusy(parentPath), isFalse);
+        expect(registry.isBusy(childStorePath), isFalse);
+        expect(registry.activeCount.value, 0);
+        expect(completedEvents.length, 1);
+        expect(
+          DriveTransferRegistry.normalizeKey(completedEvents.single.localPath),
+          DriveTransferRegistry.normalizeKey(parentPath),
+        );
+      } finally {
+        await sub.cancel();
+      }
+    });
   });
 
   group('IoFileSystem.writeStream', () {
@@ -136,6 +208,23 @@ void main() {
 
         expect(await File(targetPath).exists(), isFalse);
         expect(await File('$targetPath.part').exists(), isFalse);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('readHeaderBytes reads only requested header prefix and returns full fileSize', () async {
+      final tempDir = await Directory.systemTemp.createTemp('kokage_header_test_');
+      const fs = IoFileSystem();
+      try {
+        final targetPath = p.join(tempDir.path, 'photo.jpg');
+        final fullBytes = List<int>.generate(1024, (i) => i % 256);
+        await File(targetPath).writeAsBytes(fullBytes);
+
+        final res = await fs.readHeaderBytes(targetPath, 64);
+        expect(res.fileSize, 1024);
+        expect(res.bytes.length, 64);
+        expect(res.bytes, fullBytes.sublist(0, 64));
       } finally {
         await tempDir.delete(recursive: true);
       }

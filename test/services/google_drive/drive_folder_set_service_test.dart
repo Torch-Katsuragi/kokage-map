@@ -18,12 +18,17 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 import 'package:root_maps/core/fs/k_file_system.dart';
+import 'package:root_maps/core/path_resolver.dart';
+import 'package:root_maps/models/kmeta.dart';
+import 'package:root_maps/models/nodes/drive_folder_node.dart';
 import 'package:root_maps/models/nodes/drive_folder_set_node.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
+import 'package:root_maps/services/google_drive/drive_dir_store.dart';
 import 'package:root_maps/services/google_drive/drive_folder_set_service.dart';
 import 'package:root_maps/services/google_drive/drive_transfer_registry.dart';
 import 'package:root_maps/services/google_drive/folder_lookup.dart';
@@ -132,6 +137,7 @@ class _FakeSyncEngine implements SyncEngine {
     required String folderName,
     required String driveUrl,
     required bool isReadOnly,
+    drive.File? preloadedFolderInfo,
     void Function(SyncProgress progress)? onProgress,
     bool showOsNotification = true,
   }) async {
@@ -371,6 +377,9 @@ void main() {
 
     setUp(() {
       SharedPreferences.setMockInitialValues({});
+      KMetaService.instance.clearCache();
+      DriveDirStore.instance.resetForTest();
+      LocalSyncSeedIndex.instance.resetForTest();
       tempDir = Directory.systemTemp.createTempSync('nested_folder_set_test_');
       fakeDrive = _FakeGoogleDriveService();
       fakeSync = _FakeSyncEngine();
@@ -425,7 +434,7 @@ void main() {
         ..register(
           _FakeDriveEntry.folder(
             id: 'area_a_folder_111111',
-            name: 'A工区_施業図',
+            name: 'Aエリア_調査図',
           ),
         )
         ..register(
@@ -449,9 +458,12 @@ void main() {
 
       // ディレクトリ階層とメタデータの検証
       final childSetPath = p.join(rootSetPath, 'エリアA');
-      final rootFolderPath = p.join(rootSetPath, '共通ベースマップ');
-      final childFolder1Path = p.join(childSetPath, 'A工区_施業図');
-      final childFolder2Path = p.join(childSetPath, 'A工区_写真');
+      final rootFolderPath = (await DriveDirStore.instance
+          .findExistingPath('root_folder_id_333333'))!;
+      final childFolder1Path = (await DriveDirStore.instance
+          .findExistingPath('area_a_folder_111111'))!;
+      final childFolder2Path = (await DriveDirStore.instance
+          .findExistingPath('area_a_folder_222222'))!;
 
       expect(await fs.exists(childSetPath), isTrue);
       expect(await fs.exists(rootFolderPath), isTrue);
@@ -461,6 +473,10 @@ void main() {
       final childSetMeta = await KMetaService.instance.getMeta(childSetPath);
       expect(childSetMeta.sync.isFolderSet, isTrue);
       expect(childSetMeta.sync.driveId, 'child_json_id_222222');
+      expect(
+        childSetMeta.sync.setMembers.map((m) => m.driveId),
+        equals(['area_a_folder_111111', 'area_a_folder_222222']),
+      );
 
       final childFolderMeta = await KMetaService.instance.getMeta(childFolder1Path);
       expect(childFolderMeta.sync.isFolderSet, isFalse);
@@ -576,18 +592,28 @@ void main() {
         equals(['shared_folder_id_999']),
       );
 
-      // 共通図面は先に評価された「枝B」配下にのみ作られ、「枝C」配下には重複作成されない
-      expect(
-        await fs.exists(p.join(rootSetPath, '枝B', '共通図面')),
-        isTrue,
+      // 共通図面は先に評価された「枝B」の setMembers にのみ登録され、「枝C」には重複登録されない
+      final branchBMeta = await KMetaService.instance.getMeta(
+        p.join(rootSetPath, '枝B'),
+      );
+      final branchCMeta = await KMetaService.instance.getMeta(
+        p.join(rootSetPath, '枝C'),
       );
       expect(
-        await fs.exists(p.join(rootSetPath, '枝C', '共通図面')),
-        isFalse,
+        branchBMeta.sync.setMembers.map((m) => m.driveId),
+        equals(['shared_folder_id_999']),
       );
       expect(
-        await fs.exists(p.join(rootSetPath, '枝C', 'C専用図面')),
-        isTrue,
+        branchCMeta.sync.setMembers.map((m) => m.driveId),
+        equals(['unique_c_folder_888']),
+      );
+      expect(
+        await DriveDirStore.instance.findExistingPath('shared_folder_id_999'),
+        isNotNull,
+      );
+      expect(
+        await DriveDirStore.instance.findExistingPath('unique_c_folder_888'),
+        isNotNull,
       );
     });
 
@@ -689,7 +715,8 @@ void main() {
       expect(firstResult.addedCount, 2);
 
       final childSetPath = p.join(rootSetPath, '削除予定の子セット');
-      final dirtyFolderPath = p.join(childSetPath, '未送信フォルダ');
+      final dirtyFolderPath = (await DriveDirStore.instance
+          .findExistingPath('dirty_folder_id_444'))!;
       expect(await fs.exists(dirtyFolderPath), isTrue);
 
       // 子セット内のフォルダに未送信のローカル変更がある状態をセット
@@ -735,6 +762,7 @@ void main() {
       expect(thirdResult.removedCount, 1);
       expect(thirdResult.keptWithLocalChanges, isEmpty);
       expect(await fs.exists(childSetPath), isFalse);
+      expect(await fs.exists(dirtyFolderPath), isFalse);
     });
 
     test('reconciles child preset when child MD5 changes even if parent MD5 is unchanged', () async {
@@ -793,10 +821,10 @@ void main() {
       );
       expect(r2.success, isTrue);
       expect(r2.addedCount, 1);
-      expect(
-        await fs.exists(p.join(rootSetPath, '子プリセット', '追加フォルダ')),
-        isTrue,
-      );
+      final addedFolderPath = await DriveDirStore.instance
+          .findExistingPath('folder_added_222222');
+      expect(addedFolderPath, isNotNull);
+      expect(await fs.exists(addedFolderPath!), isTrue);
     });
 
     test('enforces kMaxSetDepth guard when nesting exceeds limit', () async {
@@ -827,6 +855,195 @@ void main() {
         result.skippedCycleOrDuplicateItems,
         contains('set_6.json'),
       );
+    });
+
+    test('shares single physical directory in DriveDirStore across multiple presets and preserves it while referenced', () async {
+      fakeDrive
+        ..register(
+          _FakeDriveEntry.json(
+            id: 'preset_1_json_id',
+            name: 'preset_1.json',
+            md5Checksum: 'p1_v1',
+            jsonContent: jsonEncode({
+              'name': 'プリセット1',
+              'folders': [
+                'shared_gis_id_11111',
+                'only_p1_id_22222222',
+              ],
+            }),
+          ),
+        )
+        ..register(
+          _FakeDriveEntry.json(
+            id: 'preset_2_json_id',
+            name: 'preset_2.json',
+            md5Checksum: 'p2_v1',
+            jsonContent: jsonEncode({
+              'name': 'プリセット2',
+              'folders': [
+                'shared_gis_id_11111', // プリセット1と同じDriveフォルダを参照
+                'only_p2_id_33333333',
+              ],
+            }),
+          ),
+        )
+        ..register(
+          _FakeDriveEntry.folder(id: 'shared_gis_id_11111', name: '共通境界ポリゴン'),
+        )
+        ..register(
+          _FakeDriveEntry.folder(id: 'only_p1_id_22222222', name: '1専用レイヤ'),
+        )
+        ..register(
+          _FakeDriveEntry.folder(id: 'only_p2_id_33333333', name: '2専用レイヤ'),
+        );
+
+      final sharedRoot = p.join(tempDir.path, '共有');
+      await fs.createDirectory(sharedRoot);
+      final preset1Path = p.join(sharedRoot, 'プリセット1');
+      final preset2Path = p.join(sharedRoot, 'プリセット2');
+
+      final r1 = await service.reconcileSet(
+        manifestFileId: 'preset_1_json_id',
+        localSetPath: preset1Path,
+      );
+      expect(r1.success, isTrue);
+      expect(r1.addedCount, 2);
+
+      // プリセット2を同期した際、shared_gis_id_11111 は既に実体が存在するため再クローンされないこと
+      final r2 = await service.reconcileSet(
+        manifestFileId: 'preset_2_json_id',
+        localSetPath: preset2Path,
+      );
+      expect(r2.success, isTrue);
+      expect(
+        fakeSync.clonedCalls.where((c) => c.driveId == 'shared_gis_id_11111').length,
+        1,
+      );
+
+      final sharedPhysicalPath = (await DriveDirStore.instance
+          .findExistingPath('shared_gis_id_11111'))!;
+      expect(await fs.exists(sharedPhysicalPath), isTrue);
+
+      // DriveFolderSetNode として読み込んだ際、両方のプリセットが同じ実体パスを参照渡しでマウントすること
+      final sharedParent = FolderNode(
+        '共有',
+        pathResolver: DirectPathResolver(sharedRoot),
+      );
+      final node1 = (await FolderNode.tryCreateDriveFolderNode(
+        preset1Path,
+        'プリセット1',
+        sharedParent,
+      ))! as DriveFolderSetNode;
+      final node2 = (await FolderNode.tryCreateDriveFolderNode(
+        preset2Path,
+        'プリセット2',
+        sharedParent,
+      ))! as DriveFolderSetNode;
+      final nodes1 = await node1.loadFolderNodes(await fs.list(preset1Path));
+      final nodes2 = await node2.loadFolderNodes(await fs.list(preset2Path));
+
+      final mounted1 = nodes1
+          .whereType<DriveFolderNode>()
+          .firstWhere((n) => n.driveId == 'shared_gis_id_11111');
+      final mounted2 = nodes2
+          .whereType<DriveFolderNode>()
+          .firstWhere((n) => n.driveId == 'shared_gis_id_11111');
+      expect(
+        DriveTransferRegistry.normalizeKey(mounted1.getAbsoluteFilePath()!),
+        DriveTransferRegistry.normalizeKey(sharedPhysicalPath),
+      );
+      expect(
+        DriveTransferRegistry.normalizeKey(mounted2.getAbsoluteFilePath()!),
+        DriveTransferRegistry.normalizeKey(sharedPhysicalPath),
+      );
+
+      // プリセット1から shared_gis_id_11111 を外しても、プリセット2が参照しているため実体は削除されないこと
+      fakeDrive.entries['preset_1_json_id']!
+        ..md5Checksum = 'p1_v2'
+        ..jsonContent = jsonEncode({
+          'name': 'プリセット1',
+          'folders': ['only_p1_id_22222222'],
+        });
+      final r1Removed = await service.reconcileSet(
+        manifestFileId: 'preset_1_json_id',
+        localSetPath: preset1Path,
+      );
+      expect(r1Removed.success, isTrue);
+      expect(r1Removed.removedCount, 1);
+      expect(await fs.exists(sharedPhysicalPath), isTrue);
+
+      // プリセット2からも外れた時点で、どこからも参照されなくなった実体が削除されること
+      fakeDrive.entries['preset_2_json_id']!
+        ..md5Checksum = 'p2_v2'
+        ..jsonContent = jsonEncode({
+          'name': 'プリセット2',
+          'folders': ['only_p2_id_33333333'],
+        });
+      final r2Removed = await service.reconcileSet(
+        manifestFileId: 'preset_2_json_id',
+        localSetPath: preset2Path,
+      );
+      expect(r2Removed.success, isTrue);
+      expect(r2Removed.removedCount, 1);
+      expect(await fs.exists(sharedPhysicalPath), isFalse);
+    });
+
+    test('LocalSyncSeedIndex seeds verified local files by MD5+size and rejects locally modified files', () async {
+      final existingFolder = p.join(tempDir.path, '共有', '親フォルダ');
+      await fs.createDirectory(existingFolder);
+
+      final cleanBytes = Uint8List.fromList(utf8.encode('clean gpkg content 12345'));
+      final cleanMd5 = md5.convert(cleanBytes).toString();
+      final cleanPath = p.join(existingFolder, 'clean.gpkg');
+      await fs.writeAsBytes(cleanPath, cleanBytes);
+
+      final dirtyOriginalBytes = Uint8List.fromList(utf8.encode('original content 12345'));
+      final dirtyOriginalMd5 = md5.convert(dirtyOriginalBytes).toString();
+      final dirtyPath = p.join(existingFolder, 'dirty.gpkg');
+      // ローカルで同じバイト長の別内容に書き換えられたケース
+      final dirtyModifiedBytes = Uint8List.fromList(utf8.encode('modified content 99999'));
+      await fs.writeAsBytes(dirtyPath, dirtyModifiedBytes);
+
+      await KMetaService.instance.setDriveSync(
+        existingFolder,
+        driveId: 'parent_folder_drive_id',
+        driveFolderName: '親フォルダ',
+        lastSynced: DateTime(2026, 11, 5, 10),
+        files: {
+          'clean.gpkg': KMetaSyncFile(
+            driveFileId: 'file_clean',
+            lastSyncedTime: DateTime(2026, 11, 5, 10),
+            remoteMd5: cleanMd5,
+          ),
+          'dirty.gpkg': KMetaSyncFile(
+            driveFileId: 'file_dirty',
+            lastSyncedTime: DateTime(2026, 11, 5, 10),
+            remoteMd5: dirtyOriginalMd5,
+          ),
+        },
+      );
+
+      await LocalSyncSeedIndex.instance.refreshFromLedgers();
+
+      final targetCleanPath = p.join(tempDir.path, 'target', 'clean_seeded.gpkg');
+      final seededClean = await LocalSyncSeedIndex.instance.trySeedToFile(
+        driveFileId: 'file_clean',
+        remoteMd5: cleanMd5,
+        remoteSize: cleanBytes.length,
+        targetFilePath: targetCleanPath,
+      );
+      expect(seededClean, isTrue);
+      expect(await fs.readAsBytes(targetCleanPath), equals(cleanBytes));
+
+      final targetDirtyPath = p.join(tempDir.path, 'target', 'dirty_seeded.gpkg');
+      final seededDirty = await LocalSyncSeedIndex.instance.trySeedToFile(
+        driveFileId: 'file_dirty',
+        remoteMd5: dirtyOriginalMd5,
+        remoteSize: dirtyOriginalBytes.length,
+        targetFilePath: targetDirtyPath,
+      );
+      expect(seededDirty, isFalse);
+      expect(await fs.exists(targetDirtyPath), isFalse);
     });
   });
 }

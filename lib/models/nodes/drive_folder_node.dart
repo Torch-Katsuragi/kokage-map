@@ -20,6 +20,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
+import '../../core/path_resolver.dart';
 import '../../services/global_folder_locator.dart';
 import '../../services/google_drive/sync_base_store.dart';
 import 'folder_node.dart';
@@ -106,15 +107,19 @@ class DriveFolderNode extends FolderNode {
     super.visible,
     super.parent,
     super.children,
+    super.pathResolver,
   });
 
   @override
   NodeType get nodeType => NodeType.folder;
 
-  /// グローバルフォルダ内の場合はグローバルパスから解決
+  /// DirectPathResolver が設定されている場合はそれを最優先し、
+  /// そうでないグローバルフォルダ内の場合はグローバルパスから解決
   @override
   String? getAbsoluteFilePath() =>
-      _resolveGlobalPath(this) ?? super.getAbsoluteFilePath();
+      pathResolver is DirectPathResolver
+          ? super.getAbsoluteFilePath()
+          : (_resolveGlobalPath(this) ?? super.getAbsoluteFilePath());
 
   /// サブフォルダもDriveSubFolderNodeとして作成（同じdriveIdを共有）
   @override
@@ -138,10 +143,12 @@ class DriveSubFolderNode extends FolderNode {
   /// 読み取り専用か
   bool get isReadOnly => rootDriveNode.isReadOnly;
 
-  /// グローバルフォルダ内の場合はグローバルパスから解決
+  /// DirectPathResolver（親の参照マウント）配下ならそれを優先し、それ以外はグローバルパスを解決
   @override
   String? getAbsoluteFilePath() =>
-      _resolveGlobalPath(this) ?? super.getAbsoluteFilePath();
+      pathResolver is DirectPathResolver
+          ? super.getAbsoluteFilePath()
+          : (_resolveGlobalPath(this) ?? super.getAbsoluteFilePath());
 
   @override
   Future<List<LayerTreeNode>> loadFolderNodes(List<KFileEntry> entries) async =>

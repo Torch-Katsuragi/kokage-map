@@ -55,8 +55,10 @@ abstract class LayerTreeNode {
     this.parent,
     List<LayerTreeNode>? children,
     required this.nodeType,
-    this._pathResolver,
-  }) : children = children ?? [];
+    PathResolver? pathResolver,
+  }) : children = children ?? [],
+       // ignore: prefer_initializing_formals
+       _pathResolver = pathResolver;
 
   /// パスリゾルバを取得
   /// 優先順位: 自身に設定 → 親から継承 → デフォルト（ProjectPathResolver）

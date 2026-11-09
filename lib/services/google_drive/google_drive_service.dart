@@ -300,11 +300,19 @@ class GoogleDriveService {
   ///
   /// web で [userGesture] が false（起動時など、クリックの直下でない）なら、タブに残った
   /// トークンだけを見てポップアップは開かない（開いてもブラウザに潰される）。native は見ない
+  Future<bool>? _silentRestoreInFlight;
+
   Future<bool> restoreSessionSilently({bool userGesture = true}) async {
+    if (isDriveApiAvailable) return true;
     if (!_isInitialized) await initialize();
     if (PlatformCapabilities.isWeb) {
       return userGesture ? restoreWebAuthorization() : _restoreWebSessionToken();
     }
+    return _silentRestoreInFlight ??=
+        _restoreNativeSessionSilently().whenComplete(() => _silentRestoreInFlight = null);
+  }
+
+  Future<bool> _restoreNativeSessionSilently() async {
     try {
       final authorization = await GoogleSignIn.instance.authorizationClient
           .authorizationForScopes(_scopes);

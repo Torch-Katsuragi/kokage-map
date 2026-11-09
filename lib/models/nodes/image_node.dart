@@ -107,6 +107,12 @@ class ImageNode extends LayerTreeNode {
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
+    final existingByPath = <String, ImageNode>{
+      for (final child in parent.children)
+        if (child is ImageNode && child.runtimeType == ImageNode)
+          p.normalize(child.filePath): child,
+    };
+
     for (final entity in imageFiles) {
       try {
         final ext = p.extension(entity.path).toLowerCase();
@@ -138,7 +144,15 @@ class ImageNode extends LayerTreeNode {
         } else if (ext == '.vrt') {
           // 位置の無い JPEG2000 / VRT は写真としても見せない
         } else {
-          // 通常画像
+          // 通常画像: 既に同じパス・同じサイズの ImageNode が親にあれば EXIF 再解析を省く
+          final existing = existingByPath[p.normalize(entity.path)];
+          if (existing != null && existing.metadata.fileSize > 0) {
+            final currentLen = await fs.length(entity.path);
+            if (currentLen != null && currentLen == existing.metadata.fileSize) {
+              nodes.add(existing);
+              continue;
+            }
+          }
           final exifData = await ExifParser.extractFromFile(entity.path);
           final meta = exifData?.metadata ??
               ImageMetadata(fileSize: await fs.length(entity.path) ?? 0);

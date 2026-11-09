@@ -836,8 +836,8 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
             return;
           }
 
-          await DriveFolderSetService.reloadFolderSetNode(node);
           node.syncStatus = SyncStatus.synced;
+          await DriveFolderSetService.reloadFolderSetNode(node);
 
           final doneTitle = t.drive.downloadCompleteTitle(name: node.name);
           final doneDetail = t.drive.folderSetUpdated(

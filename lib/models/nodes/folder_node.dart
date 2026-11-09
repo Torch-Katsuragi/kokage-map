@@ -16,6 +16,8 @@
 // Root Maps: フォルダノードクラス
 // ファイルシステムのフォルダに対応するレイヤツリーノード
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/utils/app_logger.dart';
@@ -23,6 +25,7 @@ import 'package:root_maps/utils/app_logger.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../core/hidden_dirs.dart';
 import '../../core/node_types.dart';
+import '../../services/google_drive/drive_dir_store.dart';
 import '../../services/google_drive/drive_transfer_registry.dart';
 import '../../services/google_drive/sync_base_store.dart';
 import '../../services/kmeta_service.dart';
@@ -45,8 +48,13 @@ class FolderNode extends LayerTreeNode {
   /// 展開状態（KMetaから取得、未設定時はtrue）
   bool _expanded = true;
 
-  FolderNode(super.name, {super.visible, super.parent, super.children})
-    : super(nodeType: NodeType.folder);
+  FolderNode(
+    super.name, {
+    super.visible,
+    super.parent,
+    super.children,
+    super.pathResolver,
+  }) : super(nodeType: NodeType.folder);
 
   /// 展開状態を取得
   @override
@@ -264,6 +272,7 @@ class FolderNode extends LayerTreeNode {
       AppLogger.debug('[FolderNode] Drive連携フォルダを検出: $folderName (driveId: $driveId)');
       final node = createDriveFolderNodeFromMeta(folderName, meta, parent);
       if (node is DriveFolderNode) {
+        unawaited(DriveDirStore.instance.register(driveId, folderPath));
         if (DriveTransferRegistry.instance.isBusy(folderPath)) {
           node.syncStatus = SyncStatus.syncing;
         } else if (await DriveTransferRegistry.instance.hasClonePending(folderPath)) {

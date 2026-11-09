@@ -24,6 +24,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/stable_hash.dart';
 import 'sync_progress.dart';
 
 /// 転送完了イベント
@@ -74,6 +75,15 @@ class DriveTransferRegistry {
   /// 正規化 localPath → 実行中タスク名（フォルダ表示名）
   final Map<String, String> _activeNames = {};
 
+  /// 親タスク（フォルダセット等）の配下で実行中の子フォルダキー
+  final Set<String> _subTransferFolders = {};
+
+  /// 子フォルダキー → 親タスクキー（別ディレクトリの `.kokage/drive_store` 等に実体がある場合の紐付け）
+  final Map<String, String> _parentByChildKey = {};
+
+  /// OS進捗通知を発行済みのキー集合（完了通知なしで終了した際に確実に cancel するため）
+  final Set<String> _osNotifiedKeys = {};
+
   /// driveId → 実行中のクローン Future（共有リンク・ドロワー・AppData同期の重複排除）
   final Map<String, Future<String?>> _inFlightClonesByDriveId = {};
 
@@ -95,9 +105,42 @@ class DriveTransferRegistry {
   static bool get _supportsAndroidOsNotification =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
-  /// 指定パスのフォルダが現在転送中か
-  bool isBusy(String localPath) =>
-      _activeNames.containsKey(normalizeKey(localPath));
+  /// 指定パスのフォルダが現在転送中か（親セットが転送中の場合も true）
+  bool isBusy(String localPath) {
+    final key = normalizeKey(localPath);
+    return _activeNames.containsKey(key) ||
+        _subTransferFolders.contains(key) ||
+        _activeAncestorOf(key) != null;
+  }
+
+  /// 子フォルダの転送を親タスク（フォルダセット等）に紐付ける
+  void bindParentTransfer(String childPath, String parentPath) {
+    final childKey = normalizeKey(childPath);
+    final parentKey = normalizeKey(parentPath);
+    if (childKey != parentKey) {
+      _parentByChildKey[childKey] = parentKey;
+    }
+  }
+
+  /// 子フォルダの親タスク紐付けを解除する
+  void unbindParentTransfer(String childPath) {
+    _parentByChildKey.remove(normalizeKey(childPath));
+  }
+
+  String? _activeAncestorOf(String key) {
+    var current = _parentByChildKey[key];
+    final visited = <String>{};
+    while (current != null && visited.add(current)) {
+      if (_activeNames.containsKey(current)) return current;
+      current = _parentByChildKey[current];
+    }
+    for (final activeKey in _activeNames.keys) {
+      if (activeKey != key && key.startsWith('$activeKey/')) {
+        return activeKey;
+      }
+    }
+    return null;
+  }
 
   /// 指定 driveId のクローンが現在進行中か
   bool isCloningDriveId(String driveId) =>
@@ -161,6 +204,17 @@ class DriveTransferRegistry {
     bool showOsNotification = true,
   }) {
     final key = normalizeKey(localPath);
+    final ancestorKey = _activeAncestorOf(key);
+    if (ancestorKey != null) {
+      _subTransferFolders.add(key);
+      final childNotifier = _progressNotifiers.putIfAbsent(
+        key,
+        () => ValueNotifier<SyncProgress?>(null),
+      );
+      childNotifier.value = initial;
+      return;
+    }
+
     final wasActive = _activeNames.containsKey(key);
     _activeNames[key] = folderName;
     if (!wasActive) {
@@ -185,6 +239,39 @@ class DriveTransferRegistry {
     bool showOsNotification = true,
   }) {
     final key = normalizeKey(localPath);
+    final ancestorKey = _activeAncestorOf(key);
+    if (ancestorKey != null) {
+      _subTransferFolders.add(key);
+      final childNotifier = _progressNotifiers.putIfAbsent(
+        key,
+        () => ValueNotifier<SyncProgress?>(null),
+      );
+      childNotifier.value = progress;
+
+      final childName = folderName ?? p.basename(localPath);
+      final parentName = _activeNames[ancestorKey] ?? p.basename(ancestorKey);
+      final fileLabel = progress.currentFileName;
+      final forwarded = SyncProgress(
+        phase: progress.phase,
+        completedFiles: progress.completedFiles,
+        totalFiles: progress.totalFiles,
+         transferredBytes: progress.transferredBytes,
+        totalBytes: progress.totalBytes,
+        currentFileName: fileLabel != null && fileLabel.isNotEmpty
+            ? '$childName / $fileLabel'
+            : childName,
+      );
+      final parentNotifier = _progressNotifiers.putIfAbsent(
+        ancestorKey,
+        () => ValueNotifier<SyncProgress?>(null),
+      );
+      parentNotifier.value = forwarded;
+      if (showOsNotification) {
+        _updateOsProgress(ancestorKey, parentName, forwarded);
+      }
+      return;
+    }
+
     if (!_activeNames.containsKey(key)) {
       _activeNames[key] = folderName ?? p.basename(localPath);
       activeCount.value = _activeNames.length;
@@ -213,6 +300,22 @@ class DriveTransferRegistry {
     bool showOsNotification = true,
   }) {
     final key = normalizeKey(localPath);
+    final wasSubTransfer = _subTransferFolders.remove(key);
+    final ancestorKey = _activeAncestorOf(key);
+    if (wasSubTransfer || ancestorKey != null) {
+      final childNotifier = _progressNotifiers[key];
+      if (childNotifier != null) {
+        childNotifier.value = null;
+      }
+      if (_osNotifiedKeys.remove(key)) {
+        _cancelOsNotification(key, stopService: false);
+      }
+      _lastOsNotifyAt.remove(key);
+      _lastOsPercent.remove(key);
+      _lastOsPhase.remove(key);
+      return;
+    }
+
     final name = folderName ?? _activeNames.remove(key) ?? p.basename(localPath);
     _activeNames.remove(key);
     activeCount.value = _activeNames.length;
@@ -224,6 +327,7 @@ class DriveTransferRegistry {
     _lastOsNotifyAt.remove(key);
     _lastOsPercent.remove(key);
     _lastOsPhase.remove(key);
+    final hadOsNotification = _osNotifiedKeys.remove(key);
 
     if (showOsNotification && completionTitle != null) {
       _showOsComplete(
@@ -233,6 +337,8 @@ class DriveTransferRegistry {
         isError: !success,
         stopService: _activeNames.isEmpty,
       );
+    } else if (hadOsNotification) {
+      _cancelOsNotification(key, stopService: _activeNames.isEmpty);
     } else if (_supportsAndroidOsNotification && _activeNames.isEmpty) {
       unawaited(_invokeOs('stopIfIdle', const {}));
     }
@@ -287,6 +393,7 @@ class DriveTransferRegistry {
     _lastOsNotifyAt[key] = now;
     _lastOsPercent[key] = pct;
     _lastOsPhase[key] = progress.phase;
+    _osNotifiedKeys.add(key);
 
     final String detail;
     switch (progress.phase) {
@@ -336,8 +443,30 @@ class DriveTransferRegistry {
     );
   }
 
-  static int _notificationIdFor(String key) =>
-      2000 + (key.hashCode.abs() % 100000);
+  void _cancelOsNotification(
+    String key, {
+    required bool stopService,
+  }) {
+    if (!_supportsAndroidOsNotification) return;
+    unawaited(
+      _invokeOs('cancelNotification', {
+        'id': _notificationIdFor(key),
+        'stopService': stopService,
+      }),
+    );
+  }
+
+  /// アプリ起動時などに残存している Ongoing 進捗通知を一括消去する
+  Future<void> cancelOrphanedNotifications() async {
+    if (!_supportsAndroidOsNotification) return;
+    await _invokeOs('cancelAllProgress', const {});
+  }
+
+  static int _notificationIdFor(String key) {
+    final hex = stableHashHex(key, length: 8);
+    final hash = int.tryParse(hex, radix: 16) ?? key.hashCode.abs();
+    return 2000 + (hash % 100000);
+  }
 
   Future<void> _invokeOs(String method, Map<String, Object?> args) async {
     try {
@@ -350,6 +479,9 @@ class DriveTransferRegistry {
   @visibleForTesting
   void resetForTest() {
     _activeNames.clear();
+    _subTransferFolders.clear();
+    _parentByChildKey.clear();
+    _osNotifiedKeys.clear();
     _inFlightClonesByDriveId.clear();
     for (final n in _progressNotifiers.values) {
       n.value = null;

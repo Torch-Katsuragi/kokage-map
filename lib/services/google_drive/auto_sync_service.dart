@@ -60,6 +60,7 @@ class AutoSyncService {
   bool _isWifi = false;
   bool _isSyncing = false;
   bool _enabled = false;
+  bool _pendingSyncAfterTransfer = false;
 
   /// ツリールートを外部から設定（MapPageで呼ぶ）
   LayerTreeNode? rootNode;
@@ -94,24 +95,39 @@ class AutoSyncService {
 
     unawaited(_transferCompletionSub?.cancel());
     _transferCompletionSub = DriveTransferRegistry.instance.onTransferCompleted.listen((event) async {
-      if (!event.success) {
-        onSyncStatusChanged?.call();
-        return;
-      }
-      final currentRoot = rootNode;
-      if (currentRoot == null) return;
-      final normTarget = DriveTransferRegistry.normalizeKey(event.localPath);
-      final existing = _collectDriveFolders(currentRoot).where((n) {
-        final p = n.getAbsoluteFilePath();
-        return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
-      }).firstOrNull;
-      if (existing != null) {
-        existing.syncStatus = SyncStatus.synced;
-        await onTreeRefreshNeeded?.call(existing);
-        onSyncStatusChanged?.call();
-      } else {
+      try {
+        if (!event.success) {
+          onSyncStatusChanged?.call();
+          return;
+        }
+        final currentRoot = rootNode;
+        if (currentRoot == null) return;
+        final normTarget = DriveTransferRegistry.normalizeKey(event.localPath);
+        final existingFolders = _collectDriveFolders(currentRoot).where((n) {
+          final p = n.getAbsoluteFilePath();
+          return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
+        }).toList();
+        if (existingFolders.isNotEmpty) {
+          for (final node in existingFolders) {
+            node.syncStatus = SyncStatus.synced;
+          }
+          await onTreeRefreshNeeded?.call(existingFolders.first);
+          onSyncStatusChanged?.call();
+          return;
+        }
+
+        var existingSet = _collectDriveFolderSets(currentRoot).where((n) {
+          final p = n.getAbsoluteFilePath();
+          return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
+        }).firstOrNull;
+        if (existingSet != null && existingSet.children.isNotEmpty) {
+          existingSet.syncStatus = SyncStatus.synced;
+          onSyncStatusChanged?.call();
+          return;
+        }
+
         await refreshSharedFolderTree();
-        final existingSet = _collectDriveFolderSets(currentRoot).where((n) {
+        existingSet = _collectDriveFolderSets(currentRoot).where((n) {
           final p = n.getAbsoluteFilePath();
           return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
         }).firstOrNull;
@@ -124,11 +140,19 @@ class AutoSyncService {
         final added = _collectDriveFolders(currentRoot).where((n) {
           final p = n.getAbsoluteFilePath();
           return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
-        }).firstOrNull;
-        if (added != null) {
-          added.syncStatus = SyncStatus.synced;
-          await onTreeRefreshNeeded?.call(added);
+        }).toList();
+        if (added.isNotEmpty) {
+          for (final node in added) {
+            node.syncStatus = SyncStatus.synced;
+          }
+          await onTreeRefreshNeeded?.call(added.first);
           onSyncStatusChanged?.call();
+        }
+      } finally {
+        if (_pendingSyncAfterTransfer &&
+            DriveTransferRegistry.instance.activeCount.value == 0) {
+          _pendingSyncAfterTransfer = false;
+          unawaited(_runAutoSync());
         }
       }
     });
@@ -164,6 +188,8 @@ class AutoSyncService {
     _timer = null;
     _connectivitySub?.cancel();
     _connectivitySub = null;
+    _isWifi = false;
+    _pendingSyncAfterTransfer = false;
     AppLogger.debug('[AutoSync] Stopped');
   }
 
@@ -195,10 +221,10 @@ class AutoSyncService {
     final wasWifi = _isWifi;
     _isWifi = results.contains(ConnectivityResult.wifi);
 
-    if (_isWifi && !wasWifi) {
+    if (_isWifi && (!wasWifi || _timer == null)) {
       AppLogger.debug('[AutoSync] WiFi connected, starting periodic sync');
       _startTimer();
-      // WiFi接続直後に1回実行
+      // WiFi接続直後（および起動時）に1回実行
       _runAutoSync();
     } else if (!_isWifi && wasWifi) {
       AppLogger.debug('[AutoSync] WiFi lost, pausing auto-sync');
@@ -230,6 +256,11 @@ class AutoSyncService {
 
   Future<void> _runAutoSync() async {
     if (!_enabled || !_isWifi || _isSyncing) return;
+    if (DriveTransferRegistry.instance.activeCount.value > 0) {
+      AppLogger.debug('[AutoSync] Foreground transfer active, deferring cycle');
+      _pendingSyncAfterTransfer = true;
+      return;
+    }
     final root = rootNode;
     if (root == null) return;
 
@@ -237,16 +268,23 @@ class AutoSyncService {
     AppLogger.debug('[AutoSync] Sync cycle starting...');
 
     try {
-      // Drive認証確認
+      // Drive認証確認（起動直後は main.dart の無音復元がまだ完了していないことがあるため、
+      // initialize だけでなく restoreSessionSilently を待ってから判定する）
       final driveService = GoogleDriveService();
       if (!driveService.isDriveApiAvailable) {
-        await driveService.initialize();
+        await driveService.restoreSessionSilently(userGesture: false);
         if (!driveService.isDriveApiAvailable) {
           AppLogger.debug('[AutoSync] Not authenticated, skipping');
           return;
         }
+      } else {
+        await driveService.refreshToken();
       }
-      await driveService.refreshToken();
+
+      if (DriveTransferRegistry.instance.activeCount.value > 0) {
+        _pendingSyncAfterTransfer = true;
+        return;
+      }
 
       // 端末間データ統合（AppData/kmap: 設定・共有リスト・前日以前のGPS履歴）
       try {
@@ -262,21 +300,49 @@ class AutoSyncService {
           .where((n) => n.parent is! DriveFolderSetNode);
       for (final setNode in folderSets) {
         if (!_isWifi) break;
+        if (DriveTransferRegistry.instance.activeCount.value > 0) {
+          _pendingSyncAfterTransfer = true;
+          break;
+        }
         await _syncFolderSet(setNode);
       }
 
       final folders = _collectDriveFolders(root);
       if (folders.isEmpty) return;
 
-      AppLogger.debug('[AutoSync] Found ${folders.length} Drive folder(s)');
+      // 同一実体パス（DirectPathResolver で複数セットから参照マウントされているフォルダ）を重複排除
+      final nodesByNormPath = <String, List<DriveFolderNode>>{};
+      for (final node in folders) {
+        final localPath = node.getAbsoluteFilePath();
+        if (localPath == null) continue;
+        final key = DriveTransferRegistry.normalizeKey(localPath);
+        nodesByNormPath.putIfAbsent(key, () => <DriveFolderNode>[]).add(node);
+      }
+
+      AppLogger.debug(
+        '[AutoSync] Found ${nodesByNormPath.length} unique Drive folder(s) (${folders.length} node(s))',
+      );
       final syncEngine = SyncEngine();
 
-      for (final node in folders) {
+      for (final group in nodesByNormPath.values) {
         if (!_isWifi) {
           AppLogger.debug('[AutoSync] WiFi lost mid-sync, aborting');
           break;
         }
-        await _syncFolder(syncEngine, node);
+        if (DriveTransferRegistry.instance.activeCount.value > 0) {
+          AppLogger.debug('[AutoSync] Foreground transfer started, deferring remaining');
+          _pendingSyncAfterTransfer = true;
+          break;
+        }
+        final primary = group.first;
+        for (var i = 1; i < group.length; i++) {
+          group[i].syncStatus = SyncStatus.syncing;
+        }
+        await _syncFolder(syncEngine, primary);
+        for (var i = 1; i < group.length; i++) {
+          group[i].syncStatus = primary.syncStatus;
+        }
+        onSyncStatusChanged?.call();
       }
     } catch (e) {
       AppLogger.debug('[AutoSync] Cycle error: $e');
@@ -301,6 +367,9 @@ class AutoSyncService {
       onSyncStatusChanged?.call();
       return;
     }
+
+    node.syncStatus = SyncStatus.syncing;
+    onSyncStatusChanged?.call();
 
     try {
       final detail = await engine.checkSyncStatusDetail(localPath);
@@ -486,6 +555,8 @@ class AutoSyncService {
       onSyncStatusChanged?.call();
       return;
     }
+    setNode.syncStatus = SyncStatus.syncing;
+    onSyncStatusChanged?.call();
     try {
       final result = await DriveFolderSetService().reconcileSet(
         localSetPath: localPath,
@@ -495,7 +566,9 @@ class AutoSyncService {
       if (result.success) {
         setNode.syncStatus =
             result.failedItems.isEmpty ? SyncStatus.synced : SyncStatus.error;
-        if (result.addedCount > 0 || result.removedCount > 0) {
+        if (result.addedCount > 0 ||
+            result.removedCount > 0 ||
+            setNode.children.isEmpty) {
           await DriveFolderSetService.reloadFolderSetNode(setNode);
         }
         onSyncStatusChanged?.call();

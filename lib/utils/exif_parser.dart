@@ -85,17 +85,12 @@ class ExifParser {
 
   /// 先頭 [maxBytes] だけ読む。
   ///
-  /// ⚠ 以前は `RandomAccessFile` で部分読みしていたが、ファイルシステム抽象には
-  /// 部分読みが無い（File System Access API 側も Blob.slice 経由になり、
-  /// 抽象に載せると面倒が増える）。EXIFを見るのは高々1MBなので全部読んで切る。
-  /// 全部読むのでファイルの大きさもここで分かる（別に問い合わせない）。
+  /// [KFileSystem.readHeaderBytes] を通すことで、20MB超の高解像度写真でも
+  /// ファイル全体をメモリへ読み込まず先頭チャンクだけを取得する。
   static Future<({Uint8List header, int fileSize})> _readFileHeader(
       String filePath, int maxBytes) async {
-    final bytes = await fs.readAsBytes(filePath);
-    final header = bytes.length <= maxBytes
-        ? bytes
-        : Uint8List.sublistView(bytes, 0, maxBytes);
-    return (header: header, fileSize: bytes.length);
+    final (:bytes, :fileSize) = await fs.readHeaderBytes(filePath, maxBytes);
+    return (header: bytes, fileSize: fileSize);
   }
 
   static LatLng? _extractGpsLocation(Map<String, IfdTag> tags) {

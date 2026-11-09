@@ -18,6 +18,7 @@
 
 export 'auto_sync_service.dart';
 export 'drive_auth_state.dart';
+export 'drive_dir_store.dart';
 export 'drive_folder_set_service.dart';
 export 'drive_sync_operations.dart';
 export 'drive_transfer_registry.dart';

@@ -80,6 +80,7 @@ class MainActivity : FlutterActivity() {
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager?.createNotificationChannel(channel)
             DriveTransferService.ensureChannel(this)
+            DriveTransferService.cancelAllProgress(this)
         }
     }
 
@@ -186,6 +187,16 @@ class MainActivity : FlutterActivity() {
                     }
                     "stopIfIdle" -> {
                         DriveTransferService.stopIfIdle(this)
+                        result.success(null)
+                    }
+                    "cancelNotification" -> {
+                        val id = call.argument<Int>("id") ?: 2000
+                        val stopService = call.argument<Boolean>("stopService") ?: true
+                        DriveTransferService.cancelNotification(this, id = id, stopService = stopService)
+                        result.success(null)
+                    }
+                    "cancelAllProgress" -> {
+                        DriveTransferService.cancelAllProgress(this)
                         result.success(null)
                     }
                     else -> result.notImplemented()

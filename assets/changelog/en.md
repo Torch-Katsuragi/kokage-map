@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.3 — 2026/11/10
+
+### New Features & Improvements
+
+- Google Play Store update banner on the Home Screen (Android): When a newer version of the app is available, a banner now appears at the top of the Home Screen that opens the app's Google Play Store page directly when tapped (silently skipped when offline)
+
+### Bug Fixes
+
+- Fixed an issue on Web where every tap or drag on the map logged a repeated session-restore check message when not signed in to Google Drive
+- Improved cross-platform path separator normalization when displaying folder names in transfer progress on Linux and Web
+
 ## v0.15.2 — 2026/11/09
 
 ### Improvements & Changes

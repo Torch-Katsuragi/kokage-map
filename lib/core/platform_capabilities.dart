@@ -156,6 +156,9 @@ class PlatformCapabilities {
   /// 初回起動オンボーディング（権限説明）を出すか
   static bool get showsOnboarding => needsRuntimePermissions;
 
+  /// Google Play ストアの更新案内を出すか
+  static bool get supportsPlayStoreUpdate => isAndroid;
+
   /// ローカルのプロジェクトフォルダを開けるか。
   ///
   /// ⚠ web は**ブラウザによる**。File System Access API を持つ

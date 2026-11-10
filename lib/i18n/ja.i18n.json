@@ -67,7 +67,9 @@
     "receiveConfirmTitle": "共有の地図を取り込みますか",
     "receiveConfirmBody": "「${name}」を、いつもの地図の「共有」に取り込みます。心当たりのないリンクなら取り込まないでください",
     "receiveConfirmOwner": "持ち主: ${owner}",
-    "receiveConfirmAction": "取り込む"
+    "receiveConfirmAction": "取り込む",
+    "updateAvailableTitle": "新しいバージョン（v$latest）があります",
+    "updateAvailableSubtitle": "現在: v$current — Google Play で更新"
   },
   "permissions": {
     "storageRequired": "ストレージ権限が必要です",

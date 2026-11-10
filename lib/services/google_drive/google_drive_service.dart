@@ -106,6 +106,7 @@ class GoogleDriveService {
   /// ポップアップを開くとクリックの権利（user activation）を使い切り、続くボタンの
   /// `ensureDriveAuthenticated` の 2 本目はブラウザに潰される。2 本目は 1 本目の結果を待つ
   Future<bool>? _webRestoreInFlight;
+  bool _loggedNoRememberedEmail = false;
 
   /// Googleアカウントが取れているか（スコープの認可は別）。
   ///
@@ -199,7 +200,10 @@ class GoogleDriveService {
     if (hint == null || hint.isEmpty) {
       // ⚠ `login_hint` が無いと、Googleがアカウントを決められず
       // 選択画面で止まる（＝無音にならない）。ここは諦めてUIに渡す。
-      AppLogger.debug('[GoogleDriveService] 覚えているアドレスが無いので復元しない');
+      if (!_loggedNoRememberedEmail) {
+        _loggedNoRememberedEmail = true;
+        AppLogger.debug('[GoogleDriveService] 覚えているアドレスが無いので復元しない');
+      }
       return false;
     }
 
@@ -282,6 +286,7 @@ class GoogleDriveService {
 
   Future<void> _rememberEmail(String email) async {
     if (email.isEmpty) return;
+    _loggedNoRememberedEmail = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kLastEmailKey, email);
   }

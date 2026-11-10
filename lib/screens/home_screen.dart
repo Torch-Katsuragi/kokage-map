@@ -39,6 +39,7 @@ import '../models/nodes/sys_node.dart';
 import '../providers/notification_providers.dart';
 import '../providers/project_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../services/app_update_service.dart';
 import '../services/changelog_service.dart';
 import '../services/global_folder_locator.dart';
 import '../services/google_drive/drive_folder_set_service.dart';
@@ -79,6 +80,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   String _openingProjectStatus = '';
   bool _initCompleted = false; // 初期化（オンボーディング含む）完了フラグ
   bool _hasUnreadChangelog = false; // チェンジログ未読フラグ
+  AppUpdateInfo? _availableUpdate; // リモートに新しい版があるときの情報
   bool _autoOpenAttempted = false; // --dart-define=PROJECT_DIR の自動オープンを試したか
 
   /// 最後に開いたのが「ほかの場所」ならそのパス（native だけ。web は従来のフォルダ選択）
@@ -94,6 +96,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     tutorialRequests.addListener(_onTutorialRequest);
     _initPermissions();
     _checkChangelogUnread();
+    _checkAppUpdate();
     _loadLastFolderName();
   }
 
@@ -318,6 +321,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   /// チェンジログ画面を開く
+  Future<void> _checkAppUpdate() async {
+    final update = await AppUpdateService.instance.checkForUpdate();
+    if (mounted) {
+      setState(() => _availableUpdate = update);
+    }
+  }
+
+  /// Google Play ストアのアプリページを開く
+  Future<void> _openPlayStore() async {
+    final pkg =
+        _availableUpdate?.packageName ?? AppUpdateService.defaultPackageName;
+    await AppUpdateService.instance.openPlayStore(packageName: pkg);
+  }
+
   void _openChangelog() {
     Navigator.push(
       context,
@@ -476,6 +493,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       // ただし、初期化未完了・権限チェック中・マップ画面遷移済みの場合はスキップ
       if (_initCompleted && !_isCheckingPermissions && !_navigatedToMapPage) {
         _checkPermissions();
+        _checkAppUpdate();
       }
     }
   }
@@ -959,6 +977,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const HomeHeader(),
+                    // Playストア更新案内ボタン（新しいバージョンがあるときのみ表示）
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      child:
+                          _availableUpdate != null
+                              ? Padding(
+                                padding: const EdgeInsets.only(top: 16),
+                                child: _PlayStoreUpdateBanner(
+                                  updateInfo: _availableUpdate!,
+                                  onTap: _openPlayStore,
+                                ),
+                              )
+                              : const SizedBox.shrink(),
+                    ),
                     // 更新通知バナー（未読時のみ表示）
                     AnimatedSize(
                       duration: const Duration(milliseconds: 300),
@@ -1029,6 +1062,79 @@ class _StartCard extends StatelessWidget {
             const SizedBox(height: 24),
             ...children,
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 更新通知バナー（アニメーション付き）
+///
+/// 最新版が公開されたときに表示され、タップで Google Play ストアのページへ遷移する。
+class _PlayStoreUpdateBanner extends StatelessWidget {
+  final AppUpdateInfo updateInfo;
+  final VoidCallback onTap;
+
+  const _PlayStoreUpdateBanner({
+    required this.updateInfo,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: const Color(0xFFE8F4FE),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFF90CAF9)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.system_update,
+                color: Color(0xFF0D47A1),
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      t.home.updateAvailableTitle(
+                        latest: updateInfo.latestVersion,
+                      ),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0D47A1),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      t.home.updateAvailableSubtitle(
+                        current: updateInfo.currentVersion,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF1565C0),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.open_in_new,
+                color: Color(0xFF0D47A1),
+                size: 18,
+              ),
+            ],
+          ),
         ),
       ),
     );

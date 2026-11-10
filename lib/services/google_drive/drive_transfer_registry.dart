@@ -58,7 +58,7 @@ class DriveTransferRegistry {
 
   /// パス文字列をキー用に正規化する
   static String normalizeKey(String localPath) {
-    final norm = p.normalize(localPath).replaceAll('\\', '/');
+    final norm = p.posix.normalize(localPath.replaceAll('\\', '/'));
     if (norm.length > 1 && norm.endsWith('/')) {
       return norm.substring(0, norm.length - 1);
     }
@@ -248,14 +248,15 @@ class DriveTransferRegistry {
       );
       childNotifier.value = progress;
 
-      final childName = folderName ?? p.basename(localPath);
-      final parentName = _activeNames[ancestorKey] ?? p.basename(ancestorKey);
+      final childName = folderName ?? p.posix.basename(key);
+      final parentName =
+          _activeNames[ancestorKey] ?? p.posix.basename(ancestorKey);
       final fileLabel = progress.currentFileName;
       final forwarded = SyncProgress(
         phase: progress.phase,
         completedFiles: progress.completedFiles,
         totalFiles: progress.totalFiles,
-         transferredBytes: progress.transferredBytes,
+        transferredBytes: progress.transferredBytes,
         totalBytes: progress.totalBytes,
         currentFileName: fileLabel != null && fileLabel.isNotEmpty
             ? '$childName / $fileLabel'
@@ -273,10 +274,10 @@ class DriveTransferRegistry {
     }
 
     if (!_activeNames.containsKey(key)) {
-      _activeNames[key] = folderName ?? p.basename(localPath);
+      _activeNames[key] = folderName ?? p.posix.basename(key);
       activeCount.value = _activeNames.length;
     }
-    final name = folderName ?? _activeNames[key] ?? p.basename(localPath);
+    final name = folderName ?? _activeNames[key] ?? p.posix.basename(key);
     final notifier = _progressNotifiers.putIfAbsent(
       key,
       () => ValueNotifier<SyncProgress?>(null),
@@ -316,7 +317,8 @@ class DriveTransferRegistry {
       return;
     }
 
-    final name = folderName ?? _activeNames.remove(key) ?? p.basename(localPath);
+    final name =
+        folderName ?? _activeNames.remove(key) ?? p.posix.basename(key);
     _activeNames.remove(key);
     activeCount.value = _activeNames.length;
 

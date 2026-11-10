@@ -67,7 +67,9 @@
     "receiveConfirmTitle": "Get this shared map?",
     "receiveConfirmBody": "\"${name}\" will be added to the Shared folder of your map. Don't get it if you don't recognize the link",
     "receiveConfirmOwner": "Owner: ${owner}",
-    "receiveConfirmAction": "Get"
+    "receiveConfirmAction": "Get",
+    "updateAvailableTitle": "New version (v$latest) available",
+    "updateAvailableSubtitle": "Current: v$current — Update on Google Play"
   },
   "permissions": {
     "storageRequired": "Storage permission is required",

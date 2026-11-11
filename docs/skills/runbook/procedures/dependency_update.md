@@ -23,6 +23,7 @@ flutter pub outdated
 
 - 2 回目の `pub outdated` で残ったものは推移的依存の制約で止まっている。止めているパッケージを特定し、そちらも上げる
 - `pubspec.yaml` の `environment.sdk` は上げた Dart に合わせて引き上げてよい（下限を古いままにしない）
+- Flutter 本体が上がったら `.github/workflows/ci.yml` の `FLUTTER_VERSION` も同じ版に揃える（忘れると `environment.sdk` の引き上げで CI の `flutter pub get` が落ちる）
 
 ## ステップ3: コード生成（順番に意味がある）
 

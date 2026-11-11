@@ -33,37 +33,24 @@ library;
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
-import 'package:flutter/foundation.dart' show listEquals;
-import 'package:flutter/material.dart' show Color;
 import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
 
 import '../../core/fs/k_file_system.dart';
-import '../../models/basemap_provider.dart';
 import '../../models/kmeta.dart';
-import '../../models/layer_join.dart';
-import '../../models/nodes/external_layer_node.dart';
 import '../../models/nodes/folder_node.dart';
-import '../../models/nodes/geopackage_node.dart';
-import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
-import '../../models/nodes/layer_order.dart';
 import '../../models/nodes/layer_tree_node.dart';
-import '../../models/nodes/overlay_image_node.dart';
-import '../../models/nodes/table_node.dart';
 import '../../models/nodes/view_node.dart';
-import '../../models/qgis_form.dart';
 import '../../utils/app_logger.dart';
-import '../../utils/label_expression.dart';
-import '../external/external_source.dart';
-import '../gdal_raster_overlay.dart';
-import '../kmeta_service.dart';
-import 'qgs_document.dart' show QgsDocument;
-import 'qgs_form_reader.dart';
-import 'qgs_project_builder.dart' show QgsProjectBuilder;
 import 'qgs_raster_source.dart';
-import 'qgs_renderer_reader.dart';
+import 'qgs_relation_importer.dart';
+import 'qgs_source_resolver.dart';
+import 'qgs_style_reader.dart';
+import 'qgs_tree_reader.dart';
 import 'qgs_xml.dart';
+
+export 'qgs_source_resolver.dart' show QgsDataSource;
 
 /// 取り込んだ結果。
 class QgsImportResult {
@@ -91,56 +78,6 @@ class QgsImportResult {
       viewsByLayer.values.fold(0, (sum, list) => sum + list.length);
 
   bool get isEmpty => viewsByLayer.isEmpty;
-}
-
-/// QGISのデータソース文字列から取り出したもの。
-class QgsDataSource {
-  const QgsDataSource({required this.path, this.layerName, this.subset, this.geometryType});
-
-  /// `.qgs` からの相対、または絶対パス
-  final String path;
-
-  /// GeoPackage内のテーブル名
-  final String? layerName;
-
-  /// subset string（SQLのWHERE句）
-  final String? subset;
-
-  /// `geometrytype=`（QGIS が型の混ざったファイルの型ごとのサブレイヤに付ける。例 `Point`）
-  final String? geometryType;
-
-  /// OGRのデータソース文字列を分解する。
-  ///
-  /// `path|layername=foo|subset=bar` の形。`|` で区切られ、`key=value` が続く。
-  /// ⚠ subset にも `|` が入りうるので、**subset は最後まで丸ごと**取る。
-  static QgsDataSource? parse(String raw) {
-    if (raw.trim().isEmpty) return null;
-
-    // subset は残り全部。先に切り出しておかないと `|` で壊れる
-    String rest = raw;
-    String? subset;
-    final subsetAt = rest.indexOf('|subset=');
-    if (subsetAt >= 0) {
-      subset = rest.substring(subsetAt + '|subset='.length);
-      rest = rest.substring(0, subsetAt);
-    }
-
-    final parts = rest.split('|');
-    final path = parts.first.trim();
-    String? layerName;
-    String? geometryType;
-    for (final part in parts.skip(1)) {
-      final eq = part.indexOf('=');
-      if (eq < 0) continue;
-      final key = part.substring(0, eq).trim().toLowerCase();
-      final value = part.substring(eq + 1).trim();
-      if (key == 'layername') layerName = value;
-      if (key == 'geometrytype') geometryType = value;
-      // layerid / geometrytype / table 等は使わない
-    }
-    if (path.isEmpty) return null;
-    return QgsDataSource(path: path, layerName: layerName, subset: subset, geometryType: geometryType);
-  }
 }
 
 class QgsImporter {
@@ -180,18 +117,10 @@ class QgsImporter {
 
     final rootPath = root.getAbsoluteFilePath();
     final qgsDir = p.dirname(p.normalize(qgsPath));
-    final sources = _SourceResolver(qgsDir, rootPath, _indexGeoPackages(root), _indexImages(root), _indexTables(root));
-    final tree = _TreeVisibility.read(doc);
+    final sources = QgsSourceResolver.fromRoot(qgsDir, root);
+    final tree = QgsTreeVisibility.read(doc);
     // レイヤツリーの並び（上から）。こかげマップの一覧の並び（= 描く順）に写す
-    final treeIds = qgsTreeLayerIds(doc);
-    final treePos = <String, int>{for (var i = 0; i < treeIds.length; i++) treeIds[i]: i};
-    final placed = <LayerTreeNode, int>{};
-    void place(LayerTreeNode node, String? id) {
-      final pos = id == null ? null : treePos[id];
-      if (pos == null) return;
-      final prev = placed[node];
-      if (prev == null || pos < prev) placed[node] = pos;
-    }
+    final placement = QgsTreePlacement.fromDocument(doc);
     // 形が合ったレイヤの、グループ側の可視性（レイヤ・gpkg・dir）
     final layerGroupChecked = <LayerNode, bool>{};
     final containerChecked = <LayerTreeNode, bool>{};
@@ -213,7 +142,7 @@ class QgsImporter {
       if (!accepts(layer.folderNode)) continue;
 
       final id = childText(maplayer, 'id');
-      place(layer, id);
+      placement.place(layer, id);
       final shaped = id != null && tree.readGroups(id, layer, gpkg, root, layerGroupChecked, containerChecked);
       final views = touched.putIfAbsent(layer, () => []);
       // レイヤと同じ名前でフィルタの無い QGIS レイヤは既定 View（こかげマップは既定 View をレイヤ名で書く。
@@ -246,42 +175,22 @@ class QgsImporter {
     }
 
     // 属性フォームの設定（`.qgs` の側は QGIS の持ち物なので、読んで写すだけ）
-    await _applyForms(formSource, projectLayers, sources, discarded);
+    await QgsRelationImporter.applyForms(formSource, projectLayers, sources, discarded);
 
     // 表の結合（`<vectorjoins>`。結合先は表のノードに読み替える）
-    await _applyJoins(formSource, projectLayers, sources, discarded);
+    await QgsRelationImporter.applyJoins(formSource, projectLayers, sources, discarded);
 
     // gpkg と dir のグループの可視性（変わったものだけ書く）
-    for (final MapEntry(key: node, value: checked) in containerChecked.entries) {
-      if (node.visible == checked) continue;
-      final owner = node.parent;
-      if (!accepts(owner is FolderNode ? owner : null)) continue;
-      node.visible = checked;
-      await node.persistVisibility();
-    }
+    await applyQgsContainerVisibility(containerChecked, accepts);
 
     // オーバーレイ画像（GeoTIFF）の可視性。ファイルは dir にあるものが正で、`.qgs` からは表示だけ取る
-    var overlayCount = 0;
-    for (final (:node, :id) in sources.overlays) {
-      final owner = node.parent;
-      if (owner is! FolderNode || !accepts(owner)) continue;
-      // こかげマップが書いた形（決定的な id）なら dir グループの消灯は dir の可視性なので、自身の checked。
-      // QGIS で足したものは祖先で畳む（グループごと消灯した場合も読み戻す）
-      final abs = node.getAbsoluteFilePath();
-      final rel = abs == null ? null : relativeInside(qgsDir, abs);
-      final ownForm = rel != null && id == QgsProjectBuilder.rasterLayerIdForPath('./$rel');
-      final visible = (ownForm ? tree.ownChecked[id] : tree.checked[id]) ?? true;
-      overlayCount++;
-      if (node.visible == visible) continue;
-      node.visible = visible;
-      await node.persistVisibility();
-    }
+    final overlayCount = await applyQgsOverlayVisibility(sources.overlays, tree, qgsDir, accepts);
 
-    // 並び（レイヤツリーの上から）。オーバーレイは持ち主を問わず位置だけ取る（持ち主の判定は [_applyOrder]）
+    // 並び（レイヤツリーの上から）。オーバーレイは持ち主を問わず位置だけ取る（持ち主の判定は [applyQgsTreeOrder]）
     for (final (:node, :id) in sources.overlays) {
-      place(node, id);
+      placement.place(node, id);
     }
-    await _applyOrder(root, placed, accepts);
+    await applyQgsTreeOrder(root, placement.placed, accepts);
 
     // XYZ タイル（背景地図）。端末の設定なのでここでは読むだけ
     final baseMaps = [
@@ -308,72 +217,8 @@ class QgsImporter {
     );
   }
 
-  /// レイヤツリーの並びを、こかげマップのフォルダの子とレイヤの並び（フォルダ設定の `layout.sortOrder`）に写す。
-  ///
-  /// [placed] はツリーで位置の分かった葉（レイヤ・オーバーレイ）とその位置（上から）。
-  /// 祖先（gpkg・dir）の位置は子孫のいちばん上の位置。QGIS でレイヤをグループの外へ動かしていても、
-  /// こかげマップの構造（dir > gpkg > レイヤ）の中で近い並びになる。
-  /// 並びの持ち主はその dir（[accepts] で持ち主のほうが新しければ飛ばす）。今の並びと変わらず、
-  /// 並びの設定も持っていなければ書かない（開くたびに子 dir の `.qgs` を増やさない）
-  Future<void> _applyOrder(
-    FolderNode root,
-    Map<LayerTreeNode, int> placed,
-    bool Function(FolderNode? owner) accepts,
-  ) async {
-    if (placed.isEmpty) return;
-    final pos = <LayerTreeNode, int>{};
-    for (final MapEntry(key: leaf, value: at) in placed.entries) {
-      for (LayerTreeNode? n = leaf; n != null; n = n.parent) {
-        final prev = pos[n];
-        if (prev == null || at < prev) pos[n] = at;
-        if (identical(n, root)) break;
-      }
-    }
-    if (!pos.containsKey(root)) return;
-
-    Iterable<FolderNode> folders(FolderNode f) sync* {
-      yield f;
-      for (final c in f.children.whereType<FolderNode>()) {
-        if (pos.containsKey(c)) yield* folders(c);
-      }
-    }
-
-    for (final folder in folders(root).toList()) {
-      if (!accepts(folder)) continue;
-      final folderPath = folder.getAbsoluteFilePath();
-      if (folderPath == null) continue;
-      final gpkgs = folder.children.whereType<GeoPackageNode>().toList();
-      final order = [
-        for (final c in sortByPosition(folder.children, (c) => pos[c])) c.name,
-        for (final g in gpkgs)
-          for (final l in sortByPosition(g.children.whereType<LayerNode>(), (l) => pos[l])) l.layerKey,
-      ];
-      // 写しで受ける（並びが変わらなければ applyLayerOrder は渡したリストそのものを返す）
-      final children = List.of(applyLayerOrder(folder.children, order, layerOrderKey));
-      final layers = {for (final g in gpkgs) g: List.of(applyLayerOrder(g.children, order, layerOrderKey))};
-      final moved = !listEquals(children, folder.children) || layers.entries.any((e) => !listEquals(e.value, e.key.children));
-      final stored = (await folder.getMeta()).layout.sortOrder;
-      if (!moved && stored == null) continue;
-      // 並べ替えるだけ（顔ぶれは変わらない）。`.qgs` の書き直しは設定の保存が合図になる
-      folder.children
-        ..clear()
-        ..addAll(children);
-      for (final MapEntry(key: g, value: list) in layers.entries) {
-        g.children
-          ..clear()
-          ..addAll(list);
-      }
-      await KMetaService.instance.setSortOrder(folderPath, order);
-      folder.invalidateMetaCache();
-    }
-  }
-
   /// 描き分けの印（[KMetaLayerStyle.qgisRenderer]）だけを持ち、中身（[KMetaLayerStyle.qgisRendererDef]）が
   /// 無いスタイルに、`.qgs` のレンダラの中身を足す。足した数を返す。
-  ///
-  /// 中身を持つようになった版（2026-10-11）より前に取り込んだプロジェクトは印だけを持つ。自分が書いた
-  /// `.qgs` は読み戻さないので、QGIS で保存し直すまで代表の 1 色のままになる。それを埋めるだけで、
-  /// View・可視性・他のスタイルには触らない（全部を取り込み直すとアプリだけが持つ設定を巻き戻しうる）
   Future<int> backfillRendererDefs(String qgsPath, FolderNode root) async {
     final XmlDocument doc;
     try {
@@ -382,54 +227,11 @@ class QgsImporter {
       AppLogger.debug('[QgsImporter] 描き分けの補完: 読めない $e');
       return 0;
     }
-    final rootPath = root.getAbsoluteFilePath();
-    final sources = _SourceResolver(
-      p.dirname(p.normalize(qgsPath)),
-      rootPath,
-      _indexGeoPackages(root),
-      _indexImages(root),
-    );
-    var filled = 0;
-    final projectLayers = doc.rootElement.findElements('projectlayers').firstOrNull;
-    for (final maplayer in projectLayers?.findElements('maplayer') ?? const <XmlElement>[]) {
-      final def = QgsRendererReader.read(maplayer);
-      if (def == null) continue;
-      final target = sources.resolve(maplayer, <String>[]);
-      if (target == null) continue;
-      final (:name, :source, :layer, gpkg: _) = target;
-      final folder = layer.folderNode;
-      final folderPath = folder?.getAbsoluteFilePath();
-      if (folder == null || folderPath == null) continue;
-
-      final isDefault = name == layer.layerName && (source.subset == null || source.subset!.isEmpty);
-      if (isDefault) {
-        final existing = (await KMetaService.instance.getMeta(folderPath)).styles.layers[layer.layerKey];
-        if (existing?.qgisRenderer != def.kind.qgisType || existing?.qgisRendererDef != null) continue;
-        await KMetaService.instance.setLayerStyle(folderPath, layer.layerKey, existing!.copyWith(qgisRendererDef: def));
-        folder.invalidateMetaCache();
-        layer.invalidateKmetaStyleCache();
-        filled++;
-        continue;
-      }
-      if (layer.views.isEmpty) await layer.loadViews();
-      final view = layer.views.where((v) => v.name == name).firstOrNull;
-      final style = view?.style;
-      if (view == null || style == null || style.qgisRenderer != def.kind.qgisType || style.qgisRendererDef != null) {
-        continue;
-      }
-      view.style = style.copyWith(qgisRendererDef: def);
-      await layer.persistViews();
-      filled++;
-    }
-    if (filled > 0) AppLogger.debug('[QgsImporter] 描き分けの中身を $filled 件補った（${p.basename(qgsPath)}）');
-    return filled;
+    final sources = QgsSourceResolver.fromRoot(p.dirname(p.normalize(qgsPath)), root, includeTables: false);
+    return QgsStyleReader.backfillRendererDefs(doc, qgsPath, sources);
   }
 
   /// 属性フォームの設定を持たないレイヤに、`.qgs` の設定を足す。足した数を返す。
-  ///
-  /// 属性フォームを読むようになった版（2026-10-11）より前に取り込んだプロジェクトと、QGIS で設定してから
-  /// こかげマップが先に書き直した `.qgs`（QGIS の `<fieldConfiguration>` などはそのまま残る）のため。
-  /// 既に持っているレイヤには触らない（QGIS で保存し直したときの取り込みが差し替える）
   Future<int> backfillForms(String qgsPath, FolderNode root) async {
     final XmlDocument doc;
     try {
@@ -438,159 +240,9 @@ class QgsImporter {
       AppLogger.debug('[QgsImporter] 属性フォームの補完: 読めない $e');
       return 0;
     }
-    final sources = _SourceResolver(
-      p.dirname(p.normalize(qgsPath)),
-      root.getAbsoluteFilePath(),
-      _indexGeoPackages(root),
-      _indexImages(root),
-    );
-    final projectLayers = doc.rootElement.findElements('projectlayers').firstOrNull;
-    final formSource = <LayerNode, XmlElement>{};
-    for (final maplayer in projectLayers?.findElements('maplayer') ?? const <XmlElement>[]) {
-      final target = sources.resolve(maplayer, <String>[]);
-      if (target == null) continue;
-      final (:name, :source, :layer, gpkg: _) = target;
-      final isDefault = name == layer.layerName && (source.subset == null || source.subset!.isEmpty);
-      if (isDefault || !formSource.containsKey(layer)) formSource[layer] = maplayer;
-    }
-    final missing = <LayerNode, XmlElement>{};
-    for (final MapEntry(key: layer, value: maplayer) in formSource.entries) {
-      final folderPath = layer.folderNode?.getAbsoluteFilePath();
-      if (folderPath == null) continue;
-      if ((await KMetaService.instance.getMeta(folderPath)).forms.containsKey(layer.layerKey)) continue;
-      missing[layer] = maplayer;
-    }
-    final filled = await _applyForms(missing, projectLayers, sources, <String>[], onlyNonEmpty: true);
-    if (filled > 0) AppLogger.debug('[QgsImporter] 属性フォームの設定を $filled 件補った（${p.basename(qgsPath)}）');
-    return filled;
+    final sources = QgsSourceResolver.fromRoot(p.dirname(p.normalize(qgsPath)), root, includeTables: false);
+    return QgsRelationImporter.backfillForms(doc, qgsPath, sources);
   }
-
-  /// [formSource] のレイヤごとに、maplayer の属性フォームの設定を読んでフォルダ設定に書く。
-  /// 設定の無いレイヤは外す（[onlyNonEmpty] なら外さない）。書いた（設定のある）数を返す。
-  ///
-  /// ValueRelation の参照先（maplayer の id）は、ツリーの gpkg とレイヤに読み替えて設定に入れる。
-  /// 読み替えられなければ [discarded] に足す（その列は文字の欄になる）
-  Future<int> _applyForms(
-    Map<LayerNode, XmlElement> formSource,
-    XmlElement? projectLayers,
-    _SourceResolver sources,
-    List<String> discarded, {
-    bool onlyNonEmpty = false,
-  }) async {
-    final byId = <String, XmlElement>{
-      for (final m in projectLayers?.findElements('maplayer') ?? const <XmlElement>[])
-        ?childText(m, 'id'): m,
-    };
-    var count = 0;
-    for (final MapEntry(key: layer, value: maplayer) in formSource.entries) {
-      final folder = layer.folderNode;
-      final folderPath = folder?.getAbsoluteFilePath();
-      if (folder == null || folderPath == null) continue;
-      var form = QgsFormReader.read(maplayer);
-      if (form == null && onlyNonEmpty) continue;
-      if (form != null) {
-        final fields = <String, QgisFieldForm>{};
-        for (final MapEntry(key: name, value: field) in form.fields.entries) {
-          if (field.kind != QgisWidgetKind.valueRelation) {
-            fields[name] = field;
-            continue;
-          }
-          final ref = byId[field.config['Layer']];
-          final target = ref == null ? null : sources.resolve(ref, <String>[]);
-          final gpkgPath = target == null ? null : _gpkgIndexPath(target.gpkg);
-          if (target == null || gpkgPath == null) {
-            discarded.add('${layer.layerName} の $name（値の関係の参照先 ${field.config['LayerName'] ?? ''} が見つかりません）');
-            fields[name] = field;
-            continue;
-          }
-          fields[name] = QgisFieldForm.fromJson({
-            ...field.toJson(),
-            'config': {
-              ...field.config,
-              kRelationTargetKey: {
-                'gpkg': p.relative(gpkgPath, from: folderPath).replaceAll(r'\', '/'),
-                'layer': target.layer.layerName,
-              },
-            },
-          });
-        }
-        form = form.withFields(fields);
-        count++;
-      }
-      await KMetaService.instance.setLayerForm(folderPath, layer.layerKey, form);
-      folder.invalidateMetaCache();
-    }
-    return count;
-  }
-
-  /// [formSource] のレイヤごとに、maplayer の `<vectorjoins>` を読んでフォルダ設定の結合に書く（無ければ外す）。
-  /// 結合先が表のノード（座標の無い CSV）に読み替えられなければ [discarded] に足す
-  Future<void> _applyJoins(
-    Map<LayerNode, XmlElement> formSource,
-    XmlElement? projectLayers,
-    _SourceResolver sources,
-    List<String> discarded,
-  ) async {
-    final names = <String, String>{
-      for (final m in projectLayers?.findElements('maplayer') ?? const <XmlElement>[])
-        ?childText(m, 'id'): childText(m, 'layername') ?? '',
-    };
-    for (final MapEntry(key: layer, value: maplayer) in formSource.entries) {
-      final folder = layer.folderNode;
-      final folderPath = folder?.getAbsoluteFilePath();
-      if (folder == null || folderPath == null) continue;
-      final joins = <LayerJoin>[];
-      for (final j in maplayer.getElement('vectorjoins')?.findElements('join') ?? const <XmlElement>[]) {
-        final id = j.getAttribute('joinLayerId') ?? '';
-        final table = sources.tables[id];
-        final joinField = j.getAttribute('joinFieldName');
-        final targetField = j.getAttribute('targetFieldName');
-        if (table == null || joinField == null || targetField == null) {
-          discarded.add('${layer.layerName} の結合（結合先 ${names[id] ?? id} は表ではないので未対応）');
-          continue;
-        }
-        final subset = j.getElement('joinFieldsSubset');
-        joins.add(LayerJoin(
-          table: p.relative(table.sourcePath, from: folderPath).replaceAll(r'\', '/'),
-          joinField: joinField,
-          targetField: targetField,
-          fields: subset == null ? null : [for (final f in subset.findElements('field')) ?f.getAttribute('name')],
-          prefix: j.getAttribute('hasCustomPrefix') == '1' ? (j.getAttribute('customPrefix') ?? '') : null,
-          memoryCache: j.getAttribute('memoryCache') != '0',
-        ));
-      }
-      await KMetaService.instance.setLayerJoins(folderPath, layer.layerKey, joins);
-      folder.invalidateMetaCache();
-      if (layer.featuresLoaded) {
-        await layer.loadJoins();
-        await layer.refreshStyleGroups();
-      }
-    }
-  }
-
-  /// ルート以下の表（座標の無い CSV）を、正規化した絶対パスで引けるようにする
-  Map<String, TableNode> _indexTables(LayerTreeNode node) {
-    final result = <String, TableNode>{};
-    void walk(LayerTreeNode n) {
-      if (n is TableNode) result[p.normalize(n.sourcePath)] = n;
-      for (final child in n.children) {
-        walk(child);
-      }
-    }
-
-    walk(node);
-    return result;
-  }
-
-  /// gpkg（相当）のノードを引くときのパス（[_indexGeoPackages] と同じ決まり）
-  static String? _gpkgIndexPath(GeoPackageNode n) {
-    final abs = n is ExternalLayerNode ? n.sourcePath : n.geoPackageFile.getAbsolutePath();
-    return abs == null ? null : p.normalize(abs);
-  }
-
-  // =============================================
-  // 部品
-  // =============================================
 
   /// [layer] の View を [views] に置き換えて保存する。可視性とスタイルも書く。
   /// [groupChecked] はこかげマップが書いた形のときの、レイヤグループの可視性
@@ -603,7 +255,7 @@ class QgsImporter {
     await layer.persistViews();
     // persistViews は前のスタイルに重ねるだけなので、QGIS で単一シンボルに戻した描き分けの印が残っていた。
     // QGIS の今の状態に合わせ直す（2026-10-12）
-    if (importedDefault != null) await _applyLayerStyle(layer, importedDefault);
+    if (importedDefault != null) await QgsStyleReader.applyImportedLayerStyle(layer, importedDefault);
     // 可視性は View 定義とは別の場所に持つ。
     // 既定 View 1枚だけのレイヤは View ではなく**レイヤの可視性**で表す
     // （暗黙の既定 View は フォルダ設定（`.qgs`） に書かれず、可視性も読まれないため）
@@ -621,20 +273,14 @@ class QgsImporter {
     }
   }
 
-  /// QGIS から読んだスタイルをレイヤのスタイルに重ねる。QGIS が持たない項目（ラベルの濃さ等）は残し、
-  /// 描き分けの印（[KMetaLayerStyle.qgisRenderer]）は QGIS の今の状態に合わせる（単一シンボルに戻したら外す）
-  Future<void> _applyLayerStyle(LayerNode layer, KMetaLayerStyle imported) async {
-    final folder = layer.folderNode;
-    final folderPath = folder?.getAbsoluteFilePath();
-    if (folder == null || folderPath == null) return;
-    final existing = (await KMetaService.instance.getMeta(folderPath)).styles.layers[layer.layerKey];
-    var merged = imported.mergeWith(existing);
-    if (imported.qgisRenderer == null && merged.qgisRenderer != null) {
-      merged = merged.withoutQgisRenderer();
+  /// 同一レイヤ内で View名が衝突しないようにする（QGISは同名レイヤを許す）
+  String _uniqueName(String base, List<ViewNode> existing) {
+    if (!existing.any((v) => v.name == base)) return base;
+    var n = 2;
+    while (existing.any((v) => v.name == '$base $n')) {
+      n++;
     }
-    await KMetaService.instance.setLayerStyle(folderPath, layer.layerKey, merged);
-    folder.invalidateMetaCache();
-    layer.invalidateKmetaStyleCache();
+    return '$base $n';
   }
 
   /// `.qgs` ならそのまま、`.qgz`（zip）なら中の `.qgs` を取り出して返す。
@@ -655,396 +301,12 @@ class QgsImporter {
     throw const FormatException('.qgz の中に .qgs がありません');
   }
 
-  /// ルート以下の GeoPackage を、正規化した絶対パスで引けるようにする
-  Map<String, GeoPackageNode> _indexGeoPackages(LayerTreeNode node) {
-    final result = <String, GeoPackageNode>{};
-    void walk(LayerTreeNode n) {
-      if (n is GeoPackageNode) {
-        // 読み取り専用レイヤは元のファイルのパスで引く（キャッシュのパスは .qgs に出てこない）
-        final abs = _gpkgIndexPath(n);
-        if (abs != null) result[abs] = n;
-      }
-      for (final child in n.children) {
-        walk(child);
-      }
-    }
-
-    walk(node);
-    return result;
-  }
-
-  /// ルート以下の画像（写真・オーバーレイ）を、正規化した絶対パスで引けるようにする
-  Map<String, ImageNode> _indexImages(LayerTreeNode node) {
-    final result = <String, ImageNode>{};
-    void walk(LayerTreeNode n) {
-      if (n is ImageNode) {
-        final abs = n.getAbsoluteFilePath();
-        if (abs != null) result[p.normalize(abs)] = n;
-      }
-      for (final child in n.children) {
-        walk(child);
-      }
-    }
-
-    walk(node);
-    return result;
-  }
-
-  /// 同一レイヤ内で View名が衝突しないようにする（QGISは同名レイヤを許す）
-  String _uniqueName(String base, List<ViewNode> existing) {
-    if (!existing.any((v) => v.name == base)) return base;
-    var n = 2;
-    while (existing.any((v) => v.name == '$base $n')) {
-      n++;
-    }
-    return '$base $n';
-  }
-
-  // =============================================
-  // レンダラ → KMetaLayerStyle
-  // =============================================
-
   /// シンボルとラベルをまとめて読む（どちらも無ければ null）
-  KMetaLayerStyle? readStyleWithLabel(XmlElement maplayer) {
-    final symbol = readStyle(maplayer);
-    final label = readLabel(maplayer);
-    if (label == null) return symbol;
-    return (symbol ?? const KMetaLayerStyle()).mergeWith(label);
-  }
+  KMetaLayerStyle? readStyleWithLabel(XmlElement maplayer) => QgsStyleReader.readStyleWithLabel(maplayer);
 
   /// `<labeling type="simple">` のフィールド（式）・サイズ・色と `labelsEnabled`。
-  ///
-  /// QGIS が `isExpression="0"` で書いた列名は `"列"` の式に読み替える。
-  /// 式そのものは検証せずに持ち帰る（読めない式は地図に出ないだけで、消さない）
-  KMetaLayerStyle? readLabel(XmlElement maplayer) {
-    final enabledAttr = maplayer.getAttribute('labelsEnabled');
-    final labeling = maplayer.findElements('labeling').firstOrNull;
-    if (enabledAttr == null && labeling == null) return null;
-    String? expression;
-    double? fontPx;
-    Color? color;
-    Color? halo;
-    if (labeling != null && labeling.getAttribute('type') == 'simple') {
-      final textStyle = labeling.getElement('settings')?.getElement('text-style');
-      if (textStyle != null) {
-        final field = textStyle.getAttribute('fieldName');
-        if (field != null && field.isNotEmpty) {
-          expression = textStyle.getAttribute('isExpression') == '1' ? field : quoteField(field);
-        }
-        final size = double.tryParse(textStyle.getAttribute('fontSize') ?? '');
-        if (size != null) {
-          // Point → px（書き出しの逆: px * 0.75 = pt）
-          fontPx = textStyle.getAttribute('fontSizeUnit') == 'Point' ? size / 0.75 : size;
-        }
-        color = _color(textStyle.getAttribute('textColor'));
-        final buffer = textStyle.getElement('text-buffer');
-        if (buffer != null && buffer.getAttribute('bufferDraw') == '1') {
-          halo = _color(buffer.getAttribute('bufferColor'));
-        }
-      }
-    }
-    final enabled = enabledAttr == null ? (expression != null) : enabledAttr == '1';
-    return KMetaLayerStyle(
-      labelEnabled: enabled,
-      labelProperty: expression,
-      labelFontSize: fontPx,
-      labelColor: color,
-      labelHaloColor: halo,
-    );
-  }
+  KMetaLayerStyle? readLabel(XmlElement maplayer) => QgsStyleReader.readLabel(maplayer);
 
   /// `renderer-v2` から見た目を拾う。読めない形なら null（＝スタイル無し）。
-  ///
-  /// > [!NOTE] 拾うのは単一シンボルの1レイヤ目だけ
-  /// > QGISのシンボルは重ね合わせもできるが、こかげマップ 側に受け皿が無い。
-  /// > **完全再現は狙わない。** 狙うと「開けるファイルを選り好みする」方向に行く。
-  ///
-  /// 描き分け（分類・段階・ルール）は、最初のシンボルの色を代表の色にし、中身を
-  /// [KMetaLayerStyle.qgisRendererDef] に読む（地物ごとの色はそこから決める。2026-10-11）
-  KMetaLayerStyle? readStyle(XmlElement maplayer) {
-    final style = _readSymbolStyle(maplayer);
-    final type = maplayer.findElements('renderer-v2').firstOrNull?.getAttribute('type');
-    // 単一シンボル以外は、代表の色で描きつつ「QGIS で設定されたスタイル」として印を付ける
-    if (type == null || type == 'singleSymbol') return style;
-    return (style ?? const KMetaLayerStyle()).copyWith(
-      qgisRenderer: type,
-      qgisRendererDef: QgsRendererReader.read(maplayer),
-    );
-  }
-
-  KMetaLayerStyle? _readSymbolStyle(XmlElement maplayer) {
-    final renderer = maplayer.findElements('renderer-v2').firstOrNull;
-    if (renderer == null) return null;
-    final symbol = renderer.findAllElements('symbol').firstOrNull;
-    if (symbol == null) return null;
-    return QgsSymbolReader.read(symbol);
-  }
-
-  Color? _color(String? value) => QgsSymbolReader.color(value);
-}
-
-/// `<maplayer>` のデータソースを、ツリーの GeoPackage レイヤに結びつける
-bool _isGeoPackagePath(String path) => p.extension(path).toLowerCase() == '.gpkg';
-
-/// 外部形式（読み取り専用レイヤ）のデータソースが指すキャッシュのレイヤ名。
-///
-/// `|layername=` は元のファイルの GDAL のレイヤ名、`|geometrytype=` は型の混ざったレイヤの点・線・面。
-/// キャッシュを作ったときの割り当て（[ExternalLayerNode.sourcePlan]）で引く。
-/// 割り当てが無ければ、1 レイヤならそれ、`geometrytype=` があれば `<名前>_point` など、なければファイル名（拡張子なし）
-String _externalLayerName(GeoPackageNode node, QgsDataSource source) {
-  final type = geometryTypeFromQgis(source.geometryType);
-  final plan = node is ExternalLayerNode ? node.sourcePlan : null;
-  if (plan != null) {
-    final candidates = plan.layers.where((l) =>
-        (source.layerName == null || l.qgisLayerName == source.layerName) &&
-        (type == null || !l.split || l.geometryType == type));
-    if (candidates.length == 1) return candidates.single.name;
-    if (source.layerName != null && candidates.isNotEmpty) return candidates.first.name;
-  }
-  if (source.layerName != null) return source.layerName!;
-  final layers = node.children.whereType<LayerNode>().toList();
-  if (layers.length == 1) return layers.single.layerName;
-  final stem = p.basenameWithoutExtension(source.path.replaceAll(r'\', '/'));
-  return type == null ? stem : '$stem${externalSplitSuffix(type)}';
-}
-
-class _SourceResolver {
-  _SourceResolver(this.qgsDir, this.rootPath, this.gpkgIndex, this.imageIndex, [this.tableIndex = const {}]);
-
-  /// `.qgs` のある dir（相対パスの基準）
-  final String qgsDir;
-  final String? rootPath;
-
-  /// 正規化した絶対パス → GeoPackage
-  final Map<String, GeoPackageNode> gpkgIndex;
-
-  /// 正規化した絶対パス → 画像（写真・オーバーレイ）
-  final Map<String, ImageNode> imageIndex;
-
-  /// 正規化した絶対パス → 表（座標の無い CSV）
-  final Map<String, TableNode> tableIndex;
-
-  /// 表の maplayer の id → 表のノード（結合先を読み替える）
-  final tables = <String, TableNode>{};
-
-  /// gdal のラスタのうち、dir にあるオーバーレイ画像に当たったもの（maplayer の id つき）
-  final overlays = <({OverlayImageNode node, String id})>[];
-
-  /// wms の XYZ タイル・WMS（一覧に無い URL は利用者の地図の定義 `custom` つき）
-  final baseMaps = <({String providerId, String name, String id, int opacity, BaseMapProvider? custom})>[];
-
-  /// 取り込む先のレイヤ。取り込めなければ理由を [discarded] に足して null。
-  /// 黙って飛ばすもの（埋め込みスタブ・ラスタ）も null
-  ({String name, QgsDataSource source, LayerNode layer, GeoPackageNode gpkg})? resolve(
-    XmlElement maplayer,
-    List<String> discarded,
-  ) {
-    // 埋め込みスタブ（別プロジェクトの管轄。2026-09-30 以前にこかげマップが書いたものか、手で足したもの）
-    if (maplayer.getAttribute('embedded') == '1') return null;
-
-    final name = childText(maplayer, 'layername') ?? '(名前なし)';
-    final provider = childText(maplayer, 'provider')?.toLowerCase();
-
-    // ラスタはレイヤ（View）にはならない。GeoTIFF はオーバーレイ画像、XYZ タイルは背景地図へ
-    if (maplayer.getAttribute('type') == 'raster') {
-      _resolveRaster(maplayer, name, provider, discarded);
-      return null;
-    }
-
-    // 形の無い表（CSV）は View にならない。結合の先として表のノードに結びつける
-    if (QgsDocument.isTableLayer(maplayer)) {
-      _resolveTable(maplayer, name, discarded);
-      return null;
-    }
-
-    if (provider != null && provider != 'ogr') {
-      // PostGIS / WMS / メモリレイヤ等。ファイルとして持ち歩けない
-      discarded.add('$name（$provider は取り込めません）');
-      return null;
-    }
-
-    final source = QgsDataSource.parse(childText(maplayer, 'datasource') ?? '');
-    // gpkg 以外（shp・GeoJSON など）は `|layername=` が無くてよい（読み取り専用レイヤに結びつける）
-    if (source == null || (source.layerName == null && _isGeoPackagePath(source.path))) {
-      discarded.add('$name（データソースを読み取れません）');
-      return null;
-    }
-
-    final absPath = p.normalize(p.isAbsolute(source.path) ? source.path : p.join(qgsDir, source.path));
-    final root = rootPath;
-    if (root == null || relativeInside(root, absPath) == null) {
-      // ⚠ 相対パスで root 外を指すケース（`../shared/kyoyu.gpkg`）もあるため、
-      //    判定は正規化した絶対パスで行う
-      discarded.add('$name（プロジェクトフォルダの外を参照している）');
-      return null;
-    }
-
-    final gpkg = gpkgIndex[absPath];
-    if (gpkg == null) {
-      discarded.add('$name（${p.basename(absPath)} が見つかりません）');
-      return null;
-    }
-
-    final layerName = gpkg is ExternalLayerNode ? _externalLayerName(gpkg, source) : source.layerName!;
-    final layer = gpkg.children.whereType<LayerNode>().where((l) => l.layerName == layerName).firstOrNull;
-    if (layer == null) {
-      discarded.add('$name（${gpkg.name} に $layerName がありません）');
-      return null;
-    }
-    return (name: name, source: source, layer: layer, gpkg: gpkg);
-  }
-
-  /// 表の `<maplayer>` を [tables] に入れる。dir に無い・座標のある CSV（点のレイヤになっている）なら報告
-  void _resolveTable(XmlElement maplayer, String name, List<String> discarded) {
-    final id = childText(maplayer, 'id');
-    final path = QgsDocument.tableSourcePath(maplayer);
-    if (id == null || path == null) {
-      discarded.add('$name（${childText(maplayer, 'provider') ?? '不明なプロバイダ'} の表は取り込めません）');
-      return;
-    }
-    final absPath = p.normalize(p.isAbsolute(path) ? path : p.join(qgsDir, path));
-    final root = rootPath;
-    if (root == null || relativeInside(root, absPath) == null) {
-      discarded.add('$name（プロジェクトフォルダの外を参照している）');
-      return;
-    }
-    final node = tableIndex[absPath];
-    if (node == null) {
-      discarded.add('$name（${p.basename(absPath)} を表として開けません）');
-      return;
-    }
-    tables[id] = node;
-  }
-
-  /// ラスタの `<maplayer>` を [overlays] か [baseMaps] に振り分ける。扱えなければ理由を [discarded] に足す。
-  ///
-  /// dir に置かれたファイルが正で、`.qgs` は表示の設定を運ぶだけ（[[docs/technical/external-formats]]）。
-  /// GeoTIFF のノードは dir の中身から作られているので、ここでは突き合わせるだけで作らない
-  void _resolveRaster(XmlElement maplayer, String name, String? provider, List<String> discarded) {
-    final id = childText(maplayer, 'id') ?? '';
-    final datasource = childText(maplayer, 'datasource') ?? '';
-    switch (provider) {
-      case 'gdal':
-        if (datasource.trim().isEmpty || QgsRasterSource.isNonFileSource(datasource)) {
-          discarded.add('$name（ファイルではないラスタは取り込めません）');
-          return;
-        }
-        final path = datasource.split('|').first.trim();
-        final absPath = p.normalize(p.isAbsolute(path) ? path : p.join(qgsDir, path));
-        final root = rootPath;
-        if (root == null || relativeInside(root, absPath) == null) {
-          discarded.add('$name（プロジェクトフォルダの外を参照している）');
-          return;
-        }
-        final ext = p.extension(absPath).toLowerCase();
-        if (!GdalRasterOverlay.rasterExtensions.contains(ext)) {
-          discarded.add('$name（${ext.isEmpty ? '拡張子の無い' : ext} ラスタは未対応）');
-          return;
-        }
-        final node = imageIndex[absPath];
-        if (node == null) {
-          discarded.add('$name（${p.basename(absPath)} が見つかりません）');
-        } else if (node is! OverlayImageNode) {
-          // こかげマップの GeoTIFF でも、GDAL で位置と座標系が読めるラスタ（ExternalOverlayImageNode）でもない。
-          // GDAL が無い環境（読み込みに失敗した web など）でもここに来る
-          discarded.add('$name（${p.basename(absPath)} の位置か座標系を読めません）');
-        } else {
-          overlays.add((node: node, id: id));
-        }
-      case 'wms':
-        // XYZ はその URL、本物の WMS は EPSG:3857 のタイルで引く GetMap の URL（どちらも利用者の地図になりうる）
-        final xyz = QgsRasterSource.xyzUrl(datasource);
-        final url = xyz ?? QgsRasterSource.wmsGetMapTemplate(datasource);
-        if (url == null) {
-          discarded.add('$name（WMTS は未対応）');
-          return;
-        }
-        final opacity = QgsRasterSource.opacityPercent(maplayer);
-        final known = BaseMapProvider.findByTileUrl(url);
-        if (known != null) {
-          baseMaps.add((providerId: known.id, name: name, id: id, opacity: opacity, custom: null));
-          return;
-        }
-        final host = Uri.tryParse(url)?.host ?? '';
-        // 配布アプリからの利用を規約で禁じているタイル（Google など）は持ち込まない
-        if (BaseMapProvider.isForbiddenTileHost(url) || !BaseMapProvider.isValidTemplate(url)) {
-          discarded.add('$name（${xyz == null ? 'WMS' : 'XYZ タイル'}を背景地図にできません${host.isEmpty ? '' : ': $host'}）');
-          return;
-        }
-        final params = QgsRasterSource.parseWmsUri(datasource);
-        final custom = BaseMapProvider.custom(
-          name: name,
-          urlTemplate: url,
-          minZoom: int.tryParse(params['zmin'] ?? '') ?? 0,
-          maxZoom: int.tryParse(params['zmax'] ?? '') ?? 18,
-        );
-        baseMaps.add((providerId: custom.id, name: name, id: id, opacity: opacity, custom: custom));
-      default:
-        discarded.add('$name（${provider ?? '不明なプロバイダ'} のラスタは取り込めません）');
-    }
-  }
-}
-
-/// レイヤツリーの表示状態（checked）。レイヤの id で引く
-class _TreeVisibility {
-  /// 祖先の checked を AND で畳んだもの。QGIS は親グループが Unchecked なら子も描かないので、
-  /// QGIS ユーザーがグループごと消灯した場合も読み戻せるように
-  final checked = <String, bool>{};
-
-  /// レイヤ自身の checked（こかげマップが書いた形なら、グループの checked は別に読むので畳まない）
-  final ownChecked = <String, bool>{};
-
-  /// 近い順の祖先グループ（名前と自身の checked）
-  final ancestors = <String, List<(String, bool)>>{};
-
-  static _TreeVisibility read(XmlDocument doc) {
-    final result = _TreeVisibility();
-    final treeRoot = doc.rootElement.findElements('layer-tree-group').firstOrNull;
-    if (treeRoot != null) result._walk(treeRoot, true, const []);
-    return result;
-  }
-
-  void _walk(XmlElement node, bool parentChecked, List<(String, bool)> chain) {
-    for (final child in node.childElements) {
-      final own = child.getAttribute('checked') != 'Qt::Unchecked';
-      final folded = parentChecked && own;
-      if (child.name.local == 'layer-tree-group') {
-        _walk(child, folded, [(child.getAttribute('name') ?? '', own), ...chain]);
-      } else if (child.name.local == 'layer-tree-layer') {
-        final id = child.getAttribute('id');
-        if (id != null) {
-          checked[id] = folded;
-          ownChecked[id] = own;
-          ancestors[id] = chain;
-        }
-      }
-    }
-  }
-
-  /// こかげマップが書いた形（dir グループ > gpkg グループ > レイヤグループ > View）なら、
-  /// グループの checked をレイヤ・gpkg・dir の可視性として [layerGroup] と [containers] に入れて true
-  bool readGroups(
-    String id,
-    LayerNode layer,
-    GeoPackageNode gpkg,
-    FolderNode root,
-    Map<LayerNode, bool> layerGroup,
-    Map<LayerTreeNode, bool> containers,
-  ) {
-    final chain = ancestors[id];
-    // 親がレイヤグループ、その親が gpkg グループ
-    if (chain == null || chain.length < 2 || chain[0].$1 != layer.layerName || chain[1].$1 != gpkg.name) {
-      return false;
-    }
-    layerGroup[layer] = chain[0].$2;
-    containers[gpkg] = chain[1].$2;
-    // その上は dir グループ（プロジェクト root 自身はグループにならない）
-    LayerTreeNode? folder = gpkg.parent;
-    for (var i = 2; i < chain.length && folder is FolderNode && !identical(folder, root); i++) {
-      if (chain[i].$1 != folder.name) break;
-      containers[folder] = chain[i].$2;
-      folder = folder.parent;
-    }
-    return true;
-  }
+  KMetaLayerStyle? readStyle(XmlElement maplayer) => QgsStyleReader.readStyle(maplayer);
 }

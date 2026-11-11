@@ -41,11 +41,11 @@ tags: [technical, performance]
 
 ### 地物の一覧を保つ
 
-`FeatureGeoJsonCache`（`lib/screens/map_page/feature_geojson_cache.dart`）は、地物ごとに「turf の形と属性が同じなら前の変換結果」を
+`FeatureGeoJsonCache`（`lib/screens/map_page/feature_geojson_cache.dart`）は、地物ごとに「geobase の形と属性が同じなら前の変換結果」を
 使い回し、全件が同じなら**リストそのものを前のまま返す**。描画側はリストの同一性でキャッシュを引く（タイルのシーン・地物の範囲の索引）
 ので、これで統合のたびの作り直しが止まる。
 
-- レイヤを読み直さない限り turf の形は同じオブジェクト。編集は新しい形を `addFeatureToMap` するので、同一性で見てよい
+- レイヤを読み直さない限り geobase の形は同じオブジェクト。編集は新しい形を `addFeatureToMap` するので、同一性で見てよい
 - タイルの静的シーンは、変わった範囲（焼き直しの台帳 `FeatureBakeLedger` の記録）がタイルに掛からなければ鍵だけ差し替えて使い続ける
 - 選択・頂点・写真の一覧も同じく保つ（どれかが毎回新しいと、シーンの使い回しが一度も効かない）
 
@@ -168,9 +168,13 @@ Android 実機で地図を開いて置いたまま（GPS 記録中）、20 秒�
 テスト: `test/feature_bake_ledger_test.dart`（見送り・貯めて焼く・必ず焼く変化・段ごとの texel）・`test/gps_track_sync_test.dart`（`lastChangeExtension`）。
 端末での確かめは未（引いて置いたままで `[3D] bake` が出ないこと、歩けば粗い段も追いつくこと）。
 
+## 2026-11-11 `package:turf` 撤去と `geobase` への一本化
+
+`FeatureNode` が持っていた `turf.Feature`（点ごとにボックス化した `Position` リスト）を廃止し、`geobase` の `Feature<Geometry>`（`Float64List` パック座標列 `PositionSeries`）へ一本化した。あわせて `FeatureGeoJsonCache`・`Geodesic`・`SelectTool`・`FeatureSearch`・`GeometryCalc` も中間 `List<LatLng>` を作らず `PositionSeries` を直接走査するゼロコピー経路に統一した。
+
 ## 残り
 
-TODO.md の「メモリ削減の残り」。Dart のヒープ（turf と geobase の二重持ち）と、Impeller が抱える GL の内訳。
+TODO.md の「メモリ削減の残り」。Impeller が抱える GL の内訳。
 
 ## 測り方のメモ
 

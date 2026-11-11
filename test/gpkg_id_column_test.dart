@@ -90,13 +90,13 @@ void main() {
           final f = featureAt(0);
           expect(readAttribute(f, 'id'), 101);
           expect(readAttribute(f, 'fid'), kind.fidValues.first);
-          expect(f.turfFeature.properties!.keys, isNot(contains(featureIdKey)));
+          expect(f.properties.keys, isNot(contains(featureIdKey)));
           expect(f.infoMap['id'], '101');
           expect(f.infoMap['fid'], '${kind.fidValues.first}');
         });
 
         test('ラベル・描き分けの式の "id" は id の列の値', () async {
-          final props = layer.effectiveProperties(featureAt(1).turfFeature.properties);
+          final props = layer.effectiveProperties(featureAt(1).properties);
           expect(renderLabelTemplate('"id"', props), '102');
           expect(renderLabelTemplate('{id}', props), '102');
           expect(parseQgisExpression('"id" = 102').test(props), isTrue);

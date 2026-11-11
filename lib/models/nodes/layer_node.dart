@@ -15,7 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: レイヤノードクラス
 // GeoPackage内のレイヤに対応するレイヤツリーノード
-// turf_dartのFeatureCollectionオブジェクトをメインデータとして使用
+// geobaseのFeatureオブジェクトをメインデータとして使用
 
 import 'dart:async';
 import 'dart:convert';
@@ -25,7 +25,6 @@ import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/utils/app_logger.dart';
-import 'package:turf/turf.dart' as turf;
 
 import '../../core/node_types.dart';
 import '../../services/kmeta_service.dart';
@@ -69,7 +68,7 @@ class LayerNameUtils {
 }
 
 /// レイヤノード（LayerNode）: GeoPackage内のフィーチャテーブル＋FeatureNodeコレクション
-/// turf_dartのFeatureをMap管理し、FeatureCollectionを動的生成する（Single Source of Truth）
+/// geobaseのFeatureをMap管理する（Single Source of Truth）
 abstract class LayerNode extends LayerTreeNode {
   /// GeoPackageファイル管理クラスへの参照
   final GeoPackageFile geoPackageFile;
@@ -77,8 +76,8 @@ abstract class LayerNode extends LayerTreeNode {
   /// レイヤ名（DBテーブル名）
   final String layerName;
 
-  /// turf_dartのFeatureをrowIdで管理するMap（真のデータソース）
-  final Map<int, turf.Feature> _featureMap = {};
+  /// geobaseのFeatureをrowIdで管理するMap（真のデータソース）
+  final Map<int, geo.Feature<geo.Geometry>> _featureMap = {};
 
   /// dispose済みフラグ（null参照対策）
   bool _isDisposed = false;
@@ -536,18 +535,22 @@ abstract class LayerNode extends LayerTreeNode {
   KMetaLayerStyle? get kmetaStyleIfLoaded => _cachedKmetaStyle;
 
   /// rowIdでFeatureを取得（null安全）
-  turf.Feature? getFeatureById(int rowId) {
+  geo.Feature<geo.Geometry>? getFeatureById(int rowId) {
     if (_isDisposed) return null;
     return _featureMap[rowId];
   }
 
   /// Featureを追加（FeatureNodeから呼ばれる、null参照対策含む）
-  void addFeatureToMap(int rowId, turf.Feature feature) {
+  void addFeatureToMap(int rowId, geo.Feature<geo.Geometry> feature) {
     if (_isDisposed) {
       AppLogger.debug('[WARNING] LayerNode is disposed, cannot add feature');
       return;
     }
-    _featureMap[rowId] = feature;
+    // `const geo.Feature(...)` の既定 properties（`const {}`）は変更不能なので可変 Map にしておく
+    final stored = identical(feature.properties, const <String, dynamic>{})
+        ? feature.copyWith(properties: <String, dynamic>{})
+        : feature;
+    _featureMap[rowId] = stored;
   }
 
   /// Featureを削除（内部用、null参照対策含む）
@@ -570,8 +573,13 @@ abstract class LayerNode extends LayerTreeNode {
     final feature = _featureMap[rowId];
     if (feature == null) return false;
 
-    feature.properties ??= {};
-    feature.properties![key] = value;
+    try {
+      feature.properties[key] = value;
+    } on UnsupportedError {
+      _featureMap[rowId] = feature.copyWith(
+        properties: {...feature.properties, key: value},
+      );
+    }
     _restyleRow(rowId);
     return true;
   }
@@ -589,14 +597,30 @@ abstract class LayerNode extends LayerTreeNode {
   /// 全フィーチャの実座標を収集（バウンディングボックス計算等に使用）
   List<LatLng> getAllCoordinates() {
     final coords = <LatLng>[];
+    void addSeries(geo.PositionSeries s) {
+      final n = s.positionCount;
+      for (var i = 0; i < n; i++) {
+        coords.add(LatLng(s.y(i), s.x(i)));
+      }
+    }
+
     for (final feature in features) {
-      if (feature is PointFeatureNode) {
-        coords.add(feature.point);
-      } else if (feature is LineFeatureNode) {
-        coords.addAll(feature.line);
-      } else if (feature is PolygonFeatureNode) {
-        for (final ring in feature.polygon) {
-          coords.addAll(ring);
+      final g = feature.geoGeometry;
+      if (g is geo.Point) {
+        coords.add(LatLng(g.position.y, g.position.x));
+      } else if (g is geo.MultiPoint) {
+        for (final p in g.positions) {
+          coords.add(LatLng(p.y, p.x));
+        }
+      } else if (g is geo.LineString) {
+        addSeries(g.chain);
+      } else if (g is geo.MultiLineString) {
+        g.chains.forEach(addSeries);
+      } else if (g is geo.Polygon) {
+        g.rings.forEach(addSeries);
+      } else if (g is geo.MultiPolygon) {
+        for (final rings in g.ringArrays) {
+          rings.forEach(addSeries);
         }
       }
     }

@@ -685,7 +685,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
     final current = await layer.getKmetaStyle();
     final rows = layer.children
         .whereType<FeatureNode>()
-        .map((f) => f.turfFeature.properties?.cast<String, Object?>())
+        .map((f) => f.properties.cast<String, Object?>())
         .toList();
     final columns = widget.controller.userColumnNames;
     if (!context.mounted) return;

@@ -4,6 +4,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geobase/geobase.dart' as geo;
+import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/nodes/feature_node.dart';
@@ -11,8 +13,8 @@ import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/screens/map_page/feature_geojson_cache.dart';
 import 'package:root_maps/tutorial/practice_project.dart';
+import 'package:root_maps/utils/geo_converter.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:turf/turf.dart' as turf;
 
 void main() {
   late Directory tmp;
@@ -71,16 +73,16 @@ void main() {
     expect(cache.selectedPolygons, hasLength(1));
     expect(identical(cache.selectedPolygons.single, first.first), isTrue);
 
-    // 1 件の形を差し替える（編集は新しい turf の形を地図に入れる）
+    // 1 件の形を差し替える（編集は新しい geobase の形を地図に入れる）
     final f = polys.first;
-    final old = f.turfFeature;
-    final rings = (old.geometry! as turf.MultiPolygon).coordinates.first;
-    final moved = turf.MultiPolygon(coordinates: [
+    final old = f.geoFeature;
+    final rings = geoMultiPolygonToLatLngs(old.geometry! as geo.MultiPolygon).first;
+    final moved = createGeoMultiPolygon([
       [
-        for (final ring in rings) [for (final pos in ring) turf.Position(pos.lng.toDouble() + 0.001, pos.lat.toDouble())],
+        for (final ring in rings) [for (final pt in ring) LatLng(pt.latitude, pt.longitude + 0.001)],
       ],
     ]);
-    areas.addFeatureToMap(f.rowId, turf.Feature(geometry: moved, properties: old.properties));
+    areas.addFeatureToMap(f.rowId, geo.Feature<geo.Geometry>(geometry: moved, properties: old.properties));
     cache.rebuildAll(input(polys));
     expect(identical(cache.polygons, first), isFalse);
     expect(identical(cache.polygons[1], first[1]), isTrue, reason: '変えていない地物は変換し直さない');

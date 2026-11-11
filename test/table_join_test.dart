@@ -155,11 +155,11 @@ void main() {
           if (!['fid', 'block', 'parcels', 'key'].contains(f)) f as String,
       ];
       expect(layer.joinedFieldNames, joinedNames);
-      final byKey = {for (final f in layer.features) f.turfFeature.properties!['parcels'] as String: f};
+      final byKey = {for (final f in layer.features) f.properties['parcels'] as String: f};
       for (final row in (expected['features'] as List).cast<Map>()) {
         final f = layer.features.firstWhere((f) =>
-            f.turfFeature.properties!['parcels'] == row['parcels'] && f.turfFeature.properties!['block'] == row['block']);
-        final props = layer.effectiveProperties(f.turfFeature.properties)!;
+            f.properties['parcels'] == row['parcels'] && f.properties['block'] == row['block']);
+        final props = layer.effectiveProperties(f.properties)!;
         for (final name in joinedNames) {
           expect(props[name], row[name], reason: '${row['key']} の $name');
         }
@@ -173,7 +173,7 @@ void main() {
       final r = await FeatureSearch.search([layer], '種別C');
       expect(r.hits, hasLength(1));
       expect(r.hits.single.column, '台帳_区分');
-      expect(r.hits.single.feature.turfFeature.properties!['key'], '14-1');
+      expect(r.hits.single.feature.properties['key'], '14-1');
     });
 
     // 列の表示メニューに結合した列の改名・削除が出て、押すと ALTER TABLE が「列が無い」で失敗していた（2026-10-11）

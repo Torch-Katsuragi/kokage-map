@@ -171,15 +171,15 @@ class FeatureSearch {
   static List<FeatureSearchHit> _searchJoined(LayerNode layer, String normalizedQuery, int perLayer) {
     final hits = <FeatureSearchHit>[];
     for (final f in layer.features) {
-      final Map<String, dynamic>? props;
+      final Map<String, dynamic> props;
       try {
-        props = f.turfFeature.properties;
+        props = f.properties;
       } catch (_) {
         continue;
       }
       FeatureSearchHit? best;
       for (final j in layer.joins) {
-        final values = j.valuesFor(props?[j.join.targetField]);
+        final values = j.valuesFor(props[j.join.targetField]);
         if (values == null) continue;
         for (var i = 0; i < values.length; i++) {
           final r = rankOf(values[i], normalizedQuery);

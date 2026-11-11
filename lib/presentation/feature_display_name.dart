@@ -37,14 +37,14 @@ String? featureQgisDisplayName(FeatureNode f) {
   if (expr == null) return null;
   final normalized = normalizeLabelExpression(expr);
   if (normalized == null || tryParseLabelExpression(normalized) is FieldRef) return null;
-  return renderLabelTemplate(expr, f.parent.effectiveProperties(f.turfFeature.properties));
+  return renderLabelTemplate(expr, f.parent.effectiveProperties(f.properties));
 }
 
 /// 地物の表示名: QGIS の表示名の式 → ラベルの式 → `name` 列。どれも値が無ければ null
 String? featureDisplayName(FeatureNode f) {
   if (f.isDisposed || f.parent.isDisposed) return null;
   final layer = f.parent;
-  final props = layer.effectiveProperties(f.turfFeature.properties);
+  final props = layer.effectiveProperties(f.properties);
   final kmeta = layer.styleGroups[layer.styleKeyOf(f.rowId)] ?? layer.kmetaStyleIfLoaded;
   for (final expr in [layer.displayExpression, layerStyleSettings.resolveString(labelPropertyDef, kmeta), 'name']) {
     if (expr == null) continue;
@@ -64,7 +64,7 @@ String? featureIdentifier(FeatureNode f, {String? excludeColumn, String? exclude
   final form = f.parent.qgisFormIfLoaded;
   final texts = <String>[];
   final others = <String>[];
-  for (final MapEntry(:key, :value) in (f.turfFeature.properties ?? const <String, dynamic>{}).entries) {
+  for (final MapEntry(:key, :value) in f.properties.entries) {
     if (key == excludeColumn || key.toLowerCase() == 'fid' || isSystemColumn(key) || isInternalColumn(key)) continue;
     if (value == null || value is Uint8List || value is List || value is Map) continue;
     final s = value.toString().trim();

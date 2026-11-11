@@ -305,7 +305,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     return renderLabelTemplate(
       layerStyleSettings.resolveString(labelPropertyDef, kmeta),
       // 結合した表の列（台帳の種別など）もラベルに使える
-      layer.effectiveProperties(f.turfFeature.properties),
+      layer.effectiveProperties(f.properties),
     );
   }
 }

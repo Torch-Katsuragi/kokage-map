@@ -315,7 +315,7 @@ class FeatureEditor extends Notifier<EditState?> {
         for (final r in qgisFormRows(form, cols))
           if (r is QgisFormFieldRow) r.column,
       ];
-      final values = <String, Object?>{for (final c in shown) c: f.turfFeature.properties?[c]};
+      final values = <String, Object?>{for (final c in shown) c: f.properties[c]};
       final s = state;
       if (s == null || !identical(s.feature, f)) return;
       state = s.copyWith(
@@ -569,7 +569,7 @@ class FeatureEditor extends Notifier<EditState?> {
     final form = s.form;
     var attrs = {for (final c in s.columns.where(s.attrChanged)) c: s.attrs[c]};
     if (form != null) {
-      final props = {...?f.turfFeature.properties, ...s.attrs};
+      final props = {...f.properties, ...s.attrs};
       final vs = validateQgisForm(
         form,
         props,

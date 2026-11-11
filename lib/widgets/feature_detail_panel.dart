@@ -550,7 +550,7 @@ class _AttributeRowsState extends State<_AttributeRows> {
   Widget build(BuildContext context) {
     final node = widget.node;
     final layer = node.parent;
-    final props = node.turfFeature.properties;
+    final props = node.properties;
     final form = layer.qgisFormIfLoaded;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -561,7 +561,7 @@ class _AttributeRowsState extends State<_AttributeRows> {
             child: FeatureDetailPanel._labelRow(
               '${attributeLabel(entry.key, form)}: ',
               attributeDisplayText(
-                props?[entry.key] ?? entry.value,
+                props[entry.key] ?? entry.value,
                 form: form?.fields[entry.key],
                 sqlType: layer.columnSqlTypes[entry.key] ?? '',
                 relationOptions: _relations[entry.key],

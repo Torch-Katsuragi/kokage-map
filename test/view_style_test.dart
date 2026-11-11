@@ -23,7 +23,6 @@ import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/models/nodes/view_node.dart';
 import 'package:root_maps/models/qgis_renderer.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:turf/turf.dart' as turf;
 
 void main() {
   late Directory tmp;
@@ -70,8 +69,8 @@ void main() {
     for (var fid = 1; fid <= 12; fid++) {
       layer.addFeatureToMap(
         fid,
-        turf.Feature<turf.Point>(
-          geometry: turf.Point(coordinates: turf.Position(139.76, 35.68)),
+        const geo.Feature<geo.Geometry>(
+          geometry: geo.Point(geo.Geographic(lon: 139.76, lat: 35.68)),
         ),
       );
     }
@@ -133,7 +132,10 @@ void main() {
     final otherLayer = PointLayerNode(other, 'chiten', parent: GeoPackageNode(other));
     try {
       for (final l in [layer, otherLayer]) {
-        l.addFeatureToMap(1, turf.Feature<turf.Point>(geometry: turf.Point(coordinates: turf.Position(139.76, 35.68))));
+        l.addFeatureToMap(
+          1,
+          const geo.Feature<geo.Geometry>(geometry: geo.Point(geo.Geographic(lon: 139.76, lat: 35.68))),
+        );
         l.views.add(ViewNode(name: '既定', parent: l, style: const KMetaLayerStyle(pointSize: 9)));
         await l.refreshStyleGroups();
       }
@@ -209,8 +211,8 @@ void main() {
       for (var fid = 1; fid <= 12; fid++) {
         layer.addFeatureToMap(
           fid,
-          turf.Feature<turf.Point>(
-            geometry: turf.Point(coordinates: turf.Position(135.965 + fid * 0.0003, 33.927)),
+          geo.Feature<geo.Geometry>(
+            geometry: geo.Point(geo.Geographic(lon: 135.965 + fid * 0.0003, lat: 33.927)),
             properties: {'種別': species[(fid - 1) % 4]},
           ),
         );
@@ -293,8 +295,8 @@ void main() {
       for (var fid = 1; fid <= 10000; fid++) {
         layer.addFeatureToMap(
           fid,
-          turf.Feature<turf.Point>(
-            geometry: turf.Point(coordinates: turf.Position(135.965, 33.927)),
+          geo.Feature<geo.Geometry>(
+            geometry: const geo.Point(geo.Geographic(lon: 135.965, lat: 33.927)),
             properties: {'種別': species[fid % 4], '年数': fid % 90},
           ),
         );

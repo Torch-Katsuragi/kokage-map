@@ -220,7 +220,7 @@ class TraverseRecorder {
 
   /// 後視補正済みか（GeoPackage の TEXT 列から読み戻すと文字列になる）
   static bool isBacksighted(PointFeatureNode p) {
-    final v = p.turfFeature.properties?['survey_backsight'];
+    final v = p.properties['survey_backsight'];
     return v == true || v == 'true' || v == 1 || v == '1';
   }
 
@@ -228,8 +228,7 @@ class TraverseRecorder {
   /// 後視補正されていない点や生の値（`survey_fs_*` / `survey_bs_*`）が無い古い点は null
   static BacksightDelta? backsightDeltaOf(PointFeatureNode? p) {
     if (p == null || !isBacksighted(p)) return null;
-    final props = p.turfFeature.properties;
-    if (props == null) return null;
+    final props = p.properties;
     if (props['survey_fs_az'] == null || props['survey_bs_az'] == null) return null;
     if (props['survey_fs_hd'] == null || props['survey_bs_hd'] == null) return null;
 
@@ -300,8 +299,7 @@ class TraverseRecorder {
     }
     if (isBacksighted(leg)) return null;
 
-    final props = leg.turfFeature.properties;
-    if (props == null) return null;
+    final props = leg.properties;
     final from = SurveyStation.parse(props['survey_stn']);
     if (from == null) return null; // 起点
     final fsHd = surveyNumber(props['survey_hd']);

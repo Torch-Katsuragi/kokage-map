@@ -17,12 +17,12 @@
 //
 // 統合のたびに全地物を集め直し（`updateFeatures`）、3D の下地を焼き直していた（2026-10-12、Android 実機で置いたまま
 // 20 秒ごとに 6 枚）。今日の 1 本だけを差し替え、軌跡のレイヤが見えているときだけその 1 本を地図に流す
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
-import 'package:turf/turf.dart' as turf;
 
-import '../../converters/turf_converter.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/layer_node.dart';
+import '../../utils/geo_converter.dart';
 
 /// 統合のあと地図をどう直したか
 enum TrackSyncResult {
@@ -83,9 +83,13 @@ FeatureNode? patchTrackFeature(LayerNode layer, int? featureId, List<LatLng>? li
     }
   }
   if (node == null) return null;
-  final geom = old.geometry is turf.MultiLineString
-      ? TurfConverter.createMultiLineString([line])
-      : TurfConverter.createLineString(line);
-  layer.addFeatureToMap(featureId, turf.Feature(id: old.id, geometry: geom, properties: old.properties));
+  final geom = old.geometry is geo.MultiLineString
+      ? createGeoMultiLineString([line])
+      : createGeoLine(line);
+  layer.addFeatureToMap(
+    featureId,
+    geo.Feature<geo.Geometry>(id: old.id, geometry: geom, properties: old.properties),
+  );
+  node.invalidateCache();
   return node;
 }

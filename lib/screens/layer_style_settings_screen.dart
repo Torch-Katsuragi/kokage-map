@@ -127,7 +127,7 @@ Widget _buildLabelExpressionTile(BuildContext context, SettingsStore store, Void
       ];
       final rows = layer.children
           .whereType<FeatureNode>()
-          .map((f) => layer.effectiveProperties(f.turfFeature.properties))
+          .map((f) => layer.effectiveProperties(f.properties))
           .toList();
       sample = rows.firstOrNull;
       rates = rows.isEmpty ? null : columnFillRates(rows, columns);

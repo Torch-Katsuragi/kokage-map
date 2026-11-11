@@ -17,19 +17,15 @@
 // 点・線・面の重心、距離、長さ、面積、最近傍feature取得など
 //
 // 本ファイルの関数は全て静的関数として利用可能
-// 主要な地理空間計算はturf_dartライブラリを使用して高精度化
-//
-// 依存: latlong2, turf
+// 依存: geobase, latlong2
 
 import 'dart:math' as math;
 
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
-import 'package:turf/turf.dart';
 
-import '../converters/turf_converter.dart';
 import '../models/nodes/feature_node.dart';
-import 'geo_converter.dart';
 import 'geodesic.dart';
 
 /// degree・metre変換系（球。[GeometryCalc.distancePointToSegment] の当たり判定・間引き用。
@@ -53,17 +49,37 @@ class _DegreeMeterConverter {
   }
 }
 
+enum _PipResult { inside, outside, onEdge }
+
 /// 距離・長さ・面積・重心計算
 class GeometryCalc {
-  /// 2点間の距離（メートル）を計算（turf の球、R = 6371008.8 m）
+  /// 平均地球半径 [m]（Haversine 距離用）
+  static const double _earthRadius = 6371008.8;
+  static const double _degToRad = math.pi / 180.0;
+
+  static double _calcDistanceCoords(
+    double lat1Deg,
+    double lon1Deg,
+    double lat2Deg,
+    double lon2Deg,
+  ) {
+    if (lat1Deg == lat2Deg && lon1Deg == lon2Deg) return 0.0;
+    final dLat = (lat2Deg - lat1Deg) * _degToRad;
+    final dLon = (lon2Deg - lon1Deg) * _degToRad;
+    final lat1 = lat1Deg * _degToRad;
+    final lat2 = lat2Deg * _degToRad;
+    final sdLat = math.sin(dLat / 2);
+    final sdLon = math.sin(dLon / 2);
+    final h = sdLat * sdLat + sdLon * sdLon * math.cos(lat1) * math.cos(lat2);
+    return 2 * _earthRadius * math.atan2(math.sqrt(h), math.sqrt(math.max(0.0, 1.0 - h)));
+  }
+
+  /// 2点間の距離（メートル）を計算（球面 Haversine、R = 6371008.8 m）
   ///
   /// タップの当たり判定・線の間引きのしきい値に使う（楕円体との差は 0.5% 未満）。
   /// 利用者に見せる距離は [Geodesic.distance]（WGS84 楕円体、QGIS と同じ値）を使うこと
-  static double calcDistance(LatLng a, LatLng b) {
-    final pointA = Point(coordinates: a.toTurfPosition());
-    final pointB = Point(coordinates: b.toTurfPosition());
-    return distance(pointA, pointB, Unit.meters).toDouble();
-  }
+  static double calcDistance(LatLng a, LatLng b) =>
+      _calcDistanceCoords(a.latitude, a.longitude, b.latitude, b.longitude);
 
   /// 線分（`List<LatLng>`）の長さ（メートル）を計算
   /// [line]: 線分の座標リスト
@@ -77,16 +93,63 @@ class GeometryCalc {
     return Geodesic.polygonArea(polygon);
   }
 
-  /// 線分（`List<LatLng>`）の重心（中点）を計算
+  /// `geobase` ジオメトリの重心を計算（空ジオメトリは null）
+  ///
+  /// ポリゴンのリングは閉じ点（先頭と同じ末尾）を除外して頂点平均を取る。
+  static LatLng? calcGeoCentroid(geo.Geometry? geom) {
+    if (geom == null) return null;
+    if (geom is geo.Point) {
+      return LatLng(geom.position.y, geom.position.x);
+    }
+
+    var sumLon = 0.0;
+    var sumLat = 0.0;
+    var count = 0;
+
+    void addSeries(geo.PositionSeries s, {required bool excludeClosing}) {
+      var n = s.positionCount;
+      if (excludeClosing && n >= 2 && s.x(0) == s.x(n - 1) && s.y(0) == s.y(n - 1)) {
+        n--;
+      }
+      for (var i = 0; i < n; i++) {
+        sumLon += s.x(i);
+        sumLat += s.y(i);
+      }
+      count += n;
+    }
+
+    if (geom is geo.MultiPoint) {
+      for (final p in geom.positions) {
+        sumLon += p.x;
+        sumLat += p.y;
+        count++;
+      }
+    } else if (geom is geo.LineString) {
+      addSeries(geom.chain, excludeClosing: false);
+    } else if (geom is geo.MultiLineString) {
+      for (final c in geom.chains) {
+        addSeries(c, excludeClosing: false);
+      }
+    } else if (geom is geo.Polygon) {
+      for (final r in geom.rings) {
+        addSeries(r, excludeClosing: true);
+      }
+    } else if (geom is geo.MultiPolygon) {
+      for (final rings in geom.ringArrays) {
+        for (final r in rings) {
+          addSeries(r, excludeClosing: true);
+        }
+      }
+    }
+
+    if (count == 0) return null;
+    return LatLng(sumLat / count, sumLon / count);
+  }
+
+  /// 線分（`List<LatLng>`）の重心（頂点平均）を計算
   /// [line]: 線分の座標リスト
   /// 戻り値: 重心座標（LatLng）
-  static LatLng calcLineCentroid(List<LatLng> line) {
-    if (line.isEmpty) return const LatLng(0, 0);
-    if (line.length == 1) return line.first;
-
-    final center = centroid(Feature(geometry: TurfConverter.createLineString(line)));
-    return center.geometry!.coordinates.toLatLng();
-  }
+  static LatLng calcLineCentroid(List<LatLng> line) => calcPointsCentroid(line);
 
   /// ポリゴン（外環＋穴リスト）の重心を計算
   /// [polygon]: 外環＋穴リスト（`List<List<LatLng>>`）
@@ -94,12 +157,27 @@ class GeometryCalc {
   static LatLng calcPolygonCentroid(List<List<LatLng>> polygon) {
     if (polygon.isEmpty || polygon[0].isEmpty) return const LatLng(0, 0);
 
-    // turf の centroid は面のリングの最後の座標を閉じの点とみなして必ず飛ばす。
-    // 閉じていないリングで実在の頂点が落ちないよう、先に閉じておく
-    List<LatLng> closed(List<LatLng> r) =>
-        r.isEmpty || (r.first.latitude == r.last.latitude && r.first.longitude == r.last.longitude) ? r : [...r, r.first];
-    final center = centroid(Feature(geometry: TurfConverter.createPolygon([for (final r in polygon) closed(r)])));
-    return center.geometry!.coordinates.toLatLng();
+    var sumLat = 0.0;
+    var sumLon = 0.0;
+    var count = 0;
+
+    // 閉じているリングは末尾の閉じ点を飛ばし、閉じていないリングは全実頂点を数える
+    for (final ring in polygon) {
+      var n = ring.length;
+      if (n >= 2 &&
+          ring.first.latitude == ring.last.latitude &&
+          ring.first.longitude == ring.last.longitude) {
+        n--;
+      }
+      for (var i = 0; i < n; i++) {
+        sumLat += ring[i].latitude;
+        sumLon += ring[i].longitude;
+      }
+      count += n;
+    }
+
+    if (count == 0) return const LatLng(0, 0);
+    return LatLng(sumLat / count, sumLon / count);
   }
 
   /// 点集合（`List<LatLng>`）の重心を計算
@@ -107,9 +185,13 @@ class GeometryCalc {
     if (points.isEmpty) return const LatLng(0, 0);
     if (points.length == 1) return points.first;
 
-    final multiPoint = MultiPoint(coordinates: [for (final p in points) p.toTurfPosition()]);
-    final center = centroid(Feature(geometry: multiPoint));
-    return center.geometry!.coordinates.toLatLng();
+    var sumLat = 0.0;
+    var sumLon = 0.0;
+    for (final p in points) {
+      sumLat += p.latitude;
+      sumLon += p.longitude;
+    }
+    return LatLng(sumLat / points.length, sumLon / points.length);
   }
 
   /// 点と線分（`List<LatLng>`）の最短距離（メートル）を計算
@@ -125,6 +207,23 @@ class GeometryCalc {
     return minDist;
   }
 
+  static double _calcPointToSeriesDistance(LatLng pt, geo.PositionSeries series) {
+    final n = series.positionCount;
+    var minDist = double.infinity;
+    for (var i = 1; i < n; i++) {
+      final d = _distancePointToSegmentCoords(
+        pt.latitude,
+        pt.longitude,
+        series.y(i - 1),
+        series.x(i - 1),
+        series.y(i),
+        series.x(i),
+      );
+      if (d < minDist) minDist = d;
+    }
+    return minDist;
+  }
+
   /// 点とポリゴン（外環＋穴リスト）の最短距離（メートル）を計算
   /// [pt]: 判定点
   /// [polygon]: 外環＋穴リスト
@@ -134,46 +233,143 @@ class GeometryCalc {
     List<List<LatLng>> polygon,
   ) {
     if (polygon.isEmpty) return double.infinity;
-    // 外環・穴すべてのリングとの最短距離
+    // 外環内かつどの穴にも含まれなければ距離0
+    if (pointInPolygonWithHoles(pt, polygon)) return 0.0;
+    // 外環・穴すべてのリングとの最短距離（閉じていないリングの閉じ辺も含める）
     double minDist = double.infinity;
     for (final ring in polygon) {
+      if (ring.length < 2) continue;
       for (int i = 1; i < ring.length; i++) {
         final d = distancePointToSegment(pt, ring[i - 1], ring[i]);
         if (d < minDist) minDist = d;
       }
+      if (ring.length >= 3 &&
+          (ring.first.latitude != ring.last.latitude ||
+              ring.first.longitude != ring.last.longitude)) {
+        final d = distancePointToSegment(pt, ring.last, ring.first);
+        if (d < minDist) minDist = d;
+      }
     }
-    // 外環内かつどの穴にも含まれなければ距離0
-    if (pointInPolygonWithHoles(pt, polygon)) return 0.0;
     return minDist;
   }
 
-  /// 点が外環＋穴リストのポリゴン内にあるか判定
+  static double _calcPointToGeoRingsDistance(LatLng pt, List<geo.PositionSeries> rings) {
+    if (rings.isEmpty) return double.infinity;
+    if (pointInGeoRings(pt, rings)) return 0.0;
+    var minDist = double.infinity;
+    for (final ring in rings) {
+      final n = ring.positionCount;
+      if (n < 2) continue;
+      final d = _calcPointToSeriesDistance(pt, ring);
+      if (d < minDist) minDist = d;
+      if (n >= 3 && (ring.x(0) != ring.x(n - 1) || ring.y(0) != ring.y(n - 1))) {
+        final closeDist = _distancePointToSegmentCoords(
+          pt.latitude,
+          pt.longitude,
+          ring.y(n - 1),
+          ring.x(n - 1),
+          ring.y(0),
+          ring.x(0),
+        );
+        if (closeDist < minDist) minDist = closeDist;
+      }
+    }
+    return minDist;
+  }
+
+  /// Hao & Sun の半直線交差法による単一リング内外判定（境界・頂点上は [_PipResult.onEdge]）
+  static _PipResult _pipLatLngRing(double px, double py, List<LatLng> ring) {
+    final rawLen = ring.length;
+    if (rawLen < 3) return _PipResult.outside;
+    final isClosed =
+        ring.first.latitude == ring.last.latitude && ring.first.longitude == ring.last.longitude;
+    final n = isClosed ? rawLen - 1 : rawLen;
+    if (n < 3) return _PipResult.outside;
+
+    var inside = false;
+    for (var i = 0; i < n; i++) {
+      final p1 = ring[i];
+      final p2 = ring[(i + 1) % n];
+      final u1 = p1.longitude - px;
+      final v1 = p1.latitude - py;
+      final u2 = p2.longitude - px;
+      final v2 = p2.latitude - py;
+
+      if ((u1 == 0 && v1 == 0) || (u2 == 0 && v2 == 0)) {
+        return _PipResult.onEdge;
+      }
+      if ((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) {
+        continue;
+      }
+      final f = u1 * v2 - u2 * v1;
+      if (v2 > 0 && v1 <= 0) {
+        if (f == 0) return _PipResult.onEdge;
+        if (f > 0) inside = !inside;
+      } else if (v1 > 0 && v2 <= 0) {
+        if (f == 0) return _PipResult.onEdge;
+        if (f < 0) inside = !inside;
+      } else if (v2 == 0 && v1 == 0) {
+        if ((u2 <= 0 && u1 >= 0) || (u1 <= 0 && u2 >= 0)) {
+          return _PipResult.onEdge;
+        }
+      }
+    }
+    return inside ? _PipResult.inside : _PipResult.outside;
+  }
+
+  static _PipResult _pipGeoRing(double px, double py, geo.PositionSeries ring) {
+    final rawLen = ring.positionCount;
+    if (rawLen < 3) return _PipResult.outside;
+    final isClosed = ring.x(0) == ring.x(rawLen - 1) && ring.y(0) == ring.y(rawLen - 1);
+    final n = isClosed ? rawLen - 1 : rawLen;
+    if (n < 3) return _PipResult.outside;
+
+    var inside = false;
+    for (var i = 0; i < n; i++) {
+      final j = (i + 1) % n;
+      final u1 = ring.x(i) - px;
+      final v1 = ring.y(i) - py;
+      final u2 = ring.x(j) - px;
+      final v2 = ring.y(j) - py;
+
+      if ((u1 == 0 && v1 == 0) || (u2 == 0 && v2 == 0)) {
+        return _PipResult.onEdge;
+      }
+      if ((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) {
+        continue;
+      }
+      final f = u1 * v2 - u2 * v1;
+      if (v2 > 0 && v1 <= 0) {
+        if (f == 0) return _PipResult.onEdge;
+        if (f > 0) inside = !inside;
+      } else if (v1 > 0 && v2 <= 0) {
+        if (f == 0) return _PipResult.onEdge;
+        if (f < 0) inside = !inside;
+      } else if (v2 == 0 && v1 == 0) {
+        if ((u2 <= 0 && u1 >= 0) || (u1 <= 0 && u2 >= 0)) {
+          return _PipResult.onEdge;
+        }
+      }
+    }
+    return inside ? _PipResult.inside : _PipResult.outside;
+  }
+
+  /// 点が外環＋穴リストのポリゴン内（境界上を含む）にあるか判定
   static bool pointInPolygonWithHoles(LatLng pt, List<List<LatLng>> polygon) {
     if (polygon.isEmpty) return false;
-
     try {
-      // turf_dartのbooleanPointInPolygon関数を使用
-      final pointPos = pt.toTurfPosition();
-      
-      // 各リングを閉じる（最初と最後の座標が同じでない場合は最初の座標を追加）
-      final closedPolygon = polygon.map((ring) {
-        if (ring.length < 3) return ring; // 3点未満はそのまま
-        
-        final first = ring.first;
-        final last = ring.last;
-        final isClosed = (first.latitude == last.latitude) && 
-                        (first.longitude == last.longitude);
-        
-        if (!isClosed) {
-          // 閉じていない場合は最初の座標を最後に追加
-          return List<LatLng>.from(ring)..add(first);
-        }
-        return ring;
-      }).toList();
-      
-      final feature = Feature(geometry: TurfConverter.createPolygon(closedPolygon));
+      final px = pt.longitude;
+      final py = pt.latitude;
+      final outer = _pipLatLngRing(px, py, polygon.first);
+      if (outer == _PipResult.outside) return false;
+      if (outer == _PipResult.onEdge) return true;
 
-      return booleanPointInPolygon(pointPos, feature);
+      for (var i = 1; i < polygon.length; i++) {
+        final hole = _pipLatLngRing(px, py, polygon[i]);
+        if (hole == _PipResult.onEdge) return true;
+        if (hole == _PipResult.inside) return false;
+      }
+      return true;
     } catch (e) {
       // ポリゴンが壊れている場合でもエラーを出さずfalseを返す
       AppLogger.debug('[WARNING] pointInPolygonWithHoles: エラー発生（壊れたポリゴン？）: $e');
@@ -181,42 +377,76 @@ class GeometryCalc {
     }
   }
 
-  /// 点と線分の最短距離（メートル）
-  static double distancePointToSegment(LatLng p, LatLng a, LatLng b) {
+  /// 点が `geobase` の外環＋穴リング群（単一ポリゴン）内にあるか判定
+  static bool pointInGeoRings(LatLng pt, List<geo.PositionSeries> rings) {
+    if (rings.isEmpty) return false;
+    final px = pt.longitude;
+    final py = pt.latitude;
+    final outer = _pipGeoRing(px, py, rings.first);
+    if (outer == _PipResult.outside) return false;
+    if (outer == _PipResult.onEdge) return true;
+
+    for (var i = 1; i < rings.length; i++) {
+      final hole = _pipGeoRing(px, py, rings[i]);
+      if (hole == _PipResult.onEdge) return true;
+      if (hole == _PipResult.inside) return false;
+    }
+    return true;
+  }
+
+  /// 点が `geobase` の Polygon / MultiPolygon 内にあるか判定
+  static bool pointInGeoPolygon(LatLng pt, geo.Geometry? geom) {
+    if (geom is geo.Polygon) {
+      return pointInGeoRings(pt, geom.rings);
+    }
+    if (geom is geo.MultiPolygon) {
+      return geom.ringArrays.any((rings) => pointInGeoRings(pt, rings));
+    }
+    return false;
+  }
+
+  static double _distancePointToSegmentCoords(
+    double pLat,
+    double pLon,
+    double aLat,
+    double aLon,
+    double bLat,
+    double bLon,
+  ) {
     // 線分が点の場合
-    if (a.latitude == b.latitude && a.longitude == b.longitude) {
-      return calcDistance(p, a);
+    if (aLat == bLat && aLon == bLon) {
+      return _calcDistanceCoords(pLat, pLon, aLat, aLon);
     }
 
     // 緯度経度をメートル単位の平面座標に変換して計算
-    final centerLat = (a.latitude + b.latitude) / 2;
+    final centerLat = (aLat + bLat) / 2;
     final mPerDegLat = _DegreeMeterConverter.metersPerDegreeLat();
     final mPerDegLng = _DegreeMeterConverter.metersPerDegreeLng(centerLat);
 
     // メートル単位の座標に変換
-    final x0 = p.longitude * mPerDegLng;
-    final y0 = p.latitude * mPerDegLat;
-    final x1 = a.longitude * mPerDegLng;
-    final y1 = a.latitude * mPerDegLat;
-    final x2 = b.longitude * mPerDegLng;
-    final y2 = b.latitude * mPerDegLat;
+    final x0 = pLon * mPerDegLng;
+    final y0 = pLat * mPerDegLat;
+    final x1 = aLon * mPerDegLng;
+    final y1 = aLat * mPerDegLat;
+    final x2 = bLon * mPerDegLng;
+    final y2 = bLat * mPerDegLat;
 
     final dx = x2 - x1;
     final dy = y2 - y1;
 
     // 線分の長さの二乗
     final lengthSquared = dx * dx + dy * dy;
-    if (lengthSquared == 0) return calcDistance(p, a);
+    if (lengthSquared == 0) return _calcDistanceCoords(pLat, pLon, aLat, aLon);
 
     // 線分上の最近点を求める
     final t = ((x0 - x1) * dx + (y0 - y1) * dy) / lengthSquared;
 
     if (t < 0) {
       // 最近点が線分の開始点側
-      return calcDistance(p, a);
+      return _calcDistanceCoords(pLat, pLon, aLat, aLon);
     } else if (t > 1) {
       // 最近点が線分の終了点側
-      return calcDistance(p, b);
+      return _calcDistanceCoords(pLat, pLon, bLat, bLon);
     } else {
       // 最近点が線分上にある
       final projX = x1 + t * dx;
@@ -228,31 +458,85 @@ class GeometryCalc {
       return math.sqrt(distX * distX + distY * distY);
     }
   }
+
+  /// 点と線分の最短距離（メートル）
+  static double distancePointToSegment(LatLng p, LatLng a, LatLng b) =>
+      _distancePointToSegmentCoords(
+        p.latitude,
+        p.longitude,
+        a.latitude,
+        a.longitude,
+        b.latitude,
+        b.longitude,
+      );
 }
 
 /// feature距離・最近傍feature検索
 class FeatureSearch {
   /// 点とfeature（点・線・面）の最短距離（メートル）を計算
   /// featureType: 'point'|'line'|'polygon'
+  /// [geometry] には `geo.Geometry`（推奨・中間リスト確保なし）または `LatLng` リストを渡せる
   static double calcPointToFeatureDistance(
     LatLng pt,
-    Object geometry,
+    Object? geometry,
     String featureType,
   ) {
+    if (geometry == null) return double.infinity;
+
+    if (geometry is geo.Geometry) {
+      if (featureType == 'point') {
+        if (geometry is geo.Point) {
+          return GeometryCalc._calcDistanceCoords(
+            pt.latitude,
+            pt.longitude,
+            geometry.position.y,
+            geometry.position.x,
+          );
+        }
+        if (geometry is geo.MultiPoint) {
+          var minDist = double.infinity;
+          for (final p in geometry.positions) {
+            final d = GeometryCalc._calcDistanceCoords(pt.latitude, pt.longitude, p.y, p.x);
+            if (d < minDist) minDist = d;
+          }
+          return minDist;
+        }
+      } else if (featureType == 'line') {
+        if (geometry is geo.LineString) {
+          return GeometryCalc._calcPointToSeriesDistance(pt, geometry.chain);
+        }
+        if (geometry is geo.MultiLineString) {
+          var minDist = double.infinity;
+          for (final chain in geometry.chains) {
+            final d = GeometryCalc._calcPointToSeriesDistance(pt, chain);
+            if (d < minDist) minDist = d;
+          }
+          return minDist;
+        }
+      } else if (featureType == 'polygon') {
+        if (geometry is geo.Polygon) {
+          return GeometryCalc._calcPointToGeoRingsDistance(pt, geometry.rings);
+        }
+        if (geometry is geo.MultiPolygon) {
+          var minDist = double.infinity;
+          for (final rings in geometry.ringArrays) {
+            final d = GeometryCalc._calcPointToGeoRingsDistance(pt, rings);
+            if (d == 0.0) return 0.0;
+            if (d < minDist) minDist = d;
+          }
+          return minDist;
+        }
+      }
+      return double.infinity;
+    }
+
     if (featureType == 'point') {
       if (geometry is List<LatLng> && geometry.isNotEmpty) {
         return GeometryCalc.calcDistance(pt, geometry.first);
       }
     } else if (featureType == 'line') {
       if (geometry is List<LatLng>) {
-        double minDist = double.infinity;
-        for (int i = 0; i < geometry.length - 1; i++) {
-          final line = [geometry[i], geometry[i + 1]];
-          final d = GeometryCalc.calcPointToLineDistance(pt, line);
-          // AppLogger.debug(d);
-          if (d < minDist) minDist = d;
-        }
-        return minDist;
+        return GeometryCalc.calcPointToLineDistance(pt, geometry);
       }
     } else if (featureType == 'polygon') {
       if (geometry is List<List<LatLng>>) {
@@ -360,7 +644,6 @@ class LineSimplification {
       return List.from(line);
     }
 
-    // 現在は元の実装を使用（turf_dartのsimplifyは後で実装）
     final result = _douglasPeuckerRecursive(line, tolerance);
 
     AppLogger.debug(

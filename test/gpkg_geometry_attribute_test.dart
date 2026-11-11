@@ -10,7 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
-import 'package:root_maps/converters/turf_converter.dart';
 import 'package:root_maps/editing/edit_session.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
@@ -19,6 +18,7 @@ import 'package:root_maps/models/nodes/geopackage_node.dart';
 import 'package:root_maps/models/nodes/layer_node.dart';
 import 'package:root_maps/services/coordinate/index.dart';
 import 'package:root_maps/utils/attribute_columns.dart';
+import 'package:root_maps/utils/geo_converter.dart';
 import 'package:root_maps/utils/label_template.dart';
 import 'package:root_maps/utils/qgis_expression.dart';
 import 'package:root_maps/widgets/attribute_table/attribute_table_controller.dart';
@@ -81,10 +81,10 @@ void main() {
       expect(one['geometry'], 'g-b');
       expect((one[featureGeometryKey] as List<LatLng>).single, const LatLng(33.94, 135.97));
 
-      final f = TurfConverter.createFeatureFromRow(rows.first, 'point')!;
-      expect(f.properties!['geometry'], 'g-a');
-      expect(f.properties!.keys, isNot(contains(featureGeometryKey)));
-      expect(TurfConverter.featureToRowData(f)!['geometry'], 'g-a');
+      final f = createGeoFeatureFromRow(rows.first, 'point')!;
+      expect(f.properties['geometry'], 'g-a');
+      expect(f.properties.keys, isNot(contains(featureGeometryKey)));
+      expect(propertiesToRowData(f.properties)!['geometry'], 'g-a');
     });
 
     test('地物: 形が出て、情報パネル・ラベル・描き分けの式に geometry の列の値が出る', () async {
@@ -93,7 +93,7 @@ void main() {
       expect(f.point, const LatLng(33.94, 135.97));
       expect(readAttribute(f, 'geometry'), 'g-b');
       expect(f.infoMap['geometry'], 'g-b');
-      final props = layer.effectiveProperties(f.turfFeature.properties);
+      final props = layer.effectiveProperties(f.properties);
       expect(renderLabelTemplate('"geometry"', props), 'g-b');
       expect(parseQgisExpression(""""geometry" = 'g-b'""").test(props), isTrue);
     });

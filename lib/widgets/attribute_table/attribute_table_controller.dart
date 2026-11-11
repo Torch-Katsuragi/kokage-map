@@ -363,7 +363,7 @@ class AttributeTableController extends ChangeNotifier {
 
     // QGIS の制約（必須・一意・式）。必須の強さなら書かない、警告なら書いて知らせる
     String? warning;
-    Map<String, Object?> props = {...?feature.turfFeature.properties, field: value};
+    Map<String, Object?> props = {...feature.properties, field: value};
     if (form != null) {
       final violations = validateQgisForm(
         form,

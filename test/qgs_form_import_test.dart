@@ -141,7 +141,7 @@ void main() {
 
     final chosa = layerOf(root, 'chosa');
     final f = (await PointFeatureNode.createIn(chosa, const LatLng(33.7, 135.9), '', ''))!;
-    final props = f.turfFeature.properties!;
+    final props = f.properties;
     expect(props['kubun'], 'A');
     expect(props['uid'], matches(RegExp(r'^\{.{36}\}$')));
     expect(props['kiroku'], matches(RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$')));

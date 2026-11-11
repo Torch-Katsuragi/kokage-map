@@ -6,10 +6,10 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:root_maps/converters/turf_converter.dart';
 import 'package:root_maps/models/geometry_type.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/services/coordinate/index.dart';
+import 'package:root_maps/utils/geo_converter.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'support/foreign_geom_gpkg.dart';
@@ -74,11 +74,11 @@ void main() {
         // geom という名前のふつうの列は属性のまま
         if (hasGeomAttr) expect(rows.first['geom'], 'geom-a');
 
-        // 地物（turf）の属性にも形の列は入らず、geom の列は入る
-        final f = TurfConverter.createFeatureFromRow(rows.first, 'point')!;
-        expect(f.properties!.keys, isNot(contains(kind.geomColumn)));
-        if (hasGeomAttr) expect(f.properties!['geom'], 'geom-a');
-        expect(TurfConverter.featureToRowData(f)!.keys, hasGeomAttr ? contains('geom') : isNot(contains('geom')));
+        // 地物の属性にも形の列は入らず、geom の列は入る
+        final f = createGeoFeatureFromRow(rows.first, 'point')!;
+        expect(f.properties.keys, isNot(contains(kind.geomColumn)));
+        if (hasGeomAttr) expect(f.properties['geom'], 'geom-a');
+        expect(propertiesToRowData(f.properties)!.keys, hasGeomAttr ? contains('geom') : isNot(contains('geom')));
       });
 
       test('地物を選ぶ（1 件読む）', () async {

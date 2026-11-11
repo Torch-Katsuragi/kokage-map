@@ -79,7 +79,7 @@ class SurveyStation {
 
   /// [p] の器械点（survey_stn が指す点）。起点・器械点が見つからないときは null
   static PointFeatureNode? stationOf(PointFeatureNode p) {
-    final coords = parse(p.turfFeature.properties?['survey_stn']);
+    final coords = parse(p.properties['survey_stn']);
     return coords == null ? null : findAt(coords, p.parent);
   }
 
@@ -87,7 +87,7 @@ class SurveyStation {
   static List<PointFeatureNode> dependentsOf(PointFeatureNode target) {
     final layer = target.parent;
     return layer.children.whereType<PointFeatureNode>().where((p) {
-      final coords = parse(p.turfFeature.properties?['survey_stn']);
+      final coords = parse(p.properties['survey_stn']);
       if (coords == null) return false;
       return findAt(coords, layer) == target;
     }).toList();
@@ -120,7 +120,7 @@ class SurveyStation {
   static Future<void> translate(List<PointFeatureNode> points, double dLat, double dLon) async {
     for (final p in points) {
       await p.updateLocation(LatLng(p.point.latitude + dLat, p.point.longitude + dLon));
-      final stn = parse(p.turfFeature.properties?['survey_stn']);
+      final stn = parse(p.properties['survey_stn']);
       if (stn != null) {
         await p.setAttributeValue(
           'survey_stn',
@@ -215,7 +215,7 @@ class SurveyChainResolver {
     final dependentsOf = <PointFeatureNode, List<PointFeatureNode>>{};
 
     for (final p in surveyPoints) {
-      final stnCoords = _parseStnCoords(p.turfFeature.properties?['survey_stn']);
+      final stnCoords = _parseStnCoords(p.properties['survey_stn']);
       if (stnCoords == null) continue;
 
       final stn = _findNearestPoint(stnCoords, layer);
@@ -270,8 +270,8 @@ class SurveyChainResolver {
       if (unvisited.isEmpty) break;
 
       unvisited.sort((a, b) {
-        final tA = a.turfFeature.properties?['survey_timestamp'] as String? ?? '';
-        final tB = b.turfFeature.properties?['survey_timestamp'] as String? ?? '';
+        final tA = a.properties['survey_timestamp'] as String? ?? '';
+        final tB = b.properties['survey_timestamp'] as String? ?? '';
         return tA.compareTo(tB);
       });
 
@@ -279,7 +279,7 @@ class SurveyChainResolver {
       final next = unvisited.first;
       visited.add(next);
 
-      final props = next.turfFeature.properties ?? {};
+      final props = next.properties;
       final stnCoords = _parseStnCoords(props['survey_stn']);
       if (stnCoords == null) break;
 
@@ -301,8 +301,7 @@ class SurveyChainResolver {
   }
 
   static bool _hasSurveyData(PointFeatureNode node) {
-    final props = node.turfFeature.properties;
-    if (props == null) return false;
+    final props = node.properties;
     return props.containsKey('survey_az') && props.containsKey('survey_hd');
   }
 

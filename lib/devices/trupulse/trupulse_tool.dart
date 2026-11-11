@@ -389,7 +389,7 @@ class TruPulseTool extends DeviceTool {
     PointFeatureNode target,
     List<PointFeatureNode> dependents,
   ) async {
-    final targetStn = target.turfFeature.properties?['survey_stn'];
+    final targetStn = target.properties['survey_stn'];
 
     for (final dep in dependents) {
       if (targetStn != null) {
@@ -416,7 +416,7 @@ class TruPulseTool extends DeviceTool {
     List<PointFeatureNode> dependents,
   ) async {
     final targetStnCoords = _parseStnCoords(
-      target.turfFeature.properties?['survey_stn'],
+      target.properties['survey_stn'],
     );
     if (targetStnCoords == null) {
       await _bridgeDelete(target, dependents);
@@ -505,7 +505,7 @@ class TruPulseTool extends DeviceTool {
 
     for (final child in layer.children) {
       if (child is! PointFeatureNode) continue;
-      final stnGeoJson = child.turfFeature.properties?['survey_stn'];
+      final stnGeoJson = child.properties['survey_stn'];
       if (stnGeoJson == null) continue;
 
       final coords = _parseStnCoords(stnGeoJson);

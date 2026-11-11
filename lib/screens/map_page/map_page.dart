@@ -700,7 +700,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     } else if (selected is PolygonLayerNode &&
         drawingState.drawingPolygon.length >= 3) {
       final closed = closeRing(drawingState.drawingPolygon);
-      // calcPolygonArea はもう m²（turf）。度²として掛け直していて、桁が 10 桁ずれていた
+      // calcPolygonArea はもう m²（Geodesic）。度²として掛け直していて、桁が 10 桁ずれていた
       final areaM2 = GeometryCalc.calcPolygonArea([closed]);
       final centroid = GeometryCalc.calcPolygonCentroid([closed]);
       previewText =

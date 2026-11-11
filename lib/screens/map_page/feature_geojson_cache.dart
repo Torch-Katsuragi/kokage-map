@@ -23,7 +23,6 @@
 import 'dart:ui' show Rect;
 
 import 'package:geobase/geobase.dart' as geo;
-import 'package:latlong2/latlong.dart';
 
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
@@ -121,9 +120,9 @@ class FeatureGeoJsonCache {
   /// フィーチャごとの署名と範囲（前回の全件組み立て）。キー = (レイヤの同一性, rowId)
   Map<(int, int), _Sig> _signatures = {};
 
-  /// 線・面の変換結果の使い回し（フィーチャ → 前回の turf の形・属性・変換後・署名）。
-  /// レイヤを読み直さない限り turf の形は同じオブジェクトなので、形と属性が同じなら変換も署名もやり直さない
-  /// （GPS 軌跡の統合で 20 秒ごとに全件が組み直され、1.5 万面を毎回変換していた。2026-10-06）
+  /// 線・面の変換結果の使い回し（フィーチャ → 前回の geobase の形・属性・Feature・署名）。
+  /// レイヤを読み直さない限り geobase の形は同じオブジェクトなので、形と属性が同じなら Feature 組み立てや署名をやり直さない
+  /// （GPS 軌跡の統合で 20 秒ごとに全件が組み直され、1.5 万面を毎回走査していた。2026-10-06）
   final Expando<_Conv> _conv = Expando('geojson.conv');
 
   /// 点（MultiPoint の点ごとの Feature）と写真の Feature の使い回し。中身が同じなら同じオブジェクトを返し、リストも前のまま保てるように
@@ -132,11 +131,11 @@ class FeatureGeoJsonCache {
 
   /// 頂点の点（頂点の表示をオンにしているとき）。形が同じなら前と同じオブジェクトを返す（リストを前のまま保てるように）
   final Expando<(Object?, List<geo.Feature<geo.Point>>)> _vertexConv = Expando('geojson.vertex');
-  List<geo.Feature<geo.Point>> _vertices(FeatureNode f, Object? turfGeom, Iterable<geo.Position> Function() positions) {
+  List<geo.Feature<geo.Point>> _vertices(FeatureNode f, Object? geoGeom, Iterable<geo.Position> Function() positions) {
     final c = _vertexConv[f];
-    if (c != null && identical(c.$1, turfGeom)) return c.$2;
+    if (c != null && identical(c.$1, geoGeom)) return c.$2;
     final vs = [for (final pt in positions()) geo.Feature<geo.Point>(geometry: geo.Point(pt))];
-    _vertexConv[f] = (turfGeom, vs);
+    _vertexConv[f] = (geoGeom, vs);
     return vs;
   }
 
@@ -167,9 +166,9 @@ class FeatureGeoJsonCache {
       if (c == null || !_signatures.containsKey(key)) return false;
       final at = list.indexWhere((e) => identical(e, c.feature));
       if (at < 0) return false;
-      final turfGeom = f.turfFeature.geometry;
+      final geoGeom = f.geoGeometry;
       final props = _props(input, f);
-      final hit = _converted(f, turfGeom, props, () => fill ? turfPolygonToGeo(turfGeom) : turfLineToGeo(turfGeom));
+      final hit = _converted(f, geoGeom, props, () => fill ? asGeoPolygon(geoGeom) : asGeoLine(geoGeom));
       if (hit == null) return false;
       (fill ? polyPos : linePos)[at] = hit.$1;
       sigs[key] = _Sig.of(hit.$2, props, fill: fill, geom: hit.$1.geometry);
@@ -217,20 +216,20 @@ class FeatureGeoJsonCache {
 
   static (int, int) _keyOf(FeatureNode f) => (identityHashCode(f.parent), f.rowId);
 
-  /// 変換済みを使い回す（形と属性が前回と同じとき）。無ければ変換して覚える
+  /// 変換済みを使い回す（形と属性が前回と同じとき）。無ければ組み立てて覚える
   (geo.Feature<geo.Geometry>, _GeomSig)? _converted(
     FeatureNode f,
-    Object? turfGeom,
+    geo.Geometry? geoGeom,
     Map<String, Object?>? props,
-    geo.Geometry? Function() convert,
+    geo.Geometry? Function() filter,
   ) {
     final c = _conv[f];
-    if (c != null && identical(c.turfGeom, turfGeom) && _sameProps(c.props, props)) return (c.feature, c.sign);
-    final geom = convert();
+    if (c != null && identical(c.geoGeom, geoGeom) && _sameProps(c.props, props)) return (c.feature, c.sign);
+    final geom = filter();
     if (geom == null) return null;
     final feature = geo.Feature<geo.Geometry>(geometry: geom, properties: props);
     final sg = _GeomSig.of(geom);
-    _conv[f] = _Conv(turfGeom, props, feature, sg);
+    _conv[f] = _Conv(geoGeom, props, feature, sg);
     return (feature, sg);
   }
 
@@ -269,7 +268,7 @@ class FeatureGeoJsonCache {
   void _build(FeatureGeoJsonInput input, {required bool full}) {
     // full のときだけ通常リストを作る。選択リストは常に作り直す
     // フィーチャの中身の署名: 形（座標の数と総和。1 点でも動けば変わる）とスタイル・ラベル・名前、および範囲。
-    // ⚠ turf のオブジェクトの同一性は使えない（全件の組み直しのたびに DB から読み直されて別物になる）
+    // ⚠ Geometry オブジェクトの同一性は使えない（全件の組み直しのたびに DB から読み直されて別物になる）
     final sigs = full ? <(int, int), _Sig>{} : null;
 
     final lines = full ? <geo.Feature<geo.Geometry>>[] : null;
@@ -280,16 +279,16 @@ class FeatureGeoJsonCache {
       if (input.hidden.contains(f)) continue;
       final sel = input.selected.contains(f);
       if (!full && !sel) continue;
-      final turfGeom = f.turfFeature.geometry;
+      final geoGeom = f.geoGeometry;
       final props = _props(input, f);
-      final hit = _converted(f, turfGeom, props, () => turfLineToGeo(turfGeom));
+      final hit = _converted(f, geoGeom, props, () => asGeoLine(geoGeom));
       if (hit == null) continue;
       final feature = hit.$1;
       lines?.add(feature);
       sigs?[_keyOf(f)] = _Sig.of(hit.$2, props, fill: false, geom: feature.geometry);
       if (sel) linesSel.add(feature);
       if (input.lineVertices) {
-        final vs = _vertices(f, turfGeom, () => turfLineVertices(turfGeom));
+        final vs = _vertices(f, geoGeom, () => geoLineVertices(geoGeom));
         lineVerts?.addAll(vs);
         if (sel) lineVertsSel.addAll(vs);
       }
@@ -304,9 +303,9 @@ class FeatureGeoJsonCache {
       if (input.hidden.contains(f)) continue;
       final sel = input.selected.contains(f);
       if (!full && !sel) continue;
-      final turfGeom = f.turfFeature.geometry;
+      final geoGeom = f.geoGeometry;
       final props = _props(input, f);
-      final hit = _converted(f, turfGeom, props, () => turfPolygonToGeo(turfGeom));
+      final hit = _converted(f, geoGeom, props, () => asGeoPolygon(geoGeom));
       if (hit == null) continue;
       final feature = hit.$1;
       polys?.add(feature);
@@ -314,7 +313,7 @@ class FeatureGeoJsonCache {
       sigs?[_keyOf(f)] = _Sig.of(hit.$2, props, fill: true);
       if (sel) polysSel.add(feature);
       if (input.polygonVertices) {
-        final vs = _vertices(f, turfGeom, () => turfPolygonVertices(turfGeom));
+        final vs = _vertices(f, geoGeom, () => geoPolygonVertices(geoGeom));
         polyVerts?.addAll(vs);
         if (sel) polyVertsSel.addAll(vs);
       }
@@ -326,26 +325,27 @@ class FeatureGeoJsonCache {
       if (input.hidden.contains(f)) continue;
       final sel = input.selected.contains(f);
       if (!full && !sel) continue;
-      final turfGeom = f.turfFeature.geometry;
+      final geoGeom = f.geoGeometry;
       final props = _props(input, f, f.name);
       final cached = _ptConv[f];
-      if (cached != null && identical(cached.ref, turfGeom) && _sameProps(cached.props, props)) {
+      if (cached != null && identical(cached.ref, geoGeom) && _sameProps(cached.props, props)) {
         if (sigs != null) sigs[_keyOf(f)] = cached.sign!;
         pts?.addAll(cached.features);
         if (sel) ptsSel.addAll(cached.features);
         continue;
       }
-      // 座標の一覧（List<LatLng>）は使い回せなかったときだけ作る
-      final coords = f.geometry as List<LatLng>?;
-      if (coords == null) continue;
-      final pointsSig = _GeomSig.ofLatLngs(coords);
+      if (geoGeom is! geo.Point && geoGeom is! geo.MultiPoint) continue;
+      final pointsSig = _GeomSig.of(geoGeom!);
       final ptSign = _Sig.of(pointsSig, props, fill: false);
       if (sigs != null) sigs[_keyOf(f)] = ptSign;
       final made = <geo.Feature<geo.Point>>[
-        for (final pt in coords)
-          geo.Feature<geo.Point>(geometry: geo.Point(pt.toGeographic()), properties: props),
+        if (geoGeom is geo.Point)
+          geo.Feature<geo.Point>(geometry: geoGeom, properties: props)
+        else if (geoGeom is geo.MultiPoint)
+          for (final pt in geoGeom.positions)
+            geo.Feature<geo.Point>(geometry: geo.Point(pt), properties: props),
       ];
-      _ptConv[f] = _PtConv(turfGeom, props, made, ptSign);
+      _ptConv[f] = _PtConv(geoGeom, props, made, ptSign);
       pts?.addAll(made);
       if (sel) ptsSel.addAll(made);
     }
@@ -516,24 +516,6 @@ class _GeomSig {
     return _GeomSig(n, Object.hash(n, sx, sy), n == 0 ? Rect.zero : Rect.fromLTRB(minX, minY, maxX, maxY));
   }
 
-  factory _GeomSig.ofLatLngs(List<LatLng> coords) {
-    var sx = 0.0, sy = 0.0;
-    var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;
-    for (final pt in coords) {
-      sx += pt.longitude;
-      sy += pt.latitude;
-      if (pt.longitude < minX) minX = pt.longitude;
-      if (pt.longitude > maxX) maxX = pt.longitude;
-      if (pt.latitude < minY) minY = pt.latitude;
-      if (pt.latitude > maxY) maxY = pt.latitude;
-    }
-    return _GeomSig(
-      coords.length,
-      Object.hash(coords.length, sx, sy),
-      coords.isEmpty ? Rect.zero : Rect.fromLTRB(minX, minY, maxX, maxY),
-    );
-  }
-
   final int n;
   final int hash;
   final Rect box;
@@ -557,8 +539,8 @@ class _Sig {
 }
 
 class _Conv {
-  _Conv(this.turfGeom, this.props, this.feature, this.sign);
-  final Object? turfGeom;
+  _Conv(this.geoGeom, this.props, this.feature, this.sign);
+  final geo.Geometry? geoGeom;
   final Map<String, Object?>? props;
   final geo.Feature<geo.Geometry> feature;
   final _GeomSig sign;
@@ -567,7 +549,7 @@ class _Conv {
 class _PtConv {
   _PtConv(this.ref, this.props, this.features, this.sign);
 
-  /// 何から作ったか（点は turf の形の同一性、写真は位置の値で比べる）
+  /// 何から作ったか（点は geobase の形の同一性、写真は位置の値で比べる）
   final Object? ref;
   final Map<String, Object?>? props;
   final List<geo.Feature<geo.Point>> features;

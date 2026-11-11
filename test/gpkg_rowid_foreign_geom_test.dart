@@ -57,7 +57,7 @@ void main() {
     final features = layer.children.whereType<FeatureNode>().toList();
     expect([for (final f in features) f.rowId], [1, 2]);
     // geom はふつうの属性として読める（形の列 geometry とは別）
-    expect(features.first.turfFeature.properties?['geom'], 'geom-a');
+    expect(features.first.properties['geom'], 'geom-a');
 
     final r = await FeatureSearch.search([layer], 'b');
     expect([for (final h in r.hits) h.feature.rowId], contains(2));

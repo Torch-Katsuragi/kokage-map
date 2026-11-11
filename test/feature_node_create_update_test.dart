@@ -4,6 +4,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
 import 'package:root_maps/models/nodes/feature_node.dart';
@@ -53,8 +54,8 @@ void main() {
 
     expect(await p.updateLocation(b), isTrue);
     // 地図に渡す地物の一覧も動いた位置に差し替わる
-    final coords = layer.getFeatureById(p.rowId)!.geometry!.toJson()['coordinates'] as List;
-    expect(coords[1], closeTo(b.latitude, 1e-9));
+    final movedPt = layer.getFeatureById(p.rowId)!.geometry! as geo.Point;
+    expect(movedPt.position.y, closeTo(b.latitude, 1e-9));
 
     await layer.updateChildren();
     final reloaded = layer.children.single as PointFeatureNode;

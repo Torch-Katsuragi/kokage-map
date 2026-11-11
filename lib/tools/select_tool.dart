@@ -19,8 +19,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
-import 'package:turf/turf.dart' as turf;
 
 import '../interfaces/map_state_interface.dart';
 import '../models/nodes/current_location_node.dart';
@@ -65,18 +65,19 @@ class SelectTool extends MapTool with PanDelegation {
   /// 現在位置マーカーの当たり半径 [px]（マーカー本体 20px ＋ 余白）
   static const double _locationMarkerHitPx = 22;
 
-  /// 地物の範囲（経度・緯度）。turf の形が同じなら計算し直さない（編集すると形は新しいオブジェクトになる）
+  /// 地物の範囲（経度・緯度）。geobase の形が同じなら計算し直さない（編集すると形は新しいオブジェクトになる）
   static final Expando<(Object?, double, double, double, double)> _bboxes = Expando('select.bbox');
 
   /// タップ位置が地物の範囲を [rangeM] 広げた中にあるか。外なら距離を測るまでもなく外れ
   /// （1.5 万面の全頂点を毎回なめて測っていた。2026-10-06）
   static bool _maybeNear(FeatureNode f, LatLng p, double rangeM) {
-    final geom = f.turfFeature.geometry;
+    final geom = f.geoGeometry;
     if (geom == null) return false;
     var b = _bboxes[f];
     if (b == null || !identical(b.$1, geom)) {
-      final bb = turf.bbox(geom);
-      b = (geom, bb.lng1.toDouble(), bb.lat1.toDouble(), bb.lng2.toDouble(), bb.lat2.toDouble());
+      final bb = geom.calculateBounds();
+      if (bb == null) return false;
+      b = (geom, bb.minX, bb.minY, bb.maxX, bb.maxY);
       _bboxes[f] = b;
     }
     // 当たり判定の外枠（粗い足切り）なので赤道の 1° = 111,320 m で足りる。距離そのものは見せない
@@ -112,7 +113,7 @@ class SelectTool extends MapTool with PanDelegation {
     for (final f in mapState.pointFeatures) {
       if (f.isDisposed || !_maybeNear(f, tapLatLng, selectRange)) continue;
       final d = FeatureSearch.calcPointToFeatureDistance(
-        tapLatLng, f.geometry, 'point',
+        tapLatLng, f.geoGeometry, 'point',
       );
       if (d <= selectRange) {
         candidates.add((priority: 0, distance: d, node: f));
@@ -151,7 +152,7 @@ class SelectTool extends MapTool with PanDelegation {
     for (final f in mapState.lineFeatures) {
       if (f.isDisposed || !_maybeNear(f, tapLatLng, selectRange)) continue;
       final d = FeatureSearch.calcPointToFeatureDistance(
-        tapLatLng, f.geometry, 'line',
+        tapLatLng, f.geoGeometry, 'line',
       );
       if (d <= selectRange) {
         candidates.add((priority: 1, distance: d, node: f));
@@ -161,7 +162,7 @@ class SelectTool extends MapTool with PanDelegation {
     for (final f in mapState.polygonFeatures) {
       if (f.isDisposed || !_maybeNear(f, tapLatLng, selectRange)) continue;
       final d = FeatureSearch.calcPointToFeatureDistance(
-        tapLatLng, f.geometry, 'polygon',
+        tapLatLng, f.geoGeometry, 'polygon',
       );
       if (d <= selectRange) {
         candidates.add((priority: 2, distance: d, node: f));
@@ -309,36 +310,53 @@ class SelectTool extends MapTool with PanDelegation {
         }
       }
       if (features != null) {
+        bool seriesAnyInLasso(geo.PositionSeries s) {
+          final n = s.positionCount;
+          for (var i = 0; i < n; i++) {
+            if (GeometryCalc.pointInPolygonWithHoles(
+              LatLng(s.y(i), s.x(i)),
+              [lassoPolygonLatLng],
+            )) {
+              return true;
+            }
+          }
+          return false;
+        }
+
         final selected =
             features.where((f) {
               if (f is PointFeatureNode) {
+                final g = f.geoGeometry;
+                if (g is geo.MultiPoint && g.positions.isNotEmpty) {
+                  return g.positions.any(
+                    (p) => GeometryCalc.pointInPolygonWithHoles(
+                      LatLng(p.y, p.x),
+                      [lassoPolygonLatLng],
+                    ),
+                  );
+                }
                 return GeometryCalc.pointInPolygonWithHoles(f.centroid, [
                   lassoPolygonLatLng,
                 ]);
               }
               if (f is LineFeatureNode) {
-                final geom = f.geometry;
-                if (geom is List<LatLng>) {
-                  return geom.any(
-                    (pt) => GeometryCalc.pointInPolygonWithHoles(pt, [
-                      lassoPolygonLatLng,
-                    ]),
-                  );
-                }
+                final g = f.geoGeometry;
+                if (g is geo.LineString) return seriesAnyInLasso(g.chain);
+                if (g is geo.MultiLineString) return g.chains.any(seriesAnyInLasso);
                 return false;
               }
               if (f is PolygonFeatureNode) {
-                final geom = f.geometry;
-                if (geom is List<List<LatLng>>) {
-                  return geom
-                          .expand((ring) => ring)
-                          .any(
-                            (pt) => GeometryCalc.pointInPolygonWithHoles(pt, [
-                              lassoPolygonLatLng,
-                            ]),
-                          ) ||
+                final g = f.geoGeometry;
+                if (g is geo.Polygon) {
+                  return g.rings.any(seriesAnyInLasso) ||
                       lassoPolygonLatLng.any(
-                        (pt) => GeometryCalc.pointInPolygonWithHoles(pt, geom),
+                        (pt) => GeometryCalc.pointInGeoRings(pt, g.rings),
+                      );
+                }
+                if (g is geo.MultiPolygon) {
+                  return g.ringArrays.any((rings) => rings.any(seriesAnyInLasso)) ||
+                      lassoPolygonLatLng.any(
+                        (pt) => GeometryCalc.pointInGeoPolygon(pt, g),
                       );
                 }
                 return false;

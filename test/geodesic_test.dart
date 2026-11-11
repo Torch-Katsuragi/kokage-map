@@ -1,8 +1,8 @@
 // 楕円体の上の長さ・面積（参照値は pyproj の Geod(ellps='WGS84')。GeographicLib の Karney 法）
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:root_maps/utils/geo_converter.dart';
 import 'package:root_maps/utils/geodesic.dart';
-import 'package:turf/turf.dart' as turf;
 
 void main() {
   // 北緯 34° 付近の 65 ha ほどの多角形
@@ -23,7 +23,7 @@ void main() {
   test('面積は参照値と 0.5% 以内（実際は 0.01% 以内）', () {
     near(Geodesic.ringArea(ring), 655222.7235953212, 0.0001);
     near(Geodesic.ringArea(hole), 30768.97325861454, 0.0001);
-  });
+  } );
 
   test('向き・閉じ方によらない', () {
     final closed = [...ring, ring.first];
@@ -63,19 +63,30 @@ void main() {
     }
   });
 
-  test('turf の形（Multi は合計）', () {
-    turf.Position pos(LatLng p) => turf.Position(p.longitude, p.latitude);
-    final poly = turf.Polygon(coordinates: [
-      [for (final p in [...ring, ring.first]) pos(p)],
+  test('geobase の形（穴あき・Multi は合計・空ジオメトリは 0）', () {
+    final closedRing = [...ring, ring.first];
+    final poly = createGeoPolygon([closedRing]);
+    final polyWithHole = createGeoPolygon([closedRing, hole]);
+    final multi = createGeoMultiPolygon([
+      [closedRing],
+      [closedRing],
     ]);
-    final multi = turf.MultiPolygon(coordinates: [poly.coordinates, poly.coordinates]);
     near(Geodesic.areaOf(poly)!, 655222.7235953212, 0.0001);
+    near(Geodesic.areaOf(polyWithHole)!, 655222.7235953212 - 30768.97325861454, 0.0001);
     near(Geodesic.areaOf(multi)!, 2 * 655222.7235953212, 0.0001);
     near(Geodesic.perimeterOf(poly)!, 3026.9081241840213, 0.00001);
-    final line = turf.LineString(coordinates: [for (final p in ring) pos(p)]);
+    near(Geodesic.perimeterOf(polyWithHole)!, 3026.9081241840213 + 702.6234951643169, 0.00001);
+
+    final line = createGeoLineString(ring);
+    final multiLine = createGeoMultiLineString([ring, ring]);
     near(Geodesic.lengthOf(line)!, 2640.7043402025693, 0.00001);
+    near(Geodesic.lengthOf(multiLine)!, 2 * 2640.7043402025693, 0.00001);
+
+    expect(Geodesic.areaOf(createGeoPolygon(const [])), 0);
+    expect(Geodesic.lengthOf(createGeoLineString(const [])), 0);
     expect(Geodesic.areaOf(line), isNull);
     expect(Geodesic.lengthOf(poly), isNull);
+    expect(Geodesic.perimeterOf(null), isNull);
   });
 
   test('表示', () {

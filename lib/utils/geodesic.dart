@@ -15,8 +15,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // こかげマップ: WGS84 楕円体の上で測る長さ・面積
 //
-// turf は半径 6378137 m の球で測るので、北緯 34° 付近では面積が 0.3% ほど大きく出る。
-// 地物の情報パネルと計測ツールはこちらを使う。
+// 半径 6378137 m の球で測ると北緯 34° 付近では面積が 0.3% ほど大きく出るため、
+// 地物の情報パネルと計測ツールはこちらの楕円体計算を使う。
 // - 長さ: Karney の逆解法（GeographicLib。QGIS の楕円体の長さと同じ → karney_inverse.dart）
 // - 面積: 等積の写像（正積緯度）で楕円体を球に移し、球面多角形の面積を測る。辺は球の大円で結ぶので、
 //   数 km 規模のポリゴンなら楕円体の測地線との差は無視できる
@@ -24,8 +24,8 @@
 
 import 'dart:math' as math;
 
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
-import 'package:turf/turf.dart' as turf;
 
 import 'karney_inverse.dart';
 
@@ -48,11 +48,17 @@ class Geodesic {
 
   static double _rad(double deg) => deg * math.pi / 180;
 
-  /// 2 点間の測地線長 [m]（Karney の逆解法。QGIS の楕円体の長さと同じ値で、対蹠点の近くでも収束する）
-  static double distance(LatLng p1, LatLng p2) {
-    if (p1.latitude == p2.latitude && p1.longitude == p2.longitude) return 0;
-    return karneyDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+  static double _beta(double latDeg) {
+    final r = (_q(math.sin(_rad(latDeg))) / _qp).clamp(-1.0, 1.0);
+    return math.asin(r);
   }
+
+  static double _distanceCoords(double lat1, double lon1, double lat2, double lon2) =>
+      (lat1 == lat2 && lon1 == lon2) ? 0 : karneyDistance(lat1, lon1, lat2, lon2);
+
+  /// 2 点間の測地線長 [m]（Karney の逆解法。QGIS の楕円体の長さと同じ値で、対蹠点の近くでも収束する）
+  static double distance(LatLng p1, LatLng p2) =>
+      _distanceCoords(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
 
   /// 緯度 [latDeg] での緯度 1° の長さ [m]（子午線曲率半径から。赤道 110,574 m・北緯 34° で 110,922 m）
   static double metersPerDegreeLat(double latDeg) {
@@ -89,17 +95,13 @@ class Geodesic {
   static double ringArea(List<LatLng> ring) {
     final n = _isClosed(ring) ? ring.length - 1 : ring.length;
     if (n < 3) return 0;
-    double beta(double latDeg) {
-      final r = (_q(math.sin(_rad(latDeg))) / _qp).clamp(-1.0, 1.0);
-      return math.asin(r);
-    }
 
     var sum = 0.0;
-    var b1 = beta(ring[0].latitude);
+    var b1 = _beta(ring[0].latitude);
     for (var i = 0; i < n; i++) {
       final p1 = ring[i];
       final p2 = ring[(i + 1) % n];
-      final b2 = beta(p2.latitude);
+      final b2 = _beta(p2.latitude);
       var dl = _rad(p2.longitude - p1.longitude);
       if (dl > math.pi) dl -= 2 * math.pi;
       if (dl < -math.pi) dl += 2 * math.pi;
@@ -124,30 +126,82 @@ class Geodesic {
   static bool _isClosed(List<LatLng> r) =>
       r.length > 1 && r.first.latitude == r.last.latitude && r.first.longitude == r.last.longitude;
 
-  // ── turf の形から ──────────────────────────
+  // ── geobase の形から（中間リストを作らず PositionSeries を直接読む） ──
 
-  static List<LatLng> _line(List<turf.Position> ps) => [for (final p in ps) LatLng(p.lat.toDouble(), p.lng.toDouble())];
+  static double _seriesLength(geo.PositionSeries s) {
+    final n = s.positionCount;
+    var sum = 0.0;
+    for (var i = 1; i < n; i++) {
+      sum += _distanceCoords(s.y(i - 1), s.x(i - 1), s.y(i), s.x(i));
+    }
+    return sum;
+  }
 
-  static List<List<LatLng>> _rings(List<List<turf.Position>> rs) => [for (final r in rs) _line(r)];
+  static bool _isSeriesClosed(geo.PositionSeries s) {
+    final n = s.positionCount;
+    return n > 1 && s.x(0) == s.x(n - 1) && s.y(0) == s.y(n - 1);
+  }
+
+  static double _seriesPerimeter(geo.PositionSeries s) {
+    final n = s.positionCount;
+    if (n < 2) return 0;
+    var sum = _seriesLength(s);
+    if (!_isSeriesClosed(s)) {
+      sum += _distanceCoords(s.y(n - 1), s.x(n - 1), s.y(0), s.x(0));
+    }
+    return sum;
+  }
+
+  static double _seriesArea(geo.PositionSeries s) {
+    final raw = s.positionCount;
+    final n = _isSeriesClosed(s) ? raw - 1 : raw;
+    if (n < 3) return 0;
+
+    var sum = 0.0;
+    var b1 = _beta(s.y(0));
+    for (var i = 0; i < n; i++) {
+      final j = (i + 1) % n;
+      final b2 = _beta(s.y(j));
+      var dl = _rad(s.x(j) - s.x(i));
+      if (dl > math.pi) dl -= 2 * math.pi;
+      if (dl < -math.pi) dl += 2 * math.pi;
+      final t1 = math.tan(b1 / 2), t2 = math.tan(b2 / 2);
+      sum += 2 * math.atan2(math.tan(dl / 2) * (t1 + t2), 1 + t1 * t2);
+      b1 = b2;
+    }
+    return (sum * _rq * _rq).abs();
+  }
+
+  static double _ringsArea(List<geo.PositionSeries> rings) {
+    if (rings.isEmpty) return 0;
+    var a = _seriesArea(rings.first);
+    for (var i = 1; i < rings.length; i++) {
+      a -= _seriesArea(rings[i]);
+    }
+    return math.max(0, a);
+  }
+
+  static double _ringsPerimeter(List<geo.PositionSeries> rings) =>
+      rings.fold<double>(0, (s, r) => s + _seriesPerimeter(r));
 
   /// 線（Multi は合計）の長さ [m]。線でなければ null
-  static double? lengthOf(turf.GeometryObject? g) => switch (g) {
-    turf.LineString() => lineLength(_line(g.coordinates)),
-    turf.MultiLineString() => g.coordinates.fold<double>(0, (s, l) => s + lineLength(_line(l))),
+  static double? lengthOf(geo.Geometry? g) => switch (g) {
+    geo.LineString(:final chain) => _seriesLength(chain),
+    geo.MultiLineString(:final chains) => chains.fold<double>(0, (s, c) => s + _seriesLength(c)),
     _ => null,
   };
 
   /// 面（Multi は合計）の面積 [m²]。面でなければ null
-  static double? areaOf(turf.GeometryObject? g) => switch (g) {
-    turf.Polygon() => polygonArea(_rings(g.coordinates)),
-    turf.MultiPolygon() => g.coordinates.fold<double>(0, (s, p) => s + polygonArea(_rings(p))),
+  static double? areaOf(geo.Geometry? g) => switch (g) {
+    geo.Polygon(:final rings) => _ringsArea(rings),
+    geo.MultiPolygon(:final ringArrays) => ringArrays.fold<double>(0, (s, rs) => s + _ringsArea(rs)),
     _ => null,
   };
 
   /// 面（Multi は合計）の周の長さ [m]。面でなければ null
-  static double? perimeterOf(turf.GeometryObject? g) => switch (g) {
-    turf.Polygon() => polygonPerimeter(_rings(g.coordinates)),
-    turf.MultiPolygon() => g.coordinates.fold<double>(0, (s, p) => s + polygonPerimeter(_rings(p))),
+  static double? perimeterOf(geo.Geometry? g) => switch (g) {
+    geo.Polygon(:final rings) => _ringsPerimeter(rings),
+    geo.MultiPolygon(:final ringArrays) => ringArrays.fold<double>(0, (s, rs) => s + _ringsPerimeter(rs)),
     _ => null,
   };
 

@@ -376,7 +376,7 @@ class LayerTile extends ConsumerWidget {
         ref.refreshMap();
         final typeLabel = result.targetLayer is LineLayerNode ? 'Line' : 'Polygon';
         final closureInfo = result.closePath
-            ? t.layerDrawer.layer.closureRatio(ratio: '${created.turfFeature.properties?['survey_closure_ratio'] ?? '?'}')
+            ? t.layerDrawer.layer.closureRatio(ratio: '${created.properties['survey_closure_ratio'] ?? '?'}')
             : '';
         ref.notify(t.layerDrawer.layer.surveyConvertedToType(type: typeLabel, count: '${result.chain.length}', closureInfo: closureInfo));
       } else {

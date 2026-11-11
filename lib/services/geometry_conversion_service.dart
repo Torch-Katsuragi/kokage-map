@@ -34,7 +34,7 @@ class GeometryConversionService {
   static String _buildSubTableGeoJson(List<PointFeatureNode> features) {
     final geoFeatures = <Map<String, dynamic>>[];
     for (final f in features) {
-      final props = Map<String, dynamic>.from(f.turfFeature.properties ?? {});
+      final props = Map<String, dynamic>.from(f.properties);
       geoFeatures.add({
         'type': 'Feature',
         'geometry': {

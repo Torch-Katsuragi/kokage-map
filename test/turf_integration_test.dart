@@ -1,205 +1,252 @@
-// Root Maps: turf_dart統合テスト
-// turf_dartのFeature/FeatureCollectionとの統合機能をテストする
+// こかげマップ: geobase ジオメトリ統合・空間計算網羅テスト
+// geo_converter / GeometryCalc / FeatureSearch / Geodesic の変換・境界条件を検証する
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
-import 'package:root_maps/converters/turf_converter.dart';
 import 'package:root_maps/models/geopackage/feature_row.dart';
+import 'package:root_maps/utils/feature_calc_utils.dart';
 import 'package:root_maps/utils/geo_converter.dart';
-import 'package:turf/turf.dart' as turf;
+import 'package:root_maps/utils/geodesic.dart';
 
 void main() {
-  group('TurfConverter Tests', () {
-    test('LatLng to Position conversion', () {
-      // テスト用座標
-      const latlng = LatLng(35.6895, 139.6917); // 東京駅
+  group('geobase ジオメトリ変換・Row 往復', () {
+    test('LatLng ⇄ Geographic 変換', () {
+      const latlng = LatLng(35.6895, 139.6917); // 東京都庁
+      final pos = latlng.toGeographic();
+      expect(pos.lon, equals(139.6917));
+      expect(pos.lat, equals(35.6895));
 
-      // LatLng → Position変換
-      final position = TurfConverter.latlngToPosition(latlng);
-
-      // Position形式は [longitude, latitude] の順
-      expect(position[0], equals(139.6917)); // longitude
-      expect(position[1], equals(35.6895)); // latitude
-
-      // Position → LatLng変換（逆変換）
-      final convertedBack = turf.Position.of(position).toLatLng();
+      final convertedBack = pos.toLatLng();
       expect(convertedBack.latitude, equals(latlng.latitude));
       expect(convertedBack.longitude, equals(latlng.longitude));
-
-      // ignore: avoid_print
-      print('[TEST] LatLng⇄Position変換テスト成功: $latlng ⇄ $position');
     });
 
-    test('Point Feature creation and conversion', () {
-      // テスト用座標
-      const latlng = LatLng(35.6895, 139.6917);
+    test('Point / LineString / Polygon 作成と逆変換', () {
+      const pt = LatLng(35.6895, 139.6917);
+      final geoPt = createGeoPoint(pt);
+      expect(geoPointToLatLng(geoPt), equals(pt));
 
-      // turf_dartのPointを作成
-      final point = TurfConverter.createPoint(latlng);
-      expect(point.coordinates.lng, equals(139.6917));
-      expect(point.coordinates.lat, equals(35.6895));
-
-      // Point → LatLng変換
-      final convertedLatLng = TurfConverter.pointToLatlng(point);
-      expect(convertedLatLng.latitude, equals(latlng.latitude));
-      expect(convertedLatLng.longitude, equals(latlng.longitude));
-
-      // ignore: avoid_print
-      print('[TEST] Point Feature作成・変換テスト成功');
-    });
-
-    test('LineString Feature creation and conversion', () {
-      // テスト用線分座標
-      final line = [
-        const LatLng(35.6895, 139.6917), // 東京駅
-        const LatLng(35.6762, 139.6503), // 新宿駅
-        const LatLng(35.6584, 139.7016), // 渋谷駅
+      const line = [
+        LatLng(35.6895, 139.6917),
+        LatLng(35.6762, 139.6503),
+        LatLng(35.6584, 139.7016),
       ];
+      final geoLine = createGeoLineString(line);
+      expect(geoLine.chain.positionCount, equals(3));
+      expect(geoLineToLatLngs(geoLine), equals(line));
 
-      // turf_dartのLineStringを作成
-      final lineString = TurfConverter.createLineString(line);
-      expect(lineString.coordinates.length, equals(3));
-
-      // LineString → LatLng変換
-      final convertedLine = TurfConverter.lineStringToLatlngs(lineString);
-      expect(convertedLine.length, equals(3));
-      expect(convertedLine[0].latitude, equals(line[0].latitude));
-      expect(convertedLine[0].longitude, equals(line[0].longitude));
-
-      // ignore: avoid_print
-      print('[TEST] LineString Feature作成・変換テスト成功');
-    });
-
-    test('Polygon Feature creation and conversion', () {
-      // テスト用ポリゴン座標（四角形）
-      final polygon = [
+      const polygon = [
         [
-          const LatLng(35.6895, 139.6917), // 右上
-          const LatLng(35.6762, 139.6917), // 右下
-          const LatLng(35.6762, 139.6503), // 左下
-          const LatLng(35.6895, 139.6503), // 左上
-          const LatLng(35.6895, 139.6917), // 閉じる（最初の点と同じ）
+          LatLng(35.6895, 139.6917),
+          LatLng(35.6762, 139.6917),
+          LatLng(35.6762, 139.6503),
+          LatLng(35.6895, 139.6503),
+          LatLng(35.6895, 139.6917),
         ],
       ];
-
-      // turf_dartのPolygonを作成
-      final turfPolygon = TurfConverter.createPolygon(polygon);
-      expect(turfPolygon.coordinates.length, equals(1)); // 外環のみ
-      expect(turfPolygon.coordinates[0].length, equals(5)); // 5頂点（閉じた形）
-
-      // Polygon → LatLng変換
-      final convertedPolygon = TurfConverter.polygonToLatlngs(turfPolygon);
-      expect(convertedPolygon.length, equals(1));
-      expect(convertedPolygon[0].length, equals(5));
-      expect(convertedPolygon[0][0].latitude, equals(polygon[0][0].latitude));
-
-      // ignore: avoid_print
-      print('[TEST] Polygon Feature作成・変換テスト成功');
+      final geoPoly = createGeoPolygon(polygon);
+      expect(geoPoly.rings.length, equals(1));
+      expect(geoPoly.rings[0].positionCount, equals(5));
+      expect(geoPolygonToLatLngs(geoPoly), equals(polygon));
     });
 
-    test('Feature creation from row data', () {
-      // GeoPackageから取得したrowデータをシミュレート
-      final rowData = {
+    test('Row データからの Feature 生成と属性抽出', () {
+      final rowData = <String, dynamic>{
         featureIdKey: 1,
         'name': 'Test Point',
         'description': 'テスト用ポイント',
-        featureGeometryKey: [const LatLng(35.6895, 139.6917)], // Point形式
+        featureGeometryKey: const [LatLng(35.6895, 139.6917)],
         'rmaps_metadata': {'test': 'data'},
       };
 
-      // turf_dartのFeatureを作成
-      final feature = TurfConverter.createFeatureFromRow(rowData, 'Point');
+      final feature = createGeoFeatureFromRow(rowData, 'Point');
       expect(feature, isNotNull);
-      expect(feature!.properties?['name'], equals('Test Point'));
-      expect(feature.properties?['description'], equals('テスト用ポイント'));
-      expect(feature.geometry, isA<turf.Point>());
+      expect(feature!.properties['name'], equals('Test Point'));
+      expect(feature.properties['description'], equals('テスト用ポイント'));
+      expect(feature.geometry, isA<geo.Point>());
 
-      // Feature → rowData変換
-      // featureToRowData は属性のみを返す契約。ジオメトリは feature.geometry 側に
-      // 残るため rowData には載らない（geometry/geom キーは意図的に除外される）。
-      final convertedRowData = TurfConverter.featureToRowData(feature);
+      final convertedRowData = propertiesToRowData(feature.properties);
       expect(convertedRowData, isNotNull);
       expect(convertedRowData!['name'], equals('Test Point'));
+      expect(convertedRowData['rmaps_metadata'], equals('{"test":"data"}'));
       expect(convertedRowData.containsKey(featureGeometryKey), isFalse);
       expect(convertedRowData.containsKey(featureIdKey), isFalse);
       expect(convertedRowData.containsKey('geometry'), isFalse);
       expect(convertedRowData.containsKey('geom'), isFalse);
 
-      // ジオメトリは専用の変換で取り出す
-      final latlng = TurfConverter.pointToLatlng(feature.geometry as turf.Point);
+      final latlng = geoPointToLatLng(feature.geometry! as geo.Point);
       expect(latlng.latitude, closeTo(35.6895, 1e-6));
       expect(latlng.longitude, closeTo(139.6917, 1e-6));
+    });
+  });
 
-      // ignore: avoid_print
-      print('[TEST] RowData⇄Feature変換テスト成功');
+  group('GeometryCalc 距離・重心・面積・内外判定・当たり判定', () {
+    test('calcDistance（Haversine R=6371008.8m）の精度と境界値', () {
+      const a = LatLng(35.681236, 139.767125); // 東京駅
+      const b = LatLng(35.689487, 139.691706); // 新宿付近
+      expect(GeometryCalc.calcDistance(a, a), equals(0.0));
+      expect(GeometryCalc.calcDistance(a, b), closeTo(GeometryCalc.calcDistance(b, a), 1e-9));
+      // 球面 Haversine (R = 6371008.8 m) の理論値と一致し、WGS84 楕円体距離とも 0.5% 未満
+      expect(GeometryCalc.calcDistance(a, b), closeTo(6873.073188, 1e-5));
+      final geod = Geodesic.distance(a, b);
+      expect((GeometryCalc.calcDistance(a, b) - geod).abs() / geod, lessThan(0.005));
     });
 
-    test('Centroid calculation', () {
-      // テスト用ポリゴン
-      final polygon = [
+    test('重心計算: 閉じたリング・開いたリング・Multi・空ジオメトリ', () {
+      const closedPoly = [
         [
-          const LatLng(0, 0),
-          const LatLng(0, 2),
-          const LatLng(2, 2),
-          const LatLng(2, 0),
-          const LatLng(0, 0), // 閉じる
+          LatLng(0, 0),
+          LatLng(0, 2),
+          LatLng(2, 2),
+          LatLng(2, 0),
+          LatLng(0, 0),
         ],
       ];
+      const openPoly = [
+        [
+          LatLng(0, 0),
+          LatLng(0, 2),
+          LatLng(2, 2),
+          LatLng(2, 0),
+        ],
+      ];
+      final cClosed = GeometryCalc.calcGeoCentroid(createGeoPolygon(closedPoly))!;
+      final cOpen = GeometryCalc.calcGeoCentroid(createGeoPolygon(openPoly))!;
+      expect(cClosed.latitude, closeTo(1.0, 1e-9));
+      expect(cClosed.longitude, closeTo(1.0, 1e-9));
+      expect(cOpen.latitude, closeTo(1.0, 1e-9));
+      expect(cOpen.longitude, closeTo(1.0, 1e-9));
 
-      final turfPolygon = TurfConverter.createPolygon(polygon);
-      final feature = turf.Feature(geometry: turfPolygon, properties: {});
-
-      // 重心計算
-      final centroid = TurfConverter.calculateCentroid(feature);
-      expect(centroid, isNotNull);
-
-      // 正方形の重心は中央 (1, 1) 付近になるはず
-      expect(centroid!.latitude, closeTo(1.0, 0.1));
-      expect(centroid.longitude, closeTo(1.0, 0.1));
-
-      // ignore: avoid_print
-      print('[TEST] 重心計算テスト成功: centroid = $centroid');
+      expect(GeometryCalc.calcGeoCentroid(createGeoLineString(const [])), isNull);
+      expect(GeometryCalc.calcGeoCentroid(null), isNull);
     });
 
-    test('Area and length calculations', () {
-      // 面積計算テスト用ポリゴン
-      final polygon = [
-        [
-          const LatLng(0, 0),
-          const LatLng(0, 0.01), // 約1km
-          const LatLng(0.01, 0.01),
-          const LatLng(0.01, 0),
-          const LatLng(0, 0),
-        ],
+    test('pointInPolygonWithHoles / pointInGeoPolygon: 内外・辺上・頂点・穴・未閉環・壊れた入力', () {
+      // 外周 (0,0)-(0,10)-(10,10)-(10,0)、穴 (3,3)-(3,7)-(7,7)-(7,3)
+      const outer = [
+        LatLng(0, 0),
+        LatLng(0, 10),
+        LatLng(10, 10),
+        LatLng(10, 0),
+        LatLng(0, 0),
       ];
+      const hole = [
+        LatLng(3, 3),
+        LatLng(3, 7),
+        LatLng(7, 7),
+        LatLng(7, 3),
+        LatLng(3, 3),
+      ];
+      const polyWithHole = [outer, hole];
+      final geoPolyWithHole = createGeoPolygon(polyWithHole);
 
-      final turfPolygon = TurfConverter.createPolygon(polygon);
-      final polygonFeature = turf.Feature(
-        geometry: turfPolygon,
-        properties: {},
+      // 外周の内部（穴の外）
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(1, 1), polyWithHole), isTrue);
+      expect(GeometryCalc.pointInGeoPolygon(const LatLng(1, 1), geoPolyWithHole), isTrue);
+
+      // 外周の外
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(-1, 5), polyWithHole), isFalse);
+      expect(GeometryCalc.pointInGeoPolygon(const LatLng(5, 11), geoPolyWithHole), isFalse);
+
+      // 穴の内部 → ポリゴン外
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(5, 5), polyWithHole), isFalse);
+      expect(GeometryCalc.pointInGeoPolygon(const LatLng(5, 5), geoPolyWithHole), isFalse);
+
+      // 外周の辺上・四隅の頂点（水平辺を含む） → true
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(0, 5), polyWithHole), isTrue);
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(5, 0), polyWithHole), isTrue);
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(10, 10), polyWithHole), isTrue);
+
+      // 穴の境界・頂点上 → ポリゴン境界なので true
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(3, 5), polyWithHole), isTrue);
+      expect(GeometryCalc.pointInGeoPolygon(const LatLng(7, 7), geoPolyWithHole), isTrue);
+
+      // ひし形の上下左右の尖端頂点（極大・極小頂点）
+      const diamond = [
+        [LatLng(1, 0), LatLng(0, 1), LatLng(-1, 0), LatLng(0, -1)], // 未閉環でも動く
+      ];
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(1, 0), diamond), isTrue);
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(-1, 0), diamond), isTrue);
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(0, 0), diamond), isTrue);
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(0.6, 0.6), diamond), isFalse);
+
+      // 空・3点未満の退化リング
+      expect(GeometryCalc.pointInPolygonWithHoles(const LatLng(0, 0), const []), isFalse);
+      expect(
+        GeometryCalc.pointInPolygonWithHoles(
+          const LatLng(0, 0),
+          const [
+            [LatLng(0, 0), LatLng(1, 1)],
+          ],
+        ),
+        isFalse,
       );
+      expect(
+        GeometryCalc.pointInPolygonWithHoles(
+          const LatLng(0, 0),
+          const [
+            [LatLng(0, 0), LatLng(1, 1), LatLng(0, 0)],
+          ],
+        ),
+        isFalse,
+      );
+    });
 
-      // 面積計算
-      final area = TurfConverter.calculateArea(polygonFeature);
-      expect(area, isNotNull);
-      expect(area, greaterThan(0));
+    test('FeatureSearch.calcPointToFeatureDistance: Multi 系を含む geobase と LatLng リストの一致', () {
+      const target = LatLng(35.001, 135.005);
+      const line1 = [LatLng(35.0, 135.0), LatLng(35.0, 135.01)];
+      const line2 = [LatLng(36.0, 136.0), LatLng(36.0, 136.01)];
 
-      // 長さ計算テスト用ライン
-      final line = [
-        const LatLng(0, 0),
-        const LatLng(0, 0.01), // 約1km
+      final dLatLng = FeatureSearch.calcPointToFeatureDistance(target, line1, 'line');
+      final dGeo = FeatureSearch.calcPointToFeatureDistance(target, createGeoLineString(line1), 'line');
+      final dMulti = FeatureSearch.calcPointToFeatureDistance(
+        target,
+        createGeoMultiLineString(const [line2, line1]),
+        'line',
+      );
+      expect(dGeo, closeTo(dLatLng, 1e-9));
+      expect(dMulti, closeTo(dLatLng, 1e-9));
+
+      // MultiPolygon の 2 個目のパート内部なら距離 0
+      final mp = createGeoMultiPolygon(const [
+        [
+          [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1), LatLng(1, 0), LatLng(0, 0)],
+        ],
+        [
+          [LatLng(10, 10), LatLng(10, 11), LatLng(11, 11), LatLng(11, 10), LatLng(10, 10)],
+        ],
+      ]);
+      expect(FeatureSearch.calcPointToFeatureDistance(const LatLng(10.5, 10.5), mp, 'polygon'), 0.0);
+
+      // MultiPoint の最近傍点
+      final mpt = createGeoMultiPoint(const [LatLng(0, 0), LatLng(35.0, 135.0)]);
+      expect(
+        FeatureSearch.calcPointToFeatureDistance(const LatLng(35.0, 135.0), mpt, 'point'),
+        equals(0.0),
+      );
+    });
+
+    test('calculateBounds と面積・長さ計算', () {
+      const polygon = [
+        [
+          LatLng(0, 0),
+          LatLng(0, 0.01),
+          LatLng(0.01, 0.01),
+          LatLng(0.01, 0),
+          LatLng(0, 0),
+        ],
       ];
+      final geoPoly = createGeoPolygon(polygon);
+      final bounds = geoPoly.calculateBounds()!;
+      expect(bounds.minX, 0.0);
+      expect(bounds.minY, 0.0);
+      expect(bounds.maxX, 0.01);
+      expect(bounds.maxY, 0.01);
+      expect(createGeoLineString(const []).calculateBounds(), isNull);
 
-      final lineString = TurfConverter.createLineString(line);
-      final lineFeature = turf.Feature(geometry: lineString, properties: {});
-
-      // 長さ計算
-      final length = TurfConverter.calculateLength(lineFeature);
-      expect(length, isNotNull);
-      expect(length, greaterThan(0));
-
-      // ignore: avoid_print
-      print('[TEST] 面積・長さ計算テスト成功: area=$area m², length=$length m');
+      expect(Geodesic.areaOf(geoPoly), greaterThan(1e6));
+      expect(Geodesic.lengthOf(createGeoLineString(const [LatLng(0, 0), LatLng(0, 0.01)])), greaterThan(1000));
     });
   });
 }

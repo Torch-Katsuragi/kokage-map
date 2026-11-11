@@ -15,21 +15,23 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: フィーチャノードクラス
 // GeoPackage内のフィーチャに対応するレイヤツリーノード
-// turf_dartのFeatureオブジェクトをメインデータとして使用
+// geobaseのFeatureオブジェクトをメインデータとして使用
 
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
-import 'package:turf/turf.dart' as turf;
 
-import '../../converters/turf_converter.dart';
 import '../../core/node_types.dart';
 import '../../i18n/strings.g.dart';
 import '../../services/qgis_form_logic.dart';
 import '../../utils/attribute_columns.dart';
-import '../geopackage/feature_repository.dart' show featureIdKey, metadataColumn;
+import '../../utils/feature_calc_utils.dart' show GeometryCalc;
+import '../../utils/geo_converter.dart';
+import '../../utils/geodesic.dart';
+import '../geopackage/feature_repository.dart' show featureGeometryKey, featureIdKey, metadataColumn;
 import '../geopackage/geopackage_file.dart';
 import 'layer_node.dart';
 import 'layer_tree_node.dart';
@@ -58,12 +60,12 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// DB上のrowId（主キー）
   int get rowId => _rowId;
-  
+
   /// dispose済みかどうかを取得
   bool get isDisposed => _isDisposed;
 
-  /// turf_dartのFeatureオブジェクトを取得（親のMapから参照）
-  turf.Feature get turfFeature {
+  /// geobaseのFeatureオブジェクトを取得（親のMapから参照）
+  geo.Feature<geo.Geometry> get geoFeature {
     if (_isDisposed) {
       throw StateError('FeatureNode is disposed: rowId=$_rowId');
     }
@@ -85,39 +87,47 @@ abstract class FeatureNode extends LayerTreeNode {
     return feature;
   }
 
-  /// フィーチャの重心座標（turf_dartで計算、キャッシュあり）
+  /// 地物の `geobase` ジオメトリ（パックされた座標列）
+  geo.Geometry? get geoGeometry => geoFeature.geometry;
+
+  /// 地物の属性マップ（親の `geo.Feature.properties` を直接参照）
+  Map<String, dynamic> get properties => geoFeature.properties;
+
+  /// フィーチャの重心座標（キャッシュあり）
   LatLng get centroid {
     if (_isDisposed || parent.isDisposed) return const LatLng(0, 0);
     return _cachedCentroid ??=
-        TurfConverter.calculateCentroid(turfFeature) ?? const LatLng(0, 0);
+        GeometryCalc.calcGeoCentroid(geoGeometry) ?? const LatLng(0, 0);
   }
 
-  /// ジオメトリデータ（レガシー互換用、turf_dartから変換して返す）
-  /// Multi型 → 最初のサブジオメトリのLatLngを返す（編集ツール互換）
+  /// ジオメトリデータ（レガシー互換用、`geobase` から変換して返す）
+  /// Multi型 → 点は全頂点、線・面は最初のサブジオメトリのLatLngを返す（編集ツール互換）
   dynamic get geometry {
     if (_isDisposed || parent.isDisposed) return null;
-    final geom = turfFeature.geometry;
-    if (geom is turf.Point) {
-      return [TurfConverter.pointToLatlng(geom)];
-    } else if (geom is turf.MultiLineString) {
-      final lines = TurfConverter.multiLineStringToLatlngs(geom);
-      return lines.isNotEmpty ? lines.first : <LatLng>[];
-    } else if (geom is turf.LineString) {
-      return TurfConverter.lineStringToLatlngs(geom);
-    } else if (geom is turf.MultiPolygon) {
-      final polys = TurfConverter.multiPolygonToLatlngs(geom);
-      return polys.isNotEmpty ? polys.first : <List<LatLng>>[];
-    } else if (geom is turf.Polygon) {
-      return TurfConverter.polygonToLatlngs(geom);
+    final geom = geoGeometry;
+    if (geom is geo.Point) {
+      return [geoPointToLatLng(geom)];
+    } else if (geom is geo.MultiPoint) {
+      return [for (final p in geom.positions) p.toLatLng()];
+    } else if (geom is geo.MultiLineString) {
+      return geom.chains.isNotEmpty ? seriesToLatLngs(geom.chains.first) : <LatLng>[];
+    } else if (geom is geo.LineString) {
+      return geoLineToLatLngs(geom);
+    } else if (geom is geo.MultiPolygon) {
+      return geom.ringArrays.isNotEmpty
+          ? [for (final r in geom.ringArrays.first) seriesToLatLngs(r)]
+          : <List<LatLng>>[];
+    } else if (geom is geo.Polygon) {
+      return geoPolygonToLatLngs(geom);
     }
     return null;
   }
 
-  /// 名前のgetter（turf_dartのpropertiesから取得）
+  /// 名前のgetter（propertiesから取得）
   @override
   String get name {
     if (_isDisposed || parent.isDisposed) return t.featureDetail.disposed;
-    return turfFeature.properties?['name'] as String? ?? t.featureDetail.unnamed;
+    return properties['name'] as String? ?? t.featureDetail.unnamed;
   }
 
   /// 名前のsetter（親のMapを更新）
@@ -128,10 +138,10 @@ abstract class FeatureNode extends LayerTreeNode {
     _markDirty();
   }
 
-  /// 説明のgetter（turf_dartのpropertiesから取得）
+  /// 説明のgetter（propertiesから取得）
   String? get description {
     if (_isDisposed || parent.isDisposed) return null;
-    return turfFeature.properties?['description'] as String?;
+    return properties['description'] as String?;
   }
 
   /// 説明のsetter（親のMapを更新）
@@ -141,11 +151,11 @@ abstract class FeatureNode extends LayerTreeNode {
     _markDirty();
   }
 
-  /// メタデータのgetter（turf_dartのpropertiesから取得、キャッシュあり）
+  /// メタデータのgetter（propertiesから取得、キャッシュあり）
   Map<String, dynamic>? get metadata {
     if (_isDisposed || parent.isDisposed) return null;
     if (_metadataCacheValid) return _cachedMetadata;
-    final value = turfFeature.properties?[metadataColumn];
+    final value = properties[metadataColumn];
     if (value == null) {
       _cachedMetadata = null;
     } else if (value is Map<String, dynamic>) {
@@ -171,6 +181,9 @@ abstract class FeatureNode extends LayerTreeNode {
     _markDirty();
   }
 
+  /// 重心・長さ・面積などの計算キャッシュを破棄する（外部で形を差し替えたとき用）
+  void invalidateCache() => _invalidateCache();
+
   void _invalidateCache() {
     _cachedCentroid = null;
     _metadataCacheValid = false;
@@ -187,7 +200,7 @@ abstract class FeatureNode extends LayerTreeNode {
     if (_isDisposed) return;
 
     // GeoPackageFileの遅延保存キューに追加
-    final rowData = TurfConverter.featureToRowData(turfFeature);
+    final rowData = propertiesToRowData(properties);
     if (rowData != null) {
       geoPackageFile.queueAttributeUpdates(layerName, rowId, rowData);
     } else {
@@ -202,7 +215,7 @@ abstract class FeatureNode extends LayerTreeNode {
   /// GeoJSON FeatureCollection形式と旧2D配列形式の両方に対応。
   String? _getSubTableTimeRange() {
     try {
-      final subTableValue = turfFeature.properties?['sub_table'];
+      final subTableValue = properties['sub_table'];
       if (subTableValue == null || subTableValue is! String || subTableValue.isEmpty) {
         return null;
       }
@@ -271,10 +284,10 @@ abstract class FeatureNode extends LayerTreeNode {
     }
   }
 
-  /// 属性値の取得（turf_dartのpropertiesから）
+  /// 属性値の取得（propertiesから）
   Future<dynamic> getAttributeValue(String attributeName) async {
     if (_isDisposed) return null;
-    return turfFeature.properties?[attributeName];
+    return properties[attributeName];
   }
 
   /// 属性値の設定（親のMapを更新し、バックグラウンドでDB書き込み）
@@ -283,7 +296,7 @@ abstract class FeatureNode extends LayerTreeNode {
       AppLogger.debug('[WARNING] FeatureNode is disposed, cannot set attribute');
       return;
     }
-    
+
     // 親のMapを更新（失敗した場合はfalseを返す）
     final success = parent.updateFeatureAttribute(_rowId, attributeName, value);
     if (!success) {
@@ -291,7 +304,7 @@ abstract class FeatureNode extends LayerTreeNode {
       AppLogger.debug('[WARNING] Feature may not be registered in parent._featureMap yet');
       return;
     }
-    
+
     _markDirty();
   }
 
@@ -302,21 +315,21 @@ abstract class FeatureNode extends LayerTreeNode {
       AppLogger.debug('[WARNING] FeatureNode is disposed, cannot set attributes');
       return;
     }
-    
+
     // 既存のカラム名を取得
     final existingColumns = await geoPackageFile.getColumnNames(
       layerName,
       getAll: true,
     );
     final existingColumnSet = existingColumns.toSet();
-    
+
     // 存在しないカラムを検出して作成
-    final missingColumns = attributes.keys.where((key) => 
-      !existingColumnSet.contains(key) && 
-      key != 'id' && 
+    final missingColumns = attributes.keys.where((key) =>
+      !existingColumnSet.contains(key) &&
+      key != 'id' &&
       key != 'geom'
     ).toList();
-    
+
     if (missingColumns.isNotEmpty) {
       AppLogger.debug('[DEBUG] FeatureNode: 以下のカラムを自動作成します: $missingColumns');
       for (final columnName in missingColumns) {
@@ -333,7 +346,7 @@ abstract class FeatureNode extends LayerTreeNode {
         }
       }
     }
-    
+
     // 各属性を親のMap経由で更新
     for (final entry in attributes.entries) {
       parent.updateFeatureAttribute(_rowId, entry.key, entry.value);
@@ -352,20 +365,18 @@ abstract class FeatureNode extends LayerTreeNode {
   /// 以前はここに latitude・longitude・vertex_count・timestamp を同じ名前で入れていて、
   /// 同名の列（測量の CSV 由来のデータによくある）の値が隠れたり上書きされたりしていた
   Map<String, String> get infoMap {
-    final props = turfFeature.properties;
+    final props = properties;
     // name・description の列があれば先頭に。列の無いレイヤに「name: 名前なし」を出さない（2026-10-12）
     final details = <String, String>{
-      if (props?['name'] case final n? when '$n'.isNotEmpty) 'name': '$n',
+      if (props['name'] case final n? when '$n'.isNotEmpty) 'name': '$n',
     };
     if (description != null && description!.isNotEmpty) {
       details['description'] = description!;
     }
     // 主キーの列 fid も表の列として出る。地物番号は属性に入っていない
-    if (props != null) {
-      for (final entry in props.entries) {
-        if (entry.value == null || isSystemColumn(entry.key)) continue;
-        details[entry.key] = entry.value.toString();
-      }
+    for (final entry in props.entries) {
+      if (entry.value == null || isSystemColumn(entry.key)) continue;
+      details[entry.key] = entry.value.toString();
     }
     return details;
   }
@@ -393,10 +404,10 @@ abstract class FeatureNode extends LayerTreeNode {
       AppLogger.debug('[WARNING] FeatureNode already disposed');
       return;
     }
-    
+
     // dispose済みフラグを先に設定（エラー回避のため）
     _isDisposed = true;
-    
+
     try {
       // 保留中の変更を即座に保存（エラーが発生しても続行）
       await flushChanges();
@@ -457,26 +468,28 @@ abstract class FeatureNode extends LayerTreeNode {
         children: [],
         nodeType: NodeType.feature,
       ) {
-    // 親のMapにturfFeatureを登録
-    final turfFeature = TurfConverter.createFeatureFromRow(row, geometryType) ??
-        turf.Feature(
-          geometry: turf.Point(coordinates: turf.Position.of([0, 0])),
-          properties: Map.of(row)..remove(featureIdKey),
+    // 親のMapにgeobase Featureを登録
+    final feature = createGeoFeatureFromRow(row, geometryType) ??
+        geo.Feature<geo.Geometry>(
+          geometry: const geo.Point(geo.Geographic(lon: 0, lat: 0)),
+          properties: Map<String, dynamic>.of(row)
+            ..remove(featureIdKey)
+            ..remove(featureGeometryKey),
         );
-    parent.addFeatureToMap(_rowId, turfFeature);
+    parent.addFeatureToMap(_rowId, feature);
   }
 
-  /// turf_dartのFeatureオブジェクトから直接FeatureNodeを作成（[rowId] は地物番号。属性には入れない）
-  FeatureNode.fromTurfFeature(turf.Feature feature, this.parent, int rowId)
+  /// geobaseのFeatureオブジェクトから直接FeatureNodeを作成（[rowId] は地物番号。属性には入れない）
+  FeatureNode.fromGeoFeature(geo.Feature<geo.Geometry> feature, this.parent, int rowId)
     : _rowId = rowId,
       super(
-        feature.properties?['name'] as String? ?? t.featureDetail.unnamed,
+        feature.properties['name'] as String? ?? t.featureDetail.unnamed,
         visible: parent.visible,
         parent: parent,
         children: [],
         nodeType: NodeType.feature,
       ) {
-    // 親のMapにturfFeatureを登録
+    // 親のMapにgeobase Featureを登録
     parent.addFeatureToMap(_rowId, feature);
   }
 
@@ -560,7 +573,7 @@ abstract class FeatureNode extends LayerTreeNode {
   static T _adopt<T extends FeatureNode>(T node) {
     node.parent
       ..addChild(node)
-      ..addFeatureToMap(node._rowId, node.turfFeature)
+      ..addFeatureToMap(node._rowId, node.geoFeature)
       ..notifyFeatureCountChanged();
     AppLogger.debug('[DEBUG] $T: DB保存完了 - ${node.name} (rowId: ${node._rowId})');
     return node;
@@ -570,7 +583,7 @@ abstract class FeatureNode extends LayerTreeNode {
   /// [properties] を渡さなければ今の属性のまま
   Future<bool> _commitGeometry(
     Future<bool> write,
-    turf.GeometryObject geometry, {
+    geo.Geometry geometry, {
     Map<String, dynamic>? properties,
   }) async {
     if (!await write) {
@@ -579,9 +592,9 @@ abstract class FeatureNode extends LayerTreeNode {
     }
     parent.addFeatureToMap(
       _rowId,
-      turf.Feature(
+      geo.Feature<geo.Geometry>(
         geometry: geometry,
-        properties: properties ?? turfFeature.properties,
+        properties: properties ?? Map<String, dynamic>.of(this.properties),
       ),
     );
     _markDirty();
@@ -593,7 +606,7 @@ abstract class FeatureNode extends LayerTreeNode {
     String? description,
     Map<String, dynamic>? metadata,
   ) => {
-    ...turfFeature.properties ?? {},
+    ...properties,
     'name': name,
     'description': description,
     metadataColumn: metadata,
@@ -618,15 +631,18 @@ class PointFeatureNode extends FeatureNode {
   PointFeatureNode(Map<String, dynamic> row, LayerNode parent)
     : super(row, parent, 'Point');
 
-  /// turf_dartのFeatureから点フィーチャノードを作成
-  PointFeatureNode.fromTurfFeature(super.feature, super.parent, super.rowId)
-    : super.fromTurfFeature();
+  /// geobaseのFeatureから点フィーチャノードを作成
+  PointFeatureNode.fromGeoFeature(super.feature, super.parent, super.rowId)
+    : super.fromGeoFeature();
 
-  /// 点座標（単一座標）
+  /// 点座標（単一座標。MultiPoint の場合は先頭点）
   LatLng get point {
-    final geometry = turfFeature.geometry;
-    if (geometry is turf.Point) {
-      return TurfConverter.pointToLatlng(geometry);
+    final geom = geoGeometry;
+    if (geom is geo.Point) {
+      return geoPointToLatLng(geom);
+    }
+    if (geom is geo.MultiPoint && geom.positions.isNotEmpty) {
+      return geom.positions.first.toLatLng();
     }
     return const LatLng(0, 0);
   }
@@ -666,8 +682,11 @@ class PointFeatureNode extends FeatureNode {
     return FeatureNode._adopt(
       row != null
           ? PointFeatureNode(row, parent)
-          : PointFeatureNode.fromTurfFeature(
-              turf.Feature(geometry: TurfConverter.createPoint(point), properties: properties),
+          : PointFeatureNode.fromGeoFeature(
+              geo.Feature<geo.Geometry>(
+                geometry: createGeoPoint(point),
+                properties: properties,
+              ),
               parent,
               rowId,
             ),
@@ -699,7 +718,7 @@ class PointFeatureNode extends FeatureNode {
     final shape = newGeometry as LatLng? ?? point;
     return _commitGeometry(
       _write(shape, name, description, metadata),
-      TurfConverter.createPoint(shape),
+      createGeoPoint(shape),
       properties: _propertiesWith(name, description, metadata),
     );
   }
@@ -707,7 +726,7 @@ class PointFeatureNode extends FeatureNode {
   /// 点フィーチャのジオメトリのみを更新（位置変更）
   Future<bool> updateLocation(LatLng shape) => _commitGeometry(
     _write(shape, name, description, metadata),
-    TurfConverter.createPoint(shape),
+    createGeoPoint(shape),
   );
 }
 
@@ -719,9 +738,9 @@ class LineFeatureNode extends FeatureNode {
   LineFeatureNode(Map<String, dynamic> row, LayerNode parent)
     : super(row, parent, 'LineString');
 
-  /// turf_dartのFeatureから線フィーチャノードを作成
-  LineFeatureNode.fromTurfFeature(super.feature, super.parent, super.rowId)
-    : super.fromTurfFeature();
+  /// geobaseのFeatureから線フィーチャノードを作成
+  LineFeatureNode.fromGeoFeature(super.feature, super.parent, super.rowId)
+    : super.fromGeoFeature();
 
   @override
   void _invalidateCache() {
@@ -731,13 +750,12 @@ class LineFeatureNode extends FeatureNode {
 
   /// 単一の線分（頂点リスト）。Multi の場合は最初のサブラインを返す
   List<LatLng> get line {
-    final geometry = turfFeature.geometry;
-    if (geometry is turf.MultiLineString) {
-      final lines = TurfConverter.multiLineStringToLatlngs(geometry);
-      return lines.isNotEmpty ? lines.first : [];
+    final geom = geoGeometry;
+    if (geom is geo.MultiLineString) {
+      return geom.chains.isNotEmpty ? seriesToLatLngs(geom.chains.first) : [];
     }
-    if (geometry is turf.LineString) {
-      return TurfConverter.lineStringToLatlngs(geometry);
+    if (geom is geo.LineString) {
+      return geoLineToLatLngs(geom);
     }
     return [];
   }
@@ -745,15 +763,14 @@ class LineFeatureNode extends FeatureNode {
   /// 線の長さ [m]（WGS84 楕円体の上で測る、キャッシュあり。Multi は合計）
   double get length {
     if (_isDisposed || parent.isDisposed) return 0.0;
-    return _cachedLength ??=
-        TurfConverter.calculateLength(turfFeature) ?? 0.0;
+    return _cachedLength ??= Geodesic.lengthOf(geoGeometry) ?? 0.0;
   }
 
   @override
   List<(String, String)> get computedInfo => [...super.computedInfo, ..._shapeInfo(line.length)];
-  
+
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
-  
+
   @override
   Future<void> updateChildren() async {
     children.clear();
@@ -782,8 +799,11 @@ class LineFeatureNode extends FeatureNode {
     return FeatureNode._adopt(
       row != null
           ? LineFeatureNode(row, parent)
-          : LineFeatureNode.fromTurfFeature(
-              turf.Feature(geometry: TurfConverter.createLineString(line), properties: properties),
+          : LineFeatureNode.fromGeoFeature(
+              geo.Feature<geo.Geometry>(
+                geometry: createGeoLine(line),
+                properties: properties,
+              ),
               parent,
               rowId,
             ),
@@ -815,7 +835,7 @@ class LineFeatureNode extends FeatureNode {
     final shape = newGeometry as List<LatLng>? ?? line;
     return _commitGeometry(
       _write(shape, name, description, metadata),
-      TurfConverter.createLineString(shape),
+      createGeoLine(shape),
       properties: _propertiesWith(name, description, metadata),
     );
   }
@@ -823,7 +843,7 @@ class LineFeatureNode extends FeatureNode {
   /// 線フィーチャのジオメトリのみを更新（頂点変更）
   Future<bool> updateLine(List<LatLng> shape) => _commitGeometry(
     _write(shape, name, description, metadata),
-    TurfConverter.createLineString(shape),
+    createGeoLine(shape),
   );
 }
 
@@ -836,9 +856,9 @@ class PolygonFeatureNode extends FeatureNode {
   PolygonFeatureNode(Map<String, dynamic> row, LayerNode parent)
     : super(row, parent, 'Polygon');
 
-  /// turf_dartのFeatureから面フィーチャノードを作成
-  PolygonFeatureNode.fromTurfFeature(super.feature, super.parent, super.rowId)
-    : super.fromTurfFeature();
+  /// geobaseのFeatureから面フィーチャノードを作成
+  PolygonFeatureNode.fromGeoFeature(super.feature, super.parent, super.rowId)
+    : super.fromGeoFeature();
 
   @override
   void _invalidateCache() {
@@ -849,13 +869,14 @@ class PolygonFeatureNode extends FeatureNode {
 
   /// 単一のポリゴン（外環＋穴リスト）。Multi の場合は最初のサブポリゴンを返す
   List<List<LatLng>> get polygon {
-    final geometry = turfFeature.geometry;
-    if (geometry is turf.MultiPolygon) {
-      final polys = TurfConverter.multiPolygonToLatlngs(geometry);
-      return polys.isNotEmpty ? polys.first : [];
+    final geom = geoGeometry;
+    if (geom is geo.MultiPolygon) {
+      return geom.ringArrays.isNotEmpty
+          ? [for (final r in geom.ringArrays.first) seriesToLatLngs(r)]
+          : [];
     }
-    if (geometry is turf.Polygon) {
-      return TurfConverter.polygonToLatlngs(geometry);
+    if (geom is geo.Polygon) {
+      return geoPolygonToLatLngs(geom);
     }
     return [];
   }
@@ -863,15 +884,13 @@ class PolygonFeatureNode extends FeatureNode {
   /// ポリゴンの面積 [m²]（WGS84 楕円体の上で測る、キャッシュあり。Multi は合計）
   double get area {
     if (_isDisposed || parent.isDisposed) return 0.0;
-    return _cachedArea ??=
-        TurfConverter.calculateArea(turfFeature) ?? 0.0;
+    return _cachedArea ??= Geodesic.areaOf(geoGeometry) ?? 0.0;
   }
 
   /// ポリゴンの周の長さ [m]（穴の周も足す、キャッシュあり。Multi は合計）
   double get perimeter {
     if (_isDisposed || parent.isDisposed) return 0.0;
-    return _cachedPerimeter ??=
-        TurfConverter.calculatePerimeter(turfFeature) ?? 0.0;
+    return _cachedPerimeter ??= Geodesic.perimeterOf(geoGeometry) ?? 0.0;
   }
 
   @override
@@ -883,9 +902,9 @@ class PolygonFeatureNode extends FeatureNode {
     });
     return [...super.computedInfo, ..._shapeInfo(totalVertices)];
   }
-  
+
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
-  
+
   @override
   Future<void> updateChildren() async {
     children.clear();
@@ -947,7 +966,7 @@ class PolygonFeatureNode extends FeatureNode {
     final shape = newGeometry as List<List<LatLng>>? ?? polygon;
     return _commitGeometry(
       _write(shape, name, description, metadata),
-      TurfConverter.createPolygon(shape),
+      createGeoPolygon(shape),
       properties: _propertiesWith(name, description, metadata),
     );
   }
@@ -955,6 +974,6 @@ class PolygonFeatureNode extends FeatureNode {
   /// 面フィーチャのジオメトリのみを更新（ポリゴン変更）
   Future<bool> updatePolygon(List<List<LatLng>> shape) => _commitGeometry(
     _write(shape, name, description, metadata),
-    TurfConverter.createPolygon(shape),
+    createGeoPolygon(shape),
   );
 }

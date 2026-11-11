@@ -4,6 +4,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/models/geopackage/geopackage_file.dart';
@@ -14,8 +15,8 @@ import 'package:root_maps/screens/map_page/feature_geojson_cache.dart';
 import 'package:root_maps/screens/map_page/gps_track_sync.dart';
 import 'package:root_maps/screens/map_page/map_scene_store.dart';
 import 'package:root_maps/tutorial/practice_project.dart';
+import 'package:root_maps/utils/geo_converter.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:turf/turf.dart' as turf;
 
 void main() {
   late Directory tmp;
@@ -39,13 +40,12 @@ void main() {
 
   /// 線の座標（LineString / MultiLineString の 1 本目）
   List<LatLng> coordsOf(LineFeatureNode f) {
-    final g = f.turfFeature.geometry;
-    final List<turf.Position> ps = switch (g) {
-      turf.LineString(:final coordinates) => coordinates,
-      turf.MultiLineString(:final coordinates) => coordinates.first,
+    final g = f.geoGeometry;
+    return switch (g) {
+      geo.LineString(:final chain) => seriesToLatLngs(chain),
+      geo.MultiLineString(:final chains) => seriesToLatLngs(chains.first),
       _ => throw StateError('線ではない: $g'),
     };
-    return [for (final q in ps) LatLng(q.lat.toDouble(), q.lng.toDouble())];
   }
 
   Future<(LineLayerNode, PolygonLayerNode)> load() async {
@@ -71,6 +71,7 @@ void main() {
     final (route, _) = await load();
     route.visible = false;
     final track = route.children.whereType<LineFeatureNode>().single;
+    final lengthBefore = track.length;
     final line = [...coordsOf(track), const LatLng(33.9285, 135.9800)];
     var rows = 0, all = 0;
     final r = await syncConsolidatedTrack(
@@ -84,6 +85,7 @@ void main() {
     expect(rows, 0);
     expect(all, 0);
     expect(coordsOf(track), hasLength(line.length), reason: '点けたときに今の形で出るよう、差し替えは済ませる');
+    expect(track.length, greaterThan(lengthBefore), reason: '差し替え時に長さキャッシュも破棄される');
   });
 
   test('見えていない・読み込んでいないレイヤで差し替えられなければ、読み込みもしない', () async {
@@ -159,14 +161,13 @@ void main() {
     final cache = FeatureGeoJsonCache()..rebuildAll(input(route, areas));
     final track = route.children.whereType<LineFeatureNode>().single;
     final before = coordsOf(track);
-    final whole = turf.LineString(coordinates: [for (final q in before) turf.Position(q.longitude, q.latitude)]);
 
     final added = LatLng(before.last.latitude + 0.001, before.last.longitude + 0.002);
     route.addFeatureToMap(
       track.rowId,
-      turf.Feature(
-        geometry: turf.LineString(coordinates: [...whole.coordinates, turf.Position(added.longitude, added.latitude)]),
-        properties: track.turfFeature.properties,
+      geo.Feature<geo.Geometry>(
+        geometry: createGeoLineString([...before, added]),
+        properties: track.properties,
       ),
     );
     cache.rebuildAll(input(route, areas));
@@ -175,8 +176,11 @@ void main() {
     expect(cache.lastChangeExtension, cache.lastChangeLonLat);
 
     // 最初の点を動かす → 線全体の範囲
-    final moved = [turf.Position(before.first.longitude - 0.001, before.first.latitude), ...whole.coordinates.skip(1)];
-    route.addFeatureToMap(track.rowId, turf.Feature(geometry: turf.LineString(coordinates: moved), properties: track.turfFeature.properties));
+    final moved = [LatLng(before.first.latitude, before.first.longitude - 0.001), ...before.skip(1)];
+    route.addFeatureToMap(
+      track.rowId,
+      geo.Feature<geo.Geometry>(geometry: createGeoLineString(moved), properties: track.properties),
+    );
     cache.rebuildAll(input(route, areas));
     expect(cache.lastChangeLonLat!.left, closeTo(before.first.longitude - 0.001, 1e-9));
     expect(cache.lastChangeLonLat!.right, closeTo(added.longitude, 1e-9), reason: '前の形（足した点まで）も含む');
@@ -187,20 +191,20 @@ void main() {
     final (route, areas) = await load();
     final cache = FeatureGeoJsonCache()..rebuildAll(input(route, areas));
     final track = route.children.whereType<LineFeatureNode>().single;
-    final whole = [for (final q in coordsOf(track)) turf.Position(q.longitude, q.latitude)];
-    void put(List<List<turf.Position>> chains) => route.addFeatureToMap(
+    final whole = coordsOf(track);
+    void put(List<List<LatLng>> chains) => route.addFeatureToMap(
           track.rowId,
-          turf.Feature(geometry: turf.MultiLineString(coordinates: chains), properties: track.turfFeature.properties),
+          geo.Feature<geo.Geometry>(geometry: createGeoMultiLineString(chains), properties: track.properties),
         );
     final last = whole.last;
     put([
-      [...whole, turf.Position(last.lng.toDouble() + 0.00001, last.lat.toDouble())],
+      [...whole, LatLng(last.latitude, last.longitude + 0.00001)],
     ]);
     cache.rebuildAll(input(route, areas));
     expect(cache.lastChangeExtension, isNotNull, reason: '1 本のまま後ろに足した');
     put([
-      [...whole, turf.Position(last.lng.toDouble() + 0.00001, last.lat.toDouble())],
-      [turf.Position(last.lng.toDouble() + 0.00002, last.lat.toDouble()), turf.Position(last.lng.toDouble() + 0.00003, last.lat.toDouble())],
+      [...whole, LatLng(last.latitude, last.longitude + 0.00001)],
+      [LatLng(last.latitude, last.longitude + 0.00002), LatLng(last.latitude, last.longitude + 0.00003)],
     ]);
     cache.rebuildAll(input(route, areas));
     expect(cache.lastChangeLonLat, isNotNull);
@@ -212,13 +216,13 @@ void main() {
     final cache = FeatureGeoJsonCache()..rebuildAll(input(route, areas));
     expect(cache.lastChangeHasFills, isTrue, reason: '最初の組み立ては全部');
     final f = areas.children.whereType<PolygonFeatureNode>().first;
-    final old = f.turfFeature;
-    final rings = (old.geometry! as turf.MultiPolygon).coordinates.first;
+    final old = f.geoFeature;
+    final rings = geoMultiPolygonToLatLngs(old.geometry! as geo.MultiPolygon).first;
     areas.addFeatureToMap(
       f.rowId,
-      turf.Feature(
-        geometry: turf.MultiPolygon(coordinates: [
-          [for (final ring in rings) [for (final q in ring) turf.Position(q.lng.toDouble() + 0.001, q.lat.toDouble())]],
+      geo.Feature<geo.Geometry>(
+        geometry: createGeoMultiPolygon([
+          [for (final ring in rings) [for (final q in ring) LatLng(q.latitude, q.longitude + 0.001)]],
         ]),
         properties: old.properties,
       ),

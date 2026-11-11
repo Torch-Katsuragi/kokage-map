@@ -115,7 +115,7 @@ Object? normalizeAttributeInput(String sqlType, Object? value) {
 Object? readAttribute(FeatureNode feature, String column) {
   if (feature.isDisposed) return null;
   try {
-    return feature.turfFeature.properties?[column];
+    return feature.properties[column];
   } catch (_) {
     return null;
   }

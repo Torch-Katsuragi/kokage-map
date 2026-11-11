@@ -32,11 +32,11 @@ TraverseReading _shot(double az, double hd, {double inc = 0, int t = 0}) {
 Future<TraverseShot> _record(PointFeatureNode stn, TraverseReading m) async =>
     (await TraverseRecorder.record(stn, m, trueAz: _identityAz))!;
 
-double _num(PointFeatureNode p, String key) => surveyNumber(p.turfFeature.properties?[key]);
+double _num(PointFeatureNode p, String key) => surveyNumber(p.properties[key]);
 
 /// 点の位置が、器械点（survey_stn）から採った方位角・水平距離で出した位置と合っているか
 void _expectLegConsistent(PointFeatureNode p) {
-  final stn = SurveyStation.parse(p.turfFeature.properties?['survey_stn'])!;
+  final stn = SurveyStation.parse(p.properties['survey_stn'])!;
   final expected = const Distance().offset(stn, _num(p, 'survey_hd'), _num(p, 'survey_az'));
   expect(const Distance().distance(expected, p.point), lessThan(0.01), reason: '測線と位置がずれている');
 }
@@ -71,7 +71,7 @@ void main() {
     expect(s.station, s.point);
     expect(s.point, isNot(p0));
     expect(_num(s.point, 'survey_az'), 90);
-    expect(SurveyStation.parse(s.point.turfFeature.properties?['survey_stn']), p0.point);
+    expect(SurveyStation.parse(s.point.properties['survey_stn']), p0.point);
     _expectLegConsistent(s.point);
   });
 
@@ -154,8 +154,8 @@ void main() {
       expect(_num(p, 'survey_bs_az'), e.bs.az);
       expect(_num(p, 'survey_bs_inc'), e.bs.inc);
       expect(_num(p, 'survey_bs_hd'), e.bs.hd);
-      expect(p.turfFeature.properties?['survey_fs_timestamp'], isNotEmpty);
-      expect(p.turfFeature.properties?['survey_bs_timestamp'], isNotEmpty);
+      expect(p.properties['survey_fs_timestamp'], isNotEmpty);
+      expect(p.properties['survey_bs_timestamp'], isNotEmpty);
       final adoptedAz = BacksightAdoption.circularMeanDeg(e.fs.az, (e.bs.az + 180) % 360);
       expect(_num(p, 'survey_az'), closeTo(adoptedAz, 1e-9));
       expect(_num(p, 'survey_hd'), closeTo((e.fs.hd + e.bs.hd) / 2, 1e-9));
@@ -199,7 +199,7 @@ void main() {
     // 器械点も手前も後視済み → 前視として点を作る
     expect(s.kind, TraverseShotKind.forward);
     expect(p1.point, before);
-    expect(p1.turfFeature.properties?.containsKey('survey_fs_az'), isFalse);
+    expect(p1.properties.containsKey('survey_fs_az'), isFalse);
   });
 
   test('後視の生の値と補正済みの印は GeoPackage に残る（読み直しても消えない）', () async {

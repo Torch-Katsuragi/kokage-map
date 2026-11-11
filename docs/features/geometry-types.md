@@ -1,11 +1,11 @@
-﻿---
+---
 title: レイヤジオメトリタイプ仕様
 tags: [features, geometry, ogc, specification]
 ---
 
 # レイヤジオメトリタイプ仕様（OGC Simple Features準拠）
 
-Root Mapsで新規作成・選択できるレイヤのジオメトリタイプは、OGC（Open Geospatial Consortium）のSimple Features仕様（SFS）に準拠し、以下の3種類のみをサポートします。
+こかげマップで新規作成・選択できるレイヤのジオメトリタイプは、OGC（Open Geospatial Consortium）のSimple Features仕様（SFS）に準拠し、以下の3種類のみをサポートします。
 
 ## 対応ジオメトリタイプ
 

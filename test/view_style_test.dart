@@ -190,20 +190,20 @@ void main() {
 
   // QGIS の分類のレンダラを持つ View は、地物の属性で色を分ける（.qgs の描き分けの再現。2026-10-11）
   group('QGIS の描き分け', () {
-    const sugi = Color(0xFF33A02C);
-    const hinoki = Color(0xFF1F78B4);
+    const typeA = Color(0xFF33A02C);
+    const typeB = Color(0xFF1F78B4);
     const other = Color(0xFF969696);
     final categorized = QgisRenderer(
       kind: QgisRendererKind.categorized,
-      attr: '樹種',
+      attr: '種別',
       classes: const [
-        QgisRendererClass(label: 'スギ', values: ['スギ'], style: KMetaLayerStyle(pointColor: sugi)),
-        QgisRendererClass(label: 'ヒノキ', values: ['ヒノキ'], style: KMetaLayerStyle(pointColor: hinoki, pointSize: 9)),
-        QgisRendererClass(label: 'マツ', values: ['マツ'], render: false, style: KMetaLayerStyle(pointColor: Color(0xFFFF0000))),
+        QgisRendererClass(label: 'A種', values: ['A種'], style: KMetaLayerStyle(pointColor: typeA)),
+        QgisRendererClass(label: 'B種', values: ['B種'], style: KMetaLayerStyle(pointColor: typeB, pointSize: 9)),
+        QgisRendererClass(label: 'C種', values: ['C種'], render: false, style: KMetaLayerStyle(pointColor: Color(0xFFFF0000))),
         QgisRendererClass(label: 'その他', style: KMetaLayerStyle(pointColor: other)),
       ],
     );
-    const species = ['スギ', 'ヒノキ', 'マツ', '広葉樹'];
+    const species = ['A種', 'B種', 'C種', 'D種'];
 
     void seedSpecies() {
       for (var fid = 1; fid <= 12; fid++) {
@@ -211,7 +211,7 @@ void main() {
           fid,
           turf.Feature<turf.Point>(
             geometry: turf.Point(coordinates: turf.Position(135.965 + fid * 0.0003, 33.927)),
-            properties: {'樹種': species[(fid - 1) % 4]},
+            properties: {'種別': species[(fid - 1) % 4]},
           ),
         );
       }
@@ -222,24 +222,24 @@ void main() {
       layer.views.add(ViewNode(
         name: '既定',
         parent: layer,
-        style: KMetaLayerStyle(pointColor: sugi, qgisRenderer: 'categorizedSymbol', qgisRendererDef: categorized),
+        style: KMetaLayerStyle(pointColor: typeA, qgisRenderer: 'categorizedSymbol', qgisRendererDef: categorized),
       ));
       await layer.refreshStyleGroups();
 
       final base = key('既定');
       expect(layer.styleKeyOf(1), '$base#0');
       expect(layer.styleKeyOf(2), '$base#1');
-      expect(layer.styleKeyOf(4), '$base#3', reason: '広葉樹は「その他」');
-      expect(layer.rendererHiddenRowIds, {3, 7, 11}, reason: 'マツはチェックを外してある');
-      expect(layer.styleGroups['$base#1']!.pointColor, hinoki);
+      expect(layer.styleKeyOf(4), '$base#3', reason: 'D種は「その他」');
+      expect(layer.rendererHiddenRowIds, {3, 7, 11}, reason: 'C種はチェックを外してある');
+      expect(layer.styleGroups['$base#1']!.pointColor, typeB);
       expect(layer.styleGroups['$base#1']!.pointSize, 9);
       expect(layer.styleGroupRank('$base#1'), layer.styleGroupRank(base), reason: '同じ View の中は並べ替えない');
 
       // 属性を直したら、その地物だけ選び直す
-      layer.updateFeatureAttribute(3, '樹種', 'ヒノキ');
+      layer.updateFeatureAttribute(3, '種別', 'B種');
       expect(layer.styleKeyOf(3), '$base#1');
       expect(layer.rendererHiddenRowIds, isNot(contains(3)));
-      layer.updateFeatureAttribute(1, '樹種', 'マツ');
+      layer.updateFeatureAttribute(1, '種別', 'C種');
       expect(layer.rendererHiddenRowIds, contains(1));
 
       // 3D の地図面（TerrainSceneBuilder）に流すと、分類ごとに別の色の点になる
@@ -285,8 +285,8 @@ void main() {
               properties: {'k-style': layer.styleKeyOf(fid)},
             ),
       ]);
-      expect(scene.points.map((p) => p.color).toSet(), {sugi, hinoki, other});
-      expect(scene.points, hasLength(9), reason: 'マツの 2 件（7, 11）は描かない。3 は直してヒノキ');
+      expect(scene.points.map((p) => p.color).toSet(), {typeA, typeB, other});
+      expect(scene.points, hasLength(9), reason: 'C種の 2 件（7, 11）は描かない。3 は直してB種');
     });
 
     test('1 万件の振り分け（地物の読み込み・スタイル変更のたびに 1 回）', () async {
@@ -295,7 +295,7 @@ void main() {
           fid,
           turf.Feature<turf.Point>(
             geometry: turf.Point(coordinates: turf.Position(135.965, 33.927)),
-            properties: {'樹種': species[fid % 4], '林齢': fid % 90},
+            properties: {'種別': species[fid % 4], '年数': fid % 90},
           ),
         );
       }
@@ -316,13 +316,13 @@ void main() {
       seedSpecies();
       final broken = QgisRenderer(
         kind: QgisRendererKind.rule,
-        classes: const [QgisRendererClass(label: 'x', style: KMetaLayerStyle(pointColor: hinoki))],
+        classes: const [QgisRendererClass(label: 'x', style: KMetaLayerStyle(pointColor: typeB))],
         rules: const [QgisRule(filter: r'$area > 1', classIndex: 0)],
       );
       layer.views.add(ViewNode(
         name: '既定',
         parent: layer,
-        style: KMetaLayerStyle(pointColor: sugi, qgisRenderer: 'RuleRenderer', qgisRendererDef: broken),
+        style: KMetaLayerStyle(pointColor: typeA, qgisRenderer: 'RuleRenderer', qgisRendererDef: broken),
       ));
       await layer.refreshStyleGroups();
       expect(layer.styleKeyByRowId.values.toSet(), {key('既定')});

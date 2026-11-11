@@ -2,7 +2,7 @@
 //
 // 実行: flutter test integration_test/device/geodiff_smoke_test.dart -d <device>
 // 同じ筋のホスト VM 版は test/geodiff_rebase_test.dart（geodiff.dll）。
-// 2026-09-18 Pixel 9（Android 17）で 2/2 通過。
+// 2026-09-18 Android 実機（Android 17）で 2/2 通過。
 import 'dart:convert';
 import 'dart:io';
 
@@ -43,9 +43,9 @@ void main() {
     final gpkg = GeoPackageFile(const ['base.gpkg'], absolutePath: base);
     await gpkg.addLayer('trees', GeometryType.point);
     await gpkg.addAttributeColumns('trees', {'name': 'TEXT', 'description': 'TEXT'});
-    await gpkg.addPoint('trees', const LatLng(33.93, 135.96), name: 'スギ1', description: '胸高32cm');
-    await gpkg.addPoint('trees', const LatLng(33.931, 135.961), name: 'スギ2', description: '胸高28cm');
-    await gpkg.addPoint('trees', const LatLng(33.932, 135.962), name: 'ヒノキ1', description: '胸高25cm');
+    await gpkg.addPoint('trees', const LatLng(33.93, 135.96), name: '地点1', description: '高さ32m');
+    await gpkg.addPoint('trees', const LatLng(33.931, 135.961), name: '地点2', description: '高さ28m');
+    await gpkg.addPoint('trees', const LatLng(33.932, 135.962), name: '地点3', description: '高さ25m');
     await gpkg.flushChanges();
     await gpkg.dispose();
 
@@ -57,13 +57,13 @@ void main() {
     // A: 追加 + fid=1 改名 / B: fid=2 測り直し + fid=3 削除 + fid=1 を別名に（=衝突）
     var db = await openDatabase(a);
     await db.rawInsert(
-        "INSERT INTO trees (geom, name, description) SELECT geom, 'スギ4(Aが追加)', '胸高30cm' FROM trees WHERE fid=1");
-    await db.rawUpdate("UPDATE trees SET name='スギ1(A改名)' WHERE fid=1");
+        "INSERT INTO trees (geom, name, description) SELECT geom, '地点4(Aが追加)', '高さ30m' FROM trees WHERE fid=1");
+    await db.rawUpdate("UPDATE trees SET name='地点1(A改名)' WHERE fid=1");
     await db.close();
     db = await openDatabase(b);
-    await db.rawUpdate("UPDATE trees SET description='胸高29cm(B測り直し)' WHERE fid=2");
+    await db.rawUpdate("UPDATE trees SET description='高さ29m(B測り直し)' WHERE fid=2");
     await db.rawDelete('DELETE FROM trees WHERE fid=3');
-    await db.rawUpdate("UPDATE trees SET name='スギ1(B改名)' WHERE fid=1");
+    await db.rawUpdate("UPDATE trees SET name='地点1(B改名)' WHERE fid=1");
     await db.close();
 
     final aDiff = '${tmp.path}/a.diff';
@@ -86,9 +86,9 @@ void main() {
     // ignore: avoid_print
     print('[geodiff] A after rebase: $rows');
     expect(rows.map((r) => r['fid']).toList(), [1, 2, 4]);
-    expect(rows[0]['name'], 'スギ1(A改名)'); // ローカル優先
-    expect(rows[1]['description'], '胸高29cm(B測り直し)'); // B の変更が載った
-    expect(rows[2]['name'], 'スギ4(Aが追加)');
+    expect(rows[0]['name'], '地点1(A改名)'); // ローカル優先
+    expect(rows[1]['description'], '高さ29m(B測り直し)'); // B の変更が載った
+    expect(rows[2]['name'], '地点4(Aが追加)');
 
     final j = jsonDecode(await File(conflict).readAsString()) as Map<String, dynamic>;
     // ignore: avoid_print

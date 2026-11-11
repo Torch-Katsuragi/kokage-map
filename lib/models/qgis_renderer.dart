@@ -209,7 +209,7 @@ abstract class QgisRendererEvaluator {
     }
   }
 
-  /// 列名か式。QGIS は列名をそのまま（`樹種`）、式なら `"林齢"` のように書く
+  /// 列名か式。QGIS は列名をそのまま（`種別`）、式なら `"面積"` のように書く
   static QgisExpr _value(String? attr) {
     if (attr == null || attr.trim().isEmpty) throw const QgisExpressionParseException('値が無い', 0);
     // 裸の名前（列名）。空白や記号を含む列名も QGIS は引用符なしで書くので、式として読めなければ列名とみなす

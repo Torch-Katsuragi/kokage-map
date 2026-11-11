@@ -16,7 +16,7 @@
 // こかげマップ: 地物を人に見せるときの名前（情報パネル・検索の結果・案内の見出し）
 //
 // [FeatureNode.name] は `name` 列の値で、列の無いレイヤでは「名前なし」になる。QGIS で作った
-// gpkg には `name` 列が無いことが多い（2026-10-12 に小班のレイヤで「名前なし」が並んだ）。
+// gpkg には `name` 列が無いことが多い（2026-10-12 に区画のレイヤで「名前なし」が並んだ）。
 // QGIS の「表示名」の式 → ラベルの式 → `name` 列の順に探し、無ければ null を返す。
 
 import 'dart:typed_data';
@@ -30,7 +30,7 @@ import 'attribute_display.dart';
 
 /// QGIS の表示名の式で作った名前。式が無い・値が入らなければ null。
 ///
-/// 式が列 1 つ（`"林小班"`）だけなら null（その列は属性の行にそのまま出ている）
+/// 式が列 1 つ（`"区画番号"`）だけなら null（その列は属性の行にそのまま出ている）
 String? featureQgisDisplayName(FeatureNode f) {
   if (f.isDisposed || f.parent.isDisposed) return null;
   final expr = f.parent.displayExpression;

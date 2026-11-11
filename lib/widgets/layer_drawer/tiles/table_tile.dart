@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// 表（座標の列が無い CSV。森林簿など）の行。QGIS で結合した表を読むためにあり、ほかの読み取り専用ファイルと同じく
+// 表（座標の列が無い CSV）の行。QGIS で結合した表を読むためにあり、ほかの読み取り専用ファイルと同じく
 // 見るだけ（押すと中身を見る）。地図には描かないので目は無い
 
 import 'package:flutter/material.dart';

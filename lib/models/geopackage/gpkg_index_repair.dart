@@ -30,7 +30,7 @@ import 'sql_identifier.dart';
 /// しかもこのアプリは書き込みのために rtree の ST_ トリガーを落としているので、rebase で入った行は
 /// rtree に載らない。アプリの描画は rtree を使わないが、QGIS は使う（＝QGIS で行が消えて見える）。
 ///
-/// ⚠ **Android 本体の SQLite（sqflite が使う）には rtree モジュールが無い**（2026-09-24 Pixel 9 で確認:
+/// ⚠ **Android 本体の SQLite（sqflite が使う）には rtree モジュールが無い**（2026-09-24 Android 実機で確認:
 /// `no such module: rtree`）。行と範囲は sqflite で読み、rtree への書き込みは、rtree を持っている
 /// geodiff の SQLite（libgeodiff.so に静的リンク）で行う。範囲も rtree からは読まず、ここで出した値を書く。
 abstract final class GpkgIndexRepair {

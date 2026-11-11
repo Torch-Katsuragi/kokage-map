@@ -38,7 +38,7 @@ class _FakeSurface implements MapSurface {
 
 void main() {
   const tokyo = LatLng(35.6812, 139.7671);
-  const kitayama = LatLng(33.9707, 135.8534);
+  const samplePt = LatLng(33.9707, 135.8534);
 
   late _FakeSurface surface;
   setUp(() => surface = _FakeSurface());
@@ -60,33 +60,33 @@ void main() {
 
     test('組み上がった後の move() は true を返し、即座に流れる', () {
       final controller = MapSurfaceHandle()..attach(surface);
-      expect(controller.move(kitayama, 15), isTrue);
-      expect(surface.jumps.single.center, kitayama);
+      expect(controller.move(samplePt, 15), isTrue);
+      expect(surface.jumps.single.center, samplePt);
     });
 
     test('保留は最後の1件だけ実行される（カメラ操作は上書きが正しい）', () {
       final controller = MapSurfaceHandle()
         ..move(tokyo, 16)
-        ..move(kitayama, 15);
+        ..move(samplePt, 15);
       controller.attach(surface);
       expect(surface.jumps, hasLength(1));
-      expect(surface.jumps.single.center, kitayama);
+      expect(surface.jumps.single.center, samplePt);
     });
 
     test('moveAndRotate() も保留される。方位は覚えるが、地図面へは中心とズームだけ渡す', () {
       final controller = MapSurfaceHandle();
-      expect(controller.moveAndRotate(kitayama, 15, 45), isFalse);
+      expect(controller.moveAndRotate(samplePt, 15, 45), isFalse);
       expect(controller.camera.bearing, 45);
       controller.attach(surface);
-      expect(surface.jumps.single.center, kitayama);
+      expect(surface.jumps.single.center, samplePt);
       expect(surface.jumps.single.zoom, 15);
     });
 
     test('fitCoordinates() は地図面に流れ、attach 前なら attach の時点で流れる', () {
-      final controller = MapSurfaceHandle()..fitCoordinates([tokyo, kitayama]);
+      final controller = MapSurfaceHandle()..fitCoordinates([tokyo, samplePt]);
       expect(surface.fits, isEmpty);
       controller.attach(surface);
-      expect(surface.fits.single.coords, [tokyo, kitayama]);
+      expect(surface.fits.single.coords, [tokyo, samplePt]);
       expect(surface.jumps, isEmpty);
     });
 
@@ -98,11 +98,11 @@ void main() {
     });
 
     test('camera は最後に覚えたカメラを返す', () {
-      final controller = MapSurfaceHandle()..rememberCamera(kitayama, 14, 30);
-      expect(controller.camera.center, kitayama);
+      final controller = MapSurfaceHandle()..rememberCamera(samplePt, 14, 30);
+      expect(controller.camera.center, samplePt);
       expect(controller.camera.zoom, 14);
       expect(controller.camera.rotation, 30);
-      expect(controller.lastCenter, kitayama);
+      expect(controller.lastCenter, samplePt);
     });
 
     test('一度も覚えていなければ lastCenter は null、camera は既定の位置', () {
@@ -151,16 +151,16 @@ void main() {
       final controller = MapSurfaceHandle()
         ..rememberCamera(tokyo, 12, 0)
         ..attach(surface);
-      await controller.jumpTo(kitayama, 15, animate: false);
-      expect(surface.jumps.single, (center: kitayama, zoom: 15.0, animate: false));
+      await controller.jumpTo(samplePt, 15, animate: false);
+      expect(surface.jumps.single, (center: samplePt, zoom: 15.0, animate: false));
       expect(controller.camera.center, tokyo);
     });
 
     test('jumpTo() は attach 前なら保留される', () async {
       final controller = MapSurfaceHandle();
-      await controller.jumpTo(kitayama, 15);
+      await controller.jumpTo(samplePt, 15);
       controller.attach(surface);
-      expect(surface.jumps.single, (center: kitayama, zoom: 15.0, animate: true));
+      expect(surface.jumps.single, (center: samplePt, zoom: 15.0, animate: true));
     });
 
     test('lookAt() は attach 中だけ流れ、attach 前は保留しない', () async {
@@ -168,8 +168,8 @@ void main() {
       await controller.lookAt(center: tokyo, pitchDeg: 30);
       controller.attach(surface);
       expect(surface.looks, isEmpty);
-      await controller.lookAt(center: kitayama, zoom: 14, bearingDeg: 90, pitchDeg: 30, animate: false);
-      expect(surface.looks.single, (center: kitayama, zoom: 14.0, bearingDeg: 90.0, pitchDeg: 30.0, animate: false));
+      await controller.lookAt(center: samplePt, zoom: 14, bearingDeg: 90, pitchDeg: 30, animate: false);
+      expect(surface.looks.single, (center: samplePt, zoom: 14.0, bearingDeg: 90.0, pitchDeg: 30.0, animate: false));
     });
   });
 

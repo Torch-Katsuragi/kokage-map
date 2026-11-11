@@ -550,7 +550,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
                 enabled: !have.contains(p.id),
                 onTap: () => Navigator.of(context).pop(p),
               ),
-            // 任意の XYZ / WMS の URL（林野庁の森林計画図・県の CS 立体図など）
+            // 任意の XYZ / WMS の URL（自治体の公開タイル・県の CS 立体図など）
             ListTile(
               leading: const Icon(Icons.add_link, color: Colors.blue),
               title: Text(t.basemap.custom.addEntry),

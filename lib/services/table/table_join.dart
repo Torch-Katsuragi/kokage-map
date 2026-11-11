@@ -14,7 +14,7 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // 結合の評価。表を一度だけ「結合の値 → 行」の Map にして、地物ごとには引くだけにする（1 万 × 1 万でも一瞬）。
-// 設計は docs/technical/qgis-interop.md#表の結合（森林簿 CSV と計画図）
+// 設計は docs/technical/qgis-interop.md#表の結合（属性 CSV と図面レイヤ）
 
 import '../../core/fs/k_file_system.dart';
 import '../../models/layer_join.dart';

@@ -126,7 +126,7 @@ enum _DownloadResult { downloaded, skipped, error }
 /// 背景地図管理サービス
 class BaseMapService extends ChangeNotifier {
   /// タイル取得用の HTTP クライアント。1 つを使い回して接続（TLS）を保つ。
-  /// `http.get` はそのたびに接続を張り直すので、Pixel 9 で 1 枚 0.4〜1.4 秒掛かっていた
+  /// `http.get` はそのたびに接続を張り直すので、Android 実機で 1 枚 0.4〜1.4 秒掛かっていた
   final http.Client _http = http.Client();
 
   /// アプリを特定できるUAを常に送る（OSMポリシー要件。GSIにも礼儀として）。
@@ -625,7 +625,7 @@ class BaseMapService extends ChangeNotifier {
     // プロバイダーの最大ズームレベルを超えている場合は取りに行かず直接フォールバック
     final tile = z > provider.maxZoom ? null : await _fetchTileShared(provider, z, x, y);
     // 標高タイル（Terrarium）は親を拡大して返さない。RGB を拡大すると高さがブロック状の階段になり、
-    // 3D の崖にギザギザの溝が出る（Pixel 9 で実測）。3D 側は自前のピラミッドで親タイルを正しい形で描く
+    // 3D の崖にギザギザの溝が出る（Android 実機で実測）。3D 側は自前のピラミッドで親タイルを正しい形で描く
     if (tile != null || provider.type == BaseMapType.terrain) return tile;
     return _getTileWithFallback(provider, z, x, y);
   }

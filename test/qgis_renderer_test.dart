@@ -29,10 +29,10 @@ void main() {
 
   group('読む', () {
     test('分類: 項目・その他の値・描かない項目', () {
-      final r = renderer('樹種で分類');
+      final r = renderer('種別で分類');
       expect(r.kind, QgisRendererKind.categorized);
-      expect(r.attr, '樹種');
-      expect([for (final c in r.classes) c.label], ['スギ', 'ヒノキ', 'マツ', 'その他']);
+      expect(r.attr, '種別');
+      expect([for (final c in r.classes) c.label], ['A種', 'B種', 'C種', 'その他']);
       expect(r.classes[2].render, isFalse);
       expect(r.classes[3].isDefaultCategory, isTrue);
       expect(hex(r.classes[0].style!.polygonFillColor!), '#33a02c');
@@ -43,9 +43,9 @@ void main() {
     });
 
     test('段階: 範囲と、塗り無し・輪郭無し', () {
-      final r = renderer('林齢で段階');
+      final r = renderer('年数で段階');
       expect(r.kind, QgisRendererKind.graduated);
-      expect(r.attr, '"林齢"');
+      expect(r.attr, '"年数"');
       expect([for (final c in r.classes) (c.lower, c.upper)], [(0.0, 20.0), (20.0, 40.0), (40.0, 60.0), (60.0, 80.0)]);
       expect(r.classes[2].style!.polygonFillOpacity, 0, reason: 'style=no は塗らない');
       expect(r.classes[3].style!.polygonBorderOpacity, 0, reason: 'outline_style=no は輪郭を描かない');
@@ -55,9 +55,9 @@ void main() {
       final r = renderer('ルールで');
       expect(r.kind, QgisRendererKind.rule);
       expect(r.rules, hasLength(5));
-      expect(r.rules[1].children.single.filter, '"林齢" < 20');
+      expect(r.rules[1].children.single.filter, '"年数" < 20');
       expect(r.rules.last.isElse, isTrue);
-      expect([for (final c in r.classes) c.label], ['高齢スギ', 'ヒノキ・マツ', '若い', '不明', '葉', 'その他']);
+      expect([for (final c in r.classes) c.label], ['長期A', 'B種・C種', '若い', '不明', '域', 'その他']);
     });
 
     test('点: シンボルの大きさ', () {
@@ -66,7 +66,7 @@ void main() {
     });
 
     test('JSON を往復しても同じ', () {
-      for (final name in ['樹種で分類', '林齢で段階', 'ルールで', '林道', '杭']) {
+      for (final name in ['種別で分類', '年数で段階', 'ルールで', '道路', '杭']) {
         final r = renderer(name);
         final back = QgisRenderer.fromJson(jsonDecode(jsonEncode(r.toJson())) as Map<String, dynamic>);
         expect(jsonEncode(back.toJson()), jsonEncode(r.toJson()), reason: name);
@@ -74,11 +74,11 @@ void main() {
     });
 
     test('インポータは印と中身を両方スタイルに入れ、フォルダ設定の JSON を往復する', () {
-      final style = const QgsImporter().readStyle(maplayer('樹種で分類'))!;
+      final style = const QgsImporter().readStyle(maplayer('種別で分類'))!;
       expect(style.qgisRenderer, 'categorizedSymbol');
       expect(style.qgisRendererDef!.classes, hasLength(4));
       final back = KMetaLayerStyle.fromJson(jsonDecode(jsonEncode(style.toJson())) as Map<String, dynamic>);
-      expect(back.qgisRendererDef!.classes[1].label, 'ヒノキ');
+      expect(back.qgisRendererDef!.classes[1].label, 'B種');
       // 単一シンボルに戻されたら外す
       expect(back.withoutQgisRenderer().qgisRendererDef, isNull);
       expect(back.withoutQgisRenderer().qgisRenderer, isNull);
@@ -93,7 +93,7 @@ void main() {
   });
 
   group('QGIS と同じシンボルを選ぶ', () {
-    for (final name in ['樹種で分類', '林齢で段階', '林道', '杭']) {
+    for (final name in ['種別で分類', '年数で段階', '道路', '杭']) {
       test(name, () {
         final r = renderer(name);
         final eval = r.evaluator!;
@@ -135,12 +135,12 @@ void main() {
     });
 
     test('IN・LIKE・BETWEEN・CASE・関数', () {
-      expect(t('"s" IN (\'ヒノキ\', \'マツ\')', {'s': 'マツ'}), isTrue);
-      expect(t('"s" NOT IN (\'ヒノキ\')', {'s': 'マツ'}), isTrue);
-      expect(t('"s" LIKE \'%葉%\'', {'s': '広葉樹'}), isTrue);
+      expect(t('"s" IN (\'B種\', \'C種\')', {'s': 'C種'}), isTrue);
+      expect(t('"s" NOT IN (\'B種\')', {'s': 'C種'}), isTrue);
+      expect(t('"s" LIKE \'%域%\'', {'s': '広域'}), isTrue);
       expect(t('"s" LIKE \'a_c\'', {'s': 'abc'}), isTrue);
-      expect(t('"s" ILIKE \'SUGI%\'', {'s': 'sugi1'}), isTrue);
-      expect(t('"s" NOT LIKE \'%葉%\'', {'s': 'スギ'}), isTrue);
+      expect(t('"s" ILIKE \'TYPEA%\'', {'s': 'typea1'}), isTrue);
+      expect(t('"s" NOT LIKE \'%域%\'', {'s': 'A種'}), isTrue);
       expect(t('"n" BETWEEN 10 AND 20', {'n': 15}), isTrue);
       expect(t('CASE WHEN "n" > 5 THEN TRUE ELSE FALSE END', {'n': 6}), isTrue);
       expect(t('lower("s") = \'abc\' AND length("s") = 3', {'s': 'ABC'}), isTrue);
@@ -164,40 +164,40 @@ void main() {
     test('分類の値は列名でも式でもよい。数の表記ゆれは同じ値', () {
       final r = QgisRenderer(
         kind: QgisRendererKind.categorized,
-        attr: '林班',
+        attr: '地区',
         classes: const [
           QgisRendererClass(label: '5', values: ['5']),
           QgisRendererClass(label: 'その他'),
         ],
       );
-      expect(r.evaluator!.classFor({'林班': 5}), 0);
-      expect(r.evaluator!.classFor({'林班': 5.0}), 0);
-      expect(r.evaluator!.classFor({'林班': '6'}), 1);
+      expect(r.evaluator!.classFor({'地区': 5}), 0);
+      expect(r.evaluator!.classFor({'地区': 5.0}), 0);
+      expect(r.evaluator!.classFor({'地区': '6'}), 1);
       final spaced = QgisRenderer(
         kind: QgisRendererKind.categorized,
-        attr: 'tree type',
+        attr: 'zone type',
         classes: const [QgisRendererClass(label: 'a', values: ['a'])],
       );
-      expect(spaced.evaluator!.classFor({'tree type': 'a'}), 0, reason: '空白入りの列名は列として読む');
+      expect(spaced.evaluator!.classFor({'zone type': 'a'}), 0, reason: '空白入りの列名は列として読む');
     });
   });
 
   testWidgets('凡例: ラベルを並べ、多ければ畳む', (tester) async {
     await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: QgisRendererLegend(renderer: renderer('樹種で分類'), dense: true, maxItems: 2)),
+      home: Scaffold(body: QgisRendererLegend(renderer: renderer('種別で分類'), dense: true, maxItems: 2)),
     ));
-    expect(find.text('スギ'), findsOneWidget);
-    expect(find.text('ヒノキ'), findsOneWidget);
-    expect(find.text('マツ'), findsNothing);
+    expect(find.text('A種'), findsOneWidget);
+    expect(find.text('B種'), findsOneWidget);
+    expect(find.text('C種'), findsNothing);
     expect(find.text('… +2'), findsOneWidget);
   });
 
   test('1 万件の振り分けが十分速い', () {
-    final cat = renderer('樹種で分類');
+    final cat = renderer('種別で分類');
     final rule = renderer('ルールで');
-    const species = ['スギ', 'ヒノキ', 'マツ', '広葉樹', null];
+    const species = ['A種', 'B種', 'C種', '広域', null];
     final rows = [
-      for (var i = 0; i < 10000; i++) {'樹種': species[i % 5], '林齢': i % 90, '面積': (i % 50) / 10},
+      for (var i = 0; i < 10000; i++) {'種別': species[i % 5], '年数': i % 90, '面積': (i % 50) / 10},
     ];
     final sw = Stopwatch()..start();
     for (final p in rows) {

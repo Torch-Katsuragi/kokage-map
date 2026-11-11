@@ -228,7 +228,7 @@ void main() {
       expect(WebMercator.zScaleAt(60), closeTo(2, 1e-9));
     });
 
-    test('タイル座標は zoom 14 で北山村を正しく指す', () {
+    test('タイル座標は zoom 14 で紀伊半島南部を正しく指す', () {
       // (135.97+180)/360*2^14 = 14380.4、y は 6548
       expect(WebMercator.tileXFraction(135.97, 14).floor(), 14380);
       expect(WebMercator.tileYFraction(33.93, 14).floor(), 6548);
@@ -309,7 +309,7 @@ void main() {
 
   group('TerrainSceneBuilder', () {
     test('GeoJSON のフィーチャが Mercator の DEM 座標に載り、k-style / k-label が効く', () {
-      // 北山村役場付近に 1km 四方の DEM（z14 相当 9.55m 格子）
+      // 紀伊半島南部付近に 1km 四方の DEM（z14 相当 9.55m 格子）
       const lon0 = 135.965;
       const lat0 = 33.925;
       final originX = WebMercator.xFromLon(lon0);

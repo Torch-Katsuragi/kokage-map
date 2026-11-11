@@ -47,7 +47,7 @@ void main() {
     } catch (_) {}
   });
 
-  const join = LayerJoin(table: '森林簿.csv', joinField: 'ID', targetField: 'ID');
+  const join = LayerJoin(table: '台帳.csv', joinField: 'ID', targetField: 'ID');
   const form = QgisForm(fields: {'NAME': QgisFieldForm(name: 'NAME', alias: '名前')});
 
   Future<void> giveSettings(String key) async {

@@ -89,7 +89,7 @@ void main() {
         isNull,
       );
 
-      // Android の SQLite では rtree を触れない（2026-09-24 Pixel 9 / Android 17 で確認した前提）
+      // Android の SQLite では rtree を触れない（2026-09-24 Android 実機 / Android 17 で確認した前提）
       var db = await openDatabase(path, singleInstance: false);
       Object? androidError;
       try {

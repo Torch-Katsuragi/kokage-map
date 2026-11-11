@@ -303,7 +303,7 @@ abstract final class GdalRasterOverlay {
   /// 同じ [src] の呼び出しが重なったら、走っている 1 本の結果を返す。
   /// ⚠ 以前は重なった呼び出しがそれぞれ同じ作業用の `.warp.tif` と PNG を消しては書いていて、片方が
   /// 「No such file」「Cannot open TIFF image」で落ちたり、書き直し途中の PNG を地図が読んだりした
-  /// （地図の描き直しはクローン直後・開いた直後に続けて走る。2026-10-13 Pixel 9 で `林相.tif` が出なかった）
+  /// （地図の描き直しはクローン直後・開いた直後に続けて走る。2026-10-13 Android 実機でラスタ `.tif` が出なかった）
   static Future<GdalRasterRender> render(String src, GdalRasterProbe probe) {
     final running = _rendering[src];
     if (running != null) return running;

@@ -24,42 +24,42 @@ void main() {
 
   group('読む', () {
     test('編集ウィジェットの種類と設定', () {
-      expect(form['jushu']!.kind, QgisWidgetKind.valueMap);
-      expect([for (final o in form['jushu']!.valueMapOptions) (o.value, o.label)],
-          [('SG', 'スギ'), ('HN', 'ヒノキ'), ('KO', '広葉樹')]);
-      expect(form['bassai']!.kind, QgisWidgetKind.checkBox);
-      expect((form['bassai']!.checkedState, form['bassai']!.uncheckedState), ('Y', 'N'));
+      expect(form['kind']!.kind, QgisWidgetKind.valueMap);
+      expect([for (final o in form['kind']!.valueMapOptions) (o.value, o.label)],
+          [('SG', '種別A'), ('HN', '種別B'), ('KO', '種別C')]);
+      expect(form['done']!.kind, QgisWidgetKind.checkBox);
+      expect((form['done']!.checkedState, form['done']!.uncheckedState), ('Y', 'N'));
       final date = form['chosabi']!;
       expect(date.kind, QgisWidgetKind.dateTime);
       expect((date.fieldFormat, date.displayFormat), ('yyyy-MM-dd', 'yyyy/MM/dd'));
-      final dbh = form['dbh']!;
-      expect((dbh.kind, dbh.rangeMin, dbh.rangeMax, dbh.rangeStep, dbh.rangeSlider),
+      final width = form['width']!;
+      expect((width.kind, width.rangeMin, width.rangeMax, width.rangeStep, width.rangeSlider),
           (QgisWidgetKind.range, 0.0, 200.0, 0.5, false));
-      expect(form['rinrei']!.rangeSlider, isTrue);
+      expect(form['age']!.rangeSlider, isTrue);
       expect(form['memo']!.multiline, isTrue);
       expect(form['chosasha']!.kind, QgisWidgetKind.uniqueValues);
       expect(form['chosasha']!.uniqueEditable, isTrue);
       expect(form['uid']!.hidden, isTrue);
-      final rel = form['shoban']!;
+      final rel = form['parcels']!;
       expect(rel.kind, QgisWidgetKind.valueRelation);
       expect((rel.relationKey, rel.relationValue, rel.relationFilter, rel.relationOrderByValue),
-          ('code', 'name', '"rinpan" = 1', true));
+          ('code', 'name', '"block" = 1', true));
       expect(form['iro']!.kind, QgisWidgetKind.other, reason: '知らない部品は文字の欄');
       expect(form['iro']!.widgetType, 'Color', reason: '種類は持ち帰る');
     });
 
     test('別名・既定値・制約・読み取り専用', () {
-      expect(form['dbh']!.label, '胸高直径(cm)');
+      expect(form['width']!.label, '幅員(m)');
       expect(form['chosasha']!.label, 'chosasha', reason: '別名が無ければ列名');
       expect((form['uid']!.defaultExpression, form['uid']!.applyDefaultOnUpdate), ('uuid()', false));
       expect((form['koshin']!.defaultExpression, form['koshin']!.applyDefaultOnUpdate), (r'$now', true));
       expect(form['kubun']!.defaultExpression, "'A'");
-      expect(form['jushu']!.notNull, QgisConstraintStrength.hard);
+      expect(form['kind']!.notNull, QgisConstraintStrength.hard);
       expect(form['chosasha']!.notNull, QgisConstraintStrength.soft);
       expect(form['uid']!.unique, QgisConstraintStrength.hard);
-      expect(form['dbh']!.expression, '"dbh" > 0 AND "dbh" < 150');
-      expect(form['dbh']!.expressionDescription, '胸高直径は 0〜150 cm');
-      expect(form['dbh']!.expressionStrength, QgisConstraintStrength.soft);
+      expect(form['width']!.expression, '"width" > 0 AND "width" < 150');
+      expect(form['width']!.expressionDescription, '幅員は 0〜150 m');
+      expect(form['width']!.expressionStrength, QgisConstraintStrength.soft);
       expect(form['biko']!.readOnly, isTrue);
       expect(form.editable('biko'), isFalse);
       expect(form.fields.containsKey('fid'), isFalse, reason: 'fid のデータソースの制約は持たない');
@@ -78,19 +78,19 @@ void main() {
     });
 
     test('設定の無いレイヤは null', () {
-      expect(QgsFormReader.read(maplayer('shoban')), isNull);
+      expect(QgsFormReader.read(maplayer('parcels')), isNull);
     });
 
     test('JSON で往復する', () {
       final back = QgisForm.fromJson(jsonDecode(jsonEncode(form.toJson())) as Map<String, dynamic>);
       expect(jsonEncode(back.toJson()), jsonEncode(form.toJson()));
-      expect(back['jushu']!.valueMapOptions.first.label, 'スギ');
+      expect(back['kind']!.valueMapOptions.first.label, '種別A');
       expect((back.layout!.first as QgisFormContainer).children, hasLength(5));
     });
   });
 
   group('並び', () {
-    const cols = ['jushu', 'bassai', 'chosabi', 'dbh', 'rinrei', 'memo', 'chosasha', 'uid', 'shoban', 'biko', 'kubun'];
+    const cols = ['kind', 'done', 'chosabi', 'width', 'age', 'memo', 'chosasha', 'uid', 'parcels', 'biko', 'kubun'];
     String show(QgisFormRow r) => switch (r) {
           QgisFormHeader(:final title, :final depth) => '${'  ' * depth}[$title]',
           QgisFormFieldRow(:final column, :final depth) => '${'  ' * depth}$column',
@@ -98,8 +98,8 @@ void main() {
 
     test('配置の順に、タブ・グループを見出しにする', () {
       expect(qgisFormRows(form, cols).map(show), [
-        '[基本]', '  jushu', '  dbh', '  rinrei', '  bassai', '  [詳細]', '    chosabi', '    chosasha',
-        '[その他]', '  memo', '  shoban', '  biko', '  kubun',
+        '[基本]', '  kind', '  width', '  age', '  done', '  [詳細]', '    chosabi', '    chosasha',
+        '[その他]', '  memo', '  parcels', '  biko', '  kubun',
       ]);
     });
 
@@ -124,7 +124,7 @@ void main() {
 
   group('既定値', () {
     const types = {'uid': 'TEXT', 'kiroku': 'DATETIME', 'koshin': 'TEXT', 'kubun': 'TEXT', 'fukusu': 'TEXT'};
-    const columns = ['uid', 'kiroku', 'koshin', 'kubun', 'fukusu', 'jushu'];
+    const columns = ['uid', 'kiroku', 'koshin', 'kubun', 'fukusu', 'kind'];
 
     test(r'新しい地物: 文字・uuid()・now()・$now。読めない式は飛ばす', () {
       final d = evaluateQgisDefaults(form, {}, types, columns: columns);
@@ -142,12 +142,12 @@ void main() {
     });
 
     test('レイヤに無い列には当てない', () {
-      expect(evaluateQgisDefaults(form, {}, types, columns: const ['jushu']), isEmpty);
+      expect(evaluateQgisDefaults(form, {}, types, columns: const ['kind']), isEmpty);
     });
   });
 
   group('制約', () {
-    final ok = <String, Object?>{'jushu': 'SG', 'dbh': 30, 'chosasha': '松本', 'uid': '{x}'};
+    final ok = <String, Object?>{'kind': 'SG', 'width': 30, 'chosasha': '佐藤', 'uid': '{x}'};
 
     test('守っていれば何も出ない', () {
       expect(validateQgisForm(form, ok, otherValues: (_) => ['{y}']), isEmpty);
@@ -156,21 +156,21 @@ void main() {
     test('必須（強い）・必須（警告）・一意・式', () {
       final vs = validateQgisForm(
         form,
-        {...ok, 'jushu': null, 'chosasha': '', 'dbh': 180},
+        {...ok, 'kind': null, 'chosasha': '', 'width': 180},
         otherValues: (c) => c == 'uid' ? ['{x}'] : [],
       );
       final byField = {for (final v in vs) v.field: v};
-      expect(byField['jushu']!.hard, isTrue);
-      expect(byField['jushu']!.message, '「樹種」は必須です');
+      expect(byField['kind']!.hard, isTrue);
+      expect(byField['kind']!.message, '「種別」は必須です');
       expect(byField['chosasha']!.hard, isFalse, reason: '空の文字も入っていない扱い');
-      expect(byField['dbh']!.hard, isFalse);
-      expect(byField['dbh']!.message, '「胸高直径(cm)」: 胸高直径は 0〜150 cm', reason: '説明があれば説明');
+      expect(byField['width']!.hard, isFalse);
+      expect(byField['width']!.message, '「幅員(m)」: 幅員は 0〜150 m', reason: '説明があれば説明');
       expect(byField['uid']!.hard, isTrue);
     });
 
     test('only の列だけ', () {
-      final vs = validateQgisForm(form, {...ok, 'jushu': null, 'dbh': 180}, only: ['dbh']);
-      expect([for (final v in vs) v.field], ['dbh']);
+      final vs = validateQgisForm(form, {...ok, 'kind': null, 'width': 180}, only: ['width']);
+      expect([for (final v in vs) v.field], ['width']);
     });
   });
 
@@ -218,24 +218,24 @@ void main() {
     }
 
     testWidgets('ValueMap: 表示名を見せて、選ぶと値を書く', (tester) async {
-      final changes = await pump(tester, 'jushu', 'SG');
-      expect(find.text('スギ'), findsOneWidget);
+      final changes = await pump(tester, 'kind', 'SG');
+      expect(find.text('種別A'), findsOneWidget);
       expect(find.text('SG'), findsNothing);
-      expect(find.text('樹種 *'), findsOneWidget, reason: '別名と必須の印');
-      await tester.tap(find.text('スギ'));
+      expect(find.text('種別 *'), findsOneWidget, reason: '別名と必須の印');
+      await tester.tap(find.text('種別A'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ヒノキ').last);
+      await tester.tap(find.text('種別B').last);
       await tester.pumpAndSettle();
       expect(changes.last, ('HN', true));
     });
 
     testWidgets('ValueMap: 選択肢に無い値も消さずに出す', (tester) async {
-      await pump(tester, 'jushu', 'ZZ');
+      await pump(tester, 'kind', 'ZZ');
       expect(find.text('ZZ'), findsOneWidget);
     });
 
     testWidgets('チェックボックス: 決めた値を書く', (tester) async {
-      final changes = await pump(tester, 'bassai', 'N');
+      final changes = await pump(tester, 'done', 'N');
       expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
       await tester.tap(find.byType(Checkbox));
       expect(changes.last, ('Y', true));
@@ -255,7 +255,7 @@ void main() {
     });
 
     testWidgets('範囲（数の欄）: 確定で min〜max に収める', (tester) async {
-      final changes = await pump(tester, 'dbh', 30, sqlType: 'REAL');
+      final changes = await pump(tester, 'width', 30, sqlType: 'REAL');
       await tester.enterText(find.byType(TextField), '２５０');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
@@ -263,7 +263,7 @@ void main() {
     });
 
     testWidgets('範囲（つまみ）: 刻みに合わせる', (tester) async {
-      final changes = await pump(tester, 'rinrei', 40, sqlType: 'INTEGER');
+      final changes = await pump(tester, 'age', 40, sqlType: 'INTEGER');
       expect(find.byType(Slider), findsOneWidget);
       expect(find.text('40'), findsOneWidget);
       await tester.drag(find.byType(Slider), const Offset(30, 0));
@@ -274,14 +274,14 @@ void main() {
     });
 
     testWidgets('値の関係: 選択肢の表示名を見せて、キーを書く', (tester) async {
-      final changes = await pump(tester, 'shoban', '1-b', options: const [
-        QgisValueOption('1-a', '1林班 い小班'),
-        QgisValueOption('1-b', '1林班 ろ小班'),
+      final changes = await pump(tester, 'parcels', '1-b', options: const [
+        QgisValueOption('1-a', '1区 い号'),
+        QgisValueOption('1-b', '1区 ろ号'),
       ]);
-      expect(find.text('1林班 ろ小班'), findsOneWidget);
-      await tester.tap(find.text('1林班 ろ小班'));
+      expect(find.text('1区 ろ号'), findsOneWidget);
+      await tester.tap(find.text('1区 ろ号'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('1林班 い小班').last);
+      await tester.tap(find.text('1区 い号').last);
       await tester.pumpAndSettle();
       expect(changes.last, ('1-a', true));
     });

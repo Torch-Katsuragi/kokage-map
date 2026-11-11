@@ -143,7 +143,7 @@ void main() {
     }
   });
 
-  group('北山村（33.93N 135.96E）', () {
+  group('紀伊半島南部（33.93N 135.96E）', () {
     test('NOAA の計算機と一致する（2026.8 で −7.87666°）', () {
       // https://www.ngdc.noaa.gov/geomag-web/calculators/calculateDeclination?lat1=33.93&lon1=135.96&model=WMM&startYear=2026&startMonth=10&startDay=20&resultFormat=json
       // を 2026-10-11 に引いた値（model WMM-2025, date 2026.8, elevation 0）
@@ -169,7 +169,7 @@ void main() {
       expect(magneticToTrue(90, -7.88), closeTo(82.12, 1e-9));
     });
 
-    test('北山村で磁北 0° を向いた端末は真北基準で 352.1° 付近', () {
+    test('紀伊半島南部で磁北 0° を向いた端末は真北基準で 352.1° 付近', () {
       final conv = TrueHeadingConverter(clock: () => DateTime(2026, 10, 20));
       expect(conv.toTrue(0, lat: 33.93, lon: 135.96), closeTo(360 - 7.87666, 0.01));
     });
@@ -183,11 +183,11 @@ void main() {
 
     test('近くを動いただけでは出し直さず、遠くへ行けば出し直す', () {
       final conv = TrueHeadingConverter(clock: () => DateTime(2026, 10, 20));
-      final kitayama = conv.declinationFor(33.93, 135.96)!;
-      expect(conv.declinationFor(33.95, 135.97), kitayama);
+      final kii = conv.declinationFor(33.93, 135.96)!;
+      expect(conv.declinationFor(33.95, 135.97), kii);
       // 北海道（稚内付近）は西偏 10° 近い
       final wakkanai = conv.declinationFor(45.4, 141.7)!;
-      expect(wakkanai, lessThan(kitayama - 1));
+      expect(wakkanai, lessThan(kii - 1));
       expect(wakkanai, closeTo(WmmDeclination.calculate(45.4, 141.7, DateTime(2026, 10, 20)), 1e-12));
     });
   });

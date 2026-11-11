@@ -80,7 +80,7 @@ void insertIntoMapLayer(XmlElement mapLayer, XmlElement element) {
 /// [rootPath] から見た [absPath] の相対パス。[rootPath] の外なら null。
 ///
 /// ⚠ 判定は**正規化した絶対パス**で行う。`../shared/kyoyu.gpkg` のように
-/// 相対で外に出るケースが林業では現実にありそうなので、素朴な文字列比較では足りない。
+/// 相対パスで外に出るケースがあるため、素朴な文字列比較では足りない。
 String? relativeInside(String rootPath, String absPath) {
   final rel = p.relative(p.normalize(absPath), from: p.normalize(rootPath));
   if (rel.startsWith('..') || p.isAbsolute(rel)) return null;

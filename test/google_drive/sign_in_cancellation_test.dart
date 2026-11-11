@@ -111,7 +111,7 @@ void main() {
     );
     const plainCancel = GoogleSignInException(code: GoogleSignInExceptionCode.canceled);
 
-    test('圏外の [16] reauth は圏外（2026-10 の Pixel 9）', () {
+    test('圏外の [16] reauth は圏外（2026-10 の Android 実機）', () {
       final f = classifySignInFailure(reauth, online: false);
       expect(f.kind, SignInFailureKind.offline);
       expect(f.detail, 'canceled: [16] Account reauth failed.');

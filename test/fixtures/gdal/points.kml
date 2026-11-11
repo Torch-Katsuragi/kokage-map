@@ -6,21 +6,21 @@
 </Schema>
 <Folder><name>points</name>
   <Placemark id="points.1">
-	<name>スギ1</name>
+	<name>地点1</name>
 	<ExtendedData><SchemaData schemaUrl="#points">
 		<SimpleData name="dbh">32</SimpleData>
 	</SchemaData></ExtendedData>
       <Point><coordinates>135.96,33.93</coordinates></Point>
   </Placemark>
   <Placemark id="points.2">
-	<name>ヒノキ2</name>
+	<name>地点2</name>
 	<ExtendedData><SchemaData schemaUrl="#points">
 		<SimpleData name="dbh">28</SimpleData>
 	</SchemaData></ExtendedData>
       <Point><coordinates>135.961,33.931</coordinates></Point>
   </Placemark>
   <Placemark id="points.3">
-	<name>北山村役場</name>
+	<name>基準点A</name>
 	<ExtendedData><SchemaData schemaUrl="#points">
 		<SimpleData name="dbh">0</SimpleData>
 	</SchemaData></ExtendedData>

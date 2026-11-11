@@ -48,7 +48,7 @@ void main() {
   group('TileKey / tileRangeFor', () {
     test('タイルの範囲は Mercator の矩形を覆う', () {
       const z = 14;
-      const key = TileKey(z, 14380, 6541); // 北山村付近
+      const key = TileKey(z, 14380, 6541); // 紀伊半島南部付近
       final b = key.bounds;
       final range = TerrainWorld.tileRangeFor(b.deflate(1), z);
       expect((range.x0, range.y0, range.x1, range.y1), (14380, 6541, 14380, 6541));

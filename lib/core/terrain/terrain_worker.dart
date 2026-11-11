@@ -16,7 +16,7 @@
 /// 地形まわりの重い計算（DEM の組み立て・メッシュの前計算）を流す常駐 isolate の小さなプール
 ///
 /// `compute` は呼ぶたびに isolate を起動する。引いた瞬間に 40 枚ぶん同時に起動すると
-/// debug では 1 本 30MB 超・起動 1 秒超で、メモリが 1GB 以上膨らんだ（Pixel 9 で実測）。
+/// debug では 1 本 30MB 超・起動 1 秒超で、メモリが 1GB 以上膨らんだ（Android 実機で実測）。
 /// io では [TerrainWorker.size] 本を起動したまま使い回し、web ではその場で実行する。
 /// 使い方: `TerrainWorker.instance.run(staticFn, arg)`（fn は静的関数か top-level 関数、arg と戻り値は isolate 間で送れる型）
 library;

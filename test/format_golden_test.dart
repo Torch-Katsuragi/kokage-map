@@ -108,15 +108,15 @@ void main() {
     await g.addLayer('pts', GeometryType.point);
     await g.addAttributeColumns('pts', attrs);
     await g.addPointsBatch('pts', [
-      (const LatLng(33.91, 135.97), {'name': '杉', 'description': '樹高 "高い", 太い', 'h': 21.5, 'n': 3}),
-      (const LatLng(33.92, 135.98), {'name': 'hinoki', 'h': null, 'n': 7}),
+      (const LatLng(33.91, 135.97), {'name': '地点A', 'description': '高さ "高い", 大きい', 'h': 21.5, 'n': 3}),
+      (const LatLng(33.92, 135.98), {'name': 'point_b', 'h': null, 'n': 7}),
       (const LatLng(33.93, 135.99), {'name': null, 'description': 'line\nbreak', 'h': 0.125}),
     ]);
     await g.addLayer('lns', GeometryType.linestring);
     await g.addAttributeColumns('lns', attrs);
     await g.addLinesBatch('lns', [
       (const [LatLng(33.90, 135.90), LatLng(33.91, 135.91), LatLng(33.905, 135.93)], {
-        'name': '林道 A',
+        'name': '路線 A',
         'h': 3.0,
       }),
       (const [LatLng(33.80, 135.80), LatLng(33.81, 135.82)], {
@@ -131,7 +131,7 @@ void main() {
           [LatLng(33.0, 135.0), LatLng(33.0, 135.1), LatLng(33.1, 135.1), LatLng(33.1, 135.0)],
           [LatLng(33.02, 135.02), LatLng(33.08, 135.02), LatLng(33.08, 135.08), LatLng(33.02, 135.08), LatLng(33.02, 135.02)],
         ], {
-        'name': '小班 1-い',
+        'name': '区画 1-い',
         'h': 12.25,
         'n': 10,
       }),
@@ -179,7 +179,7 @@ void main() {
     );
 
     final richProject = QgsProject(
-      name: '北山 & <テスト>',
+      name: 'サンプル & <テスト>',
       root: [
         QgsGroup(
           name: 'sub',
@@ -207,7 +207,7 @@ void main() {
                         labelHaloColor: Color(0xFFFFFFEE),
                       ),
                     ),
-                    layer('v_pts2', 'スギ', table: 'pts', path: './sub/a.gpkg', subset: "樹種 = 'スギ' | x", visible: false),
+                    layer('v_pts2', 'A種', table: 'pts', path: './sub/a.gpkg', subset: "区分 = 'A種' | x", visible: false),
                   ],
                 ),
               ],
@@ -232,13 +232,13 @@ void main() {
               ],
             ),
             QgsGroup(
-              name: 'stands',
+              name: 'parcels',
               children: [
                 layer(
-                  'v_stands',
-                  'stands',
+                  'v_parcels',
+                  'parcels',
                   geometry: GeometryType.polygon,
-                  table: 'stands',
+                  table: 'parcels',
                   path: './b.gpkg',
                   style: const QgsStyle(
                     fillColor: Color(0xFF00FF00),
@@ -273,21 +273,21 @@ void main() {
           name: 'p344',
           root: [
             QgsGroup(
-              name: '林小班.gpkg',
+              name: '区画.gpkg',
               children: [
                 QgsGroup(
-                  name: 'rinshoban',
+                  name: 'parcels',
                   children: [
                     layer(
                       '___56902204_7d58_4032_ab25_8588e0e0aa73',
                       '大きい',
                       geometry: GeometryType.polygon,
-                      table: 'rinshoban',
-                      path: './林小班.gpkg',
+                      table: 'parcels',
+                      path: './区画.gpkg',
                       subset: 'area > 200',
                       style: const QgsStyle(fillColor: Color(0xFF123456), strokeWidthPx: 2, labelEnabled: true, labelField: 'name'),
                     ),
-                    layer('new_one', '新しい', table: 'rinshoban', path: './林小班.gpkg'),
+                    layer('new_one', '新しい', table: 'parcels', path: './区画.gpkg'),
                   ],
                 ),
               ],

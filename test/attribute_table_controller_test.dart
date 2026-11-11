@@ -241,20 +241,20 @@ void main() {
       await layer.updateChildren();
     });
     addTearDown(() => tester.runAsync(close));
-    final table = CsvTable.parse(Uint8List.fromList(utf8.encode('name,樹種\np0,スギ\n')));
+    final table = CsvTable.parse(Uint8List.fromList(utf8.encode('name,区分\np0,種別A\n')));
     layer.debugJoins = [
-      ResolvedJoin.build(const LayerJoin(table: 't.csv', joinField: 'name', targetField: 'name', prefix: '簿_'), table)!,
+      ResolvedJoin.build(const LayerJoin(table: 't.csv', joinField: 'name', targetField: 'name', prefix: '台帳_'), table)!,
     ];
     final ctrl = await pumpController(tester);
     await tester.runAsync(ctrl.initialize);
-    final joined = ctrl.columns.firstWhere((c) => c.field == '簿_樹種');
+    final joined = ctrl.columns.firstWhere((c) => c.field == '台帳_区分');
     final painter = TextPainter(
-      text: const TextSpan(text: '簿_樹種', style: AttributeTableController.columnTitleStyle),
+      text: const TextSpan(text: '台帳_区分', style: AttributeTableController.columnTitleStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     // 以前は 60 で決め打ち（鎖の印と「…」しか見えなかった）
     expect(joined.width, greaterThanOrEqualTo(painter.width + 16 + 36));
-    expect(joined.width, AttributeTableController.columnWidthFor('簿_樹種', title: '簿_樹種') + 16);
+    expect(joined.width, AttributeTableController.columnWidthFor('台帳_区分', title: '台帳_区分') + 16);
     painter.dispose();
     // 短い列名のふつうの列は今までの幅より狭くしない
     expect(ctrl.columns.firstWhere((c) => c.field == 'h').width, 60);

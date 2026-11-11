@@ -731,7 +731,7 @@ class GoogleDriveService {
   /// 読むだけの呼び出し（一覧・情報取得）を、通信の一時的な失敗なら 1 回だけ取り直す。
   ///
   /// Wi-Fi の切り替わりで名前解決が一瞬落ちる（`Failed host lookup: 'www.googleapis.com'`）ことがある
-  /// （2026-10-12、Pixel 9）。書き込みは二重になりうるので使わない。API のエラー（4xx/5xx）はそのまま投げる
+  /// （2026-10-12、Android 実機）。書き込みは二重になりうるので使わない。API のエラー（4xx/5xx）はそのまま投げる
   @visibleForTesting
   static Future<T> retryTransient<T>(Future<T> Function() call) async {
     try {

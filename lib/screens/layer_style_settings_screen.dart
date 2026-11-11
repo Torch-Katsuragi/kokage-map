@@ -409,7 +409,7 @@ Widget _buildLabelExpressionTile(BuildContext context, SettingsStore store, Void
       columns = [
         ...(await layer.geoPackageFile.getColumnNames(layer.layerName, getAll: true))
             .where((c) => !isInternalColumn(c) && !isSystemColumn(c)),
-        // 結合した表の列（森林簿の樹種など）もラベルに使える
+        // 結合した表の列（台帳の種別など）もラベルに使える
         ...layer.joinedFieldNames,
       ];
       final rows = layer.children

@@ -60,7 +60,7 @@ dispose()
 `dispose()` を待たずにファイルが端末の外へ出る場面がある。Drive へ上げる（push・マージの「端末を採用」・行単位マージのあと）、
 3-way マージの base に写す、アプリが裏に回る（同じ端末の QGIS・USB で写す・裏で止められる）。
 地図を開いている間はプロジェクトのツリーが `GeoPackageFile` を持ち続けるので、`dispose()` の整合だけでは
-上がったファイルの rtree に足した地物が無く、トリガーも落ちたままだった（Pixel 9 で `ogrinfo -spat` が 0 件）。
+上がったファイルの rtree に足した地物が無く、トリガーも落ちたままだった（実機で `ogrinfo -spat` が 0 件）。
 
 `GeoPackageFile.prepareForHandOff(path)` がその前に同じ整合をする（`SyncBaseStore.prepareForUpload`・`saveBase`・`main.dart` の paused/hidden/detached から）。
 
@@ -98,7 +98,7 @@ web は rtree の焼き直しをせず、開いている写しでトリガーを
 書き直しても 3 回続けて落ちたとき、閉じるときに書けない変更を捨てたときは、通知センターにエラーで残す
 （`BackgroundSaveManager.onPersistentFailure`、`main.dart` で繋ぐ）。
 
-> [!WARNING] 経路ごとに落としていたときは属性の保存が失われた（2026-10-12 Pixel 9）
+> [!WARNING] 経路ごとに落としていたときは属性の保存が失われた（2026-10-12 実機）
 > 以前はトリガーを落とすのが `FeatureRepository` の地物の追加・形の更新・削除だけで、表ごとの「見回り済み」を持っていた。
 > 属性の UPDATE（編集パネル・属性表）・置換・計算・写しなどは「どこかで先に落としてある」ことに頼っていた。
 > 外へ出す前にトリガーを戻すようにしたら、戻したあとの属性の保存が `no such function: ST_IsEmpty` で毎回落ち、
@@ -168,15 +168,14 @@ View だけがレイヤになるので **1:1 対応**が成立する。View の�
 > --- '既定'        valid=True  count=12  crs=EPSG:4326
 > --- '大きい区画'  valid=True  count=6   subset='area > 105'
 >                   symbol=SimpleMarker color=#1e90ff
-> [group] 林小班.gpkg → [group] rinshoban → [layer] 既定 / 大きい区画
+> [group] 区画.gpkg → [group] parcels → [layer] 既定 / 大きい区画
 > ```
 > 相対パスの解決・subsetの適用（12→6）・レンダラの読み取り・グループ構造の
 > いずれも意図どおり。
 
 ### QGISで確かめる手順
 
-メイン PC（DESKTOP-16MQHHF）には 2026-09-12 に QGIS 4.2.0 を普通にインストールした
-（`C:\Program Files\QGIS 4.2.0`）。こちらは pwsh から直接呼べる:
+QGIS 4.2.0 が通常インストールされている環境（`C:\Program Files\QGIS 4.2.0`）では pwsh から直接呼べる:
 
 ```powershell
 & 'C:\Program Files\QGIS 4.2.0in\python-qgis.bat' tool/qgis/check_qgs.py <project.qgs>
@@ -185,8 +184,7 @@ View だけがレイヤになるので **1:1 対応**が成立する。View の�
 
 ⚠ `cmd //c` 経由だと Git Bash がパスを壊す。pwsh の `&` で呼ぶ。
 
-Surface（開発機）には QGIS が**インストールされていない**（管理者権限が要るため）。
-代わりにMSIを展開しただけのものを使っている。
+管理者権限のない環境では、MSIを展開しただけのものを使える。
 
 ```powershell
 # 1. MSIを取得（署名がOSGeo財団のものであることを確認すること）
@@ -223,13 +221,13 @@ QGIS で足したラスタが同じ `.tif` を指していれば、書き戻し�
 詳細は [[external-formats#ラスタ（2026-10-09 実装）]]。XML の形は `test/qgs_raster_test.dart`、読み戻しは `test/qgs_raster_read_back_test.dart`。
 
 > [!NOTE] QGIS 4.2.0 で実開封を確認済み（2026-09-12、開発機に `C:\Program Files\QGIS 4.2.0` を入れて headless）
-> 実機（Pixel 9）から pull した `Kitayama-2026/` に `test_overlay.tif` を `QgsRasterLayer` で足した `.qgs` を
+> 実機から pull した `Sample-2026/` に `test_overlay.tif` を `QgsRasterLayer` で足した `.qgs` を
 > `python-qgis.bat` の `QgsProject.read()` で開き、そのまま QGIS 側で編集して保存し直し、アプリ側で読み戻した。
 > ```
 > read() = True   badLayers = []
 > raster 'test_overlay'  valid=True  crs=EPSG:4326  bands=3  400x300
 >        extent 135.5696,33.8969 : 135.5740,33.8996   ← GeoTIFF タグどおり
-> tree: [group] Kitayama-2026 → 3 vector + raster、順序も `orderedLayerIds` どおり
+> tree: [group] Sample-2026 → 3 vector + raster、順序も `orderedLayerIds` どおり
 > QGIS 側で編集して write(): saveUser / version="4.2.0-Belém do Pará" / subset `area_ha > 5` → 6 件 / 道レイヤ消灯 / ラスタ opacity 0.5
 > アプリ側 QgsDocument.apply(): 名前と参照は直し、QGIS の <pipe>（opacity 0.5）と <projectCrs> は残る
 > アプリ側 QgsImporter.import(): 3 View（subset は filter に、消灯はレイヤ可視に）、ラスタは報告せずに飛ばす
@@ -256,7 +254,7 @@ QGIS で足したラスタが同じ `.tif` を指していれば、書き戻し�
 
 1. **root外への参照は丸ごと捨てる。** `C:\work\data.shp` やPostGIS接続を指すレイヤは
    山の中のスマホでは開けない。残すと「レイヤはあるが表示されない」最悪の状態になる
-   - ⚠ 相対パスで root 外を指すケース（`../shared/kyoyu.gpkg`）は林業では現実にありそう。
+   - ⚠ 相対パスで root 外を指すケース（`../shared/kyoyu.gpkg`）も想定されるため、
      判定は**正規化した絶対パス**で行う
 2. **QGISのグループ階層は採らない。** レイヤ構造は dir 構造に置き換える
    （`.gpkg` の実在パスで既存ツリーのレイヤに突き合わせる）
@@ -329,7 +327,7 @@ QGIS で足したラスタが同じ `.tif` を指していれば、書き戻し�
 
 ## 描き分け（分類・段階・ルール）の再現（2026-10-11）
 
-QGIS で `categorizedSymbol` / `graduatedSymbol` / `RuleRenderer` にしたレイヤ（樹種で分類した小班など）を、
+QGIS で `categorizedSymbol` / `graduatedSymbol` / `RuleRenderer` にしたレイヤ（種別で分類した区画など）を、
 それまでの「代表の 1 色」ではなく地物ごとに QGIS と同じシンボルで描く。2D・3D・引いた段の焼き込みのどれも同じ経路。
 
 ```
@@ -423,13 +421,13 @@ QGIS のレイヤのプロパティ →「属性フォーム」で決めた入�
 テストは `test/qgis_form_test.dart`（QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_forms.qgs` を読む・並び・式・既定値・制約・欄の出し分け。
 作り直しは `tool/qgis/write_form_fixture.py`）と `test/qgs_form_import_test.dart`（取り込み・値の関係の解決と選択肢・新しい地物の既定値・補完・往復で残る）。
 
-## 表の結合（森林簿 CSV と計画図）（2026-10-11）
+## 表の結合（属性 CSV と図面レイヤ）（2026-10-11）
 
-森林簿（林班・小班ごとの樹種・林齢・面積の表）は CSV や Excel で、計画図（小班のポリゴン）は shp・gpkg で配られる。
+台帳データ（区画ごとの種別・属性・面積の表）が CSV や Excel で、図面（区画のポリゴン）が shp・gpkg で別々に配られる場合がある。
 QGIS ではレイヤのプロパティ →「結合」で 1 つの列どうしを結ぶ（`.qgs` の `<vectorjoins>`）。アプリはそれを読んで同じ値を出し、`.qgs` へそのまま書き戻す。
 
 > [!NOTE] QGIS 互換のためだけに持つ（2026-10-12）
-> shp を読むのと同じ立ち位置。森林簿の列も gpkg に入れてしまえば済むので、アプリで結合を作る・直す画面は持たない
+> shp を読むのと同じ立ち位置。台帳の列も gpkg に入れてしまえば済むので、アプリで結合を作る・直す画面は持たない
 > （一晩だけあったレイヤ長押しの「表を結合」は未公開のまま撤去した）。結合は QGIS で設定する。
 
 ```
@@ -452,7 +450,7 @@ LayerNode.loadJoins（地物の読み込みのたび）
   12.0 と "12" は当たる。NULL は当たらない。同じ値の行が複数あれば、記憶あり（`memoryCache="1"`、既定）は最後の行、なしは最初の行
 - **列**: 足す列は `<接頭辞><表の列名>`。接頭辞の既定は `<表の名前>_`（QGIS の既定も `<結合先のレイヤ名>_`。アプリは表の QGIS のレイヤ名を
   ファイル名から拡張子を除いたものに揃えて書くので一致する）。結合の列そのものと、既にある名前の列は足さない（QGIS と同じ）
-- **速さ**: 表は読み込みのたびに 1 回だけ Map にし、地物ごとには引くだけ。1 万行の CSV で、読む 80 ms・Map にする 12 ms・1 万件の照合と属性の合成 35 ms（2026-10-11、メイン PC のテスト VM。
+- **速さ**: 表は読み込みのたびに 1 回だけ Map にし、地物ごとには引くだけ。1 万行の CSV で、読む 80 ms・Map にする 12 ms・1 万件の照合と属性の合成 35 ms（2026-10-11、開発 PC のテスト VM。
   `test/table_join_test.dart` は 1 秒を上限に確かめる）。
   表の中身は更新時刻と大きさで控える（`TableCache`）
 - **出る所**: 属性テーブル（右側に鎖の印・薄い色で読み取り専用。フォーム表示も）、ラベル（式とラベルの組み立ての列の一覧）、
@@ -462,12 +460,12 @@ LayerNode.loadJoins（地物の読み込みのたび）
   照合の結果を主キーごとに並べる（gpkg の SQLite で結合し直さない。照合の決まりが 1 か所に揃う）。View で絞らず全部の地物。
   1 行目は空の行（VALUES は空にできない）。数の列は数のまま書かれる（GDAL 3.13 で確認）
 - **使えない所**: 属性テーブルのフィルタ（式を gpkg の SQL にする）・統計・置換・一括設定・View のフィルタ（`|subset=` は gpkg の SQL）。
-  結合の先は表だけ（QGIS ではベクタのレイヤにも結べる。読み戻しで報告して外す）。林班と小班が別の列なら、QGIS で両側に 1 つの列を作ってから結ぶ
+  結合の先は表だけ（QGIS ではベクタのレイヤにも結べる。読み戻しで報告して外す）。複数の列の組み合わせで結ぶ場合は、QGIS で両側に 1 つの列を作ってから結ぶ
 
 ### `.qgs` との往復
 
 - **書く**（`QgsProjectBuilder`・`QgsWriter`・`QgsDocument`）: 表は `QgsTableLayer`。`provider=delimitedtext`、
-  `datasource=file:./%E6%A3%AE%E6%9E%97%E7%B0%BF.csv?type=csv&encoding=CP932&maxFields=10000&detectTypes=yes&geomType=none&subsetIndex=no&watchFile=no`
+  `datasource=file:./ledger.csv?type=csv&encoding=CP932&maxFields=10000&detectTypes=yes&geomType=none&subsetIndex=no&watchFile=no`
   （QGIS の「CSV テキストレイヤを追加」が書く形。パスは % エンコードした相対）、`wkbType="NoGeometry"`。id は相対パスのハッシュ（`table_<hash>`）。
   ツリーには dir のグループの中に `providerKey="delimitedtext"` で載る。
   レイヤ（View）の maplayer に `<vectorjoins><join joinLayerId targetFieldName joinFieldName memoryCache [customPrefix hasCustomPrefix]><joinFieldsSubset>`
@@ -560,7 +558,7 @@ GDAL 拡張の件数キャッシュ。こかげマップ が直接 INSERT/DELETE
   `id`・`fid`・`geometry` という名前でも主キー・形の列でなければふつうの属性で、属性表・情報パネル・ラベル・描き分けの式に
   自分の値で出て、書き込み・写す・足すでも名前では外さない（外すのは表の主キーと形の列だけ）。
   属性表は QGIS と同じく主キーの列（fid）を読み取り専用で出す（主キーの無い表の rowid は列ではないので出ない）。
-  以前は地物番号を `id`、解いた形を `geometry` に入れていて、主キーが fid の表や主キーの無い表の `id` の列（林小班の番号など）が
+  以前は地物番号を `id`、解いた形を `geometry` に入れていて、主キーが fid の表や主キーの無い表の `id` の列（区画の番号など）が
   地物番号に見えて直せず、形の列が geom の表の `geometry` の列は属性に出なかった（2026-10-12）。
   テストは `test/gpkg_id_column_test.dart`・`test/gpkg_geometry_attribute_test.dart`
 - **形の列の名前は表ごとに `gpkg_geometry_columns` から引く**（`GeoPackageSchema.geometryColumn`。開いている間は控える）。

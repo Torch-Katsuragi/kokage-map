@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-/// レイヤドロワーとフォルダ選択の 1 行（2026-10-06 に刷新）
+/// レイヤ一覧パネルとフォルダ選択の 1 行（2026-10-06 に刷新）
 ///
 /// 右端は表示/非表示の目だけ。メニューは長押しか右クリックで出す（⋮ は置かない）。
 /// 動かせる行は左へスワイプすると「移動」（移動先を選ぶ）。以前の長押しドラッグは、長押しのメニューと取り合うのでやめた。

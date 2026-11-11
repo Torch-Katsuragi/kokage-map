@@ -31,7 +31,7 @@ import 'web_mercator.dart';
 ///
 /// - 配信元: `https://3d.wakayamaken.geocloud.jp/outside/GridData/Common/3DData/{mesh}_1g_{mesh}_1g/potree/`
 /// - 原典の平面直角座標系第 VI 系（EPSG:6674）の 1.0m 正方グリッドに無補間で戻してから、
-///   1px 孤立スパイク（樹冠・電線等の取り残し）だけを 3×3 近傍判定で除去し、砂防堰堤・擁壁・作業道法肩の角を保つ。
+///   1px 孤立スパイク（植生・電線等の取り残し）だけを 3×3 近傍判定で除去し、砂防堰堤・擁壁・道路法肩の角を保つ。
 class WakayamaPotreeDemGenerator {
   WakayamaPotreeDemGenerator({http.Client? client}) : _http = client ?? http.Client();
 

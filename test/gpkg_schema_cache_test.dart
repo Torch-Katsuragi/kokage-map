@@ -43,14 +43,14 @@ void main() {
     expect(await columns(gpkg), ['fid', 'name', 'dbh']);
     expect(await gpkg.getTableColumns('pts'), ['fid', 'geom', 'name', 'dbh']);
 
-    await gpkg.renameColumn('pts', 'dbh', '胸高直径');
-    expect(await columns(gpkg), ['fid', 'name', '胸高直径']);
+    await gpkg.renameColumn('pts', 'dbh', '幅員');
+    expect(await columns(gpkg), ['fid', 'name', '幅員']);
     expect(
       (await gpkg.getAttributeColumnInfo('pts')).map((c) => c['name']),
-      ['fid', 'name', '胸高直径'],
+      ['fid', 'name', '幅員'],
     );
 
-    await gpkg.dropColumn('pts', '胸高直径');
+    await gpkg.dropColumn('pts', '幅員');
     expect(await columns(gpkg), ['fid', 'name']);
   });
 

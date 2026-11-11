@@ -24,7 +24,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     KMetaService.instance.clearCache();
     tmp = await Directory.systemTemp.createTemp('kmeta_qgs_');
-    dir = (await Directory(p.join(tmp.path, 'Kitayama')).create()).path;
+    dir = (await Directory(p.join(tmp.path, 'Sample')).create()).path;
     ProjectPathResolver.instance.setRootPathGetter(() => dir);
   });
   tearDown(() async {
@@ -41,9 +41,9 @@ void main() {
       layers: {'a.gpkg/trees': KMetaLayerStyle(polygonFillColor: Color(0xFF2E7D32), polygonBorderWidth: 2)},
     ),
     layout: KMetaLayout(sortOrder: ['b.gpkg', 'a.gpkg'], expanded: true),
-    sync: KMetaSync(driveId: 'drive-1', driveFolderName: 'Kitayama', isReadOnly: true),
+    sync: KMetaSync(driveId: 'drive-1', driveFolderName: 'Sample', isReadOnly: true),
     views: {
-      'a.gpkg/trees': [KMetaView(name: 'スギ', filter: "species = 'sugi'")],
+      'a.gpkg/trees': [KMetaView(name: 'A種', filter: "species = 'type_a'")],
     },
   );
 
@@ -89,7 +89,7 @@ void main() {
     // QGIS で開ける `.qgs` で、印も付いている
     final doc = QgsDocument.parse(File(qgsPath()).readAsStringSync());
     expect(doc.lastWrittenByKokage, isTrue);
-    expect(doc.stamp!.dirName, 'Kitayama');
+    expect(doc.stamp!.dirName, 'Sample');
   });
 
   test('旧 `.kmeta.json` だけなら `.qgs` に移し、`.kmeta.json.migrated` に改名する', () async {
@@ -110,7 +110,7 @@ void main() {
     final v1 = {...rich.toJson(), 'version': 1};
     File(legacyPath()).writeAsStringSync(jsonEncode(v1));
     final meta = await KMetaService.instance.getMeta(dir);
-    expect(meta.views['a.gpkg/trees']!.single.name, 'スギ');
+    expect(meta.views['a.gpkg/trees']!.single.name, 'A種');
     expect(meta.visibility.images['IMG_1.jpg'], isFalse);
   });
 
@@ -124,7 +124,7 @@ void main() {
   });
 
   test('QGIS で作った `.qgs`（kokage/meta 無し）は空の設定。設定を持つ dir として扱う', () async {
-    File(qgsPath()).writeAsStringSync(QgsDocument.create(projectName: 'Kitayama').toXmlString());
+    File(qgsPath()).writeAsStringSync(QgsDocument.create(projectName: 'Sample').toXmlString());
     final read = await QgsMetaStore.read(dir);
     expect(read, isNotNull);
     expect(read!.isEmpty, isTrue);
@@ -182,34 +182,34 @@ void main() {
   test('dir を改名しても、印を持つ `.qgs` を新しい名前に付け替えて引き継ぐ（連携していない dir）', () async {
     final local = rich.copyWith(sync: const KMetaSync());
     await QgsMetaStore.write(dir, local);
-    final renamed = p.join(tmp.path, 'Kitayama-2027');
+    final renamed = p.join(tmp.path, 'Sample-2027');
     await Directory(dir).rename(renamed);
 
     final read = await QgsMetaStore.read(renamed);
-    expect(read!.views['a.gpkg/trees']!.single.name, 'スギ');
-    expect(File(p.join(renamed, 'Kitayama-2027.qgs')).existsSync(), isTrue);
-    expect(File(p.join(renamed, 'Kitayama.qgs')).existsSync(), isFalse);
+    expect(read!.views['a.gpkg/trees']!.single.name, 'A種');
+    expect(File(p.join(renamed, 'Sample-2027.qgs')).existsSync(), isTrue);
+    expect(File(p.join(renamed, 'Sample.qgs')).existsSync(), isFalse);
   });
 
   test('Drive 連携している dir は `<Drive のフォルダ名>.qgs`。ローカルの dir 名が端末ごとに違っても同じ', () async {
-    // この端末ではローカルの dir 名が「Kitayama」、Drive のフォルダ名は「北山 共有」
-    const linked = KMeta(sync: KMetaSync(driveId: 'd', driveFolderName: '北山 共有'));
+    // この端末ではローカルの dir 名が「Sample」、Drive のフォルダ名は「サンプル 共有」
+    const linked = KMeta(sync: KMetaSync(driveId: 'd', driveFolderName: 'サンプル 共有'));
     await QgsMetaStore.write(dir, const KMeta());
-    expect(File(p.join(dir, 'Kitayama.qgs')).existsSync(), isTrue);
+    expect(File(p.join(dir, 'Sample.qgs')).existsSync(), isTrue);
 
     await QgsMetaStore.write(dir, linked); // 連携を始めた
-    expect(File(p.join(dir, '北山 共有.qgs')).existsSync(), isTrue);
-    expect(File(p.join(dir, 'Kitayama.qgs')).existsSync(), isFalse, reason: '二重にしない');
-    final doc = QgsDocument.parse(File(p.join(dir, '北山 共有.qgs')).readAsStringSync());
-    expect(doc.stamp!.dirName, '北山 共有', reason: '印とプロジェクト名も Drive の名前（端末ごとに書き換えない）');
+    expect(File(p.join(dir, 'サンプル 共有.qgs')).existsSync(), isTrue);
+    expect(File(p.join(dir, 'Sample.qgs')).existsSync(), isFalse, reason: '二重にしない');
+    final doc = QgsDocument.parse(File(p.join(dir, 'サンプル 共有.qgs')).readAsStringSync());
+    expect(doc.stamp!.dirName, 'サンプル 共有', reason: '印とプロジェクト名も Drive の名前（端末ごとに書き換えない）');
 
-    // 別の端末で「北山 (1)」という dir に落ちてきても、名前を付け替えずに読む
-    final other = (await Directory(p.join(tmp.path, '北山 (1)')).create()).path;
-    await File(p.join(dir, '北山 共有.qgs')).copy(p.join(other, '北山 共有.qgs'));
+    // 別の端末で「サンプル (1)」という dir に落ちてきても、名前を付け替えずに読む
+    final other = (await Directory(p.join(tmp.path, 'サンプル (1)')).create()).path;
+    await File(p.join(dir, 'サンプル 共有.qgs')).copy(p.join(other, 'サンプル 共有.qgs'));
     final read = await QgsMetaStore.read(other);
     expect(read!.sync.driveId, 'd');
-    expect(File(p.join(other, '北山 共有.qgs')).existsSync(), isTrue);
-    expect(File(p.join(other, '北山 (1).qgs')).existsSync(), isFalse);
+    expect(File(p.join(other, 'サンプル 共有.qgs')).existsSync(), isTrue);
+    expect(File(p.join(other, 'サンプル (1).qgs')).existsSync(), isFalse);
 
     // Drive のフォルダ名に使えない文字は置き換える
     expect(
@@ -239,7 +239,7 @@ void main() {
     await const QgsProjectBuilder().writeTo(root);
     KMetaService.instance.clearCache();
     final meta = await KMetaService.instance.getMeta(dir);
-    expect(meta.views['a.gpkg/trees']!.single.filter, "species = 'sugi'");
+    expect(meta.views['a.gpkg/trees']!.single.filter, "species = 'type_a'");
   });
 
   test('設定の保存とレイヤの書き出しが同時でも、どちらも残る', () async {
@@ -266,12 +266,12 @@ void main() {
 
     // Drive から落ちてきたもの: 持ち主の端末が書いた（読み取り専用ではない）、View が 1 枚増えている
     final remote = rich.copyWith(
-      sync: const KMetaSync(driveId: 'drive-1', driveFolderName: 'Kitayama', isReadOnly: false),
+      sync: const KMetaSync(driveId: 'drive-1', driveFolderName: 'Sample', isReadOnly: false),
       views: {
-        'a.gpkg/trees': const [KMetaView(name: 'スギ'), KMetaView(name: 'ヒノキ')],
+        'a.gpkg/trees': const [KMetaView(name: 'A種'), KMetaView(name: 'B種')],
       },
     );
-    final doc = QgsDocument.create(projectName: 'Kitayama')..kokageMeta = jsonEncode(remote.toJson());
+    final doc = QgsDocument.create(projectName: 'Sample')..kokageMeta = jsonEncode(remote.toJson());
     File(qgsPath()).writeAsStringSync(doc.toXmlString());
 
     await KMetaService.instance.afterReplace(qgsPath(), keep);

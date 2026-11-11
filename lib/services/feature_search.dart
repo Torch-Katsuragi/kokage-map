@@ -13,13 +13,13 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// こかげマップ: 見えているレイヤの属性を横断して探す（林班番号・名前など）
+// こかげマップ: 見えているレイヤの属性を横断して探す（区画番号・名前など）
 //
 // 1. 打った文字の表記ゆれ（全角・半角・大文字小文字・ひらがな／カタカナ）を数通り作り、
 //    レイヤごとに SQLite の LIKE で当てる（件数に上限。1 万件のレイヤでも全行を Dart に持ってこない）
 // 2. 当たった行の値を正規化して照らし直し、どの列で当たったかと順位（一致・前方一致・部分一致）を決める
 //
-// ⚠ 1 つの値の中で全角と半角が混ざっている（「第１2林班」など）と LIKE の段で漏れる
+// ⚠ 1 つの値の中で全角と半角が混ざっている（「第１2区画」など）と LIKE の段で漏れる
 
 import 'dart:typed_data';
 
@@ -216,7 +216,7 @@ class FeatureSearch {
         continue;
       }
       if (rows.length >= perLayer) truncated = true;
-      // 結合した表の列（森林簿の樹種など）は gpkg に無いので、読み込んである地物の値を見る
+      // 結合した表の列（台帳の種別など）は gpkg に無いので、読み込んである地物の値を見る
       final joined = layer.joins.isEmpty ? const <FeatureSearchHit>[] : _searchJoined(layer, n, perLayer);
       if (joined.length >= perLayer) truncated = true;
       if (rows.isEmpty && joined.isEmpty) continue;

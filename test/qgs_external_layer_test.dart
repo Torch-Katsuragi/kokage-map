@@ -56,7 +56,7 @@ void main() {
     ProjectPathResolver.instance.setRootPathGetter(() => proj);
 
     // 平面直角 VI 系の点（.cpg なし = Shift_JIS）
-    final base = p.join(proj, '林班');
+    final base = p.join(proj, '区画');
     await writePointShp(ExternalGdal.instance, base, [
       (0.0, 0.0, {'H': 10.0}),
       (10.0, 10.0, {'H': 20.0}),
@@ -106,8 +106,8 @@ void main() {
     final root = await loadTree();
     final project = await const QgsProjectBuilder().build(root);
     final layers = project.layers;
-    final shp = layers.singleWhere((l) => l.dataSourcePath == './林班.shp');
-    expect(shp.dataSourceUri, './林班.shp', reason: '1 ファイル 1 レイヤなら |layername= を付けない');
+    final shp = layers.singleWhere((l) => l.dataSourcePath == './区画.shp');
+    expect(shp.dataSourceUri, './区画.shp', reason: '1 ファイル 1 レイヤなら |layername= を付けない');
     // キャッシュは ogr2ogr が元の CRS のまま書いている（.prj → EPSG:6674）
     expect(shp.crs.authId, 'EPSG:6674');
     expect(shp.crs.isGeographic, isFalse);
@@ -126,21 +126,21 @@ void main() {
       }
     }
     final xml = File(result!.path).readAsStringSync();
-    expect(xml, contains('<datasource>./林班.shp</datasource>'));
+    expect(xml, contains('<datasource>./区画.shp</datasource>'));
     expect(xml, contains('encoding="CP932"'));
   }, skip: skip);
 
   test('書く: .cpg のある shp は .cpg の文字コードを書く（QGIS は .qgs の encoding を .cpg より優先する）', () async {
-    await writePointShp(ExternalGdal.instance, p.join(proj, '小班'), [
-      (0.0, 0.0, {'name': 'スギ'}),
+    await writePointShp(ExternalGdal.instance, p.join(proj, '地区'), [
+      (0.0, 0.0, {'name': '地点1'}),
     ], epsg: 'EPSG:6674');
     await writePointShp(ExternalGdal.instance, p.join(proj, 'utf8'), [
-      (0.0, 0.0, {'name': 'スギ'}),
+      (0.0, 0.0, {'name': '地点1'}),
     ], epsg: 'EPSG:6674', encoding: 'UTF-8');
     final root = await loadTree();
     final project = await const QgsProjectBuilder().build(root);
     final byPath = {for (final l in project.layers) l.dataSourcePath: l.providerEncoding};
-    expect(byPath['./小班.shp'], 'CP932');
+    expect(byPath['./地区.shp'], 'CP932');
     expect(byPath['./utf8.shp'], 'UTF-8');
   }, skip: skip);
 
@@ -153,12 +153,12 @@ void main() {
     final doc = XmlDocument.parse(File(path).readAsStringSync());
     final container = doc.findAllElements('projectlayers').single;
     final shpLayer = container.findElements('maplayer').firstWhere(
-      (e) => e.getElement('datasource')!.innerText == './林班.shp',
+      (e) => e.getElement('datasource')!.innerText == './区画.shp',
     );
     final copy = shpLayer.copy();
     copy.getElement('id')!.innerText = 'tall_copy';
     copy.getElement('layername')!.innerText = '高い';
-    copy.getElement('datasource')!.innerText = './林班.shp|subset="H" > 15';
+    copy.getElement('datasource')!.innerText = './区画.shp|subset="H" > 15';
     container.children.add(copy);
     // 型ごとのサブレイヤ（QGIS が GeoJSON に付ける形）
     final pointCopy = shpLayer.copy();
@@ -170,7 +170,7 @@ void main() {
 
     final result = await const QgsImporter().import(path, root);
     expect(result.discarded, isEmpty);
-    final shp = root.children.whereType<ExternalLayerNode>().singleWhere((n) => n.name == '林班.shp');
+    final shp = root.children.whereType<ExternalLayerNode>().singleWhere((n) => n.name == '区画.shp');
     final layer = shp.children.whereType<LayerNode>().single;
     expect(layer.views.map((v) => v.name), contains('高い'));
     expect(layer.views.firstWhere((v) => v.name == '高い').filter, '"H" > 15');
@@ -183,7 +183,7 @@ void main() {
   test('gpkg に変換すると、設定の鍵が無くても自動更新が .qgs を gpkg に向け直す（2026-10-11）', () async {
     final root = await loadTree();
     final written = await const QgsProjectBuilder().writeTo(root);
-    expect(File(written!.path).readAsStringSync(), contains('<datasource>./林班.shp</datasource>'));
+    expect(File(written!.path).readAsStringSync(), contains('<datasource>./区画.shp</datasource>'));
 
     // アプリと同じ配線（main.dart）。フォルダ設定は何も持たない（鍵の移し替えは何も書かない）
     final auto = QgsAutoRefresh.instance;
@@ -194,7 +194,7 @@ void main() {
       await auto.flushNow();
       expect(await KMetaService.instance.getRawMeta(proj), isNull, reason: '前提: 設定を持たない');
 
-      final shp = root.children.whereType<ExternalLayerNode>().singleWhere((n) => n.name == '林班.shp');
+      final shp = root.children.whereType<ExternalLayerNode>().singleWhere((n) => n.name == '区画.shp');
       final result = await ExternalLayerConverter.convert(shp);
       expect(result.outcome, ExternalConvertOutcome.converted);
       expect(auto.hasPending, isTrue, reason: '変換で子の顔ぶれが変わったので待ちが立つ');
@@ -204,9 +204,9 @@ void main() {
           .findAllElements('datasource')
           .map((e) => e.innerText)
           .toList();
-      expect(sources, contains('./林班.gpkg|layername=林班'));
-      expect(sources.where((s) => s.startsWith('./林班.shp')), isEmpty);
-      final gpkg = root.children.whereType<GeoPackageNode>().singleWhere((n) => n.name == '林班.gpkg');
+      expect(sources, contains('./区画.gpkg|layername=区画'));
+      expect(sources.where((s) => s.startsWith('./区画.shp')), isEmpty);
+      final gpkg = root.children.whereType<GeoPackageNode>().singleWhere((n) => n.name == '区画.gpkg');
       await gpkg.geoPackageFile.dispose();
     } finally {
       LayerTreeNode.onStructureChanged = null;

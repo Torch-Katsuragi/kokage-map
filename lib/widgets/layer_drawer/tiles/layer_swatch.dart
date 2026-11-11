@@ -45,7 +45,7 @@ class LayerSwatch extends StatelessWidget {
     final Color color = switch (layer) {
       PointLayerNode() => s.resolveColor(pointColorDef, style),
       LineLayerNode() => s.resolveColor(lineColorDef, style),
-      // 面は枠の色（林班のように塗りが薄く枠が本体のことが多い）。塗りが濃ければ塗りの色
+      // 面は枠の色（区画境界のように塗りが薄く枠が本体のことが多い）。塗りが濃ければ塗りの色
       PolygonLayerNode() => s.resolveDouble(polygonFillOpacityDef, style) >= 0.5
           ? s.resolveColor(polygonFillColorDef, style)
           : s.resolveColor(polygonBorderColorDef, style),

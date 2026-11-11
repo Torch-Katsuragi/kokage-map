@@ -390,7 +390,7 @@ void main() {
       expect(Directory(p.join(a, 'sub')).existsSync(), isTrue);
     });
 
-    // 「アップロード」を押したとき名前解決に失敗して、空の一覧＝「同期済み」と出ていた（2026-10-12、Pixel 9）。
+    // 「アップロード」を押したとき名前解決に失敗して、空の一覧＝「同期済み」と出ていた（2026-10-12、Android 実機）。
     // 空の一覧は「変えたものが無い」の意味なので、取れなかったときは投げて、帳簿も書かない
     test('根の一覧が取れなければ、マージの一覧もフォルダの反映も投げ、帳簿は変えない', () async {
       await shared();
@@ -531,8 +531,8 @@ void main() {
 
     test('許可リストと大文字小文字', () {
       for (final n in [
-        'IMG.JPG', 'x.GPKG', 'a.Tif', '林班.shp', '林班.SHX', '林班.dbf', '林班.prj', '林班.cpg', '林班.qix',
-        '林班.sbn', '林班.sbx', '林班.shp.xml', 'a.geojson', 'a.json', 'a.kml', 'a.KMZ', 'a.csv', 'p.qgs',
+        'IMG.JPG', 'x.GPKG', 'a.Tif', '区画.shp', '区画.SHX', '区画.dbf', '区画.prj', '区画.cpg', '区画.qix',
+        '区画.sbn', '区画.sbx', '区画.shp.xml', 'a.geojson', 'a.json', 'a.kml', 'a.KMZ', 'a.csv', 'p.qgs',
       ]) {
         expect(ops.matchesSyncPattern(n), isTrue, reason: n);
       }
@@ -547,7 +547,7 @@ void main() {
 
     test('push は shp 一式・GeoJSON・大文字の拡張子を上げ、点で始まるものは上げない', () async {
       for (final rel in [
-        '林班.shp', '林班.shx', '林班.dbf', '林班.prj', '林班.cpg', 'sub/IMG.JPG', 'sub/a.geojson', 'b.json', 'c.kml', 'd.csv',
+        '区画.shp', '区画.shx', '区画.dbf', '区画.prj', '区画.cpg', 'sub/IMG.JPG', 'sub/a.geojson', 'b.json', 'c.kml', 'd.csv',
         '.hidden.json', '.kokage/cache/external/x.gpkg', '.kokage/a.json', 'notes.txt',
       ]) {
         put(rel, 1);
@@ -556,14 +556,14 @@ void main() {
       expect(r.success, isTrue, reason: r.errorMessage);
       expect(
         drive.allPaths(rootId).where((x) => !x.endsWith('.qgs')).toSet(),
-        {'林班.shp', '林班.shx', '林班.dbf', '林班.prj', '林班.cpg', 'sub/IMG.JPG', 'sub/a.geojson', 'b.json', 'c.kml', 'd.csv'},
+        {'区画.shp', '区画.shx', '区画.dbf', '区画.prj', '区画.cpg', 'sub/IMG.JPG', 'sub/a.geojson', 'b.json', 'c.kml', 'd.csv'},
       );
       await tick();
       expect((await engine.checkSyncStatusDetail(a)).status, FolderSyncStatus.synced);
     });
 
     test('pull は Drive に無い shp を手元から消すが、点で始まるものは触らない', () async {
-      await drive.uploadBytes(jpg(1), '林班.shp', rootId);
+      await drive.uploadBytes(jpg(1), '区画.shp', rootId);
       await drive.uploadBytes(jpg(2), 'IMG.JPG', rootId);
       put('古い.shp', 1);
       put('古い.dbf', 1);
@@ -571,7 +571,7 @@ void main() {
       put('.kokage/cache/external/x.gpkg', 1);
       final r = await engine.pull(rootId, a);
       expect(r.success, isTrue, reason: r.errorMessage);
-      expect(local('林班.shp').readAsBytesSync(), jpg(1));
+      expect(local('区画.shp').readAsBytesSync(), jpg(1));
       expect(local('IMG.JPG').readAsBytesSync(), jpg(2));
       expect(local('古い.shp').existsSync(), isFalse);
       expect(local('古い.dbf').existsSync(), isFalse);

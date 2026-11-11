@@ -32,7 +32,7 @@ import 'table_node.dart';
 /// 外部形式のファイル 1 本（shp は付属一式）＝ 1 ノード。
 ///
 /// 描画・属性表・ヒットテストは裏のキャッシュ gpkg（[ExternalLayerCache]）に任せる。
-/// [name] は元のファイル名（`林班.shp`）、[getAbsoluteFilePath] は元のファイルのパス。
+/// [name] は元のファイル名（`区画.shp`）、[getAbsoluteFilePath] は元のファイルのパス。
 /// 編集の入口は [isReadOnly] を見て閉じる（[isInReadOnlyLayer]）
 class ExternalLayerNode extends GeoPackageNode {
   ExternalLayerNode._(
@@ -169,7 +169,7 @@ class ExternalLayerNode extends GeoPackageNode {
     for (final entry in files) {
       if (!ExternalSource.isCandidate(entry.path)) continue; // 速い足切り（中身は読まない）
       if (!await ExternalSource.accepts(entry.path)) {
-        // 座標の列が無い CSV は形の無い表（森林簿など。QGIS で設定した結合の先として読む）
+        // 座標の列が無い CSV は形の無い表（台帳など。QGIS で設定した結合の先として読む）
         if (tableExtensions.contains(p.extension(entry.path).toLowerCase())) {
           nodes.add(TableNode(entry.path, parent: parent));
         }

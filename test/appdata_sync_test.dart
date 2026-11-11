@@ -198,19 +198,19 @@ void main() {
   test('共有フォルダURLリスト3-wayマージ: 新規追加のクローンとローカル削除の伝播、クローン失敗時の非削除', () {
     const entryA = SharedMapEntry(
       driveId: 'idA',
-      folderName: '林班A',
+      folderName: '区画A',
       driveUrl: 'https://drive.google.com/drive/folders/idA',
       isReadOnly: false,
     );
     const entryB = SharedMapEntry(
       driveId: 'idB',
-      folderName: '林班B',
+      folderName: '区画B',
       driveUrl: 'https://drive.google.com/drive/folders/idB',
       isReadOnly: true,
     );
     const entryC = SharedMapEntry(
       driveId: 'idC',
-      folderName: '林班C',
+      folderName: '区画C',
       driveUrl: 'https://drive.google.com/drive/folders/idC',
       isReadOnly: false,
     );

@@ -104,7 +104,7 @@ CSP の出所（足すときは、ここにも書く）:
   GDAL 3.13.3-1 の worker 起動（init と version）・`/beta/` `/privacy/` `/about/` で違反 0。
   インラインの `<script>` を差し込むと止まって報告が届くことも確かめた（コレクタが生きている確認）
 
-本番でしか確かめられないもの（[[TODO]]「次の実機確認」6 に置いた）: GIS のサインインから戻った後の Drive 一覧・同期、
+本番でしか確かめられないもの: GIS のサインインから戻った後の Drive 一覧・同期、
 WMS の背景地図、OPFS / 選んだフォルダからの GDAL 形式、ルームの位置共有と App Check（reCAPTCHA Enterprise）、QR の実カメラ。
 
 > [!WARNING] Windows の `firebase serve` / hosting エミュレータでは headers が効かない

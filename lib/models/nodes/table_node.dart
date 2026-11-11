@@ -13,8 +13,8 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// 形の無い表（座標の列が無い CSV。森林簿など）のノード。読み取り専用で、QGIS で設定した結合の先として読む（アプリでは結合を作らない）。
-// 設計は docs/technical/qgis-interop.md#表の結合（森林簿 CSV と計画図）
+// 形の無い表（座標の列が無い CSV。台帳など）のノード。読み取り専用で、QGIS で設定した結合の先として読む（アプリでは結合を作らない）。
+// 設計は docs/technical/qgis-interop.md#表の結合（属性 CSV と図面レイヤ）
 
 import 'package:path/path.dart' as p;
 

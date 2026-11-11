@@ -12,12 +12,12 @@ import 'package:root_maps/services/qgis/qgs_base_map_import.dart';
 import 'package:root_maps/services/qgis/qgs_raster_source.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-BaseMapProvider _forest() => BaseMapProvider.custom(
-      name: '森林計画対象森林',
+BaseMapProvider _customTheme() => BaseMapProvider.custom(
+      name: 'カスタム主題図',
       urlTemplate: 'https://forest.example.go.jp/xyz/{z}/{x}/{y}.png',
       minZoom: 8,
       maxZoom: 17,
-      attribution: '林野庁',
+      attribution: '国土地理院',
     );
 
 void main() {
@@ -80,13 +80,13 @@ void main() {
     });
 
     test('JSON の往復', () {
-      final p = _forest();
+      final p = _customTheme();
       final back = BaseMapProvider.fromJson(jsonDecode(jsonEncode(p.toJson())) as Map<String, Object?>)!;
       expect(back.id, p.id);
-      expect(back.name, '森林計画対象森林');
+      expect(back.name, 'カスタム主題図');
       expect(back.urlTemplate, p.urlTemplate);
       expect((back.minZoom, back.maxZoom), (8, 17));
-      expect(back.attribution, '林野庁');
+      expect(back.attribution, '国土地理院');
       expect(back.isCustom, isTrue);
       expect(back.cacheId, p.id, reason: 'タイルキャッシュは自分の id で持つ');
       expect(BaseMapProvider.fromJson(const {'url': 'not a url'}), isNull);
@@ -94,7 +94,7 @@ void main() {
 
     test('足すと prefs に書かれ、読み直せる。同じ URL は足さずに既存を返す', () async {
       final svc = BaseMapService();
-      final added = await svc.addCustomProvider(_forest());
+      final added = await svc.addCustomProvider(_customTheme());
       expect(BaseMapProvider.getProviderById(added.id), same(added));
       expect(BaseMapProvider.findByTileUrl('http://forest.example.go.jp/xyz/{z}/{x}/{y}.png'), same(added));
 
@@ -114,11 +114,11 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final decoded = BaseMapService.decodeCustomProviders(prefs.getString(BaseMapService.customProvidersPrefsKey));
       expect(decoded.map((p) => p.id), [added.id]);
-      expect(decoded.single.attribution, '林野庁');
+      expect(decoded.single.attribution, '国土地理院');
 
       // レイヤとしても読み戻せる（定義が先に入っていれば）
       final layer = BaseMapLayer.fromJson(BaseMapLayer(providerId: added.id, opacity: 40).toJson());
-      expect(layer?.provider?.name, '森林計画対象森林');
+      expect(layer?.provider?.name, 'カスタム主題図');
 
       await svc.removeCustomProvider(added.id);
       expect(BaseMapProvider.getProviderById(added.id), isNull);
@@ -132,8 +132,8 @@ void main() {
   });
 
   group('.qgs からの読み戻し（一覧に無い URL）', () {
-    final custom = _forest();
-    final incoming = QgsBaseMap(providerId: custom.id, layerName: '森林', visible: true, opacity: 70, custom: custom);
+    final custom = _customTheme();
+    final incoming = QgsBaseMap(providerId: custom.id, layerName: '主題図', visible: true, opacity: 70, custom: custom);
     const current = [BaseMapLayer(providerId: 'gsi_std')];
 
     test('利用者の地図として上に足す', () {
@@ -153,7 +153,7 @@ void main() {
       final svc = BaseMapService();
       await svc.setLayers(current);
       final names = await QgsBaseMapImport.apply([incoming], service: svc);
-      expect(names, ['森林計画対象森林']);
+      expect(names, ['カスタム主題図']);
       expect(svc.layers.map((l) => l.providerId), ['gsi_std', custom.id]);
       expect(BaseMapProvider.customProviders.map((p) => p.id), [custom.id]);
 

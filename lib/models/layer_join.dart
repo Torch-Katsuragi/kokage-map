@@ -13,9 +13,9 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// レイヤに表（森林簿 CSV など）を結ぶ設定。QGIS のレイヤのプロパティ →「結合」（`.qgs` の `<vectorjoins>`）を読んだもの。
+// レイヤに表（台帳 CSV など）を結ぶ設定。QGIS のレイヤのプロパティ →「結合」（`.qgs` の `<vectorjoins>`）を読んだもの。
 // アプリでは作らない（QGIS 互換のためだけに読む・書き戻す）
-// 設計は docs/technical/qgis-interop.md#表の結合（森林簿 CSV と計画図）
+// 設計は docs/technical/qgis-interop.md#表の結合（属性 CSV と図面レイヤ）
 
 import 'package:path/path.dart' as p;
 
@@ -30,7 +30,7 @@ class LayerJoin {
     this.memoryCache = true,
   });
 
-  /// 結ぶ表のファイル（レイヤのある dir からの相対パス、`/` 区切り。例 `森林簿.csv`）
+  /// 結ぶ表のファイル（レイヤのある dir からの相対パス、`/` 区切り。例 `ledger.csv`）
   final String table;
 
   /// 表の側の列（QGIS の joinFieldName）

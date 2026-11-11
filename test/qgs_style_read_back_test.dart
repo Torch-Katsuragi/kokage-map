@@ -129,9 +129,9 @@ void main() {
       final layer = doc.findAllElements('maplayer').first;
       final copy = layer.copy();
       copy.findElements('id').single.innerText = 'filtered_copy';
-      copy.findElements('layername').single.innerText = 'スギだけ';
+      copy.findElements('layername').single.innerText = 'A種だけ';
       final ds = copy.findElements('datasource').single;
-      ds.innerText = "${ds.innerText}|subset=\"species\" = 'sugi'";
+      ds.innerText = "${ds.innerText}|subset=\"species\" = 'type_a'";
       layer.parentElement!.children.add(copy);
       File(qgs).writeAsStringSync(doc.toXmlString());
     }

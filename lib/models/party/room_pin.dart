@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-/// パーティ位置共有: ルームの共有ピン（集合地点・危険木・作業地点・メモ）
+/// パーティ位置共有: ルームの共有ピン（集合地点・危険箇所・作業地点・メモ）
 ///
 /// RTDB の `/rooms/{code}/pins/{pinId}` に置く。形は `database.rules.json` の `pins` と揃える。
 /// 消すは `deleted: true`（null 削除はルールが拒む。実体は部屋ごと purge される）。

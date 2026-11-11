@@ -124,7 +124,7 @@ class ExternalSourceLayer {
   final bool split;
 
   /// 座標の次元（`ogr2ogr -dim` の値: `XY` `XYZ` `XYM` `XYZM`）。`-nlt` で型を決めると `-dim layer_dim` は効かず
-  /// 高さが落ちる（2026-10-11 Pixel 9）ので、元のレイヤの型から決めて渡す
+  /// 高さが落ちる（2026-10-11 Android 実機）ので、元のレイヤの型から決めて渡す
   final String dim;
 
   /// KMZ の中で読んだ KML（doc.kml の NetworkLink が指す `files/a.kml` など）。null なら元のファイルそのもの
@@ -367,7 +367,7 @@ class ExternalSource {
       throw StateError('KMZ の NetworkLink は KMZ の中の KML だけを読みます（読まなかったもの: ${kmz.skippedLinks.join(', ')}）');
     }
     // 空のレイヤは、ほかに中身のあるレイヤがあれば出さない（GPX は waypoints だけでも routes・tracks・
-    // route_points・track_points の空の 4 枚が並ぶ。2026-10-11 Pixel 9）。全部空なら残す（空の shp も 1 枚のレイヤ）
+    // route_points・track_points の空の 4 枚が並ぶ。2026-10-11 Android 実機）。全部空なら残す（空の shp も 1 枚のレイヤ）
     final filled = out.where((l) => l.featureCount > 0).toList();
     return ExternalSourcePlan(layers: filled.isEmpty ? out : filled, sourceLayerCount: sourceLayerCount);
   }
@@ -480,10 +480,10 @@ class ExternalSource {
         if (!first) '-update',
         ...oo,
         // 形の型はアプリの 3 種（MULTI 系）に揃え、Z・M は型名に付けて元のまま残す（MULTIPOINTZ など）。
-        // ⚠ `-nlt MULTIPOINT -dim XYZ` だと宣言だけ 3 次元になり、値は 2 次元で書かれる（2026-10-11 Pixel 9 で発見）
+        // ⚠ `-nlt MULTIPOINT -dim XYZ` だと宣言だけ 3 次元になり、値は 2 次元で書かれる（2026-10-11 Android 実機で発見）
         '-nlt', '${layer.geometryType.value}${layer.dim.substring(2)}',
         // CSV は座標系を持たない（GDAL は未定義の srs 99999 で書く）。経度・緯度の列だけ受けるので WGS84 と決める
-        // （2026-10-11 Pixel 9 で見つけた）
+        // （2026-10-11 Android 実機で見つけた）
         if (p.extension(path).toLowerCase() == '.csv') ...['-a_srs', 'EPSG:4326'],
         '-nln', layer.name,
         if (layer.where != null) ...['-where', layer.where!],

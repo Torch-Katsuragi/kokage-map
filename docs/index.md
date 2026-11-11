@@ -41,8 +41,7 @@ tags: [index, navigation]
 | ドキュメント | 概要 |
 |-------------|------|
 | [[technical/terrain-3d]] | 3D 地形描画系（純 Dart、2D と 3D の地図面） |
-| [[technical/scene-model]] | シーンモデルの切り出し（MapLibre 撤去前の調査記録） |
-| [[technical/3d-map-design]] | 3D 地図の旧設計メモ（2026-09-07、terrain-3d で上書き） |
+| [[technical/scene-model]] | シーンモデルと地図面のインターフェース（`MapSurface` / `MapScene`） |
 | [[technical/ui-layer-tree]] | レイヤツリーUI更新ガイド（updateChildren） |
 | [[technical/performance]] | 性能（電池・メモリ・起動）の洗い直し |
 
@@ -73,7 +72,6 @@ tags: [index, navigation]
 | [[technical/signing]] | Android署名鍵の管理（保管場所・リリースビルド手順） |
 | [[technical/closed-test-invite]] | クローズドテストへの招待手順 |
 | [[technical/play-permission-video-plan]] | Google Play 権限申請の動画・宣言の計画 |
-| [[technical/development-phases]] | 開発ステップ（MVP〜フェーズ4、初期の計画） |
 
 ### 同梱のネイティブライブラリ
 

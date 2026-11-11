@@ -50,11 +50,11 @@ const _fx = 'test/fixtures/gdal';
 
 const _surveyKml = '''<?xml version="1.0" encoding="utf-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document>
-<Folder><name>立木</name>
-  <Placemark><name>スギ1</name><Point><coordinates>135.96,33.93</coordinates></Point></Placemark>
-  <Placemark><name>ヒノキ2</name><Point><coordinates>135.961,33.931</coordinates></Point></Placemark>
+<Folder><name>地点</name>
+  <Placemark><name>地点1</name><Point><coordinates>135.96,33.93</coordinates></Point></Placemark>
+  <Placemark><name>地点2</name><Point><coordinates>135.961,33.931</coordinates></Point></Placemark>
 </Folder>
-<Folder><name>作業道</name>
+<Folder><name>路線</name>
   <Placemark><name>道1</name><LineString><coordinates>135.96,33.93 135.97,33.94</coordinates></LineString></Placemark>
 </Folder>
 </Document></kml>''';
@@ -71,24 +71,24 @@ String _flatKml(String docName, String placemarks) => '''<?xml version="1.0" enc
 $placemarks
 </Document></kml>''';
 
-/// LIBKML 製の形の KMZ: doc.kml は NetworkLink だけ。files/立木.kml（点 2）・files/road.kml（点 1 と線 1）、
+/// LIBKML 製の形の KMZ: doc.kml は NetworkLink だけ。files/地点.kml（点 2）・files/road.kml（点 1 と線 1）、
 /// 外の URL へのリンクも 1 本
 List<int> _networkLinkKmz() {
   final kmz = Archive()
     ..addFile(ArchiveFile.bytes(
       'doc.kml',
-      utf8.encode(_networkLinkDoc(['files/%E7%AB%8B%E6%9C%A8.kml', 'files/road.kml', 'https://example.com/remote.kml'])),
+      utf8.encode(_networkLinkDoc(['files/%E5%9C%B0%E7%82%B9.kml', 'files/road.kml', 'https://example.com/remote.kml'])),
     ))
     ..addFile(ArchiveFile.bytes(
-      'files/立木.kml',
+      'files/地点.kml',
       utf8.encode(_flatKml('layer0', '''
-<Placemark><name>スギ1</name><Point><coordinates>135.96,33.93</coordinates></Point></Placemark>
-<Placemark><name>ヒノキ2</name><Point><coordinates>135.961,33.931</coordinates></Point></Placemark>''')),
+<Placemark><name>地点1</name><Point><coordinates>135.96,33.93</coordinates></Point></Placemark>
+<Placemark><name>地点2</name><Point><coordinates>135.961,33.931</coordinates></Point></Placemark>''')),
     ))
     ..addFile(ArchiveFile.bytes(
       'files/road.kml',
       utf8.encode(_flatKml('layer1', '''
-<Placemark><name>土場</name><Point><coordinates>135.97,33.94</coordinates></Point></Placemark>
+<Placemark><name>広場</name><Point><coordinates>135.97,33.94</coordinates></Point></Placemark>
 <Placemark><name>道1</name><LineString><coordinates>135.96,33.93 135.97,33.94</coordinates></LineString></Placemark>''')),
     ))
     ..addFile(ArchiveFile.bytes('files/icon.png', [0x89, 0x50, 0x4e, 0x47]));
@@ -166,7 +166,7 @@ void main() {
 
   group('GDAL で読む', () {
     test('候補の拡張子: .gpkg・付属ファイル・隠しフォルダは外す', () {
-      expect(ExternalSource.isCandidate(p.join(proj, '林班.SHP')), isTrue);
+      expect(ExternalSource.isCandidate(p.join(proj, '区画.SHP')), isTrue);
       for (final ext in ['.geojson', '.json', '.kml', '.kmz', '.csv', '.gpx', '.fgb', '.gml', '.dxf', '.tab', '.mif']) {
         expect(ExternalSource.isCandidate(p.join(proj, 'a$ext')), isTrue, reason: ext);
       }
@@ -177,16 +177,16 @@ void main() {
     });
 
     test('shp（Shift_JIS、.cpg も LDID も無い）: CP932 で読み、CRS（EPSG:6674）は元のまま', () async {
-      copyFixture('sjis_nocpg', as: '林班');
-      expect(await ExternalSource.needsFallbackEncoding(p.join(proj, '林班.shp')), isTrue);
+      copyFixture('sjis_nocpg', as: '区画');
+      expect(await ExternalSource.needsFallbackEncoding(p.join(proj, '区画.shp')), isTrue);
       final root = await openRoot();
       final node = root.children.whereType<ExternalLayerNode>().single;
       expect(node.loadError, isNull);
-      expect(node.children.whereType<LayerNode>().single.layerName, '林班');
-      expect(await namesIn(node.geoPackageFile, '林班'), gdalScenarioNames);
-      expect(await epsgOf(node.geoPackageFile, '林班'), 'EPSG:6674');
-      expect(await node.geoPackageFile.getGeometryType('林班'), GeometryType.point);
-      expect((await node.sourceFiles()).map(p.basename), unorderedEquals(['林班.shp', '林班.shx', '林班.dbf', '林班.prj']));
+      expect(node.children.whereType<LayerNode>().single.layerName, '区画');
+      expect(await namesIn(node.geoPackageFile, '区画'), gdalScenarioNames);
+      expect(await epsgOf(node.geoPackageFile, '区画'), 'EPSG:6674');
+      expect(await node.geoPackageFile.getGeometryType('区画'), GeometryType.point);
+      expect((await node.sourceFiles()).map(p.basename), unorderedEquals(['区画.shp', '区画.shx', '区画.dbf', '区画.prj']));
     }, skip: skip);
 
     test('shp（.cpg あり）: .cpg の文字コードで読む', () async {
@@ -260,9 +260,9 @@ void main() {
       File(p.join(proj, 'survey.kml')).writeAsStringSync(_surveyKml);
       final node = (await openRoot()).children.whereType<ExternalLayerNode>().single;
       expect(node.loadError, isNull);
-      expect(node.children.whereType<LayerNode>().map((l) => l.layerName), unorderedEquals(['立木', '作業道']));
-      expect(await namesIn(node.geoPackageFile, '立木', column: 'Name'), ['スギ1', 'ヒノキ2']);
-      expect(await node.geoPackageFile.getGeometryType('作業道'), GeometryType.linestring);
+      expect(node.children.whereType<LayerNode>().map((l) => l.layerName), unorderedEquals(['地点', '路線']));
+      expect(await namesIn(node.geoPackageFile, '地点', column: 'Name'), ['地点1', '地点2']);
+      expect(await node.geoPackageFile.getGeometryType('路線'), GeometryType.linestring);
       expect(node.sourcePlan!.sourceLayerCount, 2);
     }, skip: skip);
 
@@ -274,8 +274,8 @@ void main() {
       File(p.join(proj, 'survey.kmz')).writeAsBytesSync(ZipEncoder().encodeBytes(kmz));
       final node = (await openRoot()).children.whereType<ExternalLayerNode>().single;
       expect(node.loadError, isNull);
-      expect(node.children.whereType<LayerNode>().map((l) => l.layerName), unorderedEquals(['立木', '作業道']));
-      expect(await namesIn(node.geoPackageFile, '立木', column: 'Name'), ['スギ1', 'ヒノキ2']);
+      expect(node.children.whereType<LayerNode>().map((l) => l.layerName), unorderedEquals(['地点', '路線']));
+      expect(await namesIn(node.geoPackageFile, '地点', column: 'Name'), ['地点1', '地点2']);
     }, skip: skip);
 
     test('KMZ の中で読む KML: 根の doc.kml → 根の最初の .kml → どこかの .kml', () {
@@ -312,7 +312,7 @@ void main() {
       // zip から
       final layout = KmzLayout.fromArchive(ZipDecoder().decodeBytes(_networkLinkKmz()));
       expect(layout.main, 'doc.kml');
-      expect(layout.links, ['files/立木.kml', 'files/road.kml']);
+      expect(layout.links, ['files/地点.kml', 'files/road.kml']);
       expect(layout.skippedLinks, ['https://example.com/remote.kml']);
     });
 
@@ -320,20 +320,20 @@ void main() {
       File(p.join(proj, 'libkml.kmz')).writeAsBytesSync(_networkLinkKmz());
       final node = (await openRoot()).children.whereType<ExternalLayerNode>().single;
       expect(node.loadError, isNull);
-      expect(node.children.whereType<LayerNode>().map((l) => l.layerName), unorderedEquals(['立木', 'road_point', 'road_line']));
-      expect(await namesIn(node.geoPackageFile, '立木', column: 'Name'), ['スギ1', 'ヒノキ2']);
+      expect(node.children.whereType<LayerNode>().map((l) => l.layerName), unorderedEquals(['地点', 'road_point', 'road_line']));
+      expect(await namesIn(node.geoPackageFile, '地点', column: 'Name'), ['地点1', '地点2']);
       expect(await namesIn(node.geoPackageFile, 'road_line', column: 'Name'), ['道1']);
       expect(await node.geoPackageFile.getGeometryType('road_point'), GeometryType.point);
       final plan = node.sourcePlan!;
       expect(plan.sourceLayerCount, 2);
       final byName = {for (final l in plan.layers) l.name: l};
-      expect(byName['立木']!.dataset, 'files/立木.kml');
-      expect(byName['立木']!.qgisLayerName, '立木');
+      expect(byName['地点']!.dataset, 'files/地点.kml');
+      expect(byName['地点']!.qgisLayerName, '地点');
       expect(byName['road_line']!.qgisLayerName, 'road');
       expect(byName['road_line']!.qgisGeometryType, 'LineString');
       // QGIS へ書く URI（LIBKML のレイヤ名 + 型）
       expect(QgsProjectBuilder.externalUriOptions(node, 'road_point', layerCount: 3), ['layername=road', 'geometrytype=Point']);
-      expect(QgsProjectBuilder.externalUriOptions(node, '立木', layerCount: 3), ['layername=立木']);
+      expect(QgsProjectBuilder.externalUriOptions(node, '地点', layerCount: 3), ['layername=地点']);
     }, skip: skip);
 
     test('KMZ（NetworkLink が外の URL だけ）: 取りに行かず、読めない理由に出す', () async {
@@ -345,14 +345,14 @@ void main() {
     }, skip: skip);
 
     test('CSV: 経度・緯度の列があれば点のレイヤ、無ければレイヤにしない', () async {
-      File(p.join(proj, 'trees.csv')).writeAsStringSync('name,経度,緯度,dbh\nスギ1,135.96,33.93,32\nヒノキ2,135.961,33.931,28\n');
+      File(p.join(proj, 'trees.csv')).writeAsStringSync('name,経度,緯度,dbh\n地点1,135.96,33.93,32\n地点2,135.961,33.931,28\n');
       File(p.join(proj, 'lonlat.csv')).writeAsStringSync('name,lon,lat\na,135.0,33.0\n');
-      File(p.join(proj, 'plain.csv')).writeAsStringSync('name,dbh\nスギ1,32\n');
+      File(p.join(proj, 'plain.csv')).writeAsStringSync('name,dbh\n地点1,32\n');
       final root = await openRoot();
       final nodes = root.children.whereType<ExternalLayerNode>().toList();
       expect(nodes.map((n) => n.name), ['lonlat.csv', 'trees.csv']);
       final trees = nodes[1];
-      expect(await namesIn(trees.geoPackageFile, 'trees'), ['スギ1', 'ヒノキ2']);
+      expect(await namesIn(trees.geoPackageFile, 'trees'), ['地点1', '地点2']);
       final columns = await trees.geoPackageFile.getColumnNames('trees', getAll: true, skipPrimaryKey: true);
       expect(columns, isNot(contains('経度')), reason: 'KEEP_GEOM_COLUMNS=NO');
       final db = await trees.geoPackageFile.getDatabase();
@@ -403,7 +403,7 @@ void main() {
   group('ノードとキャッシュ', () {
 
     test('shp・GeoJSON はノードになり、付属ファイルや GeoJSON でない .json はならない', () async {
-      await writePoints(p.join(proj, '林班'));
+      await writePoints(p.join(proj, '区画'));
       writeGeoJson(p.join(proj, 'roads.geojson'), [
         feature(
           {
@@ -420,16 +420,16 @@ void main() {
 
       final root = await openRoot();
       final nodes = root.children.whereType<ExternalLayerNode>().toList();
-      expect(nodes.map((n) => n.name), ['roads.geojson', '林班.shp']);
+      expect(nodes.map((n) => n.name), ['roads.geojson', '区画.shp']);
       final shp = nodes[1];
-      expect(shp.getAbsoluteFilePath(), p.join(proj, '林班.shp'));
+      expect(shp.getAbsoluteFilePath(), p.join(proj, '区画.shp'));
       expect(shp.isReadOnly, isTrue);
       expect(p.isWithin(p.join(proj, '.kokage', 'cache', 'external'), shp.geoPackageFile.getAbsolutePath()!), isTrue);
       final layer = shp.children.whereType<LayerNode>().single;
-      expect(layer.layerName, '林班');
-      expect(layer.layerKey, '林班.shp/林班');
+      expect(layer.layerName, '区画');
+      expect(layer.layerKey, '区画.shp/区画');
       expect(isInReadOnlyLayer(layer), isTrue);
-      expect(await shp.geoPackageFile.countFilteredFeatures('林班', '1=1'), 3);
+      expect(await shp.geoPackageFile.countFilteredFeatures('区画', '1=1'), 3);
       // .kokage はツリーに出ない
       expect(root.children.whereType<FolderNode>(), isEmpty);
     }, skip: skip);
@@ -491,7 +491,7 @@ void main() {
       expect(File(cachePath).existsSync(), isFalse);
     }, skip: skip);
 
-    // 2026-10-11 Pixel 9: 改名・ファイルの追加のあと、足した子が一覧の末尾（写真の後ろ）に積まれて見つからなかった
+    // 2026-10-11 Android 実機: 改名・ファイルの追加のあと、足した子が一覧の末尾（写真の後ろ）に積まれて見つからなかった
     test('shp を改名・ファイルを追加して読み直すと、開き直したときと同じ並び（フォルダ・gpkg・外部形式・写真の順、名前順）', () async {
       await writePoints(p.join(proj, 'z_points'));
       await writePoints(p.join(proj, 'b_points'));
@@ -752,15 +752,15 @@ void main() {
     }, skip: skip);
 
     test('変換しても CRS は元のまま（EPSG:6674 の shp → EPSG:6674 の gpkg）、日本語の属性も', () async {
-      copyFixture('sjis_nocpg', as: '林班');
-      final (root, node) = await open('林班.shp');
-      expect(await epsgOf(node.geoPackageFile, '林班'), 'EPSG:6674');
+      copyFixture('sjis_nocpg', as: '区画');
+      final (root, node) = await open('区画.shp');
+      expect(await epsgOf(node.geoPackageFile, '区画'), 'EPSG:6674');
       final result = await ExternalLayerConverter.convert(node);
       expect(result.outcome, ExternalConvertOutcome.converted);
       final gpkg = root.children.whereType<GeoPackageNode>().single;
-      expect(gpkg.name, '林班.gpkg');
-      expect(await epsgOf(gpkg.geoPackageFile, '林班'), 'EPSG:6674');
-      expect(await namesIn(gpkg.geoPackageFile, '林班'), gdalScenarioNames);
+      expect(gpkg.name, '区画.gpkg');
+      expect(await epsgOf(gpkg.geoPackageFile, '区画'), 'EPSG:6674');
+      expect(await namesIn(gpkg.geoPackageFile, '区画'), gdalScenarioNames);
       // 書いた gpkg を GDAL で読み直しても同じ（QGIS からも 6674 に見える）
       final info = await ExternalGdal.instance.vectorInfo(result.gpkgPath!, args: const ['-so']);
       expect(layerEpsg(info), 6674);
@@ -775,8 +775,8 @@ void main() {
       expect(File(p.join(proj, 'libkml.kmz')).existsSync(), isFalse);
       final gpkg = root.children.whereType<GeoPackageNode>().single;
       expect(gpkg.name, 'libkml.gpkg');
-      expect(await gpkg.geoPackageFile.getLayerNames(), unorderedEquals(['立木', 'road_point', 'road_line']));
-      expect(await namesIn(gpkg.geoPackageFile, '立木', column: 'Name'), ['スギ1', 'ヒノキ2']);
+      expect(await gpkg.geoPackageFile.getLayerNames(), unorderedEquals(['地点', 'road_point', 'road_line']));
+      expect(await namesIn(gpkg.geoPackageFile, '地点', column: 'Name'), ['地点1', '地点2']);
       await gpkg.geoPackageFile.dispose();
     }, skip: skip);
 
@@ -798,7 +798,7 @@ void main() {
           feature(point(135.2, 33.2), {'n': 3}),
           feature(point(135.3, 33.3), {'n': 4}),
         ]);
-        File(p.join(proj, '森林簿.csv')).writeAsStringSync('林小班,樹種\n1-い,スギ\n');
+        File(p.join(proj, '台帳.csv')).writeAsStringSync('区画番号,区分\n1-い,種別A\n');
         final sub = await Directory(p.join(proj, 'sub')).create();
         await writePoints(p.join(sub.path, 'inner'), prj: 'EPSG:4326');
 
@@ -851,7 +851,7 @@ void main() {
         expect(await gpkgs['stumps.gpkg']!.geoPackageFile.countFilteredFeatures('stumps', '1=1'), 2);
         expect(await gpkgs['plots.gpkg']!.geoPackageFile.countFilteredFeatures('plots', '1=1'), 4);
         // 表の CSV と下のフォルダは元のまま
-        expect(File(p.join(proj, '森林簿.csv')).existsSync(), isTrue);
+        expect(File(p.join(proj, '台帳.csv')).existsSync(), isTrue);
         expect(File(p.join(sub.path, 'inner.shp')).existsSync(), isTrue);
         expect(File(p.join(sub.path, 'inner.gpkg')).existsSync(), isFalse);
 

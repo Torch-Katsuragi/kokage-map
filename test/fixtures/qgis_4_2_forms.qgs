@@ -1,5 +1,5 @@
 <!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
-<qgis projectname="属性フォームの fixture" saveDateTime="2026-10-11T22:18:30" saveUser="mtmtk" saveUserFull="桂松明" version="4.2.2-Belém do Pará">
+<qgis projectname="属性フォームの fixture" saveDateTime="2026-10-11T22:18:30" saveUser="user" saveUserFull="User" version="4.2.2-Belém do Pará">
   <homePath path=""/>
   <title>属性フォームの fixture</title>
   <transaction mode="Disabled"/>
@@ -40,20 +40,20 @@
         <Option/>
       </customproperties>
     </layer-tree-layer>
-    <layer-tree-layer checked="Qt::Checked" expanded="1" id="shoban_a51254f4_8da8_431b_90ac_21b15e72d7d2" legend_exp="" legend_split_behavior="0" name="shoban" patch_size="-1,-1" providerKey="ogr" source="../../.temp/qgs_forms/調査.gpkg|layername=shoban">
+    <layer-tree-layer checked="Qt::Checked" expanded="1" id="parcels_a51254f4_8da8_431b_90ac_21b15e72d7d2" legend_exp="" legend_split_behavior="0" name="parcels" patch_size="-1,-1" providerKey="ogr" source="../../.temp/qgs_forms/調査.gpkg|layername=parcels">
       <customproperties>
         <Option/>
       </customproperties>
     </layer-tree-layer>
     <custom-order enabled="0">
-      <item>shoban_a51254f4_8da8_431b_90ac_21b15e72d7d2</item>
+      <item>parcels_a51254f4_8da8_431b_90ac_21b15e72d7d2</item>
       <item>chosa_3d9cec03_9728_4006_9e9a_9a1fc405e449</item>
     </custom-order>
   </layer-tree-group>
   <snapping-settings enabled="0" intersection-snapping="0" maxScale="0" minScale="0" mode="2" scaleDependencyMode="0" self-snapping="0" tolerance="12" type="1" unit="1">
     <individual-layer-settings>
       <layer-setting enabled="1" id="chosa_3d9cec03_9728_4006_9e9a_9a1fc405e449" maxScale="0" minScale="0" tolerance="12" type="1" units="1"/>
-      <layer-setting enabled="1" id="shoban_a51254f4_8da8_431b_90ac_21b15e72d7d2" maxScale="0" minScale="0" tolerance="12" type="1" units="1"/>
+      <layer-setting enabled="1" id="parcels_a51254f4_8da8_431b_90ac_21b15e72d7d2" maxScale="0" minScale="0" tolerance="12" type="1" units="1"/>
     </individual-layer-settings>
   </snapping-settings>
   <relations/>
@@ -402,26 +402,26 @@
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="jushu">
+        <field configurationFlags="0" name="kind">
           <editWidget type="ValueMap">
             <config>
               <Option type="Map">
                 <Option name="map" type="List">
                   <Option type="Map">
-                    <Option name="スギ" type="QString" value="SG"/>
+                    <Option name="種別A" type="QString" value="SG"/>
                   </Option>
                   <Option type="Map">
-                    <Option name="ヒノキ" type="QString" value="HN"/>
+                    <Option name="種別B" type="QString" value="HN"/>
                   </Option>
                   <Option type="Map">
-                    <Option name="広葉樹" type="QString" value="KO"/>
+                    <Option name="種別C" type="QString" value="KO"/>
                   </Option>
                 </Option>
               </Option>
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="bassai">
+        <field configurationFlags="0" name="done">
           <editWidget type="CheckBox">
             <config>
               <Option type="Map">
@@ -444,7 +444,7 @@
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="dbh">
+        <field configurationFlags="0" name="width">
           <editWidget type="Range">
             <config>
               <Option type="Map">
@@ -458,7 +458,7 @@
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="rinrei">
+        <field configurationFlags="0" name="age">
           <editWidget type="Range">
             <config>
               <Option type="Map">
@@ -518,18 +518,18 @@
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="shoban">
+        <field configurationFlags="0" name="parcels">
           <editWidget type="ValueRelation">
             <config>
               <Option type="Map">
                 <Option name="AllowMulti" type="bool" value="false"/>
                 <Option name="AllowNull" type="bool" value="true"/>
-                <Option name="FilterExpression" type="QString" value="&quot;rinpan&quot; = 1"/>
+                <Option name="FilterExpression" type="QString" value="&quot;block&quot; = 1"/>
                 <Option name="Key" type="QString" value="code"/>
-                <Option name="Layer" type="QString" value="shoban_a51254f4_8da8_431b_90ac_21b15e72d7d2"/>
-                <Option name="LayerName" type="QString" value="shoban"/>
+                <Option name="Layer" type="QString" value="parcels_a51254f4_8da8_431b_90ac_21b15e72d7d2"/>
+                <Option name="LayerName" type="QString" value="parcels"/>
                 <Option name="LayerProviderName" type="QString" value="ogr"/>
-                <Option name="LayerSource" type="QString" value="C:\Users\mtmtk\Github\github.com\Torch-Katsuragi\kokage-map-qgis-forms\.temp\qgs_forms\調査.gpkg|layername=shoban"/>
+                <Option name="LayerSource" type="QString" value="../../.temp/qgs_forms/調査.gpkg|layername=parcels"/>
                 <Option name="OrderByValue" type="bool" value="true"/>
                 <Option name="Value" type="QString" value="name"/>
               </Option>
@@ -560,72 +560,72 @@
       </fieldConfiguration>
       <aliases>
         <alias field="fid" index="0" name=""/>
-        <alias field="jushu" index="1" name="樹種"/>
-        <alias field="bassai" index="2" name="伐採済み"/>
-        <alias field="chosabi" index="3" name="調査日"/>
-        <alias field="dbh" index="4" name="胸高直径(cm)"/>
-        <alias field="rinrei" index="5" name="林齢"/>
+        <alias field="kind" index="0" name="種別"/>
+        <alias field="done" index="1" name="完了済み"/>
+        <alias field="chosabi" index="2" name="調査日"/>
+        <alias field="width" index="3" name="幅員(m)"/>
+        <alias field="age" index="4" name="年数"/>
         <alias field="memo" index="6" name="メモ"/>
         <alias field="chosasha" index="7" name=""/>
         <alias field="uid" index="8" name=""/>
         <alias field="kiroku" index="9" name=""/>
         <alias field="koshin" index="10" name=""/>
         <alias field="kubun" index="11" name=""/>
-        <alias field="shoban" index="12" name=""/>
+        <alias field="parcels" index="12" name=""/>
         <alias field="biko" index="13" name=""/>
         <alias field="iro" index="14" name=""/>
         <alias field="fukusu" index="15" name=""/>
       </aliases>
       <defaults>
         <default applyOnUpdate="0" expression="" field="fid"/>
-        <default applyOnUpdate="0" expression="" field="jushu"/>
-        <default applyOnUpdate="0" expression="" field="bassai"/>
+        <default applyOnUpdate="0" expression="" field="kind"/>
+        <default applyOnUpdate="0" expression="" field="done"/>
         <default applyOnUpdate="0" expression="" field="chosabi"/>
-        <default applyOnUpdate="0" expression="" field="dbh"/>
-        <default applyOnUpdate="0" expression="" field="rinrei"/>
+        <default applyOnUpdate="0" expression="" field="width"/>
+        <default applyOnUpdate="0" expression="" field="age"/>
         <default applyOnUpdate="0" expression="" field="memo"/>
         <default applyOnUpdate="0" expression="" field="chosasha"/>
         <default applyOnUpdate="0" expression="uuid()" field="uid"/>
         <default applyOnUpdate="0" expression="now()" field="kiroku"/>
         <default applyOnUpdate="1" expression="$now" field="koshin"/>
         <default applyOnUpdate="0" expression="'A'" field="kubun"/>
-        <default applyOnUpdate="0" expression="" field="shoban"/>
+        <default applyOnUpdate="0" expression="" field="parcels"/>
         <default applyOnUpdate="0" expression="" field="biko"/>
         <default applyOnUpdate="0" expression="" field="iro"/>
         <default applyOnUpdate="0" expression="@user_full_name" field="fukusu"/>
       </defaults>
       <constraints>
         <constraint constraints="3" exp_strength="0" field="fid" notnull_strength="1" unique_strength="1"/>
-        <constraint constraints="1" exp_strength="0" field="jushu" notnull_strength="1" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="bassai" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="1" exp_strength="0" field="kind" notnull_strength="1" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="done" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="chosabi" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="4" exp_strength="2" field="dbh" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="rinrei" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="4" exp_strength="2" field="width" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="age" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="memo" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="1" exp_strength="0" field="chosasha" notnull_strength="2" unique_strength="0"/>
         <constraint constraints="2" exp_strength="0" field="uid" notnull_strength="0" unique_strength="1"/>
         <constraint constraints="0" exp_strength="0" field="kiroku" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="koshin" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="kubun" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="shoban" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="parcels" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="biko" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="iro" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="fukusu" notnull_strength="0" unique_strength="0"/>
       </constraints>
       <constraintExpressions>
         <constraint desc="" exp="" field="fid"/>
-        <constraint desc="" exp="" field="jushu"/>
-        <constraint desc="" exp="" field="bassai"/>
+        <constraint desc="" exp="" field="kind"/>
+        <constraint desc="" exp="" field="done"/>
         <constraint desc="" exp="" field="chosabi"/>
-        <constraint desc="胸高直径は 0〜150 cm" exp="&quot;dbh&quot; > 0 AND &quot;dbh&quot; &lt; 150" field="dbh"/>
-        <constraint desc="" exp="" field="rinrei"/>
+        <constraint desc="幅員は 0〜150 m" exp="&quot;width&quot; > 0 AND &quot;width&quot; &lt; 150" field="width"/>
+        <constraint desc="" exp="" field="age"/>
         <constraint desc="" exp="" field="memo"/>
         <constraint desc="" exp="" field="chosasha"/>
         <constraint desc="" exp="" field="uid"/>
         <constraint desc="" exp="" field="kiroku"/>
         <constraint desc="" exp="" field="koshin"/>
         <constraint desc="" exp="" field="kubun"/>
-        <constraint desc="" exp="" field="shoban"/>
+        <constraint desc="" exp="" field="parcels"/>
         <constraint desc="" exp="" field="biko"/>
         <constraint desc="" exp="" field="iro"/>
         <constraint desc="" exp="" field="fukusu"/>
@@ -655,22 +655,22 @@
           <labelStyle labelColor="" overrideLabelColor="0" overrideLabelFont="0">
             <labelFont bold="0" description="Yu Gothic UI,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0" italic="0" strikethrough="0" style="" underline="0"/>
           </labelStyle>
-          <attributeEditorField horizontalStretch="0" index="1" name="jushu" showLabel="1" verticalStretch="0">
+          <attributeEditorField horizontalStretch="0" index="1" name="kind" showLabel="1" verticalStretch="0">
             <labelStyle labelColor="" overrideLabelColor="0" overrideLabelFont="0">
               <labelFont bold="0" description="Yu Gothic UI,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0" italic="0" strikethrough="0" style="" underline="0"/>
             </labelStyle>
           </attributeEditorField>
-          <attributeEditorField horizontalStretch="0" index="4" name="dbh" showLabel="1" verticalStretch="0">
+          <attributeEditorField horizontalStretch="0" index="4" name="width" showLabel="1" verticalStretch="0">
             <labelStyle labelColor="" overrideLabelColor="0" overrideLabelFont="0">
               <labelFont bold="0" description="Yu Gothic UI,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0" italic="0" strikethrough="0" style="" underline="0"/>
             </labelStyle>
           </attributeEditorField>
-          <attributeEditorField horizontalStretch="0" index="5" name="rinrei" showLabel="1" verticalStretch="0">
+          <attributeEditorField horizontalStretch="0" index="5" name="age" showLabel="1" verticalStretch="0">
             <labelStyle labelColor="" overrideLabelColor="0" overrideLabelFont="0">
               <labelFont bold="0" description="Yu Gothic UI,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0" italic="0" strikethrough="0" style="" underline="0"/>
             </labelStyle>
           </attributeEditorField>
-          <attributeEditorField horizontalStretch="0" index="2" name="bassai" showLabel="1" verticalStretch="0">
+          <attributeEditorField horizontalStretch="0" index="2" name="done" showLabel="1" verticalStretch="0">
             <labelStyle labelColor="" overrideLabelColor="0" overrideLabelFont="0">
               <labelFont bold="0" description="Yu Gothic UI,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0" italic="0" strikethrough="0" style="" underline="0"/>
             </labelStyle>
@@ -700,7 +700,7 @@
               <labelFont bold="0" description="Yu Gothic UI,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0" italic="0" strikethrough="0" style="" underline="0"/>
             </labelStyle>
           </attributeEditorField>
-          <attributeEditorField horizontalStretch="0" index="12" name="shoban" showLabel="1" verticalStretch="0">
+          <attributeEditorField horizontalStretch="0" index="12" name="parcels" showLabel="1" verticalStretch="0">
             <labelStyle labelColor="" overrideLabelColor="0" overrideLabelFont="0">
               <labelFont bold="0" description="Yu Gothic UI,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0" italic="0" strikethrough="0" style="" underline="0"/>
             </labelStyle>
@@ -745,9 +745,9 @@
         <xmax>135.92900000000000205</xmax>
         <ymax>33.90899999999999892</ymax>
       </wgs84extent>
-      <id>shoban_a51254f4_8da8_431b_90ac_21b15e72d7d2</id>
-      <datasource>../../.temp/qgs_forms/調査.gpkg|layername=shoban</datasource>
-      <layername>shoban</layername>
+      <id>parcels_a51254f4_8da8_431b_90ac_21b15e72d7d2</id>
+      <datasource>../../.temp/qgs_forms/調査.gpkg|layername=parcels</datasource>
+      <layername>parcels</layername>
       <srs>
         <spatialrefsys nativeFormat="Wkt">
           <wkt>GEOGCRS["WGS 84",ENSEMBLE["World Geodetic System 1984 ensemble",MEMBER["World Geodetic System 1984 (Transit)"],MEMBER["World Geodetic System 1984 (G730)"],MEMBER["World Geodetic System 1984 (G873)"],MEMBER["World Geodetic System 1984 (G1150)"],MEMBER["World Geodetic System 1984 (G1674)"],MEMBER["World Geodetic System 1984 (G1762)"],MEMBER["World Geodetic System 1984 (G2139)"],MEMBER["World Geodetic System 1984 (G2296)"],ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]],ENSEMBLEACCURACY[2.0]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]],CS[ellipsoidal,2],AXIS["geodetic latitude (Lat)",north,ORDER[1],ANGLEUNIT["degree",0.0174532925199433]],AXIS["geodetic longitude (Lon)",east,ORDER[2],ANGLEUNIT["degree",0.0174532925199433]],USAGE[SCOPE["Horizontal component of 3D system."],AREA["World."],BBOX[-90,-180,90,180]],ID["EPSG",4326]]</wkt>
@@ -1024,7 +1024,7 @@
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="rinpan">
+        <field configurationFlags="0" name="block">
           <editWidget type="">
             <config>
               <Option/>
@@ -1036,25 +1036,25 @@
         <alias field="fid" index="0" name=""/>
         <alias field="code" index="1" name=""/>
         <alias field="name" index="2" name=""/>
-        <alias field="rinpan" index="3" name=""/>
+        <alias field="block" index="3" name=""/>
       </aliases>
       <defaults>
         <default applyOnUpdate="0" expression="" field="fid"/>
         <default applyOnUpdate="0" expression="" field="code"/>
         <default applyOnUpdate="0" expression="" field="name"/>
-        <default applyOnUpdate="0" expression="" field="rinpan"/>
+        <default applyOnUpdate="0" expression="" field="block"/>
       </defaults>
       <constraints>
         <constraint constraints="3" exp_strength="0" field="fid" notnull_strength="1" unique_strength="1"/>
         <constraint constraints="0" exp_strength="0" field="code" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="name" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="rinpan" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="block" notnull_strength="0" unique_strength="0"/>
       </constraints>
       <constraintExpressions>
         <constraint desc="" exp="" field="fid"/>
         <constraint desc="" exp="" field="code"/>
         <constraint desc="" exp="" field="name"/>
-        <constraint desc="" exp="" field="rinpan"/>
+        <constraint desc="" exp="" field="block"/>
       </constraintExpressions>
       <expressionfields/>
       <attributeactions/>
@@ -1083,7 +1083,7 @@
     </maplayer>
   </projectlayers>
   <layerorder>
-    <layer id="shoban_a51254f4_8da8_431b_90ac_21b15e72d7d2"/>
+    <layer id="parcels_a51254f4_8da8_431b_90ac_21b15e72d7d2"/>
     <layer id="chosa_3d9cec03_9728_4006_9e9a_9a1fc405e449"/>
   </layerorder>
   <labelEngineSettings/>
@@ -1147,7 +1147,7 @@
     <dates>
       <date type="Created" value="2026-10-11T22:18:25"/>
     </dates>
-    <author>桂松明</author>
+    <author>User</author>
     <creation>2026-10-11T22:18:25</creation>
   </projectMetadata>
   <Annotations/>

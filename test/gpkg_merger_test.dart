@@ -32,8 +32,8 @@ void main() {
     final gpkg = GeoPackageFile(const ['x.gpkg'], absolutePath: path);
     await gpkg.addLayer('trees', GeometryType.point);
     await gpkg.addAttributeColumns('trees', {'name': 'TEXT', 'dbh': 'INTEGER'});
-    await gpkg.addPointWithAttributes('trees', const LatLng(33.93, 135.96), {'name': 'スギ1', 'dbh': 32});
-    await gpkg.addPointWithAttributes('trees', const LatLng(33.931, 135.961), {'name': 'スギ2', 'dbh': 28});
+    await gpkg.addPointWithAttributes('trees', const LatLng(33.93, 135.96), {'name': '地点1', 'dbh': 32});
+    await gpkg.addPointWithAttributes('trees', const LatLng(33.931, 135.961), {'name': '地点2', 'dbh': 28});
     await gpkg.flushChanges();
     await gpkg.dispose();
     return path;
@@ -62,14 +62,14 @@ void main() {
       g.makeCopySqlite(base, mine);
       g.makeCopySqlite(base, theirs);
       await sql(mine, 'UPDATE trees SET dbh=33 WHERE fid=1');
-      await sql(theirs, "UPDATE trees SET name='スギ2(改)' WHERE fid=2");
+      await sql(theirs, "UPDATE trees SET name='地点2(改)' WHERE fid=2");
 
       final r = await GpkgMerger(g).rebase(base: base, theirs: theirs, mine: mine);
       expect(r.success, isTrue, reason: r.error);
       expect(r.conflicts, isEmpty);
       final after = await rows(mine);
       expect(after[0]['dbh'], 33);
-      expect(after[1]['name'], 'スギ2(改)');
+      expect(after[1]['name'], '地点2(改)');
       expect(File('$mine.conflict.json').existsSync(), isFalse, reason: '衝突ファイルは片付ける');
     });
 

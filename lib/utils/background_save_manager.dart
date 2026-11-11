@@ -68,7 +68,7 @@ class BackgroundSaveManager {
   /// 閉じるときに書けない変更を捨てたとき（[discarded]）に呼ぶ。通知センターに残す（main.dart で繋ぐ）。
   /// [pending] は書けていない変更の数、[files] はそのファイル名。
   ///
-  /// > [!WARNING] 黙って失われていた（2026-10-12 Pixel 9）
+  /// > [!WARNING] 黙って失われていた（2026-10-12 Android 実機）
   /// > QGIS 製の gpkg で属性の保存が ST_ 関数の無いトリガーで落ち続け、画面には新しい値が出たまま、
   /// > ファイルは変わらず、閉じると捨てていた。ログにしか出ていなかった
   void Function(int pending, List<String> files, {required bool discarded})? onPersistentFailure;

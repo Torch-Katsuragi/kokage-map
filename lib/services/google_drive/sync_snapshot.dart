@@ -437,7 +437,7 @@ class _Diff {
       }
       // 手元の同じパスにもある → 1 件の「両方にある」にまとめる。
       // 以前は「手元の追加」と「Drive の追加」の 2 件に分かれ、ダイアログの選択がパスで 1 つに潰れて
-      // 既定がクラウドになり、手元を消してから落としていた（2026-10-11、Pixel 9 で新しい gpkg 3 つと .qgs を古い版で上書き）
+      // 既定がクラウドになり、手元を消してから落としていた（2026-10-11、Android 実機で新しい gpkg 3 つと .qgs を古い版で上書き）
       final localModified = local.remove(e.relativePath);
       if (localModified != null) {
         onBoth.add((onDrive: e, localModified: localModified));

@@ -232,7 +232,7 @@ class AttributeTableController extends ChangeNotifier {
           _columnNames.where((c) => !isInternalColumn(c)).toList();
       _writableColumnNames =
           _columnNames.where((c) => !isReadOnlyColumn(c, primaryKey: _primaryKey)).toList();
-      // 結合した表の列（森林簿の樹種など）は後ろに読み取り専用で並べる。gpkg には無いので
+      // 結合した表の列は後ろに読み取り専用で並べる。gpkg には無いので
       // SQL を使う操作（フィルタ・統計・置換・一括設定）の候補には入れない
       _joinedColumns = {for (final c in layer.joinedFieldNames) if (!_columnNames.contains(c)) c};
       _columnNames = [..._columnNames, ..._joinedColumns];
@@ -865,7 +865,7 @@ class AttributeTableController extends ChangeNotifier {
 
   /// 列の最初の幅。見出し（[title]。結合の列は鎖の印も）が読める幅まで広げる（上限 [maxColumnWidth]）。
   ///
-  /// 以前は列名によらず決め打ちで、接頭辞の付く結合の列（`簿_樹種`）は鎖の印と「…」しか見えなかった
+  /// 以前は列名によらず決め打ちで、接頭辞の付く結合の列（`台帳_区分`）は鎖の印と「…」しか見えなかった
   @visibleForTesting
   static double columnWidthFor(String columnName, {String? title, bool joined = false}) {
     final painter = TextPainter(

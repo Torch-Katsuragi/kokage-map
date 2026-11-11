@@ -1,5 +1,5 @@
 <!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
-<qgis projectname="ラスタと背景地図" saveDateTime="2026-10-09T14:23:39" saveUser="mtmtk" saveUserFull="桂松明" version="4.2.2-Belém do Pará">
+<qgis projectname="ラスタと背景地図" saveDateTime="2026-10-09T14:23:39" saveUser="user" saveUserFull="User" version="4.2.2-Belém do Pará">
   <homePath path=""/>
   <title>ラスタと背景地図</title>
   <transaction mode="Disabled"/>
@@ -1661,7 +1661,7 @@
     <dates>
       <date type="Created" value="2026-10-09T14:23:38"/>
     </dates>
-    <author>桂松明</author>
+    <author>User</author>
     <creation>2026-10-09T14:23:38</creation>
   </projectMetadata>
   <Annotations/>

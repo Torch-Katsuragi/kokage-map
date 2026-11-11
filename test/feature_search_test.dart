@@ -18,18 +18,18 @@ void main() {
     test('全角英数は半角・小文字に', () {
       expect(SearchText.normalize('１２'), '12');
       expect(SearchText.normalize('ＡＢｃ　１'), 'abc 1');
-      expect(SearchText.normalize(' Sugi '), 'sugi');
+      expect(SearchText.normalize(' Area '), 'area');
     });
     test('半角カナは全角（濁点・半濁点をまとめる）、ひらがなはカタカナ', () {
-      expect(SearchText.normalize('ｽｷﾞ'), 'スギ');
+      expect(SearchText.normalize('ｶﾞｲ'), 'ガイ');
       expect(SearchText.normalize('ﾋﾟﾝ'), 'ピン');
       expect(SearchText.normalize('ｳﾞ'), 'ヴ');
       expect(SearchText.normalize('ｯｰ'), 'ッー');
-      expect(SearchText.normalize('ひのき'), 'ヒノキ');
-      expect(SearchText.normalize('林班'), '林班');
+      expect(SearchText.normalize('いろは'), 'イロハ');
+      expect(SearchText.normalize('区画'), '区画');
     });
     test('半角カナと全角カナの表が揃っている', () {
-      expect(SearchText.toHalfKana('スギ・ヒノキ・パルプ・ヴ'), 'ｽｷﾞ･ﾋﾉｷ･ﾊﾟﾙﾌﾟ･ｳﾞ');
+      expect(SearchText.toHalfKana('ガイ・イロハ・パルプ・ヴ'), 'ｶﾞｲ･ｲﾛﾊ･ﾊﾟﾙﾌﾟ･ｳﾞ');
       expect(SearchText.normalize(SearchText.toHalfKana('アイウエオカガサザタダナハバパマヤラワン')), 'アイウエオカガサザタダナハバパマヤラワン');
     });
   });
@@ -40,7 +40,7 @@ void main() {
       expect(SearchText.variants('１２').toSet(), {'１２', '12'});
     });
     test('かなはひらがな・カタカナ・半角カナ', () {
-      expect(SearchText.variants('すぎ').toSet(), containsAll(['すぎ', 'スギ', 'ｽｷﾞ']));
+      expect(SearchText.variants('がい').toSet(), containsAll(['がい', 'ガイ', 'ｶﾞｲ']));
     });
     test('英字は大文字・小文字の全角も', () {
       expect(SearchText.variants('ab').toSet(), containsAll(['ab', 'AB', 'ａｂ', 'ＡＢ']));
@@ -70,26 +70,26 @@ void main() {
       databaseFactory = databaseFactoryFfi;
       tmp = await Directory.systemTemp.createTemp('feature_search_');
       gpkg = GeoPackageFile(const ['t.gpkg'], absolutePath: '${tmp.path}/t.gpkg');
-      await gpkg.addLayer('rinpan', GeometryType.polygon);
-      await gpkg.addAttributeColumns('rinpan', {'name': 'TEXT', 'rinpan': 'TEXT', 'jushu': 'TEXT', 'no': 'INTEGER'});
+      await gpkg.addLayer('parcels', GeometryType.polygon);
+      await gpkg.addAttributeColumns('parcels', {'name': 'TEXT', 'block': 'TEXT', 'kind': 'TEXT', 'no': 'INTEGER'});
       const ring = [LatLng(33.93, 135.96), LatLng(33.93, 135.97), LatLng(33.94, 135.97), LatLng(33.93, 135.96)];
       // 1 件ずつ足すと遅いので、1 件足してから行を複製する
-      await gpkg.addPolygonWithAttributes('rinpan', [ring], {'name': 'r0', 'rinpan': '0', 'jushu': 'スギ', 'no': 0});
+      await gpkg.addPolygonWithAttributes('parcels', [ring], {'name': 'r0', 'block': '0', 'kind': 'ガイ', 'no': 0});
       final db = await gpkg.getDatabase();
-      final geom = (await db.rawQuery('SELECT geom FROM rinpan LIMIT 1')).first['geom'];
+      final geom = (await db.rawQuery('SELECT geom FROM parcels LIMIT 1')).first['geom'];
       final batch = db.batch();
       for (var i = 1; i < n; i++) {
-        batch.insert('rinpan', {
+        batch.insert('parcels', {
           'geom': geom,
           'name': 'r$i',
-          // 林班番号は全角で書かれていることがある
-          'rinpan': i.isEven ? '$i' : SearchText.toFullWidthAscii('$i'),
-          'jushu': i % 3 == 0 ? 'ﾋﾉｷ' : 'スギ',
+          // 区画番号は全角で書かれていることがある
+          'block': i.isEven ? '$i' : SearchText.toFullWidthAscii('$i'),
+          'kind': i % 3 == 0 ? 'ｲﾛﾊ' : 'ガイ',
           'no': i,
         });
       }
       await batch.commit(noResult: true);
-      layer = PolygonLayerNode(gpkg, 'rinpan', parent: GeoPackageNode(gpkg));
+      layer = PolygonLayerNode(gpkg, 'parcels', parent: GeoPackageNode(gpkg));
       await layer.updateChildren();
     });
 
@@ -98,7 +98,7 @@ void main() {
       if (tmp.existsSync()) tmp.deleteSync(recursive: true);
     });
 
-    test('半角で打っても全角の林班番号に当たり、一致が先頭に来る', () async {
+    test('半角で打っても全角の区画番号に当たり、一致が先頭に来る', () async {
       final r = await FeatureSearch.search([layer], '13');
       expect(r.hits, isNotEmpty);
       final first = r.hits.first;
@@ -111,13 +111,13 @@ void main() {
       expect(r.hits.map((h) => h.rank), orderedEquals([...r.hits.map((h) => h.rank)]..sort()));
     });
 
-    test('ひらがなで半角カナの樹種に当たる・件数の上限', () async {
+    test('ひらがなで半角カナの区分に当たる・件数の上限', () async {
       final sw = Stopwatch()..start();
-      final r = await FeatureSearch.search([layer], 'ひのき', limit: 50);
+      final r = await FeatureSearch.search([layer], 'いろは', limit: 50);
       sw.stop();
       expect(r.hits, hasLength(50));
       expect(r.truncated, isTrue);
-      expect(r.hits.first.column, 'jushu');
+      expect(r.hits.first.column, 'kind');
       // 1 万件でも全行を読まない（上限で打ち切る）。ホストでは数十 ms
       expect(sw.elapsedMilliseconds, lessThan(3000));
     });
@@ -199,20 +199,20 @@ void main() {
       expect([for (final h in byOther.hits) (h.feature.rowId, h.column, h.value)], [(2, '__id_', 'y2')]);
     });
 
-    // name 列の無いレイヤ（QGIS で作った小班など）で「小班 › 名前なし」が並んでいた（2026-10-12）
+    // name 列の無いレイヤ（QGIS で作った区画など）で「区画 › 名前なし」が並んでいた（2026-10-12）
     testWidgets('検索の窓: name 列が無ければ、当たった列以外の列で見分ける（名前なしと出さない）', (tester) async {
-      late PolygonLayerNode shohan;
+      late PolygonLayerNode parcels;
       await tester.runAsync(() async {
         final g = GeoPackageFile(const ['s.gpkg'], absolutePath: '${tmp.path}/s.gpkg');
         addTearDown(g.dispose);
-        await g.addLayer('小班', GeometryType.polygon);
-        await g.addAttributeColumns('小班', {'林班': 'INTEGER', '小班': 'TEXT', '林小班': 'TEXT', '樹種': 'TEXT'});
+        await g.addLayer('区画', GeometryType.polygon);
+        await g.addAttributeColumns('区画', {'地区': 'INTEGER', '区画': 'TEXT', '区画番号': 'TEXT', '区分': 'TEXT'});
         const ring = [LatLng(33.93, 135.96), LatLng(33.93, 135.97), LatLng(33.94, 135.97), LatLng(33.93, 135.96)];
-        await g.addPolygonWithAttributes('小班', [ring], {'林班': 77, '小班': 'い', '林小班': '77-い', '樹種': 'スギ'});
-        shohan = PolygonLayerNode(g, '小班', parent: GeoPackageNode(g));
-        await shohan.updateChildren();
+        await g.addPolygonWithAttributes('区画', [ring], {'地区': 77, '区画': 'い', '区画番号': '77-い', '区分': '種別A'});
+        parcels = PolygonLayerNode(g, '区画', parent: GeoPackageNode(g));
+        await parcels.updateChildren();
       });
-      await tester.pumpWidget(MaterialApp(home: Scaffold(body: FeatureSearchDialog(layers: [shohan]))));
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: FeatureSearchDialog(layers: [parcels]))));
       await tester.enterText(find.byType(TextField), '77');
       await tester.pump(const Duration(milliseconds: 300));
       await tester.runAsync(() async {
@@ -222,8 +222,8 @@ void main() {
         }
       });
       await tester.pump();
-      expect(find.text('林班: 77'), findsOneWidget);
-      expect(find.text('小班 › 小班: い / 林小班: 77-い'), findsOneWidget);
+      expect(find.text('地区: 77'), findsOneWidget);
+      expect(find.text('区画 › 区画: い / 区画番号: 77-い'), findsOneWidget);
       expect(find.textContaining('名前なし'), findsNothing);
     });
 

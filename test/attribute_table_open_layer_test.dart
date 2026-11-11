@@ -1,5 +1,5 @@
 // 属性表を開く先: レイヤ一覧でレイヤを選ばず、地図で地物を選んで開いたら、その地物のレイヤ（ホスト VM）。
-// 以前は「レイヤーが選択されていません」と断っていた（2026-10-12 に Pixel 9 で）
+// 以前は「レイヤーが選択されていません」と断っていた（2026-10-12 に Android 実機で）
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,11 +52,11 @@ void main() {
     expect(layerOfSelectedFeatures(const []), isNull);
   });
 
-  // 最後に選んだものを開く（2026-10-12 に Pixel 9 で。レイヤ一覧で調査点を押したあと、検索で小班の地物へ飛んで
+  // 最後に選んだものを開く（2026-10-12 に Android 実機で。レイヤ一覧で調査点を押したあと、検索で区画の地物へ飛んで
   // 属性表を開くと調査点が開いていた）
   test('属性表で開くレイヤ: 最後に選んだもの（一覧のレイヤ／地図で選んだ地物のレイヤ）', () async {
     final chousa = await layerWith('調査点');
-    final shohan = await layerWith('小班');
+    final parcels = await layerWith('区画');
     final c = ProviderContainer();
     addTearDown(c.dispose);
     LayerNode? target() => attributeTableLayerFor(c.read(selectedLayerNodeProvider), c.read(selectedFeaturesProvider));
@@ -65,14 +65,14 @@ void main() {
     c.read(selectedLayerNodeProvider.notifier).select(chousa);
     expect(target(), same(chousa));
     // 検索・タップ・表の行で地物を選ぶと、レイヤ一覧の選択もそのレイヤへ移る
-    c.read(selectedFeaturesProvider.notifier).selectOnMap(shohan.features.first);
-    expect(c.read(selectedLayerNodeProvider), same(shohan));
-    expect(target(), same(shohan));
+    c.read(selectedFeaturesProvider.notifier).selectOnMap(parcels.features.first);
+    expect(c.read(selectedLayerNodeProvider), same(parcels));
+    expect(target(), same(parcels));
     // そのあとレイヤ一覧で別のレイヤを押したら、押したほう
     c.read(selectedLayerNodeProvider.notifier).select(chousa);
     expect(target(), same(chousa));
     // 一覧で選んでいなければ地図で選んだ地物のレイヤ
     c.read(selectedLayerNodeProvider.notifier).select(null);
-    expect(target(), same(shohan));
+    expect(target(), same(parcels));
   });
 }

@@ -1,5 +1,5 @@
 // Drive クローンのダイアログは、フォルダを確かめられない理由で文言を分ける。
-// 圏外で「共有設定を確認してください」と出し、直す必要のない共有設定を触らせていた（2026-10-12、Pixel 9）
+// 圏外で「共有設定を確認してください」と出し、直す必要のない共有設定を触らせていた（2026-10-12、Android 実機）
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
@@ -18,7 +18,7 @@ void main() {
     await LocaleSettings.setLocale(AppLocale.ja);
     fake = FakeGoogleDrive();
     fake.authState.setAuthenticated(const DriveUser(id: 'x', email: 'a@example.com'));
-    folderId = fake.createRootFolder('施業地');
+    folderId = fake.createRootFolder('調査地');
   });
 
   Future<void> openAndEnter(WidgetTester tester, String id) async {
@@ -58,7 +58,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(t.drive.folderOffline), findsNothing);
     expect(find.text(t.drive.folderDetected), findsOneWidget);
-    expect(find.text('施業地'), findsOneWidget);
+    expect(find.text('調査地'), findsOneWidget);
     expect(fake.calls['lookupFolder'], 2);
   });
 

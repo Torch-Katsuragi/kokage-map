@@ -11,7 +11,7 @@
 | `gdal_data.zip`（GDAL_DATA） | `assets/gdal/gdal_data.zip` | 同上（GDAL の install を zip に） |
 | ライセンス本文 | `assets/licenses/{gdal,proj,expat,libiconv}.txt` | 各ソースから原文のまま（`lib/core/native_licenses.dart` がライセンス画面に載せる） |
 
-コミット済みの成果物は 2026-10-09 に matsumoto_tabPC の WSL（Ubuntu 22.04）で焼いたもの（CI では作っていない）。
+コミット済みの成果物は 2026-10-09 に WSL（Ubuntu 22.04）で焼いたもの（CI では作っていない）。
 
 ## 焼き方
 

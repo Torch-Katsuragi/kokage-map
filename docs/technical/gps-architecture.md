@@ -1,9 +1,9 @@
-﻿---
+---
 title: GPS追跡・測量アーキテクチャ
 tags: [technical, gps, architecture]
 ---
 
-# Root Mapsでの実装方針
+# こかげマップでの実装方針
 
 ## GPS追跡機能のアーキテクチャ
 
@@ -76,7 +76,7 @@ tags: [technical, gps, architecture]
 ## 向きは真北基準にそろえる（磁気偏角）
 
 地図・GPS の進行方向・地点への案内の方位は真北基準。磁北基準で届く値は、使う前に一度だけ偏角を足して真北に直す。
-紀伊半島の偏角は西偏 約 7.9°（北山村 33.93N 135.96E、2026.8 で −7.88°）なので、直さないとその分だけ向きがずれる。
+紀伊半島南部の偏角は西偏 約 7.9°（33.93N 135.96E、2026.8 で −7.88°）なので、直さないとその分だけ向きがずれる。
 
 | 値 | 基準 | 直す場所 |
 |----|------|----------|
@@ -86,9 +86,9 @@ tags: [technical, gps, architecture]
 
 - 偏角は `lib/utils/wmm_declination.dart`（WMM2025、12 次の球面調和関数、測地→地心の変換、経年変化は小数年で一次補間）。直すのは `lib/utils/true_heading.dart`（`TrueHeadingConverter`: 10 km 以上動くか日付が変わったら出し直す。位置が一度も分からないうちは直さない）。偏角を引く位置は今の測位（`GpsInfo.positionOr`。外部 GNSS だけ先に測れて地図の現在位置がまだ無い間も直す）、測れていなければ地図の現在位置
 - 係数は NOAA NCEI の `WMM2025COF.zip`（https://www.ncei.noaa.gov/sites/default/files/2024-12/WMM2025COF.zip）内の `WMM.COF`。SHA-256 `dfa8597825af4e0b87ff4198a5b4fb661b3c49f4cd090cd0164e0259b075582f`。public domain
-- 検算は `test/wmm_declination_test.dart`: 同梱の `WMM2025_TestValues.txt` 100 点と技術報告の 12 点（`WMM2025_TEST_VALUES.txt`）を ±0.01° で、北山村を NOAA のオンライン計算機の値（−7.87666°）と、国土地理院の偏角一覧 2020.0 年値（西偏 7°30′、±0.5°）と照らす
+- 検算は `test/wmm_declination_test.dart`: 同梱の `WMM2025_TestValues.txt` 100 点と技術報告の 12 点（`WMM2025_TEST_VALUES.txt`）を ±0.01° で、紀伊半島南部（33.93N 135.96E）を NOAA のオンライン計算機の値（−7.87666°）と、国土地理院の偏角一覧 2020.0 年値（西偏 7°30′、±0.5°）と照らす
 - 有効期間は 2025.0〜2030.0
-- **TODO(2030)**: WMM2025 は 2030.0 で期限切れ。WMM2030 が出たら `WMM.COF` を差し替え、係数表・SHA・テスト値を更新する
+- **WMM2025 の有効期限（2030年）**: WMM2025 は 2030.0 で期限切れ。WMM2030 が出たら `WMM.COF` を差し替え、係数表・SHA・テスト値を更新する
 - TruPulse 本体の偏角設定（dECLn）はシリアルで読めない。アプリが偏角を足すので、本体は 0 のままにする（[[../devices/trupulse-360r]]）
 
 ## デバッグ時の確認ポイント
@@ -100,7 +100,7 @@ tags: [technical, gps, architecture]
 
 ## GNSS の品質の記録と足切り
 
-造林補助の GNSS 竣工検査（和歌山県・石川県など）は、測位の種類・衛星数・DOP・平均化の回数の記録を求める。
+公共測量や各種補助事業の GNSS 竣工検査は、測位の種類・衛星数・DOP・平均化の回数の記録を求める。
 現場では悪い測位をその場で弾きたい。モデルは `lib/models/gnss_quality.dart`（2026-10-11）。
 
 ### 読むもの（外部 GNSS）

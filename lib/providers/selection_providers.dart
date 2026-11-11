@@ -68,7 +68,7 @@ class SelectedFeatures extends _$SelectedFeatures {
 
   /// 地図で [node] だけを選ぶ。地物ならレイヤ一覧の選択もそのレイヤに移す（タップで選んだときと同じ）。
   /// 属性の検索で地物へ飛んだときは移していなかったので、前にレイヤ一覧で押したレイヤの属性表が開いていた
-  /// （2026-10-12 に Pixel 9 で。調査点を押したあと検索で小班の 12-ろ へ飛び、属性表で調査点が開いた）
+  /// （2026-10-12 に実機で。調査点を押したあと検索で区画の 12-B へ飛び、属性表で調査点が開いた）
   void selectOnMap(LayerTreeNode node) {
     state = [node];
     if (node is FeatureNode) ref.read(selectedLayerNodeProvider.notifier).select(node.parent);

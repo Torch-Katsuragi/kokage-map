@@ -86,7 +86,7 @@ class _Drive {
 
 void main() {
   const size = Size(1080, 2000);
-  TerrainCamera kitayamaCamera(double zoom) => TerrainCamera(
+  TerrainCamera mountainCamera(double zoom) => TerrainCamera(
         centerX: WebMercator.xFromLon(135.97),
         centerY: WebMercator.yFromLat(33.93),
         scale: TerrainCamera.scaleForZoom(zoom),
@@ -97,7 +97,7 @@ void main() {
   test('静止: 温まれば被覆 100%、先読みも含めて枚数は上限内', () {
     fakeAsync((async) {
       final world = simWorld();
-      final d = _Drive(world, kitayamaCamera(16), size);
+      final d = _Drive(world, mountainCamera(16), size);
       d.warmUp(async);
       final plan = d.step(async, 'idle');
       expect(plan.coverage.full, isTrue, reason: '${plan.coverage}');
@@ -109,7 +109,7 @@ void main() {
   test('パン: 温まった後に東へ 6km（2 本指ドラッグ相当）動かしても被覆が欠けない', () {
     fakeAsync((async) {
       final world = simWorld();
-      final d = _Drive(world, kitayamaCamera(16), size);
+      final d = _Drive(world, mountainCamera(16), size);
       d.warmUp(async);
       // 1 ステップ 50ms で 60m（秒速 1.2km = かなり速いドラッグ）
       for (var i = 0; i < 100; i++) {
@@ -123,7 +123,7 @@ void main() {
   test('ズームアウト → ズームイン: 段が変わるたびに親か子で埋まっている', () {
     fakeAsync((async) {
       final world = simWorld();
-      final d = _Drive(world, kitayamaCamera(16), size);
+      final d = _Drive(world, mountainCamera(16), size);
       d.warmUp(async);
       for (var i = 0; i < 60; i++) {
         d.camera.zoom = 16 - i * 0.1; // 16 → 10
@@ -140,7 +140,7 @@ void main() {
   test('乱暴なズームアウト（1 秒に 4 段）: 欠けても数フレームまで', () {
     fakeAsync((async) {
       final world = simWorld();
-      final d = _Drive(world, kitayamaCamera(16), size);
+      final d = _Drive(world, mountainCamera(16), size);
       d.warmUp(async);
       for (var i = 0; i < 30; i++) {
         d.camera.zoom = 16 - i * 0.2;
@@ -153,7 +153,7 @@ void main() {
   test('寄る: 手が空いている間に内側半分を 1 段細かく先読みしているので、1 段寄った瞬間に細かい段が出る', () {
     fakeAsync((async) {
       final world = simWorld();
-      final d = _Drive(world, kitayamaCamera(15), size);
+      final d = _Drive(world, mountainCamera(15), size);
       d.warmUp(async);
       final before = d.step(async, 'before');
       d.camera.zoom = 16;
@@ -167,7 +167,7 @@ void main() {
   test('回転と傾け: 見える範囲が変わっても欠けない', () {
     fakeAsync((async) {
       final world = simWorld();
-      final d = _Drive(world, kitayamaCamera(15), size);
+      final d = _Drive(world, mountainCamera(15), size);
       d.warmUp(async);
       for (var i = 0; i < 72; i++) {
         d.camera.bearing = i * 5 * math.pi / 180;
@@ -181,7 +181,7 @@ void main() {
   test('パンしながらズーム: 実運用に近い複合操作', () {
     fakeAsync((async) {
       final world = simWorld(latency: const Duration(milliseconds: 500));
-      final d = _Drive(world, kitayamaCamera(16), size);
+      final d = _Drive(world, mountainCamera(16), size);
       d.warmUp(async);
       final rnd = math.Random(3);
       for (var i = 0; i < 300; i++) {

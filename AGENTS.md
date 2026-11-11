@@ -56,7 +56,7 @@ dart run build_runner build --delete-conflicting-outputs
 - **Android と web の両方で通すこと**。片方だけ緑の変更は入れない
   （web対応作業では「webを直したらAndroidが壊れた」が最大のリスク）
 - 一発で回す: `pwsh tool/test_matrix.ps1`（端末不要の段だけなら `-Only analyze,unit`）
-- **Androidの検証は実機で行う。エミュレータは不可**（Pixel 9 が常時接続されている）
+- **Androidの検証は実機で行う。エミュレータは不可**（実機を接続して検証する）
 - webの検証は `flutter build web --release` → ローカルHTTPサーバ → Chrome（`flutter run -d chrome` は不安定）
 - 詳細・落とし穴は [[docs/technical/testing|テスト構成]] を読む
 - 地図まわりを触ったら `test/map_surface_*_test.dart` と `test/map_scene_store_test.dart` を回す（地図面の契約。[[docs/technical/testing#地図面の契約テスト]]）

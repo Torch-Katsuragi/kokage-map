@@ -92,8 +92,8 @@ void main() {
   test('開いて地物・結合・読み戻し・検索を通しても gpkg を変えず、2 回目は .qgs も変えない', () async {
     // 1 回目: 結合を設定して .qgs を書く（前の作業の体）
     var root = await openTree();
-    final shoban = layersOf(root).firstWhere((l) => l.layerName == 'shoban');
-    await KMetaService.instance.setLayerJoins(proj, shoban.layerKey, fixtureJoins);
+    final parcels = layersOf(root).firstWhere((l) => l.layerKey == '計画図.gpkg/parcels');
+    await KMetaService.instance.setLayerJoins(proj, parcels.layerKey, fixtureJoins);
     root.invalidateMetaCache();
     await const QgsProjectBuilder().writeTo(root);
     await close(root);
@@ -105,7 +105,7 @@ void main() {
       KMetaService.instance.clearCache();
       root = await openTree();
       final layers = layersOf(root);
-      expect(layers.map((l) => l.layerName), containsAll(['shoban', 'Stands', 'parcels']));
+      expect(layers.map((l) => l.layerKey), containsAll(['計画図.gpkg/parcels', 'arc.gpkg/Stands', 'nopk.gpkg/parcels']));
       for (final l in layers) {
         expect(l.children, isNotEmpty, reason: '${l.layerName} の地物が読めている');
         await l.loadJoins();

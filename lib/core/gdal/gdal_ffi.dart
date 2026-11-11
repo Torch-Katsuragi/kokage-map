@@ -115,7 +115,7 @@ class GdalFfi implements Gdal {
 }
 
 // アイソレートに渡すクロージャは GdalFfi の外（トップレベル）で作る。メソッドの中で作ると this（未完了の Future を持つ
-// _ready）まで連れていき、実機では「object is unsendable」で落ちる（2026-10-11 Pixel 9。ホストのテストでは出なかった）
+// _ready）まで連れていき、実機では「object is unsendable」で落ちる（2026-10-11 Android 実機。ホストのテストでは出なかった）
 Future<GdalFfiConfig> _initOnce(GdalFfiConfig? config) async {
   final c = config ?? await _androidConfig();
   await Isolate.run(() => _GdalLib.open(c).initProcess(c));

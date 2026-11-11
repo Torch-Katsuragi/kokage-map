@@ -15,9 +15,9 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 /// サインインの失敗を「圏外」「本当のキャンセル」「その他」に分ける（純 Dart）。
 ///
-/// ⚠ 圏外の Pixel 9 では google_sign_in が
+/// ⚠ 圏外の Android 実機では google_sign_in が
 /// `canceled: [16] Account reauth failed.` を返し、それが生のまま出ていた（2026-10）。
-/// 林業の現場は圏外が多いので、通信できないときは何のエラーでも「圏外」にまとめる。
+/// 屋外作業では圏外が多いため、通信できないときは何のエラーでも「圏外」にまとめる。
 library;
 
 import 'package:google_sign_in/google_sign_in.dart';

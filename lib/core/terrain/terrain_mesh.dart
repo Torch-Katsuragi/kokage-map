@@ -251,7 +251,7 @@ class _Chunk {
   ///
   /// 対角線は「奥の角と手前の角を結ばない」方（奥の角を含む三角形と手前の角を含む三角形に割れる）を取り、
   /// 奥の角を含む方を先に描く。固定の対角線・固定の順だと、北東が奥の向きでは奥の三角形が手前を
-  /// 上書きし、崖の縁ごとにギザギザの溝が出る（Pixel 9・pitch 70°・寄りで顕著だった）
+  /// 上書きし、崖の縁ごとにギザギザの溝が出る（Android 実機・pitch 70°・寄りで顕著だった）
   Uint16List indicesFor(int quadrant) {
     final cached = indicesByQuadrant[quadrant];
     if (cached != null) return cached;

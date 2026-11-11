@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test/gdal_raster_overlay_test.dart の小さなラスタを QGIS 同梱の GDAL（gdal_create / gdal_translate）で作り直す。Git Bash 前提。
 #   bash test/fixtures/gdal/make_raster_fixtures.sh ["C:/Program Files/QGIS 4.2.2"]
-# どれも北山村あたり。QGIS で普通に作ったラスタの形（アプリが書く GeoTIFF の形ではない）:
+# どれも紀伊半島あたり。QGIS で普通に作ったラスタの形（アプリが書く GeoTIFF の形ではない）:
 #   ext_rgb_6674.tif   … RGB、EPSG:6674、LZW、タイル分割（16x16）、40x24
 #   ext_gray_4326.tif  … 1 バンド Byte、EPSG:4326、Deflate、nodata=0 の画素あり
 #   ext_png.png        … PNG ＋ ワールドファイル（.pgw）＋ .aux.xml（CRS は EPSG:6674）

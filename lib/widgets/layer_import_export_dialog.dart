@@ -71,7 +71,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   FileFormat _exportFormat = FileFormat.shapefile;
   bool _includeRowNumber = false; // 初期値はオフ
   bool _includeGnssQuality = false; // GPS 測量の品質を列に（初期値はオフ）
-  bool _includeJoinedFields = true; // 結合した表（森林簿など）の列も書く（QGIS の「名前を付けて保存」と同じく既定で書く）
+  bool _includeJoinedFields = true; // 結合した表の列も書く（QGIS の「名前を付けて保存」と同じく既定で書く）
   EpsgDefinition? _selectedCrs = _lastUsedCrs; // 最後に使用したCRSを初期値に
   String _crsSearchQuery = ''; // CRS検索クエリ
 

@@ -36,7 +36,7 @@ void main() {
     expect(requests.last.queryParameters['pageToken'], 'p2');
   });
 
-  // Wi-Fi の切り替わりで名前解決が一瞬落ちる（2026-10-12、Pixel 9）。読むだけの呼び出しは 1 回だけ取り直す
+  // Wi-Fi の切り替わりで名前解決が一瞬落ちる（2026-10-12、Android 実機）。読むだけの呼び出しは 1 回だけ取り直す
   group('通信の一時的な失敗', () {
     setUp(() => GoogleDriveService.transientRetryDelay = Duration.zero);
 

@@ -26,7 +26,7 @@ os.makedirs(outside, exist_ok=True)
 
 
 def geotiff(path):
-    """4326 の小さな GeoTIFF（北山村あたり）"""
+    """4326 の小さな GeoTIFF（紀伊半島あたり）"""
     ds = gdal.GetDriverByName('GTiff').Create(path, 40, 30, 3, gdal.GDT_Byte)
     ds.SetGeoTransform([135.97, 0.0001, 0, 33.94, 0, -0.0001])
     srs = osr.SpatialReference()

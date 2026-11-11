@@ -16,7 +16,7 @@
 // こかげマップ: 属性テーブルの下のページ送り
 //
 // TrinaLazyPagination の既定の見た目は横幅を固定で使い、縦向きのスマホ（約 412 dp）では
-// 右端がはみ出していた（2026-10-12 に Pixel 9 で「OVERFLOWED BY 76 PIXELS」）。
+// 右端がはみ出していた（2026-10-12 に Android 実機で「OVERFLOWED BY 76 PIXELS」）。
 // ボタンを詰め、幅が足りなければ「先頭へ・末尾へ」と件数を畳む。
 
 import 'package:flutter/material.dart';
@@ -107,7 +107,7 @@ class AttributeTablePager extends StatelessWidget {
                     ],
                   ),
                 ),
-              // ⚠ 文字を両脇の Spacer と並べない。空きを三等分され、1 件の表でも「1 / …」と切れていた（2026-10-12 に Pixel 9 で）。
+              // ⚠ 文字を両脇の Spacer と並べない。空きを三等分され、1 件の表でも「1 / …」と切れていた（2026-10-12 に Android 実機で）。
               //   真ん中の塊だけを Expanded にし、その中で空きを全部ページの表示に回す
               Expanded(
                 child: Row(

@@ -189,7 +189,7 @@ void main() {
       path = p.join(tmp.path, 'b.gpkg');
       gpkg = GeoPackageFile(const ['b.gpkg'], absolutePath: path);
       await gpkg.addLayer(table, GeometryType.point);
-      await gpkg.addAttributeColumns(table, {'name': 'TEXT', '確認済': 'BOOLEAN', '伐採': 'BOOLEAN', 'memo': 'TEXT'});
+      await gpkg.addAttributeColumns(table, {'name': 'TEXT', '確認済': 'BOOLEAN', '完了': 'BOOLEAN', 'memo': 'TEXT'});
       await gpkg.addPointWithAttributes(table, const LatLng(33.93, 135.96), {'name': 'a', '確認済': 'true'});
       await gpkg.addPointWithAttributes(table, const LatLng(33.94, 135.97), {'name': 'b'});
       await gpkg.flushChanges();
@@ -226,12 +226,12 @@ void main() {
 
     test('以前の版が書いた文字の真偽は、その行を書くときに 1/0 に直す（開いただけでは書き換えない）', () async {
       final db = await openDatabase(path, singleInstance: false);
-      await db.execute("UPDATE $table SET 伐採 = 'true' WHERE fid = 1");
-      await db.execute("UPDATE $table SET 伐採 = 'false' WHERE fid = 2");
+      await db.execute("UPDATE $table SET 完了 = 'true' WHERE fid = 1");
+      await db.execute("UPDATE $table SET 完了 = 'false' WHERE fid = 2");
       await db.close();
 
       expect(await gpkg.updateFeatureAttributes(table, 1, {'name': 'a2'}), isTrue);
-      expect(await onDisk('伐採'), [(1, 'integer'), ('false', 'text')], reason: '書いた行だけ直す');
+      expect(await onDisk('完了'), [(1, 'integer'), ('false', 'text')], reason: '書いた行だけ直す');
     });
 
     test('GDAL が真偽として読める（QGIS で付けたチェックが残る）', () async {

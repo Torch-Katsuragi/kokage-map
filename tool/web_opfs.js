@@ -8,9 +8,9 @@
 // 使い方は tool/web_opfs.py の冒頭。
 //
 //   const m = await import('http://localhost:8098/web_opfs.js');
-//   await m.seed('http://localhost:8098', 'Kitayama-2026');   // 丸ごと入れ直す
-//   await m.list('Kitayama-2026');                              // [[パス, 大きさ], ...]
-//   await m.read('Kitayama-2026/Kitayama-2026.qgs');            // 中身（文字）
+//   await m.seed('http://localhost:8098', 'SampleProject');   // 丸ごと入れ直す
+//   await m.list('SampleProject');                            // [[パス, 大きさ], ...]
+//   await m.read('SampleProject/SampleProject.qgs');          // 中身（文字）
 
 async function root() {
   return navigator.storage.getDirectory();

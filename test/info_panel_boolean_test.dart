@@ -1,5 +1,5 @@
 // 情報パネル: 真偽の列（gpkg の BOOLEAN・QGIS のチェックボックス）を「はい／いいえ」で出す。
-// 以前は「確認済: true」と生の値が出ていた（2026-10-12 実機、QGIS で作った小班の gpkg）
+// 以前は「確認済: true」と生の値が出ていた（2026-10-12 実機、QGIS で作った区画の gpkg）
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -68,11 +68,11 @@ void main() {
     await tester.runAsync(() async {
       tmp = await Directory.systemTemp.createTemp('info_panel_bool_');
       gpkg = GeoPackageFile(const ['t.gpkg'], absolutePath: '${tmp.path}/t.gpkg');
-      await gpkg.addLayer('小班', GeometryType.polygon);
-      await gpkg.addAttributeColumns('小班', {'確認済': 'BOOLEAN', '再確認': 'BOOLEAN', 'メモ': 'TEXT'});
+      await gpkg.addLayer('区画', GeometryType.polygon);
+      await gpkg.addAttributeColumns('区画', {'確認済': 'BOOLEAN', '再確認': 'BOOLEAN', 'メモ': 'TEXT'});
       const ring = [LatLng(33.0, 135.0), LatLng(33.0, 135.1), LatLng(33.1, 135.1), LatLng(33.0, 135.0)];
-      await gpkg.addPolygonWithAttributes('小班', [ring], {'確認済': 1, '再確認': 'false', 'メモ': 'true'});
-      layer = PolygonLayerNode(gpkg, '小班', parent: GeoPackageNode(gpkg));
+      await gpkg.addPolygonWithAttributes('区画', [ring], {'確認済': 1, '再確認': 'false', 'メモ': 'true'});
+      layer = PolygonLayerNode(gpkg, '区画', parent: GeoPackageNode(gpkg));
       await layer.updateChildren();
     });
     addTearDown(() async {

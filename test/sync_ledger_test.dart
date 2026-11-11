@@ -6,7 +6,7 @@ import 'package:root_maps/services/sync_ledger.dart';
 void main() {
   final full = KMetaSync(
     driveId: 'd1',
-    driveFolderName: 'Kitayama',
+    driveFolderName: 'Sample',
     driveUrl: 'https://drive/x',
     isReadOnly: false,
     lastSynced: DateTime(2026, 9, 6, 12, 0),
@@ -20,7 +20,7 @@ void main() {
   test('linkOnly はリンク情報だけを残す', () {
     final link = full.linkOnly();
     expect(link.driveId, 'd1');
-    expect(link.driveFolderName, 'Kitayama');
+    expect(link.driveFolderName, 'Sample');
     expect(link.driveUrl, 'https://drive/x');
     expect(link.isReadOnly, false);
     expect(link.hasBookkeeping, isFalse);

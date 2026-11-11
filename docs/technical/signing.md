@@ -1,4 +1,4 @@
-﻿---
+---
 title: Android署名鍵の管理
 tags: [technical, android, signing]
 ---
@@ -9,7 +9,7 @@ tags: [technical, android, signing]
 
 署名鍵（keystore）は開発者の個人Google Drive内で保管している。
 
-- **場所**: `マイドライブ/matsumoto_personal/事業/google play console/`
+- **場所**: `<開発者のGoogle Drive保管フォルダ>/`
 - **ファイル**: `Root Maps-release.keystore`
 - **ヒント**: 同ディレクトリの `KEYSTORE_HINT.txt` を参照
 

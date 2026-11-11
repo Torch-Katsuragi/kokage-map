@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// Root Maps: 同期コンフリクト解決
+// こかげマップ: 同期コンフリクト解決
 // ファイルごとの選択（端末を採用・クラウドを採用・行単位で合わせる）の反映を担当
 // （何が変わったかの判定は sync_snapshot.dart）
 

@@ -329,7 +329,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     // 粗く間引いたタイル（セルが 30m 以上）で面が多いときはラベルを省く（判定はデータ全体の面数。タイルごとに変えると継ぎ接ぎになる）。
     // ⚠ 輪郭は省かないこと。以前はここで輪郭も省いていたが、焼き込む段（z13 以下）は面をそもそも持ち上げないので、
     // 省かれるのは焼き込まない z14 以上のタイルを中間の段（14.6 など）で間引いたときだけだった。塗りの無い面
-    // （森林簿の小班 1.5 万面）がその段でだけ丸ごと消えていた（2026-10-06、Fold）
+    // （区画ポリゴン 1.5 万面）がその段でだけ丸ごと消えていた（2026-10-06、実機）
     final coarse = tile.bordered.cellSize * step >= 30;
     final dense = coarse && g.polygons.length > 2000;
     void add(TerrainScene s, {bool withLabels = true}) {

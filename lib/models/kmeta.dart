@@ -856,7 +856,7 @@ class KMeta {
   final Map<String, QgisForm> forms;
 
   /// 表の結合（レイヤキー → 結合の並び）。`.qgs` の `<vectorjoins>` と往復する
-  /// （[[docs/technical/qgis-interop#表の結合（森林簿 CSV と計画図）]]）
+  /// （[[docs/technical/qgis-interop#表の結合（属性 CSV と図面レイヤ）]]）
   final Map<String, List<LayerJoin>> joins;
 
   const KMeta({

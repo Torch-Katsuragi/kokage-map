@@ -492,7 +492,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
   int _resumeEpoch = 0;
 
   /// 裏に回ったらテクスチャ合成（toImage・デコード）を止め、控えを手放す。
-  /// 戻ったらサーフェス再生成と最初のフレームが終わるのを待ってから再開する（2026-10-23 Pixel 10 Pro Fold での復帰時フリーズ対策）
+  /// 戻ったらサーフェス再生成と最初のフレームが終わるのを待ってから再開する（2026-10-23 Android 実機での復帰時フリーズ対策）
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {

@@ -1,6 +1,6 @@
 // gpkg（グループ）の目を消したら、中の View の地物が地図に流れず、焼き込みも焼き直しになる（2026-10-13）。
 //
-// Pixel 9 で QGIS から持ってきた gpkg（View 3 枚の小班）の目を消しても、林齢の View の色の面が出たままだった。
+// Android 実機で QGIS から持ってきた gpkg（View 3 枚の区画）の目を消しても、年数の View の色の面が出たままだった。
 // 地図ページ（MapFeatureCacheMixin.updateFeatures → syncFeatureSources）と同じ手順を部品で辿り、
 // 「見えるレイヤ → 地物 → GeoJSON の中身の世代と変わった範囲 → 3D の焼き込みの台帳」が消灯を運ぶことを固定する。
 // 地図ページでは、これより前にオーバーレイの表示用の画像（GDAL）を待っていたのが止まる元だった（overlay_preparation_test.dart）
@@ -66,8 +66,8 @@ void main() {
     final layer = PolygonLayerNode(gpkg, PracticeProject.areaLayer, parent: gpkgNode);
     gpkgNode.children.add(layer);
     layer.views.addAll([
-      ViewNode(name: '樹種', parent: layer),
-      ViewNode(name: '林齢', parent: layer),
+      ViewNode(name: '種別', parent: layer),
+      ViewNode(name: '年数', parent: layer),
       ViewNode(name: 'ルール', parent: layer),
     ]);
     await layer.updateChildren();

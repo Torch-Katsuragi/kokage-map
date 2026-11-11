@@ -39,7 +39,7 @@ void main() {
     expect(find.text('12345'), findsOneWidget);
   });
 
-  // ページの表示が「…」に切れない（2026-10-12 に Pixel 9 で 1 件の表が「1 / …」と出た。
+  // ページの表示が「…」に切れない（2026-10-12 に Android 実機で 1 件の表が「1 / …」と出た。
   // 両脇の Spacer と幅を三等分していたので、空きが少ないと文字が切れていた）
   testWidgets('ページ / 総ページは切れずに全部出る', (tester) async {
     bool fits(String s) {

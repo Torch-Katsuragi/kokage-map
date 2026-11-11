@@ -86,7 +86,7 @@ class QgsLayer extends QgsTreeNode {
   /// QGIS上のレイヤ名（＝View名）
   final String name;
 
-  /// `.qgs` からの相対パス（例: `./林小班.gpkg`）
+  /// `.qgs` からの相対パス（例: `./区画.gpkg`）
   final String dataSourcePath;
 
   /// GeoPackage内のテーブル名
@@ -105,7 +105,7 @@ class QgsLayer extends QgsTreeNode {
   final bool visible;
 
   /// パスの後ろに `|` で続けるレイヤの指定。null なら `layername=<tableName>`（gpkg）。
-  /// 読み取り専用レイヤ（shp・GeoJSON）は 1 ファイル 1 レイヤなら空（`./林班.shp` だけ）、
+  /// 読み取り専用レイヤ（shp・GeoJSON）は 1 ファイル 1 レイヤなら空（`./区画.shp` だけ）、
   /// GeoJSON の型の混在なら `geometrytype=Point` など（[[external-formats]]）
   final List<String>? uriOptions;
 
@@ -153,7 +153,7 @@ class QgsJoin {
   final bool memoryCache;
 }
 
-/// 形の無い表（森林簿 CSV）。QGIS の「CSV テキストレイヤ」（delimitedtext、geomType=none）として書く
+/// 形の無い表（CSV）。QGIS の「CSV テキストレイヤ」（delimitedtext、geomType=none）として書く
 class QgsTableLayer extends QgsTreeNode {
   const QgsTableLayer({
     required this.id,
@@ -171,7 +171,7 @@ class QgsTableLayer extends QgsTreeNode {
   /// QGIS 上のレイヤ名（ファイル名から拡張子を除いたもの。結合の既定の接頭辞になる）
   final String name;
 
-  /// `.qgs` からの相対パス（例: `./森林簿.csv`）
+  /// `.qgs` からの相対パス（例: `./台帳.csv`）
   final String dataSourcePath;
 
   /// 文字コード（アプリが読んだもの。`UTF-8` か `CP932`）

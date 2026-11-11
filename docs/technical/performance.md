@@ -4,8 +4,8 @@ tags: [technical, performance]
 
 # 性能（電池・メモリ・起動）
 
-2026-10-06 にまとめて洗い直した記録。数字は Pixel 11 Pro Fold（折りたたみ・1080×2342）、プロジェクトはいつもの地図に
-龍神村の森林簿（小班 1.5 万面・61.7 万点、EPSG:2448）を入れたもの。debug は JIT なので CPU・メモリは profile の数字を正とする。
+2026-10-06 にまとめて洗い直した記録。数字は Android 実機（1080×2342）、プロジェクトは通常プロジェクトに
+大規模ポリゴンデータ（1.5 万面・61.7 万点、EPSG:2448）を入れたもの。debug は JIT なので CPU・メモリは profile の数字を正とする。
 
 ## 結果
 
@@ -89,7 +89,7 @@ tags: [technical, performance]
 
 ## 2026-10-12 大きさとメモリ（n9/size-mem）
 
-PC だけで測れる分を直した。メモリは端末で測っていない（[[TODO#8. メモリ・大きさ（profile 版と DevTools。n9/size-mem）]]）。
+PC だけで測れる分を直した。
 
 ### APK の大きさ
 
@@ -107,7 +107,7 @@ libgeodiff 2.8MB・libsqlite3 1.7MB・proj.db 1.9MB（元 10.5MB）・dex 2.3MB�
 - **使われないフォント**: trina_grid → shadcn_ui → lucide_icons_flutter が太さ違いの Lucide（`Lucide100`〜`600`、計 2.8MB・圧縮後 1.37MB）を
   宣言している。アプリの Dart コードはこのファミリを引かない（libapp.so にファミリ名が無いのを確かめた）。アイコンの刈り込みは
   使われたファミリだけを見るので、丸ごと入っていた。`android/app/build.gradle.kts` で `copyFlutterAssets*` から外し、
-  `FontManifest.json` からも消す。web には効いていない（TODO）
+  `FontManifest.json` からも消す。web には効いていない
 - **図解の SVG の id**: Typst は字形ごとに `g` + 32 桁の 16 進の id を振り、`<use>` で何度も引く。`tool/changelog/build.py` の
   `_short_ids` で短い名前に付け替える（形・座標は変えない。vector_graphics の符号化結果がバイト単位で同じなのを確かめた）。
   既にある SVG は `python tool/changelog/build.py --short-ids` で付け替えた。参照切れはテスト（`changelog_figure_test`）で見る
@@ -134,7 +134,7 @@ libgeodiff 2.8MB・libsqlite3 1.7MB・proj.db 1.9MB（元 10.5MB）・dex 2.3MB�
 
 ## 2026-10-12 置いたままの焼き直し（d2/rebake-loop）
 
-Pixel 9 で地図を開いて置いたまま（GPS 記録中）、20 秒ごとに `Consolidation完了` → `[Features]` → `[3D] bake: 6 枚を世代 N で焼き直す` が続いていた。
+Android 実機で地図を開いて置いたまま（GPS 記録中）、20 秒ごとに `Consolidation完了` → `[Features]` → `[3D] bake: 6 枚を世代 N で焼き直す` が続いていた。
 10-06 の直し（[[#地物の一覧を保つ]]）で全タイルの焼き直しは止まっていたが、まだ次が残っていた。
 
 - 統合のたびに `updateFeatures()`（全レイヤの地物を集め直し → 全件の組み直し → 1.5 万面の署名を取り直す）を引いていた。

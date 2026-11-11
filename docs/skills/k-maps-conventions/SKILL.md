@@ -1,9 +1,9 @@
 ---
 name: k-maps-conventions
-description: k_mapsプロジェクト固有のコーディング規約とワークフロー。Flutter/Dartでの地図アプリ開発、GeoPackage処理、GPS機能実装に関するガイドライン。このプロジェクトでコードを書く際に参照する。
+description: こかげマップ（root_maps）固有のコーディング規約とワークフロー。Flutter/Dartでの地図アプリ開発、GeoPackage処理、GPS機能実装に関するガイドライン。このプロジェクトでコードを書く際に参照する。
 ---
 
-# k_maps プロジェクト規約
+# こかげマップ プロジェクト規約
 
 Flutter製の地図アプリケーション開発プロジェクト。
 
@@ -14,11 +14,11 @@ lib/
 ├── main.dart           # エントリーポイント
 ├── core/               # コア機能
 ├── models/             # データモデル
+├── providers/          # Riverpod状態管理
 ├── screens/            # 画面
 ├── services/           # サービス層
 ├── widgets/            # ウィジェット
 ├── utils/              # ユーティリティ
-├── converters/         # データ変換
 └── tools/              # ツール類
 ```
 

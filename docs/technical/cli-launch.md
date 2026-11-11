@@ -42,14 +42,14 @@
 ## CLI
 
 ```bash
-python tool/kokage.py open --project /sdcard/FieldSurvey/Kitayama-2026 --at 33.8985,135.5718,15
+python tool/kokage.py open --project /sdcard/FieldSurvey/SampleProject --at 33.8985,135.5718,15
 python tool/kokage.py open --at 33.8985,135.5718,16 --bearing 30 --pitch 45
 python tool/kokage.py reload
 python tool/kokage.py url --at 33.8985,135.5718,15     # web 版の URL を出すだけ
 ```
 
 中身は `adb shell am start -n com.k_root.k_maps/.MainActivity --es route "/map?..."`。
-`-s <serial>` で端末を選ぶ。Surface の adb をトンネル越しに使うときは `ADB_SERVER_SOCKET` がそのまま効く。
+`-s <serial>` で端末を選ぶ。別PCの adb をトンネル越しに使うときは `ADB_SERVER_SOCKET` がそのまま効く。
 
 ## web を外から動かす（OPFS、2026-09-30）
 
@@ -64,9 +64,9 @@ python tool/web_opfs.py <テスト用フォルダ> --port 8098   # フォルダ�
 
 ```js
 const m = await import('http://localhost:8098/web_opfs.js');
-await m.seed('http://localhost:8098', 'Kitayama-2026');    // 空にしてから丸ごと入れる
-location.href = '/?r=1#/map?project=opfs:Kitayama-2026';     // 開く
-await m.list('Kitayama-2026'); await m.read('Kitayama-2026/Kitayama-2026.qgs');  // 確かめる
+await m.seed('http://localhost:8098', 'SampleProject');    // 空にしてから丸ごと入れる
+location.href = '/?r=1#/map?project=opfs:SampleProject';     // 開く
+await m.list('SampleProject'); await m.read('SampleProject/SampleProject.qgs');  // 確かめる
 ```
 
 - ⚠ タブが隠れていると（`document.visibilityState` が `hidden`）描画が止まり、地図の初期化が進まない。
@@ -74,8 +74,8 @@ await m.list('Kitayama-2026'); await m.read('Kitayama-2026/Kitayama-2026.qgs'); 
 - 同じ名前のフォルダを何度も使うと、前の回の DB が sqlite3 WASM の worker に残っていることがある。確かめ直すときは名前を変える
 - 前回のフォルダ（IndexedDB）には残さない。利用者の「前回のフォルダ」を上書きしない
 
-⚠ Git Bash から `--es route "/map?..."` を渡すと MSYS がパスに変換することがある。`MSYS_NO_PATHCONV=1` を付ける
-（[[reference-adb-device-and-msys]] と同じ）。`kokage.py` は Python の `subprocess` なので影響を受けない。
+⚠ Git Bash から `--es route "/map?..."` を渡すと MSYS がパスに変換することがある。`MSYS_NO_PATHCONV=1` を付ける。
+`kokage.py` は Python の `subprocess` なので影響を受けない。
 
 ## 典型的な流れ（AI が編集 → 見せる）
 

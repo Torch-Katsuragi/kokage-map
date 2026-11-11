@@ -23,14 +23,14 @@ void main() {
     test('往復しても内容と順序が保たれる', () {
       const meta = KMeta(
         views: {
-          'rinshoban.gpkg/rinshoban': [
-            KMetaView(name: 'スギ', filter: "樹種 = 'スギ'"),
-            KMetaView(name: 'ヒノキ', filter: "樹種 = 'ヒノキ'"),
+          'parcels.gpkg/parcels': [
+            KMetaView(name: 'A種', filter: "種別 = 'A種'"),
+            KMetaView(name: 'B種', filter: "種別 = 'B種'"),
             KMetaView(name: '全部'),
           ],
         },
         visibility: KMetaVisibility(
-          views: {'rinshoban.gpkg/rinshoban/ヒノキ': false},
+          views: {'parcels.gpkg/parcels/B種': false},
         ),
       );
 
@@ -38,14 +38,14 @@ void main() {
         jsonDecode(jsonEncode(meta.toJson())) as Map<String, dynamic>,
       );
 
-      final views = restored.getViews('rinshoban.gpkg/rinshoban');
-      expect(views.map((v) => v.name), ['スギ', 'ヒノキ', '全部'],
+      final views = restored.getViews('parcels.gpkg/parcels');
+      expect(views.map((v) => v.name), ['A種', 'B種', '全部'],
           reason: 'z順の根拠なので順序が変わってはいけない');
-      expect(views[0].filter, "樹種 = 'スギ'");
+      expect(views[0].filter, "種別 = 'A種'");
       expect(views[2].filter, isNull, reason: 'フィルタ無しは書かない');
 
-      expect(restored.getViewVisibility('rinshoban.gpkg/rinshoban/ヒノキ'), false);
-      expect(restored.getViewVisibility('rinshoban.gpkg/rinshoban/スギ'), isNull,
+      expect(restored.getViewVisibility('parcels.gpkg/parcels/B種'), false);
+      expect(restored.getViewVisibility('parcels.gpkg/parcels/A種'), isNull,
           reason: '未設定は null（＝既定の true を呼び出し側が入れる）');
     });
 
@@ -106,15 +106,15 @@ void main() {
 
     test('通常の式は通る（前後の空白は落とす）', () {
       expect(
-        FeatureRepository.sanitizeFilter("  樹種 = 'スギ' AND 面積 > 10 "),
-        "樹種 = 'スギ' AND 面積 > 10",
+        FeatureRepository.sanitizeFilter("  種別 = 'A種' AND 面積 > 10 "),
+        "種別 = 'A種' AND 面積 > 10",
       );
     });
 
     test('文を切り替えられる形は弾く', () {
       // `.kmeta.json` は Drive 経由で他人から届きうる
       expect(
-        FeatureRepository.sanitizeFilter('1=1; DROP TABLE rinshoban'),
+        FeatureRepository.sanitizeFilter('1=1; DROP TABLE parcels'),
         isNull,
       );
     });
@@ -141,32 +141,32 @@ void main() {
     test('フィルタ付きViewが複数見えていれば OR で束ねる', () {
       final layer = makeLayer(
         (l) => [
-          ViewNode(name: 'スギ', parent: l, filter: "樹種 = 'スギ'"),
-          ViewNode(name: 'ヒノキ', parent: l, filter: "樹種 = 'ヒノキ'"),
+          ViewNode(name: 'A種', parent: l, filter: "種別 = 'A種'"),
+          ViewNode(name: 'B種', parent: l, filter: "種別 = 'B種'"),
         ],
       );
-      expect(layer.activeViewFilter, "(樹種 = 'スギ') OR (樹種 = 'ヒノキ')");
+      expect(layer.activeViewFilter, "(種別 = 'A種') OR (種別 = 'B種')");
     });
 
     test('消灯したViewのフィルタは入らない', () {
       final layer = makeLayer(
         (l) => [
-          ViewNode(name: 'スギ', parent: l, filter: "樹種 = 'スギ'"),
+          ViewNode(name: 'A種', parent: l, filter: "種別 = 'A種'"),
           ViewNode(
-            name: 'ヒノキ',
+            name: 'B種',
             parent: l,
-            filter: "樹種 = 'ヒノキ'",
+            filter: "種別 = 'B種'",
             visible: false,
           ),
         ],
       );
-      expect(layer.activeViewFilter, "(樹種 = 'スギ')");
+      expect(layer.activeViewFilter, "(種別 = 'A種')");
     });
 
     test('フィルタ無しのViewが1枚でも見えていれば全件出す', () {
       final layer = makeLayer(
         (l) => [
-          ViewNode(name: 'スギ', parent: l, filter: "樹種 = 'スギ'"),
+          ViewNode(name: 'A種', parent: l, filter: "種別 = 'A種'"),
           ViewNode(name: '全部', parent: l),
         ],
       );
@@ -176,7 +176,7 @@ void main() {
     test('全消灯なら何も描かない', () {
       final layer = makeLayer(
         (l) => [
-          ViewNode(name: 'スギ', parent: l, filter: "樹種 = 'スギ'", visible: false),
+          ViewNode(name: 'A種', parent: l, filter: "種別 = 'A種'", visible: false),
         ],
       );
       expect(layer.hasVisibleView, isFalse);

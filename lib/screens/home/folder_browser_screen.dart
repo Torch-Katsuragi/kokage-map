@@ -13,11 +13,11 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-/// ホームの「フォルダを選んで開く」: いつもの地図（Documents/KokageMap）の中だけを、レイヤドロワーと同じ見た目でたどる
+/// ホームの「フォルダを選んで開く」: いつもの地図（Documents/KokageMap）の中だけを、レイヤ一覧パネルと同じ見た目でたどる
 ///
 /// OS のフォルダ選択はファイルが大きな四角で並び、端末のどこでも選べてしまう（2026-10-06）。ここは KokageMap より上へ
 /// 行けない。外の場所は右上のメニュー「端末の別の場所…」からだけ（OS の選択を出す）。
-/// gpkg の中身は読まない（ドロワーのノードを流用すると 1.5 万面の小班まで読み込んで重い）。ファイル名だけ並べる。
+/// gpkg の中身は読まない（ドロワーのノードを流用すると 1.5 万面の区画まで読み込んで重い）。ファイル名だけ並べる。
 /// 行はドロワーと同じ `DrawerRow`。
 library;
 
@@ -252,7 +252,7 @@ class _FolderBrowserScreenState extends ConsumerState<FolderBrowserScreen> {
   }
 }
 
-/// レイヤドロワーのタイトルバー（`LayerDrawerTitleBar`）と同じ見た目。ドロワーの方はノードを要るので形だけ写す
+/// レイヤ一覧パネルのタイトルバー（`LayerDrawerTitleBar`）と同じ見た目。パネルの方はノードを要るので形だけ写す
 class _TitleBar extends StatelessWidget {
   const _TitleBar({required this.title, required this.drive, required this.onAdd, this.onBack});
   final String title;

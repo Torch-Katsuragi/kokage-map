@@ -56,7 +56,7 @@ class FolderFileAdder {
     return lower.endsWith('.shp.xml') || shapefileExtensions.contains(p.extension(lower));
   }
 
-  /// 名前の「拡張子より前」。shp 一式を同じ名前でそろえて扱うための鍵（`林班.shp.xml` → `林班`）
+  /// 名前の「拡張子より前」。shp 一式を同じ名前でそろえて扱うための鍵（`区画.shp.xml` → `区画`）
   static String stemOf(String name) {
     final lower = name.toLowerCase();
     if (lower.endsWith('.shp.xml')) return name.substring(0, name.length - '.shp.xml'.length);
@@ -66,12 +66,12 @@ class FolderFileAdder {
 
   /// [names] を、[existing]（dir にもうある名前）とぶつからない名前に付け替える。元の名前 → 新しい名前。
   ///
-  /// 同じ stem のもの（shp と付属ファイル）はまとめて同じ番号を振る（`林班_1.shp` と `林班_1.dbf`）。
+  /// 同じ stem のもの（shp と付属ファイル）はまとめて同じ番号を振る（`区画_1.shp` と `区画_1.dbf`）。
   /// 片方だけ付け替えると一式としてつながらない。大文字小文字だけ違う名前もぶつかるとみなす（Drive・Windows で重なる）。
   /// 同じ名前が 2 度来たら後のものは捨てる
   static Map<String, String> planNames(Iterable<String> names, Iterable<String> existing) {
     final taken = {for (final n in existing) n.toLowerCase()};
-    // shp 一式の stem。`林班.prj` だけが残っている dir に `林班.shp` を入れると、残っていた .prj まで一式に混ざる。
+    // shp 一式の stem。`区画.prj` だけが残っている dir に `区画.shp` を入れると、残っていた .prj まで一式に混ざる。
     // 付属ファイルだけ（.shp を含まない）なら、あとから足りない分を足す使い方なので既存の一式に加える
     final shpStems = {
       for (final n in existing)

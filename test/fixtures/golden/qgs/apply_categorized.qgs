@@ -1,5 +1,5 @@
 <!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
-<qgis projectname="p42" saveDateTime="2026-09-12T10:38:46" saveUser="mtmtk" saveUserFull="桂松明" version="4.2.0-Belém do Pará">
+<qgis projectname="p42" saveDateTime="2026-09-12T10:38:46" saveUser="user" saveUserFull="User" version="4.2.0-Belém do Pará">
   <homePath path=""/>
   <title>p42</title>
   <transaction mode="Disabled"/>
@@ -1093,7 +1093,7 @@
     </properties>
     <properties name="kokage">
       <properties name="app" type="QString">kokage-map 0.6.2+19</properties>
-      <properties name="dirName" type="QString">Kitayama-2026</properties>
+      <properties name="dirName" type="QString">Sample-2026</properties>
       <properties name="savedAt" type="QString">2026-09-09T19:18:29</properties>
       <properties name="schemaVersion" type="int">1</properties>
     </properties>
@@ -1112,13 +1112,13 @@
     <parentidentifier></parentidentifier>
     <language></language>
     <type></type>
-    <title>Kitayama-2026</title>
+    <title>Sample-2026</title>
     <abstract></abstract>
     <links/>
     <dates>
       <date type="Created" value="2026-09-12T10:38:46"/>
     </dates>
-    <author>桂松明</author>
+    <author>User</author>
     <creation>2026-09-12T10:38:46</creation>
   </projectMetadata>
   <Annotations/>

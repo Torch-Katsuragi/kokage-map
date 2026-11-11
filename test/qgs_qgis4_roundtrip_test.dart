@@ -1,4 +1,4 @@
-// QGIS 4.2.0 が保存し直した .qgs（実機の Kitayama-2026 にラスタを足して QGIS で開き、
+// QGIS 4.2.0 が保存し直した .qgs（実機の Sample-2026 にラスタを足して QGIS で開き、
 // subset・消灯・ラスタ不透明度を変えて write() したもの）をアプリ側で DOM 更新しても
 // QGIS の設定が残ることを固定する。2026-09-12 に QGIS 本体で確認した往復の片側。
 //
@@ -59,7 +59,7 @@ void main() {
       ));
     }
     final report = doc.apply(
-      QgsProject(name: 'Kitayama-2026', root: [QgsGroup(name: 'Kitayama-2026', children: layers)]),
+      QgsProject(name: 'Sample-2026', root: [QgsGroup(name: 'Sample-2026', children: layers)]),
     );
     expect(report.removedLayers, isEmpty);
     expect(report.untouchedRenderers, isEmpty);
@@ -71,7 +71,7 @@ void main() {
 
     final out = doc.toXmlString();
     expect(out, contains('<projectCrs>'));
-    expect(out, contains('saveUser="mtmtk"'), reason: 'QGIS 4 の属性は残す');
+    expect(out, contains('saveUser="user"'), reason: 'QGIS 4 の属性は残す');
   });
 
   // QGIS 4.x は保存時に印を `<properties name="kokage"><properties name="savedAt">` の形に書き直す。
@@ -79,7 +79,7 @@ void main() {
   // 無いものとして扱っていた（写真の表示など QGIS の形で書けない設定が消える）
   test('QGIS 4 の書き方の印を読める', () {
     final s = doc.stamp!;
-    expect(s.dirName, 'Kitayama-2026');
+    expect(s.dirName, 'Sample-2026');
     expect(s.savedAtText, '2026-09-09T19:18:29');
     expect(s.schemaVersion, 1);
     expect(doc.lastWrittenByKokage, isFalse, reason: 'QGIS が保存したので saveDateTime が違う');

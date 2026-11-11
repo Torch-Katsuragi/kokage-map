@@ -116,8 +116,8 @@ void main() {
       engine = SyncEngine(driveService: drive);
       rootId = drive.createRootFolder('proj');
       // ローカルの dir 名は端末ごとに違う（`.qgs` は Drive のフォルダ名で共有される）
-      a = (await Directory(p.join(tmp.path, '北山')).create()).path;
-      b = p.join(tmp.path, '北山 (1)');
+      a = (await Directory(p.join(tmp.path, 'サンプル')).create()).path;
+      b = p.join(tmp.path, 'サンプル (1)');
       KMetaService.instance.clearCache();
       SharedPreferences.setMockInitialValues({});
       ledgers.clear();
@@ -177,7 +177,7 @@ void main() {
       await asDevice(b);
       expect((await engine.pull(rootId, b)).success, isTrue);
       expect((await metaOf(b)).visibility.geopackages['x.gpkg'], isFalse);
-      expect(Directory(b).listSync().map((e) => p.basename(e.path)), isNot(contains('北山 (1).qgs')));
+      expect(Directory(b).listSync().map((e) => p.basename(e.path)), isNot(contains('サンプル (1).qgs')));
       await tick();
 
       // それぞれ別のものを変える

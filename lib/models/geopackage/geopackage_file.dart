@@ -159,7 +159,7 @@ class GeoPackageFile {
   ///    その前に、トリガーが丸ごと無い表（以前の版が落としたまま上げた）には規格のトリガーを作る
   ///    （[GpkgIndexRepair.healRtreeTriggers]）
   ///
-  /// > [!WARNING] 以前は閉じる（[dispose]）ときにしか整合していなかった（2026-10-12 Pixel 9 で確認）
+  /// > [!WARNING] 以前は閉じる（[dispose]）ときにしか整合していなかった（2026-10-12 Android 実機で確認）
   /// > 開いたままのプロジェクトを Drive に上げると、QGIS 製の gpkg に足した点が rtree に無く、
   /// > トリガーも落ちたまま上がり、QGIS の空間検索（`ogrinfo -spat`）で見えなかった。
   ///

@@ -27,31 +27,31 @@ app.initQgis()
 
 folder = os.path.abspath('.temp/qgs_renderers')
 os.makedirs(folder, exist_ok=True)
-gpkg = os.path.join(folder, '小班.gpkg')
+gpkg = os.path.join(folder, '区画.gpkg')
 if os.path.exists(gpkg):
     os.remove(gpkg)
 
 ROWS = [
-    # 樹種, 林齢, 面積
-    ('スギ', 45, 1.2),
-    ('スギ', 12, 0.4),
-    ('ヒノキ', 30, 2.5),
-    ('ヒノキ', 8, 0.9),
-    ('マツ', 60, 3.1),
-    ('広葉樹', 70, 5.0),
+    # 種別, 年数, 面積
+    ('A種', 45, 1.2),
+    ('A種', 12, 0.4),
+    ('B種', 30, 2.5),
+    ('B種', 8, 0.9),
+    ('C種', 60, 3.1),
+    ('広域', 70, 5.0),
     (None, 25, 0.2),
-    ('スギ', None, 1.0),
+    ('A種', None, 1.0),
     ('その他', 100, 0.7),
-    ('ヒノキ', 40, 1.5),
-    ('スギ', 20, 0.3),
-    ('針葉樹', 55, 0.8),
+    ('B種', 40, 1.5),
+    ('A種', 20, 0.3),
+    ('狭域', 55, 0.8),
 ]
 
 
 def write_layer(name, geom_type, make_geom):
     fields = QgsFields()
-    fields.append(QgsField('樹種', QMetaType.Type.QString))
-    fields.append(QgsField('林齢', QMetaType.Type.Int))
+    fields.append(QgsField('種別', QMetaType.Type.QString))
+    fields.append(QgsField('年数', QMetaType.Type.Int))
     fields.append(QgsField('面積', QMetaType.Type.Double))
     opts = QgsVectorFileWriter.SaveVectorOptions()
     opts.driverName = 'GPKG'
@@ -73,8 +73,8 @@ def square(i):
     return QgsGeometry.fromWkt(f'POLYGON(({x} {y},{x + 0.009} {y},{x + 0.009} {y + 0.009},{x} {y + 0.009},{x} {y}))')
 
 
-write_layer('shoban', QgsWkbTypes.Polygon, square)
-write_layer('rindo', QgsWkbTypes.LineString,
+write_layer('parcels', QgsWkbTypes.Polygon, square)
+write_layer('roads', QgsWkbTypes.LineString,
             lambda i: QgsGeometry.fromWkt(f'LINESTRING({135.9 + i * 0.01} 33.8,{135.905 + i * 0.01} 33.81)'))
 write_layer('kui', QgsWkbTypes.Point, lambda i: QgsGeometry.fromWkt(f'POINT({135.9 + i * 0.01} 33.7)'))
 
@@ -95,28 +95,28 @@ def fill(color, outline='35,35,35,255', width='0.26', style='solid', outline_sty
                                        'style': style, 'outline_style': outline_style})
 
 
-# 1. 分類（樹種）。マツは描かない、それ以外の値は灰色
-cat = layer('shoban', '樹種で分類')
+# 1. 分類（種別）。C種は描かない、それ以外の値は灰色
+cat = layer('parcels', '種別で分類')
 cats = [
-    QgsRendererCategory('スギ', fill('51,160,44,255'), 'スギ'),
-    QgsRendererCategory('ヒノキ', fill('31,120,180,255', width='0.8'), 'ヒノキ'),
-    QgsRendererCategory('マツ', fill('227,26,28,255'), 'マツ', False),
+    QgsRendererCategory('A種', fill('51,160,44,255'), 'A種'),
+    QgsRendererCategory('B種', fill('31,120,180,255', width='0.8'), 'B種'),
+    QgsRendererCategory('C種', fill('227,26,28,255'), 'C種', False),
     QgsRendererCategory(None, fill('150,150,150,128'), 'その他'),
 ]
-cat.setRenderer(QgsCategorizedSymbolRenderer('樹種', cats))
+cat.setRenderer(QgsCategorizedSymbolRenderer('種別', cats))
 
-# 2. 段階（林齢）。範囲外（100 超え・NULL）は描かれない
-grad = layer('shoban', '林齢で段階')
+# 2. 段階（年数）。範囲外（100 超え・NULL）は描かれない
+grad = layer('parcels', '年数で段階')
 ranges = [
     QgsRendererRange(0, 20, fill('255,255,178,255'), '0 - 20'),
     QgsRendererRange(20, 40, fill('254,204,92,255'), '20 - 40'),
     QgsRendererRange(40, 60, fill('253,141,60,255', style='no'), '40 - 60'),
     QgsRendererRange(60, 80, fill('227,26,28,255', outline_style='no'), '60 - 80'),
 ]
-grad.setRenderer(QgsGraduatedSymbolRenderer('"林齢"', ranges))
+grad.setRenderer(QgsGraduatedSymbolRenderer('"年数"', ranges))
 
 # 3. ルール
-rule_layer = layer('shoban', 'ルールで')
+rule_layer = layer('parcels', 'ルールで')
 root_rule = QgsRuleBasedRenderer.Rule(None)
 
 
@@ -128,23 +128,23 @@ def rule(parent, expr, color, label, else_rule=False, symbol=True):
     return r
 
 
-rule(root_rule, '"林齢" >= 40 AND "樹種" = \'スギ\'', '200,0,0,255', '高齢スギ')
-hinoki = rule(root_rule, '"樹種" IN (\'ヒノキ\', \'マツ\')', '0,0,200,255', 'ヒノキ・マツ')
-rule(hinoki, '"林齢" < 20', '255,255,0,255', '若い')
-rule(root_rule, '"樹種" IS NULL', '128,128,128,255', '不明')
-rule(root_rule, '"樹種" LIKE \'%葉%\' OR "面積" > 4.5', '0,128,0,255', '葉')
+rule(root_rule, '"年数" >= 40 AND "種別" = \'A種\'', '200,0,0,255', '長期A')
+hinoki = rule(root_rule, '"種別" IN (\'B種\', \'C種\')', '0,0,200,255', 'B種・C種')
+rule(hinoki, '"年数" < 20', '255,255,0,255', '若い')
+rule(root_rule, '"種別" IS NULL', '128,128,128,255', '不明')
+rule(root_rule, '"種別" LIKE \'%域%\' OR "面積" > 4.5', '0,128,0,255', '域')
 rule(root_rule, '', '255,255,255,255', 'その他', else_rule=True)
 rule_layer.setRenderer(QgsRuleBasedRenderer(root_rule))
 
 # 4. 線の分類（太さ違い・破線）
-line = layer('rindo', '林道')
+line = layer('roads', '道路')
 lines = [
-    QgsRendererCategory('スギ', QgsLineSymbol.createSimple({'line_color': '255,0,0,255', 'line_width': '1.2'}), 'スギ'),
-    QgsRendererCategory('ヒノキ', QgsLineSymbol.createSimple({'line_color': '0,0,255,255', 'line_width': '0.4',
-                                                            'line_style': 'dash'}), 'ヒノキ'),
+    QgsRendererCategory('A種', QgsLineSymbol.createSimple({'line_color': '255,0,0,255', 'line_width': '1.2'}), 'A種'),
+    QgsRendererCategory('B種', QgsLineSymbol.createSimple({'line_color': '0,0,255,255', 'line_width': '0.4',
+                                                            'line_style': 'dash'}), 'B種'),
     QgsRendererCategory(None, QgsLineSymbol.createSimple({'line_color': '0,0,0,255', 'line_width': '0.26'}), ''),
 ]
-line.setRenderer(QgsCategorizedSymbolRenderer('樹種', lines))
+line.setRenderer(QgsCategorizedSymbolRenderer('種別', lines))
 
 # 5. 点の段階（面積）。シンボルの不透明度つき
 points = layer('kui', '杭')
@@ -173,7 +173,7 @@ def truth(lyr):
         syms = r.symbolsForFeature(f, ctx)
         top = syms[-1] if syms else None
         rows.append({
-            'attrs': {'樹種': f['樹種'], '林齢': f['林齢'], '面積': f['面積']},
+            'attrs': {'種別': f['種別'], '年数': f['年数'], '面積': f['面積']},
             'color': None if top is None else top.color().name(),
             'count': len(syms),
             # ルールは当たったルールの key（根を除く）。⚠ symbolsForFeature は ELSE を常に含めるので色は当てにならない

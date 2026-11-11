@@ -76,7 +76,7 @@ void main() {
     test('呼ぶ側の -oo ENCODING が優先する', () async {
       final info = await gdal.vectorInfo('$_fx/sjis_nocpg.shp', args: ['-features', '-oo', 'ENCODING=']);
       // 文字コードを決めない = Shift_JIS のバイトがそのまま（壊れた UTF-8 は U+FFFD に）
-      expect(names(info).first, isNot('スギ1'));
+      expect(names(info).first, isNot('地点1'));
     }, skip: skip);
 
     test('GeoJSON', () async {
@@ -104,9 +104,9 @@ void main() {
 
   test('vectorTranslate: shp → gpkg で CRS（EPSG:6674）と属性が保たれる', () async {
     final dst = p.join(tmp.path, 'sjis_nocpg.gpkg');
-    await gdal.vectorTranslate('$_fx/sjis_nocpg.shp', dst, args: ['-f', 'GPKG', '-nln', '林班']);
+    await gdal.vectorTranslate('$_fx/sjis_nocpg.shp', dst, args: ['-f', 'GPKG', '-nln', '区画']);
     final info = await gdal.vectorInfo(dst, args: ['-features']);
-    expect(firstLayer(info)['name'], '林班');
+    expect(firstLayer(info)['name'], '区画');
     expect(names(info), expectedNames);
     expect(layerEpsg(info), 6674);
   }, skip: skip);
@@ -124,7 +124,7 @@ void main() {
     final pngInfo = await gdal.rasterInfo(png);
     expect(pngInfo['driverShortName'], 'PNG');
     expect((pngInfo['size'] as List).first, 16);
-    // 四隅（wgs84Extent）は北山村あたり
+    // 四隅（wgs84Extent）は紀伊半島あたり
     final ring = ((info['wgs84Extent'] as Map)['coordinates'] as List).first as List;
     for (final c in ring) {
       expect((c as List)[0], closeTo(135.96, 0.01));

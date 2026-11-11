@@ -5,7 +5,7 @@ import 'package:root_maps/utils/geodesic.dart';
 import 'package:turf/turf.dart' as turf;
 
 void main() {
-  // 北山村あたりの 65 ha ほどの林班風の面
+  // 北緯 34° 付近の 65 ha ほどの多角形
   const lons = [135.9650, 135.9712, 135.9748, 135.9731, 135.9668, 135.9641];
   const lats = [33.9290, 33.9302, 33.9271, 33.9228, 33.9219, 33.9256];
   final ring = [for (var i = 0; i < lons.length; i++) LatLng(lats[i], lons[i])];

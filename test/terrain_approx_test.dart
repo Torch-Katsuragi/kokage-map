@@ -154,7 +154,7 @@ void main() {
     });
 
     test('高度な3D地図: 地域別 bbox フィルタと RGBA 透明 NoData のフォールバック合成', () async {
-      // 和歌山県北山村（z17/115035/52382）のタイルでは東京・静岡のソースは bbox 外なので呼ばれない
+      // 紀伊半島南部（z17/115035/52382）のタイルでは東京・静岡のソースは bbox 外なので呼ばれない
       final regionalFine = gsiTile(leftInvalid: true, height: 320, transparentInvalid: true);
       final gsiFallback = gsiTile(leftInvalid: false, height: 310);
       final requested = <String>[];
@@ -175,7 +175,7 @@ void main() {
       expect(dem!.heights[128 * 256 + 10], closeTo(310, 0.01), reason: '透明ピクセル (A=0) は DEM1A で埋まる');
       expect(dem.heights[128 * 256 + 200], closeTo(320, 0.01), reason: '有効ピクセルは和歌山 1m グリッドの値');
 
-      // 場所ごとの maxZoom: 東京駅は z19、静岡は z18、北山村は z17
+      // 場所ごとの maxZoom: 東京駅は z19、静岡は z18、和歌山は z17
       expect(
         world.maxZoomForPoint(WebMercator.xFromLon(139.767), WebMercator.yFromLat(35.681)),
         19,
@@ -195,7 +195,7 @@ void main() {
     test('EPSG:6674 座標変換と 1:2,500 国土基本図の図郭コード解決', () {
       final (eMin, nMin) = lonLatToEpsg6674(135.9460, 33.9610);
       final (eMax, nMax) = lonLatToEpsg6674(135.9585, 33.9705);
-      // 北山村大沼周辺: 東向き約 -5.0km〜-3.8km、北向き約 -226.2km〜-225.1km
+      // 紀伊半島南部周辺: 東向き約 -5.0km〜-3.8km、北向き約 -226.2km〜-225.1km
       expect(eMin, closeTo(-4991.5, 5.0));
       expect(nMin, closeTo(-226183.3, 5.0));
       final meshes = epsg6674ToWakayamaMeshes(eMin, nMin, eMax, nMax);

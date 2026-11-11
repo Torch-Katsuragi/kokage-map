@@ -13,8 +13,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   late Directory tmp;
-  // 和歌山県北山村付近。VI 系（原点 36N, 136E）では北に約 -230 km、東に約 -4 km
-  const kitayama = LatLng(33.93, 135.96);
+  // 紀伊半島南部付近。VI 系（原点 36N, 136E）では北に約 -230 km、東に約 -4 km
+  const samplePt = LatLng(33.93, 135.96);
 
   setUpAll(() {
     sqfliteFfiInit();
@@ -47,7 +47,7 @@ void main() {
     }
 
     Future<(geo.Position, LatLng)> writeAndRead(GeoPackageFile gpkg) async {
-      await gpkg.addPointWithAttributes('pts', kitayama, {});
+      await gpkg.addPointWithAttributes('pts', samplePt, {});
       await gpkg.flushChanges();
       final rows = await (await gpkg.getDatabase()).rawQuery('SELECT geom FROM pts');
       final raw = (parseGpkgGeometry(rows.single['geom']! as dynamic)! as geo.Point).position;
@@ -66,8 +66,8 @@ void main() {
         final (raw, back) = await writeAndRead(await layerWithSrs(6674, definition));
         expect(raw.x, closeTo(-3700, 1000)); // Easting
         expect(raw.y, closeTo(-230000, 10000)); // Northing
-        expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
-        expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
+        expect(back.latitude, closeTo(samplePt.latitude, 1e-6));
+        expect(back.longitude, closeTo(samplePt.longitude, 1e-6));
       });
     }
 
@@ -75,15 +75,15 @@ void main() {
       final (raw, back) = await writeAndRead(await layerWithSrs(32653, 'undefined'));
       expect(raw.x, closeTo(588700, 2000)); // Easting
       expect(raw.y, closeTo(3755000, 5000)); // Northing
-      expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
-      expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
+      expect(back.latitude, closeTo(samplePt.latitude, 1e-6));
+      expect(back.longitude, closeTo(samplePt.longitude, 1e-6));
     });
 
     test('JGD2011 地理座標系（6668）は変換しない', () async {
       final (raw, back) = await writeAndRead(await layerWithSrs(6668, 'undefined'));
       expect(raw.x, 135.96);
       expect(raw.y, 33.93);
-      expect(back, kitayama);
+      expect(back, samplePt);
     });
 
     // GDAL の書く地理座標系の WKT は緯度・経度の順の AXIS を持つ。gpkg の中は経度・緯度のまま
@@ -95,8 +95,8 @@ void main() {
         final (raw, back) = await writeAndRead(await layerWithSrs(srsId, wkt, epsg: epsg));
         expect(raw.x, closeTo(135.96, 1e-9));
         expect(raw.y, closeTo(33.93, 1e-9));
-        expect(back.latitude, closeTo(kitayama.latitude, 1e-9));
-        expect(back.longitude, closeTo(kitayama.longitude, 1e-9));
+        expect(back.latitude, closeTo(samplePt.latitude, 1e-9));
+        expect(back.longitude, closeTo(samplePt.longitude, 1e-9));
       });
     }
 
@@ -105,15 +105,15 @@ void main() {
       final (raw, back) = await writeAndRead(await layerWithSrs(4612, 'undefined'));
       expect(raw.x, 135.96);
       expect(raw.y, 33.93);
-      expect(back, kitayama);
+      expect(back, samplePt);
     });
 
     test('JGD2000 平面直角 VI 系（2448）は JGD2011 の VI 系と同じ値', () async {
       final (raw, back) = await writeAndRead(await layerWithSrs(2448, 'undefined'));
       expect(raw.x, closeTo(-3700, 1000));
       expect(raw.y, closeTo(-230000, 10000));
-      expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
-      expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
+      expect(back.latitude, closeTo(samplePt.latitude, 1e-6));
+      expect(back.longitude, closeTo(samplePt.longitude, 1e-6));
     });
 
     // 期待値は PROJ 9（pyproj）で WGS 84 → Tokyo。PROJ が既定に選ぶ EPSG:15484（Tokyo to WGS 84 (108)）の
@@ -122,31 +122,31 @@ void main() {
       final (raw, back) = await writeAndRead(await layerWithSrs(4301, 'undefined'));
       expect(raw.x, closeTo(135.962844, 1e-5));
       expect(raw.y, closeTo(33.926659, 1e-5));
-      expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
-      expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
+      expect(back.latitude, closeTo(samplePt.latitude, 1e-6));
+      expect(back.longitude, closeTo(samplePt.longitude, 1e-6));
     });
 
     test('旧日本測地系の平面直角 VI 系（30166）は測地系を変換し、x = 東で書く', () async {
       final (raw, back) = await writeAndRead(await layerWithSrs(30166, 'undefined'));
       expect(raw.x, closeTo(-3434.86, 1));
       expect(raw.y, closeTo(-229968.39, 1));
-      expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
-      expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
+      expect(back.latitude, closeTo(samplePt.latitude, 1e-6));
+      expect(back.longitude, closeTo(samplePt.longitude, 1e-6));
     });
 
     test('Web メルカトル（3857）はメートルで書き、同じ位置で読み戻す', () async {
       final (raw, back) = await writeAndRead(await layerWithSrs(3857, 'undefined'));
       expect(raw.x, closeTo(15134998, 1));
       expect(raw.y, closeTo(4019407, 1));
-      expect(back.latitude, closeTo(kitayama.latitude, 1e-6));
-      expect(back.longitude, closeTo(kitayama.longitude, 1e-6));
+      expect(back.latitude, closeTo(samplePt.latitude, 1e-6));
+      expect(back.longitude, closeTo(samplePt.longitude, 1e-6));
     });
 
     test('3 次元の地理座標系（WGS 84 の 4979）も変換しない（epsg.io に問い合わせない）', () async {
       final (raw, back) = await writeAndRead(await layerWithSrs(4979, 'undefined'));
       expect(raw.x, 135.96);
       expect(raw.y, 33.93);
-      expect(back, kitayama);
+      expect(back, samplePt);
     });
   });
 }

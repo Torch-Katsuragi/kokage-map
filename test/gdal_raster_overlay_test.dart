@@ -209,7 +209,7 @@ void main() {
     }, skip: skip);
 
     test('QGIS で作った色表の GeoTIFF（EPSG:6674・4 m・nodata 0・Deflate・日本語の名前）: 色と透明と位置', () async {
-      // 2026-10-13 Pixel 9 の `林相.tif`（120x90、4 m、1 バンド Byte の色表、nodata 0）と同じ形をその場で作る
+      // 2026-10-13 Android 実機のラスタ `.tif`（120x90、4 m、1 バンド Byte の色表、nodata 0）と同じ形をその場で作る
       final idx = StringBuffer('ncols 120\nnrows 90\nxllcorner -3700\nyllcorner -229800\ncellsize 4\nNODATA_value 0\n');
       for (var y = 0; y < 90; y++) {
         idx.writeln([for (var x = 0; x < 120; x++) x < 10 && y < 10 ? 0 : 1 + (x ~/ 60) + 2 * (y ~/ 45)].join(' '));
@@ -232,13 +232,13 @@ void main() {
     <SimpleSource><SourceFilename relativeToVRT="1">idx.tif</SourceFilename><SourceBand>1</SourceBand></SimpleSource>
   </VRTRasterBand>
 </VRTDataset>''');
-      await gdal.translate(p.join(work, 'pal.vrt'), at('林相.tif'), args: const [
+      await gdal.translate(p.join(work, 'pal.vrt'), at('分類図.tif'), args: const [
         '-a_srs', 'EPSG:6674', '-a_ullr', '-3700', '-229440', '-3220', '-229800', '-co', 'COMPRESS=DEFLATE', //
       ]);
 
       final root = FolderNode('Home', children: []);
       await root.updateChildren();
-      final node = root.children.whereType<ExternalOverlayImageNode>().singleWhere((n) => n.name == '林相.tif');
+      final node = root.children.whereType<ExternalOverlayImageNode>().singleWhere((n) => n.name == '分類図.tif');
       expect(node.probe.isPalette, isTrue);
       expect(node.probe.epsg, 6674);
       await node.ensureRendered();

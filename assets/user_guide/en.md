@@ -70,7 +70,7 @@ Basemaps work like layers in a drawing app: you can stack several. The top one i
 
 ### Adding a Basemap by URL
 
-XYZ tiles and WMS that are not in the list (such as forest planning maps or a prefecture's CS relief map) can be added from "Add layer" → "Add a background map from a URL…".
+XYZ tiles and WMS that are not in the list (such as municipal public tiles or a prefecture's CS relief map) can be added from "Add layer" → "Add a background map from a URL…".
 
 1. Enter a name and a URL template (`https://…/{z}/{x}/{y}.png`; for WMS use `BBOX={bbox-epsg-3857}`).
 2. Enter an attribution; it is shown on the map while that map is visible.
@@ -104,7 +104,7 @@ Tap the :icon-layers: button at the top to open the **layer panel on the right s
 
 The top shows the current folder and the path above it. Tap a name in the path to go back there.
 
-Layers set to "Categorized", "Graduated" or "Rule-based" in QGIS (such as stands colored by species or age) are drawn per feature just as in QGIS, with a legend in the panel. Change the colors in QGIS.
+Layers set to "Categorized", "Graduated" or "Rule-based" in QGIS (such as parcels colored by category or value) are drawn per feature just as in QGIS, with a legend in the panel. Change the colors in QGIS.
 
 ### Opening a Menu
 
@@ -126,7 +126,7 @@ Tap the :icon-visibility: at the right end of a row to toggle between visible :i
 
 ### Adding a View
 
-"Add view" in a layer's long-press menu shows the same layer another way. Each view has its own style and filter (a condition written as in QGIS, e.g. `樹種 = 'スギ'`). Deleting a view does not delete features.
+"Add view" in a layer's long-press menu shows the same layer another way. Each view has its own style and filter (a condition written as in QGIS, e.g. `種別 = '基準点'`). Deleting a view does not delete features.
 
 ### Moving Elsewhere
 
@@ -150,7 +150,7 @@ These files placed in a folder appear as layers without importing. They are read
 
 They are read-only; display, style, labels, views, the attribute table and export all work. A Shapefile without a .cpg is read as Shift_JIS (CP932), as the Japanese QGIS does. KML becomes one layer per folder, and a file mixing points, lines and polygons becomes one layer per type.
 
-A CSV without coordinate columns (such as a stand register) appears in the list as a :icon-table_chart: table that you can tap to view. Table joins set up in QGIS are read as they are, and the joined fields show in the attribute table (read-only), styling and labels.
+A CSV without coordinate columns (such as a register or ledger) appears in the list as a :icon-table_chart: table that you can tap to view. Table joins set up in QGIS are read as they are, and the joined fields show in the attribute table (read-only), styling and labels.
 
 ### Converting to gpkg to Edit
 
@@ -234,7 +234,7 @@ Pan and zoom work as usual, including in 3D. Measurements are not saved as featu
 
 ### Searching Attributes
 
-The :icon-search: magnifier in the layer panel's title bar searches the attributes of visible layers. Type a compartment number or name; tap a match to select that feature and move the map to it. Full-/half-width, upper/lower case and hiragana/katakana differences are ignored ("12" also finds "１２"). Exact matches are listed first.
+The :icon-search: magnifier in the layer panel's title bar searches the attributes of visible layers. Type a parcel number or name; tap a match to select that feature and move the map to it. Full-/half-width, upper/lower case and hiragana/katakana differences are ignored ("12" also finds "１２"). Exact matches are listed first.
 
 ### Stylus and Touch Input
 
@@ -283,7 +283,7 @@ While guiding, the map shows the distance, bearing (true north), elevation diffe
 The device compass heading is corrected to true north using the magnetic declination (WMM2025) for your position and date.
 ### Sharing Pins in a Room
 
-While you are in a room (location sharing), **long-press** the map and choose :icon-push_pin: "Drop a pin" to mark a meeting point, hazard tree, work site or note (with the Pan or Select tool). You can add a short note (up to 140 characters).
+While you are in a room (location sharing), **long-press** the map and choose :icon-push_pin: "Drop a pin" to mark a meeting point, hazard, work site or note (with the Pan or Select tool). You can add a short note (up to 140 characters).
 
 - Pins appear on everyone's map in the room. When someone else drops one you get a notification, and its "Guide me here" takes you there.
 - Tap a pin to see who dropped it, when, its note and "Guide me here". The person who dropped it and the host can also edit or remove it.

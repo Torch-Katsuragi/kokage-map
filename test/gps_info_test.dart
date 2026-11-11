@@ -86,7 +86,7 @@ void main() {
     expect(here, const LatLng(33.93, 135.97));
     final converter = TrueHeadingConverter(clock: () => DateTime(2026, 10, 12));
     final heading = converter.toTrue(0, lat: here?.latitude, lon: here?.longitude);
-    // 北山村の偏角は西偏 約 7.9°
+    // 紀伊半島南部の偏角は西偏 約 7.9°
     expect(heading, closeTo(352.1, 0.3));
 
     // 測れていなければ地図の現在位置（最後に分かった位置）に倒す

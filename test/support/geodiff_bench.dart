@@ -1,6 +1,6 @@
 // geodiff の行単位マージを、実データ規模の gpkg で測る（ホスト VM と実機で共有）。
 //
-// 森林簿のような面データを想定: n 筆のポリゴン（各 12 頂点）、属性 10 列。rtree 付き（QGIS 製を想定）。
+// 台帳のような面データを想定: n 筆のポリゴン（各 12 頂点）、属性 10 列。rtree 付き（QGIS 製を想定）。
 // 測るもの: base の写し（makeCopySqlite）／片側 k 行ずつ変えたときの rebase／rebase 後の索引の焼き直し（全件）。
 import 'dart:io';
 import 'dart:math';
@@ -34,16 +34,16 @@ Future<GeodiffBenchResult> runGeodiffBench(String dir, {int features = 20000, in
     if (file.existsSync()) file.deleteSync();
   }
   final g0 = GeoPackageFile(const ['bench_base.gpkg'], absolutePath: base);
-  await g0.addLayer('stands', GeometryType.polygon);
-  await g0.addAttributeColumns('stands', {
-    'rinpan': 'TEXT', 'shohan': 'TEXT', 'jusyu': 'TEXT', 'rinrei': 'INTEGER', 'menseki': 'REAL',
-    'zaiseki': 'REAL', 'shoyu': 'TEXT', 'sagyo': 'TEXT', 'biko': 'TEXT', 'kosin': 'TEXT',
+  await g0.addLayer('parcels', GeometryType.polygon);
+  await g0.addAttributeColumns('parcels', {
+    'block': 'TEXT', 'parcel': 'TEXT', 'kind': 'TEXT', 'age': 'INTEGER', 'menseki': 'REAL',
+    'volume': 'REAL', 'shoyu': 'TEXT', 'sagyo': 'TEXT', 'biko': 'TEXT', 'kosin': 'TEXT',
   });
   await g0.dispose();
 
   // QGIS 製を想定して rtree を付ける（中身は空で置き、最後の「索引の焼き直し」で全件入れる）。
   // Android の SQLite には rtree が無いので、そのときは geodiff の SQLite で作る
-  const createRtree = 'CREATE VIRTUAL TABLE IF NOT EXISTS rtree_stands_geom USING rtree(id, minx, maxx, miny, maxy)';
+  const createRtree = 'CREATE VIRTUAL TABLE IF NOT EXISTS rtree_parcels_geom USING rtree(id, minx, maxx, miny, maxy)';
   try {
     final d = await openDatabase(base, singleInstance: false);
     try {
@@ -71,11 +71,11 @@ Future<GeodiffBenchResult> runGeodiffBench(String dir, {int features = 20000, in
         LatLng(cy, cx + 0.0005),
       ];
       batch.rawInsert(
-        'INSERT INTO stands (geom, rinpan, shohan, jusyu, rinrei, menseki, zaiseki, shoyu, sagyo, biko, kosin) '
+        'INSERT INTO parcels (geom, block, parcel, kind, age, menseki, volume, shoyu, sagyo, biko, kosin) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
-          createWkbPolygon([ring]), '${i ~/ 100}', '${i % 100}', ['スギ', 'ヒノキ', '広葉樹'][i % 3], 10 + i % 80,
-          0.1 + rnd.nextDouble() * 5, rnd.nextDouble() * 400, '北山村', '', '', '2026-04-01',
+          createWkbPolygon([ring]), '${i ~/ 100}', '${i % 100}', ['A種', 'B種', 'C種'][i % 3], 10 + i % 80,
+          0.1 + rnd.nextDouble() * 5, rnd.nextDouble() * 400, '山間市', '', '', '2026-04-01',
         ],
       );
     }
@@ -98,14 +98,14 @@ Future<GeodiffBenchResult> runGeodiffBench(String dir, {int features = 20000, in
       final d = await openDatabase(path, singleInstance: false);
       await d.transaction((txn) async {
         for (var i = 0; i < edits; i++) {
-          await txn.rawUpdate('UPDATE stands SET sagyo = ? WHERE fid = ?', [what, from + i * 37]);
+          await txn.rawUpdate('UPDATE parcels SET sagyo = ? WHERE fid = ?', [what, from + i * 37]);
         }
       });
       await d.close();
     }
 
-    await editRows(mine, 1, '間伐(端末)');
-    await editRows(theirs, 20, '下刈(相手)');
+    await editRows(mine, 1, '更新(端末)');
+    await editRows(theirs, 20, '点検(相手)');
 
     sw.reset();
     final r = await GpkgMerger(g).rebase(base: base, theirs: theirs, mine: mine);

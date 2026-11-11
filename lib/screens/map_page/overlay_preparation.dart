@@ -17,7 +17,7 @@
 //
 // 地図の描き直し（`MapFeatureCacheMixin.updateFeatures`）は、地物と可視性を先に地図へ流し、
 // これを後から待つ（2026-10-13）。⚠ 以前は全オーバーレイの用意を待ってから地物を流していたので、
-// GDAL のワープが遅い・止まると、gpkg の目を消しても地図が変わらなかった（Pixel 9、`林相.tif` のあるフォルダ）
+// GDAL のワープが遅い・止まると、gpkg の目を消しても地図が変わらなかった（Android 実機、大きな `.tif` のあるフォルダ）
 import '../../models/nodes/external_overlay_image_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
 import '../../services/geotiff_service.dart';

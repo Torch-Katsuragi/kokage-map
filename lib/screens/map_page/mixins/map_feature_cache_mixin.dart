@@ -129,7 +129,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     if (!mounted) return;
     // 地物・可視性を先に流す。オーバーレイは表示用の画像が要らないもの・できているものだけ
     // ⚠ 以前は全オーバーレイの PNG（GDAL のワープ）を待ってから流していて、ワープが遅い・止まると
-    //   gpkg の目を消しても地図が変わらなかった（2026-10-13 Pixel 9。overlay_preparation.dart）
+    //   gpkg の目を消しても地図が変わらなかった（2026-10-13 実機。overlay_preparation.dart）
     scene.setDrawOrder(drawRanks);
     triggerSetState(() {
       pointFeatures = newPointFeatures;
@@ -304,7 +304,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     if (!layerStyleSettings.resolveBool(labelEnabledDef, kmeta)) return null;
     return renderLabelTemplate(
       layerStyleSettings.resolveString(labelPropertyDef, kmeta),
-      // 結合した表の列（森林簿の樹種など）もラベルに使える
+      // 結合した表の列（台帳の種別など）もラベルに使える
       layer.effectiveProperties(f.turfFeature.properties),
     );
   }

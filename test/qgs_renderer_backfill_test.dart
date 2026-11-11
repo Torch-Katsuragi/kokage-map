@@ -21,9 +21,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:xml/xml.dart';
 
 const _categorized = '''
-<renderer-v2 type="categorizedSymbol" attr="樹種" symbollevels="0">
+<renderer-v2 type="categorizedSymbol" attr="種別" symbollevels="0">
   <categories>
-    <category value="スギ" symbol="0" label="スギ" render="true" type="string"/>
+    <category value="A種" symbol="0" label="A種" render="true" type="string"/>
     <category value="NULL" symbol="1" label="その他" render="true" type="NULL"/>
   </categories>
   <symbols>
@@ -56,7 +56,7 @@ void main() {
     proj = (await Directory(p.join(tmp.path, 'proj')).create()).path;
     ProjectPathResolver.instance.setRootPathGetter(() => proj);
     final g = GeoPackageFile(const ['a.gpkg'], absolutePath: p.join(proj, 'a.gpkg'));
-    await g.addLayer('shoban', GeometryType.polygon);
+    await g.addLayer('parcels', GeometryType.polygon);
     await g.dispose();
   });
 
@@ -96,16 +96,16 @@ void main() {
 
     await const QgsImporter().import(qgs, root);
     KMetaService.instance.clearCache();
-    final style = (await KMetaService.instance.getMeta(proj)).styles.layers['a.gpkg/shoban']!;
+    final style = (await KMetaService.instance.getMeta(proj)).styles.layers['a.gpkg/parcels']!;
     expect(style.qgisRenderer, 'categorizedSymbol');
-    expect([for (final c in style.qgisRendererDef!.classes) c.label], ['スギ', 'その他']);
+    expect([for (final c in style.qgisRendererDef!.classes) c.label], ['A種', 'その他']);
   });
 
   test('印だけのスタイルに中身を補う。他は触らない', () async {
     await KMetaService.instance.setLayerStyle(
       proj,
-      'a.gpkg/shoban',
-      const KMetaLayerStyle(qgisRenderer: 'categorizedSymbol', labelEnabled: true, labelProperty: '"樹種"'),
+      'a.gpkg/parcels',
+      const KMetaLayerStyle(qgisRenderer: 'categorizedSymbol', labelEnabled: true, labelProperty: '"種別"'),
     );
     final root = await loadTree();
     final qgs = (await const QgsProjectBuilder().writeTo(root))!.path;
@@ -114,9 +114,9 @@ void main() {
     final filled = await const QgsImporter().backfillRendererDefs(qgs, root);
     expect(filled, 1);
     KMetaService.instance.clearCache();
-    final style = (await KMetaService.instance.getMeta(proj)).styles.layers['a.gpkg/shoban']!;
+    final style = (await KMetaService.instance.getMeta(proj)).styles.layers['a.gpkg/parcels']!;
     expect(style.qgisRendererDef!.classes, hasLength(2));
-    expect(style.labelProperty, '"樹種"', reason: 'ラベルの設定は残る');
+    expect(style.labelProperty, '"種別"', reason: 'ラベルの設定は残る');
 
     // 2 回目は何もしない（もう中身がある）
     expect(await const QgsImporter().backfillRendererDefs(qgs, root), 0);

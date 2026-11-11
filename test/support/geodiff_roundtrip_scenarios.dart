@@ -75,8 +75,8 @@ void defineGeodiffRoundtripTests() {
     final gpkg = GeoPackageFile(const ['data.gpkg'], absolutePath: path);
     await gpkg.addLayer('trees', GeometryType.point);
     await gpkg.addAttributeColumns('trees', {'name': 'TEXT', 'dbh': 'INTEGER'});
-    await gpkg.addPointWithAttributes('trees', const LatLng(33.93, 135.96), {'name': 'スギ1', 'dbh': 32});
-    await gpkg.addPointWithAttributes('trees', const LatLng(33.931, 135.961), {'name': 'スギ2', 'dbh': 28});
+    await gpkg.addPointWithAttributes('trees', const LatLng(33.93, 135.96), {'name': '地点1', 'dbh': 32});
+    await gpkg.addPointWithAttributes('trees', const LatLng(33.931, 135.961), {'name': '地点2', 'dbh': 28});
     await gpkg.flushChanges();
     await gpkg.dispose();
   }
@@ -135,7 +135,7 @@ void defineGeodiffRoundtripTests() {
     await share();
 
     await sql(p.join(a, 'data.gpkg'), 'UPDATE trees SET dbh = 33 WHERE fid = 1');
-    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = 'スギ2(B)' WHERE fid = 2");
+    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = '地点2(B)' WHERE fid = 2");
     await tick();
 
     // A が先に上げる（片側だけの変更なので local）
@@ -156,8 +156,8 @@ void defineGeodiffRoundtripTests() {
     expect(ra2.downloadedCount, 1);
 
     final expected = [
-      {'fid': 1, 'name': 'スギ1', 'dbh': 33},
-      {'fid': 2, 'name': 'スギ2(B)', 'dbh': 28},
+      {'fid': 1, 'name': '地点1', 'dbh': 33},
+      {'fid': 2, 'name': '地点2(B)', 'dbh': 28},
     ];
     expect(await rows(p.join(a, 'data.gpkg')), expected);
     expect(await rows(p.join(b, 'data.gpkg')), expected);
@@ -195,7 +195,7 @@ void defineGeodiffRoundtripTests() {
     await syncOnce(a);
 
     final expected = [
-      {'fid': 1, 'name': 'スギ1', 'dbh': 31},
+      {'fid': 1, 'name': '地点1', 'dbh': 31},
     ];
     expect(await rows(p.join(a, 'data.gpkg')), expected);
     expect(await rows(p.join(b, 'data.gpkg')), expected);
@@ -249,7 +249,7 @@ void defineGeodiffRoundtripTests() {
     final rbRows = await rows(p.join(b, 'data.gpkg'));
     expect(ra, rbRows);
     final names = ra.map((r) => r['name']).toSet();
-    expect(names, containsAll(<String>['スギ1', 'スギ2', 'Aの追加', 'Bの追加']));
+    expect(names, containsAll(<String>['地点1', '地点2', 'Aの追加', 'Bの追加']));
     expect(ra.length, 4);
   });
 
@@ -259,7 +259,7 @@ void defineGeodiffRoundtripTests() {
     await share();
 
     await sql(p.join(a, 'data.gpkg'), 'UPDATE trees SET dbh = 33 WHERE fid = 1');
-    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = 'スギ2(B)' WHERE fid = 2");
+    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = '地点2(B)' WHERE fid = 2");
     await tick();
 
     await syncOnce(a); // A の変更が Drive に上がる（Drive の時刻は B の lastSyncedTime より前）
@@ -270,8 +270,8 @@ void defineGeodiffRoundtripTests() {
     await syncOnce(a);
 
     final expected = [
-      {'fid': 1, 'name': 'スギ1', 'dbh': 33},
-      {'fid': 2, 'name': 'スギ2(B)', 'dbh': 28},
+      {'fid': 1, 'name': '地点1', 'dbh': 33},
+      {'fid': 2, 'name': '地点2(B)', 'dbh': 28},
     ];
     expect(await rows(p.join(a, 'data.gpkg')), expected);
     expect(await rows(p.join(b, 'data.gpkg')), expected);
@@ -284,7 +284,7 @@ void defineGeodiffRoundtripTests() {
     await gA.addAttributeColumn('trees', 'height', 'REAL');
     await gA.dispose();
     await sql(p.join(a, 'data.gpkg'), 'UPDATE trees SET height = 21.5 WHERE fid = 1');
-    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = 'スギ2(B)' WHERE fid = 2");
+    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = '地点2(B)' WHERE fid = 2");
     await tick();
 
     await syncOnce(a);
@@ -305,8 +305,8 @@ void defineGeodiffRoundtripTests() {
     }
 
     final expected = [
-      {'fid': 1, 'name': 'スギ1', 'height': 21.5},
-      {'fid': 2, 'name': 'スギ2(B)', 'height': null},
+      {'fid': 1, 'name': '地点1', 'height': 21.5},
+      {'fid': 2, 'name': '地点2(B)', 'height': null},
     ];
     expect(await rowsH(p.join(a, 'data.gpkg')), expected);
     expect(await rowsH(p.join(b, 'data.gpkg')), expected);
@@ -321,7 +321,7 @@ void defineGeodiffRoundtripTests() {
     final gB = GeoPackageFile(const ['data.gpkg'], absolutePath: p.join(b, 'data.gpkg'));
     await gB.addAttributeColumn('trees', 'owner', 'TEXT');
     await gB.dispose();
-    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = 'スギ2(B)' WHERE fid = 2");
+    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = '地点2(B)' WHERE fid = 2");
     await tick();
 
     await syncOnce(a);
@@ -329,7 +329,7 @@ void defineGeodiffRoundtripTests() {
     final rb = await syncOnce(b);
     expect(rb.mergedCount, 0, reason: '両側が別々の列を足したらそろえない');
     expect(rb.failedMerges, ['data.gpkg'], reason: '合わせられなかったことを呼び手に返す');
-    expect((await rows(p.join(b, 'data.gpkg')))[1]['name'], 'スギ2(B)');
+    expect((await rows(p.join(b, 'data.gpkg')))[1]['name'], '地点2(B)');
     await asDevice(b);
     final again = await engine.getMergeEntries(b);
     expect(again.single.isConflict, isTrue);
@@ -340,10 +340,10 @@ void defineGeodiffRoundtripTests() {
 
     final gA = GeoPackageFile(const ['data.gpkg'], absolutePath: p.join(a, 'data.gpkg'));
     await gA.addLayer('roads', GeometryType.linestring);
-    await gA.addLine('roads', const [LatLng(33.93, 135.96), LatLng(33.94, 135.97)], name: '作業道A');
+    await gA.addLine('roads', const [LatLng(33.93, 135.96), LatLng(33.94, 135.97)], name: '路線A');
     await gA.flushChanges();
     await gA.dispose();
-    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = 'スギ2(B)' WHERE fid = 2");
+    await sql(p.join(b, 'data.gpkg'), "UPDATE trees SET name = '地点2(B)' WHERE fid = 2");
     await tick();
 
     await syncOnce(a);
@@ -387,7 +387,7 @@ void defineGeodiffRoundtripTests() {
     await share();
     final gA = GeoPackageFile(const ['data.gpkg'], absolutePath: p.join(a, 'data.gpkg'));
     // アプリ（feature_node.dart）と同じく、いまの名前を渡して動かす
-    await gA.updatePoint('trees', 1, const LatLng(33.935, 135.965), name: 'スギ1');
+    await gA.updatePoint('trees', 1, const LatLng(33.935, 135.965), name: '地点1');
     await gA.flushChanges();
     await gA.dispose();
     await sql(p.join(b, 'data.gpkg'), 'UPDATE trees SET dbh = 40 WHERE fid = 1');
@@ -410,7 +410,7 @@ void defineGeodiffRoundtripTests() {
       }
     }
 
-    expect((await rows(p.join(b, 'data.gpkg')))[0], {'fid': 1, 'name': 'スギ1', 'dbh': 40});
+    expect((await rows(p.join(b, 'data.gpkg')))[0], {'fid': 1, 'name': '地点1', 'dbh': 40});
     expect(await geomOf(p.join(b, 'data.gpkg')), await geomOf(p.join(a, 'data.gpkg')));
     expect((await rows(p.join(a, 'data.gpkg')))[0]['dbh'], 40);
   });
@@ -431,7 +431,7 @@ void defineGeodiffRoundtripTests() {
     // geodiff は「削除」と「更新」がぶつかると削除を採り、更新した値を衝突に残す
     // （同じ行・同じ列の更新どうしなら後から合わせた側が勝つのとは違う。2026-09-24 に確認）
     final expected = [
-      {'fid': 2, 'name': 'スギ2', 'dbh': 28},
+      {'fid': 2, 'name': '地点2', 'dbh': 28},
     ];
     expect(await rows(p.join(a, 'data.gpkg')), expected);
     expect(await rows(p.join(b, 'data.gpkg')), expected);
@@ -456,7 +456,7 @@ void defineGeodiffRoundtripTests() {
     await syncOnce(a);
 
     final expected = [
-      {'fid': 1, 'name': 'スギ1', 'dbh': 40},
+      {'fid': 1, 'name': '地点1', 'dbh': 40},
     ];
     expect(await rows(p.join(a, 'data.gpkg')), expected);
     expect(await rows(p.join(b, 'data.gpkg')), expected);
@@ -487,7 +487,7 @@ void defineGeodiffRoundtripTests() {
     expect(GeoPackageConnection.openCountFor(pathB), 1);
 
     await sql(p.join(a, 'data.gpkg'), 'UPDATE trees SET dbh = 33 WHERE fid = 1');
-    await sql(pathB, "UPDATE trees SET name = 'スギ2(B)' WHERE fid = 2");
+    await sql(pathB, "UPDATE trees SET name = '地点2(B)' WHERE fid = 2");
     await tick();
     await syncOnce(a);
     await tick();

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<qgis projectname="北山 &amp; &lt;テスト>" version="3.34.0-Prizren">
+<qgis projectname="サンプル &amp; &lt;テスト>" version="3.34.0-Prizren">
   <homePath path=""/>
-  <title>北山 &amp; &lt;テスト></title>
+  <title>サンプル &amp; &lt;テスト></title>
   <properties>
     <Paths>
       <Absolute type="bool">false</Absolute>
@@ -27,7 +27,7 @@
           <layer-tree-layer id="v_pts" name="pts" source="./sub/a.gpkg|layername=pts" providerKey="ogr" expanded="1" checked="Qt::Checked" patch_size="-1,-1">
             <customproperties/>
           </layer-tree-layer>
-          <layer-tree-layer id="v_pts2" name="スギ" source="./sub/a.gpkg|layername=pts|subset=樹種 = 'スギ' | x" providerKey="ogr" expanded="1" checked="Qt::Unchecked" patch_size="-1,-1">
+          <layer-tree-layer id="v_pts2" name="A種" source="./sub/a.gpkg|layername=pts|subset=区分 = 'A種' | x" providerKey="ogr" expanded="1" checked="Qt::Unchecked" patch_size="-1,-1">
             <customproperties/>
           </layer-tree-layer>
         </layer-tree-group>
@@ -41,9 +41,9 @@
           <customproperties/>
         </layer-tree-layer>
       </layer-tree-group>
-      <layer-tree-group name="stands" expanded="1" checked="Qt::Checked">
+      <layer-tree-group name="parcels" expanded="1" checked="Qt::Checked">
         <customproperties/>
-        <layer-tree-layer id="v_stands" name="stands" source="./b.gpkg|layername=stands" providerKey="ogr" expanded="1" checked="Qt::Checked" patch_size="-1,-1">
+        <layer-tree-layer id="v_parcels" name="parcels" source="./b.gpkg|layername=parcels" providerKey="ogr" expanded="1" checked="Qt::Checked" patch_size="-1,-1">
           <customproperties/>
         </layer-tree-layer>
       </layer-tree-group>
@@ -110,8 +110,8 @@
     </maplayer>
     <maplayer type="vector" geometry="Point" hasScaleBasedVisibilityFlag="0" minScale="1e+08" maxScale="0" readOnly="0" refreshOnNotifyEnabled="0" autoRefreshMode="Disabled" styleCategories="AllStyleCategories" labelsEnabled="0">
       <id>v_pts2</id>
-      <datasource>./sub/a.gpkg|layername=pts|subset=樹種 = 'スギ' | x</datasource>
-      <layername>スギ</layername>
+      <datasource>./sub/a.gpkg|layername=pts|subset=区分 = 'A種' | x</datasource>
+      <layername>A種</layername>
       <provider encoding="UTF-8">ogr</provider>
       <srs>
         <spatialrefsys>
@@ -175,9 +175,9 @@
       <previewExpression></previewExpression>
     </maplayer>
     <maplayer type="vector" geometry="Polygon" hasScaleBasedVisibilityFlag="0" minScale="1e+08" maxScale="0" readOnly="0" refreshOnNotifyEnabled="0" autoRefreshMode="Disabled" styleCategories="AllStyleCategories" labelsEnabled="0">
-      <id>v_stands</id>
-      <datasource>./b.gpkg|layername=stands</datasource>
-      <layername>stands</layername>
+      <id>v_parcels</id>
+      <datasource>./b.gpkg|layername=parcels</datasource>
+      <layername>parcels</layername>
       <provider encoding="UTF-8">ogr</provider>
       <srs>
         <spatialrefsys>
@@ -231,7 +231,7 @@
     <layer id="v_pts"/>
     <layer id="v_pts2"/>
     <layer id="v_roads"/>
-    <layer id="v_stands"/>
+    <layer id="v_parcels"/>
     <layer id="raster_1"/>
   </layerorder>
 </qgis>

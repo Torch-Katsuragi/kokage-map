@@ -275,7 +275,7 @@ class SyncEngine {
   /// マージ用のファイルエントリ一覧を取得（[snapshot] を渡せばそれで判定する）。
   ///
   /// ⚠ 判定できなければ投げる（空の一覧を返さない）。空は「変えたものが無い」の意味なので、
-  /// 以前は名前解決の失敗（電波の切り替わり）でも「同期済み」と出て、上げていない変更が残っていた（2026-10-12、Pixel 9）
+  /// 以前は名前解決の失敗（電波の切り替わり）でも「同期済み」と出て、上げていない変更が残っていた（2026-10-12、Android 実機）
   Future<List<MergeFileEntry>> getMergeEntries(String localPath, {SyncSnapshot? snapshot}) async {
     try {
       final SyncSnapshot s;

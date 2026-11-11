@@ -84,7 +84,7 @@ class WebFileSystem implements KFileSystem {
   /// 選択されたルート。未選択なら null
   web.FileSystemDirectoryHandle? _root;
 
-  /// ルートの仮想パス（例: `/山林データ`）
+  /// ルートの仮想パス（例: `/調査データ`）
   String? _rootPath;
 
   String? get rootPath => _rootPath;

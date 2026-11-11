@@ -212,7 +212,7 @@ void main() {
     test('parses combined presets and folders arrays and preset/folder entry keys', () {
       const jsonStr = '''
       {
-        "name": "北山村統合プリセット",
+        "name": "広域統合プリセット",
         "presets": [
           "https://drive.google.com/file/d/1ChildPresetJsonIdAbCdEfGhIj/view?usp=sharing",
           {
@@ -229,7 +229,7 @@ void main() {
       ''';
 
       final manifest = DriveFolderSetManifest.parse(jsonStr);
-      expect(manifest.name, '北山村統合プリセット');
+      expect(manifest.name, '広域統合プリセット');
       expect(manifest.invalidEntryCount, 0);
       expect(manifest.items.length, 3);
       expect(manifest.items[0].driveId, '1ChildPresetJsonIdAbCdEfGhIj');

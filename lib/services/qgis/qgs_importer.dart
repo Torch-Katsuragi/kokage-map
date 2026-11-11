@@ -851,7 +851,7 @@ class _SourceResolver {
       return null;
     }
 
-    // 形の無い表（森林簿 CSV）は View にならない。結合の先として表のノードに結びつける
+    // 形の無い表（CSV）は View にならない。結合の先として表のノードに結びつける
     if (QgsDocument.isTableLayer(maplayer)) {
       _resolveTable(maplayer, name, discarded);
       return null;
@@ -873,8 +873,8 @@ class _SourceResolver {
     final absPath = p.normalize(p.isAbsolute(source.path) ? source.path : p.join(qgsDir, source.path));
     final root = rootPath;
     if (root == null || relativeInside(root, absPath) == null) {
-      // ⚠ 相対パスで root 外を指すケース（`../shared/kyoyu.gpkg`）は
-      //    林業では現実にありそう。判定は正規化した絶対パスで行う
+      // ⚠ 相対パスで root 外を指すケース（`../shared/kyoyu.gpkg`）もあるため、
+      //    判定は正規化した絶対パスで行う
       discarded.add('$name（プロジェクトフォルダの外を参照している）');
       return null;
     }

@@ -20,7 +20,7 @@
 /// **準備（compile）の時点で** `no such function: ST_IsEmpty` で落ちる。GDAL の組の update5・update4 は
 /// `AFTER UPDATE ON <表>`（列を問わない）なので、属性だけの UPDATE も落ちる。
 ///
-/// > [!WARNING] 属性の変更が保存されなかった（2026-10-12 Pixel 9）
+/// > [!WARNING] 属性の変更が保存されなかった（2026-10-12 Android 実機）
 /// > 以前はトリガーを落とすのが地物の追加・形の更新・削除の経路だけで、属性の UPDATE などは
 /// > 「どこかで先に落としてある」ことに頼っていた。外へ出す前にトリガーを戻す
 /// > （`GeoPackageFile.prepareForHandOff`）ようにしたら、戻したあとの属性の保存が毎回落ち、

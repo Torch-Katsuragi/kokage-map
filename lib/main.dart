@@ -202,7 +202,7 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     WidgetsBinding.instance.addObserver(this);
     // ⚠ 復帰時も Flutter は paused → hidden → inactive → resumed と合成して配送する。
     // didChangeAppLifecycleState で hidden を見ると、復帰の瞬間（サーフェス再生成と同時）にも
-    // prepareAllForHandOff が走っていた（2026-10-23 Pixel 10 Pro Fold）。onHide は下りの inactive → hidden だけ
+    // prepareAllForHandOff が走っていた（2026-10-23 Android 実機）。onHide は下りの inactive → hidden だけ
     _lifecycle = AppLifecycleListener(
       onHide: () {
         _flushing ??= _flushOnBackground().whenComplete(() => _flushing = null);

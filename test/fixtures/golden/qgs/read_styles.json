@@ -29,7 +29,7 @@
     "lineColor": "#FFFF0000",
     "labelEnabled": false
   },
-  "qgis_3_44_written.qgs/v_stands": {
+  "qgis_3_44_written.qgs/v_parcels": {
     "polygonBorderWidth": 1.5118110236220474,
     "polygonBorderColor": "#FF000080",
     "polygonFillColor": "#FF00FF00",
@@ -74,7 +74,7 @@
     "lineColor": "#FFFF0000",
     "labelEnabled": false
   },
-  "qgis_4_2_saved.qgs/v_stands": {
+  "qgis_4_2_saved.qgs/v_parcels": {
     "polygonBorderWidth": 1.5118110236220474,
     "polygonBorderColor": "#FF000080",
     "polygonFillColor": "#FF00FF00",

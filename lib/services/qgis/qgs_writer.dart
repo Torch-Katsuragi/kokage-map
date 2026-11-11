@@ -270,7 +270,7 @@ class QgsWriter {
     );
   }
 
-  /// 表（森林簿 CSV）の `<maplayer>`。QGIS の「CSV テキストレイヤを追加」（geomType=none）と同じ形
+  /// 表（ジオメトリなし CSV）の `<maplayer>`。QGIS の「CSV テキストレイヤを追加」（geomType=none）と同じ形
   void _writeTableMapLayer(XmlBuilder builder, QgsTableLayer layer) {
     builder.element(
       'maplayer',

@@ -1,7 +1,7 @@
 // 地物の表示名: QGIS で作った name 列の無いレイヤで「名前なし」を出さない（ホスト VM）。
 //
-// 2026-10-12 に Pixel 9 で、小班のレイヤ（列は fid・林班・小班・林小班・樹種…）の情報パネルに
-// 「name: 名前なし」、検索の結果に「小班 › 名前なし」が出ていた。
+// 2026-10-12 に Android 実機で、区画のレイヤ（列は fid・地区・区画・区画番号・区分…）の情報パネルに
+// 「name: 名前なし」、検索の結果に「区画 › 名前なし」が出ていた。
 // 表示名は QGIS の表示名の式（`<previewExpression>`）→ ラベルの式 → name 列の順に探す
 import 'dart:io';
 
@@ -38,44 +38,44 @@ void main() {
     } catch (_) {}
   });
 
-  Future<PolygonLayerNode> shohan({Map<String, String>? extra, Map<String, Object?>? extraAttrs}) async {
-    await gpkg.addLayer('小班', GeometryType.polygon);
-    await gpkg.addAttributeColumns('小班', {'林班': 'INTEGER', '小班': 'TEXT', '林小班': 'TEXT', '樹種': 'TEXT', ...?extra});
+  Future<PolygonLayerNode> parcels({Map<String, String>? extra, Map<String, Object?>? extraAttrs}) async {
+    await gpkg.addLayer('区画', GeometryType.polygon);
+    await gpkg.addAttributeColumns('区画', {'地区': 'INTEGER', '区画': 'TEXT', '区画番号': 'TEXT', '区分': 'TEXT', ...?extra});
     const ring = [LatLng(33.0, 135.0), LatLng(33.0, 135.1), LatLng(33.1, 135.1), LatLng(33.0, 135.0)];
-    await gpkg.addPolygonWithAttributes('小班', [ring], {'林班': 12, '小班': 'い', '林小班': '12-い', '樹種': 'スギ', ...?extraAttrs});
-    final layer = PolygonLayerNode(gpkg, '小班', parent: GeoPackageNode(gpkg));
+    await gpkg.addPolygonWithAttributes('区画', [ring], {'地区': 12, '区画': 'い', '区画番号': '12-い', '区分': '種別A', ...?extraAttrs});
+    final layer = PolygonLayerNode(gpkg, '区画', parent: GeoPackageNode(gpkg));
     await layer.updateChildren();
     return layer;
   }
 
   test('name 列の無いレイヤ: 情報パネルに name の行を出さず、表示名も無い。見分けは列から', () async {
-    final layer = await shohan();
+    final layer = await parcels();
     final f = layer.features.single;
     expect(f.infoMap.containsKey('name'), isFalse);
-    expect(f.infoMap['林小班'], '12-い');
+    expect(f.infoMap['区画番号'], '12-い');
     expect(featureDisplayName(f), isNull);
     expect(featureQgisDisplayName(f), isNull);
-    // 当たった列（林班）は除き、文字の列を先に 2 つ
-    expect(featureIdentifier(f, excludeColumn: '林班'), '小班: い / 林小班: 12-い');
+    // 当たった列（地区）は除き、文字の列を先に 2 つ
+    expect(featureIdentifier(f, excludeColumn: '地区'), '区画: い / 区画番号: 12-い');
   });
 
   test('name 列があれば先頭に出し、表示名にも使う', () async {
-    final layer = await shohan(extra: {'name': 'TEXT'}, extraAttrs: {'name': '北の山'});
+    final layer = await parcels(extra: {'name': 'TEXT'}, extraAttrs: {'name': '北の山'});
     final f = layer.features.single;
     expect(f.infoMap.keys.first, 'name');
     expect(featureDisplayName(f), '北の山');
-    expect(featureIdentifier(f, excludeColumn: '林班'), '北の山');
+    expect(featureIdentifier(f, excludeColumn: '地区'), '北の山');
     // 当たった値そのものなら列から作る（同じ文字を 2 度見せない）
-    expect(featureIdentifier(f, excludeColumn: 'name', exclude: '北の山'), '小班: い / 林小班: 12-い');
+    expect(featureIdentifier(f, excludeColumn: 'name', exclude: '北の山'), '区画: い / 区画番号: 12-い');
   });
 
   test('QGIS の表示名の式があれば使う。列 1 つだけの式は情報パネルに別の行として出さない', () async {
-    final layer = await shohan();
+    final layer = await parcels();
     final f = layer.features.single;
-    layer.debugDisplayExpression = "concat(\"林班\", '-', \"小班\")";
+    layer.debugDisplayExpression = "concat(\"地区\", '-', \"区画\")";
     expect(featureDisplayName(f), '12-い');
     expect(featureQgisDisplayName(f), '12-い');
-    layer.debugDisplayExpression = '"林小班"';
+    layer.debugDisplayExpression = '"区画番号"';
     expect(featureDisplayName(f), '12-い');
     expect(featureQgisDisplayName(f), isNull);
   });
@@ -83,10 +83,10 @@ void main() {
   test('.qgs の <previewExpression> を読み、フォルダ設定に往復する。空なら持たない', () {
     XmlElement maplayer(String preview) =>
         XmlDocument.parse('<maplayer><previewExpression>$preview</previewExpression></maplayer>').rootElement;
-    final form = QgsFormReader.read(maplayer('"林小班"'));
-    expect(form?.displayExpression, '"林小班"');
-    expect(QgisForm.fromJson(form!.toJson()).displayExpression, '"林小班"');
-    expect(form.withFields(const {}).displayExpression, '"林小班"');
+    final form = QgsFormReader.read(maplayer('"区画番号"'));
+    expect(form?.displayExpression, '"区画番号"');
+    expect(QgisForm.fromJson(form!.toJson()).displayExpression, '"区画番号"');
+    expect(form.withFields(const {}).displayExpression, '"区画番号"');
     expect(QgsFormReader.read(maplayer('')), isNull);
   });
 }

@@ -302,7 +302,7 @@ class MainActivity : FlutterActivity() {
      * （ACCESS_MEDIA_LOCATION も無視される仕様）。
      * そこで URI からメディアIDを取り出し、MediaStore.Images の実体で _data を
      * 引き直す。実パスの直接読みは FUSE のリダクション対象外なので EXIF が丸ごと残る
-     * （2026-08-28 に Pixel 9 実機で検証済み）。
+     * （2026-08-28 に実機で検証済み）。
      */
     private fun resolveRealPath(uri: Uri): String? {
         if (uri.scheme == "file") return uri.path
@@ -310,7 +310,7 @@ class MainActivity : FlutterActivity() {
         // 1) ピッカー系URIはメディアIDで MediaStore の実体を引き直す。
         //    ⚠ ピッカーURIをそのまま query すると _data が「成功」するが、
         //    返るのは `/sdcard/.transforms/synthetic/...` という合成パスで、
-        //    読めるのは**リダクション済み（GPSゼロ埋め）バイト**（Pixel 9 実測）。
+        //    読めるのは**リダクション済み（GPSゼロ埋め）バイト**（実機実測）。
         extractMediaId(uri)?.let { id ->
             val mediaUri =
                 ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)

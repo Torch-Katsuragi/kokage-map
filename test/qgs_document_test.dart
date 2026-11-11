@@ -19,7 +19,7 @@ import 'package:xml/xml.dart';
 
 String fixture() => File('test/fixtures/qgis_3_44_written.qgs').readAsStringSync();
 
-/// フィクスチャ内の「林小班」グループにある2つの root 内レイヤの id
+/// フィクスチャ内の「区画」グループにある2つの root 内レイヤの id
 const idSugi = '___56902204_7d58_4032_ab25_8588e0e0aa73';
 const idAll = '___574d01b1_4fc4_44f8_8645_634a0a308fca';
 
@@ -32,8 +32,8 @@ QgsLayer layer(
 }) => QgsLayer(
   id: id,
   name: name,
-  dataSourcePath: './林小班.gpkg',
-  tableName: 'rinshoban',
+  dataSourcePath: './区画.gpkg',
+  tableName: 'parcels',
   geometryType: GeometryType.point,
   crs: QgsCrs.wgs84,
   subset: subset,
@@ -46,9 +46,9 @@ QgsProject projectFromFixture({QgsStyle? sugiStyle, String? sugiSubset = 'area >
       name: 'テスト',
       root: [
         QgsGroup(
-          name: '林小班',
+          name: '区画',
           children: [
-            layer(idSugi, 'スギ', subset: sugiSubset, style: sugiStyle),
+            layer(idSugi, 'A種', subset: sugiSubset, style: sugiStyle),
             layer(idAll, '全部', visible: false),
           ],
         ),
@@ -92,7 +92,7 @@ void main() {
       doc.apply(projectFromFixture());
       final tree = doc.root.getElement('layer-tree-group')!;
       final group = tree.findElements('layer-tree-group').single;
-      expect(group.getAttribute('name'), '林小班');
+      expect(group.getAttribute('name'), '区画');
       expect(group.getElement('customproperties'), isNotNull);
       final layers = group.findElements('layer-tree-layer').toList();
       expect(layers.map((l) => l.getAttribute('id')), [idSugi, idAll]);
@@ -106,9 +106,9 @@ void main() {
   group('自分の管轄だけ直す', () {
     test('フィルタと可視性が更新される', () {
       final doc = QgsDocument.parse(fixture());
-      doc.apply(projectFromFixture(sugiSubset: "樹種 = 'スギ'"));
+      doc.apply(projectFromFixture(sugiSubset: "区分 = 'A種'"));
       final sugi = doc.findMapLayer(idSugi)!;
-      expect(sugi.getElement('datasource')!.innerText, "./林小班.gpkg|layername=rinshoban|subset=樹種 = 'スギ'");
+      expect(sugi.getElement('datasource')!.innerText, "./区画.gpkg|layername=parcels|subset=区分 = 'A種'");
       final tree = doc.root.getElement('layer-tree-group')!;
       final all = tree.findAllElements('layer-tree-layer').firstWhere((l) => l.getAttribute('id') == idAll);
       expect(all.getAttribute('checked'), 'Qt::Unchecked');
@@ -197,7 +197,7 @@ void main() {
       final project = QgsProject(
         name: 'テスト',
         root: [
-          QgsGroup(name: '林小班', expanded: false, children: [layer(idSugi, 'スギ'), layer(idAll, '全部')]),
+          QgsGroup(name: '区画', expanded: false, children: [layer(idSugi, 'A種'), layer(idAll, '全部')]),
         ],
       );
       doc.apply(project);
@@ -256,13 +256,13 @@ void main() {
       final project = QgsProject(
         name: 'テスト',
         root: [
-          QgsGroup(name: '林小班', children: [layer(idSugi, 'スギ'), layer(idAll, '全部'), extra]),
+          QgsGroup(name: '区画', children: [layer(idSugi, 'A種'), layer(idAll, '全部'), extra]),
         ],
       );
       doc.apply(project);
       final added = doc.findMapLayer('new_id')!;
       expect(added.getElement('renderer-v2'), isNotNull);
-      expect(added.getElement('datasource')!.innerText, './林小班.gpkg|layername=rinshoban');
+      expect(added.getElement('datasource')!.innerText, './区画.gpkg|layername=parcels');
       final treeIds = doc.root.getElement('layer-tree-group')!
           .findAllElements('layer-tree-layer').map((l) => l.getAttribute('id'));
       expect(treeIds, contains('new_id'));
@@ -323,9 +323,9 @@ void main() {
     });
 
     test('View キーから決定的な id ができ、非ASCIIでも衝突しない', () {
-      final a = QgsProjectBuilder.layerIdForViewKey('林小班.gpkg/rinshoban/スギ');
-      final b = QgsProjectBuilder.layerIdForViewKey('林小班.gpkg/rinshoban/ヒノキ');
-      expect(a, QgsProjectBuilder.layerIdForViewKey('林小班.gpkg/rinshoban/スギ'));
+      final a = QgsProjectBuilder.layerIdForViewKey('区画.gpkg/parcels/A種');
+      final b = QgsProjectBuilder.layerIdForViewKey('区画.gpkg/parcels/B種');
+      expect(a, QgsProjectBuilder.layerIdForViewKey('区画.gpkg/parcels/A種'));
       expect(a, isNot(b));
       expect(a, matches(RegExp(r'^[A-Za-z0-9_]+$')));
     });

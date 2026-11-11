@@ -27,8 +27,8 @@ QgsLayer makeLayer(
 }) => QgsLayer(
   id: 'id_$name',
   name: name,
-  dataSourcePath: './林小班.gpkg',
-  tableName: 'rinshoban',
+  dataSourcePath: './区画.gpkg',
+  tableName: 'parcels',
   geometryType: geometry,
   crs: QgsCrs.wgs84,
   subset: subset,
@@ -48,13 +48,13 @@ void main() {
             name: '2026年度',
             children: [
               QgsGroup(
-                name: '林小班.gpkg',
+                name: '区画.gpkg',
                 children: [
                   QgsGroup(
-                    name: 'rinshoban',
+                    name: 'parcels',
                     children: [
-                      makeLayer('スギ', subset: "樹種 = 'スギ'"),
-                      makeLayer('ヒノキ', subset: "樹種 = 'ヒノキ'"),
+                      makeLayer('A種', subset: "区分 = 'A種'"),
+                      makeLayer('B種', subset: "区分 = 'B種'"),
                     ],
                   ),
                 ],
@@ -71,13 +71,13 @@ void main() {
       final dir = tree.findElements('layer-tree-group').single;
       expect(dir.getAttribute('name'), '2026年度');
       final gpkg = dir.findElements('layer-tree-group').single;
-      expect(gpkg.getAttribute('name'), '林小班.gpkg');
+      expect(gpkg.getAttribute('name'), '区画.gpkg');
       final layer = gpkg.findElements('layer-tree-group').single;
-      expect(layer.getAttribute('name'), 'rinshoban');
+      expect(layer.getAttribute('name'), 'parcels');
 
       // レイヤは View のぶんだけ
       final treeLayers = layer.findElements('layer-tree-layer').toList();
-      expect(treeLayers.map((e) => e.getAttribute('name')), ['スギ', 'ヒノキ']);
+      expect(treeLayers.map((e) => e.getAttribute('name')), ['A種', 'B種']);
 
       // maplayer も同数
       final mapLayers = doc.rootElement
@@ -91,7 +91,7 @@ void main() {
       final project = QgsProject(
         name: 'p',
         root: [
-          QgsGroup(name: 'g', children: [makeLayer('スギ'), makeLayer('ヒノキ')]),
+          QgsGroup(name: 'g', children: [makeLayer('A種'), makeLayer('B種')]),
         ],
       );
       final doc = XmlDocument.parse(writer.build(project));
@@ -146,17 +146,17 @@ void main() {
 
   group('データソース', () {
     test('フィルタが |subset= として載る', () {
-      final layer = makeLayer('スギ', subset: "樹種 = 'スギ' AND 面積 > 10");
+      final layer = makeLayer('A種', subset: "区分 = 'A種' AND 面積 > 10");
       expect(
         layer.dataSourceUri,
-        "./林小班.gpkg|layername=rinshoban|subset=樹種 = 'スギ' AND 面積 > 10",
+        "./区画.gpkg|layername=parcels|subset=区分 = 'A種' AND 面積 > 10",
       );
     });
 
     test('フィルタが無ければ |subset= を付けない', () {
       expect(
         makeLayer('全部').dataSourceUri,
-        './林小班.gpkg|layername=rinshoban',
+        './区画.gpkg|layername=parcels',
       );
     });
 
@@ -164,11 +164,11 @@ void main() {
       final project = QgsProject(
         name: 'p',
         root: [
-          QgsGroup(name: 'g', children: [makeLayer('スギ')]),
+          QgsGroup(name: 'g', children: [makeLayer('A種')]),
         ],
       );
       final xml = writer.build(project);
-      expect(xml, contains('./林小班.gpkg'));
+      expect(xml, contains('./区画.gpkg'));
       expect(xml, isNot(contains('C:')), reason: '絶対パスが混ざると他人の環境で開けない');
       // 相対パスで解決させる設定も要る
       expect(xml, contains('<Absolute type="bool">false</Absolute>'));
@@ -194,7 +194,7 @@ void main() {
       final project = QgsProject(
         name: 'p',
         root: [
-          QgsGroup(name: 'g', children: [makeLayer('スギ')]),
+          QgsGroup(name: 'g', children: [makeLayer('A種')]),
         ],
       );
       final doc = XmlDocument.parse(writer.build(project));

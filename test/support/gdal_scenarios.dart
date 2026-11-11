@@ -5,13 +5,13 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/core/gdal/gdal.dart';
 
-const gdalScenarioNames = ['スギ1', 'ヒノキ2', '北山村役場'];
+const gdalScenarioNames = ['地点1', '地点2', '基準点A'];
 
 const _pointsGeoJson = '''
 {"type":"FeatureCollection","features":[
-{"type":"Feature","properties":{"name":"スギ1","dbh":32},"geometry":{"type":"Point","coordinates":[135.96,33.93]}},
-{"type":"Feature","properties":{"name":"ヒノキ2","dbh":28},"geometry":{"type":"Point","coordinates":[135.961,33.931]}},
-{"type":"Feature","properties":{"name":"北山村役場","dbh":0},"geometry":{"type":"Point","coordinates":[135.97,33.94]}}
+{"type":"Feature","properties":{"name":"地点1","dbh":32},"geometry":{"type":"Point","coordinates":[135.96,33.93]}},
+{"type":"Feature","properties":{"name":"地点2","dbh":28},"geometry":{"type":"Point","coordinates":[135.961,33.931]}},
+{"type":"Feature","properties":{"name":"基準点A","dbh":0},"geometry":{"type":"Point","coordinates":[135.97,33.94]}}
 ]}''';
 
 /// 書き出し先の形式 → (拡張子, 追加の引数)。アプリの libgdal.so に入れたベクタのドライバ全部

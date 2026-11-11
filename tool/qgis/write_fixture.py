@@ -5,7 +5,7 @@
 
     <QGIS>/bin/python-qgis-ltr.bat tool/qgis/write_fixture.py
 
-⚠ `.temp/qgs_check/林小班.gpkg` が要る。docs/technical/testing の
+⚠ `.temp/qgs_check/区画.gpkg` が要る。docs/technical/testing の
 「最小のGeoPackageを標準ライブラリだけで作る」を参照。
 """
 import os
@@ -19,17 +19,17 @@ app = QgsApplication([], False)
 app.initQgis()
 
 folder = os.path.abspath('.temp/qgs_check')
-gpkg = os.path.join(folder, '林小班.gpkg')
+gpkg = os.path.join(folder, '区画.gpkg')
 
 project = QgsProject.instance()
 project.clear()
 project.setTitle('QGISが書いたプロジェクト')
 
 root = project.layerTreeRoot()
-group = root.addGroup('林小班')
+group = root.addGroup('区画')
 
 def add(name, subset, color, size):
-    uri = f'{gpkg}|layername=rinshoban'
+    uri = f'{gpkg}|layername=parcels'
     if subset:
         uri += f'|subset={subset}'
     layer = QgsVectorLayer(uri, name, 'ogr')
@@ -40,7 +40,7 @@ def add(name, subset, color, size):
     group.addLayer(layer)
     return layer
 
-add('スギ', "area > 105", '30,144,255,255', '4')
+add('A種', "area > 105", '30,144,255,255', '4')
 hidden = add('全部', None, '227,26,28,255', '2')
 # 1枚は非表示にして、checked の読み取りも試せるようにする
 root.findLayer(hidden.id()).setItemVisibilityChecked(False)

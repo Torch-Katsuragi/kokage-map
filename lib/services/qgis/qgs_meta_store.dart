@@ -92,7 +92,7 @@ abstract final class QgsFileWriter {
 ///
 /// > [!IMPORTANT] Drive 連携している dir は `<Drive のフォルダ名>.qgs`（2026-09-29）
 /// > `.qgs` は Drive で共有される。`<dir名>.qgs` のままだと、端末ごとにローカルの dir 名が
-/// > 違うとき（A 端末は「北山」、B 端末は「北山 (1)」…）互いに自分の名前へ改名し合い、
+/// > 違うとき（A 端末は「プロジェクトA」、B 端末は「プロジェクトA (1)」…）互いに自分の名前へ改名し合い、
 /// > 同期のたびに消して上げ直す。連携していれば全端末で同じ Drive のフォルダ名を使う。
 /// > プロジェクト名と印の `dirName` も同じ理由でこの名前にする。
 abstract final class QgsProjectFile {

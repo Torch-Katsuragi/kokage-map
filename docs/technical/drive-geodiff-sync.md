@@ -8,12 +8,12 @@ tags: [technical, google-drive, geopackage, geodiff, sync]
 いまの Drive 同期は GeoPackage を**ファイル単位**でしか扱えない
 （[[../features/google-drive|Google Drive 連携]]「GeoPackage ファイルの競合」）。
 2 台が同じ `.gpkg` を別々に編集すると、Keep Local / Keep Remote のどちらかを捨てるか、
-`_conflict` 付きで両方残すしかない。ルーム（複数人）で同じ林班を触ると必ずここに当たる。
+`_conflict` 付きで両方残すしかない。複数人で同じ区画データを触ると必ずここに当たる。
 
 [geodiff](https://github.com/MerginMaps/geodiff)（Mergin Maps の中核、C++・C API・MIT）は
 これを **行単位の 3-way マージ**で解く。base と 2 つの派生からチェンジセットを作り、
 片方をもう片方の上に載せ直す（rebase）。同じ行・同じ列を両方が変えたときだけ衝突として
-JSON に残し、それ以外は全部自動で通る。自前で ops.log から競合検出する案（TODO「レイヤ単位での競合解決」）より実績がある。
+JSON に残し、それ以外は全部自動で通る。自前で操作ログから競合検出する案より実績がある。
 
 ## PoC（2026-09-18・PC の pygeodiff 2.3.1）
 
@@ -27,7 +27,7 @@ GDAL 製（rtree・ST_ トリガ付き。アプリと同様に ST_ トリガだ�
 
 `rebase(base, B, A, conflict.json)` の結果、A は「A の追加 ＋ B の測り直し ＋ B の削除 ＋ 自分の改名」になり、
 fid=1 の改名だけが `conflict.json` に `base / old(B) / new(A)` 付きで出た。ジオメトリは無傷。
-rtree テーブルがあっても通る。スクリプトと出力は Vault `K-Maps/geodiff_poc/`。
+rtree テーブルがあっても通る。
 
 ## geodiff が触らないもの（`sqlitedriver.cpp`）
 
@@ -99,7 +99,7 @@ geodiff は同じ行・同じ列の衝突を**ローカル優先**で解き、`c
 | 2 バインディング | 済 | `lib/services/geodiff/`（ffi + web stub）。`test/geodiff_rebase_test.dart`、`integration_test/device/geodiff_smoke_test.dart` |
 | 3 base と差し込み | 済 | `SyncBaseStore`（`.sync/base/`）、`GpkgMerger`、`MergeChoice.merge`、`SyncConflictResolver._mergeGpkg()` |
 | 4 後処理 | 済 | `GeoPackageConnection.closeAllFor()`、`GpkgIndexRepair`、`GeoPackageNode.reloadLoadedLayers()` |
-| 5 2 台で往復 | 済（偽 Drive） | Pixel 9 + Pixel 11 Pro Fold で `tool/sync_relay/run_two_device.sh`。本物の Drive での往復は未 |
+| 5 2 台で往復 | 済（偽 Drive） | 実機 2 台で `tool/sync_relay/run_two_device.sh` |
 
 base は「gpkg を Drive と上げ下ろしした直後」に写す（push / pull / executeMerge の upload・download・merge の全経路）。
 base が無い gpkg（この版より前に同期したもの）は、次に上げ下ろしした時点から持てるようになる。
@@ -120,7 +120,7 @@ base が無い gpkg（この版より前に同期したもの）は、次に上�
 
 ### Android の SQLite には rtree が無い（2026-09-24）
 
-Android 本体の SQLite（sqflite が使う）は rtree モジュールを持っていない（Pixel 9 / Android 17 で `no such module: rtree`）。
+Android 本体の SQLite（sqflite が使う）は rtree モジュールを持っていない（Android 実機で `no such module: rtree`）。
 地物テーブルは読み書きできるが、QGIS 製の gpkg の `rtree_*` には触れない。`GpkgIndexRepair` は行と範囲を sqflite で読み、
 rtree への書き込みだけ geodiff に入っている SQLite（`SQLITE_ENABLE_RTREE` 付き、`libgeodiff.so` が `sqlite3_*` を外に出している）で行う
 （`Geodiff.execSql()`）。範囲も rtree から読まず、Dart で出した値を書く。実機で確認（`integration_test/device/gpkg_rtree_android_test.dart`）。
@@ -137,11 +137,11 @@ rtree の無い gpkg（このアプリで作ったもの）は何もしない。
 
 ### 速さ（2026-09-24、`test/support/geodiff_bench.dart`）
 
-森林簿を想定した面 2 万筆（各 12 頂点、属性 10 列、rtree 付き、12.6MB）。各側 50 行を変えて rebase。
+区画ポリゴンを想定した面 2 万筆（各 12 頂点、属性 10 列、rtree 付き、12.6MB）。各側 50 行を変えて rebase。
 
 | | base の写し | rebase | 索引の焼き直し（全件） |
 |---|---|---|---|
-| Pixel 9（実機） | 37ms | 66ms | 270ms |
+| Android 実機 | 37ms | 66ms | 270ms |
 | PC（Windows、ホスト VM） | 72ms | 128ms | 188ms |
 
 同期のたびに回しても問題にならない。base は同期した gpkg と同じ大きさの写しなので、端末の容量はその分増える。
@@ -215,7 +215,7 @@ rebase の前に 3 つ（base・相手・こちら）の列を見比べ、片側
 帳簿（`SyncLedger`）は端末の私有領域（SharedPreferences）にあり、フォルダと `.qgs` は共有領域にある。
 アプリのデータを消す・入れ直すと、リンク済みのフォルダが帳簿なしで残り、次の同期では全部が「両方にある」になる。
 
-**起きたこと（Pixel 9）**: サインインし直したあとの最初の同期ダイアログで、両方にあるファイルがクラウド側に印の付いた状態で出て、
+**起きたこと（実機）**: サインインし直したあとの最初の同期ダイアログで、両方にあるファイルがクラウド側に印の付いた状態で出て、
 そのまま同期して gpkg 3 つと `.qgs` が古いクラウドの版で上書きされた。
 原因は、帳簿に無いものを「手元の追加」と「Drive の追加」の **2 件**に分けて出していたこと。
 ダイアログの選択はパスをキーに持つので後の 1 件（Drive の追加 → クラウド）で潰れ、反映では
@@ -287,19 +287,19 @@ tool/sync_relay/run_two_device.sh <端末A> <端末B>
 
 テスト用ビルドは applicationId に `.geodifftest` を付けて既存のアプリと並べて入れる（普段使いの端末のデータを置き換えない）。
 そのためにスクリプトが `build.gradle.kts` と `google-services.json` を一時的に書き換え、終了時に必ず戻す。
-2026-09-24 に Pixel 9（A）＋ Pixel 11 Pro Fold（B）で通過：B が `local=modified remote=modified mergeable=true` を検出して
+2026-09-24 に Android 実機 A ＋ 実機 B で通過：B が `local=modified remote=modified mergeable=true` を検出して
 行単位で合わせ（衝突 1 件＝B の値が残る）、A が取り込み、両端末の中身が一致した。
 
 ### 本物の Drive での往復（2026-09-24）
 
-合わせる側は Fold（アプリの自動同期、5 分ごと）、相手側は PC の Drive for Desktop 上の gpkg を直接書き換えた
+合わせる側は Android 実機（アプリの自動同期、5 分ごと）、相手側は PC の Drive for Desktop 上の gpkg を直接書き換えた
 （QGIS で PC から編集するのと同じ経路）。web は、プロジェクトを開くときに OS のフォルダ選択を使うので、ブラウザ拡張からは動かせなかった。
 
-| 回 | Fold | PC | 結果 |
+| 回 | 実機 | PC | 結果 |
 |---|---|---|---|
-| 1 | 木4 の dbh 24 → 44 | 木2 の dbh 22 → 42 | 自動同期が merge を選び、衝突 0 件。PC 側にも両方届いた |
-| 2 | 木5 の dbh 25 → 55 | 木5 の dbh 25 → 50 | 衝突 1 件（端末の 55 が残る）。PC 側も 55 にそろった |
-| 3 | 木3 の dbh 23 → 33 | 木3 の dbh 23 → 30 | 衝突 1 件。通知の「クラウドの値に戻す」で端末も 30 に戻り、次の同期で PC 側も 30 |
+| 1 | 地点4 の val 24 → 44 | 地点2 の val 22 → 42 | 自動同期が merge を選び、衝突 0 件。PC 側にも両方届いた |
+| 2 | 地点5 の val 25 → 55 | 地点5 の val 25 → 50 | 衝突 1 件（端末の 55 が残る）。PC 側も 55 にそろった |
+| 3 | 地点3 の val 23 → 33 | 地点3 の val 23 → 30 | 衝突 1 件。通知の「クラウドの値に戻す」で端末も 30 に戻り、次の同期で PC 側も 30 |
 
 このとき見つけて直したもの:
 
@@ -308,11 +308,11 @@ tool/sync_relay/run_two_device.sh <端末A> <端末B>
   変更の判定は更新時刻なので、自動同期が 5 分ごとにアップロードし続けていた。中身が変わらなければ書かないようにした
 - フォルダの push は、1 つ変わると全ファイルを上げ直していた。変わっていない gpkg も Drive 側の更新時刻が進み、
   他の端末が毎回「Drive で変更あり」と見る。前回の同期から変わったファイルだけを上げるようにした
-- 直したあとは、変更の無い周期は何もせず、変更があれば変わったファイルだけを上げる（Fold で確認）
+- 直したあとは、変更の無い周期は何もせず、変更があれば変わったファイルだけを上げる（実機で確認）
 
 Android で gpkg を初めて開くと `android_metadata` 表が足され、1 回だけ無駄にアップロードされていた（地物は同じ）。
 Drive から落とした直後、同期済みと記録する前に sqflite で一度開いて閉じ（`SyncBaseStore.settleAfterDownload`）、
-表を足させてから記録するようにした。Fold で、`android_metadata` の無い gpkg を PC から置いて落とし、
+表を足させてから記録するようにした。実機で、`android_metadata` の無い gpkg を PC から置いて落とし、
 レイヤを開いた次の周期でその gpkg が上がらないことを確かめた（2026-09-25。上がったのはレイヤが増えた `.qgs` だけ）。
 
 同じ試験で、プロジェクトを `/sdcard/…` で開くと帳簿が `/storage/emulated/0/…` の持ち主と別の dir とみなされ、
@@ -324,7 +324,7 @@ Drive から落とした直後、同期済みと記録する前に sqflite で�
 2. Dart バインディング＋ホスト VM のテスト（PoC と同じ A/B/衝突の 3 本）
 3. base の保持と `executeMerge()` への差し込み
 4. rtree / extent の後処理と強制再読込
-5. Pixel 9 ＋ web（読むだけ）ではなく、**Android 2 台**で同じ gpkg を同時に編集して往復
+5. Android 1 台 ＋ web（読むだけ）ではなく、**Android 2 台**で同じ gpkg を同時に編集して往復
 
 ## 未決
 

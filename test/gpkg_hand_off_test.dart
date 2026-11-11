@@ -1,7 +1,7 @@
 // QGIS 製の gpkg をアプリで直して外へ出す（Drive へ上げる・base に写す・裏に回る）とき、
 // 出ていくファイルが QGIS/GDAL で読める形になっている（ホスト VM、geodiff.dll）。
 //
-// 2026-10-12 Pixel 9: QGIS 製の gpkg の「調査点」に点を足して同期すると、上がったファイルは
+// 2026-10-12 Android 実機: QGIS 製の gpkg の「調査点」に点を足して同期すると、上がったファイルは
 // rtree に点が無く、GDAL の rtree トリガーも落ちたままで、`ogrinfo -spat` で 0 件だった。
 // 整合（トリガーの復元・rtree の焼き直し）が GeoPackageFile を閉じるときにしか走らず、
 // プロジェクトを開いたままの同期では閉じないため。
@@ -27,7 +27,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'support/fake_google_drive.dart';
 
 const _points = '調査点';
-const _parcels = '小班';
+const _parcels = '区画';
 
 /// GDAL（QGIS）が作るのと同じ形の gpkg: rtree、ST_ 関数を使う rtree トリガー、件数キャッシュ。
 /// [_points] に 1 点、[_parcels] に 1 点

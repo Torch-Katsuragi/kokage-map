@@ -3,7 +3,7 @@ name: geopandas-gis
 description: >
   GeoPandas でベクタ（GPKG/GeoJSON/Shapefile/FlatGeobuf/Parquet 等）を読み書き・変換する。
   「GeoPandas」「GPKGを編集」「ベクタを結合」「クリップ」「バッファ」「CRS変換」「空間結合」
-  「森林簿の属性一括」「レイヤ情報を見たい」等のトリガーで使用。
+  「属性の一括処理」「レイヤ情報を見たい」等のトリガーで使用。
 upstream:
   - https://playbooks.com/skills/k-dense-ai/claude-scientific-skills/geopandas
 ---
@@ -40,7 +40,7 @@ $script = ".agent/skills/geopandas-gis/scripts/gpd_tool.py"
 & $py $script info --in "data.gpkg" --layer "foo"
 & $py $script export --in "a.gpkg" --layer "foo" --out "out.gpkg" --out-layer "foo"
 & $py $script reproject --in "a.gpkg" --layer "foo" --out "b.gpkg" --to EPSG:6670
-& $py $script filter-query --in "a.gpkg" --layer "foo" --out "sub.gpkg" --query "rinpan == 42"
+& $py $script filter-query --in "a.gpkg" --layer "foo" --out "sub.gpkg" --query "area > 100"
 & $py $script clip --in "a.gpkg" --layer "foo" --clip "mask.gpkg" --clip-layer "m" --out "clipped.gpkg"
 & $py $script sjoin --left "a.gpkg" --left-layer "x" --right "b.gpkg" --right-layer "y" --out "j.gpkg"
 ```

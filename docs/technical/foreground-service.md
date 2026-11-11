@@ -1,4 +1,4 @@
-﻿---
+---
 title: フォアグラウンドサービスとBluetooth通信の制約
 tags: [technical, bluetooth, gnss, isolate]
 ---
@@ -9,7 +9,7 @@ tags: [technical, bluetooth, gnss, isolate]
 
 ### 問題の背景
 
-Root Mapsでは、SSP（Secure Simple Pairing）対応の外部GNSS機器（例：u-blox Geode）との通信を実装していますが、フォアグラウンドサービス（別isolate）での実装には重大な制約があります。
+こかげマップでは、SSP（Secure Simple Pairing）対応の外部GNSS機器（例：u-blox Geode）との通信を実装していますが、フォアグラウンドサービス（別isolate）での実装には重大な制約があります。
 
 ### 技術的制約の詳細
 

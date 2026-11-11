@@ -1,5 +1,5 @@
 <!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
-<qgis projectname="結合の fixture" saveDateTime="2026-10-11T22:55:58" saveUser="mtmtk" saveUserFull="桂松明" version="4.2.2-Belém do Pará">
+<qgis projectname="結合の fixture" saveDateTime="2026-10-11T22:55:58" saveUser="user" saveUserFull="User" version="4.2.2-Belém do Pará">
   <homePath path=""/>
   <title>結合の fixture</title>
   <transaction mode="Disabled"/>
@@ -35,30 +35,30 @@
     <customproperties>
       <Option/>
     </customproperties>
-    <layer-tree-layer checked="Qt::Checked" expanded="1" id="____ebd5a35f_f65c_4195_9b16_884c9717e412" legend_exp="" legend_split_behavior="0" name="林班表" patch_size="-1,-1" providerKey="ogr" source="./林班表.csv">
+    <layer-tree-layer checked="Qt::Checked" expanded="1" id="____ebd5a35f_f65c_4195_9b16_884c9717e412" legend_exp="" legend_split_behavior="0" name="地区表" patch_size="-1,-1" providerKey="ogr" source="./地区表.csv">
       <customproperties>
         <Option/>
       </customproperties>
     </layer-tree-layer>
-    <layer-tree-layer checked="Qt::Checked" expanded="1" id="____8ed29fe7_66d4_436a_831a_012bf205c780" legend_exp="" legend_split_behavior="0" name="森林簿" patch_size="-1,-1" providerKey="delimitedtext" source="file:./%E6%A3%AE%E6%9E%97%E7%B0%BF.csv?type=csv&amp;maxFields=10000&amp;detectTypes=yes&amp;geomType=none&amp;subsetIndex=no&amp;watchFile=no">
+    <layer-tree-layer checked="Qt::Checked" expanded="1" id="____8ed29fe7_66d4_436a_831a_012bf205c780" legend_exp="" legend_split_behavior="0" name="台帳" patch_size="-1,-1" providerKey="delimitedtext" source="file:./%E5%8F%B0%E5%B8%B3.csv?type=csv&amp;maxFields=10000&amp;detectTypes=yes&amp;geomType=none&amp;subsetIndex=no&amp;watchFile=no">
       <customproperties>
         <Option/>
       </customproperties>
     </layer-tree-layer>
-    <layer-tree-layer checked="Qt::Checked" expanded="1" id="shoban_fb3e17cc_ad6c_4962_bde0_7da5ebe921bf" legend_exp="" legend_split_behavior="0" name="shoban" patch_size="-1,-1" providerKey="ogr" source="./計画図.gpkg|layername=shoban">
+    <layer-tree-layer checked="Qt::Checked" expanded="1" id="parcels_fb3e17cc_ad6c_4962_bde0_7da5ebe921bf" legend_exp="" legend_split_behavior="0" name="parcels" patch_size="-1,-1" providerKey="ogr" source="./計画図.gpkg|layername=parcels">
       <customproperties>
         <Option/>
       </customproperties>
     </layer-tree-layer>
     <custom-order enabled="0">
-      <item>shoban_fb3e17cc_ad6c_4962_bde0_7da5ebe921bf</item>
+      <item>parcels_fb3e17cc_ad6c_4962_bde0_7da5ebe921bf</item>
       <item>____8ed29fe7_66d4_436a_831a_012bf205c780</item>
       <item>____ebd5a35f_f65c_4195_9b16_884c9717e412</item>
     </custom-order>
   </layer-tree-group>
   <snapping-settings enabled="0" intersection-snapping="0" maxScale="0" minScale="0" mode="2" scaleDependencyMode="0" self-snapping="0" tolerance="12" type="1" unit="1">
     <individual-layer-settings>
-      <layer-setting enabled="1" id="shoban_fb3e17cc_ad6c_4962_bde0_7da5ebe921bf" maxScale="0" minScale="0" tolerance="12" type="1" units="1"/>
+      <layer-setting enabled="1" id="parcels_fb3e17cc_ad6c_4962_bde0_7da5ebe921bf" maxScale="0" minScale="0" tolerance="12" type="1" units="1"/>
     </individual-layer-settings>
   </snapping-settings>
   <relations/>
@@ -123,8 +123,8 @@
   <projectlayers>
     <maplayer autoRefreshMode="Disabled" autoRefreshTime="0" geometry="No geometry" hasScaleBasedVisibilityFlag="0" layerType="Vector" legendPlaceholderImage="" maxScale="0" minScale="1e+08" readOnly="0" refreshOnNotifyEnabled="0" refreshOnNotifyMessage="" styleCategories="AllStyleCategories" type="vector" wkbType="NoGeometry">
       <id>____8ed29fe7_66d4_436a_831a_012bf205c780</id>
-      <datasource>file:./%E6%A3%AE%E6%9E%97%E7%B0%BF.csv?type=csv&amp;maxFields=10000&amp;detectTypes=yes&amp;geomType=none&amp;subsetIndex=no&amp;watchFile=no</datasource>
-      <layername>森林簿</layername>
+      <datasource>file:./%E5%8F%B0%E5%B8%B3.csv?type=csv&amp;maxFields=10000&amp;detectTypes=yes&amp;geomType=none&amp;subsetIndex=no&amp;watchFile=no</datasource>
+      <layername>台帳</layername>
       <srs>
         <spatialrefsys nativeFormat="Wkt">
           <wkt></wkt>
@@ -330,21 +330,21 @@
       <referencedLayers/>
       <referencingLayers/>
       <fieldConfiguration>
-        <field configurationFlags="0" name="林小班">
+        <field configurationFlags="0" name="区画番号">
           <editWidget type="">
             <config>
               <Option/>
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="樹種">
+        <field configurationFlags="0" name="区分">
           <editWidget type="">
             <config>
               <Option/>
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="林齢">
+        <field configurationFlags="0" name="年数">
           <editWidget type="">
             <config>
               <Option/>
@@ -360,27 +360,27 @@
         </field>
       </fieldConfiguration>
       <aliases>
-        <alias field="林小班" index="0" name=""/>
-        <alias field="樹種" index="1" name=""/>
-        <alias field="林齢" index="2" name=""/>
+        <alias field="区画番号" index="0" name=""/>
+        <alias field="区分" index="1" name=""/>
+        <alias field="年数" index="2" name=""/>
         <alias field="面積" index="3" name=""/>
       </aliases>
       <defaults>
-        <default applyOnUpdate="0" expression="" field="林小班"/>
-        <default applyOnUpdate="0" expression="" field="樹種"/>
-        <default applyOnUpdate="0" expression="" field="林齢"/>
+        <default applyOnUpdate="0" expression="" field="区画番号"/>
+        <default applyOnUpdate="0" expression="" field="区分"/>
+        <default applyOnUpdate="0" expression="" field="年数"/>
         <default applyOnUpdate="0" expression="" field="面積"/>
       </defaults>
       <constraints>
-        <constraint constraints="0" exp_strength="0" field="林小班" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="樹種" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="林齢" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="区画番号" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="区分" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="年数" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="面積" notnull_strength="0" unique_strength="0"/>
       </constraints>
       <constraintExpressions>
-        <constraint desc="" exp="" field="林小班"/>
-        <constraint desc="" exp="" field="樹種"/>
-        <constraint desc="" exp="" field="林齢"/>
+        <constraint desc="" exp="" field="区画番号"/>
+        <constraint desc="" exp="" field="区分"/>
+        <constraint desc="" exp="" field="年数"/>
         <constraint desc="" exp="" field="面積"/>
       </constraintExpressions>
       <expressionfields/>
@@ -410,8 +410,8 @@
     </maplayer>
     <maplayer autoRefreshMode="Disabled" autoRefreshTime="0" geometry="No geometry" hasScaleBasedVisibilityFlag="0" layerType="Vector" legendPlaceholderImage="" maxScale="0" minScale="1e+08" readOnly="0" refreshOnNotifyEnabled="0" refreshOnNotifyMessage="" styleCategories="AllStyleCategories" type="vector" wkbType="NoGeometry">
       <id>____ebd5a35f_f65c_4195_9b16_884c9717e412</id>
-      <datasource>./林班表.csv</datasource>
-      <layername>林班表</layername>
+      <datasource>./地区表.csv</datasource>
+      <layername>地区表</layername>
       <srs>
         <spatialrefsys nativeFormat="Wkt">
           <wkt></wkt>
@@ -617,7 +617,7 @@
       <referencedLayers/>
       <referencingLayers/>
       <fieldConfiguration>
-        <field configurationFlags="0" name="林班">
+        <field configurationFlags="0" name="地区">
           <editWidget type="">
             <config>
               <Option/>
@@ -640,22 +640,22 @@
         </field>
       </fieldConfiguration>
       <aliases>
-        <alias field="林班" index="0" name=""/>
+        <alias field="地区" index="0" name=""/>
         <alias field="所有者" index="1" name=""/>
         <alias field="地番" index="2" name=""/>
       </aliases>
       <defaults>
-        <default applyOnUpdate="0" expression="" field="林班"/>
+        <default applyOnUpdate="0" expression="" field="地区"/>
         <default applyOnUpdate="0" expression="" field="所有者"/>
         <default applyOnUpdate="0" expression="" field="地番"/>
       </defaults>
       <constraints>
-        <constraint constraints="0" exp_strength="0" field="林班" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="地区" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="所有者" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="地番" notnull_strength="0" unique_strength="0"/>
       </constraints>
       <constraintExpressions>
-        <constraint desc="" exp="" field="林班"/>
+        <constraint desc="" exp="" field="地区"/>
         <constraint desc="" exp="" field="所有者"/>
         <constraint desc="" exp="" field="地番"/>
       </constraintExpressions>
@@ -697,9 +697,9 @@
         <xmax>135.94900000000001228</xmax>
         <ymax>33.90899999999999892</ymax>
       </wgs84extent>
-      <id>shoban_fb3e17cc_ad6c_4962_bde0_7da5ebe921bf</id>
-      <datasource>./計画図.gpkg|layername=shoban</datasource>
-      <layername>shoban</layername>
+      <id>parcels_fb3e17cc_ad6c_4962_bde0_7da5ebe921bf</id>
+      <datasource>./計画図.gpkg|layername=parcels</datasource>
+      <layername>parcels</layername>
       <srs>
         <spatialrefsys nativeFormat="Wkt">
           <wkt>GEOGCRS["WGS 84",ENSEMBLE["World Geodetic System 1984 ensemble",MEMBER["World Geodetic System 1984 (Transit)"],MEMBER["World Geodetic System 1984 (G730)"],MEMBER["World Geodetic System 1984 (G873)"],MEMBER["World Geodetic System 1984 (G1150)"],MEMBER["World Geodetic System 1984 (G1674)"],MEMBER["World Geodetic System 1984 (G1762)"],MEMBER["World Geodetic System 1984 (G2139)"],MEMBER["World Geodetic System 1984 (G2296)"],ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]],ENSEMBLEACCURACY[2.0]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]],CS[ellipsoidal,2],AXIS["geodetic latitude (Lat)",north,ORDER[1],ANGLEUNIT["degree",0.0174532925199433]],AXIS["geodetic longitude (Lon)",east,ORDER[2],ANGLEUNIT["degree",0.0174532925199433]],USAGE[SCOPE["Horizontal component of 3D system."],AREA["World."],BBOX[-90,-180,90,180]],ID["EPSG",4326]]</wkt>
@@ -741,13 +741,13 @@
       </resourceMetadata>
       <provider encoding="UTF-8">ogr</provider>
       <vectorjoins>
-        <join cascadedDelete="0" dynamicForm="0" editable="0" joinFieldName="林小班" joinLayerId="____8ed29fe7_66d4_436a_831a_012bf205c780" memoryCache="1" targetFieldName="key" upsertOnEdit="0">
+        <join cascadedDelete="0" dynamicForm="0" editable="0" joinFieldName="区画番号" joinLayerId="____8ed29fe7_66d4_436a_831a_012bf205c780" memoryCache="1" targetFieldName="key" upsertOnEdit="0">
           <joinFieldsSubset>
-            <field name="樹種"/>
-            <field name="林齢"/>
+            <field name="区分"/>
+            <field name="年数"/>
           </joinFieldsSubset>
         </join>
-        <join cascadedDelete="0" customPrefix="林班_" dynamicForm="0" editable="0" hasCustomPrefix="1" joinFieldName="林班" joinLayerId="____ebd5a35f_f65c_4195_9b16_884c9717e412" memoryCache="1" targetFieldName="rinpan" upsertOnEdit="0"/>
+        <join cascadedDelete="0" customPrefix="地区_" dynamicForm="0" editable="0" hasCustomPrefix="1" joinFieldName="地区" joinLayerId="____ebd5a35f_f65c_4195_9b16_884c9717e412" memoryCache="1" targetFieldName="block" upsertOnEdit="0"/>
       </vectorjoins>
       <layerDependencies/>
       <dataDependencies/>
@@ -970,14 +970,14 @@
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="rinpan">
+        <field configurationFlags="0" name="block">
           <editWidget type="">
             <config>
               <Option/>
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="shoban">
+        <field configurationFlags="0" name="parcels">
           <editWidget type="">
             <config>
               <Option/>
@@ -991,28 +991,28 @@
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="森林簿_樹種">
+        <field configurationFlags="0" name="台帳_区分">
           <editWidget type="">
             <config>
               <Option/>
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="森林簿_林齢">
+        <field configurationFlags="0" name="台帳_年数">
           <editWidget type="">
             <config>
               <Option/>
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="林班_所有者">
+        <field configurationFlags="0" name="地区_所有者">
           <editWidget type="">
             <config>
               <Option/>
             </config>
           </editWidget>
         </field>
-        <field configurationFlags="0" name="林班_地番">
+        <field configurationFlags="0" name="地区_地番">
           <editWidget type="">
             <config>
               <Option/>
@@ -1022,43 +1022,43 @@
       </fieldConfiguration>
       <aliases>
         <alias field="fid" index="0" name=""/>
-        <alias field="rinpan" index="1" name=""/>
-        <alias field="shoban" index="2" name=""/>
+        <alias field="block" index="1" name=""/>
+        <alias field="parcels" index="2" name=""/>
         <alias field="key" index="3" name=""/>
-        <alias field="森林簿_樹種" index="4" name=""/>
-        <alias field="森林簿_林齢" index="5" name=""/>
-        <alias field="林班_所有者" index="6" name=""/>
-        <alias field="林班_地番" index="7" name=""/>
+        <alias field="台帳_区分" index="4" name=""/>
+        <alias field="台帳_年数" index="5" name=""/>
+        <alias field="地区_所有者" index="6" name=""/>
+        <alias field="地区_地番" index="7" name=""/>
       </aliases>
       <defaults>
         <default applyOnUpdate="0" expression="" field="fid"/>
-        <default applyOnUpdate="0" expression="" field="rinpan"/>
-        <default applyOnUpdate="0" expression="" field="shoban"/>
+        <default applyOnUpdate="0" expression="" field="block"/>
+        <default applyOnUpdate="0" expression="" field="parcels"/>
         <default applyOnUpdate="0" expression="" field="key"/>
-        <default applyOnUpdate="0" expression="" field="森林簿_樹種"/>
-        <default applyOnUpdate="0" expression="" field="森林簿_林齢"/>
-        <default applyOnUpdate="0" expression="" field="林班_所有者"/>
-        <default applyOnUpdate="0" expression="" field="林班_地番"/>
+        <default applyOnUpdate="0" expression="" field="台帳_区分"/>
+        <default applyOnUpdate="0" expression="" field="台帳_年数"/>
+        <default applyOnUpdate="0" expression="" field="地区_所有者"/>
+        <default applyOnUpdate="0" expression="" field="地区_地番"/>
       </defaults>
       <constraints>
         <constraint constraints="3" exp_strength="0" field="fid" notnull_strength="1" unique_strength="1"/>
-        <constraint constraints="0" exp_strength="0" field="rinpan" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="shoban" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="block" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="parcels" notnull_strength="0" unique_strength="0"/>
         <constraint constraints="0" exp_strength="0" field="key" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="森林簿_樹種" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="森林簿_林齢" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="林班_所有者" notnull_strength="0" unique_strength="0"/>
-        <constraint constraints="0" exp_strength="0" field="林班_地番" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="台帳_区分" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="台帳_年数" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="地区_所有者" notnull_strength="0" unique_strength="0"/>
+        <constraint constraints="0" exp_strength="0" field="地区_地番" notnull_strength="0" unique_strength="0"/>
       </constraints>
       <constraintExpressions>
         <constraint desc="" exp="" field="fid"/>
-        <constraint desc="" exp="" field="rinpan"/>
-        <constraint desc="" exp="" field="shoban"/>
+        <constraint desc="" exp="" field="block"/>
+        <constraint desc="" exp="" field="parcels"/>
         <constraint desc="" exp="" field="key"/>
-        <constraint desc="" exp="" field="森林簿_樹種"/>
-        <constraint desc="" exp="" field="森林簿_林齢"/>
-        <constraint desc="" exp="" field="林班_所有者"/>
-        <constraint desc="" exp="" field="林班_地番"/>
+        <constraint desc="" exp="" field="台帳_区分"/>
+        <constraint desc="" exp="" field="台帳_年数"/>
+        <constraint desc="" exp="" field="地区_所有者"/>
+        <constraint desc="" exp="" field="地区_地番"/>
       </constraintExpressions>
       <expressionfields/>
       <attributeactions/>
@@ -1087,7 +1087,7 @@
     </maplayer>
   </projectlayers>
   <layerorder>
-    <layer id="shoban_fb3e17cc_ad6c_4962_bde0_7da5ebe921bf"/>
+    <layer id="parcels_fb3e17cc_ad6c_4962_bde0_7da5ebe921bf"/>
     <layer id="____8ed29fe7_66d4_436a_831a_012bf205c780"/>
     <layer id="____ebd5a35f_f65c_4195_9b16_884c9717e412"/>
   </layerorder>
@@ -1152,7 +1152,7 @@
     <dates>
       <date type="Created" value="2026-10-11T22:55:56"/>
     </dates>
-    <author>桂松明</author>
+    <author>User</author>
     <creation>2026-10-11T22:55:56</creation>
   </projectMetadata>
   <Annotations/>

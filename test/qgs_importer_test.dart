@@ -26,18 +26,18 @@ KMetaLayerStyle? readStyleForTest(String maplayerXml) =>
 void main() {
   group('データソース文字列の分解', () {
     test('パスとレイヤ名を取り出す', () {
-      final source = QgsDataSource.parse('./林小班.gpkg|layername=rinshoban');
+      final source = QgsDataSource.parse('./区画.gpkg|layername=parcels');
       expect(source, isNotNull);
-      expect(source!.path, './林小班.gpkg');
-      expect(source.layerName, 'rinshoban');
+      expect(source!.path, './区画.gpkg');
+      expect(source.layerName, 'parcels');
       expect(source.subset, isNull);
     });
 
     test('subset を取り出す', () {
       final source = QgsDataSource.parse(
-        "./a.gpkg|layername=t|subset=\"樹種\" = 'スギ'",
+        "./a.gpkg|layername=t|subset=\"区分\" = 'A種'",
       );
-      expect(source!.subset, '"樹種" = \'スギ\'');
+      expect(source!.subset, '"区分" = \'A種\'');
     });
 
     test('subset の中に | があっても壊れない', () {
@@ -72,8 +72,8 @@ void main() {
 <maplayer type="vector" geometry="Polygon">
   <renderer-v2 type="categorizedSymbol" attr="species">
     <categories>
-      <category value="sugi" symbol="0" label="スギ"/>
-      <category value="hinoki" symbol="1" label="ヒノキ"/>
+      <category value="type_a" symbol="0" label="A種"/>
+      <category value="type_b" symbol="1" label="B種"/>
     </categories>
     <symbols>
       <symbol name="0" type="fill">
@@ -124,7 +124,7 @@ void main() {
 <maplayer type="vector" geometry="Point">
   <id>l1</id>
   <datasource>./a.gpkg|layername=t</datasource>
-  <layername>スギ</layername>
+  <layername>A種</layername>
   <provider>ogr</provider>
   <renderer-v2 type="singleSymbol">
     <symbols>
@@ -255,15 +255,15 @@ void main() {
       // ⚠ 文書全体から maplayer を探すと `<main-annotation-layer>` まで拾う
       expect(
         mapLayers.map((e) => e.findElements('layername').single.innerText),
-        ['スギ', '全部', 'root外'],
+        ['A種', '全部', 'root外'],
       );
     });
 
     test('データソースとフィルタを読める', () {
       final source = QgsDataSource.parse(
-        layerNamed('スギ').findElements('datasource').single.innerText,
+        layerNamed('A種').findElements('datasource').single.innerText,
       );
-      expect(source!.layerName, 'rinshoban');
+      expect(source!.layerName, 'parcels');
       expect(source.subset, 'area > 105');
       expect(source.path, endsWith('.gpkg'));
     });
@@ -278,13 +278,13 @@ void main() {
 
     test('色に付く浮動小数表記に引きずられない', () {
       // QGIS が書くのは `30,144,255,255,rgb:0.1176471,0.5647059,1,1`
-      final style = const QgsImporter().readStyle(layerNamed('スギ'));
+      final style = const QgsImporter().readStyle(layerNamed('A種'));
       expect(style, isNotNull);
       expect(style!.pointColor?.toARGB32(), 0xFF1E90FF);
     });
 
     test('data_defined_properties があっても size を読める', () {
-      final style = const QgsImporter().readStyle(layerNamed('スギ'));
+      final style = const QgsImporter().readStyle(layerNamed('A種'));
       expect(style!.pointSize, isNotNull, reason: 'size を読めていない');
       expect(style.pointSize, closeTo(4 * 96 / 25.4 / 2, 0.01));
     });

@@ -19,13 +19,13 @@ import 'package:root_maps/widgets/info_panel_card.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 const _speciesMap = QgisFieldForm(
-  name: '樹種',
-  alias: '樹種名',
+  name: '種別',
+  alias: '種別名',
   widgetType: 'ValueMap',
   config: {
     'map': [
-      {'スギ': 'SUGI'},
-      {'ヒノキ': 'HINOKI'},
+      {'種別A': 'TYPE_A'},
+      {'種別B': 'TYPE_B'},
     ],
   },
 );
@@ -44,15 +44,15 @@ void main() {
 
   group('attributeLabel / attributeDisplayText', () {
     test('別名があれば別名、無ければ列名', () {
-      const form = QgisForm(fields: {'直径': QgisFieldForm(name: '直径', alias: '胸高直径（cm）')});
-      expect(attributeLabel('直径', form), '胸高直径（cm）');
-      expect(attributeLabel('樹高', form), '樹高');
-      expect(attributeLabel('直径', null), '直径');
+      const form = QgisForm(fields: {'幅': QgisFieldForm(name: '幅', alias: '幅員（m）')});
+      expect(attributeLabel('幅', form), '幅員（m）');
+      expect(attributeLabel('高さ', form), '高さ');
+      expect(attributeLabel('幅', null), '幅');
     });
 
     test('ValueMap は表示名、選択肢に無い値はそのまま', () {
-      expect(attributeDisplayText('HINOKI', form: _speciesMap), 'ヒノキ');
-      expect(attributeDisplayText('MATSU', form: _speciesMap), 'MATSU');
+      expect(attributeDisplayText('TYPE_B', form: _speciesMap), '種別B');
+      expect(attributeDisplayText('TYPE_C', form: _speciesMap), 'TYPE_C');
     });
 
     test('ValueRelation は参照先の値。複数選択の {a,b} もつなぐ。選択肢が無ければ値のまま', () {
@@ -75,14 +75,14 @@ void main() {
     await tester.runAsync(() async {
       tmp = await Directory.systemTemp.createTemp('info_panel_alias_');
       gpkg = GeoPackageFile(const ['t.gpkg'], absolutePath: '${tmp.path}/t.gpkg');
-      await gpkg.addLayer('立木', GeometryType.point);
-      await gpkg.addAttributeColumns('立木', {'直径': 'INTEGER', '樹種': 'TEXT', '所有者': 'INTEGER', '内部': 'TEXT'});
+      await gpkg.addLayer('調査点', GeometryType.point);
+      await gpkg.addAttributeColumns('調査点', {'幅': 'INTEGER', '種別': 'TEXT', '所有者': 'INTEGER', '内部': 'TEXT'});
       await gpkg.addPointWithAttributes(
-        '立木',
+        '調査点',
         const LatLng(33.0, 135.0),
-        {'直径': 24, '樹種': 'SUGI', '所有者': 2, '内部': 'x1'},
+        {'幅': 24, '種別': 'TYPE_A', '所有者': 2, '内部': 'x1'},
       );
-      layer = PointLayerNode(gpkg, '立木', parent: GeoPackageNode(gpkg));
+      layer = PointLayerNode(gpkg, '調査点', parent: GeoPackageNode(gpkg));
       await layer.updateChildren();
     });
     addTearDown(() async {
@@ -95,8 +95,8 @@ void main() {
     });
 
     const form = QgisForm(fields: {
-      '直径': QgisFieldForm(name: '直径', alias: '胸高直径（cm）'),
-      '樹種': _speciesMap,
+      '幅': QgisFieldForm(name: '幅', alias: '幅員（m）'),
+      '種別': _speciesMap,
       '所有者': _ownerRelation,
       '内部': QgisFieldForm(name: '内部', alias: '内部番号', widgetType: 'Hidden'),
     });
@@ -112,12 +112,12 @@ void main() {
     ));
     await tester.pump();
 
-    expect(find.text('胸高直径（cm）: '), findsOneWidget);
-    expect(find.text('直径: '), findsNothing);
+    expect(find.text('幅員（m）: '), findsOneWidget);
+    expect(find.text('幅: '), findsNothing);
     expect(find.text('24'), findsOneWidget);
-    expect(find.text('樹種名: '), findsOneWidget);
-    expect(find.text('スギ'), findsOneWidget);
-    expect(find.text('SUGI'), findsNothing);
+    expect(find.text('種別名: '), findsOneWidget);
+    expect(find.text('種別A'), findsOneWidget);
+    expect(find.text('TYPE_A'), findsNothing);
     expect(find.text('所有者: '), findsOneWidget);
     expect(find.text('鈴木'), findsOneWidget);
     // Hidden の列も出す（QGIS の地物情報の表示と同じ）
@@ -125,6 +125,6 @@ void main() {
     expect(find.text('x1'), findsOneWidget);
 
     // 地物を見分ける文字（検索の結果）も別名で
-    expect(featureIdentifier(layer.features.single, maxFields: 1), startsWith('樹種名: '));
+    expect(featureIdentifier(layer.features.single, maxFields: 1), startsWith('種別名: '));
   });
 }

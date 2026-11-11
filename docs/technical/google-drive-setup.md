@@ -143,7 +143,7 @@ Google Drive連携機能を有効にするためのセットアップ手順。
 
 1. [Google Cloud Console](https://console.cloud.google.com/) にアクセス
 2. 「プロジェクトを選択」→「新しいプロジェクト」
-3. プロジェクト名: `Root Maps`（任意）
+3. プロジェクト名: `こかげマップ`（任意）
 4. 「作成」をクリック
 
 ### 1.2 Drive API有効化
@@ -157,7 +157,7 @@ Google Drive連携機能を有効にするためのセットアップ手順。
 1. 左メニュー「APIとサービス」→「OAuth同意画面」
 2. ユーザータイプ: 「外部」を選択（テスト段階）
 3. 必須項目を入力：
-   - アプリ名: `Root Maps`
+   - アプリ名: `こかげマップ`
    - ユーザーサポートメール: 自分のメールアドレス（またはGoogle Group）
    - デベロッパーの連絡先: 自分のメールアドレス
 4. スコープ設定で以下を追加：
@@ -194,7 +194,7 @@ Google Drive連携機能を有効にするためのセットアップ手順。
 > | **K-Maps Android (Play)** | **Play のアプリ署名鍵**（Play から入れた端末はこれで動く） | `36:7E:1C:6E:4A:B7:E5:FE:41:B0:2A:60:BD:D1:C7:F1:C5:8F:EE:65` |
 >
 > Play の分が無く、Play から入れた端末だけ `[28444] Developer console is not set up correctly` でサインインできなかった
-> （父の端末で発覚。開発者の端末は debug 版なので踏まない）。Play の鍵の SHA-1 は Play Console の「アプリの署名」に出ないので、
+> （別端末で発覚。開発者の端末は debug 版なので踏まない）。Play の鍵の SHA-1 は Play Console の「アプリの署名」に出ないので、
 > アプリ署名鍵の証明書（`deployment_cert.der`）を落として SHA-1 を計算する（SHA-256 が `71:09:25:12:…:AC:DA` と合うことを確かめる）。
 > ⚠ 同じパッケージ名と SHA-1 の組は 1 か所にしか登録できない。旧プロジェクト `k-maps-484306`（RootMap GIS）に残っていた
 > Play 用のクライアントが組を押さえていたので消してから作った（旧プロジェクトは 2026-10-07 に削除。30 日は `gcloud projects undelete k-maps-484306` で戻せる）。サインインはアプリの Web クライアントと同じプロジェクトに
@@ -209,7 +209,7 @@ Google Drive連携機能を有効にするためのセットアップ手順。
 keytool -list -v -keystore $env:USERPROFILE\.android\debug.keystore -alias androiddebugkey -storepass android -keypass android | Select-String "SHA1"
 
 # リリース用SHA-1（key.propertiesのパスを参照）
-keytool -list -v -keystore C:\Users\kitay\Root Maps-release.keystore -alias Root Maps
+keytool -list -v -keystore <keystoreのパス> -alias "Root Maps"
 ```
 
 #### デバッグ用クライアントID作成
@@ -217,8 +217,8 @@ keytool -list -v -keystore C:\Users\kitay\Root Maps-release.keystore -alias Root
 1. 左メニュー「APIとサービス」→「認証情報」
 2. 「認証情報を作成」→「OAuthクライアントID」
 3. アプリケーションの種類: 「Android」
-4. 名前: `Root Maps Android (Debug)`
-5. パッケージ名: `com.k_root.root_maps`
+4. 名前: `K-Maps Android (Debug)`
+5. パッケージ名: `com.k_root.k_maps`
 6. SHA-1フィンガープリント: デバッグ用SHA-1を入力
 7. 「作成」をクリック
 
@@ -226,8 +226,8 @@ keytool -list -v -keystore C:\Users\kitay\Root Maps-release.keystore -alias Root
 
 1. 「認証情報を作成」→「OAuthクライアントID」
 2. アプリケーションの種類: 「Android」
-3. 名前: `Root Maps Android (Release)`
-4. パッケージ名: `com.k_root.root_maps`
+3. 名前: `K-Maps Android (Release)`
+4. パッケージ名: `com.k_root.k_maps`
 5. SHA-1フィンガープリント: リリース用SHA-1を入力
 6. 「作成」をクリック
 

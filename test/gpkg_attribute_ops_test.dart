@@ -45,13 +45,13 @@ void main() {
   group('置換', () {
     test('一致する部分だけ置き換え、置き換えた行の数を返す', () async {
       final ids = await addRows([
-        {'name': '1林班-い'},
-        {'name': '2林班-ろ'},
+        {'name': '1区画-い'},
+        {'name': '2区画-ろ'},
         {'name': '沢'},
       ]);
-      expect((await gpkg.replaceText('pts', 'name', '林班', 'りんぱん')).replaced, 2);
-      expect(await value(ids[0], 'name'), '1りんぱん-い');
-      expect(await value(ids[1], 'name'), '2りんぱん-ろ');
+      expect((await gpkg.replaceText('pts', 'name', '区画', 'くかく')).replaced, 2);
+      expect(await value(ids[0], 'name'), '1くかく-い');
+      expect(await value(ids[1], 'name'), '2くかく-ろ');
       expect(await value(ids[2], 'name'), '沢');
     });
 
@@ -132,11 +132,11 @@ void main() {
   group('検索・統計', () {
     test('どれかの列に含む行の番号を返す', () async {
       final ids = await addRows([
-        {'name': 'スギ', 'n': 12},
-        {'name': 'ヒノキ', 'n': 3},
-        {'name': 'スギ2', 'n': 120},
+        {'name': '種別A', 'n': 12},
+        {'name': '種別B', 'n': 3},
+        {'name': '種別A2', 'n': 120},
       ]);
-      expect(await gpkg.searchText('pts', 'スギ', ['name']), [ids[0], ids[2]]);
+      expect(await gpkg.searchText('pts', '種別A', ['name']), [ids[0], ids[2]]);
       expect(await gpkg.searchText('pts', '12', ['name', 'n']), [ids[0], ids[2]]);
       expect(await gpkg.searchText('pts', '', ['name']), isEmpty);
     });

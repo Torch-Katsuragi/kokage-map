@@ -167,8 +167,8 @@ web の GDAL（WASM、24 MB）はリポジトリに入れていない。GDAL を
 ```js
 const opfs = await navigator.storage.getDirectory();
 const root = await opfs.getDirectoryHandle('テストプロジェクト', {create: true});
-await root.getDirectoryHandle('林小班', {create: true});
-const fh = await root.getFileHandle('路網.gpkg', {create: true});
+await root.getDirectoryHandle('区画', {create: true});
+const fh = await root.getFileHandle('経路.gpkg', {create: true});
 const w = await fh.createWritable(); await w.write('dummy'); await w.close();
 window.showDirectoryPicker = async () => root;   // ← これでピッカーを乗っ取る
 ```

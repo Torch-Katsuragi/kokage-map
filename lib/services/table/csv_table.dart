@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// 形の無い表（森林簿などの CSV）を読む。設計は docs/technical/qgis-interop.md#表の結合（森林簿 CSV と計画図）
+// 形の無い表（台帳などの CSV）を読む。設計は docs/technical/qgis-interop.md#表の結合（属性 CSV と図面レイヤ）
 //
 // GDAL の CSV ドライバは文字コードを選べない（Shift_JIS の CSV は化ける）ので、表は Dart で読む。
 // 型の判定は QGIS の「CSV テキストレイヤ」（delimitedtext、detectTypes=yes）に合わせる: 整数・小数・文字。

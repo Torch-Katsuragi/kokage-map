@@ -34,18 +34,18 @@ void main() {
     final vi = EpsgRegistry.instance.getByCode('EPSG:6674');
 
     List<String> args(FileFormat f, {GeometryType? type = GeometryType.point, EpsgDefinition? crs, String? pk}) =>
-        ImportExportService.exportArgs(format: f, layerName: '林班', geometryType: type, targetCrs: crs, rowNumberPk: pk);
+        ImportExportService.exportArgs(format: f, layerName: '区画', geometryType: type, targetCrs: crs, rowNumberPk: pk);
 
     test('座標系は選ばなければレイヤのまま、選べば -t_srs', () {
-      expect(args(FileFormat.shapefile), ['-f', 'ESRI Shapefile', '-lco', 'ENCODING=UTF-8', '-nlt', 'POINT', '林班']);
-      expect(args(FileFormat.shapefile, type: GeometryType.polygon), ['-f', 'ESRI Shapefile', '-lco', 'ENCODING=UTF-8', '林班']);
-      expect(args(FileFormat.geopackage, crs: vi), ['-f', 'GPKG', '-t_srs', 'EPSG:6674', '林班']);
+      expect(args(FileFormat.shapefile), ['-f', 'ESRI Shapefile', '-lco', 'ENCODING=UTF-8', '-nlt', 'POINT', '区画']);
+      expect(args(FileFormat.shapefile, type: GeometryType.polygon), ['-f', 'ESRI Shapefile', '-lco', 'ENCODING=UTF-8', '区画']);
+      expect(args(FileFormat.geopackage, crs: vi), ['-f', 'GPKG', '-t_srs', 'EPSG:6674', '区画']);
     });
 
     test('GeoJSON・KML・GPX は形式の決まりで 4326（選んだ座標系は使わない）', () {
       // 点は -nlt POINT で単一の Point に書く（1a57f57）
-      expect(args(FileFormat.geojson, crs: vi), ['-f', 'GeoJSON', '-t_srs', 'EPSG:4326', '-lco', 'RFC7946=YES', '-nlt', 'POINT', '林班']);
-      expect(args(FileFormat.kml, crs: vi), ['-f', 'KML', '-t_srs', 'EPSG:4326', '-nlt', 'POINT', '林班']);
+      expect(args(FileFormat.geojson, crs: vi), ['-f', 'GeoJSON', '-t_srs', 'EPSG:4326', '-lco', 'RFC7946=YES', '-nlt', 'POINT', '区画']);
+      expect(args(FileFormat.kml, crs: vi), ['-f', 'KML', '-t_srs', 'EPSG:4326', '-nlt', 'POINT', '区画']);
       expect(args(FileFormat.gpx), containsAllInOrder(['-t_srs', 'EPSG:4326', '-nlt', 'POINT']));
     });
 
@@ -57,8 +57,8 @@ void main() {
     test('行番号は主キーの順に -sql で足す', () {
       final a = args(FileFormat.csv, pk: 'fid');
       expect(a.sublist(a.indexOf('-sql') + 1), [
-        'SELECT *, ROW_NUMBER() OVER (ORDER BY "fid") AS ROW_NUM FROM "林班"',
-        '-nln', '林班',
+        'SELECT *, ROW_NUMBER() OVER (ORDER BY "fid") AS ROW_NUM FROM "区画"',
+        '-nln', '区画',
       ]);
     });
   });
@@ -106,7 +106,7 @@ void main() {
     });
 
     test('和歌山県の座標変換テスト', () {
-      // 和歌山県北山村の平面直角座標系VI系の座標例（推定値）
+      // 平面直角座標系VI系の座標例（推定値）
       // 平面直角座標系は X=Northing(北方向), Y=Easting(東方向)
       const x = -150000.0; // Northing (北方向)
       const y = 50000.0; // Easting (東方向)

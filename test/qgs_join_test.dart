@@ -63,12 +63,12 @@ void main() {
     return root;
   }
 
-  LayerNode shoban(FolderNode root) =>
+  LayerNode parcels(FolderNode root) =>
       root.children.whereType<GeoPackageNode>().single.children.whereType<LayerNode>().single;
 
   Future<List<LayerJoin>> storedJoins() async {
     KMetaService.instance.clearCache();
-    return (await KMetaService.instance.getMeta(proj)).joins['計画図.gpkg/shoban'] ?? const [];
+    return (await KMetaService.instance.getMeta(proj)).joins['計画図.gpkg/parcels'] ?? const [];
   }
 
   test('QGIS 4.2.2 の結合を読む: 表（delimitedtext・ogr の CP932）に結びつけ、列の選択・接頭辞・記憶を写す', () async {
@@ -81,17 +81,17 @@ void main() {
     expect(await storedJoins(), fixtureJoins);
 
     // 読み込み済みのレイヤは結合の値がすぐ出る
-    final layer = shoban(root);
+    final layer = parcels(root);
     await layer.updateChildren();
-    expect(layer.joinedFieldNames, ['森林簿_樹種', '森林簿_林齢', '林班_所有者', '林班_地番']);
+    expect(layer.joinedFieldNames, ['台帳_区分', '台帳_年数', '地区_所有者', '地区_地番']);
   });
 
   test('結合先が表でない（ベクタのレイヤ）なら報告して外す', () async {
     final qgs = p.join(proj, 'qgis_joins.qgs');
     final doc = XmlDocument.parse(File('test/fixtures/qgis_4_2_joins.qgs').readAsStringSync());
-    final shobanLayer = doc.findAllElements('maplayer').firstWhere((m) => m.getElement('layername')!.innerText == 'shoban');
-    final selfId = shobanLayer.getElement('id')!.innerText;
-    shobanLayer.getElement('vectorjoins')!.children.add(XmlElement(const XmlName.parts('join'), [
+    final parcelsLayer = doc.findAllElements('maplayer').firstWhere((m) => m.getElement('layername')!.innerText == 'parcels');
+    final selfId = parcelsLayer.getElement('id')!.innerText;
+    parcelsLayer.getElement('vectorjoins')!.children.add(XmlElement(const XmlName.parts('join'), [
       XmlAttribute(const XmlName.parts('joinLayerId'), selfId),
       XmlAttribute(const XmlName.parts('joinFieldName'), 'key'),
       XmlAttribute(const XmlName.parts('targetFieldName'), 'key'),
@@ -100,12 +100,12 @@ void main() {
     final root = await loadTree();
 
     final result = await const QgsImporter().import(qgs, root);
-    expect(result.discarded, [contains('shoban の結合（結合先 shoban は表ではないので未対応）')]);
+    expect(result.discarded, [contains('parcels の結合（結合先 parcels は表ではないので未対応）')]);
     expect(await storedJoins(), fixtureJoins);
   });
 
   test('書く: 表は delimitedtext（文字コードつき）、結合は <vectorjoins>。読み直すと同じ結合', () async {
-    await KMetaService.instance.setLayerJoins(proj, '計画図.gpkg/shoban', fixtureJoins);
+    await KMetaService.instance.setLayerJoins(proj, '計画図.gpkg/parcels', fixtureJoins);
     final root = await loadTree();
     final written = (await const QgsProjectBuilder().writeTo(root))!;
     final doc = XmlDocument.parse(File(written.path).readAsStringSync());
@@ -119,55 +119,55 @@ void main() {
 
     final maplayers = doc.findAllElements('maplayer').toList();
     XmlElement byName(String name) => maplayers.firstWhere((m) => m.getElement('layername')!.innerText == name);
-    final boki = byName('森林簿');
-    final rinpan = byName('林班表');
-    expect(boki.getAttribute('wkbType'), 'NoGeometry');
-    expect(boki.getElement('provider')!.innerText, 'delimitedtext');
-    expect(boki.getElement('datasource')!.innerText,
-        startsWith('file:./%E6%A3%AE%E6%9E%97%E7%B0%BF.csv?type=csv&encoding=UTF-8&'));
-    expect(rinpan.getElement('datasource')!.innerText, contains('encoding=CP932'));
-    expect(boki.getElement('id')!.innerText, QgsProjectBuilder.tableLayerIdForPath('./森林簿.csv'));
+    final ledger = byName('台帳');
+    final blockTable = byName('地区表');
+    expect(ledger.getAttribute('wkbType'), 'NoGeometry');
+    expect(ledger.getElement('provider')!.innerText, 'delimitedtext');
+    expect(ledger.getElement('datasource')!.innerText,
+        startsWith('file:./%E5%8F%B0%E5%B8%B3.csv?type=csv&encoding=UTF-8&'));
+    expect(blockTable.getElement('datasource')!.innerText, contains('encoding=CP932'));
+    expect(ledger.getElement('id')!.innerText, QgsProjectBuilder.tableLayerIdForPath('./台帳.csv'));
     // ツリーにも載る（QGIS のレイヤパネルに出る）
     expect(doc.findAllElements('layer-tree-layer').where((t) => t.getAttribute('providerKey') == 'delimitedtext'), hasLength(2));
 
-    final joins = byName('shoban').getElement('vectorjoins')!.findElements('join').toList();
+    final joins = byName('parcels').getElement('vectorjoins')!.findElements('join').toList();
     expect(joins, hasLength(2));
-    expect(joins[0].getAttribute('joinLayerId'), boki.getElement('id')!.innerText);
+    expect(joins[0].getAttribute('joinLayerId'), ledger.getElement('id')!.innerText);
     expect(joins[0].getAttribute('targetFieldName'), 'key');
     expect(joins[0].getAttribute('hasCustomPrefix'), isNull);
-    expect([for (final f in joins[0].findAllElements('field')) f.getAttribute('name')], ['樹種', '林齢']);
-    expect(joins[1].getAttribute('joinLayerId'), rinpan.getElement('id')!.innerText);
-    expect(joins[1].getAttribute('customPrefix'), '林班_');
+    expect([for (final f in joins[0].findAllElements('field')) f.getAttribute('name')], ['区分', '年数']);
+    expect(joins[1].getAttribute('joinLayerId'), blockTable.getElement('id')!.innerText);
+    expect(joins[1].getAttribute('customPrefix'), '地区_');
     expect(joins[1].getAttribute('hasCustomPrefix'), '1');
     expect(joins[1].findElements('joinFieldsSubset'), isEmpty);
 
     // 読み直す（設定を消してから、書いた .qgs だけで戻るか）
-    await KMetaService.instance.setLayerJoins(proj, '計画図.gpkg/shoban', const []);
+    await KMetaService.instance.setLayerJoins(proj, '計画図.gpkg/parcels', const []);
     final result = await const QgsImporter().import(written.path, root);
     expect(result.discarded, isEmpty);
     expect(await storedJoins(), fixtureJoins);
   });
 
   test('更新: QGIS で足した表は id を付け替えて結合ごと引き継ぎ、ほかのレイヤへの結合は残す', () async {
-    await KMetaService.instance.setLayerJoins(proj, '計画図.gpkg/shoban', [fixtureJoins.first]);
+    await KMetaService.instance.setLayerJoins(proj, '計画図.gpkg/parcels', [fixtureJoins.first]);
     final root = await loadTree();
     final project = await const QgsProjectBuilder().build(root);
 
-    // QGIS で作った文書に、アプリの shoban（id を合わせる）と、表ではない結合（QGIS の持ち物）を足した体
+    // QGIS で作った文書に、アプリの parcels（id を合わせる）と、表ではない結合（QGIS の持ち物）を足した体
     final fixture = File('test/fixtures/qgis_4_2_joins.qgs').readAsStringSync();
     final doc = QgsDocument.parse(fixture);
-    final ourShobanId = project.layers.single.id;
-    final qgisShoban = doc.mapLayers.firstWhere((m) => m.getElement('layername')!.innerText == 'shoban');
-    final oldShobanId = qgisShoban.getElement('id')!.innerText;
-    qgisShoban.getElement('id')!.innerText = ourShobanId;
+    final ourParcelsId = project.layers.single.id;
+    final qgisParcels = doc.mapLayers.firstWhere((m) => m.getElement('layername')!.innerText == 'parcels');
+    final oldParcelsId = qgisParcels.getElement('id')!.innerText;
+    qgisParcels.getElement('id')!.innerText = ourParcelsId;
     final foreign = XmlElement(const XmlName.parts('join'), [
       XmlAttribute(const XmlName.parts('joinLayerId'), 'some_vector_layer'),
       XmlAttribute(const XmlName.parts('joinFieldName'), 'a'),
       XmlAttribute(const XmlName.parts('targetFieldName'), 'b'),
     ]);
-    qgisShoban.getElement('vectorjoins')!.children.add(foreign);
-    for (final t in doc.root.findAllElements('layer-tree-layer').where((t) => t.getAttribute('id') == oldShobanId)) {
-      t.setAttribute('id', ourShobanId);
+    qgisParcels.getElement('vectorjoins')!.children.add(foreign);
+    for (final t in doc.root.findAllElements('layer-tree-layer').where((t) => t.getAttribute('id') == oldParcelsId)) {
+      t.setAttribute('id', ourParcelsId);
     }
 
     final report = doc.apply(project);
@@ -178,44 +178,44 @@ void main() {
         if (m.getAttribute('wkbType') == 'NoGeometry') m.getElement('layername')!.innerText: m.getElement('id')!.innerText,
     };
     expect(tableIds, {
-      '森林簿': QgsProjectBuilder.tableLayerIdForPath('./森林簿.csv'),
-      '林班表': QgsProjectBuilder.tableLayerIdForPath('./林班表.csv'),
+      '台帳': QgsProjectBuilder.tableLayerIdForPath('./台帳.csv'),
+      '地区表': QgsProjectBuilder.tableLayerIdForPath('./地区表.csv'),
     });
-    // QGIS が ogr・CP932 で読んでいた林班表は、その形のまま
-    final rinpan = out.findAllElements('maplayer').firstWhere((m) => m.getElement('layername')!.innerText == '林班表');
-    expect(rinpan.getElement('provider')!.innerText, 'ogr');
-    expect(rinpan.getElement('provider')!.getAttribute('encoding'), 'CP932');
+    // QGIS が ogr・CP932 で読んでいた地区表は、その形のまま
+    final blockTable = out.findAllElements('maplayer').firstWhere((m) => m.getElement('layername')!.innerText == '地区表');
+    expect(blockTable.getElement('provider')!.innerText, 'ogr');
+    expect(blockTable.getElement('provider')!.getAttribute('encoding'), 'CP932');
 
     final joins = out
         .findAllElements('maplayer')
-        .firstWhere((m) => m.getElement('id')!.innerText == ourShobanId)
+        .firstWhere((m) => m.getElement('id')!.innerText == ourParcelsId)
         .getElement('vectorjoins')!
         .findElements('join')
         .toList();
-    // 表への結合はアプリの設定（森林簿の 1 本）に差し替え、表ではない結合は残る
+    // 表への結合はアプリの設定（台帳の 1 本）に差し替え、表ではない結合は残る
     expect([for (final j in joins) j.getAttribute('joinLayerId')], [
       'some_vector_layer',
-      tableIds['森林簿'],
+      tableIds['台帳'],
     ]);
   });
 
   test('更新: 表を消すと、その表への結合も .qgs から落とす（宙に浮いた <join> を残さない）', () async {
-    await KMetaService.instance.setLayerJoins(proj, '計画図.gpkg/shoban', fixtureJoins);
+    await KMetaService.instance.setLayerJoins(proj, '計画図.gpkg/parcels', fixtureJoins);
     final first = (await const QgsProjectBuilder().writeTo(await loadTree()))!;
-    final rinpanId = QgsProjectBuilder.tableLayerIdForPath('./林班表.csv');
-    expect(File(first.path).readAsStringSync(), contains('joinLayerId="$rinpanId"'));
+    final blockTableId = QgsProjectBuilder.tableLayerIdForPath('./地区表.csv');
+    expect(File(first.path).readAsStringSync(), contains('joinLayerId="$blockTableId"'));
 
-    File(p.join(proj, '林班表.csv')).deleteSync();
+    File(p.join(proj, '地区表.csv')).deleteSync();
     TableCache.clear();
     final written = (await const QgsProjectBuilder().writeTo(await loadTree()))!;
     final doc = XmlDocument.parse(File(written.path).readAsStringSync());
     final ids = {for (final m in doc.findAllElements('maplayer')) m.getElement('id')!.innerText};
-    expect(ids, isNot(contains(rinpanId)));
+    expect(ids, isNot(contains(blockTableId)));
     final joins = doc
         .findAllElements('maplayer')
-        .firstWhere((m) => m.getElement('layername')!.innerText == 'shoban')
+        .firstWhere((m) => m.getElement('layername')!.innerText == 'parcels')
         .getElement('vectorjoins')!
         .findElements('join');
-    expect([for (final j in joins) j.getAttribute('joinLayerId')], [QgsProjectBuilder.tableLayerIdForPath('./森林簿.csv')]);
+    expect([for (final j in joins) j.getAttribute('joinLayerId')], [QgsProjectBuilder.tableLayerIdForPath('./台帳.csv')]);
   });
 }

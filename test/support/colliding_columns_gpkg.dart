@@ -1,6 +1,6 @@
 // こかげマップが読んだ行で使っていた鍵（id・fid・geometry）と同じ名前のふつうの列を持つ gpkg をテスト用に作る。
 //
-// 林業のデータには「id」（林小班の番号など）という列がよくある。主キーが fid の表や主キーの無い表で、
+// GIS データには「id」（区画の番号など）という列がよくある。主キーが fid の表や主キーの無い表で、
 // 以前はその列が地物番号に上書きされて見えていた。
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/models/geometry_type.dart';

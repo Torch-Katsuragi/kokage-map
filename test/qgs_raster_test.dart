@@ -21,8 +21,8 @@ import 'package:xml/xml.dart';
 QgsLayer vector(String id, String name) => QgsLayer(
       id: id,
       name: name,
-      dataSourcePath: './林小班.gpkg',
-      tableName: 'rinshoban',
+      dataSourcePath: './区画.gpkg',
+      tableName: 'parcels',
       geometryType: GeometryType.point,
       crs: QgsCrs.wgs84,
     );
@@ -33,8 +33,8 @@ QgsProject project({bool withRaster = true}) => QgsProject(
       name: 'テスト',
       root: [
         QgsGroup(
-          name: '林小班',
-          children: [vector('v1', 'スギ'), if (withRaster) raster, vector('v2', '全部')],
+          name: '区画',
+          children: [vector('v1', 'A種'), if (withRaster) raster, vector('v2', '全部')],
         ),
       ],
     );
@@ -97,9 +97,9 @@ void main() {
         name: 'テスト',
         root: [
           QgsGroup(
-            name: '林小班',
+            name: '区画',
             children: [
-              vector('v1', 'スギ'),
+              vector('v1', 'A種'),
               const QgsRasterLayer(id: 'raster_1', name: 'ortho2', dataSourcePath: './sub/ortho.tif'),
               vector('v2', '全部'),
             ],
@@ -124,7 +124,7 @@ void main() {
   test('フィクスチャ（QGIS 3.44 が書いた .qgs）にラスタを足しても他は壊れない', () {
     final doc = QgsDocument.parse(File('test/fixtures/qgis_3_44_written.qgs').readAsStringSync());
     final before = doc.mapLayers.length;
-    doc.apply(const QgsProject(name: 'テスト', root: [QgsGroup(name: '林小班', children: [raster])]));
+    doc.apply(const QgsProject(name: 'テスト', root: [QgsGroup(name: '区画', children: [raster])]));
     expect(doc.findMapLayer('raster_1'), isNotNull);
     expect(doc.mapLayers.length, lessThanOrEqualTo(before + 1));
   });

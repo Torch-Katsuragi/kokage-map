@@ -84,9 +84,9 @@ void main() {
       final g = GeoPackageFile(const ['data.gpkg'], absolutePath: gpkg);
       await g.addLayer('trees', GeometryType.point);
       await g.addAttributeColumns('trees', {'name': 'TEXT', 'dbh': 'INTEGER'});
-      await g.addPointWithAttributes('trees', const LatLng(33.93, 135.96), {'name': 'スギ1', 'dbh': 32});
-      await g.addPointWithAttributes('trees', const LatLng(33.931, 135.961), {'name': 'スギ2', 'dbh': 28});
-      await g.addPointWithAttributes('trees', const LatLng(33.932, 135.962), {'name': 'ヒノキ1', 'dbh': 25});
+      await g.addPointWithAttributes('trees', const LatLng(33.93, 135.96), {'name': '地点1', 'dbh': 32});
+      await g.addPointWithAttributes('trees', const LatLng(33.931, 135.961), {'name': '地点2', 'dbh': 28});
+      await g.addPointWithAttributes('trees', const LatLng(33.932, 135.962), {'name': '地点3', 'dbh': 25});
       await g.flushChanges();
       await g.dispose();
       final pushed = await engine.push(local, driveFolder: rootId);
@@ -98,7 +98,7 @@ void main() {
       // 3. B が落としたら、A は fid=1 の dbh と fid=3 の name を直す
       await relay.waitFor('2-pulled');
       await sql('UPDATE trees SET dbh = 33 WHERE fid = 1');
-      await sql("UPDATE trees SET name = 'ヒノキ1(A)' WHERE fid = 3");
+      await sql("UPDATE trees SET name = '地点3(A)' WHERE fid = 3");
       await relay.done('3a-edited');
 
       // 4. 両方直したら、A が先に上げる
@@ -121,8 +121,8 @@ void main() {
       await relay.done('2-pulled');
 
       // 3. B は fid=2 の name と、A と同じ fid=3 の name（=衝突）を直す
-      await sql("UPDATE trees SET name = 'スギ2(B)' WHERE fid = 2");
-      await sql("UPDATE trees SET name = 'ヒノキ1(B)' WHERE fid = 3");
+      await sql("UPDATE trees SET name = '地点2(B)' WHERE fid = 2");
+      await sql("UPDATE trees SET name = '地点3(B)' WHERE fid = 3");
       await relay.done('3b-edited');
 
       // 5. A が上げたら、B は行単位で合わせる
@@ -131,8 +131,8 @@ void main() {
       expect(rb.mergedCount, 1, reason: 'A の変更に気づいて合わせるはず');
       expect(rb.conflicts.length, 1);
       expect(rb.conflicts.single.fid, '3');
-      expect(rb.conflicts.single.theirs, 'ヒノキ1(A)');
-      expect(rb.conflicts.single.mine, 'ヒノキ1(B)');
+      expect(rb.conflicts.single.theirs, '地点3(A)');
+      expect(rb.conflicts.single.mine, '地点3(B)');
       await relay.done('5-b-merged');
     }
 
@@ -144,9 +144,9 @@ void main() {
     if (role == 'A') await relay.done('6-a-final');
 
     expect(result, [
-      {'fid': 1, 'name': 'スギ1', 'dbh': 33},
-      {'fid': 2, 'name': 'スギ2(B)', 'dbh': 28},
-      {'fid': 3, 'name': 'ヒノキ1(B)', 'dbh': 25}, // 後から合わせた B の値が残る
+      {'fid': 1, 'name': '地点1', 'dbh': 33},
+      {'fid': 2, 'name': '地点2(B)', 'dbh': 28},
+      {'fid': 3, 'name': '地点3(B)', 'dbh': 25}, // 後から合わせた B の値が残る
     ]);
     try {
       await tmp.delete(recursive: true);

@@ -46,13 +46,13 @@ void main() {
     final g = GeoPackageFile(const ['a.gpkg'], absolutePath: p.join(proj, 'a.gpkg'));
     await g.addLayer('chosa', GeometryType.point);
     await g.addAttributeColumns('chosa', {
-      'jushu': 'TEXT', 'uid': 'TEXT', 'kubun': 'TEXT', 'koshin': 'TEXT', 'kiroku': 'DATETIME', 'shoban': 'TEXT',
+      'kind': 'TEXT', 'uid': 'TEXT', 'kubun': 'TEXT', 'koshin': 'TEXT', 'kiroku': 'DATETIME', 'parcels': 'TEXT',
     });
-    await g.addLayer('shoban', GeometryType.polygon);
-    await g.addAttributeColumns('shoban', {'code': 'TEXT', 'name': 'TEXT', 'rinpan': 'INTEGER'});
+    await g.addLayer('parcels', GeometryType.polygon);
+    await g.addAttributeColumns('parcels', {'code': 'TEXT', 'name': 'TEXT', 'block': 'INTEGER'});
     const ring = [LatLng(33.9, 135.9), LatLng(33.9, 135.91), LatLng(33.91, 135.91), LatLng(33.9, 135.9)];
-    for (final (code, name, rinpan) in [('1-b', '1林班 ろ小班', 1), ('1-a', '1林班 い小班', 1), ('2-a', '2林班 い小班', 2)]) {
-      await g.addPolygonWithAttributes('shoban', [ring], {'code': code, 'name': name, 'rinpan': rinpan});
+    for (final (code, name, block) in [('1-b', '1区 ろ号', 1), ('1-a', '1区 い号', 1), ('2-a', '2区 い号', 2)]) {
+      await g.addPolygonWithAttributes('parcels', [ring], {'code': code, 'name': name, 'block': block});
     }
     await g.dispose();
   });
@@ -81,7 +81,7 @@ void main() {
       root.children.whereType<GeoPackageNode>().single.children.whereType<LayerNode>().firstWhere((l) => l.layerName == name);
 
   /// 書いた `.qgs` の chosa に、QGIS 4.2.2 が書いたフォームの設定を移す（QGIS で設定した体）。
-  /// 値の関係の参照先は、書いた `.qgs` の shoban の id に直す
+  /// 値の関係の参照先は、書いた `.qgs` の parcels の id に直す
   void transplantForm(String qgs) {
     final fixture = XmlDocument.parse(File('test/fixtures/qgis_4_2_forms.qgs').readAsStringSync());
     final source = fixture.findAllElements('maplayer').firstWhere((m) => m.getElement('layername')?.innerText == 'chosa');
@@ -90,7 +90,7 @@ void main() {
         .findAllElements('maplayer')
         .firstWhere((m) => (m.getElement('datasource')?.innerText ?? '').contains('layername=$table'));
     final chosa = byLayer('chosa');
-    final shobanId = byLayer('shoban').getElement('id')!.innerText;
+    final parcelsId = byLayer('parcels').getElement('id')!.innerText;
     for (final tag in _formTags) {
       chosa.findElements(tag).toList().forEach((e) => e.remove());
       final copied = source.getElement(tag)!.copy();
@@ -99,7 +99,7 @@ void main() {
     chosa
         .findAllElements('Option')
         .firstWhere((o) => o.getAttribute('name') == 'Layer')
-        .setAttribute('value', shobanId);
+        .setAttribute('value', parcelsId);
     File(qgs).writeAsStringSync(doc.toXmlString());
   }
 
@@ -112,13 +112,13 @@ void main() {
     expect(result.discarded, isEmpty);
     KMetaService.instance.clearCache();
     final form = (await KMetaService.instance.getMeta(proj)).forms['a.gpkg/chosa']!;
-    expect(form['jushu']!.label, '樹種');
-    expect(form['shoban']!.relationTarget, (gpkg: 'a.gpkg', layer: 'shoban'));
-    expect((await KMetaService.instance.getMeta(proj)).forms.containsKey('a.gpkg/shoban'), isFalse);
+    expect(form['kind']!.label, '種別');
+    expect(form['parcels']!.relationTarget, (gpkg: 'a.gpkg', layer: 'parcels'));
+    expect((await KMetaService.instance.getMeta(proj)).forms.containsKey('a.gpkg/parcels'), isFalse);
 
-    // 値の関係の選択肢: rinpan = 1 に絞り、表示名で並べる
+    // 値の関係の選択肢: block = 1 に絞り、表示名で並べる
     final opts = await QgisFormOptions.load(layerOf(root, 'chosa'), form);
-    expect([for (final o in opts['shoban']!) (o.value, o.label)], [('1-a', '1林班 い小班'), ('1-b', '1林班 ろ小班')]);
+    expect([for (final o in opts['parcels']!) (o.value, o.label)], [('1-a', '1区 い号'), ('1-b', '1区 ろ号')]);
 
     // こかげマップが書き直しても、.qgs の側のフォームの設定は残る
     await const QgsProjectBuilder().writeTo(root);
@@ -157,7 +157,7 @@ void main() {
 
     expect(await const QgsImporter().backfillForms(qgs, root), 1);
     KMetaService.instance.clearCache();
-    expect((await KMetaService.instance.getMeta(proj)).forms['a.gpkg/chosa']!['dbh']!.label, '胸高直径(cm)');
+    expect((await KMetaService.instance.getMeta(proj)).forms['a.gpkg/chosa']!['width']!.label, '幅員(m)');
 
     // 2 回目は何もしない（もう持っている）
     expect(await const QgsImporter().backfillForms(qgs, root), 0);

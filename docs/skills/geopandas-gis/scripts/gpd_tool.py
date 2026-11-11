@@ -566,7 +566,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("rename-cols", help="列リネーム old:new,old2:new2")
     add_in_out(sp)
-    sp.add_argument("--rename-map", required=True, dest="rename_map", help="例: rinpan:C,junrinpan:Q")
+    sp.add_argument("--rename-map", required=True, dest="rename_map", help="例: old_name:new_name,code:id")
     sp.set_defaults(func=cmd_rename_cols)
 
     sp = sub.add_parser("head-export", help="先頭N件だけ書き出し（検証用）")

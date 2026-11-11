@@ -802,7 +802,7 @@ class TerrainWorld extends ChangeNotifier {
     if (nan == 0) return;
     final filled = fillFromAncestor ? await _fillFromAncestor(key, merged) : 0;
     var left = _countNaN(merged.heights);
-    // 川や湖は地理院の 3 ソース全部が無効なので親を辿っても埋まらない（2026-09-13 に北山川で台地を観測）。
+    // 川や湖は地理院の 3 ソース全部が無効なので親を辿っても埋まらない（2026-09-13 に大河川で台地を観測）。
     // 残った穴は最後の砦（AWS。水面にも値がある）を点ごとに重ねる。z ≤ 15 だけ（それより細かい段は親の近似がこれを受け継ぐ）
     var resort = 0;
     if (left > 0) {
@@ -1234,7 +1234,7 @@ class TerrainWorld extends ChangeNotifier {
   /// 読み込み済みタイルの標高の範囲（無ければ null）。タイルごとの最小・最大を畳むだけ
   ///
   /// ⚠ 以前は毎回 全タイルの全点を走査していて（50 枚で 340 万点）、タイル到着ごとの描き直しが
-  /// 連鎖するとイベントループを数十秒独占した（Pixel 9 で実測）
+  /// 連鎖するとイベントループを数十秒独占した（Android 実機で実測）
   (double, double)? get heightRange => TerrainTile.heightRangeOf(_tiles.values);
 
   /// 作り直せる控え（デコード済みタイル画像の LRU と DEM の LRU）を手放す。貼ってあるタイルはそのまま

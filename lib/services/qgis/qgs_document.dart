@@ -324,7 +324,7 @@ class QgsDocument {
     return s.toLowerCase();
   }
 
-  // ---- 表（森林簿 CSV）----
+  // ---- 表（ジオメトリなし CSV）----
 
   /// 形の無い表の maplayer か（`wkbType="NoGeometry"`、古い形は `geometry="No geometry"`）
   static bool isTableLayer(XmlElement maplayer) =>
@@ -332,7 +332,7 @@ class QgsDocument {
       (maplayer.getAttribute('wkbType') == 'NoGeometry' || maplayer.getAttribute('geometry') == 'No geometry');
 
   /// 表の maplayer が指すファイルのパス（`.qgs` に書かれたまま。相対なら `./…`）。
-  /// delimitedtext は `file:./%E6….csv?type=csv&…`（パスは % エンコード）、ogr は `./林班表.csv|…`
+  /// delimitedtext は `file:./%E6….csv?type=csv&…`（パスは % エンコード）、ogr は `./属性表.csv|…`
   static String? tableSourcePath(XmlElement maplayer) {
     final provider = maplayer.getElement('provider')?.innerText.trim().toLowerCase();
     final raw = maplayer.getElement('datasource')?.innerText.trim() ?? '';

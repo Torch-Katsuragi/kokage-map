@@ -15,7 +15,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // こかげマップ: GPS 軌跡の統合（20 秒ごと）を地図に映す
 //
-// 統合のたびに全地物を集め直し（`updateFeatures`）、3D の下地を焼き直していた（2026-10-12、Pixel 9 で置いたまま
+// 統合のたびに全地物を集め直し（`updateFeatures`）、3D の下地を焼き直していた（2026-10-12、Android 実機で置いたまま
 // 20 秒ごとに 6 枚）。今日の 1 本だけを差し替え、軌跡のレイヤが見えているときだけその 1 本を地図に流す
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;

@@ -240,7 +240,7 @@ abstract class LayerNode extends LayerTreeNode {
 
       // 描画で使うキー。viewKey（gpkg名/レイヤ名/View名）には dir が入らないので、別の dir にある
       // 同名の gpkg・レイヤ（複製した dir 等）と地図全体で1つに畳まれ、片方の色で両方描いていた
-      // （2026-09-30、Pixel 9 で Kitayama-2026 とその下の Kitayama-2026-demo）。gpkg のパスを添える
+      // （2026-09-30、実機で Sample-2026 とその下の Sample-2026-demo）。gpkg のパスを添える
       final key = '${geoPackageFile.getAbsolutePath() ?? ''}|${view.viewKey}';
       styleGroups[key] = style;
       _styleGroupRank[key] = rank;
@@ -775,7 +775,7 @@ abstract class LayerNode extends LayerTreeNode {
       // 子ノードの変更があったためキャッシュをクリア
       clearColumnNamesCache();
       _featuresRevision++;
-      // 結合した表（森林簿など）。描き分けが結合の列を読むので先に
+      // 結合した表（台帳など）。描き分けが結合の列を読むので先に
       await loadJoins();
       await _loadColumnSqlTypes();
       // フィーチャが入れ替わったので、どれがどの View のものかも取り直す

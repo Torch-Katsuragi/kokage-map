@@ -104,7 +104,7 @@ void main() {
 
     test('WGS84 → JGD2011 VI系 は X=Northing, Y=Easting で返す', () {
       final vi = registry.getByCode('EPSG:6674')!;
-      // 和歌山県北山村付近
+      // 紀伊半島南部付近
       final xy = service.transformToXY(const LatLng(33.93, 135.96), vi);
       expect(xy, isNotNull);
       // 原点 (36N, 136E) より南 → X(Northing) は負、東経がほぼ同じ → Y(Easting) は小さい

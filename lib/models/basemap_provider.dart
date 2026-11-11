@@ -26,7 +26,7 @@ import '../core/terrain/contour_tiles.dart' show ContourTiles;
 /// ⚠ OSMのタイル利用ポリシーは「アプリを特定できる固有のUA＋連絡先」を要求し、
 /// 汎用UA・偽装UAは**予告なくブロック**される。以前の `com.example.k_maps` は
 /// これに引っかかり、全タイルが 403 "Access blocked" になっていた
-/// （2026-08-28 Pixel 9 で確認）。文字列を変えるときはポリシーを読み直すこと:
+/// （2026-08-28 Android 実機で確認）。文字列を変えるときはポリシーを読み直すこと:
 /// https://operations.osmfoundation.org/policies/tiles/
 const String kTileUserAgent =
     'KokageMap/1.0 (+https://kokage-map.sleeptree.jp; k-root@googlegroups.com)';

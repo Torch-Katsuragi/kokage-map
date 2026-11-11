@@ -90,7 +90,7 @@ dependencies:
   # flutter_secure_storage: 削除（lib/内で未使用、win32バージョン競合の原因）
   mobile_scanner: ^7.1.4
   package_info_plus: ^10.2.1         # win32 ^5 vs ^6 競合のため据え置き
-  # 3D の flutter_gpu スパイク（Vault 3D化の詰め 12 節）。web は stub（lib/core/terrain/gpu/）
+  # 3D の flutter_gpu 描画系。web は WebGL2 版（lib/core/terrain/gpu/）
   flutter_gpu:
     sdk: flutter
   flutter_gpu_shaders: ^0.5.2 # hook/build.dart でシェーダ束（terrain.shaderbundle）を作る

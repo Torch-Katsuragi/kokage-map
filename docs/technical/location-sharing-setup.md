@@ -19,7 +19,7 @@ tags: [technical, location-sharing, firebase, setup, runbook]
 
 ## 0. 前提
 
-- [[user-google-ai-ultra]] の **$100/月 GCPクレジット**が Firebase に適用される。
+- Google Developer Program の **$100/月 GCPクレジット**が Firebase に適用される。
 - リージョンは RTDB の **`asia-southeast1`（シンガポール）**を使用（日本から遅延50〜80ms）。
 
 ## 1. Firebaseプロジェクト作成と課金
@@ -75,18 +75,16 @@ npm install
 firebase deploy --only functions
 ```
 
-## 6. 実装側の残作業（コード）
+## 6. アプリ側の構成（実装済み）
 
-provisioning後に行う配線。すべて Android/iOS 限定で。
-
-- [ ] `RtdbPeerSource implements PeerSource`（`.info/connected` 監視・`publishPosition`/`publishTrack`・`goOnline`/`goOffline`・匿名認証・onDisconnect設定）
-- [ ] `main.dart` で `Firebase.initializeApp`（**Android/iOS のみ**・機能フラグでガード）
-- [ ] Riverpod provider 化（`PartyLocationStore` を提供、ライフサイクル管理）
-- [ ] 地図描画: `PartyLocationStore.peersStream` → `_buildOverlayWidgetMarkers()` にピアマーカー追加（鮮度3段階表示）
-- [ ] ルーム作成/参加UI（8文字コード生成・コード入力）
-- [ ] メンバーパネル（参加者一覧・表示ON/OFF・共有停止＝ゴーストモード・hostキック）
-- [ ] connectivity_plus → `hasInterface` ブール変換アダプタ
-- [ ] バッテリー残量取得（`battery_plus` 追加 or 既存手段）
+- `RtdbPeerSource implements PeerSource`（`.info/connected` 監視・`publishPosition`/`publishTrack`・`goOnline`/`goOffline`・匿名認証・onDisconnect設定）
+- `main.dart` で `Firebase.initializeApp`（機能フラグでガード）
+- Riverpod provider 化（`PartyLocationStore` を提供、ライフサイクル管理）
+- 地図描画: `PartyLocationStore.peersStream` → ピアマーカー表示（鮮度3段階表示）
+- ルーム作成/参加UI（8文字コード生成・コード入力・QRコード・招待リンク）
+- メンバーパネル（参加者一覧・表示ON/OFF・共有停止＝ゴーストモード・hostキック）
+- `connectivity_plus` → `hasInterface` ブール変換アダプタ
+- バッテリー残量取得（`battery_plus`）
 
 ## 7. コスト確認
 

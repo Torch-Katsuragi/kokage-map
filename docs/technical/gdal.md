@@ -108,9 +108,9 @@ WASM が半分以下になったのはドライバを Android と同じ組に絞
 > worker はヒープを `>>> 0` / `HEAPU32[p >>> 2]` で引く。ラスタのオーバーレイは `-ts` で長辺を絞って出す前提。
 > 引数の中のパス（`-clipsrc other.shp` など）とフォルダのデータセット（FileGDB など）は渡らない。
 
-### 速さ（2026-10-11、matsumoto_tabPC、内蔵ブラウザ、127.0.0.1 から配信）
+### 速さ（2026-10-11、Windows PC、内蔵ブラウザ、127.0.0.1 から配信）
 
-| | 3.13.3-1 | 参考: 2.8.1（2026-10-09、メインPC） |
+| | 3.13.3-1 | 参考: 2.8.1（2026-10-09、デスクトップPC） |
 |---|---|---|
 | 初回の読み込み（キャッシュ無し、`version()` まで） | 0.91 秒（※ タブが隠れた状態） | 0.60 秒 |
 | 2 回目以降の起動（HTTP キャッシュあり。WASM のコンパイル込み） | 0.46 秒（※ 同上） | 0.71 秒 |
@@ -198,19 +198,17 @@ kokageGdal.loadMs()                                                         // �
 
 ## 未決・見張り（Android）
 
-- 実機（Pixel 9）での確認は `integration_test/device/gdal_smoke_test.dart`。armeabi-v7a は手元に実機が無く未確認
+- Android 実機（arm64-v8a）での確認は `integration_test/device/gdal_smoke_test.dart`。armeabi-v7a は手元に実機が無く未確認
 
 ## 実機での確認（2026-10-11）
 
-TODO.md から移した記録。残りは TODO.md の「次の実機確認」。
-
-- Pixel 9（テスト用アプリ `com.k_root.k_maps.gdaltest` を並べて入れ、`/sdcard/FieldSurvey/GdalCheck` に test/fixtures/gdal を置いた）:
+- Android 実機（テスト用アプリ `com.k_root.k_maps.gdaltest` を並べて入れ、`/sdcard/FieldSurvey/GdalCheck` に test/fixtures/gdal を置いた）:
   gdal_smoke_test 全通過（初回 172ms・12 ドライバ往復・Shift_JIS・ラスタ）／shp（.cpg あり・なし）・GeoJSON・KML・CSV・KMZ・GPX・型の混ざった GeoJSON・
   Z 付きの shp が読み取り専用で件数どおり／2 万面の shp（キャッシュ作り約 2.5 秒・UI 止まらず）／Shift_JIS・EPSG:6674 のまま／点と 6674 の GeoTIFF が同じ位置に重なる／
   外部ラスタ 6 枚がオーバーレイに（PNG 作成 20〜60ms）、位置合わせ不可の通知、削除で .pgw/.aux.xml まで消える／位置の無い画像は写真のまま／
   KML →「gpkgに変換」→ 頂点を動かして保存（Z は DEM の 136.4 m、元の Z 400/410/420 は残る）／改名で付属ファイルが動き .qgs が 6 秒以内に追従／
   削除でファイルとキャッシュが消える／書き出し（shp の zip に UTF-8 の .cpg、.prj は JGD2011 VI 系のまま、一時ファイルが残らない）／「ファイルを追加」（SAF）／
-  移して空になった gpkg が消える／Pixel 9 で書いた .qgs を QGIS 4.2.2 で開いて全レイヤ valid・件数と CRS が合う／
+  移して空になった gpkg が消える／実機で書いた .qgs を QGIS 4.2.2 で開いて全レイヤ valid・件数と CRS が合う／
   Drive（本物のアプリ）で shp 一式・KML・JPG が上がり `.kokage` は上がらない、Drive に置いた GeoJSON が下りて読み取り専用レイヤに
 - release APK（3 ABI）183 MB（GDAL 前より約 +57 MB。Play の ABI 別配布では arm64 のダウンロード約 +10 MB）
 - web（Chrome、OPFS、127.0.0.1 配信）: shp（.cpg あり・なし）・GeoJSON・KML・CSV・GPX・KMZ（doc.kml 形式）が件数どおり、.cpg なしの属性が日本語、

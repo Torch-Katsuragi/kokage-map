@@ -75,7 +75,7 @@ class _FakeMap implements IMapState {
 }
 
 void main() {
-  const kitayama = LatLng(33.9707, 135.8534);
+  const samplePt = LatLng(33.9707, 135.8534);
 
   late ProviderContainer container;
   late MapSurfaceHandle handle;
@@ -84,7 +84,7 @@ void main() {
 
   setUp(() {
     container = ProviderContainer();
-    handle = MapSurfaceHandle()..rememberCamera(kitayama, 15, 0);
+    handle = MapSurfaceHandle()..rememberCamera(samplePt, 15, 0);
     surface = _FlatSurface(handle);
     handle.attach(surface);
     map = _FakeMap(handle);

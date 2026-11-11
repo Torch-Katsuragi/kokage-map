@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// 表（森林簿 CSV）を見るだけの画面。形が無いので地図とはつながらない
+// 表（属性 CSV）を見るだけの画面。形が無いので地図とはつながらない
 
 import 'package:flutter/material.dart';
 import 'package:trina_grid/trina_grid.dart';

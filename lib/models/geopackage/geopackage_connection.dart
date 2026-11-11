@@ -409,7 +409,7 @@ class GeoPackageConnection {
   ///
   /// native は**実ファイルのパスそのもの**（sqflite が直接そのファイルを開く）。
   /// web は実パスが無く、これは sqlite3 WASM 側ストレージ上の名前でしかないので、
-  /// 仮想パス（`/フォルダ名/林小班.gpkg`）をそのまま渡さず、
+  /// 仮想パス（`/フォルダ名/区画.gpkg`）をそのまま渡さず、
   /// スラッシュも非ASCIIも含まない安全な名前に潰す。
   String _databaseKey(String absPath) {
     if (fs.hasRealPaths) return absPath;

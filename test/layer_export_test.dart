@@ -61,19 +61,19 @@ void main() {
   /// 点・線・面と属性（日本語・カンマと引用符・null・数値）を持つ gpkg
   Future<void> makeSourceGpkg(String path) async {
     final g = GeoPackageFile([p.basename(path)], absolutePath: path);
-    const attrs = {'name': 'TEXT', 'description': 'TEXT', 'h': 'REAL', 'n': 'INTEGER', '樹種': 'TEXT'};
+    const attrs = {'name': 'TEXT', 'description': 'TEXT', 'h': 'REAL', 'n': 'INTEGER', '種別': 'TEXT'};
     await g.addLayer('pts', GeometryType.point);
     await g.addAttributeColumns('pts', attrs);
     await g.addPointsBatch('pts', [
-      (const LatLng(33.91, 135.97), {'name': '杉', 'description': '樹高 "高い", 太い', 'h': 21.5, 'n': 3, '樹種': 'スギ'}),
-      (const LatLng(33.92, 135.98), {'name': 'hinoki', 'h': null, 'n': 7, '樹種': 'ヒノキ'}),
+      (const LatLng(33.91, 135.97), {'name': '地点A', 'description': '高さ "高い", 太い', 'h': 21.5, 'n': 3, '種別': 'A種'}),
+      (const LatLng(33.92, 135.98), {'name': 'pointB', 'h': null, 'n': 7, '種別': 'B種'}),
       (const LatLng(33.93, 135.99), {'name': null, 'description': 'line\nbreak', 'h': 0.125}),
     ]);
     await g.addLayer('lns', GeometryType.linestring);
     await g.addAttributeColumns('lns', attrs);
     await g.addLinesBatch('lns', [
       (const [LatLng(33.90, 135.90), LatLng(33.91, 135.91), LatLng(33.905, 135.93)], {
-        'name': '林道 A',
+        'name': '路線 A',
         'h': 3.0,
       }),
     ]);
@@ -83,7 +83,7 @@ void main() {
       (const [
           [LatLng(33.0, 135.0), LatLng(33.0, 135.1), LatLng(33.1, 135.1), LatLng(33.1, 135.0)],
         ], {
-        'name': '小班 1-い',
+        'name': '区画 1-い',
         'n': 10,
       }),
     ]);
@@ -125,8 +125,8 @@ void main() {
     }
     expect(File('$base.cpg').readAsStringSync().trim().toUpperCase(), 'UTF-8');
     final info = await features(out);
-    expect(featureValues(info, 'name'), ['杉', 'hinoki', null]);
-    expect(featureValues(info, '樹種'), ['スギ', 'ヒノキ', null]);
+    expect(featureValues(info, 'name'), ['地点A', 'pointB', null]);
+    expect(featureValues(info, '種別'), ['A種', 'B種', null]);
     expect(featureValues(info, 'n'), [3, 7, null]);
     expect(layerEpsg(info), 4326);
   }, skip: skip);
@@ -137,11 +137,11 @@ void main() {
     final json = jsonDecode(File(out).readAsStringSync()) as Map<String, dynamic>;
     expect(json.containsKey('crs'), isFalse);
     final first = (json['features'] as List).first as Map<String, dynamic>;
-    expect(first['properties'], containsPair('name', '杉'));
-    expect(first['properties'], containsPair('description', '樹高 "高い", 太い'));
+    expect(first['properties'], containsPair('name', '地点A'));
+    expect(first['properties'], containsPair('description', '高さ "高い", 太い'));
     expect(first['properties'], containsPair('h', 21.5));
     expect(first['properties'], containsPair('n', 3));
-    expect(first['properties'], containsPair('樹種', 'スギ'));
+    expect(first['properties'], containsPair('種別', 'A種'));
     expect((first['geometry'] as Map)['type'], 'Point', reason: 'アプリの点レイヤ（MULTIPOINT 宣言）でも Point で書く');
     final coords = (first['geometry'] as Map)['coordinates'] as List;
     expect(coords[0] as num, closeTo(135.97, 1e-9));
@@ -153,9 +153,9 @@ void main() {
     final out = await export(layers['pts']!, FileFormat.kml);
     final info = await features(out);
     expect(firstLayer(info)['featureCount'], 3);
-    expect(featureValues(info, 'Name'), ['杉', 'hinoki', null]);
+    expect(featureValues(info, 'Name'), ['地点A', 'pointB', null]);
     final text = File(out).readAsStringSync();
-    expect(text, contains('<SimpleData name="樹種">スギ</SimpleData>'));
+    expect(text, contains('<SimpleData name="種別">A種</SimpleData>'));
     expect(text, contains('<SimpleData name="h">21.5</SimpleData>'));
   }, skip: skip);
 
@@ -163,9 +163,9 @@ void main() {
     final layers = await sourceLayers();
     final pts = File(await export(layers['pts']!, FileFormat.csv)).readAsLinesSync();
     expect(pts.first.split(',').take(2), ['X', 'Y']);
-    expect(pts.first, contains('樹種'));
+    expect(pts.first, contains('種別'));
     expect(pts[1], startsWith('135.97,33.91,'));
-    expect(pts[1], contains('杉'));
+    expect(pts[1], contains('地点A'));
 
     final lns = File(await export(layers['lns']!, FileFormat.csv)).readAsLinesSync();
     // WKT の列名は形の列の名前（GDAL・QGIS と同じ）
@@ -178,7 +178,7 @@ void main() {
     final out = await export(layers['pts']!, FileFormat.shapefile, options: const ExportOptions(includeRowNumber: true));
     final info = await features(out);
     expect(featureValues(info, 'ROW_NUM'), [1, 2, 3]);
-    expect(featureValues(info, 'name'), ['杉', 'hinoki', null]);
+    expect(featureValues(info, 'name'), ['地点A', 'pointB', null]);
     expect(firstLayer(info)['geometryFields'], isNotEmpty);
   }, skip: skip);
 
@@ -264,7 +264,7 @@ void main() {
     expect(layerEpsg(info), 6674);
     final xy = dig(firstLayer(info), ['features', 0, 'geometry', 'coordinates'])! as List;
     expect(xy[1] as num, closeTo(-232000, 5000)); // Northing（33.91N は原点 36N の南）
-    expect(featureValues(info, '樹種'), ['スギ', 'ヒノキ', null]);
+    expect(featureValues(info, '種別'), ['A種', 'B種', null]);
   }, skip: skip);
 
   test('GPX（点・線）・FlatGeobuf・DXF・GeoPackage も書ける', () async {

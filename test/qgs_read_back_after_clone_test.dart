@@ -34,21 +34,21 @@ String _qgisSaved({String saveDateTime = '2026-10-12T10:00:00'}) => '''
 <!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
 <qgis projectname="" version="4.2.2-Kokura" saveDateTime="$saveDateTime" saveUser="qgis">
   <layer-tree-group>
-    <layer-tree-layer id="shoban_a" name="shoban" checked="Qt::Checked" source="./計画図.gpkg|layername=shoban" providerKey="ogr"/>
-    <layer-tree-layer id="shoban_b" name="小班 区分" checked="Qt::Unchecked" source="./計画図.gpkg|layername=shoban" providerKey="ogr"/>
+    <layer-tree-layer id="parcels_a" name="parcels" checked="Qt::Checked" source="./計画図.gpkg|layername=parcels" providerKey="ogr"/>
+    <layer-tree-layer id="parcels_b" name="区画 区分" checked="Qt::Unchecked" source="./計画図.gpkg|layername=parcels" providerKey="ogr"/>
     <layer-tree-layer id="xyz_a" name="どこかのタイル" checked="Qt::Checked" providerKey="wms"/>
   </layer-tree-group>
   <projectlayers>
     <maplayer type="vector" geometry="Polygon">
-      <id>shoban_a</id>
-      <datasource>./計画図.gpkg|layername=shoban</datasource>
-      <layername>shoban</layername>
+      <id>parcels_a</id>
+      <datasource>./計画図.gpkg|layername=parcels</datasource>
+      <layername>parcels</layername>
       <provider encoding="UTF-8">ogr</provider>
     </maplayer>
     <maplayer type="vector" geometry="Polygon">
-      <id>shoban_b</id>
-      <datasource>./計画図.gpkg|layername=shoban</datasource>
-      <layername>小班 区分</layername>
+      <id>parcels_b</id>
+      <datasource>./計画図.gpkg|layername=parcels</datasource>
+      <layername>区画 区分</layername>
       <provider encoding="UTF-8">ogr</provider>
     </maplayer>
     <maplayer type="raster">
@@ -90,7 +90,7 @@ void main() {
     // クローンで落ちてきた体: 計画図.gpkg と、QGIS が保存した `<フォルダ名>.qgs`
     cloneDir = (await Directory(p.join(proj, _folder)).create()).path;
     final g = GeoPackageFile(['計画図.gpkg'], absolutePath: p.join(cloneDir, '計画図.gpkg'));
-    await g.addLayer('shoban', GeometryType.polygon);
+    await g.addLayer('parcels', GeometryType.polygon);
     await g.dispose();
     File(p.join(cloneDir, '$_folder.qgs')).writeAsStringSync(_qgisSaved());
   });
@@ -110,7 +110,7 @@ void main() {
     return root;
   }
 
-  LayerNode shobanOf(LayerTreeNode folder) => folder.children
+  LayerNode parcelsOf(LayerTreeNode folder) => folder.children
       .whereType<GeoPackageNode>()
       .single
       .children
@@ -144,14 +144,14 @@ void main() {
     expect(claimed(), isTrue, reason: '取り込んだので印を付け、自動更新が書けるようになる');
 
     // ツリーはその場で View を持つ（開き直さない）
-    final views = await viewNamesOf(shobanOf(cloned.node));
+    final views = await viewNamesOf(parcelsOf(cloned.node));
     expect(views, hasLength(2));
-    expect(views, contains('小班 区分'));
+    expect(views, contains('区画 区分'));
 
     // 背景地図: XYZ が端末の背景地図に入った（読めなかった環境でも二度足さない印は付く）
     KMetaService.instance.clearCache();
     final meta = await KMetaService.instance.getMeta(cloneDir);
-    expect(meta.views.keys, contains('計画図.gpkg/shoban'));
+    expect(meta.views.keys, contains('計画図.gpkg/parcels'));
     final custom = BaseMapProvider.custom(
       name: 'どこかのタイル',
       urlTemplate: 'https://tiles.example.com/v1/{z}/{x}/{y}.png',
@@ -207,6 +207,6 @@ void main() {
     expect(r, isNotNull);
     expect(r!.importedViewCount, 2);
     expect(claimed(), isTrue);
-    expect(await viewNamesOf(shobanOf(cloned.node)), contains('小班 区分'));
+    expect(await viewNamesOf(parcelsOf(cloned.node)), contains('区画 区分'));
   });
 }

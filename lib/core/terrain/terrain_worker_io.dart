@@ -19,7 +19,7 @@ import 'dart:isolate';
 /// 地形まわりの重い計算（DEM の組み立て・メッシュの前計算）を流す常駐 isolate の小さなプール
 ///
 /// `compute` は呼ぶたびに isolate を起動する。引いた瞬間に 40 枚ぶん同時に起動すると
-/// debug では 1 本 30MB 超・起動 1 秒超で、メモリが 1GB 以上膨らんだ（Pixel 9 で実測）。
+/// debug では 1 本 30MB 超・起動 1 秒超で、メモリが 1GB 以上膨らんだ（Android 実機で実測）。
 /// ここでは [size] 本を起動したまま使い回し、順番に流す（io 実装。web は `terrain_worker_web.dart`）
 class TerrainWorker {
   TerrainWorker({this.size = 2});

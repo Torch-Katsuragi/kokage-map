@@ -16,8 +16,8 @@ void main() {
 
   group('resolveUnder', () {
     test('ふつうの名前はそのまま下に置く（日本語・スペース入り）', () {
-      expect(resolveUnder(base, '林班 1.gpkg'), p.join(base, '林班 1.gpkg'));
-      expect(resolveUnder(base, '北山村/第2 林班/写真 A.jpg'), p.join(base, '北山村', '第2 林班', '写真 A.jpg'));
+      expect(resolveUnder(base, '区画 1.gpkg'), p.join(base, '区画 1.gpkg'));
+      expect(resolveUnder(base, '調査地/第2 区画/写真 A.jpg'), p.join(base, '調査地', '第2 区画', '写真 A.jpg'));
       expect(resolveUnder(base, '.hidden.jpg'), p.join(base, '.hidden.jpg'));
       expect(resolveUnder(base, 'a..b.jpg'), p.join(base, 'a..b.jpg'));
     });
@@ -51,7 +51,7 @@ void main() {
   });
 
   test('toLocalFolderName: フォルダ名 1 段にする。使えなければ代わりの名前', () {
-    expect(toLocalFolderName(' 北山村 共有 ', fallback: 'ID'), '北山村 共有');
+    expect(toLocalFolderName(' 調査地 共有 ', fallback: 'ID'), '調査地 共有');
     expect(toLocalFolderName('a/../b', fallback: 'ID'), 'a_.._b');
     expect(toLocalFolderName(r'C:\x', fallback: 'ID'), 'C__x');
     expect(toLocalFolderName('..', fallback: 'ID'), 'ID');

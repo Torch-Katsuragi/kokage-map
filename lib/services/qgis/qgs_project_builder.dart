@@ -260,7 +260,7 @@ class QgsProjectBuilder {
     if (node is GeoPackageNode) {
       return _convertGeoPackage(node, rootPath, skipped, crsCache);
     }
-    // 形の無い表（森林簿 CSV）。QGIS の「CSV テキストレイヤ」として書き、結合の先にする
+    // 形の無い表（CSV）。QGIS の「CSV テキストレイヤ」として書き、結合の先にする
     if (node is TableNode) {
       final relPath = _relativeTo(rootPath, node.sourcePath);
       if (relPath == null) {
@@ -418,7 +418,7 @@ class QgsProjectBuilder {
 
   /// 読み取り専用レイヤ（GDAL で読む形式）→ `provider=ogr` で**元のファイル**を指す（キャッシュのパスは書かない）。
   ///
-  /// 1 ファイル 1 レイヤなら `./林班.shp` だけ。ほかは [externalUriOptions]。
+  /// 1 ファイル 1 レイヤなら `./区画.shp` だけ。ほかは [externalUriOptions]。
   /// CRS はキャッシュ gpkg のもの（ogr2ogr が元の CRS のまま書いている）、shp の文字コードは [externalProviderEncoding]
   Future<QgsTreeNode?> _convertExternal(
     ExternalLayerNode node,

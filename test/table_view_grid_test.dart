@@ -1,4 +1,4 @@
-// 表（森林簿 CSV）を見る画面の格子: 空の数値のマスを 0 と見せない
+// 表（台帳 CSV）を見る画面の格子: 空の数値のマスを 0 と見せない
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -9,7 +9,7 @@ import 'package:root_maps/widgets/layer_drawer/table_view_dialog.dart';
 
 void main() {
   testWidgets('空の数値のマスは空のまま（0 にしない）。値のあるマスは数で見せる', (tester) async {
-    final table = CsvTable.parse(Uint8List.fromList(utf8.encode('林小班,林齢,材積\n12-1,,\n12-2,35,120.5\n')));
+    final table = CsvTable.parse(Uint8List.fromList(utf8.encode('区画番号,年数,面積\n12-1,,\n12-2,35,120.5\n')));
     expect(table.fields.map((f) => f.type), [TableFieldType.text, TableFieldType.integer, TableFieldType.real]);
     await tester.binding.setSurfaceSize(const Size(900, 600));
     addTearDown(() => tester.binding.setSurfaceSize(null));

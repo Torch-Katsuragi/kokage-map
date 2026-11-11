@@ -18,11 +18,10 @@
 library;
 
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
-import '../../core/fs/k_file_system.dart';
 import '../../core/platform_capabilities.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
@@ -30,17 +29,16 @@ import '../../models/nodes/drive_folder_node.dart';
 import '../../models/nodes/drive_folder_set_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
-import '../../models/nodes/global_folder_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../providers/notification_providers.dart';
-import '../../services/kmeta_service.dart';
 import '../../utils/app_logger.dart';
 import '../../widgets/dialogs/drive_sign_in_prompt.dart';
 import '../../widgets/layer_drawer/common_dialogs.dart';
 import '../../widgets/layer_drawer/sync_merge_dialog.dart';
 import '../qgis/qgs_read_back.dart';
 import '../qgis/qgs_read_back_notice.dart';
-import 'conflict_restorer.dart';
+import 'drive_folder_local_lifecycle.dart';
+import 'drive_merge_notifier.dart';
 import 'index.dart';
 
 /// Drive同期操作を提供するサービスクラス
@@ -87,8 +85,7 @@ class DriveSyncOperations {
       if (!driveService.isDriveApiAvailable) {
         await driveService.restoreSessionSilently(userGesture: false);
       }
-      final syncEngine = SyncEngine();
-      final detail = await syncEngine.checkSyncStatusDetail(localPath);
+      final detail = await SyncEngine().checkSyncStatusDetail(localPath);
       updateNodeSyncStatus(node, detail.status);
     } catch (e) {
       node.syncStatus = SyncStatus.error;
@@ -117,98 +114,10 @@ class DriveSyncOperations {
       return;
     }
 
-    final notifier = ref.read(notificationCenterProvider.notifier);
-    final transferKey = DriveTransferRegistry.normalizeKey(localPath);
-
     // 未完了のクローン（.sync/clone.pending）がある場合はマージダイアログを開かず（誤Push防止）、
     // 即座に Pull を再開して未取得のファイルを落とす
     if (await registry.hasClonePending(localPath)) {
-      node.syncStatus = SyncStatus.syncing;
-      onStateChanged();
-      registry.beginTransfer(
-        localPath,
-        folderName: node.name,
-        showOsNotification: true,
-      );
-      notifier.startTransfer(
-        transferKey: transferKey,
-        title: t.drive.resumingClone,
-        detail: node.name,
-      );
-      try {
-        final result = await SyncEngine().pullFolder(
-          localPath,
-          showOsNotification: true,
-        );
-        if (result.success) {
-          registry.updateProgress(
-            localPath,
-            const SyncProgress.finalizing(),
-            folderName: node.name,
-            showOsNotification: true,
-          );
-          await _refreshAndNotify(ref, node);
-          onMapRefresh?.call();
-          node.syncStatus = SyncStatus.synced;
-          final doneTitle = t.drive.downloadCompleteTitle(name: node.name);
-          final doneDetail = t.drive.downloadCompleteDetail(
-            count: result.downloadedCount.toString(),
-          );
-          registry.endTransfer(
-            localPath,
-            driveId: node.driveId,
-            folderName: node.name,
-            success: true,
-            completionTitle: doneTitle,
-            completionBody: doneDetail,
-            showOsNotification: true,
-          );
-          notifier.completeTransfer(
-            transferKey: transferKey,
-            title: doneTitle,
-            detail: doneDetail,
-            level: NotificationLevel.success,
-          );
-        } else {
-          node.syncStatus = SyncStatus.error;
-          final errMsg = result.errorMessage ?? '';
-          registry.endTransfer(
-            localPath,
-            driveId: node.driveId,
-            folderName: node.name,
-            success: false,
-            completionTitle: t.drive.downloadFailedTitle(name: node.name),
-            completionBody: errMsg,
-            errorMessage: errMsg,
-            showOsNotification: true,
-          );
-          notifier.completeTransfer(
-            transferKey: transferKey,
-            title: t.drive.downloadFailedTitle(name: node.name),
-            detail: errMsg,
-            level: NotificationLevel.error,
-          );
-        }
-      } catch (e) {
-        node.syncStatus = SyncStatus.error;
-        registry.endTransfer(
-          localPath,
-          driveId: node.driveId,
-          folderName: node.name,
-          success: false,
-          completionTitle: t.drive.downloadFailedTitle(name: node.name),
-          completionBody: '$e',
-          errorMessage: '$e',
-          showOsNotification: true,
-        );
-        notifier.completeTransfer(
-          transferKey: transferKey,
-          title: t.drive.downloadFailedTitle(name: node.name),
-          detail: '$e',
-          level: NotificationLevel.error,
-        );
-      }
-      onStateChanged();
+      await _resumePendingClone(node, localPath);
       return;
     }
 
@@ -251,20 +160,7 @@ class DriveSyncOperations {
       }
 
       if (entries.isEmpty) {
-        // ファイル変更なしでもDriveの新フォルダをローカルに作成
-        final foldersCreated = await syncEngine.ensureDriveFolders(localPath);
-        node.syncStatus = SyncStatus.synced;
-        onStateChanged();
-        if (foldersCreated > 0) {
-          await _refreshAndNotify(ref, node);
-          onStateChanged();
-        }
-        _notify(
-          foldersCreated > 0
-              ? t.drive.foldersCreated(count: foldersCreated.toString())
-              : t.drive.noChanges,
-          NotificationLevel.success,
-        );
+        await _handleNoFileChanges(syncEngine, node, localPath);
         return;
       }
 
@@ -282,39 +178,39 @@ class DriveSyncOperations {
         return;
       }
 
-      node.syncStatus = SyncStatus.syncing;
-      onStateChanged();
+      await _executeInteractiveMerge(syncEngine, node, localPath, decisions);
+    } catch (e) {
+      if (progressShown && context.mounted) Navigator.of(context).pop();
+      node.syncStatus = SyncStatus.error;
+      final errMsg = t.drive.syncError(error: e.toString());
+      _notify(errMsg, NotificationLevel.error);
+    }
 
-      registry.beginTransfer(
-        localPath,
-        folderName: node.name,
-        showOsNotification: true,
-      );
-      notifier.startTransfer(
-        transferKey: transferKey,
-        title: t.drive.downloadingTitle(name: node.name),
-      );
+    onStateChanged();
+  }
 
-      final result = await syncEngine.executeMerge(
-        localPath,
-        decisions,
-        showOsNotification: true,
-      );
+  Future<void> _resumePendingClone(
+    DriveFolderNode node,
+    String localPath,
+  ) async {
+    final notifier = ref.read(notificationCenterProvider.notifier);
+    node.syncStatus = SyncStatus.syncing;
+    onStateChanged();
 
-      if (result.success) {
-        // 行単位で合わせられなかったファイルは衝突のまま（端末かクラウドを選び直してもらう）。
-        // 置き場所が見つからず上げられなかったものがあればエラー（通知は notifyMerge）
-        node.syncStatus = result.failedUploads.isNotEmpty
-            ? SyncStatus.error
-            : result.failedMerges.isEmpty
-                ? SyncStatus.synced
-                : SyncStatus.conflict;
-
-        if (result.downloadedCount > 0 ||
-            result.deletedCount > 0 ||
-            result.movedCount > 0 ||
-            result.mergedCount > 0) {
-          registry.updateProgress(
+    await runTrackedDriveTransfer(
+      localPath: localPath,
+      driveId: node.driveId,
+      folderName: node.name,
+      notifier: notifier,
+      startTitle: t.drive.resumingClone,
+      startDetail: node.name,
+      action: () async {
+        final result = await SyncEngine().pullFolder(
+          localPath,
+          showOsNotification: true,
+        );
+        if (result.success) {
+          DriveTransferRegistry.instance.updateProgress(
             localPath,
             const SyncProgress.finalizing(),
             folderName: node.name,
@@ -322,79 +218,151 @@ class DriveSyncOperations {
           );
           await _refreshAndNotify(ref, node);
           onMapRefresh?.call();
-          onStateChanged();
+          node.syncStatus = SyncStatus.synced;
+          return TrackedTransferOutcome(
+            success: true,
+            title: t.drive.downloadCompleteTitle(name: node.name),
+            detail: t.drive.downloadCompleteDetail(
+              count: result.downloadedCount.toString(),
+            ),
+            level: NotificationLevel.success,
+          );
         }
-
-        final doneMsg = t.drive.syncComplete(
-          uploaded: result.uploadedCount.toString(),
-          downloaded: result.downloadedCount.toString(),
-          deleted: result.deletedCount.toString(),
-          moved: result.movedCount.toString(),
+        node.syncStatus = SyncStatus.error;
+        final errMsg = result.errorMessage ?? '';
+        return TrackedTransferOutcome(
+          success: false,
+          title: t.drive.downloadFailedTitle(name: node.name),
+          detail: errMsg,
+          errorMessage: errMsg,
+          level: NotificationLevel.error,
         );
-        registry.endTransfer(
+      },
+      onUnhandledError: (e) {
+        node.syncStatus = SyncStatus.error;
+        return TrackedTransferOutcome(
+          success: false,
+          title: t.drive.downloadFailedTitle(name: node.name),
+          detail: '$e',
+          errorMessage: '$e',
+          level: NotificationLevel.error,
+        );
+      },
+    );
+    onStateChanged();
+  }
+
+  Future<void> _handleNoFileChanges(
+    SyncEngine syncEngine,
+    DriveFolderNode node,
+    String localPath,
+  ) async {
+    // ファイル変更なしでもDriveの新フォルダをローカルに作成
+    final foldersCreated = await syncEngine.ensureDriveFolders(localPath);
+    node.syncStatus = SyncStatus.synced;
+    onStateChanged();
+    if (foldersCreated > 0) {
+      await _refreshAndNotify(ref, node);
+      onStateChanged();
+    }
+    _notify(
+      foldersCreated > 0
+          ? t.drive.foldersCreated(count: foldersCreated.toString())
+          : t.drive.noChanges,
+      NotificationLevel.success,
+    );
+  }
+
+  Future<void> _executeInteractiveMerge(
+    SyncEngine syncEngine,
+    DriveFolderNode node,
+    String localPath,
+    List<MergeDecision> decisions,
+  ) async {
+    final notifier = ref.read(notificationCenterProvider.notifier);
+    node.syncStatus = SyncStatus.syncing;
+    onStateChanged();
+
+    SyncResult? succeededResult;
+    await runTrackedDriveTransfer(
+      localPath: localPath,
+      driveId: node.driveId,
+      folderName: node.name,
+      notifier: notifier,
+      startTitle: t.drive.downloadingTitle(name: node.name),
+      action: () async {
+        final result = await syncEngine.executeMerge(
           localPath,
-          driveId: node.driveId,
-          folderName: node.name,
-          success: true,
-          completionTitle: doneMsg,
+          decisions,
           showOsNotification: true,
         );
-        notifier.completeTransfer(
-          transferKey: transferKey,
-          title: doneMsg,
-          level: NotificationLevel.success,
-        );
-        notifyMerge(
-          ref,
-          result,
-          afterRestore: () async {
+        if (result.success) {
+          // 行単位で合わせられなかったファイルは衝突のまま（端末かクラウドを選び直してもらう）。
+          // 置き場所が見つからず上げられなかったものがあればエラー（通知は notifyMerge）
+          node.syncStatus = result.failedUploads.isNotEmpty
+              ? SyncStatus.error
+              : result.failedMerges.isEmpty
+                  ? SyncStatus.synced
+                  : SyncStatus.conflict;
+
+          if (result.downloadedCount > 0 ||
+              result.deletedCount > 0 ||
+              result.movedCount > 0 ||
+              result.mergedCount > 0) {
+            DriveTransferRegistry.instance.updateProgress(
+              localPath,
+              const SyncProgress.finalizing(),
+              folderName: node.name,
+              showOsNotification: true,
+            );
             await _refreshAndNotify(ref, node);
             onMapRefresh?.call();
-          },
-        );
-      } else {
+            onStateChanged();
+          }
+          succeededResult = result;
+          return TrackedTransferOutcome(
+            success: true,
+            title: t.drive.syncComplete(
+              uploaded: result.uploadedCount.toString(),
+              downloaded: result.downloadedCount.toString(),
+              deleted: result.deletedCount.toString(),
+              moved: result.movedCount.toString(),
+            ),
+            level: NotificationLevel.success,
+          );
+        }
+
         node.syncStatus = SyncStatus.error;
         final errMsg = t.drive.syncError(error: result.errorMessage ?? '');
-        registry.endTransfer(
-          localPath,
-          driveId: node.driveId,
-          folderName: node.name,
+        return TrackedTransferOutcome(
           success: false,
-          completionTitle: errMsg,
+          title: errMsg,
           errorMessage: result.errorMessage,
-          showOsNotification: true,
-        );
-        notifier.completeTransfer(
-          transferKey: transferKey,
-          title: errMsg,
           level: NotificationLevel.error,
         );
-      }
-    } catch (e) {
-      if (progressShown && context.mounted) Navigator.of(context).pop();
-      node.syncStatus = SyncStatus.error;
-      final errMsg = t.drive.syncError(error: e.toString());
-      if (registry.isBusy(localPath)) {
-        registry.endTransfer(
-          localPath,
-          driveId: node.driveId,
-          folderName: node.name,
+      },
+      onUnhandledError: (e) {
+        node.syncStatus = SyncStatus.error;
+        final errMsg = t.drive.syncError(error: e.toString());
+        return TrackedTransferOutcome(
           success: false,
-          completionTitle: errMsg,
-          errorMessage: '$e',
-          showOsNotification: true,
-        );
-        notifier.completeTransfer(
-          transferKey: transferKey,
           title: errMsg,
+          errorMessage: '$e',
           level: NotificationLevel.error,
         );
-      } else {
-        _notify(errMsg, NotificationLevel.error);
-      }
-    }
+      },
+    );
 
-    onStateChanged();
+    if (succeededResult != null) {
+      notifyMerge(
+        ref,
+        succeededResult!,
+        afterRestore: () async {
+          await _refreshAndNotify(ref, node);
+          onMapRefresh?.call();
+        },
+      );
+    }
   }
 
   /// 行単位マージの結果を通知する（手動の同期と自動同期で共通）
@@ -403,134 +371,8 @@ class DriveSyncOperations {
     WidgetRef ref,
     SyncResult result, {
     Future<void> Function()? afterRestore,
-  }) {
-    if (result.failedUploads.isNotEmpty) {
-      ref
-          .read(notificationCenterProvider.notifier)
-          .add(
-            title: t.drive.uploadFolderMissing(
-              count: result.failedUploads.length.toString(),
-            ),
-            detail: result.failedUploads.join('\n'),
-            level: NotificationLevel.warning,
-          );
-    }
-    if (result.failedMerges.isNotEmpty) {
-      ref
-          .read(notificationCenterProvider.notifier)
-          .add(
-            title: t.drive.mergeFailed(
-              count: result.failedMerges.length.toString(),
-            ),
-            detail: result.failedMerges.join('\n'),
-            level: NotificationLevel.warning,
-          );
-    }
-    if (result.mergedCount > 0) {
-      ref
-          .read(notificationCenterProvider.notifier)
-          .add(
-            title: t.drive.mergedFiles(count: result.mergedCount.toString()),
-            level: NotificationLevel.success,
-          );
-    }
-    if (result.settingConflicts.isNotEmpty) {
-      ref
-          .read(notificationCenterProvider.notifier)
-          .add(
-            title: t.drive.settingConflicts(
-              count: result.settingConflicts.length.toString(),
-            ),
-            detail: result.settingConflicts
-                .map(
-                  (c) =>
-                      '${c.dirPath == null ? '' : '${p.basename(c.dirPath!)}: '}${c.path}',
-                )
-                .join('\n'),
-            level: NotificationLevel.warning,
-            actionLabel: t.drive.restoreTheirs,
-            onAction: () async {
-              try {
-                final n = await ConflictRestorer.restoreSettings(
-                  result.settingConflicts,
-                );
-                await afterRestore?.call();
-                ref
-                    .read(notificationCenterProvider.notifier)
-                    .add(
-                      title: t.drive.restoredTheirs(count: n.toString()),
-                      level: NotificationLevel.success,
-                    );
-              } catch (e) {
-                ref
-                    .read(notificationCenterProvider.notifier)
-                    .add(
-                      title: t.drive.restoreTheirsFailed(error: '$e'),
-                      level: NotificationLevel.error,
-                    );
-              }
-            },
-          );
-    }
-    if (result.conflicts.isNotEmpty) {
-      ref
-          .read(notificationCenterProvider.notifier)
-          .add(
-            title: t.drive.mergeConflicts(
-              count: result.conflicts.length.toString(),
-            ),
-            detail: result.conflicts
-                .map(
-                  (c) => c.theirsDeleted
-                      ? t.drive.mergeConflictDeletedLine(
-                          table: c.table,
-                          fid: c.fid,
-                          mine: '${c.mine}',
-                        )
-                      : c.mineDeleted
-                      ? t.drive.mergeConflictMineDeletedLine(
-                          table: c.table,
-                          fid: c.fid,
-                          theirs: '${c.theirs}',
-                        )
-                      : t.drive.mergeConflictLine(
-                          table: c.table,
-                          fid: c.fid,
-                          theirs: '${c.theirs}',
-                          mine: '${c.mine}',
-                        ),
-                )
-                .join('\n'),
-            level: NotificationLevel.warning,
-            actionLabel: result.conflicts.any((c) => c.restorable)
-                ? t.drive.restoreTheirs
-                : null,
-            onAction: result.conflicts.any((c) => c.restorable)
-                ? () async {
-                    try {
-                      final n = await ConflictRestorer.restoreTheirs(
-                        result.conflicts,
-                      );
-                      await afterRestore?.call();
-                      ref
-                          .read(notificationCenterProvider.notifier)
-                          .add(
-                            title: t.drive.restoredTheirs(count: n.toString()),
-                            level: NotificationLevel.success,
-                          );
-                    } catch (e) {
-                      ref
-                          .read(notificationCenterProvider.notifier)
-                          .add(
-                            title: t.drive.restoreTheirsFailed(error: '$e'),
-                            level: NotificationLevel.error,
-                          );
-                    }
-                  }
-                : null,
-          );
-    }
-  }
+  }) =>
+      notifyMergeResult(ref, result, afterRestore: afterRestore);
 
   /// 共有フォルダセット（JSON）のリスト再取得＆差分同期を実行
   Future<void> syncFolderSet(
@@ -551,108 +393,62 @@ class DriveSyncOperations {
     }
 
     final notifier = ref.read(notificationCenterProvider.notifier);
-    final transferKey = DriveTransferRegistry.normalizeKey(localPath);
-
     node.syncStatus = SyncStatus.syncing;
     onStateChanged();
 
-    registry.beginTransfer(
-      localPath,
+    String? extraKeptWarning;
+    await runTrackedDriveTransfer(
+      localPath: localPath,
+      driveId: node.driveId,
       folderName: node.name,
-      showOsNotification: true,
-    );
-    notifier.startTransfer(
-      transferKey: transferKey,
-      title: t.drive.downloadingTitle(name: node.name),
-    );
-
-    try {
-      final result = await DriveFolderSetService().reconcileSet(
-        localSetPath: localPath,
-        manifestFileId: node.manifestFileId,
-        setNode: node,
-        showOsNotification: true,
-      );
-      if (result.success) {
-        final hasFailures = result.failedItems.isNotEmpty;
-        node.syncStatus = hasFailures ? SyncStatus.error : SyncStatus.synced;
-        await DriveFolderSetService.reloadFolderSetNode(node);
-        onMapRefresh?.call();
-        onStateChanged();
-
-        final hasChanges = result.addedCount > 0 || result.removedCount > 0;
-        final keptOnly = !hasChanges && !hasFailures && result.keptWithLocalChanges.isNotEmpty;
-        final doneMsg = hasFailures
-            ? t.drive.syncError(error: result.failedItems.join('、'))
-            : hasChanges
-                ? t.drive.folderSetUpdated(
-                    added: result.addedCount.toString(),
-                    removed: result.removedCount.toString(),
-                  )
-                : keptOnly
-                    ? t.drive.folderSetKeptLocalChanges(
-                        names: result.keptWithLocalChanges.join('、'),
-                      )
-                    : t.drive.noChanges;
-        registry.endTransfer(
-          localPath,
-          driveId: node.driveId,
-          folderName: node.name,
-          success: !hasFailures,
-          completionTitle: doneMsg,
+      notifier: notifier,
+      startTitle: t.drive.downloadingTitle(name: node.name),
+      action: () async {
+        final result = await DriveFolderSetService().reconcileSet(
+          localSetPath: localPath,
+          manifestFileId: node.manifestFileId,
+          setNode: node,
           showOsNotification: true,
         );
-        notifier.completeTransfer(
-          transferKey: transferKey,
-          title: doneMsg,
-          level: (hasFailures || keptOnly) ? NotificationLevel.warning : NotificationLevel.success,
-        );
-
-        if ((hasChanges || hasFailures) && result.keptWithLocalChanges.isNotEmpty) {
-          _notify(
-            t.drive.folderSetKeptLocalChanges(
-              names: result.keptWithLocalChanges.join('、'),
-            ),
-            NotificationLevel.warning,
+        if (result.success) {
+          final summary = formatFolderSetSyncSummary(result);
+          node.syncStatus = summary.success ? SyncStatus.synced : SyncStatus.error;
+          await DriveFolderSetService.reloadFolderSetNode(node);
+          onMapRefresh?.call();
+          onStateChanged();
+          extraKeptWarning = summary.extraKeptWarning;
+          return TrackedTransferOutcome(
+            success: summary.success,
+            title: summary.title,
+            level: summary.level,
           );
         }
-      } else {
+
         node.syncStatus = SyncStatus.error;
         onStateChanged();
         final errMsg = t.drive.syncError(error: result.errorMessage ?? '');
-        registry.endTransfer(
-          localPath,
-          driveId: node.driveId,
-          folderName: node.name,
+        return TrackedTransferOutcome(
           success: false,
-          completionTitle: errMsg,
-          errorMessage: result.errorMessage,
-          showOsNotification: true,
-        );
-        notifier.completeTransfer(
-          transferKey: transferKey,
           title: errMsg,
+          errorMessage: result.errorMessage,
           level: NotificationLevel.error,
         );
-      }
-    } catch (e) {
-      node.syncStatus = SyncStatus.error;
-      onStateChanged();
-      final errMsg = t.drive.syncError(error: '$e');
-      registry.endTransfer(
-        localPath,
-        driveId: node.driveId,
-        folderName: node.name,
-        success: false,
-        completionTitle: errMsg,
-        errorMessage: '$e',
-        showOsNotification: true,
-      );
-      notifier.completeTransfer(
-        transferKey: transferKey,
-        title: errMsg,
-        level: NotificationLevel.error,
-      );
+      },
+      onUnhandledError: (e) {
+        node.syncStatus = SyncStatus.error;
+        onStateChanged();
+        final errMsg = t.drive.syncError(error: '$e');
+        return TrackedTransferOutcome(
+          success: false,
+          title: errMsg,
+          errorMessage: '$e',
+          level: NotificationLevel.error,
+        );
+      },
+    );
+
+    if (extraKeptWarning != null) {
+      _notify(extraKeptWarning!, NotificationLevel.warning);
     }
   }
 
@@ -670,44 +466,7 @@ class DriveSyncOperations {
     );
     if (!confirmed) return;
 
-    final folderPath = node.getAbsoluteFilePath();
-    if (folderPath == null) return;
-
-    await KMetaService.instance.unlinkDrive(folderPath);
-
-    final parentNode = node.parent;
-    if (parentNode != null) {
-      final index = parentNode.children.indexOf(node);
-      if (index >= 0) {
-        // Global の下なら Global のサブフォルダとして置き直す
-        final globalBase = switch (parentNode) {
-          GlobalFolderNode() => parentNode.globalPath,
-          GlobalSubFolderNode() => parentNode.basePath,
-          _ => null,
-        };
-        final LayerTreeNode replacement = globalBase != null
-            ? GlobalSubFolderNode(
-                node.name,
-                basePath: globalBase,
-                visible: node.visible,
-                parent: parentNode,
-                children: [],
-              )
-            : FolderNode(
-                node.name,
-                visible: node.visible,
-                parent: parentNode,
-                children: [],
-              );
-        for (final child in node.children) {
-          child.parent = replacement;
-          replacement.children.add(child);
-        }
-        node.children.clear();
-        parentNode.children[index] = replacement;
-        node.parent = null;
-      }
-    }
+    if (!await unlinkDriveFolderNodeInTree(node)) return;
 
     onMapRefresh?.call();
     onStateChanged();
@@ -729,74 +488,10 @@ class DriveSyncOperations {
     );
     if (!confirmed) return;
 
-    final folderPath = node.getAbsoluteFilePath();
-    if (folderPath == null) return;
+    if (node.getAbsoluteFilePath() == null) return;
 
     try {
-      final parentNode = node.parent;
-      final parentSet = parentNode is DriveFolderSetNode ? parentNode : null;
-      final parentSetPath = parentSet?.getAbsoluteFilePath();
-
-      // DriveFolderSetNode を削除する場合、配下の参照メンバー一覧を先に控えておく
-      final descendantFolders = <DriveFolderNode>[];
-      if (node is DriveFolderSetNode) {
-        void collectDriveNodes(LayerTreeNode n) {
-          for (final c in n.children) {
-            if (c is DriveFolderNode) {
-              descendantFolders.add(c);
-            } else if (c is DriveFolderSetNode) {
-              collectDriveNodes(c);
-            }
-          }
-        }
-        collectDriveNodes(node);
-      }
-
-      await node.dispose();
-
-      if (parentSet != null && parentSetPath != null && node is DriveFolderNode) {
-        // 親セットの setMembers から除外
-        final setMeta = await KMetaService.instance.getMeta(parentSetPath);
-        final nextMembers = setMeta.sync.setMembers
-            .where((m) => m.driveId != node.driveId)
-            .toList();
-        await KMetaService.instance.setDriveSync(
-          parentSetPath,
-          setMembers: nextMembers,
-        );
-        await DriveDirStore.instance.deletePhysicalIfUnreferenced(
-          driveId: node.driveId,
-          targetPath: folderPath,
-          excludingSetPath: parentSetPath,
-          searchRoots: [p.dirname(parentSetPath)],
-        );
-      } else if (node is DriveFolderSetNode) {
-        if (await fs.isDirectory(folderPath)) {
-          await fs.delete(folderPath, recursive: true);
-        }
-        final searchRoot = p.dirname(folderPath);
-        for (final childDrive in descendantFolders) {
-          final childPath = childDrive.getAbsoluteFilePath();
-          if (childPath != null) {
-            await DriveDirStore.instance.deletePhysicalIfUnreferenced(
-              driveId: childDrive.driveId,
-              targetPath: childPath,
-              excludingSetPath: folderPath,
-              searchRoots: [searchRoot],
-            );
-          }
-        }
-      } else {
-        if (await fs.isDirectory(folderPath)) {
-          await fs.delete(folderPath, recursive: true);
-        }
-        if (node is DriveFolderNode) {
-          await DriveDirStore.instance.unregister(
-            node.driveId,
-            ifPathMatches: folderPath,
-          );
-        }
-      }
+      await deleteDriveFolderLocally(node);
       onMapRefresh?.call();
       onStateChanged();
 
@@ -873,23 +568,7 @@ class DriveSyncOperations {
       node.syncStatus = next;
     }
   }
-  /*
-      case FolderSyncStatus.synced:
-        break;
-        node.syncStatus = SyncStatus.synced;
-      case FolderSyncStatus.localChanges:
-        break;
-      case FolderSyncStatus.remoteChanges:
-        break;
-      case FolderSyncStatus.conflict:
-        break;
-      case FolderSyncStatus.notLinked:
-      case FolderSyncStatus.error:
-        node.syncStatus = SyncStatus.error;
-    }
-  }
 
-  */
   /// 同期で落としたあとの更新: ツリーを読み直し、QGIS で保存された `.qgs` が届いていれば読み戻す。
   ///
   /// 読み戻しは開いたときにしか走らなかったので、QGIS で直した `.qgs` が Drive 越しに届いても、
@@ -915,7 +594,10 @@ class DriveSyncOperations {
   }
 
   /// [refreshAfterSync] して、読み戻したら通知する（手動の同期）
-  static Future<void> _refreshAndNotify(WidgetRef ref, LayerTreeNode node) async {
+  static Future<void> _refreshAndNotify(
+    WidgetRef ref,
+    LayerTreeNode node,
+  ) async {
     final r = await refreshAfterSync(node);
     if (r != null) notifyQgsReadBack(ref, r);
   }

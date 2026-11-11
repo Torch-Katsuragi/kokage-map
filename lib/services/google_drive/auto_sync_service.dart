@@ -33,6 +33,7 @@ import '../projects_home.dart';
 import 'appdata_sync_service.dart';
 import 'drive_folder_set_service.dart';
 import 'drive_transfer_registry.dart';
+import 'drive_tree_nodes.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';
 import 'sync_snapshot.dart';
@@ -94,68 +95,8 @@ class AutoSyncService {
     this.onMerged = onMerged;
 
     unawaited(_transferCompletionSub?.cancel());
-    _transferCompletionSub = DriveTransferRegistry.instance.onTransferCompleted.listen((event) async {
-      try {
-        if (!event.success) {
-          onSyncStatusChanged?.call();
-          return;
-        }
-        final currentRoot = rootNode;
-        if (currentRoot == null) return;
-        final normTarget = DriveTransferRegistry.normalizeKey(event.localPath);
-        final existingFolders = _collectDriveFolders(currentRoot).where((n) {
-          final p = n.getAbsoluteFilePath();
-          return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
-        }).toList();
-        if (existingFolders.isNotEmpty) {
-          for (final node in existingFolders) {
-            node.syncStatus = SyncStatus.synced;
-          }
-          await onTreeRefreshNeeded?.call(existingFolders.first);
-          onSyncStatusChanged?.call();
-          return;
-        }
-
-        var existingSet = _collectDriveFolderSets(currentRoot).where((n) {
-          final p = n.getAbsoluteFilePath();
-          return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
-        }).firstOrNull;
-        if (existingSet != null && existingSet.children.isNotEmpty) {
-          existingSet.syncStatus = SyncStatus.synced;
-          onSyncStatusChanged?.call();
-          return;
-        }
-
-        await refreshSharedFolderTree();
-        existingSet = _collectDriveFolderSets(currentRoot).where((n) {
-          final p = n.getAbsoluteFilePath();
-          return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
-        }).firstOrNull;
-        if (existingSet != null) {
-          existingSet.syncStatus = SyncStatus.synced;
-          await DriveFolderSetService.reloadFolderSetNode(existingSet);
-          onSyncStatusChanged?.call();
-          return;
-        }
-        final added = _collectDriveFolders(currentRoot).where((n) {
-          final p = n.getAbsoluteFilePath();
-          return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
-        }).toList();
-        if (added.isNotEmpty) {
-          for (final node in added) {
-            node.syncStatus = SyncStatus.synced;
-          }
-          await onTreeRefreshNeeded?.call(added.first);
-          onSyncStatusChanged?.call();
-        }
-      } finally {
-        if (_pendingSyncAfterTransfer &&
-            DriveTransferRegistry.instance.activeCount.value == 0) {
-          _pendingSyncAfterTransfer = false;
-          unawaited(_runAutoSync());
-        }
-      }
-    });
+    _transferCompletionSub = DriveTransferRegistry.instance.onTransferCompleted
+        .listen(_handleTransferCompleted);
 
     final prefs = await SharedPreferences.getInstance();
     _enabled = prefs.getBool(kAutoSyncEnabledKey) ?? true;
@@ -167,6 +108,71 @@ class AutoSyncService {
 
     _listenConnectivity();
     AppLogger.debug('[AutoSync] Started');
+  }
+
+  Future<void> _handleTransferCompleted(
+    DriveTransferCompletionEvent event,
+  ) async {
+    try {
+      if (!event.success) {
+        onSyncStatusChanged?.call();
+        return;
+      }
+      final currentRoot = rootNode;
+      if (currentRoot == null) return;
+
+      final existingFolders = DriveTreeNodes.findDriveFoldersByPath(
+        currentRoot,
+        event.localPath,
+      );
+      if (existingFolders.isNotEmpty) {
+        for (final node in existingFolders) {
+          node.syncStatus = SyncStatus.synced;
+        }
+        await onTreeRefreshNeeded?.call(existingFolders.first);
+        onSyncStatusChanged?.call();
+        return;
+      }
+
+      var existingSet = DriveTreeNodes.findFolderSetByPath(
+        currentRoot,
+        event.localPath,
+      );
+      if (existingSet != null && existingSet.children.isNotEmpty) {
+        existingSet.syncStatus = SyncStatus.synced;
+        onSyncStatusChanged?.call();
+        return;
+      }
+
+      await refreshSharedFolderTree();
+      existingSet = DriveTreeNodes.findFolderSetByPath(
+        currentRoot,
+        event.localPath,
+      );
+      if (existingSet != null) {
+        existingSet.syncStatus = SyncStatus.synced;
+        await DriveFolderSetService.reloadFolderSetNode(existingSet);
+        onSyncStatusChanged?.call();
+        return;
+      }
+      final added = DriveTreeNodes.findDriveFoldersByPath(
+        currentRoot,
+        event.localPath,
+      );
+      if (added.isNotEmpty) {
+        for (final node in added) {
+          node.syncStatus = SyncStatus.synced;
+        }
+        await onTreeRefreshNeeded?.call(added.first);
+        onSyncStatusChanged?.call();
+      }
+    } finally {
+      if (_pendingSyncAfterTransfer &&
+          DriveTransferRegistry.instance.activeCount.value == 0) {
+        _pendingSyncAfterTransfer = false;
+        unawaited(_runAutoSync());
+      }
+    }
   }
 
   /// 設定変更時に呼ぶ
@@ -209,9 +215,8 @@ class AutoSyncService {
   /// 接続状態の監視
   void _listenConnectivity() {
     _connectivitySub?.cancel();
-    _connectivitySub = Connectivity()
-        .onConnectivityChanged
-        .listen(_onConnectivityChanged);
+    _connectivitySub =
+        Connectivity().onConnectivityChanged.listen(_onConnectivityChanged);
 
     // 初回チェック
     Connectivity().checkConnectivity().then(_onConnectivityChanged);
@@ -236,11 +241,11 @@ class AutoSyncService {
   void _startTimer() async {
     _timer?.cancel();
     final prefs = await SharedPreferences.getInstance();
-    final minutes = prefs.getInt(kAutoSyncIntervalKey) ?? kAutoSyncDefaultInterval;
+    final minutes =
+        prefs.getInt(kAutoSyncIntervalKey) ?? kAutoSyncDefaultInterval;
     _timer = Timer.periodic(Duration(minutes: minutes), (_) => _runAutoSync());
   }
 
-  /// メイン同期ロジック
   /// `共有/` フォルダのツリーを再読み込みする
   Future<void> refreshSharedFolderTree() async {
     final root = rootNode;
@@ -254,11 +259,34 @@ class AutoSyncService {
     onSyncStatusChanged?.call();
   }
 
+  bool _deferIfForegroundTransferActive([String? reasonLog]) {
+    if (DriveTransferRegistry.instance.activeCount.value <= 0) return false;
+    if (reasonLog != null) AppLogger.debug(reasonLog);
+    _pendingSyncAfterTransfer = true;
+    return true;
+  }
+
+  /// Drive認証確認（起動直後は main.dart の無音復元がまだ完了していないことがあるため、
+  /// initialize だけでなく restoreSessionSilently を待ってから判定する）
+  Future<bool> _ensureSilentDriveAuth() async {
+    final driveService = GoogleDriveService();
+    if (!driveService.isDriveApiAvailable) {
+      await driveService.restoreSessionSilently(userGesture: false);
+      if (!driveService.isDriveApiAvailable) {
+        AppLogger.debug('[AutoSync] Not authenticated, skipping');
+        return false;
+      }
+    } else {
+      await driveService.refreshToken();
+    }
+    return true;
+  }
+
   Future<void> _runAutoSync() async {
     if (!_enabled || !_isWifi || _isSyncing) return;
-    if (DriveTransferRegistry.instance.activeCount.value > 0) {
-      AppLogger.debug('[AutoSync] Foreground transfer active, deferring cycle');
-      _pendingSyncAfterTransfer = true;
+    if (_deferIfForegroundTransferActive(
+      '[AutoSync] Foreground transfer active, deferring cycle',
+    )) {
       return;
     }
     final root = rootNode;
@@ -268,23 +296,8 @@ class AutoSyncService {
     AppLogger.debug('[AutoSync] Sync cycle starting...');
 
     try {
-      // Drive認証確認（起動直後は main.dart の無音復元がまだ完了していないことがあるため、
-      // initialize だけでなく restoreSessionSilently を待ってから判定する）
-      final driveService = GoogleDriveService();
-      if (!driveService.isDriveApiAvailable) {
-        await driveService.restoreSessionSilently(userGesture: false);
-        if (!driveService.isDriveApiAvailable) {
-          AppLogger.debug('[AutoSync] Not authenticated, skipping');
-          return;
-        }
-      } else {
-        await driveService.refreshToken();
-      }
-
-      if (DriveTransferRegistry.instance.activeCount.value > 0) {
-        _pendingSyncAfterTransfer = true;
-        return;
-      }
+      if (!await _ensureSilentDriveAuth()) return;
+      if (_deferIfForegroundTransferActive()) return;
 
       // 端末間データ統合（AppData/kmap: 設定・共有リスト・前日以前のGPS履歴）
       try {
@@ -295,55 +308,8 @@ class AutoSyncService {
         AppLogger.debug('[AutoSync] AppData sync error: $e');
       }
 
-      // 子セット（親が DriveFolderSetNode のもの）は親セットの reconcileSet 内で再帰的に同期されるため、ルートセットのみ走査する
-      final folderSets = _collectDriveFolderSets(root)
-          .where((n) => n.parent is! DriveFolderSetNode);
-      for (final setNode in folderSets) {
-        if (!_isWifi) break;
-        if (DriveTransferRegistry.instance.activeCount.value > 0) {
-          _pendingSyncAfterTransfer = true;
-          break;
-        }
-        await _syncFolderSet(setNode);
-      }
-
-      final folders = _collectDriveFolders(root);
-      if (folders.isEmpty) return;
-
-      // 同一実体パス（DirectPathResolver で複数セットから参照マウントされているフォルダ）を重複排除
-      final nodesByNormPath = <String, List<DriveFolderNode>>{};
-      for (final node in folders) {
-        final localPath = node.getAbsoluteFilePath();
-        if (localPath == null) continue;
-        final key = DriveTransferRegistry.normalizeKey(localPath);
-        nodesByNormPath.putIfAbsent(key, () => <DriveFolderNode>[]).add(node);
-      }
-
-      AppLogger.debug(
-        '[AutoSync] Found ${nodesByNormPath.length} unique Drive folder(s) (${folders.length} node(s))',
-      );
-      final syncEngine = SyncEngine();
-
-      for (final group in nodesByNormPath.values) {
-        if (!_isWifi) {
-          AppLogger.debug('[AutoSync] WiFi lost mid-sync, aborting');
-          break;
-        }
-        if (DriveTransferRegistry.instance.activeCount.value > 0) {
-          AppLogger.debug('[AutoSync] Foreground transfer started, deferring remaining');
-          _pendingSyncAfterTransfer = true;
-          break;
-        }
-        final primary = group.first;
-        for (var i = 1; i < group.length; i++) {
-          group[i].syncStatus = SyncStatus.syncing;
-        }
-        await _syncFolder(syncEngine, primary);
-        for (var i = 1; i < group.length; i++) {
-          group[i].syncStatus = primary.syncStatus;
-        }
-        onSyncStatusChanged?.call();
-      }
+      await _syncRootFolderSets(root);
+      await _syncUniqueDriveFolders(root);
     } catch (e) {
       AppLogger.debug('[AutoSync] Cycle error: $e');
     } finally {
@@ -352,9 +318,61 @@ class AutoSyncService {
     }
   }
 
+  Future<void> _syncRootFolderSets(LayerTreeNode root) async {
+    // 子セット（親が DriveFolderSetNode のもの）は親セットの reconcileSet 内で再帰的に同期されるため、ルートセットのみ走査する
+    final folderSets = DriveTreeNodes.collectFolderSets(root)
+        .where((n) => n.parent is! DriveFolderSetNode);
+    for (final setNode in folderSets) {
+      if (!_isWifi) break;
+      if (_deferIfForegroundTransferActive()) break;
+      await _syncFolderSet(setNode);
+    }
+  }
+
+  Future<void> _syncUniqueDriveFolders(LayerTreeNode root) async {
+    final folders = DriveTreeNodes.collectDriveFolders(root);
+    if (folders.isEmpty) return;
+
+    // 同一実体パス（DirectPathResolver で複数セットから参照マウントされているフォルダ）を重複排除
+    final nodesByNormPath = <String, List<DriveFolderNode>>{};
+    for (final node in folders) {
+      final localPath = node.getAbsoluteFilePath();
+      if (localPath == null) continue;
+      final key = DriveTransferRegistry.normalizeKey(localPath);
+      nodesByNormPath.putIfAbsent(key, () => <DriveFolderNode>[]).add(node);
+    }
+
+    AppLogger.debug(
+      '[AutoSync] Found ${nodesByNormPath.length} unique Drive folder(s) (${folders.length} node(s))',
+    );
+    final syncEngine = SyncEngine();
+
+    for (final group in nodesByNormPath.values) {
+      if (!_isWifi) {
+        AppLogger.debug('[AutoSync] WiFi lost mid-sync, aborting');
+        break;
+      }
+      if (_deferIfForegroundTransferActive(
+        '[AutoSync] Foreground transfer started, deferring remaining',
+      )) {
+        break;
+      }
+      final primary = group.first;
+      for (var i = 1; i < group.length; i++) {
+        group[i].syncStatus = SyncStatus.syncing;
+      }
+      await _syncFolder(syncEngine, primary);
+      for (var i = 1; i < group.length; i++) {
+        group[i].syncStatus = primary.syncStatus;
+      }
+      onSyncStatusChanged?.call();
+    }
+  }
+
   /// テスト用: 1 フォルダ分の自動同期
   @visibleForTesting
-  Future<void> syncFolderForTest(SyncEngine engine, DriveFolderNode node) => _syncFolder(engine, node);
+  Future<void> syncFolderForTest(SyncEngine engine, DriveFolderNode node) =>
+      _syncFolder(engine, node);
 
   /// 個別フォルダの同期
   Future<void> _syncFolder(SyncEngine engine, DriveFolderNode node) async {
@@ -389,10 +407,12 @@ class AutoSyncService {
           }
           node.syncStatus = SyncStatus.syncing;
           onSyncStatusChanged?.call();
-          final result = await engine.pushFolder(localPath, snapshot: detail.snapshot);
-          node.syncStatus = result.success
-              ? SyncStatus.synced
-              : SyncStatus.error;
+          final result = await engine.pushFolder(
+            localPath,
+            snapshot: detail.snapshot,
+          );
+          node.syncStatus =
+              result.success ? SyncStatus.synced : SyncStatus.error;
           if (result.success) {
             AppLogger.debug(
               '[AutoSync] ${node.name}: pushed ${result.uploadedCount} file(s)',
@@ -406,10 +426,12 @@ class AutoSyncService {
         case FolderSyncStatus.remoteChanges:
           node.syncStatus = SyncStatus.syncing;
           onSyncStatusChanged?.call();
-          final result = await engine.pullFolder(localPath, snapshot: detail.snapshot);
-          node.syncStatus = result.success
-              ? SyncStatus.synced
-              : SyncStatus.error;
+          final result = await engine.pullFolder(
+            localPath,
+            snapshot: detail.snapshot,
+          );
+          node.syncStatus =
+              result.success ? SyncStatus.synced : SyncStatus.error;
           if (result.success) {
             AppLogger.debug(
               '[AutoSync] ${node.name}: pulled ${result.downloadedCount} file(s) '
@@ -439,17 +461,84 @@ class AutoSyncService {
     onSyncStatusChanged?.call();
   }
 
-  /// フォルダレベルconflict時のファイル単位マージ
-  ///
   /// [relativePath] が `.qgs` で、同じ dir にまだ別の `.qgs`（付け替え後の名前）があるか
-  static Future<bool> _isRenamedProjectFile(String localPath, String relativePath) async {
+  static Future<bool> _isRenamedProjectFile(
+    String localPath,
+    String relativePath,
+  ) async {
     if (!relativePath.toLowerCase().endsWith('.qgs')) return false;
     final dir = p.join(localPath, p.dirname(relativePath));
     try {
-      return (await fs.list(dir)).any((e) => !e.isDirectory && e.path.toLowerCase().endsWith('.qgs'));
+      return (await fs.list(dir)).any(
+        (e) => !e.isDirectory && e.path.toLowerCase().endsWith('.qgs'),
+      );
     } on Object {
       return false;
     }
+  }
+
+  /// ファイル単位の差分一覧から自動マージ可能な [MergeDecision] と残存衝突有無を計画する
+  @visibleForTesting
+  static Future<({
+    List<MergeDecision> decisions,
+    bool hasRealConflict,
+    bool needsTreeRefresh,
+  })> planAutoMergeDecisions({
+    required List<MergeFileEntry> entries,
+    required String localPath,
+    required Map<String, DateTime?> failedMergeAt,
+    Future<bool> Function(String localPath, String relativePath)?
+        isRenamedProjectFile,
+  }) async {
+    final checkRenamed = isRenamedProjectFile ?? _isRenamedProjectFile;
+    final autoDecisions = <MergeDecision>[];
+    var hasRealConflict = false;
+    var needsTreeRefresh = false;
+
+    for (final entry in entries) {
+      if (entry.isConflict) {
+        final failedKey = '$localPath/${entry.relativePath}';
+        if (entry.mergeable &&
+            failedMergeAt.containsKey(failedKey) &&
+            failedMergeAt[failedKey] == entry.remoteModifiedTime) {
+          // この版は前に合わせられなかった → ユーザーに委ねる
+          hasRealConflict = true;
+          continue;
+        }
+        if (entry.mergeable) {
+          // 同じ gpkg を両方で変更 → 行単位で合わせる（base があるときだけ）
+          autoDecisions
+              .add(MergeDecision(entry: entry, choice: MergeChoice.merge));
+          needsTreeRefresh = true;
+          continue;
+        }
+        // 同一ファイルが両方で変更 → ユーザーに委ねる
+        hasRealConflict = true;
+        continue;
+      }
+
+      // ローカル削除は自動pushしない。ただし `.qgs` の名前の付け替え（同じ dir にまだ `.qgs` がある）は、
+      // 古い名前を Drive に残すと相手の端末に散らかるので消す
+      if (entry.localChange == MergeChangeType.deleted &&
+          !await checkRenamed(localPath, entry.relativePath)) {
+        continue;
+      }
+
+      if (entry.localChange != MergeChangeType.none) {
+        autoDecisions
+            .add(MergeDecision(entry: entry, choice: MergeChoice.local));
+      } else if (entry.remoteChange != MergeChangeType.none) {
+        autoDecisions
+            .add(MergeDecision(entry: entry, choice: MergeChoice.remote));
+        needsTreeRefresh = true;
+      }
+    }
+
+    return (
+      decisions: autoDecisions,
+      hasRealConflict: hasRealConflict,
+      needsTreeRefresh: needsTreeRefresh,
+    );
   }
 
   /// 同一ファイルが両方で変更された場合のみユーザーに委ね、
@@ -468,56 +557,35 @@ class AutoSyncService {
       return;
     }
 
-    final autoDecisions = <MergeDecision>[];
-    bool hasRealConflict = false;
-    bool needsTreeRefresh = false;
-
-    for (final entry in entries) {
-      if (entry.isConflict) {
-        final failedKey = '$localPath/${entry.relativePath}';
-        if (entry.mergeable &&
-            _failedMergeAt.containsKey(failedKey) &&
-            _failedMergeAt[failedKey] == entry.remoteModifiedTime) {
-          // この版は前に合わせられなかった → ユーザーに委ねる
-          hasRealConflict = true;
-          continue;
-        }
-        if (entry.mergeable) {
-          // 同じ gpkg を両方で変更 → 行単位で合わせる（base があるときだけ）
-          autoDecisions.add(MergeDecision(entry: entry, choice: MergeChoice.merge));
-          needsTreeRefresh = true;
-          continue;
-        }
-        // 同一ファイルが両方で変更 → ユーザーに委ねる
-        hasRealConflict = true;
-        continue;
-      }
-      // ローカル削除は自動pushしない。ただし `.qgs` の名前の付け替え（同じ dir にまだ `.qgs` がある）は、
-      // 古い名前を Drive に残すと相手の端末に散らかるので消す
-      if (entry.localChange == MergeChangeType.deleted && !await _isRenamedProjectFile(localPath, entry.relativePath)) continue;
-
-      if (entry.localChange != MergeChangeType.none) {
-        autoDecisions.add(MergeDecision(entry: entry, choice: MergeChoice.local));
-      } else if (entry.remoteChange != MergeChangeType.none) {
-        autoDecisions.add(MergeDecision(entry: entry, choice: MergeChoice.remote));
-        needsTreeRefresh = true;
-      }
-    }
+    final plan = await planAutoMergeDecisions(
+      entries: entries,
+      localPath: localPath,
+      failedMergeAt: _failedMergeAt,
+    );
+    var hasRealConflict = plan.hasRealConflict;
 
     // 自動マージ可能なエントリを実行
-    if (autoDecisions.isNotEmpty) {
+    if (plan.decisions.isNotEmpty) {
       node.syncStatus = SyncStatus.syncing;
       onSyncStatusChanged?.call();
-      final result = await engine.executeMerge(localPath, autoDecisions, snapshot: snapshot);
+      final result = await engine.executeMerge(
+        localPath,
+        plan.decisions,
+        snapshot: snapshot,
+      );
       if (result.success) {
         AppLogger.debug(
-          '[AutoSync] ${node.name}: auto-merged ${autoDecisions.length} file(s) '
+          '[AutoSync] ${node.name}: auto-merged ${plan.decisions.length} file(s) '
           '(↑${result.uploadedCount} ↓${result.downloadedCount} ⇄${result.mergedCount})',
         );
         if (result.conflicts.isNotEmpty) {
-          AppLogger.debug('[AutoSync] ${node.name}: 行の衝突 ${result.conflicts.length} 件（この端末の値を残した）: ${result.conflicts}');
+          AppLogger.debug(
+            '[AutoSync] ${node.name}: 行の衝突 ${result.conflicts.length} 件（この端末の値を残した）: ${result.conflicts}',
+          );
         }
-        if (result.mergedCount > 0 || result.failedMerges.isNotEmpty || result.failedUploads.isNotEmpty) {
+        if (result.mergedCount > 0 ||
+            result.failedMerges.isNotEmpty ||
+            result.failedUploads.isNotEmpty) {
           onMerged?.call(node, result);
         }
         // 置き場所が見つからず上げられなかったものは、次の周期でもう一度（状態は衝突として人の目に入れる）
@@ -525,15 +593,23 @@ class AutoSyncService {
         if (result.failedMerges.isNotEmpty) {
           hasRealConflict = true;
           for (final path in result.failedMerges) {
-            final e = autoDecisions.map((d) => d.entry).firstWhere((x) => x.relativePath == path);
+            final e = plan.decisions
+                .map((d) => d.entry)
+                .firstWhere((x) => x.relativePath == path);
             _failedMergeAt['$localPath/$path'] = e.remoteModifiedTime;
           }
-          AppLogger.debug('[AutoSync] ${node.name}: 行単位で合わせられなかった ${result.failedMerges}');
+          AppLogger.debug(
+            '[AutoSync] ${node.name}: 行単位で合わせられなかった ${result.failedMerges}',
+          );
         }
-        if (needsTreeRefresh && result.changedLocal) await onTreeRefreshNeeded?.call(node);
+        if (plan.needsTreeRefresh && result.changedLocal) {
+          await onTreeRefreshNeeded?.call(node);
+        }
       } else {
         // 以前は失敗しても下で「同期済み」にしていた
-        AppLogger.debug('[AutoSync] ${node.name}: auto-merge failed - ${result.errorMessage}');
+        AppLogger.debug(
+          '[AutoSync] ${node.name}: auto-merge failed - ${result.errorMessage}',
+        );
         node.syncStatus = SyncStatus.error;
         return;
       }
@@ -587,30 +663,6 @@ class AutoSyncService {
   DriveFolderSetNode? findFolderSetByPath(String localPath) {
     final currentRoot = rootNode;
     if (currentRoot == null) return null;
-    final normTarget = DriveTransferRegistry.normalizeKey(localPath);
-    return _collectDriveFolderSets(currentRoot).where((n) {
-      final p = n.getAbsoluteFilePath();
-      return p != null && DriveTransferRegistry.normalizeKey(p) == normTarget;
-    }).firstOrNull;
-  }
-
-  /// ツリーからDriveFolderSetNodeを再帰収集
-  List<DriveFolderSetNode> _collectDriveFolderSets(LayerTreeNode node) {
-    final result = <DriveFolderSetNode>[];
-    if (node is DriveFolderSetNode) result.add(node);
-    for (final child in node.children) {
-      result.addAll(_collectDriveFolderSets(child));
-    }
-    return result;
-  }
-
-  /// ツリーからDriveFolderNodeを再帰収集
-  List<DriveFolderNode> _collectDriveFolders(LayerTreeNode node) {
-    final result = <DriveFolderNode>[];
-    if (node is DriveFolderNode) result.add(node);
-    for (final child in node.children) {
-      result.addAll(_collectDriveFolders(child));
-    }
-    return result;
+    return DriveTreeNodes.findFolderSetByPath(currentRoot, localPath);
   }
 }

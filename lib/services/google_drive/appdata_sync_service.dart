@@ -31,38 +31,15 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/platform_capabilities.dart';
-import '../../models/track_recording_settings.dart';
 import '../../utils/app_logger.dart';
-import '../basemap_service.dart';
 import '../gps_history_recorder.dart';
 import '../shared_map_link.dart';
+import 'appdata_merge_models.dart';
 import 'auto_sync_service.dart';
 import 'google_drive_service.dart';
 
-/// 端末間統合の有効/無効設定キー（既定は false: オプトイン）
-const String kAppDataSyncEnabledKey = 'appdata_sync_enabled';
-
-/// 最終同期日時（ISO-8601）
-const String kAppDataSyncLastSyncedKey = 'appdata_sync_last_synced';
-
-/// 1回の統合結果
-class AppDataSyncResult {
-  final bool success;
-  final int importedGpsDays;
-  final int exportedGpsDays;
-  final int clonedSharedFolders;
-  final bool updatedSettings;
-  final String? errorMessage;
-
-  const AppDataSyncResult({
-    required this.success,
-    this.importedGpsDays = 0,
-    this.exportedGpsDays = 0,
-    this.clonedSharedFolders = 0,
-    this.updatedSettings = false,
-    this.errorMessage,
-  });
-}
+export 'appdata_merge_models.dart'
+    show kAppDataSyncEnabledKey, kAppDataSyncLastSyncedKey, AppDataSyncResult;
 
 class AppDataSyncService extends ChangeNotifier {
   static final AppDataSyncService instance = AppDataSyncService._();
@@ -85,25 +62,12 @@ class AppDataSyncService extends ChangeNotifier {
   static const String _kLastGpsSyncDateKey = 'appdata_sync_last_gps_date';
 
   /// 端末間で同期する SharedPreferences キーの Allowlist（端末固有のパスやUIスケール・レイアウトは除外）
-  static const List<String> portableSettingKeys = [
-    'track_recording_settings',
-    'gnss_quality_gate',
-    BaseMapService.customProvidersPrefsKey,
-    'basemap_layers',
-    'basemap_provider_id',
-    'app_locale',
-  ];
+  static const List<String> portableSettingKeys = kAppDataPortableSettingKeys;
 
   Future<AppDataSyncResult>? _activeSyncFuture;
   bool get isSyncing => _activeSyncFuture != null;
 
   /// 設定の3-wayマージ（純粋関数）
-  ///
-  /// - 初回同期（`base` が空）で `remote` が既に存在する場合:
-  ///   既存のリモート設定を優先して取り込み、リモートに未設定でローカルにのみ存在するキーだけを追加アップロードする。
-  /// - 2回目以降:
-  ///   - `local != base`: この端末で前回同期後に変更された → `local` を採用しリモートへ送る
-  ///   - `remote != base`: 他端末で変更された → `remote` を採用しローカルへ反映する
   @visibleForTesting
   static ({
     Map<String, Object?> merged,
@@ -113,63 +77,10 @@ class AppDataSyncService extends ChangeNotifier {
     required Map<String, Object?> local,
     required Map<String, Object?> base,
     required Map<String, Object?>? remote,
-  }) {
-    if (remote == null) {
-      return (
-        merged: Map<String, Object?>.of(local),
-        toApplyLocally: const {},
-        shouldUpload: local.isNotEmpty,
-      );
-    }
-
-    final merged = <String, Object?>{};
-    final toApplyLocally = <String, Object?>{};
-    var shouldUpload = false;
-    final isInitialJoin = base.isEmpty && remote.isNotEmpty;
-
-    for (final key in portableSettingKeys) {
-      final l = local[key];
-      final b = base[key];
-      final r = remote[key];
-
-      if (isInitialJoin) {
-        if (r != null) {
-          merged[key] = r;
-          if (r != l) {
-            toApplyLocally[key] = r;
-          }
-        } else if (l != null) {
-          merged[key] = l;
-          shouldUpload = true;
-        }
-        continue;
-      }
-
-      if (l != b) {
-        // ローカルで変更あり
-        if (l != null) merged[key] = l;
-        if (l != r) shouldUpload = true;
-      } else if (r != b) {
-        // リモートで変更あり
-        if (r != null) merged[key] = r;
-        toApplyLocally[key] = r;
-      } else {
-        if (l != null) merged[key] = l;
-      }
-    }
-
-    return (
-      merged: merged,
-      toApplyLocally: toApplyLocally,
-      shouldUpload: shouldUpload,
-    );
-  }
+  }) =>
+      mergeAppDataSettings3Way(local: local, base: base, remote: remote);
 
   /// 共有フォルダURLリストの3-wayマージ（純粋関数）
-  ///
-  /// - ローカルで新規追加（`in local && not in base`）→ `merged` に追加してアップロード
-  /// - ローカルで削除（`not in local && in base`）→ `merged` から外してアップロード（再クローンしない）
-  /// - リモートで新規追加（`in remote && not in base && not in local`）→ クローン対象（`toClone`）に追加
   @visibleForTesting
   static ({
     Map<String, SharedMapEntry> merged,
@@ -179,66 +90,12 @@ class AppDataSyncService extends ChangeNotifier {
     required Map<String, SharedMapEntry> local,
     required Set<String> baseIds,
     required Map<String, SharedMapEntry>? remote,
-  }) {
-    if (remote == null) {
-      return (
-        merged: Map<String, SharedMapEntry>.of(local),
-        toClone: const [],
-        shouldUpload: local.isNotEmpty,
+  }) =>
+      mergeAppDataSharedFolders3Way(
+        local: local,
+        baseIds: baseIds,
+        remote: remote,
       );
-    }
-
-    final merged = Map<String, SharedMapEntry>.of(remote);
-    final toClone = <SharedMapEntry>[];
-    var shouldUpload = false;
-
-    // 1. ローカルで新規追加されたフォルダ（または読み取り専用属性の変更）
-    // ※ クローン時の同名衝突サフィックス（" 2" 等）によるピンポンを防ぐため folderName 差分では再アップロードしない
-    for (final entry in local.values) {
-      final id = entry.driveId;
-      if (!remote.containsKey(id)) {
-        if (!baseIds.contains(id)) {
-          // この端末で新しく追加された共有フォルダ
-          merged[id] = entry;
-          shouldUpload = true;
-        }
-        // baseIds にあるのに remote に無い場合は、他端末でリストから外されたものなので再アップロードしない
-      } else {
-        final r = remote[id]!;
-        if (r.isReadOnly != entry.isReadOnly) {
-          merged[id] = SharedMapEntry(
-            driveId: r.driveId,
-            folderName: r.folderName,
-            driveUrl: r.driveUrl,
-            isReadOnly: entry.isReadOnly,
-          isFolderSet: entry.isFolderSet,
-          );
-          shouldUpload = true;
-        }
-      }
-    }
-
-    // 2. この端末で削除されたフォルダ（base にあったが local に無い）
-    for (final baseId in baseIds) {
-      if (!local.containsKey(baseId) && merged.containsKey(baseId)) {
-        merged.remove(baseId);
-        shouldUpload = true;
-      }
-    }
-
-    // 3. 他端末で追加され、この端末にまだ無いフォルダ
-    for (final entry in merged.values) {
-      if (!local.containsKey(entry.driveId) && !baseIds.contains(entry.driveId)) {
-        toClone.add(entry);
-      }
-    }
-
-    return (
-      merged: merged,
-      toClone: toClone,
-      shouldUpload: shouldUpload,
-    );
-  }
 
   /// オプトイン設定が有効かどうか
   Future<bool> isEnabled() async {
@@ -310,18 +167,7 @@ class AppDataSyncService extends ChangeNotifier {
       }
 
       final prefs = await SharedPreferences.getInstance();
-      final currentEmail = driveService.authState.user?.email ?? '';
-      final lastEmail = prefs.getString(_kLastSyncedEmailKey);
-      if (currentEmail.isNotEmpty && lastEmail != null && lastEmail != currentEmail) {
-        // アカウントが切り替わった場合は base 帳簿をリセット
-        await prefs.remove(_kBaseSettingsKey);
-        await prefs.remove(_kBaseSharedIdsKey);
-        await prefs.remove(_kRemoteGpsMd5Key);
-        await prefs.remove(_kLastGpsSyncDateKey);
-      }
-      if (currentEmail.isNotEmpty) {
-        await prefs.setString(_kLastSyncedEmailKey, currentEmail);
-      }
+      await _resetBaseLedgerIfAccountSwitched(prefs, driveService);
 
       // 1. マイドライブ直下の AppData/kmap フォルダを取得または作成
       final kmapFolderId = await _resolveKmapFolderId(driveService);
@@ -334,8 +180,7 @@ class AppDataSyncService extends ChangeNotifier {
 
       final files = await driveService.listFiles(kmapFolderId);
       final remoteByName = <String, drive.File>{
-        for (final f in files)
-          if (f.name != null) f.name!: f,
+        for (final f in files) ?f.name: f,
       };
 
       // 2. 設定（settings.json）の同期
@@ -356,14 +201,16 @@ class AppDataSyncService extends ChangeNotifier {
           remoteByName[kSharedFoldersFileName],
         );
         if (clonedFolders > 0) {
-          await (onSharedFoldersChanged ?? AutoSyncService.instance.refreshSharedFolderTree)();
+          await (onSharedFoldersChanged ??
+              AutoSyncService.instance.refreshSharedFolderTree)();
         }
       }
 
       // 4. 前日以前の GPS 履歴（gps_history.gpkg）の統合
       var importedDays = 0;
       var exportedDays = 0;
-      if (PlatformCapabilities.hasLocalFileSystem && GpsHistoryRecorder().isInitialized) {
+      if (PlatformCapabilities.hasLocalFileSystem &&
+          GpsHistoryRecorder().isInitialized) {
         final gpsRes = await _syncGpsHistory(
           driveService,
           prefs,
@@ -401,11 +248,33 @@ class AppDataSyncService extends ChangeNotifier {
     }
   }
 
+  Future<void> _resetBaseLedgerIfAccountSwitched(
+    SharedPreferences prefs,
+    GoogleDriveService driveService,
+  ) async {
+    final currentEmail = driveService.authState.user?.email ?? '';
+    final lastEmail = prefs.getString(_kLastSyncedEmailKey);
+    if (currentEmail.isNotEmpty &&
+        lastEmail != null &&
+        lastEmail != currentEmail) {
+      // アカウントが切り替わった場合は base 帳簿をリセット
+      await prefs.remove(_kBaseSettingsKey);
+      await prefs.remove(_kBaseSharedIdsKey);
+      await prefs.remove(_kRemoteGpsMd5Key);
+      await prefs.remove(_kLastGpsSyncDateKey);
+    }
+    if (currentEmail.isNotEmpty) {
+      await prefs.setString(_kLastSyncedEmailKey, currentEmail);
+    }
+  }
+
   Future<String?> _resolveKmapFolderId(GoogleDriveService driveService) async {
-    final appData = await driveService.getOrCreateSubFolder('root', kRootFolderName);
+    final appData =
+        await driveService.getOrCreateSubFolder('root', kRootFolderName);
     final appDataId = appData?.id;
     if (appDataId == null || appDataId.isEmpty) return null;
-    final kmap = await driveService.getOrCreateSubFolder(appDataId, kSubFolderName);
+    final kmap =
+        await driveService.getOrCreateSubFolder(appDataId, kSubFolderName);
     return kmap?.id;
   }
 
@@ -415,88 +284,37 @@ class AppDataSyncService extends ChangeNotifier {
     String folderId,
     drive.File? remoteFile,
   ) async {
-    // ローカルの現在値
-    final localMap = <String, Object?>{};
-    for (final k in portableSettingKeys) {
-      final v = prefs.get(k);
-      if (v != null) localMap[k] = v;
-    }
+    final localMap = <String, Object?>{
+      for (final k in portableSettingKeys) k: ?prefs.get(k),
+    };
 
-    // 前回同期時の base 値
     final baseRaw = prefs.getString(_kBaseSettingsKey);
     final baseMap = baseRaw != null
         ? Map<String, Object?>.from(jsonDecode(baseRaw) as Map)
         : <String, Object?>{};
 
-    // リモート値（remoteFile が存在するのにダウンロード・解析に失敗した場合は上書き防止のため中断）
-    Map<String, Object?>? remoteMap;
-    if (remoteFile?.id != null) {
-      final bytes = await driveService.downloadBytes(remoteFile!.id!);
-      if (bytes == null) {
-        AppLogger.debug('$_logTag settings.json のダウンロードに失敗したため設定同期をスキップ');
-        return false;
-      }
-      try {
-        final decoded = jsonDecode(utf8.decode(bytes));
-        if (decoded is Map) {
-          remoteMap = Map<String, Object?>.from(decoded);
-        } else {
-          AppLogger.debug('$_logTag settings.json の形式が不正なため設定同期をスキップ');
-          return false;
-        }
-      } catch (e) {
-        AppLogger.debug('$_logTag settings.json の解析失敗のため設定同期をスキップ: $e');
-        return false;
-      }
-    }
+    final downloaded = await downloadAppDataJsonMap(
+      driveService,
+      remoteFile,
+      fileLabel: kSettingsFileName,
+      logTag: _logTag,
+    );
+    if (!downloaded.ok) return false;
 
     final res = mergeSettings3Way(
       local: localMap,
       base: baseMap,
-      remote: remoteMap,
+      remote: downloaded.map,
     );
 
-    // リモート変更分をローカルの SharedPreferences に適用
-    for (final entry in res.toApplyLocally.entries) {
-      final k = entry.key;
-      final v = entry.value;
-      if (v == null) {
-        await prefs.remove(k);
-      } else if (v is String) {
-        await prefs.setString(k, v);
-      } else if (v is int) {
-        await prefs.setInt(k, v);
-      } else if (v is double) {
-        await prefs.setDouble(k, v);
-      } else if (v is bool) {
-        await prefs.setBool(k, v);
-      }
-    }
-
-    if (res.toApplyLocally['track_recording_settings'] case final String rawTrackJson) {
-      try {
-        GpsHistoryRecorder().filter.settings = TrackRecordingSettings.fromJson(
-          jsonDecode(rawTrackJson) as Map,
-        );
-      } catch (_) {}
-    }
-
-    if (res.toApplyLocally.containsKey(BaseMapService.customProvidersPrefsKey) ||
-        res.toApplyLocally.containsKey('basemap_layers') ||
-        res.toApplyLocally.containsKey('basemap_provider_id')) {
-      try {
-        await BaseMapService().reloadSettingsFromPrefs();
-      } catch (_) {}
-    }
+    await applyPortableSettingsLocally(prefs, res.toApplyLocally);
 
     if (res.shouldUpload) {
-      final encoded = utf8.encode(
-        const JsonEncoder.withIndent('  ').convert(res.merged),
-      );
-      final uploaded = await driveService.uploadBytes(
-        Uint8List.fromList(encoded),
-        kSettingsFileName,
-        folderId,
+      final uploaded = await uploadAppDataPrettyJson(
+        driveService,
+        payload: res.merged,
+        fileName: kSettingsFileName,
+        folderId: folderId,
       );
       if (uploaded == null) {
         AppLogger.debug('$_logTag settings.json のアップロードに失敗したため base 更新を保留');
@@ -516,30 +334,36 @@ class AppDataSyncService extends ChangeNotifier {
   ) async {
     final localList = await listLocalSharedMaps();
     final localMap = {for (final e in localList) e.driveId: e};
-    final baseIds = (prefs.getStringList(_kBaseSharedIdsKey) ?? const <String>[]).toSet();
+    final baseIds =
+        (prefs.getStringList(_kBaseSharedIdsKey) ?? const <String>[]).toSet();
 
-    // remoteFile が存在するのにダウンロード・解析に失敗した場合は誤削除防止のため中断
+    final downloaded = await downloadAppDataJsonMap(
+      driveService,
+      remoteFile,
+      fileLabel: kSharedFoldersFileName,
+      logTag: _logTag,
+    );
+    if (!downloaded.ok) return 0;
+
     Map<String, SharedMapEntry>? remoteMap;
-    if (remoteFile?.id != null) {
-      final bytes = await driveService.downloadBytes(remoteFile!.id!);
-      if (bytes == null) {
-        AppLogger.debug('$_logTag shared_folders.json のダウンロードに失敗したため共有リスト同期をスキップ');
+    if (downloaded.map != null) {
+      final rawFolders = downloaded.map!['folders'];
+      if (rawFolders is! List) {
+        AppLogger.debug(
+          '$_logTag shared_folders.json の形式が不正なため共有リスト同期をスキップ',
+        );
         return 0;
       }
       try {
-        final decoded = jsonDecode(utf8.decode(bytes));
-        if (decoded is Map && decoded['folders'] is List) {
-          remoteMap = {
-            for (final item in (decoded['folders'] as List).whereType<Map<String, dynamic>>())
-              if ((item['driveId'] as String?)?.isNotEmpty ?? false)
-                item['driveId'] as String: SharedMapEntry.fromJson(item),
-          };
-        } else {
-          AppLogger.debug('$_logTag shared_folders.json の形式が不正なため共有リスト同期をスキップ');
-          return 0;
-        }
+        remoteMap = {
+          for (final item in rawFolders.whereType<Map<String, dynamic>>())
+            if ((item['driveId'] as String?)?.isNotEmpty ?? false)
+              item['driveId'] as String: SharedMapEntry.fromJson(item),
+        };
       } catch (e) {
-        AppLogger.debug('$_logTag shared_folders.json の解析失敗のため共有リスト同期をスキップ: $e');
+        AppLogger.debug(
+          '$_logTag shared_folders.json の解析失敗のため共有リスト同期をスキップ: $e',
+        );
         return 0;
       }
     }
@@ -567,17 +391,14 @@ class AppDataSyncService extends ChangeNotifier {
     }
 
     if (res.shouldUpload) {
-      final payload = {
-        'v': 1,
-        'folders': [for (final e in res.merged.values) e.toJson()],
-      };
-      final encoded = utf8.encode(
-        const JsonEncoder.withIndent('  ').convert(payload),
-      );
-      final uploaded = await driveService.uploadBytes(
-        Uint8List.fromList(encoded),
-        kSharedFoldersFileName,
-        folderId,
+      final uploaded = await uploadAppDataPrettyJson(
+        driveService,
+        payload: {
+          'v': 1,
+          'folders': [for (final e in res.merged.values) e.toJson()],
+        },
+        fileName: kSharedFoldersFileName,
+        folderId: folderId,
       );
       if (uploaded == null) {
         AppLogger.debug('$_logTag shared_folders.json のアップロード失敗');
@@ -615,7 +436,8 @@ class AppDataSyncService extends ChangeNotifier {
       return (importedDays: 0, exportedDays: 0);
     }
 
-    final tempDir = await Directory.systemTemp.createTemp('kokage_appdata_gps_');
+    final tempDir =
+        await Directory.systemTemp.createTemp('kokage_appdata_gps_');
     final tempPath = p.join(tempDir.path, kGpsFileName);
     try {
       if (remoteFile?.id != null) {

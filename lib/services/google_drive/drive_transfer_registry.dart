@@ -65,6 +65,25 @@ class DriveTransferRegistry {
     return norm;
   }
 
+  /// 2つのパスが正規化後に同一かどうかを返す
+  static bool sameNormalizedPath(String a, String b) =>
+      normalizeKey(a) == normalizeKey(b);
+
+  /// [childPath] が [ancestorPath] の真の子孫パスかどうかを返す（同一パスは false）
+  static bool isStrictDescendantPath(String childPath, String ancestorPath) {
+    final childNorm = normalizeKey(childPath);
+    final ancestorNorm = normalizeKey(ancestorPath);
+    return childNorm != ancestorNorm && childNorm.startsWith('$ancestorNorm/');
+  }
+
+  /// [targetPath] が [ancestorPath] 自身またはその子孫パスかどうかを返す
+  static bool isSameOrDescendantPath(String targetPath, String ancestorPath) {
+    final targetNorm = normalizeKey(targetPath);
+    final ancestorNorm = normalizeKey(ancestorPath);
+    return targetNorm == ancestorNorm ||
+        targetNorm.startsWith('$ancestorNorm/');
+  }
+
   /// クローン未完了マーカーのパス（`.sync/` 配下なので同期対象外）
   static String clonePendingMarkerPath(String localPath) =>
       p.join(localPath, '.sync', 'clone.pending');

@@ -22,16 +22,12 @@
 ///   フォルダがある場合に、新規ダウンロードを行わず同一の物理ディレクトリを参照渡しでマウントする。
 /// - **Tier 2 ([LocalSyncSeedIndex])**:
 ///   親フォルダ（例: `全体プロジェクト`）の一部として既にローカルへ同期済みのファイルを
-///   [SyncLedger] から索引化する。別 `driveId` の子フォルダをクローンする際、`driveFileId` または
-///   `md5Checksum` が一致するローカルファイルが存在すれば、MD5 を検証した上でローカルコピーし、
-///   冗長なネットワークダウンロードを回避する。
+///   [SyncLedger] から索引化する。実装は [local_sync_seed_index.dart] に分離し、本ファイルから再エクスポートする。
 library;
 
 import 'dart:convert';
-import 'dart:isolate';
 
-import 'package:crypto/crypto.dart' show md5;
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -43,6 +39,8 @@ import '../kmeta_service.dart';
 import '../projects_home.dart';
 import '../sync_ledger.dart';
 import 'drive_transfer_registry.dart';
+
+export 'local_sync_seed_index.dart';
 
 /// `driveId -> canonicalLocalPath` の実体ディレクトリ辞書
 class DriveDirStore {
@@ -110,8 +108,7 @@ class DriveDirStore {
     if (ifPathMatches != null) {
       final existing = _pathsByDriveId[driveId];
       if (existing != null &&
-          DriveTransferRegistry.normalizeKey(existing) !=
-              DriveTransferRegistry.normalizeKey(ifPathMatches)) {
+          !DriveTransferRegistry.sameNormalizedPath(existing, ifPathMatches)) {
         return;
       }
     }
@@ -251,19 +248,17 @@ class DriveDirStore {
     required String excludingSetPath,
     List<String> searchRoots = const [],
   }) async {
-    final exclNorm = DriveTransferRegistry.normalizeKey(excludingSetPath);
-
-    bool isExcluded(String path) {
-      final norm = DriveTransferRegistry.normalizeKey(path);
-      return norm == exclNorm || norm.startsWith('$exclNorm/');
-    }
-
     Future<bool> scanSetDir(String dirPath, int depth) async {
       if (depth > 6) return false;
       if (!await fs.isDirectory(dirPath)) return false;
       for (final entry in await fs.list(dirPath)) {
         if (!entry.isDirectory || entry.name.startsWith('.')) continue;
-        if (isExcluded(entry.path)) continue;
+        if (DriveTransferRegistry.isSameOrDescendantPath(
+          entry.path,
+          excludingSetPath,
+        )) {
+          continue;
+        }
         try {
           final meta = await KMetaService.instance.getRawMeta(entry.path);
           if (meta == null || meta.sync.isFolderSet != true) continue;
@@ -305,10 +300,10 @@ class DriveDirStore {
       return;
     }
 
-    final exclNorm = DriveTransferRegistry.normalizeKey(excludingSetPath);
-    final targetNorm = DriveTransferRegistry.normalizeKey(targetPath);
-    final isInsideExcludedSet =
-        targetNorm != exclNorm && targetNorm.startsWith('$exclNorm/');
+    final isInsideExcludedSet = DriveTransferRegistry.isStrictDescendantPath(
+      targetPath,
+      excludingSetPath,
+    );
     final isManaged = isManagedStorePath(targetPath);
 
     if (!isManaged && !isInsideExcludedSet) {
@@ -322,7 +317,8 @@ class DriveDirStore {
     if (isManaged) {
       final parentDir = p.dirname(targetPath);
       try {
-        if (await fs.isDirectory(parentDir) && (await fs.list(parentDir)).isEmpty) {
+        if (await fs.isDirectory(parentDir) &&
+            (await fs.list(parentDir)).isEmpty) {
           await fs.delete(parentDir, recursive: true);
         }
       } on Object catch (_) {}
@@ -335,170 +331,5 @@ class DriveDirStore {
     _pathsByDriveId.clear();
     _loaded = false;
     customStoreRoot = null;
-  }
-}
-
-/// ローカルの既存同期済みファイル候補
-class LocalSeedCandidate {
-  final String driveFileId;
-  final String? remoteMd5;
-  final String localFilePath;
-
-  const LocalSeedCandidate({
-    required this.driveFileId,
-    required this.remoteMd5,
-    required this.localFilePath,
-  });
-}
-
-/// 既存の [SyncLedger] から構築するローカルファイルシード索引。
-///
-/// 巨大な親共有フォルダ（例: `全体プロジェクト`）の中にあるサブフォルダと同一のファイルが
-/// 別の `driveId` でクローン要求された際、ネットワーク通信を行わずにローカルから検証付きコピーする。
-class LocalSyncSeedIndex {
-  LocalSyncSeedIndex._();
-
-  static final LocalSyncSeedIndex instance = LocalSyncSeedIndex._();
-
-  final Map<String, List<LocalSeedCandidate>> _byDriveFileId = {};
-  final Map<String, List<LocalSeedCandidate>> _byMd5 = {};
-  bool _initialized = false;
-
-  /// [SyncLedger] の全エントリから索引を再構築する
-  Future<void> refreshFromLedgers() async {
-    _byDriveFileId.clear();
-    _byMd5.clear();
-    _initialized = true;
-
-    final entries = await SyncLedger.instance.readAllEntries();
-    for (final entry in entries) {
-      final owner = entry.owner;
-      if (owner == null || owner.isEmpty) continue;
-      for (final fileEntry in entry.files.entries) {
-        final relPath = fileEntry.key;
-        final syncFile = fileEntry.value;
-        if (syncFile.driveFileId.isEmpty) continue;
-        final absPath = p.normalize(p.joinAll([owner, ...relPath.split('/')]));
-        _addCandidate(
-          LocalSeedCandidate(
-            driveFileId: syncFile.driveFileId,
-            remoteMd5: syncFile.remoteMd5,
-            localFilePath: absPath,
-          ),
-        );
-      }
-    }
-  }
-
-  void _addCandidate(LocalSeedCandidate candidate) {
-    final byId = _byDriveFileId.putIfAbsent(
-      candidate.driveFileId,
-      () => <LocalSeedCandidate>[],
-    );
-    if (!byId.any((c) => c.localFilePath == candidate.localFilePath)) {
-      byId.add(candidate);
-    }
-    final md5Hex = candidate.remoteMd5?.toLowerCase();
-    if (md5Hex != null && md5Hex.isNotEmpty) {
-      final byHash = _byMd5.putIfAbsent(md5Hex, () => <LocalSeedCandidate>[]);
-      if (!byHash.any((c) => c.localFilePath == candidate.localFilePath)) {
-        byHash.add(candidate);
-      }
-    }
-  }
-
-  /// ダウンロードまたはシード完了したファイルを即座にメモリ索引へ追加する
-  void registerSeededFile({
-    required String driveFileId,
-    required String? remoteMd5,
-    required String localFilePath,
-  }) {
-    if (driveFileId.isEmpty || localFilePath.isEmpty) return;
-    _addCandidate(
-      LocalSeedCandidate(
-        driveFileId: driveFileId,
-        remoteMd5: remoteMd5,
-        localFilePath: p.normalize(localFilePath),
-      ),
-    );
-  }
-
-  /// ローカルに同一内容（MD5一致）のファイルが存在すれば [targetFilePath] へアトミックにコピーし true を返す。
-  /// ローカルで編集されたファイル（MD5不一致）はコピーせず false を返すため、不整合や破損が伝播しない。
-  Future<bool> trySeedToFile({
-    required String driveFileId,
-    required String? remoteMd5,
-    int? remoteSize,
-    required String targetFilePath,
-    void Function(int chunkBytes)? onChunkBytes,
-  }) async {
-    if (remoteMd5 == null || remoteMd5.isEmpty) return false;
-    if (!_initialized) {
-      await refreshFromLedgers();
-    }
-
-    final expectedMd5 = remoteMd5.toLowerCase();
-    final targetNorm = DriveTransferRegistry.normalizeKey(targetFilePath);
-
-    final candidates = <LocalSeedCandidate>[
-      ...?_byDriveFileId[driveFileId],
-      ...?_byMd5[expectedMd5],
-    ];
-    if (candidates.isEmpty) return false;
-
-    final seenPaths = <String>{};
-    for (final candidate in candidates) {
-      final srcPath = candidate.localFilePath;
-      final srcNorm = DriveTransferRegistry.normalizeKey(srcPath);
-      if (srcNorm == targetNorm || !seenPaths.add(srcNorm)) continue;
-
-      try {
-        if (!await fs.exists(srcPath)) continue;
-        if (remoteSize != null) {
-          final srcLen = await fs.length(srcPath);
-          if (srcLen == null || srcLen != remoteSize) continue;
-        }
-
-        final bytes = await fs.readAsBytes(srcPath);
-        if (remoteSize != null && bytes.length != remoteSize) continue;
-
-        final actualMd5 = kIsWeb
-            ? md5.convert(bytes).toString().toLowerCase()
-            : await Isolate.run(
-                () => md5.convert(bytes).toString().toLowerCase(),
-              );
-        if (actualMd5 != expectedMd5) {
-          AppLogger.debug(
-            '[LocalSyncSeedIndex] ローカル変更あり（MD5不一致）のためシード除外: $srcPath',
-          );
-          continue;
-        }
-
-        await fs.writeStream(
-          targetFilePath,
-          Stream<List<int>>.value(bytes),
-          onChunk: onChunkBytes,
-        );
-        registerSeededFile(
-          driveFileId: driveFileId,
-          remoteMd5: expectedMd5,
-          localFilePath: targetFilePath,
-        );
-        AppLogger.debug(
-          '[LocalSyncSeedIndex] ローカルシード成功 (${bytes.length} bytes): $srcPath -> $targetFilePath',
-        );
-        return true;
-      } on Object catch (e) {
-        AppLogger.debug('[LocalSyncSeedIndex] シード試行失敗 ($srcPath): $e');
-      }
-    }
-    return false;
-  }
-
-  @visibleForTesting
-  void resetForTest() {
-    _byDriveFileId.clear();
-    _byMd5.clear();
-    _initialized = false;
   }
 }

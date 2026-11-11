@@ -13,92 +13,19 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// こかげマップ: ホームの入口（ゲームの「続きから」「はじめから」のように）
+// こかげマップ: ホームの入口カード群（native ランチャ・web フォルダ選択・プレビュー入口）
 //
-// 上に等高線の帯、その下に「続きから」（最後に開いたプロジェクト）、「新しく作る」「ほかの場所を開く」、
-// 置き場所のプロジェクトの一覧、チュートリアル。置き場所は [ProjectsHome]（2026-10-03）。
-
-import 'dart:math' as math;
+// 「続きから」（最後に開いたプロジェクト）、「いつもの地図を開く」「QR で受け取る」「ほかの場所を開く」、
+// チュートリアル、および web ブラウザ向けのフォルダ選択・閲覧専用カードをまとめる。
+// 置き場所は [ProjectsHome]（2026-10-03）。
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../i18n/strings.g.dart';
+import 'home_header_banners.dart';
 
-/// こかげの緑（ホームだけの色）
-const kKokageGreen = Color(0xFF2E6B4F);
-const _kKokageGreenLight = Color(0xFFE3F0E8);
-
-/// 上の帯: 等高線を敷いた見出し
-class HomeHeader extends StatelessWidget {
-  const HomeHeader({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        height: 132,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            const ColoredBox(color: _kKokageGreenLight),
-            const CustomPaint(painter: _ContourPainter()),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    t.common.appName,
-                    style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w600, color: kKokageGreen),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(t.home.tagline, style: TextStyle(fontSize: 13, color: kKokageGreen.withValues(alpha: 0.8))),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 山の等高線（決まった形。毎回同じに見えるように乱数は使わない）
-class _ContourPainter extends CustomPainter {
-  const _ContourPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = kKokageGreen.withValues(alpha: 0.22);
-    // 右上に頂のある山。中心からの距離で輪を何本か描く
-    final c = Offset(size.width * 0.78, size.height * 0.28);
-    for (var i = 1; i <= 9; i++) {
-      final r = i * 16.0;
-      final path = Path();
-      for (var a = 0; a <= 72; a++) {
-        final th = a / 72 * 2 * math.pi;
-        final wobble = 1 + 0.12 * math.sin(th * 3 + i * 0.7) + 0.06 * math.sin(th * 5 - i);
-        final o = c + Offset(math.cos(th) * r * 1.6 * wobble, math.sin(th) * r * wobble);
-        if (a == 0) {
-          path.moveTo(o.dx, o.dy);
-        } else {
-          path.lineTo(o.dx, o.dy);
-        }
-      }
-      path.close();
-      canvas.drawPath(path, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ContourPainter old) => false;
-}
+export 'home_header_banners.dart' show HomeHeader, kKokageGreen;
 
 /// いちばん大きい「地図を開く」と、「続きから」「QR で受け取る」「ほかの場所を開く」
 class ProjectLauncher extends StatelessWidget {
@@ -162,6 +89,280 @@ class ProjectLauncher extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// 置き場所のホーム（native）。権限が無い間は案内とやり直しだけ
+class NativeHomeLauncher extends StatelessWidget {
+  const NativeHomeLauncher({
+    super.key,
+    required this.permissionsGranted,
+    required this.isOpeningProject,
+    required this.openingProjectStatus,
+    required this.lastProject,
+    required this.canTutorial,
+    required this.onRecheckPermissions,
+    required this.onOpenMyMap,
+    required this.onOpenLast,
+    required this.onPickOther,
+    required this.onReceive,
+    required this.onStartTutorial,
+  });
+
+  final bool permissionsGranted;
+  final bool isOpeningProject;
+  final String openingProjectStatus;
+  final String? lastProject;
+  final bool canTutorial;
+  final VoidCallback onRecheckPermissions;
+  final VoidCallback onOpenMyMap;
+  final ValueChanged<String> onOpenLast;
+  final VoidCallback onPickOther;
+  final VoidCallback? onReceive;
+  final VoidCallback onStartTutorial;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!permissionsGranted) {
+      return Column(
+        children: [
+          const Icon(Icons.warning_amber, color: Colors.orange, size: 40),
+          const SizedBox(height: 8),
+          Text(t.home.permissionRequired, textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: onRecheckPermissions,
+            icon: const Icon(Icons.refresh),
+            label: Text(t.home.recheckPermission),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ProjectLauncher(
+          last: lastProject,
+          enabled: !isOpeningProject,
+          onOpenMyMap: onOpenMyMap,
+          onOpenLast: onOpenLast,
+          onPickOther: onPickOther,
+          onReceive: onReceive,
+        ),
+        if (isOpeningProject) ...[
+          const SizedBox(height: 16),
+          Text(openingProjectStatus, style: const TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          const LinearProgressIndicator(color: kKokageGreen),
+        ],
+        if (canTutorial && !isOpeningProject) ...[
+          const SizedBox(height: 12),
+          Align(
+            child: TextButton.icon(
+              onPressed: onStartTutorial,
+              icon: const Icon(Icons.school_outlined),
+              label: Text(t.tutorial.homeButton),
+              style: TextButton.styleFrom(foregroundColor: kKokageGreen),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// フォルダを開けない環境向けの入口カード（地図だけ見る）
+///
+/// いま該当するのは **File System Access API を持たないブラウザ**
+/// （Firefox / Safari）だけ。Chrome / Edge なら通常のフォルダ選択が出る。
+class WebPreviewCard extends StatelessWidget {
+  const WebPreviewCard({super.key, required this.onOpenMapWithoutProject});
+
+  final VoidCallback onOpenMapWithoutProject;
+
+  @override
+  Widget build(BuildContext context) {
+    return StartCard(
+      icon: Icons.public,
+      iconColor: Colors.blue,
+      title: t.home.webUnsupportedBrowserTitle,
+      description: t.home.webUnsupportedBrowserDesc,
+      children: [
+        ElevatedButton.icon(
+          onPressed: onOpenMapWithoutProject,
+          icon: const Icon(Icons.map),
+          label: Text(t.home.openMap),
+          style: StartCard.buttonStyle(Colors.blue),
+        ),
+      ],
+    );
+  }
+}
+
+/// フォルダを選んで開くカード（web の Chrome / Edge）
+class WebFolderPickerCard extends StatelessWidget {
+  const WebFolderPickerCard({
+    super.key,
+    required this.permissionsGranted,
+    required this.isOpeningProject,
+    required this.openingProjectStatus,
+    required this.lastFolderName,
+    required this.canTutorial,
+    required this.onPickProjectDir,
+    required this.onReopenLastFolder,
+    required this.onStartTutorial,
+    required this.onRecheckPermissions,
+  });
+
+  final bool permissionsGranted;
+  final bool isOpeningProject;
+  final String openingProjectStatus;
+  final String? lastFolderName;
+  final bool canTutorial;
+  final VoidCallback onPickProjectDir;
+  final VoidCallback onReopenLastFolder;
+  final VoidCallback onStartTutorial;
+  final VoidCallback onRecheckPermissions;
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = permissionsGranted && !isOpeningProject;
+    return StartCard(
+      icon: Icons.folder_open,
+      iconColor: Colors.orange,
+      title: t.home.startProject,
+      description: t.home.selectProjectFolder,
+      children: [
+        ElevatedButton.icon(
+          onPressed: ready ? onPickProjectDir : null,
+          icon: Icon(
+            isOpeningProject ? Icons.hourglass_top : (permissionsGranted ? Icons.folder : Icons.warning),
+          ),
+          label: Text(
+            isOpeningProject
+                ? t.home.launching
+                : (permissionsGranted ? t.home.selectFolder : t.home.permissionRequired),
+          ),
+          style: StartCard.buttonStyle(ready ? Colors.blue : Colors.grey),
+        ),
+        if (lastFolderName != null && !isOpeningProject) ...[
+          const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: permissionsGranted ? onReopenLastFolder : null,
+            icon: const Icon(Icons.history),
+            label: Text('${t.home.reopenLastFolder}（$lastFolderName）'),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+          ),
+        ],
+        if (canTutorial && !isOpeningProject) ...[
+          const SizedBox(height: 4),
+          TextButton.icon(
+            onPressed: permissionsGranted ? onStartTutorial : null,
+            icon: const Icon(Icons.school_outlined),
+            label: Text(t.tutorial.homeButton),
+          ),
+        ],
+        if (isOpeningProject) ...[
+          const SizedBox(height: 12),
+          Text(openingProjectStatus, style: const TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          const LinearProgressIndicator(),
+        ],
+        if (!permissionsGranted) ...[
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: onRecheckPermissions,
+            icon: const Icon(Icons.refresh),
+            label: Text(t.home.recheckPermission),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 地図から戻ってきたときの導線。タップでピッカーを通さず同じフォルダを開き直す
+class ReopenProjectCard extends StatelessWidget {
+  const ReopenProjectCard({
+    super.key,
+    required this.dir,
+    required this.isOpeningProject,
+    required this.onReopen,
+  });
+
+  final String dir;
+  final bool isOpeningProject;
+  final ValueChanged<String> onReopen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.green[50],
+      child: InkWell(
+        onTap: isOpeningProject ? null : () => onReopen(dir),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green, size: 24),
+              const SizedBox(height: 8),
+              Text(t.common.selectedFolder, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(dir, style: const TextStyle(fontSize: 12, fontFamily: 'monospace'), textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              Text(t.home.tapToOpenMap, style: TextStyle(color: Colors.green[800])),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 入口のカード（アイコン・見出し・説明の下にボタンを並べる）
+class StartCard extends StatelessWidget {
+  const StartCard({
+    super.key,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.description,
+    required this.children,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String description;
+  final List<Widget> children;
+
+  static ButtonStyle buttonStyle(Color background) => ElevatedButton.styleFrom(
+        backgroundColor: background,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        textStyle: const TextStyle(fontSize: 16),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            Icon(icon, size: 48, color: iconColor),
+            const SizedBox(height: 16),
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(description, style: const TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            ...children,
+          ],
+        ),
+      ),
     );
   }
 }

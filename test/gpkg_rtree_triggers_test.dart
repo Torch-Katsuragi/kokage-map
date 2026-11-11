@@ -105,7 +105,16 @@ void main() {
 
         expect(await GpkgIndexRepair.healRtreeTriggers(path), 1);
         expect(await _triggers(path, rtree), gdal);
-        expect(await _rtreeRows(path, rtree), rows, reason: 'rtree を実データから焼き直す');
+        final healedRows = await _rtreeRows(path, rtree);
+        expect([for (final r in healedRows) r['id']], [for (final r in rows) r['id']], reason: 'rtree を実データから焼き直す');
+        for (var i = 0; i < rows.length; i++) {
+          for (final k in const ['minx', 'maxx', 'miny', 'maxy']) {
+            // rtree は float32 で、GDAL 側の SQLite とアプリの SQLite の版差で 1 ULP（東経 136° 付近で 2^-16 ≈ 1.53e-5）ずれることがある
+            expect(healedRows[i][k]! as double, closeTo(rows[i][k]! as double, 2e-5), reason: 'row $i $k');
+          }
+        }
+        expect(healedRows[0]['minx']! as double, lessThanOrEqualTo(135.96));
+        expect(healedRows[0]['maxx']! as double, greaterThanOrEqualTo(135.96));
         expect(await GpkgIndexRepair.healRtreeTriggers(path), 0, reason: '直したあとは何もしない');
 
         // GDAL の空間検索で全部見える（足した点 c も）

@@ -503,8 +503,6 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         dialogTitle: t.importExport.exportTitle,
         fileName: '$baseName.$saveExt',
         bytes: bytes,
-        type: FileType.custom,
-        allowedExtensions: [saveExt],
       );
       if (saved == null) {
         setState(() {

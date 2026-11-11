@@ -55,7 +55,7 @@
 - [ ] QGIS の「レイヤ順の制御」（`custom-order enabled="1"`）を描く順に使うか（いまはツリーの並び）
 - [ ] JPEG2000（.jp2）を読むなら GDAL に OpenJPEG を入れて Android・web とも焼き直す
 - [ ] `sys/view`（端末の写真など読み取り専用の仮想レイヤ）。写真の権限（Play の申告）と大量写真の性能の設計が先
-- [ ] Flutter の警告「KGP を当てるプラグイン（desktop_drop / firebase_* / location）は将来ビルドできなくなる」→ プラグイン側の更新を待つ
+- [ ] Flutter の警告「KGP を当てるプラグイン（desktop_drop / firebase_* / photo_manager）は将来ビルドできなくなる」→ プラグイン側の更新を待つ（`desktop_drop` は 0.9 で解消済みだが `file_picker` 13.3 が `cross_file ^0.3.5` を求めるので 0.8 止まり）
 - [ ] `proj4dart` 3（geobase 1.5.0 が ^2.0.0 を求めるので待ち）
 - [ ] 外のラスタの残り: 大きな `.tif` の判定で中身を丸ごと読む（アプリの GeoTIFF のタグを見るため。先頭だけ読めば足りる）
 - [ ] 自動同期が周期ごとに Drive のフォルダ配下を全部たどる（フォルダ 1 つにつき一覧 1 回）。Changes API で差分だけにできるが、共有フォルダの変更が拾えるか確かめてから

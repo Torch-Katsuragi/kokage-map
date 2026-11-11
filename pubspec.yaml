@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 0.15.3+37
 
 environment:
-  sdk: ^3.13.0
+  sdk: ^3.13.7
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -85,7 +85,7 @@ dependencies:
   # Google Drive連携用パッケージ
   google_sign_in: ^7.0.0            # Google OAuth認証用
   google_sign_in_web: ^1.1.0        # webのサインインボタン（renderButton）を直接使う
-  googleapis: ^17.0.0               # Google APIs（Drive API含む）
+  googleapis: ^18.0.0               # Google APIs（Drive API含む）
   extension_google_sign_in_as_googleapis_auth: ^3.0.0  # google_sign_inとgoogleapisの連携
   # flutter_secure_storage: 削除（lib/内で未使用、win32バージョン競合の原因）
   mobile_scanner: ^7.1.4
@@ -102,11 +102,11 @@ dependencies:
   audioplayers: ^6.6.0
   markdown: ^7.0.0                         # カスタムMarkdownシンタックス用
   device_info_plus: ^13.2.0         # win32 ^5 vs ^6 競合のため据え置き
-  firebase_core: ^4.11.0
-  firebase_database: ^12.4.4
-  firebase_auth: ^6.5.4
+  firebase_core: ^5.1.0
+  firebase_database: ^13.0.1
+  firebase_auth: ^7.0.1
   battery_plus: ^7.1.0
-  firebase_app_check: ^0.4.5
+  firebase_app_check: ^0.5.1
   web: ^1.1.0                       # web版のFile System Access API（js_interop）
   qr_flutter: ^4.1.0                    # Drive連携フォルダのQRコード表示（スキャン側は mobile_scanner）
   flutter_markdown_plus: ^1.0.12         # 更新履歴・使い方の表示用（flutter_markdown は 2026 に discontinued）

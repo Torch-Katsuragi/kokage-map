@@ -429,8 +429,6 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       final saved = await FilePicker.saveFile(
         fileName: fileName,
         bytes: bytes,
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
       );
       if (saved == null) return; // 取りやめ
 

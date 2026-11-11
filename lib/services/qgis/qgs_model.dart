@@ -319,67 +319,33 @@ class QgsProject {
   /// > 呼び出し側は必ずユーザーに見せること。
   final List<String> skipped;
 
+  /// ツリーを深さ優先で辿って、指定した型のノードだけを順に返す
+  List<T> _collectNodes<T extends QgsTreeNode>() {
+    final result = <T>[];
+    void walk(List<QgsTreeNode> nodes) {
+      for (final node in nodes) {
+        if (node is QgsGroup) {
+          walk(node.children);
+        } else if (node is T) {
+          result.add(node);
+        }
+      }
+    }
+
+    walk(root);
+    return result;
+  }
+
   /// ツリーを深さ優先で辿って、レイヤだけを順に返す。
   ///
   /// QGIS の `<projectlayers>` と `<layerorder>` はこの順で並べる。
-  List<QgsLayer> get layers {
-    final result = <QgsLayer>[];
-    void walk(List<QgsTreeNode> nodes) {
-      for (final node in nodes) {
-        switch (node) {
-          case QgsGroup(:final children):
-            walk(children);
-          case QgsLayer():
-            result.add(node);
-          case QgsRasterLayer() || QgsTableLayer():
-            break; // [rasterLayers] [tableLayers]
-        }
-      }
-    }
-
-    walk(root);
-    return result;
-  }
+  List<QgsLayer> get layers => _collectNodes<QgsLayer>();
 
   /// ツリーを深さ優先で辿って、ラスタレイヤだけを順に返す
-  List<QgsRasterLayer> get rasterLayers {
-    final result = <QgsRasterLayer>[];
-    void walk(List<QgsTreeNode> nodes) {
-      for (final node in nodes) {
-        switch (node) {
-          case QgsGroup(:final children):
-            walk(children);
-          case QgsRasterLayer():
-            result.add(node);
-          case QgsLayer() || QgsTableLayer():
-            break;
-        }
-      }
-    }
-
-    walk(root);
-    return result;
-  }
+  List<QgsRasterLayer> get rasterLayers => _collectNodes<QgsRasterLayer>();
 
   /// ツリーを深さ優先で辿って、表だけを順に返す
-  List<QgsTableLayer> get tableLayers {
-    final result = <QgsTableLayer>[];
-    void walk(List<QgsTreeNode> nodes) {
-      for (final node in nodes) {
-        switch (node) {
-          case QgsGroup(:final children):
-            walk(children);
-          case QgsTableLayer():
-            result.add(node);
-          case QgsLayer() || QgsRasterLayer():
-            break;
-        }
-      }
-    }
-
-    walk(root);
-    return result;
-  }
+  List<QgsTableLayer> get tableLayers => _collectNodes<QgsTableLayer>();
 
   /// `<layerorder>` に書く順（ツリーの深さ優先。ベクタもラスタも同じ並びに載せる）
   List<String> get orderedLayerIds {

@@ -124,42 +124,23 @@ class QgsDocument {
   /// `<properties>` の下の `<kokage>` を返す。無ければ null
   XmlElement? get _kokageElement {
     final props = root.getElement('properties');
-    return props == null ? null : _property(props, _kokageScope);
-  }
-
-  /// `<properties>` の中の [key] を返す。QGIS の書き方は 2 通りある:
-  /// 3.x までの `<key type="…">` と、4.x の `<properties name="key" type="…">`
-  /// （QGIS 4.2 で保存し直すと、こかげマップが書いた印も後者に書き換わる。2026-09-30 実測）
-  static XmlElement? _property(XmlElement scope, String key) =>
-      scope.getElement(key) ??
-      scope.findElements('properties').where((e) => e.getAttribute('name') == key).firstOrNull;
-
-  /// [_property] と同じだが、無ければ作る。作るときは文書の書き方に合わせる
-  XmlElement _ensureProperty(XmlElement scope, String key) {
-    final existing = _property(scope, key);
-    if (existing != null) return existing;
-    final named = root.getElement('properties')?.getAttribute('name') == 'properties';
-    final created = named
-        ? XmlElement(const XmlName.parts('properties'), [XmlAttribute(const XmlName.parts('name'), key)])
-        : XmlElement(XmlName.parts(key));
-    scope.children.add(created);
-    return created;
+    return props == null ? null : qgsProperty(props, _kokageScope);
   }
 
   /// 印を読む。無ければ null（QGIS か他人が作ったファイル）
   KokageStamp? get stamp {
     final k = _kokageElement;
     if (k == null) return null;
-    final savedAt = _property(k, 'savedAt')?.innerText;
-    final dirName = _property(k, 'dirName')?.innerText;
+    final savedAt = qgsProperty(k, 'savedAt')?.innerText;
+    final dirName = qgsProperty(k, 'dirName')?.innerText;
     if (savedAt == null || dirName == null) return null;
     final parsed = DateTime.tryParse(savedAt);
     if (parsed == null) return null;
     return KokageStamp(
-      schemaVersion: int.tryParse(_property(k, 'schemaVersion')?.innerText ?? '') ?? 0,
-      app: _property(k, 'app')?.innerText ?? '',
+      schemaVersion: int.tryParse(qgsProperty(k, 'schemaVersion')?.innerText ?? '') ?? 0,
+      app: qgsProperty(k, 'app')?.innerText ?? '',
       savedAt: parsed,
-      savedBy: _property(k, 'savedBy')?.innerText,
+      savedBy: qgsProperty(k, 'savedBy')?.innerText,
       dirName: dirName,
     );
   }
@@ -167,15 +148,15 @@ class QgsDocument {
   /// 印を書く。root の `saveDateTime` も同じ値にする（QGIS が保存すると上書きされる）。
   void setStamp(KokageStamp stamp) {
     final props = ensureChild(root, 'properties');
-    final k = _ensureProperty(props, _kokageScope);
-    _setProperty(k, 'schemaVersion', '${stamp.schemaVersion}', type: 'int');
-    _setProperty(k, 'app', stamp.app);
-    _setProperty(k, 'savedAt', stamp.savedAtText);
-    _setProperty(k, 'dirName', stamp.dirName);
+    final k = ensureQgsProperty(root, props, _kokageScope);
+    setQgsProperty(root, k, 'schemaVersion', '${stamp.schemaVersion}', type: 'int');
+    setQgsProperty(root, k, 'app', stamp.app);
+    setQgsProperty(root, k, 'savedAt', stamp.savedAtText);
+    setQgsProperty(root, k, 'dirName', stamp.dirName);
     if (stamp.savedBy != null) {
-      _setProperty(k, 'savedBy', stamp.savedBy!);
+      setQgsProperty(root, k, 'savedBy', stamp.savedBy!);
     } else {
-      final stale = _property(k, 'savedBy');
+      final stale = qgsProperty(k, 'savedBy');
       if (stale != null) detachNode(stale);
     }
     root.setAttribute('saveDateTime', stamp.savedAtText);
@@ -198,30 +179,22 @@ class QgsDocument {
   /// `.kmeta.json` をやめて `.qgs` に一本化したときの置き場（2026-09-29）。QGIS が表現できる
   /// 部分（可視性・フィルタ・単一シンボル・並び）は別に QGIS の形でも書いてあり、QGIS 側で
   /// 保存されたときは読み戻し（`QgsReadBack`）がそちらを取り込んでここを書き直す。
-  /// QGIS は保存時に知らない `<properties>` を残す（4.x では書き方だけ変わる。[_property]）。
+  /// QGIS は保存時に知らない `<properties>` を残す（4.x では書き方だけ変わる。[qgsProperty]）。
   String? get kokageMeta {
     final k = _kokageElement;
-    final text = k == null ? null : _property(k, 'meta')?.innerText;
+    final text = k == null ? null : qgsProperty(k, 'meta')?.innerText;
     return text == null || text.isEmpty ? null : text;
   }
 
   set kokageMeta(String? json) {
     if (json == null) {
       final k = _kokageElement;
-      final stale = k == null ? null : _property(k, 'meta');
+      final stale = k == null ? null : qgsProperty(k, 'meta');
       if (stale != null) detachNode(stale);
       return;
     }
     final props = ensureChild(root, 'properties');
-    _setProperty(_ensureProperty(props, _kokageScope), 'meta', json);
-  }
-
-  /// QGIS の `<properties>` 流儀で値を置く（`<key type="QString">value</key>` か 4.x の書き方）
-  void _setProperty(XmlElement scope, String key, String value, {String type = 'QString'}) {
-    final el = _ensureProperty(scope, key);
-    el.setAttribute('type', type);
-    el.children.clear();
-    el.children.add(XmlText(value));
+    setQgsProperty(root, ensureQgsProperty(root, props, _kokageScope), 'meta', json);
   }
 
   // =============================================
@@ -233,9 +206,8 @@ class QgsDocument {
   /// 文書内の `<maplayer>`
   Iterable<XmlElement> get mapLayers => _projectLayers.findElements('maplayer');
 
-  XmlElement? findMapLayer(String id) => mapLayers
-      .where((e) => e.getElement('id')?.innerText == id)
-      .firstOrNull;
+  XmlElement? findMapLayer(String id) =>
+      mapLayers.where((e) => childText(e, 'id') == id).firstOrNull;
 
   /// 埋め込み（別プロジェクト由来）の maplayer か。[apply] は外す（子 dir は写しで入る）
   static bool isEmbedded(XmlElement e) => e.getAttribute('embedded') == '1';
@@ -258,9 +230,7 @@ class QgsDocument {
   QgsApplyReport apply(QgsProject project) {
     final report = QgsApplyReport();
     root.setAttribute('projectname', project.name);
-    ensureChild(root, 'title')
-      ..children.clear()
-      ..children.add(XmlText(project.name));
+    setChildText(root, 'title', project.name);
 
     _adoptRasterIds(project);
     _adoptTableIds(project);
@@ -280,111 +250,86 @@ class QgsDocument {
   /// ネットワーク越しのレイヤ（XYZ タイル・WMS など）か
   static bool isWebLayer(XmlElement maplayer) {
     if (maplayer.getAttribute('type') == 'vector-tile') return true;
-    final provider = maplayer.getElement('provider')?.innerText.trim().toLowerCase();
+    final provider = childText(maplayer, 'provider')?.toLowerCase();
     return provider != null && _webProviders.contains(provider);
   }
 
   /// 残す（触らない）maplayer の id。ツリーと `<layerorder>` でも残す
   Set<String> _webLayerIds() => {
         for (final e in mapLayers)
-          if (!isEmbedded(e) && isWebLayer(e) && e.getElement('id') != null) e.getElement('id')!.innerText,
+          if (!isEmbedded(e) && isWebLayer(e)) ?childText(e, 'id'),
       };
 
-  /// QGIS で足した gdal のラスタが、アプリの GeoTIFF（[QgsRasterLayer]）と同じファイルを指していれば、
-  /// アプリの決定的な id に付け替える。外して足し直すと QGIS が付けたレンダラ（不透明度など）が消えるため
-  void _adoptRasterIds(QgsProject project) {
+  /// QGIS 側で足された maplayer がアプリのノードと同じファイルを指していれば、
+  /// アプリの決定的な id に付け替える（外して足し直すと QGIS 側の設定や結合が消えるため）
+  void _adoptLayerIds({
+    required Iterable<({String id, String dataSourcePath})> targets,
+    required String? Function(XmlElement maplayer) matchSourcePath,
+    bool rewriteJoinRefs = false,
+  }) {
     final layers = mapLayers.toList();
-    final present = {for (final e in layers) e.getElement('id')?.innerText};
-    final byPath = <String, QgsRasterLayer>{
-      for (final r in project.rasterLayers)
-        if (!present.contains(r.id)) _rasterPathKey(r.dataSourcePath): r,
+    final present = {for (final e in layers) childText(e, 'id')};
+    final byPath = <String, String>{
+      for (final t in targets)
+        if (!present.contains(t.id)) qgsNormalizedPathKey(t.dataSourcePath): t.id,
     };
     if (byPath.isEmpty) return;
-    final wanted = {for (final r in project.rasterLayers) r.id};
+    final wanted = {for (final t in targets) t.id};
     for (final e in layers) {
-      if (isEmbedded(e) || e.getAttribute('type') != 'raster') continue;
-      if (e.getElement('provider')?.innerText.trim() != 'gdal') continue;
-      final oldId = e.getElement('id')?.innerText;
+      if (isEmbedded(e)) continue;
+      final oldId = childText(e, 'id');
       if (oldId == null || wanted.contains(oldId)) continue;
-      final target = byPath.remove(_rasterPathKey(e.getElement('datasource')?.innerText ?? ''));
-      if (target == null) continue;
-      setChildText(e, 'id', target.id);
+      final path = matchSourcePath(e);
+      if (path == null) continue;
+      final newId = byPath.remove(qgsNormalizedPathKey(path));
+      if (newId == null) continue;
+      setChildText(e, 'id', newId);
       for (final t in root.findAllElements('layer-tree-layer').where((t) => t.getAttribute('id') == oldId)) {
-        t.setAttribute('id', target.id);
+        t.setAttribute('id', newId);
+      }
+      if (rewriteJoinRefs) {
+        for (final j in root.findAllElements('join').where((j) => j.getAttribute('joinLayerId') == oldId)) {
+          j.setAttribute('joinLayerId', newId);
+        }
       }
     }
   }
 
-  /// `./sub/a.tif` と `sub\a.tif` を同じに見る
-  static String _rasterPathKey(String path) {
-    var s = path.split('|').first.trim().replaceAll(r'\', '/');
-    while (s.startsWith('./')) {
-      s = s.substring(2);
-    }
-    return s.toLowerCase();
+  /// QGIS で足した gdal のラスタが、アプリの GeoTIFF（[QgsRasterLayer]）と同じファイルを指していれば、
+  /// アプリの決定的な id に付け替える。外して足し直すと QGIS が付けたレンダラ（不透明度など）が消えるため
+  void _adoptRasterIds(QgsProject project) {
+    _adoptLayerIds(
+      targets: [for (final r in project.rasterLayers) (id: r.id, dataSourcePath: r.dataSourcePath)],
+      matchSourcePath: (e) {
+        if (e.getAttribute('type') != 'raster' || childText(e, 'provider') != 'gdal') return null;
+        return childText(e, 'datasource');
+      },
+    );
   }
 
   // ---- 表（ジオメトリなし CSV）----
 
   /// 形の無い表の maplayer か（`wkbType="NoGeometry"`、古い形は `geometry="No geometry"`）
-  static bool isTableLayer(XmlElement maplayer) =>
-      maplayer.getAttribute('type') == 'vector' &&
-      (maplayer.getAttribute('wkbType') == 'NoGeometry' || maplayer.getAttribute('geometry') == 'No geometry');
+  static bool isTableLayer(XmlElement maplayer) => isQgsTableLayer(maplayer);
 
   /// 表の maplayer が指すファイルのパス（`.qgs` に書かれたまま。相対なら `./…`）。
-  /// delimitedtext は `file:./%E6….csv?type=csv&…`（パスは % エンコード）、ogr は `./属性表.csv|…`
-  static String? tableSourcePath(XmlElement maplayer) {
-    final provider = maplayer.getElement('provider')?.innerText.trim().toLowerCase();
-    final raw = maplayer.getElement('datasource')?.innerText.trim() ?? '';
-    if (raw.isEmpty) return null;
-    if (provider == 'delimitedtext') {
-      var path = raw.split('?').first;
-      if (path.startsWith('file:')) path = path.substring(5);
-      // file:///C:/… → C:/…（ドライブ文字が無ければ / から）
-      if (path.startsWith('///')) path = RegExp('^///[A-Za-z]:').hasMatch(path) ? path.substring(3) : path.substring(2);
-      try {
-        return Uri.decodeComponent(path);
-      } catch (_) {
-        return path;
-      }
-    }
-    if (provider == 'ogr') return raw.split('|').first.trim();
-    return null;
-  }
+  static String? tableSourcePath(XmlElement maplayer) => qgsTableSourcePath(maplayer);
 
   /// QGIS で足した表が、アプリの表（[QgsTableLayer]）と同じファイルを指していれば、アプリの決定的な id に付け替える。
   /// 結合（`<join joinLayerId>`）も付け替える。外して足し直すと QGIS の結合が宙に浮くため
   void _adoptTableIds(QgsProject project) {
-    final layers = mapLayers.toList();
-    final present = {for (final e in layers) e.getElement('id')?.innerText};
-    final byPath = <String, QgsTableLayer>{
-      for (final t in project.tableLayers)
-        if (!present.contains(t.id)) _rasterPathKey(t.dataSourcePath): t,
-    };
-    if (byPath.isEmpty) return;
-    final wanted = {for (final t in project.tableLayers) t.id};
-    for (final e in layers) {
-      if (isEmbedded(e) || !isTableLayer(e)) continue;
-      final oldId = e.getElement('id')?.innerText;
-      final path = tableSourcePath(e);
-      if (oldId == null || path == null || wanted.contains(oldId)) continue;
-      final target = byPath.remove(_rasterPathKey(path));
-      if (target == null) continue;
-      setChildText(e, 'id', target.id);
-      for (final t in root.findAllElements('layer-tree-layer').where((t) => t.getAttribute('id') == oldId)) {
-        t.setAttribute('id', target.id);
-      }
-      for (final j in root.findAllElements('join').where((j) => j.getAttribute('joinLayerId') == oldId)) {
-        j.setAttribute('joinLayerId', target.id);
-      }
-    }
+    _adoptLayerIds(
+      targets: [for (final t in project.tableLayers) (id: t.id, dataSourcePath: t.dataSourcePath)],
+      matchSourcePath: (e) => isTableLayer(e) ? tableSourcePath(e) : null,
+      rewriteJoinRefs: true,
+    );
   }
 
   /// 表の maplayer を合わせる。QGIS が同じファイルを読んでいる形（ogr・区切りの指定など）はそのまま残す
   void _patchTableLayer(XmlElement e, QgsTableLayer layer) {
     setChildText(e, 'layername', layer.name);
     final path = tableSourcePath(e);
-    if (path != null && _rasterPathKey(path) == _rasterPathKey(layer.dataSourcePath)) return;
+    if (path != null && qgsNormalizedPathKey(path) == qgsNormalizedPathKey(layer.dataSourcePath)) return;
     setChildText(e, 'datasource', layer.dataSourceUri);
     final provider = e.getElement('provider');
     if (provider != null) {
@@ -554,12 +499,12 @@ class QgsDocument {
     final seen = <String>{};
     for (final e in container.findElements('maplayer').toList()) {
       if (isEmbedded(e)) continue;
-      final id = e.getElement('id')?.innerText;
+      final id = childText(e, 'id');
       // 管轄外（ネットワークのタイル等）は触らない
       if (id != null && web.contains(id) && !wanted.containsKey(id)) continue;
       final layer = id == null ? null : wanted[id];
       if (layer == null) {
-        final name = e.getElement('layername')?.innerText ?? id ?? '?';
+        final name = childText(e, 'layername') ?? id ?? '?';
         report.removedLayers.add(name);
         detachNode(e);
         continue;
@@ -585,8 +530,7 @@ class QgsDocument {
 
     // 無かったものを足す（project の順に、末尾へ）
     final existing = {
-      for (final e in container.findElements('maplayer'))
-        if (e.getElement('id') != null) e.getElement('id')!.innerText,
+      for (final e in container.findElements('maplayer')) ?childText(e, 'id'),
     };
     for (final layer in layers) {
       if (existing.contains(layer.id)) continue;
@@ -605,8 +549,7 @@ class QgsDocument {
     // 差し替えないので、前に書いた表を消すと、その表への `<join>` が宙に浮いて残っていた。
     // QGIS で足した結合（id がアプリの形でないもの）はこれまでどおり触らない
     final present = {
-      for (final e in container.findElements('maplayer'))
-        if (e.getElement('id') != null) e.getElement('id')!.innerText,
+      for (final e in container.findElements('maplayer')) ?childText(e, 'id'),
     };
     bool danglingAppTable(XmlElement j) {
       final id = j.getAttribute('joinLayerId');
@@ -677,7 +620,7 @@ class QgsDocument {
     }
     final buffer = textStyle.getElement('text-buffer');
     if (buffer != null && style.labelHaloColor != null) {
-      buffer.setAttribute('bufferColor', QgsWriter.formatColor(style.labelHaloColor!));
+      buffer.setAttribute('bufferColor', formatQgsColor(style.labelHaloColor!));
     }
   }
 
@@ -692,26 +635,26 @@ class QgsDocument {
     final values = <String, String>{};
     switch (symbol.getAttribute('type')) {
       case 'marker':
-        if (style.pointColor != null) values['color'] = QgsWriter.formatColor(style.pointColor!);
-        if (style.pointSizePx != null) values['size'] = QgsWriter.formatMm(style.pointSizePx! * 2);
+        if (style.pointColor != null) values['color'] = formatQgsColor(style.pointColor!);
+        if (style.pointSizePx != null) values['size'] = formatQgsMm(style.pointSizePx! * 2);
       case 'line':
-        if (style.lineColor != null) values['line_color'] = QgsWriter.formatColor(style.lineColor!);
-        if (style.lineWidthPx != null) values['line_width'] = QgsWriter.formatMm(style.lineWidthPx!);
+        if (style.lineColor != null) values['line_color'] = formatQgsColor(style.lineColor!);
+        if (style.lineWidthPx != null) values['line_width'] = formatQgsMm(style.lineWidthPx!);
       case 'fill':
         if (style.fillColor != null || style.fillOpacity != null) {
-          values['color'] = QgsWriter.formatColor(
+          values['color'] = formatQgsColor(
             style.fillColor ?? _readColor(symbolLayer, 'color'),
             opacity: style.fillOpacity,
           );
         }
         if (style.strokeColor != null || style.strokeOpacity != null) {
-          values['outline_color'] = QgsWriter.formatColor(
+          values['outline_color'] = formatQgsColor(
             style.strokeColor ?? _readColor(symbolLayer, 'outline_color'),
             opacity: style.strokeOpacity,
           );
         }
         if (style.strokeWidthPx != null) {
-          values['outline_width'] = QgsWriter.formatMm(style.strokeWidthPx!);
+          values['outline_width'] = formatQgsMm(style.strokeWidthPx!);
         }
       default:
         return;
@@ -722,18 +665,7 @@ class QgsDocument {
     final map = symbolOptionMap(symbolLayer);
     if (map == null) return;
     for (final entry in values.entries) {
-      final option = namedOption(map, entry.key);
-      if (option != null) {
-        option.setAttribute('value', entry.value);
-      } else {
-        map.children.add(
-          XmlElement(const XmlName.parts('Option'), [
-            XmlAttribute(const XmlName.parts('name'), entry.key),
-            XmlAttribute(const XmlName.parts('type'), 'QString'),
-            XmlAttribute(const XmlName.parts('value'), entry.value),
-          ]),
-        );
-      }
+      setNamedOption(map, entry.key, entry.value);
     }
   }
 
@@ -741,10 +673,7 @@ class QgsDocument {
   static Color _readColor(XmlElement symbolLayer, String name) {
     final map = symbolOptionMap(symbolLayer);
     final value = map == null ? null : namedOption(map, name)?.getAttribute('value');
-    final parts = value?.split(',') ?? const [];
-    if (parts.length < 3) return const Color(0xFF000000);
-    int channel(int i) => int.tryParse(parts[i].trim())?.clamp(0, 255) ?? 0;
-    return Color.fromARGB(255, channel(0), channel(1), channel(2));
+    return parseQgsColor(value) ?? const Color(0xFF000000);
   }
 
   // ---- layerorder ----

@@ -49,12 +49,6 @@ const String kLegacyQgsFileName = 'project.qgs';
 /// （[[docs/technical/project-format-design#正典を `.qgs` に移す（2026-09-06 決定・設計）]]）。
 String qgsFileNameFor(String dirName) => '$dirName.qgs';
 
-/// px → mm（QGISのシンボル単位はMM）。96dpi 相当。
-///
-/// ⚠ こかげマップ のスタイル値は地図の画面ピクセルなので、厳密な対応は無い。
-/// **見た目が近くなるだけの近似**であって、往復しても同じ値には戻らない。
-const double _kPxToMm = 25.4 / 96;
-
 class QgsWriter {
   const QgsWriter();
 
@@ -252,12 +246,31 @@ class QgsWriter {
   // レイヤ本体
   // =============================================
 
+  static Map<String, String> _mapLayerAttributes({
+    required String type,
+    String? geometry,
+    String? wkbType,
+    String? readOnly,
+    String? labelsEnabled,
+  }) => {
+    'type': type,
+    'geometry': ?geometry,
+    'wkbType': ?wkbType,
+    'hasScaleBasedVisibilityFlag': '0',
+    'minScale': '1e+08',
+    'maxScale': '0',
+    'readOnly': ?readOnly,
+    'refreshOnNotifyEnabled': '0',
+    'autoRefreshMode': 'Disabled',
+    'styleCategories': 'AllStyleCategories',
+    'labelsEnabled': ?labelsEnabled,
+  };
+
   void _writeProjectLayers(XmlBuilder builder, QgsProject project) {
-    final layers = project.layers;
     builder.element(
       'projectlayers',
       nest: () {
-        for (final layer in layers) {
+        for (final layer in project.layers) {
           _writeMapLayer(builder, layer);
         }
         for (final raster in project.rasterLayers) {
@@ -274,18 +287,12 @@ class QgsWriter {
   void _writeTableMapLayer(XmlBuilder builder, QgsTableLayer layer) {
     builder.element(
       'maplayer',
-      attributes: {
-        'type': 'vector',
-        'geometry': 'No geometry',
-        'wkbType': 'NoGeometry',
-        'hasScaleBasedVisibilityFlag': '0',
-        'minScale': '1e+08',
-        'maxScale': '0',
-        'readOnly': '0',
-        'refreshOnNotifyEnabled': '0',
-        'autoRefreshMode': 'Disabled',
-        'styleCategories': 'AllStyleCategories',
-      },
+      attributes: _mapLayerAttributes(
+        type: 'vector',
+        geometry: 'No geometry',
+        wkbType: 'NoGeometry',
+        readOnly: '0',
+      ),
       nest: () {
         builder.element('id', nest: layer.id);
         builder.element('datasource', nest: layer.dataSourceUri);
@@ -302,15 +309,7 @@ class QgsWriter {
   void _writeRasterMapLayer(XmlBuilder builder, QgsRasterLayer layer) {
     builder.element(
       'maplayer',
-      attributes: {
-        'type': 'raster',
-        'hasScaleBasedVisibilityFlag': '0',
-        'minScale': '1e+08',
-        'maxScale': '0',
-        'refreshOnNotifyEnabled': '0',
-        'autoRefreshMode': 'Disabled',
-        'styleCategories': 'AllStyleCategories',
-      },
+      attributes: _mapLayerAttributes(type: 'raster'),
       nest: () {
         builder.element('id', nest: layer.id);
         builder.element('datasource', nest: layer.dataSourcePath);
@@ -324,18 +323,12 @@ class QgsWriter {
   void _writeMapLayer(XmlBuilder builder, QgsLayer layer) {
     builder.element(
       'maplayer',
-      attributes: {
-        'type': 'vector',
-        'geometry': qgsGeometryName(layer.geometryType),
-        'hasScaleBasedVisibilityFlag': '0',
-        'minScale': '1e+08',
-        'maxScale': '0',
-        'readOnly': '0',
-        'refreshOnNotifyEnabled': '0',
-        'autoRefreshMode': 'Disabled',
-        'styleCategories': 'AllStyleCategories',
-        'labelsEnabled': (layer.style?.hasLabel ?? false) ? '1' : '0',
-      },
+      attributes: _mapLayerAttributes(
+        type: 'vector',
+        geometry: qgsGeometryName(layer.geometryType),
+        readOnly: '0',
+        labelsEnabled: (layer.style?.hasLabel ?? false) ? '1' : '0',
+      ),
       nest: () {
         builder.element('id', nest: layer.id);
         builder.element('datasource', nest: layer.dataSourceUri);
@@ -620,17 +613,9 @@ class QgsWriter {
   }
 
   /// QGIS の色表記 `R,G,B,A`（各0-255）。[opacity] があればアルファはそれにする
-  static String formatColor(Color color, {double? opacity}) {
-    final argb = color.toARGB32();
-    final a = opacity != null
-        ? (opacity.clamp(0.0, 1.0) * 255).round()
-        : (argb >> 24) & 0xFF;
-    final r = (argb >> 16) & 0xFF;
-    final g = (argb >> 8) & 0xFF;
-    final b = argb & 0xFF;
-    return '$r,$g,$b,$a';
-  }
+  static String formatColor(Color color, {double? opacity}) =>
+      formatQgsColor(color, opacity: opacity);
 
   /// px → QGIS のシンボル単位（MM）
-  static String formatMm(double px) => (px * _kPxToMm).toStringAsFixed(2);
+  static String formatMm(double px) => formatQgsMm(px);
 }

@@ -24,9 +24,9 @@ import 'package:xml/xml.dart';
 
 import '../../models/kmeta.dart';
 import '../../models/qgis_renderer.dart';
+import 'qgs_xml.dart';
 
-/// px ⇄ mm（QGISのシンボル単位はMM）。96dpi 相当。[[qgs_writer]] の逆。
-const double kQgsMmToPx = 96 / 25.4;
+export 'qgs_xml.dart' show kQgsMmToPx;
 
 /// `<symbol>` → 見た目
 abstract final class QgsSymbolReader {
@@ -128,35 +128,13 @@ abstract final class QgsSymbolReader {
   }
 
   /// QGIS の `R,G,B,A`（各0-255）
-  ///
-  /// ⚠ QGIS 3.44 は後ろに浮動小数表記を足してくる:
-  /// `30,144,255,255,rgb:0.1176471,0.5647059,1,1`。先頭4つだけ見ればよい。
-  static Color? color(String? value) {
-    if (value == null) return null;
-    final parts = value.split(',');
-    if (parts.length < 3) return null;
-    final rgb = [
-      for (final part in parts.take(3)) int.tryParse(part.trim()) ?? 0,
-    ];
-    // アルファは別途 opacity として持つので、色は不透明にしておく
-    return Color.fromARGB(255, rgb[0], rgb[1], rgb[2]);
-  }
+  static Color? color(String? value) => parseQgsColor(value);
 
   /// `R,G,B,A` のAを 0..1 で返す
-  static double? alphaOf(String? value) {
-    if (value == null) return null;
-    final parts = value.split(',');
-    if (parts.length < 4) return null;
-    final a = int.tryParse(parts[3].trim());
-    return a == null ? null : a / 255;
-  }
+  static double? alphaOf(String? value) => parseQgsColorAlpha(value);
 
-  static double? px(String? mm, {double divideBy = 1}) {
-    if (mm == null) return null;
-    final value = double.tryParse(mm.trim());
-    if (value == null) return null;
-    return value * kQgsMmToPx / divideBy;
-  }
+  static double? px(String? mm, {double divideBy = 1}) =>
+      parseQgsMmToPx(mm, divideBy: divideBy);
 }
 
 /// `<renderer-v2>`（分類・段階・ルール）→ [QgisRenderer]
@@ -167,7 +145,7 @@ abstract final class QgsRendererReader {
     final kind = QgisRendererKind.fromQgisType(renderer?.getAttribute('type'));
     if (renderer == null || kind == null) return null;
 
-    final opacity = double.tryParse(maplayer.getElement('layerOpacity')?.innerText.trim() ?? '') ?? 1;
+    final opacity = double.tryParse(childText(maplayer, 'layerOpacity') ?? '') ?? 1;
     final symbols = <String, XmlElement>{
       for (final s in renderer.getElement('symbols')?.findElements('symbol') ?? const <XmlElement>[])
         s.getAttribute('name') ?? '': s,

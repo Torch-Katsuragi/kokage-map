@@ -556,13 +556,9 @@ class QgsProjectBuilder {
   // 部品
   // =============================================
 
-  /// `.qgs` から見た相対パス（[relativeInside]）。root外を指していたら null。
+  /// `.qgs` から見た相対パス（[qgsRelativePath]）。root外を指していたら null。
   /// QGIS は `./` 始まりを相対パスとして扱う。区切りは常に `/`
-  String? _relativeTo(String? rootPath, String? absPath) {
-    if (rootPath == null || absPath == null) return null;
-    final rel = relativeInside(rootPath, absPath);
-    return rel == null ? null : './${rel.replaceAll(r'\', '/')}';
-  }
+  String? _relativeTo(String? rootPath, String? absPath) => qgsRelativePath(rootPath, absPath);
 
   /// View の一意ID。
   ///
@@ -627,7 +623,7 @@ class QgsProjectBuilder {
       labelEnabled: style.labelEnabled,
       labelField: normalizeLabelExpression(style.labelProperty),
       // こかげマップ のラベルは px、QGIS は pt。96dpi で 1px = 0.75pt
-      labelFontSizePt: style.labelFontSize == null ? null : style.labelFontSize! * 0.75,
+      labelFontSizePt: style.labelFontSize == null ? null : style.labelFontSize! * kQgsPxToPt,
       labelColor: style.labelColor,
       labelHaloColor: style.labelHaloColor,
       pointColor: style.pointColor,

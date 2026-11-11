@@ -22,6 +22,7 @@
 import 'package:xml/xml.dart';
 
 import '../../models/qgis_form.dart';
+import 'qgs_xml.dart';
 
 class QgsFormReader {
   const QgsFormReader._();
@@ -115,23 +116,21 @@ class QgsFormReader {
 
     final layout = _readLayout(maplayer);
     // 表示名の式。空なら持たない（こかげマップが書いた `.qgs` は空で書く）
-    final display = maplayer.getElement('previewExpression')?.innerText.trim();
-    final form = QgisForm(fields: fields, layout: layout, displayExpression: display == null || display.isEmpty ? null : display);
+    final display = childText(maplayer, 'previewExpression');
+    final form = QgisForm(fields: fields, layout: layout, displayExpression: display);
     return form.isEmpty ? null : form;
   }
 
   static bool _bool(Object? v) => v == true || v == 'true' || v == 1;
 
   static Iterable<XmlElement> _children(XmlElement maplayer, String parent, String child) =>
-      maplayer.findElements(parent).firstOrNull?.findElements(child) ?? const [];
+      maplayer.getElement(parent)?.findElements(child) ?? const [];
 
   /// ドラッグ&ドロップの配置（`<editorlayout>tablayout</editorlayout>` のときだけ）
   static List<QgisFormElement>? _readLayout(XmlElement maplayer) {
-    final kind = maplayer.findElements('editorlayout').firstOrNull?.innerText.trim();
-    if (kind != 'tablayout') return null;
-    final form = maplayer.findElements('attributeEditorForm').firstOrNull;
-    if (form == null) return null;
-    return _readElements(form);
+    if (childText(maplayer, 'editorlayout') != 'tablayout') return null;
+    final form = maplayer.getElement('attributeEditorForm');
+    return form == null ? null : _readElements(form);
   }
 
   static List<QgisFormElement> _readElements(XmlElement parent) {

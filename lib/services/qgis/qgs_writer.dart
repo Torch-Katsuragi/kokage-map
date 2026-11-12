@@ -28,7 +28,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:xml/xml.dart';
 
+import '../../core/terrain/svg_marker_atlas.dart';
 import '../../models/geometry_type.dart';
+import '../../models/qgis_symbol.dart';
 import 'qgs_model.dart';
 import 'qgs_xml.dart';
 
@@ -404,12 +406,16 @@ class QgsWriter {
     final style = layer.style;
     if (style == null || style.isEmpty) return;
 
+    final useSymbolLevels =
+        (layer.geometryType == GeometryType.linestring && style.lineCasingEnabled == true && (style.lineCasingWidthPx ?? 2.0) > 0) ||
+        (layer.geometryType == GeometryType.polygon && style.strokeCasingEnabled == true && (style.strokeCasingWidthPx ?? 2.0) > 0);
+
     builder.element(
       'renderer-v2',
       attributes: {
         'type': 'singleSymbol',
         'forceraster': '0',
-        'symbollevels': '0',
+        'symbollevels': useSymbolLevels ? '1' : '0',
         'enableorderby': '0',
         'referencescale': '-1',
       },
@@ -486,16 +492,59 @@ class QgsWriter {
     return _fragment((b) => _writeLabeling(b, layer));
   }
 
-  void _writeSymbol(
+  void _writeOptionMap(XmlBuilder builder, Map<String, String> options) {
+    builder.element(
+      'Option',
+      attributes: {'type': 'Map'},
+      nest: () {
+        // QGIS は順不同で読むが、差分を安定させるため名前順で書く
+        final keys = options.keys.toList()..sort();
+        for (final key in keys) {
+          builder.element(
+            'Option',
+            attributes: {
+              'name': key,
+              'type': 'QString',
+              'value': options[key]!,
+            },
+          );
+        }
+      },
+    );
+  }
+
+  void _writeSymbolLayer(
     XmlBuilder builder,
-    String type,
     String layerClass,
-    Map<String, String> options,
-  ) {
+    Map<String, String> options, {
+    int pass = 0,
+    void Function()? extraChildren,
+  }) {
+    builder.element(
+      'layer',
+      attributes: {
+        'class': layerClass,
+        'enabled': '1',
+        'locked': '0',
+        'pass': '$pass',
+      },
+      nest: () {
+        _writeOptionMap(builder, options);
+        extraChildren?.call();
+      },
+    );
+  }
+
+  void _writeSymbolShell(
+    XmlBuilder builder, {
+    required String name,
+    required String type,
+    required void Function() writeLayers,
+  }) {
     builder.element(
       'symbol',
       attributes: {
-        'name': '0',
+        'name': name,
         'type': type,
         'alpha': '1',
         'clip_to_extent': '1',
@@ -503,59 +552,117 @@ class QgsWriter {
         'frame_rate': '10',
         'is_animated': '0',
       },
-      nest: () {
-        builder.element(
-          'layer',
-          attributes: {
-            'class': layerClass,
-            'enabled': '1',
-            'locked': '0',
-            'pass': '0',
-          },
-          nest: () {
-            builder.element(
-              'Option',
-              attributes: {'type': 'Map'},
-              nest: () {
-                // QGIS は順不同で読むが、差分を安定させるため名前順で書く
-                final keys = options.keys.toList()..sort();
-                for (final key in keys) {
-                  builder.element(
-                    'Option',
-                    attributes: {
-                      'name': key,
-                      'type': 'QString',
-                      'value': options[key]!,
-                    },
-                  );
-                }
-              },
-            );
-          },
-        );
-      },
+      nest: writeLayers,
     );
   }
 
+  void _writeSymbol(
+    XmlBuilder builder,
+    String type,
+    String layerClass,
+    Map<String, String> options,
+  ) {
+    _writeSymbolShell(
+      builder,
+      name: '0',
+      type: type,
+      writeLayers: () => _writeSymbolLayer(builder, layerClass, options),
+    );
+  }
+
+  Map<String, String> _simpleLineOptions({
+    required String color,
+    required String widthMm,
+    String lineStyle = 'solid',
+    String capStyle = 'square',
+    String joinStyle = 'bevel',
+  }) => {
+    'align_dash_pattern': '0',
+    'capstyle': capStyle,
+    'customdash': '5;2',
+    'customdash_map_unit_scale': '3x:0,0,0,0,0,0',
+    'customdash_unit': 'MM',
+    'dash_pattern_offset': '0',
+    'dash_pattern_offset_map_unit_scale': '3x:0,0,0,0,0,0',
+    'dash_pattern_offset_unit': 'MM',
+    'draw_inside_polygon': '0',
+    'joinstyle': joinStyle,
+    'line_color': color,
+    'line_style': lineStyle,
+    'line_width': widthMm,
+    'line_width_unit': 'MM',
+    'offset': '0',
+    'offset_map_unit_scale': '3x:0,0,0,0,0,0',
+    'offset_unit': 'MM',
+    'ring_filter': '0',
+    'trim_distance_end': '0',
+    'trim_distance_start': '0',
+    'tweak_dash_pattern_on_corners': '0',
+    'use_custom_dash': '0',
+    'width_map_unit_scale': '3x:0,0,0,0,0,0',
+  };
+
   void _writeMarkerSymbol(XmlBuilder builder, QgsStyle style) {
+    final outlineColor = style.pointOutlineColor != null
+        ? formatColor(style.pointOutlineColor!, opacity: style.pointOpacity)
+        : '35,35,35,255';
+    final outlineWidth = style.pointOutlineEnabled == false
+        ? '0'
+        : (style.pointOutlineWidthPx != null ? formatMm(style.pointOutlineWidthPx!) : '0');
+    final angle = (style.pointAngleDeg != null && style.pointAngleDeg != 0)
+        ? style.pointAngleDeg!.toString()
+        : '0';
+    // こかげマップ の pointSize は半径感覚の px。QGIS の size は直径(MM)。
+    final sizeMm = formatMm((style.pointSizePx ?? 6) * 2);
+
+    if (style.pointSvgContent != null) {
+      final svgName = (style.pointSvgPath != null && style.pointSvgPath!.startsWith('base64:'))
+          ? style.pointSvgPath!
+          : encodeBase64QgisSvg(style.pointSvgContent!);
+      _writeSymbol(builder, 'marker', 'SvgMarker', {
+        'angle': angle,
+        'color': formatColor(style.pointColor ?? Colors.red, opacity: style.pointOpacity),
+        'fixedAspectRatio': '0',
+        'horizontal_anchor_point': '1',
+        'name': svgName,
+        'offset': '0,0',
+        'offset_map_unit_scale': '3x:0,0,0,0,0,0',
+        'offset_unit': 'MM',
+        'outline_color': outlineColor,
+        'outline_width': outlineWidth,
+        'outline_width_map_unit_scale': '3x:0,0,0,0,0,0',
+        'outline_width_unit': 'MM',
+        'parameters': '',
+        'scale_method': 'diameter',
+        'size': sizeMm,
+        'size_map_unit_scale': '3x:0,0,0,0,0,0',
+        'size_unit': 'MM',
+        'vertical_anchor_point': '1',
+      });
+      return;
+    }
+
+    final shapeName = style.pointShape == null
+        ? 'circle'
+        : PointMarkerShape.fromId(style.pointShape).qgisName;
+    final outlineStyle = style.pointOutlineEnabled == false ? 'no' : 'solid';
     _writeSymbol(builder, 'marker', 'SimpleMarker', {
-      'angle': '0',
+      'angle': angle,
       'cap_style': 'square',
-      'color': formatColor(style.pointColor ?? Colors.red),
+      'color': formatColor(style.pointColor ?? Colors.red, opacity: style.pointOpacity),
       'horizontal_anchor_point': '1',
       'joinstyle': 'bevel',
-      'name': 'circle',
+      'name': shapeName,
       'offset': '0,0',
       'offset_map_unit_scale': '3x:0,0,0,0,0,0',
       'offset_unit': 'MM',
-      'outline_color': '35,35,35,255',
-      'outline_style': 'solid',
-      'outline_width': '0',
+      'outline_color': outlineColor,
+      'outline_style': outlineStyle,
+      'outline_width': outlineWidth,
       'outline_width_map_unit_scale': '3x:0,0,0,0,0,0',
       'outline_width_unit': 'MM',
       'scale_method': 'diameter',
-      // こかげマップ の pointSize は半径感覚の px。QGIS の size は直径(MM)。
-      'size': formatMm((style.pointSizePx ?? 6) * 2),
+      'size': sizeMm,
       'size_map_unit_scale': '3x:0,0,0,0,0,0',
       'size_unit': 'MM',
       'vertical_anchor_point': '1',
@@ -563,53 +670,269 @@ class QgsWriter {
   }
 
   void _writeLineSymbol(XmlBuilder builder, QgsStyle style) {
-    _writeSymbol(builder, 'line', 'SimpleLine', {
-      'align_dash_pattern': '0',
-      'capstyle': 'square',
-      'customdash': '5;2',
-      'customdash_map_unit_scale': '3x:0,0,0,0,0,0',
-      'customdash_unit': 'MM',
-      'dash_pattern_offset': '0',
-      'dash_pattern_offset_map_unit_scale': '3x:0,0,0,0,0,0',
-      'dash_pattern_offset_unit': 'MM',
-      'draw_inside_polygon': '0',
-      'joinstyle': 'bevel',
-      'line_color': formatColor(style.lineColor ?? Colors.blue),
-      'line_style': 'solid',
-      'line_width': formatMm(style.lineWidthPx ?? 2),
-      'line_width_unit': 'MM',
-      'offset': '0',
-      'offset_map_unit_scale': '3x:0,0,0,0,0,0',
-      'offset_unit': 'MM',
-      'ring_filter': '0',
-      'trim_distance_end': '0',
-      'trim_distance_start': '0',
-      'tweak_dash_pattern_on_corners': '0',
-      'use_custom_dash': '0',
-      'width_map_unit_scale': '3x:0,0,0,0,0,0',
-    });
+    final dash = LineDashPattern.fromId(style.lineDash);
+    final coreWidth = style.lineWidthPx ?? 2;
+    final casingWidth = style.lineCasingWidthPx ?? 2;
+    final hasCasing = style.lineCasingEnabled == true && casingWidth > 0;
+    if (!hasCasing) {
+      _writeSymbol(
+        builder,
+        'line',
+        'SimpleLine',
+        _simpleLineOptions(
+          color: formatColor(style.lineColor ?? Colors.blue, opacity: style.lineOpacity),
+          widthMm: formatMm(coreWidth),
+          lineStyle: dash.qgisPenStyle,
+        ),
+      );
+      return;
+    }
+    _writeSymbolShell(
+      builder,
+      name: '0',
+      type: 'line',
+      writeLayers: () {
+        _writeSymbolLayer(
+          builder,
+          'SimpleLine',
+          _simpleLineOptions(
+            color: formatColor(style.lineCasingColor ?? Colors.white, opacity: style.lineOpacity),
+            widthMm: formatMm(coreWidth + casingWidth * 2),
+            capStyle: 'round',
+            joinStyle: 'round',
+          ),
+          pass: 0,
+        );
+        _writeSymbolLayer(
+          builder,
+          'SimpleLine',
+          _simpleLineOptions(
+            color: formatColor(style.lineColor ?? Colors.blue, opacity: style.lineOpacity),
+            widthMm: formatMm(coreWidth),
+            lineStyle: dash.qgisPenStyle,
+            capStyle: dash == LineDashPattern.solid ? 'round' : 'square',
+            joinStyle: 'round',
+          ),
+          pass: 1,
+        );
+      },
+    );
   }
 
   void _writeFillSymbol(XmlBuilder builder, QgsStyle style) {
-    _writeSymbol(builder, 'fill', 'SimpleFill', {
-      'border_width_map_unit_scale': '3x:0,0,0,0,0,0',
-      'color': formatColor(
-        style.fillColor ?? Colors.orange,
-        opacity: style.fillOpacity,
-      ),
-      'joinstyle': 'bevel',
-      'offset': '0,0',
-      'offset_map_unit_scale': '3x:0,0,0,0,0,0',
-      'offset_unit': 'MM',
-      'outline_color': formatColor(
-        style.strokeColor ?? Colors.black,
-        opacity: style.strokeOpacity,
-      ),
-      'outline_style': 'solid',
-      'outline_width': formatMm(style.strokeWidthPx ?? 1),
-      'outline_width_unit': 'MM',
-      'style': 'solid',
-    });
+    final fillPat = PolygonFillPattern.fromId(style.fillPattern);
+    final strokeDash = LineDashPattern.fromId(style.strokeDash);
+    final strokeW = style.strokeWidthPx ?? 1;
+    final strokeCasingW = style.strokeCasingWidthPx ?? 2;
+    final hasStrokeCasing = style.strokeCasingEnabled == true && strokeCasingW > 0 && strokeW > 0;
+
+    // ベタ塗りまたは塗りなし・かつ輪郭の縁取りなし → 単一 SimpleFill（従来の XML と完全一致）
+    if ((fillPat == PolygonFillPattern.solid || fillPat == PolygonFillPattern.none) && !hasStrokeCasing) {
+      final outlineStyle = (style.strokeWidthPx != null && style.strokeWidthPx! <= 0)
+          ? 'no'
+          : strokeDash.qgisPenStyle;
+      _writeSymbol(builder, 'fill', 'SimpleFill', {
+        'border_width_map_unit_scale': '3x:0,0,0,0,0,0',
+        'color': formatColor(
+          style.fillColor ?? Colors.orange,
+          opacity: style.fillOpacity,
+        ),
+        'joinstyle': 'bevel',
+        'offset': '0,0',
+        'offset_map_unit_scale': '3x:0,0,0,0,0,0',
+        'offset_unit': 'MM',
+        'outline_color': formatColor(
+          style.strokeColor ?? Colors.black,
+          opacity: style.strokeOpacity,
+        ),
+        'outline_style': outlineStyle,
+        'outline_width': formatMm(strokeW),
+        'outline_width_unit': 'MM',
+        'style': fillPat == PolygonFillPattern.none ? 'no' : 'solid',
+      });
+      return;
+    }
+
+    // ハッチング・ドット・または輪郭の縁取りあり → 複数シンボルレイヤ
+    final fillColorStr = formatColor(style.fillColor ?? Colors.orange, opacity: style.fillOpacity);
+    final spacingMm = formatMm(style.patternSpacingPx ?? 8.0);
+    final hatchWidthMm = formatMm(style.patternLineWidthPx ?? 1.5);
+
+    _writeSymbolShell(
+      builder,
+      name: '0',
+      type: 'fill',
+      writeLayers: () {
+        var subIdx = 0;
+        switch (fillPat) {
+          case PolygonFillPattern.none:
+            break;
+          case PolygonFillPattern.solid:
+            _writeSymbolLayer(builder, 'SimpleFill', {
+              'border_width_map_unit_scale': '3x:0,0,0,0,0,0',
+              'color': fillColorStr,
+              'joinstyle': 'bevel',
+              'offset': '0,0',
+              'offset_map_unit_scale': '3x:0,0,0,0,0,0',
+              'offset_unit': 'MM',
+              'outline_color': '0,0,0,0',
+              'outline_style': 'no',
+              'outline_width': '0',
+              'outline_width_unit': 'MM',
+              'style': 'solid',
+            });
+          case PolygonFillPattern.dots:
+            final symName = '@0@${subIdx++}';
+            _writeSymbolLayer(
+              builder,
+              'PointPatternFill',
+              {
+                'angle': '0',
+                'clip_mode': 'shape',
+                'coordinate_reference': 'feature',
+                'displacement_x': '0',
+                'displacement_x_map_unit_scale': '3x:0,0,0,0,0,0',
+                'displacement_x_unit': 'MM',
+                'displacement_y': '0',
+                'displacement_y_map_unit_scale': '3x:0,0,0,0,0,0',
+                'displacement_y_unit': 'MM',
+                'distance_x': spacingMm,
+                'distance_x_map_unit_scale': '3x:0,0,0,0,0,0',
+                'distance_x_unit': 'MM',
+                'distance_y': spacingMm,
+                'distance_y_map_unit_scale': '3x:0,0,0,0,0,0',
+                'distance_y_unit': 'MM',
+                'offset_x': '0',
+                'offset_x_map_unit_scale': '3x:0,0,0,0,0,0',
+                'offset_x_unit': 'MM',
+                'offset_y': '0',
+                'offset_y_map_unit_scale': '3x:0,0,0,0,0,0',
+                'offset_y_unit': 'MM',
+                'outline_width_map_unit_scale': '3x:0,0,0,0,0,0',
+                'outline_width_unit': 'MM',
+                'random_deviation_x': '0',
+                'random_deviation_y': '0',
+                'seed': '0',
+              },
+              extraChildren: () => _writeSymbolShell(
+                builder,
+                name: symName,
+                type: 'marker',
+                writeLayers: () => _writeSymbolLayer(builder, 'SimpleMarker', {
+                  'angle': '0',
+                  'cap_style': 'square',
+                  'color': fillColorStr,
+                  'horizontal_anchor_point': '1',
+                  'joinstyle': 'bevel',
+                  'name': 'circle',
+                  'offset': '0,0',
+                  'offset_map_unit_scale': '3x:0,0,0,0,0,0',
+                  'offset_unit': 'MM',
+                  'outline_color': '35,35,35,255',
+                  'outline_style': 'no',
+                  'outline_width': '0',
+                  'outline_width_map_unit_scale': '3x:0,0,0,0,0,0',
+                  'outline_width_unit': 'MM',
+                  'scale_method': 'diameter',
+                  'size': formatMm((style.patternLineWidthPx ?? 1.5) * 2),
+                  'size_map_unit_scale': '3x:0,0,0,0,0,0',
+                  'size_unit': 'MM',
+                  'vertical_anchor_point': '1',
+                }),
+              ),
+            );
+          case PolygonFillPattern.slash:
+          case PolygonFillPattern.backslash:
+          case PolygonFillPattern.cross:
+          case PolygonFillPattern.grid:
+          case PolygonFillPattern.horizontal:
+          case PolygonFillPattern.vertical:
+            final angles = switch (fillPat) {
+              PolygonFillPattern.slash => const [45],
+              PolygonFillPattern.backslash => const [135],
+              PolygonFillPattern.cross => const [45, 135],
+              PolygonFillPattern.grid => const [0, 90],
+              PolygonFillPattern.horizontal => const [0],
+              PolygonFillPattern.vertical => const [90],
+              _ => const [45],
+            };
+            for (final deg in angles) {
+              final symName = '@0@${subIdx++}';
+              _writeSymbolLayer(
+                builder,
+                'LinePatternFill',
+                {
+                  'angle': '$deg',
+                  'clip_mode': 'during_render',
+                  'color': fillColorStr,
+                  'coordinate_reference': 'feature',
+                  'distance': spacingMm,
+                  'distance_map_unit_scale': '3x:0,0,0,0,0,0',
+                  'distance_unit': 'MM',
+                  'line_width': hatchWidthMm,
+                  'line_width_map_unit_scale': '3x:0,0,0,0,0,0',
+                  'line_width_unit': 'MM',
+                  'offset': '0',
+                  'offset_map_unit_scale': '3x:0,0,0,0,0,0',
+                  'offset_unit': 'MM',
+                  'outline_width_map_unit_scale': '3x:0,0,0,0,0,0',
+                  'outline_width_unit': 'MM',
+                },
+                extraChildren: () => _writeSymbolShell(
+                  builder,
+                  name: symName,
+                  type: 'line',
+                  writeLayers: () => _writeSymbolLayer(
+                    builder,
+                    'SimpleLine',
+                    _simpleLineOptions(color: fillColorStr, widthMm: hatchWidthMm),
+                  ),
+                ),
+              );
+            }
+        }
+
+        // 輪郭線レイヤ
+        if (strokeW > 0 && (style.strokeOpacity ?? 1.0) > 0 && strokeDash != LineDashPattern.none) {
+          final outlineColorStr = formatColor(style.strokeColor ?? Colors.black, opacity: style.strokeOpacity);
+          if (hasStrokeCasing) {
+            _writeSymbolLayer(
+              builder,
+              'SimpleLine',
+              _simpleLineOptions(
+                color: formatColor(style.strokeCasingColor ?? Colors.white, opacity: style.strokeOpacity),
+                widthMm: formatMm(strokeW + strokeCasingW * 2),
+                capStyle: 'round',
+                joinStyle: 'round',
+              ),
+              pass: 0,
+            );
+            _writeSymbolLayer(
+              builder,
+              'SimpleLine',
+              _simpleLineOptions(
+                color: outlineColorStr,
+                widthMm: formatMm(strokeW),
+                lineStyle: strokeDash.qgisPenStyle,
+                capStyle: strokeDash == LineDashPattern.solid ? 'round' : 'square',
+                joinStyle: 'round',
+              ),
+              pass: 1,
+            );
+          } else {
+            _writeSymbolLayer(
+              builder,
+              'SimpleLine',
+              _simpleLineOptions(
+                color: outlineColorStr,
+                widthMm: formatMm(strokeW),
+                lineStyle: strokeDash.qgisPenStyle,
+              ),
+            );
+          }
+        }
+      },
+    );
   }
 
   /// QGIS の色表記 `R,G,B,A`（各0-255）。[opacity] があればアルファはそれにする

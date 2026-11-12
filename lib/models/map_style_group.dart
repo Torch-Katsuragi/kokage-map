@@ -15,6 +15,10 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:ui' show Color;
 
+import 'package:flutter/foundation.dart' show listEquals;
+
+import 'qgis_symbol.dart';
+
 /// フィーチャの GeoJSON に載せるプロパティ名（MapSourceManager から移した。2026-09-11 MapLibre 撤去）
 ///
 /// [kStyleProp] はスタイルグループのキー（View のキー）。
@@ -44,6 +48,26 @@ class MapStyleGroup {
     this.labelHex = '#000000',
     this.labelHaloHex = '#ffffff',
     this.labelOpacity = 1.0,
+    this.lineStrokes = const [],
+    this.polygonFills = const [],
+    this.polygonOutlineStrokes = const [],
+    this.pointShape = PointMarkerShape.circle,
+    this.pointOutlineColor = const Color(0xFFFFFFFF),
+    this.pointOutlineWidth = 1.5,
+    this.pointAngle = 0.0,
+    this.pointSvgContent,
+    this.invertedPolygon = false,
+    this.nullSymbol = false,
+    this.minScale,
+    this.maxScale,
+    this.labelHaloEnabled = true,
+    this.labelHaloSize,
+    this.labelWrapChar,
+    this.labelBgEnabled = false,
+    this.labelBgShape,
+    this.labelBgColor,
+    this.labelBgBorderColor,
+    this.labelBgBorderWidth,
   });
 
   /// フィーチャの `k-style` 属性と突き合わせるキー（View のキー）
@@ -64,6 +88,43 @@ class MapStyleGroup {
   final String labelHaloHex;
   final double labelOpacity;
 
+  // 拡張シンボル属性（空の場合は基本フィールドから組み立てる）
+  final List<ResolvedLineStroke> lineStrokes;
+  final List<ResolvedFillLayer> polygonFills;
+  final List<ResolvedLineStroke> polygonOutlineStrokes;
+  final PointMarkerShape pointShape;
+  final Color pointOutlineColor;
+  final double pointOutlineWidth;
+  final double pointAngle;
+  final String? pointSvgContent;
+  final bool invertedPolygon;
+  final bool nullSymbol;
+  final double? minScale;
+  final double? maxScale;
+
+  // リッチラベル属性
+  final bool labelHaloEnabled;
+  final double? labelHaloSize;
+  final String? labelWrapChar;
+  final bool labelBgEnabled;
+  final String? labelBgShape;
+  final Color? labelBgColor;
+  final Color? labelBgBorderColor;
+  final double? labelBgBorderWidth;
+
+  /// テクスチャ焼き込み世代判定用の署名文字列
+  String get signature =>
+      '$key $fillHex $fillOpacity $outlineHex $outlineOpacity $borderWidth '
+      '$lineHex $lineWidth $lineOpacity $pointHex $pointSize $pointOpacity '
+      '$labelFontSize $labelHex $labelHaloHex $labelOpacity '
+      '${pointShape.id} ${pointOutlineColor.toARGB32()} $pointOutlineWidth $pointAngle '
+      '${pointSvgContent.hashCode} '
+      '$invertedPolygon $nullSymbol $minScale $maxScale '
+      '$labelHaloEnabled $labelHaloSize $labelWrapChar '
+      '$labelBgEnabled $labelBgShape ${labelBgColor?.toARGB32()} '
+      '${labelBgBorderColor?.toARGB32()} $labelBgBorderWidth '
+      '${Object.hashAll(lineStrokes)} ${Object.hashAll(polygonFills)} ${Object.hashAll(polygonOutlineStrokes)}';
+
   @override
   bool operator ==(Object other) =>
       other is MapStyleGroup &&
@@ -82,10 +143,30 @@ class MapStyleGroup {
       other.labelFontSize == labelFontSize &&
       other.labelHex == labelHex &&
       other.labelHaloHex == labelHaloHex &&
-      other.labelOpacity == labelOpacity;
+      other.labelOpacity == labelOpacity &&
+      listEquals(other.lineStrokes, lineStrokes) &&
+      listEquals(other.polygonFills, polygonFills) &&
+      listEquals(other.polygonOutlineStrokes, polygonOutlineStrokes) &&
+      other.pointShape == pointShape &&
+      other.pointOutlineColor == pointOutlineColor &&
+      other.pointOutlineWidth == pointOutlineWidth &&
+      other.pointAngle == pointAngle &&
+      other.pointSvgContent == pointSvgContent &&
+      other.invertedPolygon == invertedPolygon &&
+      other.nullSymbol == nullSymbol &&
+      other.minScale == minScale &&
+      other.maxScale == maxScale &&
+      other.labelHaloEnabled == labelHaloEnabled &&
+      other.labelHaloSize == labelHaloSize &&
+      other.labelWrapChar == labelWrapChar &&
+      other.labelBgEnabled == labelBgEnabled &&
+      other.labelBgShape == labelBgShape &&
+      other.labelBgColor == labelBgColor &&
+      other.labelBgBorderColor == labelBgBorderColor &&
+      other.labelBgBorderWidth == labelBgBorderWidth;
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
         key,
         fillHex,
         fillOpacity,
@@ -102,7 +183,27 @@ class MapStyleGroup {
         labelHex,
         labelHaloHex,
         labelOpacity,
-      );
+        Object.hashAll(lineStrokes),
+        Object.hashAll(polygonFills),
+        Object.hashAll(polygonOutlineStrokes),
+        pointShape,
+        pointOutlineColor,
+        pointOutlineWidth,
+        pointAngle,
+        pointSvgContent,
+        invertedPolygon,
+        nullSymbol,
+        minScale,
+        maxScale,
+        labelHaloEnabled,
+        labelHaloSize,
+        labelWrapChar,
+        labelBgEnabled,
+        labelBgShape,
+        labelBgColor,
+        labelBgBorderColor,
+        labelBgBorderWidth,
+      ]);
 }
 
 /// Flutter の色を `#RRGGBB`（不透明度は別フィールド）に

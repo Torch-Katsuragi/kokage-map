@@ -251,13 +251,34 @@ class QgsStyle {
   const QgsStyle({
     this.pointColor,
     this.pointSizePx,
+    this.pointOpacity,
+    this.pointShape,
+    this.pointOutlineEnabled,
+    this.pointOutlineColor,
+    this.pointOutlineWidthPx,
+    this.pointAngleDeg,
+    this.pointSvgContent,
+    this.pointSvgPath,
     this.lineColor,
     this.lineWidthPx,
+    this.lineOpacity,
+    this.lineDash,
+    this.lineCasingEnabled,
+    this.lineCasingColor,
+    this.lineCasingWidthPx,
     this.fillColor,
     this.fillOpacity,
+    this.fillPattern,
+    this.patternSpacingPx,
+    this.patternLineWidthPx,
     this.strokeColor,
     this.strokeWidthPx,
     this.strokeOpacity,
+    this.strokeDash,
+    this.strokeCasingEnabled,
+    this.strokeCasingColor,
+    this.strokeCasingWidthPx,
+    this.preserveExistingSymbol = false,
     this.labelEnabled,
     this.labelField,
     this.labelFontSizePt,
@@ -277,24 +298,69 @@ class QgsStyle {
 
   final Color? pointColor;
   final double? pointSizePx;
+  final double? pointOpacity;
+  final String? pointShape;
+  final bool? pointOutlineEnabled;
+  final Color? pointOutlineColor;
+  final double? pointOutlineWidthPx;
+  final double? pointAngleDeg;
+  final String? pointSvgContent;
+  final String? pointSvgPath;
+
   final Color? lineColor;
   final double? lineWidthPx;
+  final double? lineOpacity;
+  final String? lineDash;
+  final bool? lineCasingEnabled;
+  final Color? lineCasingColor;
+  final double? lineCasingWidthPx;
+
   final Color? fillColor;
   final double? fillOpacity;
+  final String? fillPattern;
+  final double? patternSpacingPx;
+  final double? patternLineWidthPx;
   final Color? strokeColor;
   final double? strokeWidthPx;
   final double? strokeOpacity;
+  final String? strokeDash;
+  final bool? strokeCasingEnabled;
+  final Color? strokeCasingColor;
+  final double? strokeCasingWidthPx;
+
+  /// QGIS 側で作られた複合シンボル（`symbolLayers != null`）を DOM 更新時に壊さず保持するか
+  final bool preserveExistingSymbol;
+
+  /// 複数シンボルレイヤを使って書き出す設定（縁取り・ハッチング・ドット）を含むか
+  bool get usesMultiSymbolLayers =>
+      lineCasingEnabled == true ||
+      strokeCasingEnabled == true ||
+      (fillPattern != null && fillPattern != 'solid' && fillPattern != 'none');
 
   bool get isEmpty =>
       pointColor == null &&
       pointSizePx == null &&
+      pointOpacity == null &&
+      pointShape == null &&
+      pointOutlineEnabled == null &&
+      pointOutlineColor == null &&
+      pointOutlineWidthPx == null &&
+      pointAngleDeg == null &&
+      pointSvgContent == null &&
       lineColor == null &&
       lineWidthPx == null &&
+      lineOpacity == null &&
+      lineDash == null &&
+      lineCasingEnabled == null &&
       fillColor == null &&
       fillOpacity == null &&
+      fillPattern == null &&
       strokeColor == null &&
       strokeWidthPx == null &&
-      strokeOpacity == null;
+      strokeOpacity == null &&
+      strokeDash == null &&
+      strokeCasingEnabled == null &&
+      !preserveExistingSymbol;
 }
 
 /// 書き出す `.qgs` 1本ぶん。

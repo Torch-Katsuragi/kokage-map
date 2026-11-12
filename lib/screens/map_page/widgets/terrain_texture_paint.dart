@@ -19,13 +19,16 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/painting.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/terrain/dem_tiles.dart';
+import '../../../core/terrain/fill_pattern_painter.dart';
 import '../../../core/terrain/terrain_scene.dart';
 import '../../../core/terrain/web_mercator.dart';
+import '../../../models/qgis_symbol.dart';
 
 /// テクスチャ 1 枚の範囲（[TileRange]）と、緯度経度 → テクスチャのピクセルの換算
 class TextureFrame {
@@ -39,9 +42,17 @@ class TextureFrame {
   final double north;
   final double pxPerM;
 
+  /// このテクスチャの中心緯度における代表縮尺分母（96 DPI 基準）
+  late final double scaleDenom = () {
+    final centerY = north - 0.5 * range.height * WebMercator.tileSpan(range.z);
+    final latRad = WebMercator.latFromY(centerY) * math.pi / 180.0;
+    final groundMPerPx = math.cos(latRad).abs() / math.max(pxPerM, 1e-9);
+    return groundMPerPx * (96.0 / 0.0254);
+  }();
+
   /// 範囲の Mercator の矩形（地物のふるい分け用）
   Rect get mercator =>
-      Rect.fromLTRB(west, north - range.height * WebMercator.tileSpan(range.z), west + range.widthMeters, north);
+      Rect.fromLTRB(west, north - range.height * WebMercator.tileSize / pxPerM, west + range.widthMeters, north);
 
   /// テクスチャ全体のピクセルの矩形
   Rect get pixels => Rect.fromLTWH(
@@ -59,20 +70,37 @@ class TextureFrame {
   /// 面のリング（穴を含む）を 1 本の Path に（evenOdd）
   ui.Path polygonPath(geo.Geometry? g) {
     final path = ui.Path()..fillType = ui.PathFillType.evenOdd;
+    addPolygonRingsToPath(path, g);
+    return path;
+  }
+
+  void addPolygonRingsToPath(ui.Path path, geo.Geometry? g) {
     for (final rings in TerrainSceneBuilder.ringsOf(g)) {
       for (final ring in rings) {
         _addPolyline(path, ring.positions);
         path.close();
       }
     }
-    return path;
   }
 
-  /// 線（多重線は部分ごと）を 1 本の Path に
-  ui.Path linePath(geo.Geometry? g) {
+  /// 線（多重線は部分ごと）を 1 本の Path に（[offsetPx] != 0 なら平行オフセット）
+  ui.Path linePath(geo.Geometry? g, {double offsetPx = 0.0}) {
     final path = ui.Path();
     for (final chain in TerrainSceneBuilder.chainsOf(g)) {
-      _addPolyline(path, chain.positions);
+      if (offsetPx.abs() > 0.01) {
+        // 画面座標（Y 下向き）では進行方向右側は -offset
+        final pts = [for (final p in chain.positions) ofPosition(p)];
+        final shifted = offsetPolyline2D(pts, -offsetPx);
+        for (var i = 0; i < shifted.length; i++) {
+          if (i == 0) {
+            path.moveTo(shifted[i].dx, shifted[i].dy);
+          } else {
+            path.lineTo(shifted[i].dx, shifted[i].dy);
+          }
+        }
+      } else {
+        _addPolyline(path, chain.positions);
+      }
     }
     return path;
   }
@@ -124,11 +152,6 @@ final class FillRun extends TextureDrawStep {
 }
 
 /// 面の塗りとオーバーレイ画像を描く順（下から）に混ぜる。
-///
-/// [fillRanks] は描く面それぞれの段（下から積む順に並んでいる前提。レイヤの並びで、大きいほど手前）、
-/// [overlayRanks] はオーバーレイ画像それぞれの段。段の小さいものから描き、同じ段ならオーバーレイが先
-/// （QGIS のレイヤ一覧で、上にあるものほど手前に描くのと同じ）。
-/// 線・点・枠線・ラベルはこの後（いつも一番上）。[[qgis-interop#レイヤの並びと描く順（2026-10-13）]]
 List<TextureDrawStep> composeTextureDraws({required List<int> fillRanks, required List<int> overlayRanks}) {
   final overlays = [for (var i = 0; i < overlayRanks.length; i++) i]
     ..sort((a, b) {
@@ -162,19 +185,50 @@ void paintPolygonFills(
   required Iterable<int> indexes,
   required TerrainFeatureStyle Function(geo.Feature f) styleOf,
 }) {
-  final fill = Paint()..style = PaintingStyle.fill;
+  final scale = frame.scaleDenom;
+  final outer = frame.pixels;
+  ui.Path? pendingInvertedPath;
+  List<ResolvedFillLayer>? pendingInvertedFills;
+
+  void flushInverted() {
+    if (pendingInvertedPath != null && pendingInvertedFills != null) {
+      drawPolygonFillLayers(
+        canvas,
+        pendingInvertedPath!,
+        pendingInvertedFills!,
+        inverted: true,
+        outerBounds: outer,
+      );
+      pendingInvertedPath = null;
+      pendingInvertedFills = null;
+    }
+  }
+
   for (final i in indexes) {
     final f = polygons[i];
     final st = styleOf(f);
-    if (st.fillColor.a > 0) canvas.drawPath(frame.polygonPath(f.geometry), fill..color = st.fillColor);
+    if (!st.isScaleVisible(scale)) continue;
+    final fillLayers = st.effectivePolygonFills;
+    if (fillLayers.isEmpty) continue;
+
+    if (st.invertedPolygon) {
+      if (pendingInvertedFills != null && !listEquals(pendingInvertedFills, fillLayers)) {
+        flushInverted();
+      }
+      pendingInvertedFills ??= fillLayers;
+      pendingInvertedPath ??= ui.Path()..fillType = ui.PathFillType.evenOdd;
+      frame.addPolygonRingsToPath(pendingInvertedPath!, f.geometry);
+      continue;
+    }
+
+    flushInverted();
+    drawPolygonFillLayers(canvas, frame.polygonPath(f.geometry), fillLayers);
   }
+  flushInverted();
 }
 
 /// 地物をテクスチャに描き、描いた件数を返す。[fillsOnly] なら面の塗りだけ、[fills] が false なら塗り以外
 /// （枠線・線・点。塗りはオーバーレイ画像と混ぜて先に描いてある: [composeTextureDraws]）。
-///
-/// 太さは画面で見える太さに合わせる。テクスチャは表示の段とほぼ同じ段で作るので、テクスチャの 1 px ≒ 画面の 1 px。
-/// [indexesIn] は範囲に掛かる地物の番号（範囲の索引で先にふるう）
 int paintFeatures(
   ui.Canvas canvas,
   TextureFrame frame, {
@@ -187,33 +241,57 @@ int paintFeatures(
   bool fills = true,
 }) {
   final merc = frame.mercator;
-  final fill = Paint()..style = PaintingStyle.fill;
-  final stroke = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeJoin = StrokeJoin.round
-    ..strokeCap = StrokeCap.round;
+  final scale = frame.scaleDenom;
   var n = 0;
-  for (final i in indexesIn(polygons, merc)) {
-    final f = polygons[i];
-    final st = styleOf(f);
-    final outline = !fillsOnly && st.outlineColor.a > 0 && st.outlineWidth > 0;
-    final filled = fills && st.fillColor.a > 0;
-    if (filled || outline) {
-      final path = frame.polygonPath(f.geometry);
-      if (filled) canvas.drawPath(path, fill..color = st.fillColor);
-      if (outline) canvas.drawPath(path, stroke..color = st.outlineColor..strokeWidth = math.max(1.0, st.outlineWidth));
-    }
-    n++;
+
+  final polyIdx = indexesIn(polygons, merc);
+  if (fills) {
+    paintPolygonFills(canvas, frame, polygons: polygons, indexes: polyIdx, styleOf: styleOf);
   }
-  if (fillsOnly) return n;
+  if (!fillsOnly) {
+    final polyDraws = <(int pass, ui.Path path, ResolvedLineStroke stroke)>[];
+    var hasMultiPassPoly = false;
+    for (final i in polyIdx) {
+      final f = polygons[i];
+      final st = styleOf(f);
+      if (!st.isScaleVisible(scale)) continue;
+      final outStrokes = st.effectivePolygonOutlineStrokes;
+      if (outStrokes.isNotEmpty) {
+        final path = frame.polygonPath(f.geometry);
+        for (final s in outStrokes) {
+          polyDraws.add((s.pass, path, s));
+          if (s.pass != 0) hasMultiPassPoly = true;
+        }
+      }
+      n++;
+    }
+    _drawPassOrderedStrokes(canvas, polyDraws, hasMultiPassPoly, minWidth: 1.0);
+  } else {
+    n += polyIdx.length;
+    return n;
+  }
+
+  final lineDraws = <(int pass, ui.Path path, ResolvedLineStroke stroke)>[];
+  var hasMultiPassLine = false;
   for (final i in indexesIn(polylines, merc)) {
     final f = polylines[i];
     final st = styleOf(f);
-    if (st.lineColor.a > 0 && st.lineWidth > 0) {
-      canvas.drawPath(frame.linePath(f.geometry), stroke..color = st.lineColor..strokeWidth = math.max(1.5, st.lineWidth));
+    if (!st.isScaleVisible(scale)) continue;
+    final strokes = st.effectiveLineStrokes;
+    if (strokes.isNotEmpty) {
+      ui.Path? basePath;
+      for (final s in strokes) {
+        final p = s.offsetPx.abs() > 0.01
+            ? frame.linePath(f.geometry, offsetPx: s.offsetPx)
+            : (basePath ??= frame.linePath(f.geometry));
+        lineDraws.add((s.pass, p, s));
+        if (s.pass != 0) hasMultiPassLine = true;
+      }
     }
     n++;
   }
+  _drawPassOrderedStrokes(canvas, lineDraws, hasMultiPassLine, minWidth: 1.5);
+
   for (final f in markers) {
     final pos = f.geometry?.position;
     if (pos == null) continue;
@@ -221,12 +299,57 @@ int paintFeatures(
     final y = WebMercator.yFromLat(pos.y);
     if (x < merc.left || x > merc.right || y < merc.top || y > merc.bottom) continue;
     final st = styleOf(f);
-    if (st.pointColor.a > 0 && st.pointSize > 0) {
-      canvas.drawCircle(frame.ofPosition(pos), math.max(2.0, st.pointSize), fill..color = st.pointColor);
+    if (!st.isScaleVisible(scale) || st.nullSymbol) continue;
+    final hasVisiblePoint = st.pointSvgContent != null ||
+        st.pointColor.a > 0 ||
+        (st.pointOutlineWidth > 0 && st.pointOutlineColor.a > 0);
+    if (st.pointSize > 0 && hasVisiblePoint) {
+      drawPointOrSvgMarker(
+        canvas,
+        frame.ofPosition(pos),
+        math.max(2.0, st.pointSize),
+        svgContent: st.pointSvgContent,
+        shape: st.pointShape,
+        fillColor: st.pointColor,
+        outlineColor: st.pointOutlineColor,
+        outlineWidth: st.pointOutlineWidth,
+        angleDeg: st.pointAngle,
+      );
     }
     n++;
   }
   return n;
+}
+
+void _drawPassOrderedStrokes(
+  ui.Canvas canvas,
+  List<(int pass, ui.Path path, ResolvedLineStroke stroke)> items,
+  bool sortPasses, {
+  required double minWidth,
+}) {
+  if (items.isEmpty) return;
+  if (sortPasses) {
+    final idx = List<int>.generate(items.length, (i) => i)
+      ..sort((a, b) {
+        final c = items[a].$1.compareTo(items[b].$1);
+        return c != 0 ? c : a.compareTo(b);
+      });
+    final sorted = [for (final i in idx) items[i]];
+    items
+      ..clear()
+      ..addAll(sorted);
+  }
+  final paint = ui.Paint()
+    ..style = ui.PaintingStyle.stroke
+    ..strokeJoin = ui.StrokeJoin.round;
+  for (final (_, path, s) in items) {
+    if (s.color.a <= 0 || s.widthPx <= 0) continue;
+    paint
+      ..color = s.color
+      ..strokeWidth = math.max(minWidth, s.widthPx)
+      ..strokeCap = s.capRound ? ui.StrokeCap.round : ui.StrokeCap.butt;
+    canvas.drawPath(s.isDashed ? dashPath(path, s.dashArray!) : path, paint);
+  }
 }
 
 /// 選んだ面の塗り

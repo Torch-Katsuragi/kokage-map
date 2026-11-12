@@ -49,6 +49,31 @@ double? parseQgsMmToPx(String? mm, {double divideBy = 1}) {
   return value * kQgsMmToPx / divideBy;
 }
 
+/// QGIS の単位付きサイズ文字列（`MM` / `Pixel` / `Point` / `Inch` / `MapUnit` / `RenderMetersInMapUnits`）→ 論理 px。
+///
+/// 地図単位（`MapUnit` / `RenderMetersInMapUnits`）は画面縮尺に依存するため、標準的な詳細ズーム相当
+/// （[metersPerPx] = 0.5 m/px ≒ z18）で近似換算しつつ極端な値にならないようクランプする。
+double? parseQgsSizeToPx(
+  String? raw, {
+  String? unit,
+  double divideBy = 1,
+  double metersPerPx = 0.5,
+}) {
+  if (raw == null) return null;
+  final value = double.tryParse(raw.trim());
+  if (value == null) return null;
+  if (value == 0) return 0;
+  final px = switch (unit?.trim()) {
+    null || '' || 'MM' || '0' => value * kQgsMmToPx,
+    'Pixel' || 'px' || '2' => value,
+    'Point' || 'pt' || '4' => value / kQgsPxToPt,
+    'Inch' || '5' => value * 96.0,
+    'MapUnit' || '1' || 'RenderMetersInMapUnits' || '6' => (value / metersPerPx).clamp(0.5, 80.0),
+    _ => value * kQgsMmToPx,
+  };
+  return px / divideBy;
+}
+
 /// QGIS の色表記 `R,G,B,A`（各0-255）。[opacity] があればアルファはそれにする
 String formatQgsColor(Color color, {double? opacity}) {
   final argb = color.toARGB32();
@@ -148,6 +173,39 @@ void setNamedOption(XmlElement optionMap, String name, String value) {
       ]),
     );
   }
+}
+
+/// `<data_defined_properties>` 内の有効（`active="true"`）なデータ定義式を `{QGISプロパティ名: 式文字列}` で返す。
+/// 列参照型（`type="2"`, `field="..."`）は `"列"` の式に変換する。
+Map<String, String> readDataDefinedExpressions(XmlElement container) {
+  final ddp = container.getElement('data_defined_properties');
+  if (ddp == null) return const {};
+  final rootMap = ddp.findElements('Option').where((o) => o.getAttribute('type') == 'Map').firstOrNull;
+  if (rootMap == null) return const {};
+  final propsMap = rootMap
+      .findElements('Option')
+      .where((o) => o.getAttribute('name') == 'properties' && o.getAttribute('type') == 'Map')
+      .firstOrNull;
+  if (propsMap == null) return const {};
+  final out = <String, String>{};
+  for (final prop in propsMap.findElements('Option')) {
+    if (prop.getAttribute('type') != 'Map') continue;
+    final key = prop.getAttribute('name');
+    if (key == null || key.isEmpty) continue;
+    final active = namedOption(prop, 'active')?.getAttribute('value')?.toLowerCase();
+    if (active != 'true' && active != '1') continue;
+    final pType = namedOption(prop, 'type')?.getAttribute('value');
+    final expr = namedOption(prop, 'expression')?.getAttribute('value')?.trim();
+    final field = namedOption(prop, 'field')?.getAttribute('value')?.trim();
+    if (pType == '2' && field != null && field.isNotEmpty) {
+      out[key] = '"${field.replaceAll('"', '""')}"';
+    } else if (expr != null && expr.isNotEmpty) {
+      out[key] = expr;
+    } else if (field != null && field.isNotEmpty) {
+      out[key] = '"${field.replaceAll('"', '""')}"';
+    }
+  }
+  return out;
 }
 
 /// `<properties>` の中の [key] を返す。QGIS の書き方は 2 通りある:

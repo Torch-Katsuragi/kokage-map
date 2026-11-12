@@ -27,6 +27,7 @@
   "qgis_3_44_written.qgs/v_roads": {
     "lineWidth": 2.9858267716535436,
     "lineColor": "#FFFF0000",
+    "lineOpacity": 0.5019607843137255,
     "labelEnabled": false
   },
   "qgis_3_44_written.qgs/v_parcels": {
@@ -72,6 +73,7 @@
   "qgis_4_2_saved.qgs/v_roads": {
     "lineWidth": 2.9858267716535436,
     "lineColor": "#FFFF0000",
+    "lineOpacity": 0.5019607843137255,
     "labelEnabled": false
   },
   "qgis_4_2_saved.qgs/v_parcels": {

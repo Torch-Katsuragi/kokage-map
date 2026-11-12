@@ -278,15 +278,14 @@ QGIS で足したラスタが同じ `.tif` を指していれば、書き戻し�
 > QGISのバージョンを上げたら fixture を作り直すこと。
 
 > [!NOTE] 読み取りは寛容に
-> - シンボルのプロパティは QGIS 3.x の `<Option name= value=>` と、
+> - シンボルのプロパティは QGIS 3.x / 4.x の `<Option name= value=>` と、
 >   それ以前の `<prop k= v=>` の**両方**を読む。他人のファイルは古い形式で来る
-> - 単一シンボルは1レイヤ目だけ拾う。重ね合わせの完全再現は狙わない。
->   狙うと「開けるファイルを選り好みする」方向に行く（コンセプトと逆）
-> - 分類・段階・ルールは地物ごとの色まで再現する（下の「描き分けの再現」）
+> - 単位は `MM`・`Pixel`・`Point`・`Inch`・`MapUnit`（縮尺不明時は既定 1m≒0.5px にフォールバック）を換算して読む
+> - 単一レイヤだけでなく、QGIS 側で作られた複数レイヤの重ね合わせ（2 層 `SimpleLine` の縁取り、下地 `SimpleFill` + `LinePatternFill` / `PointPatternFill` のハッチング・ドット等）も `ResolvedSymbolLayers` として保持・描画する
+> - 分類・段階・ルールは地物ごとのシンボル（縁取り・破線・ハッチング・点形状・縮尺制限を含む）まで再現する（下の「描き分けの再現」）
 > - `subset` は `|` で切らずに**最後まで丸ごと**取る（SQLの `||` で壊れるため）
 
-読み込み口はファイル選択ダイアログではなく「**このフォルダの中の `.qgs`**」。
-共有の単位が dir なので、それで足りる。複数あれば `project.qgs` を優先。
+読み込み口はファイル選択ダイアログではなく「**このフォルダの中の `.qgs` / `.qgz`**」（さらに無ければ GeoPackage 内の `qgis_projects` / `layer_styles` や横置き `.qml` を読み取り専用で救済する。下の「シンボル表現力とプロジェクト互換強化」を参照）。
 
 ## レイヤの並びと描く順（2026-10-13）
 
@@ -355,16 +354,47 @@ LayerNode.refreshStyleGroups（地物の読み込み・スタイル変更のた�
   戻されたら印と中身を一緒に外す（`KMetaLayerStyle.withoutQgisRenderer`）
 - **古い取り込みの補完**: 中身を持つ前に取り込んだプロジェクトは印だけを持つ。自分が書いた `.qgs` は読み戻さないので、
   開いたときに `QgsImporter.backfillRendererDefs` が印だけのスタイル・View にレンダラの中身を足す（他の設定には触らない）
-- **凡例**: スタイル画面（色・太さは引き続き編集させない）と、レイヤ一覧の行の下（8 件を超えたら「… +N」）
-- **やらないこと**: 縮尺による切り替え（ルールの min/max scale は無視して常に当てる）・破線・点の形・線と点の不透明度・
-  シンボルの重ね合わせ・データ定義の上書き・`$area` など地物の形を使う式
+- **凡例**: スタイル画面（色・太さは引き続き編集させない）と、レイヤ一覧の行の下（8 件を超えたら「… +N」）。色見本スウォッチでもハッチング・ドット・破線・縁取り・点の 7 形状を描き分ける
+- **やらないこと**: `$area` など地物の形を使う式・SVG 外部ファイル参照マーカー・グラデーション塗り（`GradientFill`）
 
 テストは `test/qgis_renderer_test.dart`（QGIS 4.2.2 に書かせた `test/fixtures/qgis_4_2_renderers.qgs` と、QGIS が地物ごとに選んだ
 シンボルの `_expected.json` を突き合わせる。作り直しは `tool/qgis/write_renderer_fixture.py`）、`test/view_style_test.dart`
-（振り分けと 3D の点の色）、`test/qgs_renderer_backfill_test.dart`（取り込みと補完）。
+（振り分けと 3D の点の色）、`test/qgs_renderer_backfill_test.dart`（取り込みと補完）、`test/qgis_style_compat_test.dart`（縁取り・ハッチング・縮尺制限・追加レンダラ・データ定義式・`.qgz`・GPKG 埋め込みスタイルの統合検証）。
 
 > [!NOTE] QGIS の `symbolsForFeature` は ELSE のルールを常に含める
 > 正解を作るときは `legendKeysForFeature`（当たったルールの key）を使う。色で比べると ELSE が全部に当たって見える。
+
+## シンボル表現力（縁取り・ハッチング・破線・点形状）とプロジェクト互換強化（2026-11-12）
+
+QGIS でよく使われるスタイル表現とプロジェクト保存形態を、UI を複雑にせず実用的に扱えるよう拡張した。
+
+### 1. シンボル表現と `.qgs` 往復
+
+- **線の種類と縁取り（ケーシング）**:
+  - 線種は実線・破線（`dash`）・点線（`dot`）・一点鎖線（`dash dot`）・二点鎖線（`dash dot dot`）・線なし（`no`）に加え、QGIS の `use_custom_dash="1"` + `customdash`、左右平行オフセット（`offset`）、`MarkerLine` / `HashLine`（破線近似）、`<symbol><buffer enabled="1">` を読み取る
+  - 縁取りは QGIS 標準の `symbollevels="1"` + 2 層 `SimpleLine`（背面 `pass="0"` の太線 + 前面 `pass="1"` の芯線）として `.qgs` と双方向に往復する。`TerrainSceneBuilder` とテクスチャ焼き込みでは全地物の `pass=0` を先に描いてから `pass=1` を重ねるため、道路の交差点で縁取り線が食い込まず綺麗に融合する
+  - 3D 地図面では `shaders/line.vert`・`shaders/line.frag` に累積弧長 `arc` と破線パターン `vec4 dash` を渡し、GPU 上で 1 パスあたり高速に破線を描画する
+- **面のハッチング・ドット・重ね塗り**:
+  - UI からはベタ塗り・斜線 `╱`・逆斜線 `╲`・クロス `×`・格子 `＋`・横線・縦線・ドット・塗りなしと、パターンの間隔・輪郭の線種と縁取りを設定できる
+  - 読む側は `SimpleFill` の各種ブラシ（`b_diagonal` / `f_diagonal` / `diagonal_x` / `cross` / `horizontal` / `vertical` / `dense1`〜`dense7` / `no`）に加え、`LinePatternFill`・`PointPatternFill` および下地ベタ塗りとの複数レイヤ重ね合わせを `ResolvedSymbolLayers`（`lib/models/qgis_symbol.dart`）に保持する
+  - 書く側（`QgsWriter`）はハッチングを `LinePatternFill` + `SimpleLine`、ドットを `PointPatternFill` + `SimpleLine` として出力する。QGIS 側で作られた 3 層以上の複合シンボルは、アプリ側でシンボル項目を編集しない限り `QgsDocument` が元の `<symbol>` DOM をそのまま温存する
+  - 描画（`lib/core/terrain/fill_pattern_painter.dart`）はオフスクリーンタイルから `TileMode.repeated` の `ui.ImageShader` を生成して LRU キャッシュ（`FillPatternCache`）し、地形テクスチャ焼き込み・Canvas フォールバック・スタイルプレビュー・凡例スウォッチで共用する
+- **点マーカーの 7 形状・縁取り・回転**:
+  - 丸（`circle`）・四角（`square`）・ひし形（`diamond`）・三角（`triangle`）・星（`star`）・十字（`cross`）・×印（`cross2` / `x`）の 7 形状と、縁取り ON/OFF・色・太さ・回転角（`angle`）に対応。`shaders/point.vert`・`shaders/point.frag` の SDF で全 7 形状と回転・縁取りを GPU 描画する
+
+### 2. 縮尺制限・追加レンダラ・ラベル強化・データ定義式
+
+- **縮尺依存表示**: `<maplayer hasScaleBasedVisibilityFlag="1" minScale="…" maxScale="…">`（`minScale` が縮小側の大分母、`maxScale` が拡大側の小分母）と `<rule scalemindenom="…" scalemaxdenom="…">`（極性が逆）の両方を読み取り、地図の現在縮尺分母に応じて表示を切り替える
+- **追加レンダラ**: `nullSymbol`（地物本体を描かずラベルのみ表示）、`invertedPolygonRenderer`（対象ポリゴンの外側を塗る区域外マスク）、`mergedFeatureRenderer`、`pointCluster` / `pointDisplacement`（内部サブレンダラを展開して適用）に対応
+- **ラベル強化**: `<labeling type="rule-based">`、`wrapChar` による複数行折り返し、`<text-buffer bufferDraw="0">`（縁取り OFF）、`<background shapeDraw="1" shapeType="0|1|2|3">`（四角・角丸・円/楕円の背景枠＝林班番号の丸囲み等）に対応
+- **データ定義プロパティ**: `<data_defined_properties>` のアクティブな式（`size`・`angle`・`width`・`color` 等）を読み取り、`LayerNode.refreshStyleGroups` で `QgisExpr` を地物属性に対して評価し派生スタイルグループへ振り分ける
+
+### 3. `.qgz`・単一別名 `.qgs`・GeoPackage 埋め込みスタイルの救済
+
+- **`.qgz`（QGIS 既定の ZIP 保存形式）と単一別名 `.qgs`**: フォルダ内に `<dir名>.qgs` が無く `.qgz` がある場合は中の `.qgs` を `<dir名>.qgs` に展開し、元の `.qgz` は `<元名>.qgz.bak` に退避する。別名の `.qgs` が 1 つだけある場合は元ファイルを残したまま `<dir名>.qgs` に複製して取り込む（子フォルダ用など複数ある場合は勝手に選ばない）
+- **GeoPackage 内 `qgis_projects` / `layer_styles` と横置き `.qml`**（`lib/services/qgis/qgs_embedded_style_loader.dart`）:
+  - フォルダ内に `.qgs` / `.qgz` が無いとき、直下の `.gpkg` 内に `qgis_projects` テーブル（生 XML または 16 進エンコード ZIP）があれば読み取り専用 `SELECT` で取り出して `<dir名>.qgs` を起こす
+  - スタイル未設定のレイヤに対し、`.gpkg` 内の `layer_styles`（`useAsDefault DESC` の `styleQML`）または同名の横置き `.qml` があれば初期スタイルとして適用する。**すべてのアクセスは読み取り専用 `SELECT` のみとし、見ただけの `.gpkg` は 1 バイトも書き換えない**
 
 ## 属性フォーム（編集ウィジェット・既定値・制約）（2026-10-11）
 
@@ -578,10 +608,26 @@ GDAL 拡張の件数キャッシュ。こかげマップ が直接 INSERT/DELETE
   - ⚠ **gpkg には書き戻さない**。epsg.io で取れた定義もメモリにだけ持つ。以前は `gpkg_spatial_ref_sys` に書いていて、
     開いただけでファイルが変わり Drive 同期で上がっていた（2026-10-12）。web も同じコード
 
+## 4. スタイル表現・SVG マーカー・`.qml` プリセット入出力（2026-11-12）
+
+- **複合シンボル・パターン描画**（`lib/models/qgis_symbol.dart`・`lib/core/terrain/fill_pattern_painter.dart`）:
+  - 線の縁取り（2層 `SimpleLine` + `symbollevels="1"`、および QGIS 3.40+ / 4.x の `<buffer>`）、破線・点線・一点鎖線・二点鎖線・カスタムダッシュ、平行オフセット
+  - 面のハッチング（`LinePatternFill` 斜線・逆斜線・クロス・格子・横線・縦線、および Qt ブラシ `b_diagonal` / `f_diagonal` / `diag_cross` / `cross` / `dense1`〜`dense7`）、ドット（`PointPatternFill`）、輪郭の縁取り
+  - 点の 7 形状（丸・四角・ひし形・三角・星・十字・×印、GPU `point.frag` SDF 描画＋Canvas 共通）、縁取り、回転角
+  - ラベルの背景枠（四角・角丸・丸）、改行文字（`wrapChar`）、縁取り ON/OFF・太さ、データ定義プロパティ式（色・太さ・サイズ・回転角）、縮尺依存表示（`minScale` / `maxScale`）
+- **`SvgMarker` のスプライトアトラス化・3D ビルボード描画**（`lib/core/terrain/svg_marker_atlas.dart`）:
+  - `<layer class="SvgMarker">` の `base64:...` 埋め込み SVG、プロジェクトフォルダ内の相対 `.svg`（`relativeInside` でルート外参照を遮断）、および QGIS 標準 SVG パス（`gpsicons/tree.svg`・`arrows/Arrow_01.svg`・`emergency/...` 等）を読み取り、`param(fill)` / `param(outline)` / `param(fill-opacity)` / `param(outline-opacity)` / `param(outline-width)`（`viewBox` スケール換算付き）を置換する
+  - `flutter_svg` で非同期ラスタライズして `512×512` スプライトアトラス（1 セル `64×64`、内側 `60×60` + 2px ガター、1 ページ 64 個）に詰め、3D 地図面（`TerrainWorldPainter` の `canvas.drawAtlas`、透視・正射影・地形隠れ判定・回転角対応。GPU 経路では `GpuPointGeometry.pack` が SVG 点を除外して二重描画を防ぐ）、引いた段のテクスチャ焼き込み、面の `PointPatternFill`、スタイル設定プレビュー、凡例スウォッチで共用する
+  - 新規 `.qgs` / `.qml` 書き出し時は自己完結する `base64:` 形式の `SvgMarker` として出力し、既存 `.qgs` の DOM 更新時は元の `SvgMarker` 要素を壊さず保持する
+- **`.qml` スタイルプリセットの書き出し・読み込み**（`lib/services/qgis/qgs_qml_service.dart`）:
+  - 個別レイヤ／View のスタイル設定画面（`LayerStyleSettingsScreen`）右上のメニューから `.qml` の読み込み・書き出しを行える（ジオメトリ型の整合チェック付き）
+  - GeoPackage 内の `qgis_projects` / `layer_styles` テーブルおよび横置き `.qml` からの初期スタイル読み取り専用救済（`QgsEmbeddedStyleLoader`。`.gpkg` は 1 バイトも書き換えない）にも対応
+
+テストは `test/qgis_style_compat_test.dart`・`test/qgis_svg_and_qml_test.dart`。
+
 ## 未対応
 
-- **`layer_styles`**（QGISのスタイル保存テーブル）。こかげマップ で設定した色・線幅は
-  QGIS に引き継がれない。逆も同様
+- **`layer_styles` への書き戻し**（GeoPackage 内 `layer_styles` からの初期読み取りには対応済みだが、こかげマップ側のスタイル変更は `.qgs` に書き、`.gpkg` 内の `layer_styles` は書き換えない）
 - `gpkg_metadata` / `gpkg_metadata_reference`
 
 ## テストの注意点

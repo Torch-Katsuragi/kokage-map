@@ -617,8 +617,12 @@ class QgsProjectBuilder {
     }
   }
 
-  QgsStyle? _toQgsStyle(KMetaLayerStyle? style) {
+  QgsStyle? _toQgsStyle(KMetaLayerStyle? style) => toQgsStyle(style);
+
+  /// [KMetaLayerStyle] を [QgsStyle] に変換する（`.qgs` 書き出し・`.qml` 書き出し共用）
+  static QgsStyle? toQgsStyle(KMetaLayerStyle? style) {
     if (style == null) return null;
+    final lastMarker = style.symbolLayers?.markers.lastOrNull;
     final converted = QgsStyle(
       labelEnabled: style.labelEnabled,
       labelField: normalizeLabelExpression(style.labelProperty),
@@ -628,14 +632,35 @@ class QgsProjectBuilder {
       labelHaloColor: style.labelHaloColor,
       pointColor: style.pointColor,
       pointSizePx: style.pointSize,
+      pointOpacity: style.pointOpacity,
+      pointShape: style.pointShape,
+      pointOutlineEnabled: style.pointOutlineEnabled,
+      pointOutlineColor: style.pointOutlineColor,
+      pointOutlineWidthPx: style.pointOutlineWidth,
+      pointAngleDeg: style.pointAngle ?? lastMarker?.angleDeg,
+      pointSvgContent: lastMarker?.svgContent,
+      pointSvgPath: lastMarker?.svgPath,
       lineColor: style.lineColor,
       lineWidthPx: style.lineWidth,
+      lineOpacity: style.lineOpacity,
+      lineDash: style.lineDash,
+      lineCasingEnabled: style.lineCasingEnabled,
+      lineCasingColor: style.lineCasingColor,
+      lineCasingWidthPx: style.lineCasingWidth,
       fillColor: style.polygonFillColor,
       fillOpacity: style.polygonFillOpacity,
+      fillPattern: style.polygonFillPattern,
+      patternSpacingPx: style.polygonPatternSpacing,
+      patternLineWidthPx: style.polygonPatternLineWidth,
       strokeColor: style.polygonBorderColor,
       strokeWidthPx: style.polygonBorderWidth,
       strokeOpacity: style.polygonBorderOpacity,
+      strokeDash: style.polygonBorderDash,
+      strokeCasingEnabled: style.polygonBorderCasingEnabled,
+      strokeCasingColor: style.polygonBorderCasingColor,
+      strokeCasingWidthPx: style.polygonBorderCasingWidth,
+      preserveExistingSymbol: style.symbolLayers != null,
     );
-    return converted.isEmpty ? null : converted;
+    return converted.isEmpty && style.labelEnabled == null ? null : converted;
   }
 }

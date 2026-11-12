@@ -19,6 +19,8 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 import 'package:geobase/geobase.dart' as geo;
@@ -28,7 +30,9 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../../core/node_types.dart';
 import '../../services/kmeta_service.dart';
+import '../../services/qgis/qgs_xml.dart' as qgs_xml;
 import '../../services/table/table_join.dart';
+import '../../utils/qgis_expression.dart';
 import '../geometry_type.dart';
 import '../geopackage/feature_repository.dart' show toGeoMultiLine, toGeoMultiPolygon, toGeoPoint;
 import '../geopackage/geopackage_file.dart';
@@ -221,6 +225,7 @@ abstract class LayerNode extends LayerTreeNode {
     styleGroups.clear();
     _styleGroupRank.clear();
     _renderers.clear();
+    _ddStylers.clear();
     rendererHiddenRowIds.clear();
     _hiddenRowViewKey.clear();
     _restStyleKey = null;
@@ -245,20 +250,39 @@ abstract class LayerNode extends LayerTreeNode {
       _styleGroupRank[key] = rank;
       final renderer = _ViewRenderer.of(key, style, styleGroups, _styleGroupRank, rank);
       if (renderer != null) _renderers[key] = renderer;
+      // データ定義プロパティ式のコンパイル（単一シンボル・分類の各クラス両方）
+      for (final entry in styleGroups.entries.toList()) {
+        if (entry.key == key || entry.key.startsWith('$key#')) {
+          final dd = _DataDefinedStyler.tryCompile(entry.key, entry.value, styleGroups, _styleGroupRank, rank);
+          if (dd != null) _ddStylers[entry.key] = dd;
+        }
+      }
       rank++;
 
       void assign(int rowId) {
         if (styleKeyByRowId.containsKey(rowId)) return;
+        Map<String, Object?>? props;
+        bool propsLoaded = false;
+        Map<String, Object?>? getProps() {
+          if (!propsLoaded) {
+            props = effectiveProperties(_featureMap[rowId]?.properties);
+            propsLoaded = true;
+          }
+          return props;
+        }
+
+        String? baseKey;
         if (renderer == null) {
-          styleKeyByRowId[rowId] = key;
-          return;
-        }
-        final k = renderer.keyFor(effectiveProperties(_featureMap[rowId]?.properties));
-        if (k == null) {
-          hiddenBy.putIfAbsent(rowId, () => key);
+          baseKey = key;
         } else {
-          styleKeyByRowId[rowId] = k;
+          baseKey = renderer.keyFor(getProps());
+          if (baseKey == null) {
+            hiddenBy.putIfAbsent(rowId, () => key);
+            return;
+          }
         }
+        final dd = _ddStylers[baseKey];
+        styleKeyByRowId[rowId] = dd != null ? dd.resolve(getProps()) : baseKey;
       }
 
       if (!view.hasFilter) {
@@ -292,6 +316,9 @@ abstract class LayerNode extends LayerTreeNode {
   /// View のキー → その View の描き分け（[refreshStyleGroups] が作る）
   final Map<String, _ViewRenderer> _renderers = {};
 
+  /// ベーススタイルキー → データ定義プロパティの評価器
+  final Map<String, _DataDefinedStyler> _ddStylers = {};
+
   /// スタイルグループのキー → View の順位（上の View ほど小さい）。描き分けのシンボルは View と同じ順位
   final Map<String, int> _styleGroupRank = {};
 
@@ -305,24 +332,31 @@ abstract class LayerNode extends LayerTreeNode {
   /// View の順位の数（描き分けのシンボルは数えない。地図で View の順に積むときの段の数）
   int get styleGroupRankCount => _styleGroupRank.isEmpty ? 0 : _styleGroupRank.values.reduce((a, b) => a > b ? a : b) + 1;
 
-  /// 1 件の属性が変わったので、描き分けのシンボルを選び直す（全件は振り分け直さない）
+  /// 1 件の属性が変わったので、描き分けとデータ定義プロパティを選び直す（全件は振り分け直さない）
   void _restyleRow(int rowId) {
-    if (_renderers.isEmpty) return;
-    final current = styleKeyByRowId[rowId] ?? _hiddenRowViewKey[rowId];
+    if (_renderers.isEmpty && _ddStylers.isEmpty) return;
+    var current = styleKeyByRowId[rowId] ?? _hiddenRowViewKey[rowId];
     if (current == null) return;
-    final viewKey = _renderers.keys.where((k) => current == k || current.startsWith('$k#')).firstOrNull;
-    final renderer = viewKey == null ? null : _renderers[viewKey];
-    if (renderer == null) return;
-    final k = renderer.keyFor(effectiveProperties(_featureMap[rowId]?.properties));
-    if (k == null) {
-      styleKeyByRowId.remove(rowId);
-      rendererHiddenRowIds.add(rowId);
-      _hiddenRowViewKey[rowId] = viewKey!;
-    } else {
-      styleKeyByRowId[rowId] = k;
+    final ddIdx = current.indexOf('@dd:');
+    if (ddIdx >= 0) current = current.substring(0, ddIdx);
+
+    final props = effectiveProperties(_featureMap[rowId]?.properties);
+    final viewKey = _renderers.keys.where((k) => current == k || current!.startsWith('$k#')).firstOrNull;
+    String? baseKey = current;
+    if (viewKey != null) {
+      final renderer = _renderers[viewKey]!;
+      baseKey = renderer.keyFor(props);
+      if (baseKey == null) {
+        styleKeyByRowId.remove(rowId);
+        rendererHiddenRowIds.add(rowId);
+        _hiddenRowViewKey[rowId] = viewKey;
+        return;
+      }
       rendererHiddenRowIds.remove(rowId);
       _hiddenRowViewKey.remove(rowId);
     }
+    final dd = _ddStylers[baseKey];
+    styleKeyByRowId[rowId] = dd != null ? dd.resolve(props) : baseKey;
   }
 
   /// フィルタ無しの View のキー。取り直しの後に足した地物（描いた面など）はここに落とす。
@@ -1155,18 +1189,44 @@ class _ViewRenderer {
       return styleOp ?? symbolOp;
     }
 
+    // ルールの縮尺（scalemindenom = 最拡大側・小、scalemaxdenom = 最縮小側・大）と
+    // レイヤの縮尺（minScale = 最縮小側・大、maxScale = 最拡大側・小）の共通範囲を取る
+    double? intersectMinScale(double? layerMin, double? ruleMax) {
+      final a = (layerMin != null && layerMin > 0) ? layerMin : null;
+      final b = (ruleMax != null && ruleMax > 0) ? ruleMax : null;
+      if (a == null) return b;
+      if (b == null) return a;
+      return math.min(a, b);
+    }
+
+    double? intersectMaxScale(double? layerMax, double? ruleMin) {
+      final a = (layerMax != null && layerMax > 0) ? layerMax : null;
+      final b = (ruleMin != null && ruleMin > 0) ? ruleMin : null;
+      if (a == null) return b;
+      if (b == null) return a;
+      return math.max(a, b);
+    }
+
     for (var i = 0; i < def.classes.length; i++) {
-      final symbol = def.classes[i].style;
+      final cls = def.classes[i];
+      final symbol = cls.style;
       if (symbol == null) {
         classKeys.add(key);
         continue;
       }
       final k = '$key#$i';
-      groups[k] = symbol.mergeWith(style).copyWith(
+      var merged = symbol.mergeWith(style);
+      if (def.invertedPolygon) {
+        final sl = (merged.symbolLayers ?? const ResolvedSymbolLayers()).copyWith(invertedPolygon: true);
+        merged = merged.copyWith(symbolLayers: sl);
+      }
+      groups[k] = merged.copyWith(
         pointOpacity: overrideOpacity(style.pointOpacity, symbol.pointOpacity),
         lineOpacity: overrideOpacity(style.lineOpacity, symbol.lineOpacity),
         polygonFillOpacity: overrideOpacity(style.polygonFillOpacity, symbol.polygonFillOpacity),
         polygonBorderOpacity: overrideOpacity(style.polygonBorderOpacity, symbol.polygonBorderOpacity),
+        minScale: intersectMinScale(style.minScale, cls.scaleMaxDenom),
+        maxScale: intersectMaxScale(style.maxScale, cls.scaleMinDenom),
       );
       ranks[k] = rank;
       classKeys.add(k);
@@ -1177,5 +1237,171 @@ class _ViewRenderer {
   String? keyFor(Map<String, Object?>? props) {
     final i = evaluator.classFor(props);
     return i == null ? null : classKeys[i];
+  }
+}
+
+/// QGIS のデータ定義プロパティ（`<data_defined_properties>`）を地物ごとに評価し、
+/// 派生スタイルグループ（最大 [_maxVariants] 種）を生成する
+class _DataDefinedStyler {
+  _DataDefinedStyler._({
+    required this.baseKey,
+    required this.baseStyle,
+    required this.groups,
+    required this.ranks,
+    required this.rank,
+    required this.exprs,
+  });
+
+  static const int _maxVariants = 256;
+  static const double _mmToPx = 96.0 / 25.4;
+
+  final String baseKey;
+  final KMetaLayerStyle baseStyle;
+  final Map<String, KMetaLayerStyle> groups;
+  final Map<String, int> ranks;
+  final int rank;
+  final Map<String, QgisExpr> exprs;
+  int _variantCount = 0;
+
+  static _DataDefinedStyler? tryCompile(
+    String baseKey,
+    KMetaLayerStyle baseStyle,
+    Map<String, KMetaLayerStyle> groups,
+    Map<String, int> ranks,
+    int rank,
+  ) {
+    final raw = baseStyle.dataDefined;
+    if (raw == null || raw.isEmpty) return null;
+    final compiled = <String, QgisExpr>{};
+    for (final e in raw.entries) {
+      final ex = tryParseQgisExpression(e.value);
+      if (ex != null) compiled[e.key] = ex;
+    }
+    if (compiled.isEmpty) return null;
+    return _DataDefinedStyler._(
+      baseKey: baseKey,
+      baseStyle: baseStyle,
+      groups: groups,
+      ranks: ranks,
+      rank: rank,
+      exprs: compiled,
+    );
+  }
+
+  String resolve(Map<String, Object?>? props) {
+    double? ptSize;
+    double? ptAngle;
+    Color? ptColor;
+    double? lnWidth;
+    Color? lnColor;
+    Color? polyFill;
+    Color? polyBorder;
+    double? polyBorderW;
+
+    double? qQuarter(double v) => (v * 4.0).round() / 4.0;
+
+    if (exprs['pointSize'] case final ex?) {
+      final n = qgisToNumber(ex.eval(props));
+      if (n != null && n > 0) ptSize = qQuarter((n * _mmToPx * 0.5).clamp(1.0, 64.0));
+    }
+    if (exprs['pointAngle'] case final ex?) {
+      final n = qgisToNumber(ex.eval(props));
+      if (n != null) ptAngle = ((n.round() % 360) + 360) % 360 * 1.0;
+    }
+    if (exprs['pointColor'] case final ex?) {
+      ptColor = _evalColor(ex.eval(props));
+    }
+    if (exprs['lineWidth'] case final ex?) {
+      final n = qgisToNumber(ex.eval(props));
+      if (n != null && n >= 0) lnWidth = qQuarter((n * _mmToPx).clamp(0.0, 48.0));
+    }
+    if (exprs['lineColor'] case final ex?) {
+      lnColor = _evalColor(ex.eval(props));
+    }
+    if (exprs['polygonFillColor'] case final ex?) {
+      polyFill = _evalColor(ex.eval(props));
+    }
+    if (exprs['polygonBorderColor'] case final ex?) {
+      polyBorder = _evalColor(ex.eval(props));
+    }
+    if (exprs['polygonBorderWidth'] case final ex?) {
+      final n = qgisToNumber(ex.eval(props));
+      if (n != null && n >= 0) polyBorderW = qQuarter((n * _mmToPx).clamp(0.0, 48.0));
+    }
+
+    if (ptSize == null &&
+        ptAngle == null &&
+        ptColor == null &&
+        lnWidth == null &&
+        lnColor == null &&
+        polyFill == null &&
+        polyBorder == null &&
+        polyBorderW == null) {
+      return baseKey;
+    }
+
+    final suffix = [
+      if (ptSize != null) 'ps=$ptSize',
+      if (ptAngle != null) 'pa=${ptAngle.toInt()}',
+      if (ptColor != null) 'pc=${ptColor.toARGB32().toRadixString(16)}',
+      if (lnWidth != null) 'lw=$lnWidth',
+      if (lnColor != null) 'lc=${lnColor.toARGB32().toRadixString(16)}',
+      if (polyFill != null) 'pf=${polyFill.toARGB32().toRadixString(16)}',
+      if (polyBorder != null) 'pb=${polyBorder.toARGB32().toRadixString(16)}',
+      if (polyBorderW != null) 'pw=$polyBorderW',
+    ].join(',');
+    final derivedKey = '$baseKey@dd:$suffix';
+    if (groups.containsKey(derivedKey)) return derivedKey;
+    if (_variantCount >= _maxVariants) return baseKey;
+    _variantCount++;
+
+    final overridesGeometryStyle =
+        lnWidth != null || lnColor != null || polyFill != null || polyBorder != null || polyBorderW != null;
+    final inverted = baseStyle.symbolLayers?.invertedPolygon ?? false;
+    final nextSl = overridesGeometryStyle
+        ? (inverted ? const ResolvedSymbolLayers(invertedPolygon: true) : null)
+        : baseStyle.symbolLayers;
+
+    groups[derivedKey] = baseStyle.copyWith(
+      pointSize: ptSize,
+      pointAngle: ptAngle,
+      pointColor: ptColor,
+      lineWidth: lnWidth,
+      lineColor: lnColor,
+      polygonFillColor: polyFill,
+      polygonBorderColor: polyBorder,
+      polygonBorderWidth: polyBorderW,
+      symbolLayers: nextSl,
+      clearSymbolLayers: overridesGeometryStyle && !inverted,
+    );
+    ranks[derivedKey] = rank;
+    return derivedKey;
+  }
+
+  static Color? _evalColor(Object? v) {
+    if (v == null) return null;
+    final s = v.toString().trim();
+    if (s.isEmpty) return null;
+    if (s.startsWith('#')) {
+      final hex = s.substring(1);
+      final parsed = int.tryParse(hex.length == 6 ? 'FF$hex' : hex, radix: 16);
+      if (parsed != null) return Color(parsed);
+    }
+    final qgsColor = qgs_xml.parseQgsColor(s);
+    if (qgsColor != null) return qgsColor;
+    return switch (s.toLowerCase()) {
+      'red' => const Color(0xFFFF0000),
+      'green' => const Color(0xFF008000),
+      'blue' => const Color(0xFF0000FF),
+      'yellow' => const Color(0xFFFFFF00),
+      'orange' => const Color(0xFFFFA500),
+      'purple' => const Color(0xFF800080),
+      'cyan' => const Color(0xFF00FFFF),
+      'magenta' => const Color(0xFFFF00FF),
+      'white' => const Color(0xFFFFFFFF),
+      'black' => const Color(0xFF000000),
+      'gray' || 'grey' => const Color(0xFF808080),
+      _ => null,
+    };
   }
 }

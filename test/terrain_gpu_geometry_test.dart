@@ -10,6 +10,7 @@ import 'package:root_maps/core/terrain/terrain_camera.dart';
 import 'package:root_maps/core/terrain/terrain_lifted.dart';
 import 'package:root_maps/core/terrain/terrain_mesh.dart';
 import 'package:root_maps/core/terrain/terrain_scene.dart';
+import 'package:root_maps/models/qgis_symbol.dart';
 
 void main() {
   DemGrid dem({int n = 9, double cell = 10}) => DemGrid(
@@ -105,7 +106,13 @@ void main() {
     });
 
     test('線分 1 本 = 頂点 4・インデックス 6、両端と左右を持つ', () {
-      final line = LiftedPolyline.lift(const [Offset(0, 0), Offset(30, 0), Offset(30, 30)], mesh, color: const Color(0xFF0000FF), widthPx: 3);
+      final line = LiftedPolyline.lift(
+        const [Offset(0, 0), Offset(30, 0), Offset(30, 30)],
+        mesh,
+        color: const Color(0xFF0000FF),
+        widthPx: 3,
+        dashVec4: const (12, 6, 3, 6),
+      );
       final g = GpuLineGeometry.pack(polylines: [line]);
       expect(g.segmentCount, line.pointCount - 1);
       expect(g.vertexCount, g.segmentCount * 4);
@@ -120,6 +127,10 @@ void main() {
       expect([g.vertices[3 * f + 6], g.vertices[3 * f + 7]], [1, 1]);
       expect(g.vertices[8], 3); // width
       expect(g.vertices.sublist(9, 13), [0, 0, 1, 1]);
+      // arc: 最初の区間は 0 → 10m、dashVec4 は (12, 6, 3, 6)
+      expect(g.vertices[13], 0);
+      expect(g.vertices[14], closeTo(10, 1e-5));
+      expect(g.vertices.sublist(15, 19), [12, 6, 3, 6]);
       expect(g.indices.sublist(0, 6), [0, 1, 2, 1, 3, 2]);
       for (final i in g.indices) {
         expect(i, lessThan(g.vertexCount));
@@ -128,7 +139,16 @@ void main() {
 
     test('点 1 つ = 頂点 4・インデックス 6、角と半径と色、標高は elevationAt', () {
       const pts = [
-        TerrainPoint(x: 10, y: 20, color: Color(0xFFFF0000), sizePx: 5),
+        TerrainPoint(
+          x: 10,
+          y: 20,
+          color: Color(0xFFFF0000),
+          sizePx: 5,
+          shape: PointMarkerShape.star,
+          outlineColor: Color(0xFF0000FF),
+          outlineWidthPx: 2,
+          angleDeg: 90,
+        ),
         TerrainPoint(x: 30, y: 40, color: Color(0x8000FF00), sizePx: 3),
       ];
       final g = GpuPointGeometry.pack(pts, elevationAt: (x, y) => x + y);
@@ -143,6 +163,11 @@ void main() {
       expect([g.vertices[3 * f + 3], g.vertices[3 * f + 4]], [1, 1]);
       expect(g.vertices[5], 5);
       expect(g.vertices.sublist(6, 10), [1, 0, 0, 1]);
+      // outline_color = 青、marker_style = (outlineWidthPx=2, shape=star, angleRad=pi/2, 0)
+      expect(g.vertices.sublist(10, 14), [0, 0, 1, 1]);
+      expect(g.vertices[14], 2);
+      expect(g.vertices[15], PointMarkerShape.star.gpuId);
+      expect(g.vertices[16], closeTo(math.pi / 2, 1e-5));
       expect(g.indices.sublist(6, 12), [4, 5, 6, 5, 7, 6]);
       // from で増分
       final tail = GpuPointGeometry.pack(pts, from: 1, elevationAt: (x, y) => 0);

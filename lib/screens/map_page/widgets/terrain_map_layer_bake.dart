@@ -41,15 +41,23 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
   String? _bakedStyleSignature;
   String _styleSignature() {
     final d = _defaultStyle();
+    final usesSvg = widget.scene.styleGroups.any(
+      (g) => g.pointSvgContent != null || g.polygonFills.any((f) => f.pointSvgContent != null),
+    );
     return [
       '${d.fillColor.toARGB32()} ${d.outlineColor.toARGB32()} ${d.lineColor.toARGB32()} ${d.pointColor.toARGB32()} '
           '${d.outlineWidth} ${d.lineWidth} ${d.pointSize} '
+          '${d.pointShape.id} ${d.pointOutlineColor.toARGB32()} ${d.pointOutlineWidth} '
+          '${Object.hashAll(d.lineStrokes)} ${Object.hashAll(d.polygonFills)} ${Object.hashAll(d.polygonOutlineStrokes)} '
           '${d.labelTextStyle?.fontSize} ${d.labelTextStyle?.color?.toARGB32()} ${d.labelHaloColor?.toARGB32()}',
-      for (final g in widget.scene.styleGroups)
-        '${g.key} ${g.fillHex} ${g.fillOpacity} ${g.outlineHex} ${g.outlineOpacity} ${g.borderWidth} '
-            '${g.lineHex} ${g.lineWidth} ${g.lineOpacity} ${g.pointHex} ${g.pointSize} ${g.pointOpacity} '
-            '${g.labelFontSize} ${g.labelHex} ${g.labelHaloHex} ${g.labelOpacity}',
+      if (usesSvg) 'svg:${SvgMarkerCache.instance.revision.value}',
+      for (final g in widget.scene.styleGroups) g.signature,
     ].join('|');
+  }
+
+  void _onSvgAtlasRevision() {
+    _onSceneRevision();
+    _scheduleRefresh();
   }
 
   /// 最後に焼いたときの描く順の世代（`MapScene.drawOrderRevision`）
@@ -310,7 +318,19 @@ mixin _TerrainBakes on ConsumerState<TerrainMapLayer> {
         for (final n in widget.scene.overlayImages)
           if (_overlayImages[n.filePath] case final im?) (n, im),
     ];
-    final fillIdx = g.polygons.isEmpty ? const <int>[] : _featureIndexes(g.polygons, frame.mercator);
+    final hasInverted = groups.values.any((s) => s.invertedPolygon);
+    final List<int> fillIdx;
+    if (g.polygons.isEmpty) {
+      fillIdx = const <int>[];
+    } else if (!hasInverted) {
+      fillIdx = _featureIndexes(g.polygons, frame.mercator);
+    } else {
+      final inTile = _featureIndexes(g.polygons, frame.mercator).toSet();
+      fillIdx = [
+        for (var i = 0; i < g.polygons.length; i++)
+          if (inTile.contains(i) || styleOf(g.polygons[i]).invertedPolygon) i,
+      ];
+    }
     final ranks = g.polygonRanks;
     final steps = composeTextureDraws(
       fillRanks: [for (final i in fillIdx) i < ranks.length ? ranks[i] : 0],

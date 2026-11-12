@@ -20,17 +20,28 @@
 /// DataDrivenSettingsScreenでUI自動生成。
 library;
 
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:xml/xml.dart';
 
 import '../core/settings_schema.dart';
 import '../i18n/strings.g.dart';
+import '../models/app_notification.dart';
+import '../models/geometry_type.dart';
 import '../models/kmeta.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/view_node.dart';
 import '../models/qgis_renderer.dart';
+import '../providers/notification_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../services/kmeta_service.dart';
+import '../services/qgis/qgs_qml_service.dart';
+import '../services/qgis/qgs_style_reader.dart';
 import '../tutorial/tutorial.dart';
 import '../utils/app_logger.dart';
 import '../utils/attribute_columns.dart';
@@ -56,19 +67,33 @@ export 'layer_style_settings/symbol_style_defs.dart'
         StyleSection,
         clusteringDisableZoomDef,
         clusteringEnabledDef,
+        lineCasingColorDef,
+        lineCasingEnabledDef,
+        lineCasingWidthDef,
         lineColorDef,
+        lineDashDef,
         lineOpacityDef,
         lineVertexPointSizeFactorDef,
         lineVertexPointsEnabledDef,
         lineWidthDef,
         pointColorDef,
         pointOpacityDef,
+        pointOutlineColorDef,
+        pointOutlineEnabledDef,
+        pointOutlineWidthDef,
+        pointShapeDef,
         pointSizeDef,
+        polygonBorderCasingColorDef,
+        polygonBorderCasingEnabledDef,
+        polygonBorderCasingWidthDef,
         polygonBorderColorDef,
+        polygonBorderDashDef,
         polygonBorderOpacityDef,
         polygonBorderWidthDef,
         polygonFillColorDef,
         polygonFillOpacityDef,
+        polygonFillPatternDef,
+        polygonPatternSpacingDef,
         polygonVertexPointSizeFactorDef,
         polygonVertexPointsEnabledDef,
         selectedColorDef,
@@ -321,11 +346,13 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
 
   /// overlay値をKMetaに保存
   Future<void> _saveToKMeta() async {
+    final existing = widget.isViewMode ? widget.targetView?.style : _layerStyle;
     final style = buildStyleFromStore(
       layerStyleSettings,
       omitLayerQgisRenderer: widget.isViewMode || _rendererFromView,
       qgisRenderer: _qgisRenderer,
       qgisRendererDef: _qgisRendererDef,
+      existingStyle: existing,
     );
     if (widget.isViewMode) {
       await saveViewStyleToKMeta(
@@ -401,6 +428,188 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     super.dispose();
   }
 
+  void _notify(String title, NotificationLevel level) {
+    try {
+      final c = _container ?? (mounted ? ProviderScope.containerOf(context, listen: false) : null);
+      c?.read(notificationCenterProvider.notifier).add(title: title, level: level);
+    } catch (_) {
+      // ProviderScope が無い単体テスト環境では何もしない
+    }
+  }
+
+  GeometryType? _targetGeometryType() {
+    final layer = widget.targetLayer;
+    if (layer is PointLayerNode) return GeometryType.point;
+    if (layer is LineLayerNode) return GeometryType.linestring;
+    if (layer is PolygonLayerNode) return GeometryType.polygon;
+    return null;
+  }
+
+  String _geometryLabel(GeometryType type) => switch (type) {
+        GeometryType.point => t.styleScreen.point,
+        GeometryType.linestring => t.styleScreen.line,
+        GeometryType.polygon => t.styleScreen.polygon,
+      };
+
+  String? _currentPointSvgContent() {
+    final effective = widget.isViewMode
+        ? (widget.targetView?.style?.mergeWith(_layerStyle) ?? _layerStyle)
+        : _layerStyle;
+    return effective?.symbolLayers?.markers.lastOrNull?.svgContent;
+  }
+
+  Future<void> _importQmlFile() async {
+    final layer = widget.targetLayer;
+    final folderPath = widget.folderPath;
+    if (layer == null || folderPath == null) return;
+
+    final List<PlatformFile> picked;
+    try {
+      picked = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['qml'],
+      );
+    } on Object catch (e) {
+      AppLogger.error('[LayerStyle] QML ファイル選択失敗: $e');
+      _notify(t.common.errorOccurred(error: '$e'), NotificationLevel.error);
+      return;
+    }
+    if (picked.isEmpty) return;
+
+    final file = picked.first;
+    final String xmlText;
+    Map<String, String> localSvgs = const {};
+    try {
+      final bytes = await file.readAsBytes();
+      xmlText = utf8.decode(bytes, allowMalformed: true);
+      if (file.path != null) {
+        final doc = XmlDocument.parse(xmlText);
+        localSvgs = await QgsStyleReader.preloadLocalSvgFiles(
+          doc,
+          baseDir: p.dirname(file.path!),
+          rootDir: folderPath,
+        );
+      }
+    } on Object {
+      _notify(t.styleScreen.qmlInvalid, NotificationLevel.error);
+      return;
+    }
+
+    final result = QgsQmlService.importQml(
+      xmlText,
+      expectedGeometryType: _targetGeometryType(),
+      svgFileReader: localSvgs.isEmpty ? null : (raw) => localSvgs[raw],
+    );
+
+    switch (result) {
+      case QmlImportInvalid():
+        _notify(t.styleScreen.qmlInvalid, NotificationLevel.error);
+      case QmlImportGeometryMismatch(:final expected, :final actual):
+        _notify(
+          t.styleScreen.qmlGeometryMismatch(
+            actual: _geometryLabel(actual),
+            expected: _geometryLabel(expected),
+          ),
+          NotificationLevel.warning,
+        );
+      case QmlImportSuccess(:final style):
+        if (widget.isViewMode) {
+          widget.targetView!.style = style;
+          await layer.persistViews();
+          layer.folderNode?.invalidateMetaCache();
+          await layer.refreshStyleGroups();
+        } else {
+          await KMetaService.instance.setLayerStyle(
+            folderPath,
+            layer.layerKey,
+            style,
+          );
+          layer.folderNode?.invalidateMetaCache();
+          layer.invalidateKmetaStyleCache();
+          await layer.refreshStyleGroups();
+        }
+        await _onInit();
+        if (mounted) setState(() {});
+        _notifyMapRefresh();
+        _tutorialReport(StyleSaved(layer, view: widget.isViewMode ? widget.targetView : null));
+        _notify(t.styleScreen.qmlImported(name: file.name), NotificationLevel.success);
+    }
+  }
+
+  Future<void> _exportQmlFile() async {
+    final layer = widget.targetLayer;
+    final geomType = _targetGeometryType();
+    if (layer == null || geomType == null) return;
+
+    final existingEffective = widget.isViewMode
+        ? (widget.targetView?.style?.mergeWith(_layerStyle) ?? _layerStyle)
+        : _layerStyle;
+    final current = buildStyleFromStore(
+      layerStyleSettings,
+      omitLayerQgisRenderer: false,
+      qgisRenderer: _qgisRenderer,
+      qgisRendererDef: _qgisRendererDef,
+      existingStyle: existingEffective,
+    );
+    final existingMapLayer = await QgsQmlService.findExistingMapLayerInFolder(
+      folderPath: widget.folderPath,
+      layer: layer,
+      view: widget.targetView,
+    );
+    final bytes = QgsQmlService.exportQmlBytes(
+      style: current,
+      geometryType: geomType,
+      existingMapLayer: existingMapLayer,
+    );
+    final rawBase = widget.isViewMode
+        ? '${layer.layerName}_${widget.targetView!.displayName}'
+        : layer.layerName;
+    final safeBase = rawBase.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+    final fileName = '${safeBase.isEmpty ? 'style' : safeBase}.qml';
+
+    try {
+      final saved = await FilePicker.saveFile(
+        dialogTitle: t.styleScreen.qmlExport,
+        fileName: fileName,
+        bytes: bytes,
+      );
+      if (saved == null) return;
+      _notify(t.styleScreen.qmlExported(name: fileName), NotificationLevel.success);
+    } on Object catch (e) {
+      AppLogger.error('[LayerStyle] QML 書き出し失敗: $e');
+      _notify(t.common.errorOccurred(error: '$e'), NotificationLevel.error);
+    }
+  }
+
+  Widget _buildQmlMenuButton() => PopupMenuButton<_QmlMenuAction>(
+        icon: const Icon(Icons.import_export),
+        tooltip: t.styleScreen.qmlMenuTooltip,
+        onSelected: (action) => switch (action) {
+          _QmlMenuAction.importQml => _importQmlFile(),
+          _QmlMenuAction.exportQml => _exportQmlFile(),
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: _QmlMenuAction.importQml,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.file_open_outlined),
+              title: Text(t.styleScreen.qmlImport),
+            ),
+          ),
+          PopupMenuItem(
+            value: _QmlMenuAction.exportQml,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.save_alt_outlined),
+              title: Text(t.styleScreen.qmlExport),
+            ),
+          ),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
     return LabelEditorScope(
@@ -415,6 +624,9 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
         onValueChanged: _onValueChanged,
         sectionFilter: _sectionFilter,
         itemFilter: _itemFilter,
+        extraActions: [
+          if (widget.isLayerMode && _targetGeometryType() != null) _buildQmlMenuButton(),
+        ],
         customSections: (store) => buildStyleHeaderAndPreviewSections(
           store: store,
           isGlobalMode: _isGlobalMode,
@@ -422,8 +634,11 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
           targetLayer: widget.targetLayer,
           qgisRenderer: _qgisRenderer,
           qgisRendererDef: _qgisRendererDef,
+          pointSvgContent: _currentPointSvgContent(),
         ),
       ),
     );
   }
 }
+
+enum _QmlMenuAction { importQml, exportQml }

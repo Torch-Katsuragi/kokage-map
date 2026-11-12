@@ -134,6 +134,25 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
           color: TerrainFeatureStyle.fromHex(g.labelHex, g.labelOpacity),
         ),
         labelHaloColor: TerrainFeatureStyle.fromHex(g.labelHaloHex),
+        lineStrokes: g.lineStrokes,
+        polygonFills: g.polygonFills,
+        polygonOutlineStrokes: g.polygonOutlineStrokes,
+        pointShape: g.pointShape,
+        pointOutlineColor: g.pointOutlineColor,
+        pointOutlineWidth: g.pointOutlineWidth,
+        pointAngle: g.pointAngle,
+        pointSvgContent: g.pointSvgContent,
+        invertedPolygon: g.invertedPolygon,
+        nullSymbol: g.nullSymbol,
+        minScale: g.minScale,
+        maxScale: g.maxScale,
+        labelHaloEnabled: g.labelHaloEnabled,
+        labelHaloSize: g.labelHaloSize,
+        labelWrapChar: g.labelWrapChar,
+        labelBgShape: g.labelBgEnabled ? (g.labelBgShape ?? 'rect') : null,
+        labelBgColor: g.labelBgEnabled ? g.labelBgColor : null,
+        labelBgBorderColor: g.labelBgEnabled ? g.labelBgBorderColor : null,
+        labelBgBorderWidth: g.labelBgEnabled ? g.labelBgBorderWidth : null,
       );
 
   /// View 固有スタイルをキーで引ける形に
@@ -142,14 +161,46 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
 
   TerrainFeatureStyle _defaultStyle() {
     final s = layerStyleSettings;
+    final lineColor = s.getColor(lineColorDef).withValues(alpha: s.getDouble(lineOpacityDef));
+    final lineWidth = s.getDouble(lineWidthDef);
+    final fillColor = s.getColor(polygonFillColorDef).withValues(alpha: s.getDouble(polygonFillOpacityDef));
+    final outlineColor = s.getColor(polygonBorderColorDef).withValues(alpha: s.getDouble(polygonBorderOpacityDef));
+    final outlineWidth = s.getDouble(polygonBorderWidthDef);
+    final pointOpacity = s.getDouble(pointOpacityDef);
+    final pointColor = s.getColor(pointColorDef).withValues(alpha: pointOpacity);
+    final pointOutlineOn = s.getBool(pointOutlineEnabledDef);
     return TerrainFeatureStyle(
-      lineColor: s.getColor(lineColorDef).withValues(alpha: s.getDouble(lineOpacityDef)),
-      lineWidth: s.getDouble(lineWidthDef),
-      fillColor: s.getColor(polygonFillColorDef).withValues(alpha: s.getDouble(polygonFillOpacityDef)),
-      outlineColor: s.getColor(polygonBorderColorDef).withValues(alpha: s.getDouble(polygonBorderOpacityDef)),
-      outlineWidth: s.getDouble(polygonBorderWidthDef),
-      pointColor: s.getColor(pointColorDef).withValues(alpha: s.getDouble(pointOpacityDef)),
+      lineColor: lineColor,
+      lineWidth: lineWidth,
+      fillColor: fillColor,
+      outlineColor: outlineColor,
+      outlineWidth: outlineWidth,
+      pointColor: pointColor,
       pointSize: s.getDouble(pointSizeDef),
+      pointShape: PointMarkerShape.fromId(s.getString(pointShapeDef)),
+      pointOutlineColor: s.getColor(pointOutlineColorDef).withValues(alpha: pointOpacity),
+      pointOutlineWidth: pointOutlineOn ? s.getDouble(pointOutlineWidthDef) : 0.0,
+      lineStrokes: buildEffectiveLineStrokes(
+        lineColor: lineColor,
+        lineWidth: lineWidth,
+        dash: LineDashPattern.fromId(s.getString(lineDashDef)),
+        casingEnabled: s.getBool(lineCasingEnabledDef),
+        casingColor: s.getColor(lineCasingColorDef),
+        casingWidth: s.getDouble(lineCasingWidthDef),
+      ),
+      polygonFills: buildEffectivePolygonFills(
+        fillColor: fillColor,
+        pattern: PolygonFillPattern.fromId(s.getString(polygonFillPatternDef)),
+        spacingPx: s.getDouble(polygonPatternSpacingDef),
+      ),
+      polygonOutlineStrokes: buildEffectiveLineStrokes(
+        lineColor: outlineColor,
+        lineWidth: outlineWidth,
+        dash: LineDashPattern.fromId(s.getString(polygonBorderDashDef)),
+        casingEnabled: s.getBool(polygonBorderCasingEnabledDef),
+        casingColor: s.getColor(polygonBorderCasingColorDef),
+        casingWidth: s.getDouble(polygonBorderCasingWidthDef),
+      ),
       labelTextStyle: TextStyle(
         fontSize: s.getDouble(labelFontSizeDef),
         color: s.getColor(labelColorDef).withValues(alpha: s.getDouble(labelOpacityDef)),
@@ -165,12 +216,14 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     final k = s.getDouble(selectedMultiplierDef);
     return TerrainFeatureStyle(
       lineColor: color,
-      lineWidth: base.lineWidth * k,
+      lineWidth: math.max(2.0, base.lineWidth) * k,
       fillColor: Colors.transparent,
       outlineColor: color,
-      outlineWidth: base.outlineWidth * k,
+      outlineWidth: math.max(2.0, base.outlineWidth) * k,
       pointColor: color,
-      pointSize: base.pointSize * k,
+      pointSize: math.max(3.0, base.pointSize) * k,
+      pointShape: base.pointShape,
+      pointAngle: base.pointAngle,
     );
   }
 
@@ -229,6 +282,8 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
       fontSize: layerStyleSettings.getDouble(labelFontSizeDef),
       color: layerStyleSettings.getColor(labelColorDef).withValues(alpha: layerStyleSettings.getDouble(labelOpacityDef)),
     );
+    final centerLatRad = WebMercator.latFromY(dem.originY + dem.height * 0.5) * math.pi / 180.0;
+    final tileScaleDenom = (math.cos(centerLatRad).abs() * WebMercator.metersPerPixel(tile.key.z)) * (96.0 / 0.0254);
     TerrainSceneBuilder builder(Map<String, TerrainFeatureStyle> styles, TerrainFeatureStyle def, String labelProp) =>
         TerrainSceneBuilder(
           mesh: mesh,
@@ -238,6 +293,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
           labelProp: labelProp,
           labelTextStyle: labelStyle,
           polygonClipCells: clipCells,
+          scaleDenom: tileScaleDenom,
         );
 
     // 静的な部分。1 回あたり数 ms ずつ育てる（1 タイル 1 万面を一度に持ち上げると 0.5〜1 秒止まる）

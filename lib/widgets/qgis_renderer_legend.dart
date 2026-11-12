@@ -17,6 +17,8 @@
 
 import 'package:flutter/material.dart';
 
+import '../core/terrain/fill_pattern_painter.dart';
+import '../core/terrain/svg_marker_atlas.dart';
 import '../i18n/strings.g.dart';
 import '../models/kmeta.dart';
 import '../models/qgis_renderer.dart';
@@ -89,7 +91,8 @@ class QgisRendererLegend extends StatelessWidget {
 }
 
 class _SwatchPainter extends CustomPainter {
-  _SwatchPainter(this.style, {required this.enabled});
+  _SwatchPainter(this.style, {required this.enabled})
+      : super(repaint: SvgMarkerCache.instance.revision);
 
   final KMetaLayerStyle? style;
   final bool enabled;
@@ -102,12 +105,53 @@ class _SwatchPainter extends CustomPainter {
       canvas.drawRect(Offset.zero & size, Paint()..color = Colors.grey.withValues(alpha: 0.3 * dim));
       return;
     }
-    if (s.polygonFillColor != null || s.polygonBorderColor != null || s.polygonFillOpacity != null) {
+    final sl = s.symbolLayers;
+    if (s.polygonFillColor != null ||
+        s.polygonBorderColor != null ||
+        s.polygonFillOpacity != null ||
+        s.polygonFillPattern != null ||
+        (sl != null && (sl.fills.isNotEmpty || sl.outlineStrokes.isNotEmpty))) {
       final rect = (Offset.zero & size).deflate(1);
-      final fill = s.polygonFillColor ?? Colors.grey;
-      canvas.drawRect(rect, Paint()..color = fill.withValues(alpha: (s.polygonFillOpacity ?? 1) * dim));
+      final path = Path()..addRect(rect);
+      final fillCol = (s.polygonFillColor ?? Colors.grey).withValues(alpha: (s.polygonFillOpacity ?? 1) * dim);
+      final fills = buildEffectivePolygonFills(
+        fillColor: fillCol,
+        pattern: PolygonFillPattern.fromId(s.polygonFillPattern),
+        spacingPx: (s.polygonPatternSpacing ?? 6.0).clamp(3.0, 8.0),
+        lineWidthPx: (s.polygonPatternLineWidth ?? 1.2).clamp(0.8, 2.0),
+        symbolLayers: sl,
+      );
+      canvas.save();
+      canvas.clipRect(rect);
+      drawPolygonFillLayers(
+        canvas,
+        path,
+        [
+          for (final f in fills)
+            switch (f.kind) {
+              FillLayerKind.solid => f.withOpacityFactor(dim),
+              FillLayerKind.linePattern => ResolvedFillLayer.linePattern(
+                  color: f.color.withValues(alpha: f.color.a * dim),
+                  angleDeg: f.angleDeg,
+                  spacingPx: f.spacingPx.clamp(3.0, 8.0),
+                  lineWidthPx: f.lineWidthPx.clamp(0.8, 2.0),
+                  offsetPx: f.offsetPx,
+                  dashArray: f.dashArray,
+                ),
+              FillLayerKind.pointPattern => ResolvedFillLayer.pointPattern(
+                  color: f.color.withValues(alpha: f.color.a * dim),
+                  dxPx: f.dxPx.clamp(3.0, 8.0),
+                  dyPx: f.dyPx.clamp(3.0, 8.0),
+                  pointRadiusPx: f.pointRadiusPx.clamp(0.8, 2.0),
+                  pointShape: f.pointShape,
+                  pointSvgContent: f.pointSvgContent,
+                ),
+            },
+        ],
+      );
+      canvas.restore();
       final borderOpacity = s.polygonBorderOpacity ?? 1;
-      if (borderOpacity > 0) {
+      if (borderOpacity > 0 && (s.polygonBorderWidth ?? 1) > 0) {
         canvas.drawRect(
           rect,
           Paint()
@@ -118,20 +162,50 @@ class _SwatchPainter extends CustomPainter {
       }
       return;
     }
-    if (s.lineColor != null) {
-      canvas.drawLine(
-        Offset(0, size.height / 2),
-        Offset(size.width, size.height / 2),
-        Paint()
-          ..color = s.lineColor!.withValues(alpha: dim)
-          ..strokeWidth = (s.lineWidth ?? 2).clamp(1, size.height / 2),
+    if (s.lineColor != null || (sl != null && sl.strokes.isNotEmpty)) {
+      final path = Path()
+        ..moveTo(0, size.height / 2)
+        ..lineTo(size.width, size.height / 2);
+      final strokes = buildEffectiveLineStrokes(
+        lineColor: (s.lineColor ?? Colors.blue).withValues(alpha: (s.lineOpacity ?? 1) * dim),
+        lineWidth: (s.lineWidth ?? 2).clamp(1, size.height * 0.45),
+        dash: LineDashPattern.fromId(s.lineDash),
+        casingEnabled: s.lineCasingEnabled ?? false,
+        casingColor: (s.lineCasingColor ?? Colors.white).withValues(alpha: dim),
+        casingWidth: (s.lineCasingWidth ?? 1.5).clamp(0.5, 2.0),
+        symbolLayers: sl,
+      );
+      drawLineStrokeLayers(
+        canvas,
+        path,
+        [
+          for (final st in strokes)
+            ResolvedLineStroke(
+              color: st.color.withValues(alpha: st.color.a * dim),
+              widthPx: st.widthPx.clamp(1.0, size.height * 0.7),
+              dashArray: st.dashArray == null ? null : [for (final d in st.dashArray!) (d * 0.5).clamp(1.5, 6.0)],
+            ),
+        ],
       );
       return;
     }
-    canvas.drawCircle(
+    final marker = (sl != null && sl.markers.isNotEmpty) ? sl.markers.last : null;
+    final shape = marker?.shape ?? PointMarkerShape.fromId(s.pointShape);
+    final fillCol = (marker?.color ?? s.pointColor ?? Colors.grey).withValues(alpha: (s.pointOpacity ?? 1) * dim);
+    final outOn = s.pointOutlineEnabled ?? true;
+    final outW = marker != null ? marker.outlineWidthPx.clamp(0.0, 1.5) : (outOn ? 1.0 : 0.0);
+    final outCol = (marker?.outlineColor ?? s.pointOutlineColor ?? Colors.white).withValues(alpha: dim);
+    drawPointOrSvgMarker(
+      canvas,
       size.center(Offset.zero),
-      (s.pointSize ?? size.width / 3).clamp(2, size.width / 2),
-      Paint()..color = (s.pointColor ?? Colors.grey).withValues(alpha: dim),
+      (s.pointSize ?? size.width / 3).clamp(2.5, size.width / 2 - 1),
+      svgContent: marker?.svgContent,
+      shape: shape,
+      fillColor: fillCol,
+      outlineColor: outCol,
+      outlineWidth: outW,
+      angleDeg: marker?.angleDeg ?? s.pointAngle ?? 0.0,
+      opacity: dim,
     );
   }
 

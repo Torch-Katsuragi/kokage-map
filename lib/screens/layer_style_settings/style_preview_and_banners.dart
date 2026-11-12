@@ -21,9 +21,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/settings_schema.dart';
+import '../../core/terrain/fill_pattern_painter.dart';
+import '../../core/terrain/svg_marker_atlas.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/qgis_renderer.dart';
+import '../../models/qgis_symbol.dart';
 import '../../widgets/qgis_renderer_legend.dart';
 import '../../widgets/settings_widgets.dart';
 import 'label_style_defs.dart';
@@ -34,6 +37,11 @@ String qgisRendererLabel(String type) => switch (type) {
       'categorizedSymbol' => t.styleScreen.qgisRendererCategorized,
       'graduatedSymbol' => t.styleScreen.qgisRendererGraduated,
       'RuleRenderer' => t.styleScreen.qgisRendererRule,
+      'nullSymbol' => t.styleScreen.qgisRendererNull,
+      'invertedPolygonRenderer' => t.styleScreen.qgisRendererInverted,
+      'mergedFeatureRenderer' => t.styleScreen.qgisRendererMerged,
+      'pointCluster' => t.styleScreen.qgisRendererCluster,
+      'pointDisplacement' => t.styleScreen.qgisRendererDisplacement,
       _ => type,
     };
 
@@ -46,6 +54,7 @@ List<Widget> buildStyleHeaderAndPreviewSections({
   required LayerNode? targetLayer,
   required String? qgisRenderer,
   required QgisRenderer? qgisRendererDef,
+  String? pointSvgContent,
 }) =>
     [
       if (qgisRenderer != null)
@@ -71,6 +80,7 @@ List<Widget> buildStyleHeaderAndPreviewSections({
         store: store,
         isGlobalMode: isGlobalMode,
         targetLayer: targetLayer,
+        pointSvgContent: pointSvgContent,
       ),
     ];
 
@@ -81,11 +91,13 @@ class StylePreviewSection extends StatelessWidget {
     required this.store,
     required this.isGlobalMode,
     required this.targetLayer,
+    this.pointSvgContent,
   });
 
   final SettingsStore store;
   final bool isGlobalMode;
   final LayerNode? targetLayer;
+  final String? pointSvgContent;
 
   @override
   Widget build(BuildContext context) {
@@ -120,13 +132,28 @@ class StylePreviewSection extends StatelessWidget {
                       pointColor: store.getColor(pointColorDef),
                       pointOpacity: store.getDouble(pointOpacityDef),
                       pointSize: store.getDouble(pointSizeDef),
+                      pointShape: PointMarkerShape.fromId(store.getString(pointShapeDef)),
+                      pointSvgContent: store.getString(pointShapeDef) == 'circle' ? pointSvgContent : null,
+                      pointOutlineEnabled: store.getBool(pointOutlineEnabledDef),
+                      pointOutlineColor: store.getColor(pointOutlineColorDef),
+                      pointOutlineWidth: store.getDouble(pointOutlineWidthDef),
                       lineColor: store.getColor(lineColorDef),
                       lineOpacity: store.getDouble(lineOpacityDef),
                       lineWidth: store.getDouble(lineWidthDef),
+                      lineDash: LineDashPattern.fromId(store.getString(lineDashDef)),
+                      lineCasingEnabled: store.getBool(lineCasingEnabledDef),
+                      lineCasingColor: store.getColor(lineCasingColorDef),
+                      lineCasingWidth: store.getDouble(lineCasingWidthDef),
                       polygonBorderColor: store.getColor(polygonBorderColorDef),
                       polygonBorderWidth: store.getDouble(polygonBorderWidthDef),
+                      polygonBorderDash: LineDashPattern.fromId(store.getString(polygonBorderDashDef)),
+                      polygonBorderCasingEnabled: store.getBool(polygonBorderCasingEnabledDef),
+                      polygonBorderCasingColor: store.getColor(polygonBorderCasingColorDef),
+                      polygonBorderCasingWidth: store.getDouble(polygonBorderCasingWidthDef),
                       polygonFillColor: store.getColor(polygonFillColorDef),
                       polygonFillOpacity: store.getDouble(polygonFillOpacityDef),
+                      polygonFillPattern: PolygonFillPattern.fromId(store.getString(polygonFillPatternDef)),
+                      polygonPatternSpacing: store.getDouble(polygonPatternSpacingDef),
                       polygonBorderOpacity: store.getDouble(polygonBorderOpacityDef),
                       labelEnabled: store.getBool(labelEnabledDef),
                       labelFontSize: store.getDouble(labelFontSizeDef),
@@ -153,13 +180,28 @@ class StylePreviewPainter extends CustomPainter {
   final Color pointColor;
   final double pointOpacity;
   final double pointSize;
+  final PointMarkerShape pointShape;
+  final String? pointSvgContent;
+  final bool pointOutlineEnabled;
+  final Color pointOutlineColor;
+  final double pointOutlineWidth;
   final Color lineColor;
   final double lineOpacity;
   final double lineWidth;
+  final LineDashPattern lineDash;
+  final bool lineCasingEnabled;
+  final Color lineCasingColor;
+  final double lineCasingWidth;
   final Color polygonBorderColor;
   final double polygonBorderWidth;
+  final LineDashPattern polygonBorderDash;
+  final bool polygonBorderCasingEnabled;
+  final Color polygonBorderCasingColor;
+  final double polygonBorderCasingWidth;
   final Color polygonFillColor;
   final double polygonFillOpacity;
+  final PolygonFillPattern polygonFillPattern;
+  final double polygonPatternSpacing;
   final double polygonBorderOpacity;
   final bool labelEnabled;
   final double labelFontSize;
@@ -174,20 +216,35 @@ class StylePreviewPainter extends CustomPainter {
     required this.pointColor,
     required this.pointOpacity,
     required this.pointSize,
+    this.pointShape = PointMarkerShape.circle,
+    this.pointSvgContent,
+    this.pointOutlineEnabled = true,
+    this.pointOutlineColor = Colors.white,
+    this.pointOutlineWidth = 1.5,
     required this.lineColor,
     required this.lineOpacity,
     required this.lineWidth,
+    this.lineDash = LineDashPattern.solid,
+    this.lineCasingEnabled = false,
+    this.lineCasingColor = Colors.white,
+    this.lineCasingWidth = 2.0,
     required this.polygonBorderColor,
     required this.polygonBorderWidth,
+    this.polygonBorderDash = LineDashPattern.solid,
+    this.polygonBorderCasingEnabled = false,
+    this.polygonBorderCasingColor = Colors.white,
+    this.polygonBorderCasingWidth = 2.0,
     required this.polygonFillColor,
     required this.polygonFillOpacity,
+    this.polygonFillPattern = PolygonFillPattern.solid,
+    this.polygonPatternSpacing = 8.0,
     required this.polygonBorderOpacity,
     required this.labelEnabled,
     required this.labelFontSize,
     required this.labelColor,
     required this.labelHaloColor,
     required this.labelOpacity,
-  });
+  }) : super(repaint: SvgMarkerCache.instance.revision);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -211,19 +268,25 @@ class StylePreviewPainter extends CustomPainter {
         }
       }
       polygonPath.close();
-      canvas.drawPath(
-        polygonPath,
-        Paint()
-          ..color = polygonFillColor.withValues(alpha: polygonFillOpacity)
-          ..style = PaintingStyle.fill,
+
+      final fills = buildEffectivePolygonFills(
+        fillColor: polygonFillColor.withValues(alpha: polygonFillOpacity),
+        pattern: polygonFillPattern,
+        spacingPx: polygonPatternSpacing,
       );
-      canvas.drawPath(
-        polygonPath,
-        Paint()
-          ..color = polygonBorderColor.withValues(alpha: polygonBorderOpacity)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = polygonBorderWidth,
-      );
+      drawPolygonFillLayers(canvas, polygonPath, fills);
+
+      if (polygonBorderWidth > 0 && polygonBorderOpacity > 0) {
+        final borderStrokes = buildEffectiveLineStrokes(
+          lineColor: polygonBorderColor.withValues(alpha: polygonBorderOpacity),
+          lineWidth: polygonBorderWidth,
+          dash: polygonBorderDash,
+          casingEnabled: polygonBorderCasingEnabled,
+          casingColor: polygonBorderCasingColor,
+          casingWidth: polygonBorderCasingWidth,
+        );
+        drawLineStrokeLayers(canvas, polygonPath, borderStrokes);
+      }
     }
 
     // ライン
@@ -250,35 +313,41 @@ class StylePreviewPainter extends CustomPainter {
             size.height * 0.25,
           );
       }
-      canvas.drawPath(
-        linePath,
-        Paint()
-          ..color = lineColor.withValues(alpha: lineOpacity)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = lineWidth
-          ..strokeCap = StrokeCap.round,
+      final strokes = buildEffectiveLineStrokes(
+        lineColor: lineColor.withValues(alpha: lineOpacity),
+        lineWidth: lineWidth,
+        dash: lineDash,
+        casingEnabled: lineCasingEnabled,
+        casingColor: lineCasingColor,
+        casingWidth: lineCasingWidth,
       );
+      drawLineStrokeLayers(canvas, linePath, strokes);
     }
 
     // ポイント
     if (showPoint) {
-      final pointPaint = Paint()
-        ..color = pointColor.withValues(alpha: pointOpacity)
-        ..style = PaintingStyle.fill;
-      if (allThree) {
-        canvas.drawCircle(
-          Offset(size.width * 0.15, size.height * 0.5),
-          pointSize / 2,
-          pointPaint,
+      final fillCol = pointColor.withValues(alpha: pointOpacity);
+      final outCol = pointOutlineColor.withValues(alpha: pointOpacity);
+      final outW = pointOutlineEnabled ? pointOutlineWidth : 0.0;
+      final r = math.max(3.0, pointSize);
+      final positions = allThree
+          ? [Offset(size.width * 0.15, size.height * 0.5)]
+          : [
+              Offset(size.width * 0.25, size.height * 0.62),
+              Offset(size.width * 0.50, size.height * 0.45),
+              Offset(size.width * 0.75, size.height * 0.55),
+            ];
+      for (final pos in positions) {
+        drawPointOrSvgMarker(
+          canvas,
+          pos,
+          r,
+          svgContent: pointSvgContent,
+          shape: pointShape,
+          fillColor: fillCol,
+          outlineColor: outCol,
+          outlineWidth: outW,
         );
-      } else {
-        for (final pos in [
-          Offset(size.width * 0.25, size.height * 0.62),
-          Offset(size.width * 0.50, size.height * 0.45),
-          Offset(size.width * 0.75, size.height * 0.55),
-        ]) {
-          canvas.drawCircle(pos, pointSize / 2, pointPaint);
-        }
       }
     }
 
@@ -314,13 +383,28 @@ class StylePreviewPainter extends CustomPainter {
       old.pointColor != pointColor ||
       old.pointOpacity != pointOpacity ||
       old.pointSize != pointSize ||
+      old.pointShape != pointShape ||
+      old.pointSvgContent != pointSvgContent ||
+      old.pointOutlineEnabled != pointOutlineEnabled ||
+      old.pointOutlineColor != pointOutlineColor ||
+      old.pointOutlineWidth != pointOutlineWidth ||
       old.lineColor != lineColor ||
       old.lineOpacity != lineOpacity ||
       old.lineWidth != lineWidth ||
+      old.lineDash != lineDash ||
+      old.lineCasingEnabled != lineCasingEnabled ||
+      old.lineCasingColor != lineCasingColor ||
+      old.lineCasingWidth != lineCasingWidth ||
       old.polygonBorderColor != polygonBorderColor ||
       old.polygonBorderWidth != polygonBorderWidth ||
+      old.polygonBorderDash != polygonBorderDash ||
+      old.polygonBorderCasingEnabled != polygonBorderCasingEnabled ||
+      old.polygonBorderCasingColor != polygonBorderCasingColor ||
+      old.polygonBorderCasingWidth != polygonBorderCasingWidth ||
       old.polygonFillColor != polygonFillColor ||
       old.polygonFillOpacity != polygonFillOpacity ||
+      old.polygonFillPattern != polygonFillPattern ||
+      old.polygonPatternSpacing != polygonPatternSpacing ||
       old.polygonBorderOpacity != polygonBorderOpacity ||
       old.labelEnabled != labelEnabled ||
       old.labelFontSize != labelFontSize ||

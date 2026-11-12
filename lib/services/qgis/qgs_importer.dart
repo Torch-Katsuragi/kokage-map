@@ -118,6 +118,12 @@ class QgsImporter {
     final rootPath = root.getAbsoluteFilePath();
     final qgsDir = p.dirname(p.normalize(qgsPath));
     final sources = QgsSourceResolver.fromRoot(qgsDir, root);
+    final svgFiles = await QgsStyleReader.preloadLocalSvgFiles(
+      doc,
+      baseDir: qgsDir,
+      rootDir: rootPath,
+    );
+    String? svgReader(String raw) => svgFiles[raw];
     final tree = QgsTreeVisibility.read(doc);
     // レイヤツリーの並び（上から）。こかげマップの一覧の並び（= 描く順）に写す
     final placement = QgsTreePlacement.fromDocument(doc);
@@ -156,7 +162,7 @@ class QgsImporter {
           name: isDefault ? kDefaultViewName : _uniqueName(name, views),
           parent: layer,
           filter: source.subset,
-          style: readStyleWithLabel(maplayer),
+          style: QgsStyleReader.readStyleWithLabel(maplayer, svgFileReader: svgReader),
           visible: id == null ? true : (shaped ? tree.ownChecked[id]! : (tree.checked[id] ?? true)),
         ),
       );

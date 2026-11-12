@@ -123,8 +123,8 @@ class TerrainGpuWorldRenderer {
     final gl = _gl;
     _terrain = _Program(gl, _terrainVert, _terrainFrag, ['position', 'uv', 'shade', 'slope'], ['u_mvp', 'u_params', 'tex', 'ramp', 'u_color_a', 'u_color_b']);
     _polygon = _Program(gl, _polygonVert, _colorFrag, ['position', 'color'], ['u_mvp', 'u_params']);
-    _line = _Program(gl, _lineVert, _lineFrag, ['a', 'b', 't', 'side', 'width', 'color'], ['u_mvp', 'u_viewport', 'u_pixel_ratio', 'u_params']);
-    _point = _Program(gl, _pointVert, _pointFrag, ['position', 'corner', 'size', 'color'], ['u_mvp', 'u_viewport', 'u_pixel_ratio']);
+    _line = _Program(gl, _lineVert, _lineFrag, ['a', 'b', 't', 'side', 'width', 'color', 'arc', 'dash'], ['u_mvp', 'u_viewport', 'u_pixel_ratio', 'u_params']);
+    _point = _Program(gl, _pointVert, _pointFrag, ['position', 'corner', 'size', 'color', 'outline_color', 'marker_style'], ['u_mvp', 'u_viewport', 'u_pixel_ratio']);
     _anisotropy = gl.getExtension('EXT_texture_filter_anisotropic') != null;
     gl.pixelStorei(_G.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
   }
@@ -322,7 +322,16 @@ class TerrainGpuWorldRenderer {
     gl.uniform2f(_line.uniform('u_viewport'), w.toDouble(), h.toDouble());
     gl.uniform1f(_line.uniform('u_pixel_ratio'), pixelRatio);
     gl.uniform4f(_line.uniform('u_params'), params.$1, params.$2, params.$3, params.$4);
-    const lineAttribs = [('a', 3, 0), ('b', 3, 12), ('t', 1, 24), ('side', 1, 28), ('width', 1, 32), ('color', 4, 36)];
+    const lineAttribs = [
+      ('a', 3, 0),
+      ('b', 3, 12),
+      ('t', 1, 24),
+      ('side', 1, 28),
+      ('width', 1, 32),
+      ('color', 4, 36),
+      ('arc', 2, 52),
+      ('dash', 4, 60),
+    ];
     for (final e in entries) {
       if (e.lines == null && e.segments == null && e.tile.dynamicLines.isEmpty) continue;
       gl.uniformMatrix4fv(_line.uniform('u_mvp'), false, e.lineMvp!.toJS);
@@ -354,13 +363,21 @@ class TerrainGpuWorldRenderer {
     gl.useProgram(_point.program);
     gl.uniform2f(_point.uniform('u_viewport'), w.toDouble(), h.toDouble());
     gl.uniform1f(_point.uniform('u_pixel_ratio'), pixelRatio);
+    const pointAttribs = [
+      ('position', 3, 0),
+      ('corner', 2, 12),
+      ('size', 1, 20),
+      ('color', 4, 24),
+      ('outline_color', 4, 40),
+      ('marker_style', 4, 56),
+    ];
     for (final e in entries) {
       final parts = e.points;
       if (parts == null) continue;
       gl.uniformMatrix4fv(_point.uniform('u_mvp'), false, e.lineMvp!.toJS);
       for (final p in parts.parts) {
         gl.bindBuffer(_G.ARRAY_BUFFER, p.vertices);
-        _point.attribs(gl, GpuPointGeometry.strideInBytes, [('position', 3, 0), ('corner', 2, 12), ('size', 1, 20), ('color', 4, 24)]);
+        _point.attribs(gl, GpuPointGeometry.strideInBytes, pointAttribs);
         gl.bindBuffer(_G.ELEMENT_ARRAY_BUFFER, p.indices);
         gl.drawElements(_G.TRIANGLES, p.count, _G.UNSIGNED_INT, 0);
         draws++;
@@ -629,7 +646,7 @@ class _Program {
     _enabled = used;
   }
 
-  static const _maxAttribs = 8;
+  static const _maxAttribs = 12;
   static int _enabled = 0; // コンテキスト全体の状態なので static
 
   static web.WebGLShader _compile(web.WebGL2RenderingContext gl, int type, String src) {
@@ -775,6 +792,7 @@ void main() {
 ''';
 
 const _lineVert = '''#version 300 es
+precision highp float;
 uniform mat4 u_mvp;
 uniform vec2 u_viewport;
 uniform float u_pixel_ratio;
@@ -784,10 +802,14 @@ in float t;
 in float side;
 in float width;
 in vec4 color;
+in vec2 arc;
+in vec4 dash;
 out vec4 v_color;
 out vec2 v_local;
 out vec2 v_extent;
 out float v_w;
+out float v_arc_lpx;
+out vec4 v_dash;
 void main() {
   vec4 pa = u_mvp * vec4(a, 1.0);
   vec4 pb = u_mvp * vec4(b, 1.0);
@@ -799,7 +821,8 @@ void main() {
   dir = len > 0.0001 ? dir / len : vec2(1.0, 0.0);
   vec2 normal = vec2(-dir.y, dir.x);
   vec4 p = mix(pa, pb, t);
-  float half_width = width * u_pixel_ratio * 0.5;
+  float pr = max(u_pixel_ratio, 0.001);
+  float half_width = width * pr * 0.5;
   float along = t * 2.0 - 1.0;
   vec2 offset = (normal * side + dir * along) * half_width;
   p.xy += offset / half_viewport * p.w;
@@ -808,24 +831,63 @@ void main() {
   v_local = vec2(t * len + along * half_width, side * half_width);
   v_extent = vec2(len, half_width);
   v_w = p.w;
+  float horiz_px_per_m = length(vec2(u_mvp[0].x, u_mvp[1].x)) * half_viewport.x / max(abs(p.w), 0.001);
+  float lpx_per_m = horiz_px_per_m / pr;
+  v_arc_lpx = mix(arc.x, arc.y, t) * lpx_per_m + along * (width * 0.5);
+  v_dash = dash;
 }
 ''';
 
 const _lineFrag = '''#version 300 es
-precision mediump float;
+precision highp float;
 uniform vec4 u_params;
 in vec4 v_color;
 in vec2 v_local;
 in vec2 v_extent;
 in float v_w;
+in float v_arc_lpx;
+in vec4 v_dash;
 out vec4 frag_color;
+
+float dash_interval_alpha(float s, float center, float half_len, float period) {
+  float d = abs(mod(s - center + 0.5 * period, period) - 0.5 * period) - half_len;
+  return 1.0 - smoothstep(-0.5, 0.5, d);
+}
+
+float eval_dash_alpha(float s, vec4 d) {
+  float on1 = d.x;
+  float off1 = d.y;
+  if (abs(d.z) < 0.01) {
+    float p = max(on1 + off1, 1.0);
+    return dash_interval_alpha(s, 0.5 * on1, 0.5 * on1, p);
+  }
+  if (d.z > 0.0) {
+    float on2 = d.z;
+    float off2 = max(d.w, 0.5);
+    float p = max(on1 + off1 + on2 + off2, 1.0);
+    float a1 = dash_interval_alpha(s, 0.5 * on1, 0.5 * on1, p);
+    float a2 = dash_interval_alpha(s, on1 + off1 + 0.5 * on2, 0.5 * on2, p);
+    return max(a1, a2);
+  }
+  float on2 = -d.z;
+  float off2 = max(d.w, 0.5);
+  float p = max(on1 + off1 + 2.0 * (on2 + off2), 1.0);
+  float a1 = dash_interval_alpha(s, 0.5 * on1, 0.5 * on1, p);
+  float a2 = dash_interval_alpha(s, on1 + off1 + 0.5 * on2, 0.5 * on2, p);
+  float a3 = dash_interval_alpha(s, on1 + off1 + on2 + off2 + 0.5 * on2, 0.5 * on2, p);
+  return max(a1, max(a2, a3));
+}
+
 void main() {
   float len = v_extent.x;
   float hw = v_extent.y;
   float ax = clamp(v_local.x, 0.0, len);
   float d = length(vec2(v_local.x - ax, v_local.y));
   float alpha = 1.0 - smoothstep(hw - 1.0, hw, d);
-  if (alpha <= 0.0) discard;
+  if (v_dash.x > 0.0) {
+    alpha *= eval_dash_alpha(v_arc_lpx, v_dash);
+  }
+  if (alpha <= 0.001) discard;
   float a = v_color.a * alpha;
   if (u_params.w > 0.5) a *= 1.0 - smoothstep(u_params.y, u_params.z, v_w);
   frag_color = vec4(v_color.rgb * a, a);
@@ -833,6 +895,7 @@ void main() {
 ''';
 
 const _pointVert = '''#version 300 es
+precision highp float;
 uniform mat4 u_mvp;
 uniform vec2 u_viewport;
 uniform float u_pixel_ratio;
@@ -840,39 +903,108 @@ in vec3 position;
 in vec2 corner;
 in float size;
 in vec4 color;
+in vec4 outline_color;
+in vec4 marker_style;
 out vec4 v_color;
+out vec4 v_outline_color;
 out vec2 v_offset;
-out vec2 v_radius;
+out vec3 v_style;
 void main() {
   vec4 p = u_mvp * vec4(position, 1.0);
   float r = size * u_pixel_ratio;
-  float edge = 1.5 * u_pixel_ratio;
-  float extent = r + edge * 0.5 + 1.0;
+  float edge = max(marker_style.x, 0.0) * u_pixel_ratio;
+  float extent = r * 1.2 + edge * 0.5 + 1.5;
   vec2 half_viewport = u_viewport * 0.5;
   p.xy += corner * extent / half_viewport * p.w;
   gl_Position = p;
   v_color = color;
-  v_offset = corner * extent;
-  v_radius = vec2(r, edge);
+  v_outline_color = outline_color;
+  vec2 raw_off = corner * extent;
+  float ang = marker_style.z;
+  float ca = cos(ang);
+  float sa = sin(ang);
+  v_offset = vec2(ca * raw_off.x - sa * raw_off.y, sa * raw_off.x + ca * raw_off.y);
+  v_style = vec3(r, edge, marker_style.y);
 }
 ''';
 
 const _pointFrag = '''#version 300 es
-precision mediump float;
+precision highp float;
 in vec4 v_color;
+in vec4 v_outline_color;
 in vec2 v_offset;
-in vec2 v_radius;
+in vec3 v_style;
 out vec4 frag_color;
+
+float sd_box(vec2 p, vec2 b) {
+  vec2 d = abs(p) - b;
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+
+float sd_equilateral_triangle(vec2 p, float r) {
+  const float k = 1.7320508;
+  vec2 tp = vec2(abs(p.x) - r * 0.8660254, p.y + r * 0.5);
+  if (tp.x + k * tp.y > 0.0) {
+    tp = vec2(tp.x - k * tp.y, -k * tp.x - tp.y) * 0.5;
+  }
+  tp.x -= clamp(tp.x, -r * 1.7320508, 0.0);
+  return -length(tp) * sign(tp.y);
+}
+
+float sd_star5(vec2 p, float r, float rf) {
+  const vec2 k1 = vec2(0.809016994375, -0.587785252292);
+  const vec2 k2 = vec2(-0.809016994375, -0.587785252292);
+  vec2 sp = vec2(abs(p.x), p.y);
+  sp -= 2.0 * max(dot(k1, sp), 0.0) * k1;
+  sp -= 2.0 * max(dot(k2, sp), 0.0) * k2;
+  sp.x = abs(sp.x);
+  sp.y -= r;
+  vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);
+  float h = clamp(dot(sp, ba) / dot(ba, ba), 0.0, r);
+  return length(sp - ba * h) * sign(sp.y * ba.x - sp.x * ba.y);
+}
+
+float sd_marker(vec2 q, float r, int shape) {
+  if (shape == 1) return sd_box(q, vec2(r * 0.88));
+  if (shape == 2) {
+    vec2 rq = vec2((q.x + q.y) * 0.70710678, (q.y - q.x) * 0.70710678);
+    return sd_box(rq, vec2(r * 1.08 * 0.70710678));
+  }
+  if (shape == 3) return sd_equilateral_triangle(q, r * 1.12);
+  if (shape == 4) return sd_star5(q, r * 1.15, 0.42);
+  if (shape == 5) {
+    float th = max(r * 0.28, 1.0);
+    return min(sd_box(q, vec2(r, th)), sd_box(q, vec2(th, r)));
+  }
+  if (shape == 6) {
+    vec2 rq = vec2((q.x + q.y) * 0.70710678, (q.y - q.x) * 0.70710678);
+    float th = max(r * 0.28, 1.0);
+    return min(sd_box(rq, vec2(r, th)), sd_box(rq, vec2(th, r)));
+  }
+  return length(q) - r;
+}
+
 void main() {
-  float d = length(v_offset);
-  float r = v_radius.x;
-  float edge = v_radius.y;
-  float outer = r + edge * 0.5;
-  float alpha = 1.0 - smoothstep(outer - 1.0, outer, d);
-  if (alpha <= 0.0) discard;
-  float ring = smoothstep(r - edge * 0.5 - 0.5, r - edge * 0.5 + 0.5, d);
-  vec4 c = mix(v_color, vec4(1.0), ring);
-  float a = c.a * alpha;
-  frag_color = vec4(c.rgb * a, a);
+  float r = v_style.x;
+  float edge = v_style.y;
+  int shape = int(v_style.z + 0.5);
+  float d = sd_marker(v_offset, r, shape);
+
+  if (edge > 0.01 && v_outline_color.a > 0.0) {
+    float outer = edge * 0.5;
+    float alpha = 1.0 - smoothstep(outer - 1.0, outer, d);
+    if (alpha <= 0.001) discard;
+    float ring = smoothstep(-edge * 0.5 - 0.5, -edge * 0.5 + 0.5, d);
+    vec4 pm_fill = vec4(v_color.rgb * v_color.a, v_color.a);
+    vec4 pm_out = vec4(v_outline_color.rgb * v_outline_color.a, v_outline_color.a);
+    vec4 pm = mix(pm_fill, pm_out, ring) * alpha;
+    if (pm.a <= 0.001) discard;
+    frag_color = pm;
+  } else {
+    float alpha = 1.0 - smoothstep(-1.0, 0.0, d);
+    float a = v_color.a * alpha;
+    if (a <= 0.001) discard;
+    frag_color = vec4(v_color.rgb * a, a);
+  }
 }
 ''';

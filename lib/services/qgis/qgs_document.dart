@@ -32,6 +32,7 @@
 import 'package:flutter/painting.dart' show Color;
 import 'package:xml/xml.dart';
 
+import '../../models/qgis_symbol.dart';
 import 'qgs_model.dart';
 import 'qgs_writer.dart';
 import 'qgs_xml.dart';
@@ -628,24 +629,85 @@ class QgsDocument {
   void _patchSingleSymbol(XmlElement renderer, QgsLayer layer) {
     final style = layer.style;
     if (style == null || style.isEmpty) return;
+    // QGIS 側で作られた複合シンボル（symbolLayers 保持中）は壊さずそのまま残す
+    if (style.preserveExistingSymbol) return;
+
     final symbol = renderer.getElement('symbols')?.getElement('symbol');
-    final symbolLayer = symbol?.getElement('layer');
+    final symbolLayers = symbol?.findElements('layer').toList() ?? const <XmlElement>[];
+    final explicitlyResetToSingle =
+        style.lineCasingEnabled == false ||
+        style.strokeCasingEnabled == false ||
+        style.fillPattern == 'solid' ||
+        style.fillPattern == 'none';
+    if (style.usesMultiSymbolLayers ||
+        (symbolLayers.length > 1 && explicitlyResetToSingle) ||
+        (symbolLayers.isNotEmpty &&
+            symbolLayers.first.getAttribute('class') != 'SimpleFill' &&
+            (style.fillPattern == 'solid' || style.fillPattern == 'none'))) {
+      final fresh = _writer.rendererElement(layer);
+      final parent = renderer.parent;
+      if (fresh != null && parent != null) {
+        final idx = parent.children.indexOf(renderer);
+        if (idx >= 0) {
+          parent.children[idx] = fresh;
+          return;
+        }
+      }
+    }
+
+    final symbolLayer = symbolLayers.firstOrNull;
     if (symbol == null || symbolLayer == null) return;
 
     final values = <String, String>{};
     switch (symbol.getAttribute('type')) {
       case 'marker':
-        if (style.pointColor != null) values['color'] = formatQgsColor(style.pointColor!);
+        if (style.pointColor != null || style.pointOpacity != null) {
+          values['color'] = formatQgsColor(
+            style.pointColor ?? _readColor(symbolLayer, 'color'),
+            opacity: style.pointOpacity,
+          );
+        }
         if (style.pointSizePx != null) values['size'] = formatQgsMm(style.pointSizePx! * 2);
+        if (style.pointShape != null) {
+          values['name'] = PointMarkerShape.fromId(style.pointShape).qgisName;
+        }
+        if (style.pointOutlineEnabled != null) {
+          values['outline_style'] = style.pointOutlineEnabled! ? 'solid' : 'no';
+        }
+        if (style.pointOutlineColor != null) {
+          values['outline_color'] = formatQgsColor(
+            style.pointOutlineColor!,
+            opacity: style.pointOpacity,
+          );
+        }
+        if (style.pointOutlineWidthPx != null) {
+          values['outline_width'] = formatQgsMm(style.pointOutlineWidthPx!);
+        }
+        if (style.pointAngleDeg != null) {
+          values['angle'] = style.pointAngleDeg!.toString();
+        }
       case 'line':
-        if (style.lineColor != null) values['line_color'] = formatQgsColor(style.lineColor!);
+        if (style.lineColor != null || style.lineOpacity != null) {
+          values['line_color'] = formatQgsColor(
+            style.lineColor ?? _readColor(symbolLayer, 'line_color'),
+            opacity: style.lineOpacity,
+          );
+        }
         if (style.lineWidthPx != null) values['line_width'] = formatQgsMm(style.lineWidthPx!);
+        if (style.lineDash != null) {
+          values['line_style'] = LineDashPattern.fromId(style.lineDash).qgisPenStyle;
+        }
       case 'fill':
         if (style.fillColor != null || style.fillOpacity != null) {
           values['color'] = formatQgsColor(
             style.fillColor ?? _readColor(symbolLayer, 'color'),
             opacity: style.fillOpacity,
           );
+        }
+        if (style.fillPattern != null) {
+          final pat = PolygonFillPattern.fromId(style.fillPattern);
+          if (pat == PolygonFillPattern.none) values['style'] = 'no';
+          if (pat == PolygonFillPattern.solid) values['style'] = 'solid';
         }
         if (style.strokeColor != null || style.strokeOpacity != null) {
           values['outline_color'] = formatQgsColor(
@@ -655,6 +717,9 @@ class QgsDocument {
         }
         if (style.strokeWidthPx != null) {
           values['outline_width'] = formatQgsMm(style.strokeWidthPx!);
+        }
+        if (style.strokeDash != null) {
+          values['outline_style'] = LineDashPattern.fromId(style.strokeDash).qgisPenStyle;
         }
       default:
         return;

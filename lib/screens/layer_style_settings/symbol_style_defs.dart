@@ -70,6 +70,21 @@ DoubleDef _vertexPointSizeFactorDef(String key, SwitchDef enabledDef) => DoubleD
     );
 
 // --- Point ---
+final pointShapeDef = StringDef(
+  key: 'layer_style_point_shape',
+  title: t.styleScreen.pointShape,
+  defaultValue: 'circle',
+  kmetaGetter: (k) => k.pointShape,
+  options: [
+    ('circle', t.styleScreen.pointShapeCircle),
+    ('square', t.styleScreen.pointShapeSquare),
+    ('diamond', t.styleScreen.pointShapeDiamond),
+    ('triangle', t.styleScreen.pointShapeTriangle),
+    ('star', t.styleScreen.pointShapeStar),
+    ('cross', t.styleScreen.pointShapeCross),
+    ('x', t.styleScreen.pointShapeX),
+  ],
+);
 final pointSizeDef = DoubleDef(
   key: 'layer_style_point_size',
   title: t.styleScreen.size,
@@ -92,8 +107,47 @@ final pointOpacityDef = createStyleOpacityDef(
   defaultValue: 1.0,
   kmetaGetter: (k) => k.pointOpacity,
 );
+final pointOutlineEnabledDef = SwitchDef(
+  key: 'layer_style_point_outline_enabled',
+  title: t.styleScreen.pointOutline,
+  defaultValue: true,
+  kmetaGetter: (k) => k.pointOutlineEnabled,
+);
+final pointOutlineColorDef = ColorDef(
+  key: 'layer_style_point_outline_color',
+  title: t.styleScreen.pointOutlineColor,
+  defaultArgb: 0xFFFFFFFF,
+  kmetaGetter: (k) => k.pointOutlineColor,
+  visibleWhen: (s) => s.getBool(pointOutlineEnabledDef),
+);
+final pointOutlineWidthDef = DoubleDef(
+  key: 'layer_style_point_outline_width',
+  title: t.styleScreen.pointOutlineWidth,
+  defaultValue: 1.5,
+  min: 0.5,
+  max: 5.0,
+  divisions: 9,
+  formatter: (v) => '${v.toStringAsFixed(1)} px',
+  kmetaGetter: (k) => k.pointOutlineWidth,
+  visibleWhen: (s) => s.getBool(pointOutlineEnabledDef),
+);
+
+List<(String, String)> _lineDashOptions() => [
+      ('solid', t.styleScreen.lineStyleSolid),
+      ('dash', t.styleScreen.lineStyleDash),
+      ('dot', t.styleScreen.lineStyleDot),
+      ('dashDot', t.styleScreen.lineStyleDashDot),
+      ('dashDotDot', t.styleScreen.lineStyleDashDotDot),
+    ];
 
 // --- Line ---
+final lineDashDef = StringDef(
+  key: 'layer_style_line_dash',
+  title: t.styleScreen.lineStyle,
+  defaultValue: 'solid',
+  kmetaGetter: (k) => k.lineDash,
+  options: _lineDashOptions(),
+);
 final lineWidthDef = DoubleDef(
   key: 'layer_style_line_width',
   title: t.styleScreen.width,
@@ -116,6 +170,31 @@ final lineOpacityDef = createStyleOpacityDef(
   defaultValue: 1.0,
   kmetaGetter: (k) => k.lineOpacity,
 );
+final lineCasingEnabledDef = SwitchDef(
+  key: 'layer_style_line_casing_enabled',
+  title: t.styleScreen.casing,
+  description: t.styleScreen.casingDesc,
+  defaultValue: false,
+  kmetaGetter: (k) => k.lineCasingEnabled,
+);
+final lineCasingColorDef = ColorDef(
+  key: 'layer_style_line_casing_color',
+  title: t.styleScreen.casingColor,
+  defaultArgb: 0xFFFFFFFF,
+  kmetaGetter: (k) => k.lineCasingColor,
+  visibleWhen: (s) => s.getBool(lineCasingEnabledDef),
+);
+final lineCasingWidthDef = DoubleDef(
+  key: 'layer_style_line_casing_width',
+  title: t.styleScreen.casingWidth,
+  defaultValue: 2.0,
+  min: 0.5,
+  max: 8.0,
+  divisions: 15,
+  formatter: (v) => '${v.toStringAsFixed(1)} px',
+  kmetaGetter: (k) => k.lineCasingWidth,
+  visibleWhen: (s) => s.getBool(lineCasingEnabledDef),
+);
 final lineVertexPointsEnabledDef = _vertexPointsEnabledDef(
   'layer_style_line_vertex_points_enabled',
   t.styleScreen.drawVertexPointsLineDesc,
@@ -126,6 +205,51 @@ final lineVertexPointSizeFactorDef = _vertexPointSizeFactorDef(
 );
 
 // --- Polygon ---
+final polygonFillPatternDef = StringDef(
+  key: 'layer_style_polygon_fill_pattern',
+  title: t.styleScreen.fillPattern,
+  defaultValue: 'solid',
+  kmetaGetter: (k) => k.polygonFillPattern,
+  options: [
+    ('solid', t.styleScreen.fillPatternSolid),
+    ('slash', t.styleScreen.fillPatternSlash),
+    ('backslash', t.styleScreen.fillPatternBackslash),
+    ('cross', t.styleScreen.fillPatternCross),
+    ('grid', t.styleScreen.fillPatternGrid),
+    ('horizontal', t.styleScreen.fillPatternHorizontal),
+    ('vertical', t.styleScreen.fillPatternVertical),
+    ('dots', t.styleScreen.fillPatternDots),
+    ('none', t.styleScreen.fillPatternNone),
+  ],
+);
+final polygonFillColorDef = ColorDef(
+  key: 'layer_style_polygon_fill_color',
+  title: t.styleScreen.fillColor,
+  defaultArgb: 0xFF000000,
+  kmetaGetter: (k) => k.polygonFillColor,
+  visibleWhen: (s) => s.getString(polygonFillPatternDef) != 'none',
+);
+final polygonFillOpacityDef = createStyleOpacityDef(
+  key: 'layer_style_polygon_fill_opacity',
+  title: t.styleScreen.fillOpacity,
+  defaultValue: 0.1,
+  kmetaGetter: (k) => k.polygonFillOpacity,
+  visibleWhen: (s) => s.getString(polygonFillPatternDef) != 'none',
+);
+final polygonPatternSpacingDef = DoubleDef(
+  key: 'layer_style_polygon_pattern_spacing',
+  title: t.styleScreen.patternSpacing,
+  defaultValue: 8.0,
+  min: 4.0,
+  max: 24.0,
+  divisions: 20,
+  formatter: formatStylePx,
+  kmetaGetter: (k) => k.polygonPatternSpacing,
+  visibleWhen: (s) {
+    final pat = s.getString(polygonFillPatternDef);
+    return pat != 'solid' && pat != 'none';
+  },
+);
 final polygonBorderWidthDef = DoubleDef(
   key: 'layer_style_polygon_border_width',
   title: t.styleScreen.borderWidth,
@@ -136,6 +260,14 @@ final polygonBorderWidthDef = DoubleDef(
   formatter: (v) => '${v.toStringAsFixed(1)} px',
   kmetaGetter: (k) => k.polygonBorderWidth,
 );
+final polygonBorderDashDef = StringDef(
+  key: 'layer_style_polygon_border_dash',
+  title: t.styleScreen.borderStyle,
+  defaultValue: 'solid',
+  kmetaGetter: (k) => k.polygonBorderDash,
+  options: _lineDashOptions(),
+  visibleWhen: (s) => s.getDouble(polygonBorderWidthDef) > 0,
+);
 final polygonBorderColorDef = ColorDef(
   key: 'layer_style_polygon_border_color',
   title: t.styleScreen.borderColor,
@@ -143,24 +275,39 @@ final polygonBorderColorDef = ColorDef(
   kmetaGetter: (k) => k.polygonBorderColor,
   visibleWhen: (s) => s.getDouble(polygonBorderWidthDef) > 0,
 );
-final polygonFillColorDef = ColorDef(
-  key: 'layer_style_polygon_fill_color',
-  title: t.styleScreen.fillColor,
-  defaultArgb: 0xFF000000,
-  kmetaGetter: (k) => k.polygonFillColor,
-);
-final polygonFillOpacityDef = createStyleOpacityDef(
-  key: 'layer_style_polygon_fill_opacity',
-  title: t.styleScreen.fillOpacity,
-  defaultValue: 0.1,
-  kmetaGetter: (k) => k.polygonFillOpacity,
-);
 final polygonBorderOpacityDef = createStyleOpacityDef(
   key: 'layer_style_polygon_border_opacity',
   title: t.styleScreen.borderOpacity,
   defaultValue: 1.0,
   kmetaGetter: (k) => k.polygonBorderOpacity,
   visibleWhen: (s) => s.getDouble(polygonBorderWidthDef) > 0,
+);
+final polygonBorderCasingEnabledDef = SwitchDef(
+  key: 'layer_style_polygon_border_casing_enabled',
+  title: t.styleScreen.borderCasing,
+  defaultValue: false,
+  kmetaGetter: (k) => k.polygonBorderCasingEnabled,
+  visibleWhen: (s) => s.getDouble(polygonBorderWidthDef) > 0,
+);
+final polygonBorderCasingColorDef = ColorDef(
+  key: 'layer_style_polygon_border_casing_color',
+  title: t.styleScreen.borderCasingColor,
+  defaultArgb: 0xFFFFFFFF,
+  kmetaGetter: (k) => k.polygonBorderCasingColor,
+  visibleWhen: (s) =>
+      s.getDouble(polygonBorderWidthDef) > 0 && s.getBool(polygonBorderCasingEnabledDef),
+);
+final polygonBorderCasingWidthDef = DoubleDef(
+  key: 'layer_style_polygon_border_casing_width',
+  title: t.styleScreen.borderCasingWidth,
+  defaultValue: 2.0,
+  min: 0.5,
+  max: 6.0,
+  divisions: 11,
+  formatter: (v) => '${v.toStringAsFixed(1)} px',
+  kmetaGetter: (k) => k.polygonBorderCasingWidth,
+  visibleWhen: (s) =>
+      s.getDouble(polygonBorderWidthDef) > 0 && s.getBool(polygonBorderCasingEnabledDef),
 );
 final polygonVertexPointsEnabledDef = _vertexPointsEnabledDef(
   'layer_style_polygon_vertex_points_enabled',
@@ -225,7 +372,15 @@ SettingsStore createLayerStyleSettingsStore({
         title: t.styleScreen.point,
         icon: Icons.place,
         initiallyExpanded: true,
-        items: [pointSizeDef, pointColorDef, pointOpacityDef],
+        items: [
+          pointShapeDef,
+          pointSizeDef,
+          pointColorDef,
+          pointOpacityDef,
+          pointOutlineEnabledDef,
+          pointOutlineColorDef,
+          pointOutlineWidthDef,
+        ],
       ),
       SettingSectionDef(
         id: StyleSection.line,
@@ -233,9 +388,13 @@ SettingsStore createLayerStyleSettingsStore({
         icon: Icons.show_chart,
         initiallyExpanded: true,
         items: [
+          lineDashDef,
           lineWidthDef,
           lineColorDef,
           lineOpacityDef,
+          lineCasingEnabledDef,
+          lineCasingColorDef,
+          lineCasingWidthDef,
           lineVertexPointsEnabledDef,
           lineVertexPointSizeFactorDef,
         ],
@@ -246,11 +405,17 @@ SettingsStore createLayerStyleSettingsStore({
         icon: Icons.crop_square,
         initiallyExpanded: true,
         items: [
-          polygonBorderWidthDef,
-          polygonBorderColorDef,
-          polygonBorderOpacityDef,
+          polygonFillPatternDef,
           polygonFillColorDef,
           polygonFillOpacityDef,
+          polygonPatternSpacingDef,
+          polygonBorderWidthDef,
+          polygonBorderDashDef,
+          polygonBorderColorDef,
+          polygonBorderOpacityDef,
+          polygonBorderCasingEnabledDef,
+          polygonBorderCasingColorDef,
+          polygonBorderCasingWidthDef,
           polygonVertexPointsEnabledDef,
           polygonVertexPointSizeFactorDef,
         ],

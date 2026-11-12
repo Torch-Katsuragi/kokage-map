@@ -35,6 +35,7 @@ import '../../../core/terrain/dem_grid.dart';
 import '../../../core/terrain/dem_tiles.dart';
 import '../../../core/terrain/feature_bake_ledger.dart';
 import '../../../core/terrain/gpu/terrain_gpu.dart';
+import '../../../core/terrain/svg_marker_atlas.dart';
 import '../../../core/terrain/terrain_appearance.dart';
 import '../../../core/terrain/terrain_camera.dart';
 import '../../../core/terrain/terrain_frame.dart';
@@ -54,6 +55,7 @@ import '../../../models/map_style_group.dart';
 import '../../../models/nodes/external_overlay_image_node.dart';
 import '../../../models/nodes/overlay_image_node.dart';
 import '../../../models/party/party_room.dart';
+import '../../../models/qgis_symbol.dart';
 import '../../../providers/party_providers.dart';
 import '../../../providers/room_pin_providers.dart';
 import '../../../providers/selection_providers.dart';
@@ -345,6 +347,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     );
     widget.scene.revision.addListener(_onSceneRevision);
     TerrainAppearance.revision.addListener(_onAppearanceChanged);
+    SvgMarkerCache.instance.revision.addListener(_onSvgAtlasRevision);
     widget.heading?.addListener(_onHeading);
     widget.location.addListener(_scheduleRefresh);
     // 描きかけの線・面・点（ペン・GPS 測量）。地図ページは組み直さないのでここで聞く
@@ -458,6 +461,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     GlobalDrawingState.instance.removeListener(_scheduleRefresh);
     widget.scene.revision.removeListener(_onSceneRevision);
     TerrainAppearance.revision.removeListener(_onAppearanceChanged);
+    SvgMarkerCache.instance.revision.removeListener(_onSvgAtlasRevision);
     widget.onSurfaceChanged(null);
     // 最後のカメラを覚えさせる（次に組み立てるときの初期値）
     widget.controller.moveAndRotate(_centerLatLng(), _camera.zoom, _camera.bearing * 180 / math.pi);

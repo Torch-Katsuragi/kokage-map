@@ -30,6 +30,9 @@ class LiftedPolyline {
     required this.cells,
     required this.color,
     required this.widthPx,
+    this.arcM,
+    this.dashVec4 = const (0.0, 0.0, 0.0, 0.0),
+    this.dashArray,
   });
 
   /// x, y, z の並び（点数 × 3）
@@ -38,8 +41,19 @@ class LiftedPolyline {
   /// 各区間（点 i → i+1）が属するセル番号（点数 - 1）
   final Int32List cells;
 
+  /// 各頂点の折れ線始点からの累積 2D 距離（Mercator m、点数と同長。破線の位相計算用）
+  final Float32List? arcM;
+
+  /// GPU 破線パラメータ `(on1, off1, on2, off2)`（論理 px。すべて 0 なら実線）
+  final (double, double, double, double) dashVec4;
+
+  /// Canvas フォールバック描画用の破線配列（論理 px）
+  final List<double>? dashArray;
+
   final Color color;
   final double widthPx;
+
+  bool get isDashed => dashVec4.$1 > 0 || (dashArray != null && dashArray!.length >= 2);
 
   int get pointCount => xyz.length ~/ 3;
 
@@ -50,22 +64,27 @@ class LiftedPolyline {
     required Color color,
     required double widthPx,
     double? step,
+    (double, double, double, double) dashVec4 = const (0.0, 0.0, 0.0, 0.0),
+    List<double>? dashArray,
   }) {
     final dem = mesh.dem;
     final s = step ?? dem.cellSize * mesh.step;
     final out = <double>[];
+    final arcs = <double>[];
     final cells = <int>[];
-    void addPoint(double x, double y) {
+    var cumArc = 0.0;
+    void addPoint(double x, double y, double arc) {
       out
         ..add(x)
         ..add(y)
         ..add(dem.elevationAtLocal(x, y));
+      arcs.add(arc);
     }
 
     for (var i = 0; i < points.length; i++) {
       final p = points[i];
       if (i == 0) {
-        addPoint(p.dx, p.dy);
+        addPoint(p.dx, p.dy, 0.0);
         continue;
       }
       final q = points[i - 1];
@@ -78,14 +97,18 @@ class LiftedPolyline {
         final mx = q.dx + (p.dx - q.dx) * (k - 0.5) / n;
         final my = q.dy + (p.dy - q.dy) * (k - 0.5) / n;
         cells.add(mesh.cellIndexAt(mx, my));
-        addPoint(x, y);
+        addPoint(x, y, cumArc + len * t);
       }
+      cumArc += len;
     }
     return LiftedPolyline(
       xyz: Float32List.fromList(out),
       cells: Int32List.fromList(cells),
+      arcM: Float32List.fromList(arcs),
       color: color,
       widthPx: widthPx,
+      dashVec4: dashVec4,
+      dashArray: dashArray,
     );
   }
 }
@@ -459,6 +482,12 @@ class TerrainLabel {
     String? text,
     this.style,
     this.haloColor,
+    this.haloEnabled = true,
+    this.haloSizePx,
+    this.bgShape,
+    this.bgColor,
+    this.bgBorderColor,
+    this.bgBorderWidth,
     this.markerGap,
   })  : _painter = painter,
         text = text ?? painter?.text?.toPlainText() ?? '';
@@ -472,6 +501,16 @@ class TerrainLabel {
   /// ラベルの背景（縁取り）の色。省略時は白
   final Color? haloColor;
 
+  /// ハロー（白座布団）を描くか（QGIS `bufferDraw="0"` で false）
+  final bool haloEnabled;
+  final double? haloSizePx;
+
+  /// 背景図形（`'rect'` / `'roundRect'` / `'circle'`。QGIS `<background shapeDraw="1">`）
+  final String? bgShape;
+  final Color? bgColor;
+  final Color? bgBorderColor;
+  final double? bgBorderWidth;
+
   /// 点の印に付くラベル: 印の半径＋すき間（論理 px）。印があるので位置の黒点は打たず、ラベルを印の上に離して置く。
   /// null は面・線のラベル（重心や中点に黒点を打ち、その上に置く）
   final double? markerGap;
@@ -483,6 +522,7 @@ class TerrainLabel {
   TextPainter get painter => _painter ??= TextPainter(
         text: TextSpan(text: text, style: style),
         textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
       )..layout();
 }
 

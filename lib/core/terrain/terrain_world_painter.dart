@@ -19,7 +19,9 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'fill_pattern_painter.dart';
 import 'gpu/terrain_gpu.dart';
+import 'svg_marker_atlas.dart';
 import 'terrain_camera.dart';
 import 'terrain_lifted.dart';
 import 'terrain_mesh.dart';
@@ -44,8 +46,12 @@ class TerrainTileDrawable {
     this.points = const [],
     this.labels = const [],
     Map<int, List<PolygonBatch>>? polygonBatches,
-  })  : polygonBatches = polygonBatches ?? {for (final e in PolygonBatch.byChunk(polygons).entries) e.key: [e.value]},
+  })  : hasSvgPoints = points.any((p) => p.svgContent != null),
+        polygonBatches = polygonBatches ?? {for (final e in PolygonBatch.byChunk(polygons).entries) e.key: [e.value]},
         textureKey = textureKey ?? texture ?? mesh;
+
+  /// `SvgMarker` のビルボード点を含むか（GPU 経路で SDF 点と分離して `drawAtlas` 描画するため）
+  final bool hasSvgPoints;
 
   /// テクスチャの世代（GPU 側のキャッシュのキー。画像を手放した後も同じキーで GPU 側の複製を引く）
   final Object textureKey;
@@ -164,7 +170,7 @@ class _ProjectedLines {
 
   /// 細い線を省いた（回転中）
   final bool thinSkipped;
-  final Map<int, Map<(int, double), Path>> pathsByBand;
+  final Map<int, Map<(int, double, String), (Path, List<double>?)>> pathsByBand;
   final Map<int, Map<(int, double), Float32List>> segsByBand;
 }
 
@@ -349,14 +355,17 @@ class TerrainWorldPainter extends CustomPainter {
   }
 
   _ProjectedLines _projectLines(List<LiftedPolyline> lines, TerrainMesh mesh, {required bool skipThin}) {
-    final pathsByBand = <int, Map<(int, double), Path>>{};
+    final pathsByBand = <int, Map<(int, double, String), (Path, List<double>?)>>{};
     final segLists = <int, Map<(int, double), List<double>>>{};
     for (var li = 0; li < lines.length; li++) {
       final line = lines[li];
       final n = line.pointCount;
-      final styleKey = (line.color.toARGB32(), line.widthPx);
-      final thin = line.widthPx <= 2.5;
+      final dash = (line.dashArray != null && line.dashArray!.length >= 2) ? line.dashArray : null;
+      final thin = dash == null && line.widthPx <= 2.5;
       if (thin && skipThin) continue;
+      final segKey = (line.color.toARGB32(), line.widthPx);
+      final dashSig = dash == null ? '' : dash.join(',');
+      final pathKey = (line.color.toARGB32(), line.widthPx, dashSig);
       var currentBand = -1;
       Path? path;
       List<double>? segs;
@@ -366,7 +375,7 @@ class TerrainWorldPainter extends CustomPainter {
         final b = camera.project(line.xyz[i * 3 + 3], line.xyz[i * 3 + 4], line.xyz[i * 3 + 5]);
         if (thin) {
           if (band != currentBand) {
-            segs = (segLists[band] ??= {})[styleKey] ??= <double>[];
+            segs = (segLists[band] ??= {})[segKey] ??= <double>[];
             currentBand = band;
           }
           segs!
@@ -376,7 +385,9 @@ class TerrainWorldPainter extends CustomPainter {
             ..add(b.dy);
         } else {
           if (band != currentBand) {
-            path = (pathsByBand[band] ??= {})[styleKey] ??= Path();
+            final byStyle = pathsByBand[band] ??= {};
+            final entry = byStyle[pathKey] ??= (Path(), dash);
+            path = entry.$1;
             path.moveTo(a.dx, a.dy);
             currentBand = band;
           }
@@ -550,8 +561,13 @@ class TerrainWorldPainter extends CustomPainter {
     return pb;
   }
 
-  /// 見た目（色・太さ）ごとにまとめた線分（細い線）と Path（太い線）を描く
-  void _drawLineGroups(Canvas canvas, Map<(int, double), Float32List>? segs, Map<(int, double), Path>? paths, _CanvasPaints paints) {
+  /// 見た目（色・太さ・破線）ごとにまとめた線分（細い実線）と Path（太い線・破線）を描く
+  void _drawLineGroups(
+    Canvas canvas,
+    Map<(int, double), Float32List>? segs,
+    Map<(int, double, String), (Path, List<double>?)>? paths,
+    _CanvasPaints paints,
+  ) {
     if (segs != null) {
       for (final e in segs.entries) {
         paints.segment
@@ -562,10 +578,15 @@ class TerrainWorldPainter extends CustomPainter {
     }
     if (paths != null) {
       for (final e in paths.entries) {
+        final dash = e.value.$2;
         paints.line
           ..color = Color(e.key.$1)
-          ..strokeWidth = e.key.$2 / camera.scale;
-        canvas.drawPath(e.value, paints.line);
+          ..strokeWidth = e.key.$2 / camera.scale
+          ..strokeCap = dash != null ? StrokeCap.butt : StrokeCap.round;
+        final drawTarget = dash == null
+            ? e.value.$1
+            : dashPath(e.value.$1, [for (final d in dash) d / camera.scale]);
+        canvas.drawPath(drawTarget, paints.line);
       }
     }
   }
@@ -574,43 +595,101 @@ class TerrainWorldPainter extends CustomPainter {
   /// 投影は方位・傾きごとにキャッシュし、隠れ判定は画面に入っている点だけ・1 フレーム上限つきで進める
   /// （1 万点を毎フレーム投影して光線探索すると 400ms）
   void _paintPoints(Canvas canvas, Size size, Rect viewport) {
-    final pointPaint = Paint();
-    final pointEdge = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = Colors.white;
     final pc = camera.project(camera.centerX, camera.centerY, _centerHeight);
-    final pointArea = viewport.inflate(16);
+    final pointArea = viewport.inflate(24);
     final dynamicArea = viewport.inflate(40);
+    final persp = _perspective;
+    final gpuOnlySvg = gpu != null;
     var occlusionTests = 0;
+    Map<ui.Image, (List<ui.RSTransform>, List<ui.Rect>, List<ui.Color>)>? atlasBatches;
+
     for (final t in tiles) {
       final pts = t.points;
-      // GPU 経路では静的な点は GPU が描く（深度テストで隠れる）。動的な点（現在位置など）はここで
-      if (pts.isEmpty || gpu != null) {
-        _paintDynamicPoints(canvas, t, size, dynamicArea, pointPaint, pointEdge);
+      // GPU 経路では非 SVG の静的な点は GPU が描く（深度テストで隠れる）。SVG ビルボード点だけここで描く
+      if (pts.isEmpty || (gpuOnlySvg && !t.hasSvgPoints)) {
         continue;
       }
       final pp = _projectedPoints(t);
       for (var i = 0; i < pts.length; i++) {
-        final sp = Offset(
-          size.width / 2 + (pp.xy[i * 2] - pc.dx) * camera.scale,
-          size.height / 2 + (pp.xy[i * 2 + 1] - pc.dy) * camera.scale,
-        );
+        final pt = pts[i];
+        if (gpuOnlySvg && pt.svgContent == null) continue;
+        final wx = t.originX + pt.x;
+        final wy = t.originY + pt.y;
+        final sp = persp
+            ? toScreen(wx, wy, pp.z[i], size)
+            : Offset(
+                size.width / 2 + (pp.xy[i * 2] - pc.dx) * camera.scale,
+                size.height / 2 + (pp.xy[i * 2 + 1] - pc.dy) * camera.scale,
+              );
         if (!pointArea.contains(sp)) continue;
         var h = pp.hidden[i];
         if (h == 0 && !gesturing && occlusionTests < _occlusionTestsPerFrame) {
           occlusionTests++;
-          h = isOccluded(t.originX + pts[i].x, t.originY + pts[i].y, pp.z[i]) ? 2 : 1;
+          h = isOccluded(wx, wy, pp.z[i]) ? 2 : 1;
           pp.hidden[i] = h;
         }
         if (h == 2) continue;
-        final pt = pts[i];
-        pointPaint.color = pt.color;
-        pointEdge.color = Colors.white.withValues(alpha: pt.color.a);
-        canvas.drawCircle(sp, pt.sizePx, pointPaint);
-        canvas.drawCircle(sp, pt.sizePx, pointEdge);
+
+        final svgXml = pt.svgContent;
+        if (svgXml != null) {
+          final slot = SvgMarkerCache.instance.slotFor(svgXml);
+          if (slot != null) {
+            final batch = (atlasBatches ??= {}).putIfAbsent(
+              slot.atlas,
+              () => (<ui.RSTransform>[], <ui.Rect>[], <ui.Color>[]),
+            );
+            final scale = (pt.sizePx * 2.0) / slot.srcRect.width;
+            batch.$1.add(
+              ui.RSTransform.fromComponents(
+                rotation: pt.angleDeg * math.pi / 180.0,
+                scale: scale,
+                anchorX: slot.srcRect.width * 0.5,
+                anchorY: slot.srcRect.height * 0.5,
+                translateX: sp.dx,
+                translateY: sp.dy,
+              ),
+            );
+            batch.$2.add(slot.srcRect);
+            final alpha = pt.color.a > 0 ? pt.color.a.clamp(0.0, 1.0) : 1.0;
+            batch.$3.add(Color.fromRGBO(255, 255, 255, alpha));
+            continue;
+          }
+        }
+
+        drawPointMarkerShape(
+          canvas,
+          sp,
+          pt.sizePx,
+          shape: pt.shape,
+          fillColor: pt.color,
+          outlineColor: pt.outlineColor,
+          outlineWidth: pt.outlineWidthPx,
+          angleDeg: pt.angleDeg,
+        );
       }
-      _paintDynamicPoints(canvas, t, size, dynamicArea, pointPaint, pointEdge);
+    }
+
+    if (atlasBatches != null) {
+      final atlasPaint = Paint()..filterQuality = FilterQuality.low;
+      for (final entry in atlasBatches.entries) {
+        final (transforms, rects, colors) = entry.value;
+        final allOpaque = colors.every((c) => c.a >= 0.999);
+        canvas.drawAtlas(
+          entry.key,
+          transforms,
+          rects,
+          allOpaque ? null : colors,
+          allOpaque ? null : BlendMode.modulate,
+          viewport,
+          atlasPaint,
+        );
+      }
+    }
+
+    for (final t in tiles) {
+      if (t.dynamicPoints.isNotEmpty) {
+        _paintDynamicPoints(canvas, t, size, dynamicArea);
+      }
     }
   }
 
@@ -750,16 +829,69 @@ class TerrainWorldPainter extends CustomPainter {
         }
         final tp = label.painter;
         final origin = sp - Offset(tp.width / 2, tp.height + gap);
-        final box = Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2);
+        final padX = label.bgShape != null ? 5.0 : 2.0;
+        final padY = label.bgShape != null ? 3.0 : 1.0;
+        Rect box = Rect.fromLTWH(origin.dx - padX, origin.dy - padY, tp.width + padX * 2, tp.height + padY * 2);
+        if (label.bgShape == 'circle') {
+          final r = math.max(tp.width, tp.height) * 0.5 + 4.0;
+          box = Rect.fromCircle(center: origin + Offset(tp.width / 2, tp.height / 2), radius: r);
+        }
         if (collideLabels && placed.overlaps(box)) {
           if (dot) canvas.drawCircle(sp, 2, dotPaint);
           continue;
         }
         placed.add(box);
         visibleLabels.add(base + k);
-        boxPaint.color = (label.haloColor ?? Colors.white).withValues(alpha: 0.85 * alpha);
         anchorPaint.color = Colors.black.withValues(alpha: alpha);
-        canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(3)), boxPaint);
+        if (label.bgShape != null) {
+          final bgCol = label.bgColor ?? Colors.white;
+          boxPaint
+            ..style = PaintingStyle.fill
+            ..color = bgCol.withValues(alpha: bgCol.a * alpha);
+          final borderW = label.bgBorderWidth ?? 0.0;
+          final borderCol = label.bgBorderColor;
+          switch (label.bgShape) {
+            case 'circle':
+              canvas.drawOval(box, boxPaint);
+              if (borderW > 0 && borderCol != null && borderCol.a > 0) {
+                canvas.drawOval(
+                  box,
+                  Paint()
+                    ..style = PaintingStyle.stroke
+                    ..strokeWidth = borderW
+                    ..color = borderCol.withValues(alpha: borderCol.a * alpha),
+                );
+              }
+            case 'roundRect':
+              final rr = RRect.fromRectAndRadius(box, const Radius.circular(5));
+              canvas.drawRRect(rr, boxPaint);
+              if (borderW > 0 && borderCol != null && borderCol.a > 0) {
+                canvas.drawRRect(
+                  rr,
+                  Paint()
+                    ..style = PaintingStyle.stroke
+                    ..strokeWidth = borderW
+                    ..color = borderCol.withValues(alpha: borderCol.a * alpha),
+                );
+              }
+            default:
+              canvas.drawRect(box, boxPaint);
+              if (borderW > 0 && borderCol != null && borderCol.a > 0) {
+                canvas.drawRect(
+                  box,
+                  Paint()
+                    ..style = PaintingStyle.stroke
+                    ..strokeWidth = borderW
+                    ..color = borderCol.withValues(alpha: borderCol.a * alpha),
+                );
+              }
+          }
+        } else if (label.haloEnabled && (label.haloSizePx ?? 1.0) > 0) {
+          boxPaint
+            ..style = PaintingStyle.fill
+            ..color = (label.haloColor ?? Colors.white).withValues(alpha: 0.85 * alpha);
+          canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(3)), boxPaint);
+        }
         tp.paint(canvas, origin);
         if (dot) canvas.drawCircle(sp, 2.5, anchorPaint);
       }
@@ -768,7 +900,7 @@ class TerrainWorldPainter extends CustomPainter {
 
   /// 動的な点（現在位置・描画中の点など）。毎フレーム投影し、隠れ判定は視線なぞり。
   /// 向きを持つ点（現在位置）はその手前に 60°・半径 30 px の扇（画面座標）
-  void _paintDynamicPoints(Canvas canvas, TerrainTileDrawable t, Size size, Rect area, Paint pointPaint, Paint pointEdge) {
+  void _paintDynamicPoints(Canvas canvas, TerrainTileDrawable t, Size size, Rect area) {
     for (final pt in t.dynamicPoints) {
       final wx = t.originX + pt.x;
       final wy = t.originY + pt.y;
@@ -783,9 +915,17 @@ class TerrainWorldPainter extends CustomPainter {
         _paintIconMarker(canvas, sp, pt, icon);
         continue;
       }
-      pointPaint.color = pt.color;
-      canvas.drawCircle(sp, pt.sizePx, pointPaint);
-      canvas.drawCircle(sp, pt.sizePx, pointEdge);
+      drawPointOrSvgMarker(
+        canvas,
+        sp,
+        pt.sizePx,
+        svgContent: pt.svgContent,
+        shape: pt.shape,
+        fillColor: pt.color,
+        outlineColor: pt.outlineColor,
+        outlineWidth: pt.outlineWidthPx,
+        angleDeg: pt.angleDeg,
+      );
     }
   }
 

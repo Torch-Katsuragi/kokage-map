@@ -286,12 +286,13 @@ class GpuPolygonGeometry {
   }
 }
 
-/// 点（画面に正対する円）の頂点列。点 1 つ = 頂点 4 つ（角 ±1）+ インデックス 6 つ。
-/// 頂点 = position(3) + corner(2) + size(1) + rgba(4) = 40 バイト。標高は [elevationAt]（タイルの DEM）で引く
+/// 点（画面に正対するマーカー）の頂点列。点 1 つ = 頂点 4 つ（角 ±1）+ インデックス 6 つ。
+/// 頂点 = position(3) + corner(2) + size(1) + rgba(4) + outline_rgba(4) + marker_style(4) = 72 バイト。
+/// 標高は [elevationAt]（タイルの DEM）で引く
 class GpuPointGeometry {
   GpuPointGeometry._(this.vertices, this.indices, this.pointCount);
 
-  static const floatsPerVertex = 10;
+  static const floatsPerVertex = 18;
   static const strideInBytes = floatsPerVertex * 4;
 
   final Float32List vertices;
@@ -306,14 +307,26 @@ class GpuPointGeometry {
     int from = 0,
     required double Function(double x, double y) elevationAt,
   }) {
-    final n = points.length - from;
+    final total = points.length - from;
+    var n = 0;
+    for (var i = 0; i < total; i++) {
+      if (points[from + i].svgContent == null) n++;
+    }
+    if (n == 0) {
+      return GpuPointGeometry._(Float32List(0), Uint32List(0), 0);
+    }
     final data = Float32List(n * 4 * floatsPerVertex);
     final indices = Uint32List(n * 6);
     var o = 0;
-    for (var i = 0; i < n; i++) {
+    var written = 0;
+    for (var i = 0; i < total; i++) {
       final p = points[from + i];
+      if (p.svgContent != null) continue;
       final z = elevationAt(p.x, p.y);
       final c = p.color;
+      final oc = p.outlineColor;
+      final shapeId = p.shape.gpuId.toDouble();
+      final angleRad = p.angleDeg * math.pi / 180.0;
       for (var corner = 0; corner < 4; corner++) {
         data[o] = p.x;
         data[o + 1] = p.y;
@@ -325,16 +338,25 @@ class GpuPointGeometry {
         data[o + 7] = c.g;
         data[o + 8] = c.b;
         data[o + 9] = c.a;
+        data[o + 10] = oc.r;
+        data[o + 11] = oc.g;
+        data[o + 12] = oc.b;
+        data[o + 13] = oc.a;
+        data[o + 14] = p.outlineWidthPx;
+        data[o + 15] = shapeId;
+        data[o + 16] = angleRad;
+        data[o + 17] = 0.0;
         o += floatsPerVertex;
       }
-      final v0 = i * 4;
-      final i0 = i * 6;
+      final v0 = written * 4;
+      final i0 = written * 6;
       indices[i0] = v0;
       indices[i0 + 1] = v0 + 1;
       indices[i0 + 2] = v0 + 2;
       indices[i0 + 3] = v0 + 1;
       indices[i0 + 4] = v0 + 3;
       indices[i0 + 5] = v0 + 2;
+      written++;
     }
     return GpuPointGeometry._(data, indices, n);
   }
@@ -343,13 +365,13 @@ class GpuPointGeometry {
 /// 線の頂点列。線分 1 本 = 頂点 4 つ（両端 × 左右）+ インデックス 6 つ。
 /// 太さは頂点シェーダが画面空間で付ける（`shaders/line.vert`）。
 ///
-/// 頂点 = a(3) + b(3) + t(1) + side(1) + width(1) + rgba(4) = 52 バイト。
+/// 頂点 = a(3) + b(3) + t(1) + side(1) + width(1) + rgba(4) + arc(2) + dash(4) = 76 バイト。
 /// a, b は線分の両端（タイルの DEM 原点基準）、t は自分がどちらの端か（0 = a、1 = b）、side は左右（±1）、
-/// width は論理 px（シェーダで pixelRatio を掛ける）
+/// width は論理 px（シェーダで pixelRatio を掛ける）、arc は累積距離（Mercator m）、dash は破線周期（論理 px）
 class GpuLineGeometry {
   GpuLineGeometry._(this.vertices, this.indices, this.segmentCount);
 
-  static const floatsPerVertex = 13;
+  static const floatsPerVertex = 19;
   static const strideInBytes = floatsPerVertex * 4;
 
   final Float32List vertices;
@@ -380,6 +402,8 @@ class GpuLineGeometry {
       double ax, double ay, double az,
       double bx, double by, double bz,
       double width, double r, double g, double b, double a,
+      double arc0, double arc1,
+      double d0, double d1, double d2, double d3,
     ) {
       var o = seg * 4 * floatsPerVertex;
       for (var corner = 0; corner < 4; corner++) {
@@ -396,6 +420,12 @@ class GpuLineGeometry {
         data[o + 10] = g;
         data[o + 11] = b;
         data[o + 12] = a;
+        data[o + 13] = arc0;
+        data[o + 14] = arc1;
+        data[o + 15] = d0;
+        data[o + 16] = d1;
+        data[o + 17] = d2;
+        data[o + 18] = d3;
         o += floatsPerVertex;
       }
       final v0 = seg * 4;
@@ -413,11 +443,28 @@ class GpuLineGeometry {
       final xyz = l.xyz;
       final n = l.pointCount;
       final c = l.color;
+      final arcs = l.arcM;
+      final (d0, d1, d2, d3) = l.dashVec4;
+      var cumArc = 0.0;
       for (var i = 0; i + 1 < n; i++) {
+        final ax = xyz[i * 3], ay = xyz[i * 3 + 1], az = xyz[i * 3 + 2];
+        final bx = xyz[i * 3 + 3], by = xyz[i * 3 + 4], bz = xyz[i * 3 + 5];
+        final double arc0, arc1;
+        if (arcs != null && arcs.length == n) {
+          arc0 = arcs[i];
+          arc1 = arcs[i + 1];
+        } else {
+          arc0 = cumArc;
+          final dx = bx - ax, dy = by - ay;
+          cumArc += math.sqrt(dx * dx + dy * dy);
+          arc1 = cumArc;
+        }
         addSegment(
-          xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2],
-          xyz[i * 3 + 3], xyz[i * 3 + 4], xyz[i * 3 + 5],
+          ax, ay, az,
+          bx, by, bz,
           l.widthPx, c.r, c.g, c.b, c.a,
+          arc0, arc1,
+          d0, d1, d2, d3,
         );
       }
     }
@@ -425,7 +472,13 @@ class GpuLineGeometry {
       final c = s.color;
       for (final buf in s.byChunk.values) {
         for (var i = 0; i + 5 < buf.length; i += 6) {
-          addSegment(buf[i], buf[i + 1], buf[i + 2], buf[i + 3], buf[i + 4], buf[i + 5], s.widthPx, c.r, c.g, c.b, c.a);
+          addSegment(
+            buf[i], buf[i + 1], buf[i + 2],
+            buf[i + 3], buf[i + 4], buf[i + 5],
+            s.widthPx, c.r, c.g, c.b, c.a,
+            0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0,
+          );
         }
       }
     }

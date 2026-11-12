@@ -646,6 +646,9 @@ class DataDrivenSettingsScreen extends StatefulWidget {
   /// 項目フィルタ（表示する設定項目を制御）
   final bool Function(SettingSectionDef, SettingDef)? itemFilter;
 
+  /// AppBar に追加するアクションボタン（リセットボタンの左に並ぶ）
+  final List<Widget>? extraActions;
+
   const DataDrivenSettingsScreen({
     super.key,
     required this.title,
@@ -657,6 +660,7 @@ class DataDrivenSettingsScreen extends StatefulWidget {
     this.onValueChanged,
     this.sectionFilter,
     this.itemFilter,
+    this.extraActions,
   });
 
   @override
@@ -688,6 +692,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
       isEmbedded: widget.isEmbedded,
       isLoading: _isLoading,
       actions: [
+        ...?widget.extraActions,
         IconButton(
           icon: const Icon(Icons.restore),
           tooltip: t.settingsWidget.resetToDefault,
@@ -803,7 +808,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
       valueLabel: def.formatValue(value),
       description: def.description,
       slider: Slider(
-        value: value,
+        value: value.clamp(def.min, def.max),
         min: def.min,
         max: def.max,
         divisions: def.divisions,
@@ -856,7 +861,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
       valueLabel: def.formatValue(value),
       description: def.description,
       slider: Slider(
-        value: value.toDouble(),
+        value: value.clamp(def.min, def.max).toDouble(),
         min: def.min.toDouble(),
         max: def.max.toDouble(),
         divisions: def.divisions,
@@ -869,6 +874,46 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
   }
 
   Widget _buildStringTile(StringDef def) {
+    final opts = def.options;
+    if (opts != null && opts.isNotEmpty) {
+      final current = _store.getString(def);
+      return Padding(
+        key: TutorialTargets.settingTile(def.key),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(def.title, style: Theme.of(context).textTheme.bodyLarge),
+            if (def.description != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                def.description!,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                for (final (val, label) in opts)
+                  ChoiceChip(
+                    label: Text(label),
+                    selected: current == val,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (selected) {
+                      if (selected && current != val) {
+                        _store.setString(def, val);
+                        _changed();
+                      }
+                    },
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
     return ListTile(
       title: Text(def.title),
       subtitle: def.description != null ? Text(def.description!) : null,

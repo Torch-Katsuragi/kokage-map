@@ -47,11 +47,13 @@ class QgisRendererClass {
     this.values = const [],
     this.lower,
     this.upper,
+    this.scaleMinDenom,
+    this.scaleMaxDenom,
   });
 
   final String label;
 
-  /// シンボルの見た目（色・太さ）。読めないシンボルなら null（代表の色で描く）
+  /// シンボルの見た目（色・太さ・パターン）。読めないシンボルなら null（代表の色で描く）
   final KMetaLayerStyle? style;
 
   /// 分類・段階でチェックを外した（描かない）項目なら false
@@ -63,6 +65,10 @@ class QgisRendererClass {
   /// 段階の範囲
   final double? lower;
   final double? upper;
+
+  /// ルール由来の縮尺分母範囲（`scalemindenom` = 最拡大側分母、`scalemaxdenom` = 最縮小側分母）
+  final double? scaleMinDenom;
+  final double? scaleMaxDenom;
 
   /// 分類の「その他の値すべて」
   bool get isDefaultCategory => values.isEmpty || values.every((v) => v == null || v.isEmpty);
@@ -76,6 +82,8 @@ class QgisRendererClass {
         values: [for (final v in (json['values'] as List<dynamic>? ?? const [])) v as String?],
         lower: (json['lower'] as num?)?.toDouble(),
         upper: (json['upper'] as num?)?.toDouble(),
+        scaleMinDenom: (json['scaleMinDenom'] as num?)?.toDouble(),
+        scaleMaxDenom: (json['scaleMaxDenom'] as num?)?.toDouble(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -85,6 +93,8 @@ class QgisRendererClass {
         if (values.isNotEmpty) 'values': values,
         if (lower != null) 'lower': lower,
         if (upper != null) 'upper': upper,
+        if (scaleMinDenom != null) 'scaleMinDenom': scaleMinDenom,
+        if (scaleMaxDenom != null) 'scaleMaxDenom': scaleMaxDenom,
       };
 }
 
@@ -95,6 +105,8 @@ class QgisRule {
     this.isElse = false,
     this.active = true,
     this.classIndex,
+    this.scaleMinDenom,
+    this.scaleMaxDenom,
     this.children = const [],
   });
 
@@ -107,6 +119,11 @@ class QgisRule {
 
   /// シンボルを持つルールなら [QgisRenderer.classes] の添字
   final int? classIndex;
+
+  /// `<rule scalemindenom="..." scalemaxdenom="...">`（0 以下は制限なしのため null として扱う）
+  final double? scaleMinDenom;
+  final double? scaleMaxDenom;
+
   final List<QgisRule> children;
 
   factory QgisRule.fromJson(Map<String, dynamic> json) => QgisRule(
@@ -114,6 +131,8 @@ class QgisRule {
         isElse: json['else'] as bool? ?? false,
         active: json['active'] as bool? ?? true,
         classIndex: json['class'] as int?,
+        scaleMinDenom: (json['scaleMinDenom'] as num?)?.toDouble(),
+        scaleMaxDenom: (json['scaleMaxDenom'] as num?)?.toDouble(),
         children: [
           for (final c in (json['children'] as List<dynamic>? ?? const []))
             QgisRule.fromJson(c as Map<String, dynamic>),
@@ -125,6 +144,8 @@ class QgisRule {
         if (isElse) 'else': true,
         if (!active) 'active': false,
         if (classIndex != null) 'class': classIndex,
+        if (scaleMinDenom != null) 'scaleMinDenom': scaleMinDenom,
+        if (scaleMaxDenom != null) 'scaleMaxDenom': scaleMaxDenom,
         if (children.isNotEmpty) 'children': [for (final c in children) c.toJson()],
       };
 }
@@ -136,6 +157,7 @@ class QgisRenderer {
     this.attr,
     required this.classes,
     this.rules = const [],
+    this.invertedPolygon = false,
   });
 
   final QgisRendererKind kind;
@@ -149,6 +171,9 @@ class QgisRenderer {
   /// ルールベースの最上位のルール（根のルールの子）
   final List<QgisRule> rules;
 
+  /// `invertedPolygonRenderer` でラップされた描き分けか
+  final bool invertedPolygon;
+
   factory QgisRenderer.fromJson(Map<String, dynamic> json) => QgisRenderer(
         kind: QgisRendererKind.values.byName(json['kind'] as String),
         attr: json['attr'] as String?,
@@ -159,6 +184,7 @@ class QgisRenderer {
         rules: [
           for (final r in (json['rules'] as List<dynamic>? ?? const [])) QgisRule.fromJson(r as Map<String, dynamic>),
         ],
+        invertedPolygon: json['invertedPolygon'] as bool? ?? false,
       );
 
   /// 読めない JSON なら null（古い版・壊れた設定は単に代表の色で描く）
@@ -177,6 +203,7 @@ class QgisRenderer {
         if (attr != null) 'attr': attr,
         'classes': [for (final c in classes) c.toJson()],
         if (rules.isNotEmpty) 'rules': [for (final r in rules) r.toJson()],
+        if (invertedPolygon) 'invertedPolygon': true,
       };
 
   /// 地物ごとの評価器。式が読めなければ null（そのレンダラは代表の色で描く）
@@ -188,7 +215,7 @@ abstract class QgisRendererEvaluator {
   const QgisRendererEvaluator();
 
   /// 描かないなら null。ルールで複数当たったときは、QGIS でいちばん上に描かれるもの（最後に当たったもの）
-  int? classFor(Map<String, Object?>? props);
+  int? classFor(Map<String, Object?>? props, {double? scaleDenom});
 
   /// 式が読めなかったものは一度だけログに出す
   static final Set<String> _logged = {};
@@ -225,6 +252,8 @@ abstract class QgisRendererEvaluator {
       isElse: rule.isElse,
       active: rule.active,
       classIndex: rule.classIndex,
+      scaleMinDenom: rule.scaleMinDenom,
+      scaleMaxDenom: rule.scaleMaxDenom,
       children: [for (final c in rule.children) _compileRule(c)],
     );
   }
@@ -257,7 +286,7 @@ class _CategorizedEval extends QgisRendererEvaluator {
   late final List<bool> render;
 
   @override
-  int? classFor(Map<String, Object?>? props) {
+  int? classFor(Map<String, Object?>? props, {double? scaleDenom}) {
     final v = value.eval(props);
     final i = (v == null ? null : byKey[_categoryKey(v)]) ?? defaultIndex;
     if (i == null || !render[i]) return null;
@@ -271,7 +300,7 @@ class _GraduatedEval extends QgisRendererEvaluator {
   final QgisExpr value;
 
   @override
-  int? classFor(Map<String, Object?>? props) {
+  int? classFor(Map<String, Object?>? props, {double? scaleDenom}) {
     final v = qgisToNumber(value.eval(props));
     if (v == null) return null;
     for (var i = 0; i < r.classes.length; i++) {
@@ -291,6 +320,8 @@ class _CompiledRule {
     required this.isElse,
     required this.active,
     required this.classIndex,
+    required this.scaleMinDenom,
+    required this.scaleMaxDenom,
     required this.children,
   });
 
@@ -298,7 +329,16 @@ class _CompiledRule {
   final bool isElse;
   final bool active;
   final int? classIndex;
+  final double? scaleMinDenom;
+  final double? scaleMaxDenom;
   final List<_CompiledRule> children;
+
+  bool isScaleOk(double? scaleDenom) {
+    if (scaleDenom == null) return true;
+    if (scaleMinDenom != null && scaleMinDenom! > 0 && scaleDenom < scaleMinDenom!) return false;
+    if (scaleMaxDenom != null && scaleMaxDenom! > 0 && scaleDenom > scaleMaxDenom!) return false;
+    return true;
+  }
 }
 
 class _RuleEval extends QgisRendererEvaluator {
@@ -306,36 +346,37 @@ class _RuleEval extends QgisRendererEvaluator {
   final List<_CompiledRule> rules;
 
   @override
-  int? classFor(Map<String, Object?>? props) {
+  int? classFor(Map<String, Object?>? props, {double? scaleDenom}) {
     final drawn = <int>[];
-    _children(rules, props, drawn);
+    _children(rules, props, scaleDenom, drawn);
     return drawn.isEmpty ? null : drawn.last;
   }
 
   /// QGIS の Rule::renderFeature と同じ順で辿る。ELSE は兄弟のどれも描かなかったときだけ
-  bool _children(List<_CompiledRule> rules, Map<String, Object?>? props, List<int> drawn) {
+  bool _children(List<_CompiledRule> rules, Map<String, Object?>? props, double? scaleDenom, List<int> drawn) {
     var rendered = false;
     for (final r in rules) {
       if (!r.active || r.isElse) continue;
-      rendered |= _rule(r, props, drawn);
+      rendered |= _rule(r, props, scaleDenom, drawn);
     }
     if (!rendered) {
       for (final r in rules) {
         if (!r.active || !r.isElse) continue;
-        rendered |= _rule(r, props, drawn);
+        rendered |= _rule(r, props, scaleDenom, drawn);
       }
     }
     return rendered;
   }
 
-  bool _rule(_CompiledRule r, Map<String, Object?>? props, List<int> drawn) {
+  bool _rule(_CompiledRule r, Map<String, Object?>? props, double? scaleDenom, List<int> drawn) {
+    if (!r.isScaleOk(scaleDenom)) return false;
     if (r.filter != null && !r.filter!.test(props)) return false;
     var rendered = false;
     if (r.classIndex != null) {
       drawn.add(r.classIndex!);
       rendered = true;
     }
-    if (_children(r.children, props, drawn)) rendered = true;
+    if (_children(r.children, props, scaleDenom, drawn)) rendered = true;
     return rendered;
   }
 }

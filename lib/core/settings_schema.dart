@@ -142,10 +142,11 @@ class CustomDef extends SettingDef {
   });
 }
 
-/// String値設定
+/// String値設定（[options] 指定時はチップ選択 UI、省略時はテキスト入力）
 class StringDef extends SettingDef {
   final String defaultValue;
   final String? Function(KMetaLayerStyle)? kmetaGetter;
+  final List<(String value, String label)>? options;
 
   const StringDef({
     required super.key,
@@ -154,6 +155,7 @@ class StringDef extends SettingDef {
     super.visibleWhen,
     required this.defaultValue,
     this.kmetaGetter,
+    this.options,
   });
 }
 

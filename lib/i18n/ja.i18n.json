@@ -209,7 +209,12 @@
       "appDataLastSynced": "最終統合: $time",
       "appDataNeverSynced": "未実行",
       "appDataSyncSuccess": "端末間データの統合が完了しました",
-      "appDataSyncFailed": "端末間データの統合に失敗しました: $error"
+      "appDataSyncFailed": "端末間データの統合に失敗しました: $error",
+      "storeCacheTitle": "共有ストアの整理",
+      "storeCacheClean": "未使用の退避データはありません",
+      "storeCacheUnused": "未使用データ: ${count}件 ($size)",
+      "storeCacheClearButton": "未使用分を削除",
+      "storeCacheCleared": "未使用データを${count}件削除しました ($size)"
     }
   },
   "basemap": {
@@ -1176,7 +1181,9 @@
     "folderSetCount": "${count} 件のフォルダを含むセット",
     "invalidFolderSetJson": "共有フォルダセットのJSON形式が正しくありません",
     "folderSetKeptLocalChanges": "リストから外れた「$names」は未送信の変更があるため残しました",
-    "folderSetUpdated": "フォルダセットを更新しました（追加: $added / 削除: $removed）"
+    "folderSetUpdated": "フォルダセットを更新しました（追加: $added / 削除: $removed）",
+    "deleteStandaloneReferencedConfirm": "「${name}」は他のフォルダセット（${sets}）からも参照されています。\n\n単体フォルダの一覧からは外し、実体データはセット側で引き続き使えるように保持します。\nDrive上のデータには影響しません。",
+    "relocatedToStoreSuccess": "「${name}」を単体一覧から外しました（フォルダセット側のデータは保持されています）"
   },
   "trupulse": {
     "toolName": "レーザー距離計",

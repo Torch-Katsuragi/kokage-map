@@ -23,6 +23,7 @@ import '../../providers/gps_providers.dart';
 import '../../providers/notification_providers.dart';
 import '../../services/google_drive/appdata_sync_service.dart';
 import '../../services/google_drive/auto_sync_service.dart';
+import '../../services/google_drive/drive_dir_store.dart';
 import '../../services/google_drive/google_drive_service.dart';
 import '../../widgets/settings_widgets.dart';
 
@@ -43,6 +44,8 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
   DateTime? _appDataLastSynced;
   int _intervalMinutes = kAutoSyncDefaultInterval;
   bool _isAccountLoading = false;
+  List<OrphanedStoreEntry> _orphanedStoreEntries = const [];
+  bool _isStoreCacheBusy = false;
 
   /// 同期間隔の選択肢（分）
   static const _intervalChoices = [1, 3, 5, 10, 30];
@@ -57,6 +60,7 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     final lastSynced = await _appDataSync.lastSyncedAt();
+    final orphans = await DriveDirStore.instance.scanOrphanedStoreEntries();
     if (!mounted) return;
     setState(() {
       _autoSyncEnabled = prefs.getBool(kAutoSyncEnabledKey) ?? true;
@@ -64,6 +68,7 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
       _appDataLastSynced = lastSynced;
       _intervalMinutes =
           prefs.getInt(kAutoSyncIntervalKey) ?? kAutoSyncDefaultInterval;
+      _orphanedStoreEntries = orphans;
     });
   }
 
@@ -153,6 +158,36 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
     final l = dt.toLocal();
     return '${l.year}/${l.month.toString().padLeft(2, '0')}/${l.day.toString().padLeft(2, '0')} '
         '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatByteSize(int bytes) {
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    if (bytes >= 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '$bytes B';
+  }
+
+  Future<void> _clearOrphanedStoreCache() async {
+    if (_isStoreCacheBusy) return;
+    setState(() => _isStoreCacheBusy = true);
+    try {
+      final res = await DriveDirStore.instance.pruneOrphanedStoreEntries();
+      final remaining = await DriveDirStore.instance.scanOrphanedStoreEntries();
+      if (!mounted) return;
+      setState(() => _orphanedStoreEntries = remaining);
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.settings.autoSync.storeCacheCleared(
+              count: res.deletedCount,
+              size: _formatByteSize(res.freedBytes),
+            ),
+            level: NotificationLevel.info,
+          );
+    } finally {
+      if (mounted) setState(() => _isStoreCacheBusy = false);
+    }
   }
 
   @override
@@ -252,6 +287,48 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                         ),
                       ],
                     ),
+                  ),
+                ],
+              ),
+              SettingsSection(
+                title: tr.storeCacheTitle,
+                icon: Icons.cleaning_services_outlined,
+                iconColor: Colors.blueGrey,
+                children: [
+                  ListTile(
+                    leading: const Icon(
+                      Icons.folder_zip_outlined,
+                      color: Colors.blueGrey,
+                    ),
+                    title: Text(
+                      _orphanedStoreEntries.isEmpty
+                          ? tr.storeCacheClean
+                          : tr.storeCacheUnused(
+                              count: _orphanedStoreEntries.length,
+                              size: _formatByteSize(
+                                _orphanedStoreEntries.fold(
+                                  0,
+                                  (sum, e) => sum + e.sizeBytes,
+                                ),
+                              ),
+                            ),
+                    ),
+                    trailing: _isStoreCacheBusy
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: _orphanedStoreEntries.isEmpty
+                                ? null
+                                : _clearOrphanedStoreCache,
+                            icon: const Icon(
+                              Icons.delete_sweep_outlined,
+                              size: 18,
+                            ),
+                            label: Text(tr.storeCacheClearButton),
+                          ),
                   ),
                 ],
               ),

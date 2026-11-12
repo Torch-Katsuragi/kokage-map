@@ -147,6 +147,10 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
             // 新規ダウンロードや同期で増えたレイヤのフィーチャ読込・再描画を必ず走らせる
             ref.read(featureRefreshTriggerProvider.notifier).trigger();
           },
+          onFolderSetRefreshNeeded: (setNode) async {
+            if (!mounted) return;
+            ref.read(featureRefreshTriggerProvider.notifier).trigger();
+          },
           onMerged: (node, result) {
             if (!mounted) return;
             DriveSyncOperations.notifyMerge(ref, result, afterRestore: () async {

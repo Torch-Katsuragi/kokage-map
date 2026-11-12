@@ -103,6 +103,59 @@ class DriveTreeNodes {
     }
   }
 
+  /// ファイルや DB テーブルを物理削除せず、開いている GeoPackage 接続だけを閉じて [node] を親ツリーから切り離す。
+  ///
+  /// 共有フォルダセットの参照解除・単体フォルダのストア退避など、実体ディレクトリの削除可否を
+  /// 参照カウントで後から判定する場面では、[LayerTreeNode.dispose]（物理削除を伴う）ではなく本メソッドを使う。
+  static Future<void> detachSubtreeWithoutDeletingFiles(
+    LayerTreeNode node,
+  ) async {
+    await _closeSubtreeConnectionsRecursive(node);
+    node.parent?.removeChild(node);
+  }
+
+  /// [node] 自身は親に残したまま、配下の子ノードの接続を閉じて `children` を空にする（向き先パス差し替え前の解放用）
+  static Future<void> closeAndClearChildrenWithoutDeletingFiles(
+    LayerTreeNode node,
+  ) async {
+    for (final child in List.of(node.children)) {
+      await _closeSubtreeConnectionsRecursive(child);
+      node.removeChild(child);
+    }
+  }
+
+  static Future<void> _closeSubtreeConnectionsRecursive(
+    LayerTreeNode node,
+  ) async {
+    if (node is GeoPackageNode) {
+      try {
+        await node.geoPackageFile.dispose();
+      } catch (e) {
+        AppLogger.debug(
+          '[DriveTreeNodes] GeoPackage 接続クローズ失敗 (${node.name}): $e',
+        );
+      }
+    }
+    for (final child in List.of(node.children)) {
+      await _closeSubtreeConnectionsRecursive(child);
+      child.parent = null;
+    }
+    node.children.clear();
+  }
+
+  /// 単一の [FolderNode]（参照マウントの向き先変更後など）配下を再帰的に再読込し、`.qgs` も読み戻す
+  static Future<void> reloadFolderSubtree(FolderNode node) async {
+    await _reloadSetSubtreeRecursive(node);
+    try {
+      final readBack = await const QgsReadBack().run(node);
+      if (readBack != null) {
+        await _reloadSetSubtreeRecursive(node);
+      }
+    } catch (e) {
+      AppLogger.debug('[DriveFolderSet] フォルダ ${node.name} の .qgs 読み戻しエラー: $e');
+    }
+  }
+
   static Future<void> _reloadSetSubtreeRecursive(LayerTreeNode node) async {
     await node.updateChildren();
     for (final child in node.children) {
@@ -117,8 +170,11 @@ class DriveTreeNodes {
           child.syncStatus = SyncStatus.synced;
         }
       }
-      if (child is FolderNode || child is GeoPackageNode) {
+      if (child is FolderNode) {
         await _reloadSetSubtreeRecursive(child);
+      } else if (child is GeoPackageNode) {
+        await child.updateChildren();
+        await child.reloadLoadedLayers();
       }
     }
   }

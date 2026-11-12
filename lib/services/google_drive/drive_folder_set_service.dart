@@ -98,6 +98,7 @@ class DriveFolderSetService {
     DriveFolderSetManifest? preloadedManifest,
     bool showOsNotification = false,
     bool forceReadOnly = false,
+    bool forceFullReconcile = false,
   }) {
     final key = DriveTransferRegistry.normalizeKey(localSetPath);
     final existing = _inFlight[key];
@@ -110,6 +111,7 @@ class DriveFolderSetService {
       preloadedManifest: preloadedManifest,
       showOsNotification: showOsNotification,
       forceReadOnly: forceReadOnly,
+      forceFullReconcile: forceFullReconcile,
     );
     _inFlight[key] = future;
     return future.whenComplete(() => _inFlight.remove(key));
@@ -122,12 +124,16 @@ class DriveFolderSetService {
     DriveFolderSetManifest? preloadedManifest,
     required bool showOsNotification,
     required bool forceReadOnly,
+    required bool forceFullReconcile,
   }) async {
     await LocalSyncSeedIndex.instance.refreshFromLedgers();
     final init = await FolderSetHierarchy.buildInitialState(
       localSetPath: localSetPath,
       setNode: setNode,
       forceReadOnly: forceReadOnly,
+    );
+    final searchRoots = await DriveDirStore.instance.resolveSearchRoots(
+      init.rootSetPath,
     );
     return _reconcileSetImpl(
       manifestFileId: manifestFileId,
@@ -136,11 +142,12 @@ class DriveFolderSetService {
       preloadedManifest: preloadedManifest,
       showOsNotification: showOsNotification,
       forceReadOnly: init.forceReadOnly,
+      forceFullReconcile: forceFullReconcile,
       depth: init.depth,
       context: FolderSetReconcileContext(
         initialVisitedIds: init.visitedIds,
         rootSetPath: init.rootSetPath,
-        searchRoots: [p.dirname(init.rootSetPath)],
+        searchRoots: searchRoots,
       ),
     );
   }
@@ -154,6 +161,7 @@ class DriveFolderSetService {
     String? preloadedRemoteName,
     required bool showOsNotification,
     required bool forceReadOnly,
+    bool forceFullReconcile = false,
     required int depth,
     required FolderSetReconcileContext context,
   }) async {
@@ -194,6 +202,7 @@ class DriveFolderSetService {
         effectiveSetNode: effectiveSetNode,
         showOsNotification: showOsNotification,
         forceReadOnly: forceReadOnly,
+        forceFullReconcile: forceFullReconcile,
         depth: depth,
         context: context,
       );
@@ -278,6 +287,7 @@ class DriveFolderSetService {
               effectiveSetNode: effectiveSetNode,
               itemEffectiveReadOnly: itemEffectiveReadOnly,
               showOsNotification: showOsNotification,
+              forceFullReconcile: forceFullReconcile,
               depth: depth,
               context: context,
               skippedOut: skippedCycleOrDuplicateItems,
@@ -419,13 +429,16 @@ class DriveFolderSetService {
     required DriveFolderSetNode? effectiveSetNode,
     required bool showOsNotification,
     required bool forceReadOnly,
+    required bool forceFullReconcile,
     required int depth,
     required FolderSetReconcileContext context,
   }) async {
     final registry = DriveTransferRegistry.instance;
-    if (preloadedManifest != null ||
+    if (forceFullReconcile ||
+        preloadedManifest != null ||
         remoteMd5 == null ||
         scan.anySubfolderPending ||
+        scan.anyRecordedMemberMissing ||
         await registry.hasClonePending(localSetPath)) {
       return null;
     }
@@ -507,6 +520,7 @@ class DriveFolderSetService {
     required DriveFolderSetNode? effectiveSetNode,
     required bool itemEffectiveReadOnly,
     required bool showOsNotification,
+    required bool forceFullReconcile,
     required int depth,
     required FolderSetReconcileContext context,
     required List<String> skippedOut,
@@ -543,6 +557,7 @@ class DriveFolderSetService {
       setNode: childSetNode,
       showOsNotification: showOsNotification,
       forceReadOnly: itemEffectiveReadOnly,
+      forceFullReconcile: forceFullReconcile,
       depth: depth + 1,
       context: context,
     );

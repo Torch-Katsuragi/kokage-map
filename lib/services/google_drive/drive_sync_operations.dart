@@ -21,6 +21,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/platform_capabilities.dart';
 import '../../i18n/strings.g.dart';
@@ -409,6 +410,7 @@ class DriveSyncOperations {
           manifestFileId: node.manifestFileId,
           setNode: node,
           showOsNotification: true,
+          forceFullReconcile: true,
         );
         if (result.success) {
           final summary = formatFolderSetSyncSummary(result);
@@ -479,26 +481,49 @@ class DriveSyncOperations {
     BuildContext context,
     FolderNode node,
   ) async {
+    final folderPath = node.getAbsoluteFilePath();
+    if (folderPath == null) return;
+
+    final isStandaloneDrive =
+        node is DriveFolderNode && node.parent is! DriveFolderSetNode;
+    var referencingSetNames = const <String>[];
+    if (isStandaloneDrive &&
+        !DriveDirStore.instance.isManagedStorePath(folderPath)) {
+      final roots =
+          await DriveDirStore.instance.resolveSearchRoots(folderPath);
+      final setPaths = await DriveDirStore.instance.findReferencingSets(
+        node.driveId,
+        searchRoots: roots,
+      );
+      referencingSetNames = setPaths.map(p.basename).toSet().toList();
+    }
+    if (!context.mounted) return;
+
+    final confirmMessage = referencingSetNames.isNotEmpty
+        ? t.drive.deleteStandaloneReferencedConfirm(
+            name: node.name,
+            sets: referencingSetNames.join(', '),
+          )
+        : t.drive.deleteFolderConfirm(name: node.name);
+
     final confirmed = await showConfirmDialog(
       context,
       title: t.drive.deleteFolder,
-      content: Text(t.drive.deleteFolderConfirm(name: node.name)),
+      content: Text(confirmMessage),
       confirmLabel: t.common.delete,
       confirmColor: Colors.red,
     );
     if (!confirmed) return;
 
-    if (node.getAbsoluteFilePath() == null) return;
-
     try {
-      await deleteDriveFolderLocally(node);
+      final outcome = await deleteDriveFolderLocally(node);
       onMapRefresh?.call();
       onStateChanged();
 
-      _notify(
-        t.drive.deleteFolderSuccess(name: node.name),
-        NotificationLevel.info,
-      );
+      final msg = outcome == DriveFolderDeleteOutcome.relocatedToStore
+          ? t.drive.relocatedToStoreSuccess(name: node.name)
+          : t.drive.deleteFolderSuccess(name: node.name);
+      _notify(msg, NotificationLevel.info);
     } catch (e) {
       AppLogger.error('[DriveSyncOps] フォルダ削除エラー: $e');
       _notify(

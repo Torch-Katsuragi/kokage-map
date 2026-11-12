@@ -19,7 +19,6 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/fs/k_file_system.dart';
 import '../../../core/platform_capabilities.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../models/nodes/drive_folder_node.dart';
@@ -27,6 +26,7 @@ import '../../../models/nodes/drive_folder_set_node.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../presentation/node_presenter.dart';
 import '../../../providers/notification_providers.dart';
+import '../../../services/google_drive/drive_folder_local_lifecycle.dart';
 import '../../../services/google_drive/drive_transfer_registry.dart';
 import '../../../services/google_drive/sync_progress.dart';
 import '../../dialogs/drive_qr_dialog.dart';
@@ -264,7 +264,6 @@ class FolderTile extends ConsumerWidget {
   }
 
   Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
-    final absPath = node.getAbsoluteFilePath();
     await confirmAndExecute(
       context,
       ref: ref,
@@ -273,10 +272,7 @@ class FolderTile extends ConsumerWidget {
       confirmLabel: t.common.delete,
       successMessage: t.layerDrawer.folder.deleted(name: node.name),
       execute: () async {
-        if (absPath != null && await fs.exists(absPath)) {
-          await fs.delete(absPath, recursive: true);
-        }
-        await node.dispose();
+        await deleteDriveFolderLocally(node);
         ref.refreshMap();
       },
     );

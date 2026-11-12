@@ -72,6 +72,9 @@ class AutoSyncService {
   /// 同期完了後にツリーリフレッシュが必要な場合のコールバック
   Future<void> Function(DriveFolderNode node)? onTreeRefreshNeeded;
 
+  /// フォルダセット構成更新後にフィーチャ読込・地図再描画が必要な場合のコールバック
+  Future<void> Function(DriveFolderSetNode setNode)? onFolderSetRefreshNeeded;
+
   /// 行単位で合わせられなかった版（`<dir>/<相対パス>` → そのときの Drive 側の modifiedTime）。
   /// 同じリモートの版で何度やっても合わせられない（列の増減など）ので、版が変わるまで試さない
   final Map<String, DateTime?> _failedMergeAt = {};
@@ -87,11 +90,13 @@ class AutoSyncService {
     required LayerTreeNode root,
     VoidCallback? onStatusChanged,
     Future<void> Function(DriveFolderNode)? onRefreshNeeded,
+    Future<void> Function(DriveFolderSetNode)? onFolderSetRefreshNeeded,
     void Function(DriveFolderNode node, SyncResult result)? onMerged,
   }) async {
     rootNode = root;
     onSyncStatusChanged = onStatusChanged;
     onTreeRefreshNeeded = onRefreshNeeded;
+    this.onFolderSetRefreshNeeded = onFolderSetRefreshNeeded;
     this.onMerged = onMerged;
 
     unawaited(_transferCompletionSub?.cancel());
@@ -138,8 +143,10 @@ class AutoSyncService {
         currentRoot,
         event.localPath,
       );
-      if (existingSet != null && existingSet.children.isNotEmpty) {
+      if (existingSet != null) {
         existingSet.syncStatus = SyncStatus.synced;
+        await DriveFolderSetService.reloadFolderSetNode(existingSet);
+        await onFolderSetRefreshNeeded?.call(existingSet);
         onSyncStatusChanged?.call();
         return;
       }
@@ -152,6 +159,7 @@ class AutoSyncService {
       if (existingSet != null) {
         existingSet.syncStatus = SyncStatus.synced;
         await DriveFolderSetService.reloadFolderSetNode(existingSet);
+        await onFolderSetRefreshNeeded?.call(existingSet);
         onSyncStatusChanged?.call();
         return;
       }
@@ -209,6 +217,7 @@ class AutoSyncService {
     rootNode = null;
     onSyncStatusChanged = null;
     onTreeRefreshNeeded = null;
+    onFolderSetRefreshNeeded = null;
     onMerged = null;
   }
 
@@ -646,6 +655,7 @@ class AutoSyncService {
             result.removedCount > 0 ||
             setNode.children.isEmpty) {
           await DriveFolderSetService.reloadFolderSetNode(setNode);
+          await onFolderSetRefreshNeeded?.call(setNode);
         }
         onSyncStatusChanged?.call();
       } else {

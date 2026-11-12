@@ -209,7 +209,12 @@
       "appDataLastSynced": "Last synced: $time",
       "appDataNeverSynced": "Never synced",
       "appDataSyncSuccess": "Cross-device sync completed",
-      "appDataSyncFailed": "Cross-device sync failed: $error"
+      "appDataSyncFailed": "Cross-device sync failed: $error",
+      "storeCacheTitle": "Shared Store Cleanup",
+      "storeCacheClean": "No unused store data",
+      "storeCacheUnused": "Unused data: $count item(s) ($size)",
+      "storeCacheClearButton": "Delete unused",
+      "storeCacheCleared": "Deleted $count unused item(s) ($size)"
     }
   },
   "basemap": {
@@ -1176,7 +1181,9 @@
     "folderSetCount": "Set containing ${count} folder(s)",
     "invalidFolderSetJson": "Invalid folder set JSON format",
     "folderSetKeptLocalChanges": "Kept \"$names\" (removed from set) because it has unsynced local changes",
-    "folderSetUpdated": "Folder set updated (added: $added, removed: $removed)"
+    "folderSetUpdated": "Folder set updated (added: $added, removed: $removed)",
+    "deleteStandaloneReferencedConfirm": "\"${name}\" is also referenced by folder set(s): ${sets}.\n\nIt will be removed as a standalone folder while keeping its data available inside the folder set(s).\nDrive data will not be affected.",
+    "relocatedToStoreSuccess": "Removed \"${name}\" from standalone folders (kept intact for folder sets)"
   },
   "trupulse": {
     "toolName": "Laser rangefinder",

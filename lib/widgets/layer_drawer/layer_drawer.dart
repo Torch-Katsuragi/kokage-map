@@ -812,6 +812,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
             setNode: node,
             preloadedManifest: urlResult.folderSetManifest,
             showOsNotification: true,
+            forceFullReconcile: true,
           );
           if (!result.success) {
             node.syncStatus = SyncStatus.error;

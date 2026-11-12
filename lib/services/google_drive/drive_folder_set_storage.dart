@@ -29,6 +29,7 @@ import '../kmeta_service.dart';
 import 'drive_dir_store.dart';
 import 'drive_folder_set_manifest.dart';
 import 'drive_transfer_registry.dart';
+import 'drive_tree_nodes.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';
 
@@ -39,6 +40,7 @@ class FolderSetLocalScan {
   final Map<String, bool> existingIsSetByDriveId;
   final Map<String, KMetaFolderSetMember> existingMemberByDriveId;
   final bool anySubfolderPending;
+  final bool anyRecordedMemberMissing;
 
   const FolderSetLocalScan({
     required this.existingByDriveId,
@@ -46,6 +48,7 @@ class FolderSetLocalScan {
     required this.existingIsSetByDriveId,
     required this.existingMemberByDriveId,
     required this.anySubfolderPending,
+    this.anyRecordedMemberMissing = false,
   });
 }
 
@@ -68,6 +71,7 @@ class FolderSetStorage {
     final existingIsSetByDriveId = <String, bool>{};
     final existingMemberByDriveId = <String, KMetaFolderSetMember>{};
     var anySubfolderPending = false;
+    var anyRecordedMemberMissing = false;
 
     for (final member in currentSetMeta.sync.setMembers) {
       if (member.driveId.isEmpty) continue;
@@ -78,7 +82,10 @@ class FolderSetStorage {
           searchRoots: searchRoots,
         );
       }
-      if (targetPath == null || !await fs.isDirectory(targetPath)) continue;
+      if (targetPath == null || !await fs.isDirectory(targetPath)) {
+        anyRecordedMemberMissing = true;
+        continue;
+      }
       await DriveDirStore.instance.register(member.driveId, targetPath);
       if (await registry.hasClonePending(targetPath)) {
         anySubfolderPending = true;
@@ -125,6 +132,7 @@ class FolderSetStorage {
       existingIsSetByDriveId: existingIsSetByDriveId,
       existingMemberByDriveId: existingMemberByDriveId,
       anySubfolderPending: anySubfolderPending,
+      anyRecordedMemberMissing: anyRecordedMemberMissing,
     );
   }
 
@@ -210,30 +218,54 @@ class FolderSetStorage {
     return allSafe;
   }
 
-  /// 削除される子セット（[subSetPath]）配下の参照メンバー一覧を再帰収集する
-  Future<List<KMetaFolderSetMember>> collectSubSetMembers(
+  /// 削除されるセット・フォルダ（[subSetPath]）配下の参照メンバー一覧をディスク上の `KMeta` から再帰収集する
+  static Future<List<KMetaFolderSetMember>> collectSubSetMembersFromDisk(
     String subSetPath, {
     List<String> searchRoots = const [],
   }) async {
     final out = <KMetaFolderSetMember>[];
     try {
-      final meta = await KMetaService.instance.getMeta(subSetPath);
-      for (final member in meta.sync.setMembers) {
-        final mPath = member.targetPath ??
-            await DriveDirStore.instance.findExistingPath(
-              member.driveId,
-              searchRoots: searchRoots,
-            );
-        out.add(member.copyWith(targetPath: mPath));
+      final meta = await KMetaService.instance.getRawMeta(subSetPath);
+      if (meta != null) {
+        for (final member in meta.sync.setMembers) {
+          final mPath = member.targetPath ??
+              await DriveDirStore.instance.findExistingPath(
+                member.driveId,
+                searchRoots: searchRoots,
+              );
+          out.add(member.copyWith(targetPath: mPath));
+        }
       }
+      if (!await fs.isDirectory(subSetPath)) return out;
       for (final entry in await fs.list(subSetPath)) {
         if (!entry.isDirectory || entry.name.startsWith('.')) continue;
-        final childMeta = await KMetaService.instance.getMeta(entry.path);
-        if (childMeta.sync.isFolderSet == true) {
+        final childMeta = await KMetaService.instance.getRawMeta(entry.path);
+        if (childMeta == null || !childMeta.sync.isLinked) {
+          // 通常フォルダの中にセットが入っているケースも再帰走査する
           out.addAll(
-            await collectSubSetMembers(
+            await collectSubSetMembersFromDisk(
               entry.path,
               searchRoots: searchRoots,
+            ),
+          );
+          continue;
+        }
+        if (childMeta.sync.isFolderSet == true) {
+          out.addAll(
+            await collectSubSetMembersFromDisk(
+              entry.path,
+              searchRoots: searchRoots,
+            ),
+          );
+        } else if (childMeta.sync.driveId != null &&
+            childMeta.sync.driveId!.isNotEmpty) {
+          out.add(
+            KMetaFolderSetMember(
+              driveId: childMeta.sync.driveId!,
+              name: entry.name,
+              driveUrl: childMeta.sync.driveUrl ?? '',
+              isReadOnly: childMeta.sync.isReadOnly ?? false,
+              targetPath: entry.path,
             ),
           );
         }
@@ -241,6 +273,13 @@ class FolderSetStorage {
     } catch (_) {}
     return out;
   }
+
+  /// 削除される子セット（[subSetPath]）配下の参照メンバー一覧を再帰収集する
+  Future<List<KMetaFolderSetMember>> collectSubSetMembers(
+    String subSetPath, {
+    List<String> searchRoots = const [],
+  }) =>
+      collectSubSetMembersFromDisk(subSetPath, searchRoots: searchRoots);
 
   /// JSONから外れたフォルダ・子セットを安全に検査・削除する（削除できた場合は true）
   Future<bool> removeUnlistedEntry({
@@ -284,7 +323,7 @@ class FolderSetStorage {
             )
             .firstOrNull;
         if (childSetNode != null) {
-          await childSetNode.dispose();
+          await DriveTreeNodes.detachSubtreeWithoutDeletingFiles(childSetNode);
         }
       }
       if (await fs.exists(subPath)) {
@@ -319,7 +358,7 @@ class FolderSetStorage {
           .where((c) => c.driveId == driveId || c.getAbsoluteFilePath() == subPath)
           .firstOrNull;
       if (childNode != null) {
-        await childNode.dispose();
+        await DriveTreeNodes.detachSubtreeWithoutDeletingFiles(childNode);
       }
     }
 

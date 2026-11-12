@@ -136,17 +136,18 @@ Future<String?> _cloneSharedMapIfNeededImpl({
   for (final item in existing) {
     if (item.driveId == driveId) {
       final path = item.localPath;
+      if (path != null && (isFolderSet || item.isFolderSet)) {
+        final r = await DriveFolderSetService().reconcileSet(
+          manifestFileId: driveId,
+          localSetPath: path,
+          showOsNotification: true,
+          forceFullReconcile: true,
+        );
+        if (!r.success) throw StateError(r.errorMessage ?? 'folder set sync failed');
+        return path;
+      }
       if (path != null &&
           await DriveTransferRegistry.instance.hasClonePending(path)) {
-        if (isFolderSet || item.isFolderSet) {
-          final r = await DriveFolderSetService().reconcileSet(
-            manifestFileId: driveId,
-            localSetPath: path,
-            showOsNotification: true,
-          );
-          if (!r.success) throw StateError(r.errorMessage ?? 'folder set sync failed');
-          return path;
-        }
         final r = await SyncEngine().pull(
           driveId,
           path,
@@ -449,6 +450,7 @@ Future<String?> receiveSharedFolderSetInBackground({
           manifestFileId: jsonDriveId,
           preloadedManifest: preloadedManifest,
           showOsNotification: true,
+          forceFullReconcile: true,
         );
         if (!result.success) {
           final errMsg = result.errorMessage ?? t.layerDrawer.cloneFailed;

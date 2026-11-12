@@ -273,6 +273,10 @@ QGIS / GDAL で作ったラスタは **GDAL で開いて読み取り専用のオ
     アプリのオーバーレイは「中心・m/px・回転」の形（ピクセルが m で正方形）なので、経緯度で正方形にすると横に伸びる
   - 範囲はワープ後の `geoTransform`（EPSG:4326 で軸に沿う）→ 回転 0、m/px は縦方向から
   - nodata は `-dstalpha` で透明。オーバービューは GDAL が自分で使う
+  - **バンドの選び方（PNG の 1〜4 バンド制限への対応）**:
+    - 8bit の `['Red', 'Green', 'Blue', 'Undefined']`（または 2 バンドの `['Gray', 'Undefined']`、rasterio などで `alpha="YES"` を付け忘れた RGBA）は、最後のバンドを元のアルファとして扱う（`gdalwarp -srcalpha -dstalpha` → 4 バンドまたは 2 バンド）
+    - 5 バンド以上（RGB＋近赤外などの多バンド衛星画像）や、`Undefined` だけの 4 バンド・16bit 以上の 4 バンドなどは、`Red` `Green` `Blue` が揃っていればその順（BGR 順も含む）、無ければ `Alpha` 以外の先頭 3 本（3 本未満なら先頭 1 本）を `-srcband` で選んでワープし、PNG に渡すバンドが必ず 4 本以下になるようにする
+  - ワープ・PNG 化に失敗したときは無言で捨てず、通知センターにエラーを出す（`overlay_preparation.dart`、同じファイル印では 1 回だけ）
   - **Byte 以外（16bit・浮動小数の DEM など）は、ワープ後の最小〜最大（`gdalinfo -mm`）で 0〜255 の灰色に伸ばす**
     （`-ot Byte -scale_n min max 0 255`、色表のラスタは除く）。範囲外と nodata を数えないよう、このときだけワープを `-ot Float32 -dstnodata nan` で受ける。
     `-stats` は使わない（`.aux.xml` を書こうとし、web では入力が読み取り専用で mount される）。QGIS の既定（累積 2〜98%）とは濃淡が少し違う。陰影や色ランプはしない（いちばん素直な形）

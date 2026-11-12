@@ -490,6 +490,7 @@
     "readOnlyDetail": "Shapefile, GeoJSON and other formats are opened read-only. Convert to gpkg to edit.",
     "badge": "Read-only",
     "loadFailed": "Cannot read: $error",
+    "overlayRenderFailed": "Cannot display $name ($reason)",
     "convertAction": "Convert to gpkg to edit",
     "convertTitle": "Convert to gpkg",
     "editPrompt": "This layer is read-only. Convert it to gpkg to edit?",

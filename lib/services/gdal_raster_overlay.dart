@@ -78,12 +78,51 @@ class GdalRasterProbe {
   final double east;
   final double north;
 
-  /// 灰色に伸ばす要があるか（色のバンドに Byte 以外がある）
-  bool get needsStretch => [
-        for (var i = 0; i < bandTypes.length; i++)
-          if (colorInterpretations.elementAtOrNull(i) != 'Alpha') bandTypes[i],
-      ].any((t) => t != 'Byte') &&
-      !isPalette;
+  /// 最後の `Undefined` バンドを元のアルファとして扱うか（`gdalwarp -srcalpha`）。
+  ///
+  /// rasterio などで `count=4, photometric="RGB"`（または 2 バンドの Gray）として書き `alpha="YES"` を付け忘れると、
+  /// TIFF の `ExtraSamples = 0 (unspecified)` になり GDAL は `['Red', 'Green', 'Blue', 'Undefined']` と読む。
+  /// そのまま `-dstalpha` を付けると 5 バンドになって PNG 化で落ちるため、8bit のこの形は最後のバンドをアルファとして使う
+  /// （16bit・浮動小数の 4 バンドは RGB＋近赤外などの多バンド画像でありうるのでアルファ扱いしない）。
+  bool get treatLastBandAsAlpha =>
+      (bandTypes.length == 4 &&
+          bandTypes[3] == 'Byte' &&
+          colorInterpretations.length == 4 &&
+          colorInterpretations[0] == 'Red' &&
+          colorInterpretations[1] == 'Green' &&
+          colorInterpretations[2] == 'Blue' &&
+          colorInterpretations[3] == 'Undefined') ||
+      (bandTypes.length == 2 &&
+          bandTypes[1] == 'Byte' &&
+          colorInterpretations.length == 2 &&
+          colorInterpretations[0] == 'Gray' &&
+          colorInterpretations[1] == 'Undefined');
+
+  /// 表示に使う色バンド番号（1 始まり、長さ 1 または 3）。
+  ///
+  /// PNG ドライバは 1〜4 バンドしか受け付けず、ワープで `-dstalpha` を足すため色バンドは必ず 1 本か 3 本にする:
+  /// - 色表（Palette）は 1 バンド目（PNG 化で `-expand rgba`）
+  /// - [treatLastBandAsAlpha] は RGB の `[1, 2, 3]` または Gray の `[1]`
+  /// - `Red` `Green` `Blue` が揃っていればその順（BGR 順や 5 バンド以上の多バンド衛星画像でも RGB を選ぶ）
+  /// - そうでなければ `Alpha` 以外の先頭 3 本（3 本未満なら先頭 1 本）
+  List<int> get colorBands {
+    if (isPalette) return const [1];
+    if (treatLastBandAsAlpha) return bandTypes.length == 4 ? const [1, 2, 3] : const [1];
+    final r = colorInterpretations.indexOf('Red');
+    final g = colorInterpretations.indexOf('Green');
+    final b = colorInterpretations.indexOf('Blue');
+    if (r >= 0 && g >= 0 && b >= 0) return [r + 1, g + 1, b + 1];
+    final nonAlpha = [
+      for (var i = 0; i < bandTypes.length; i++)
+        if (colorInterpretations.elementAtOrNull(i) != 'Alpha') i + 1,
+    ];
+    if (nonAlpha.length >= 3) return nonAlpha.sublist(0, 3);
+    if (nonAlpha.isNotEmpty) return [nonAlpha.first];
+    return const [1];
+  }
+
+  /// 0〜255 に伸ばす要があるか（表示に使う色バンドに Byte 以外がある）
+  bool get needsStretch => !isPalette && colorBands.any((b) => bandTypes[b - 1] != 'Byte');
 
   /// 色表のラスタ（1 バンドの Palette）。番号を補間できないので最近傍でワープし、PNG にするとき `-expand rgba` で色に開く
   bool get isPalette => colorInterpretations.firstOrNull == 'Palette';
@@ -192,6 +231,7 @@ abstract final class GdalRasterOverlay {
       return null;
     }
     final bands = (info['bands'] as List? ?? const []).cast<Map>();
+    if (bands.isEmpty) return null;
     final epsg = RegExp(r'ID\["EPSG",(\d+)\]\]\s*$').firstMatch(wkt)?.group(1);
     final proj4 = cs['proj4'] as String?;
     return GdalRasterProbe(
@@ -339,8 +379,19 @@ abstract final class GdalRasterOverlay {
     await _deleteQuietly(tmp);
     final (w, h) = outputSize(probe);
     final stretch = probe.needsStretch;
+    final selectedBands = probe.colorBands;
+    final defaultNonAlpha = [
+      for (var i = 0; i < probe.bandTypes.length; i++)
+        if (probe.colorInterpretations.elementAtOrNull(i) != 'Alpha') i + 1,
+    ];
+    final alphaCount = probe.colorInterpretations.where((c) => c == 'Alpha').length;
+    final needsBandSelect = !probe.treatLastBandAsAlpha && (alphaCount > 1 || !_sameInts(selectedBands, defaultNonAlpha));
     await _g.warp(src, tmp, args: [
-      '-t_srs', 'EPSG:4326', '-ts', '$w', '$h', '-r', probe.isPalette ? 'near' : 'bilinear', '-dstalpha', '-of', 'GTiff',
+      '-t_srs', 'EPSG:4326', '-ts', '$w', '$h', '-r', probe.isPalette ? 'near' : 'bilinear',
+      if (probe.treatLastBandAsAlpha) '-srcalpha',
+      if (needsBandSelect)
+        for (final b in selectedBands) ...['-srcband', '$b'],
+      '-dstalpha', '-of', 'GTiff',
       '-overwrite',
       // 伸ばすときは、範囲外と nodata を統計から外すため NaN を nodata にした Float32 で受ける
       // （-dstalpha だけでは範囲外が 0 の値になり、gdalinfo -stats の最小値に入ってしまう）
@@ -385,6 +436,14 @@ abstract final class GdalRasterOverlay {
       await _deleteQuietly('$tmp.aux.xml');
       await _deleteQuietly('$png.aux.xml');
     }
+  }
+
+  static bool _sameInts(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   static Future<void> _deleteQuietly(String path) async {

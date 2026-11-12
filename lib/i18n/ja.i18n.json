@@ -490,6 +490,7 @@
     "readOnlyDetail": "shp・GeoJSON などは読み取り専用で開いています。編集するには gpkg に変換してください。",
     "badge": "読み取り専用",
     "loadFailed": "読み込めません: $error",
+    "overlayRenderFailed": "$name を表示できません（$reason）",
     "convertAction": "gpkgに変換して編集",
     "convertTitle": "gpkg に変換",
     "editPrompt": "読み取り専用です。gpkg に変換して編集しますか？",

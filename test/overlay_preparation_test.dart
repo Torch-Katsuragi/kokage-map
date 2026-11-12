@@ -7,15 +7,18 @@
 // GDAL は gdal_raster_overlay_test.dart と同じ（見つからなければ skip）。
 import 'dart:io';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/core/gdal/gdal_ffi.dart';
 import 'package:root_maps/core/path_resolver.dart';
+import 'package:root_maps/models/app_notification.dart';
 import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/models/nodes/external_overlay_image_node.dart';
 import 'package:root_maps/models/nodes/folder_node.dart';
 import 'package:root_maps/models/nodes/image_node.dart';
 import 'package:root_maps/models/nodes/overlay_image_node.dart';
+import 'package:root_maps/providers/notification_providers.dart';
 import 'package:root_maps/screens/map_page/overlay_preparation.dart';
 import 'package:root_maps/services/gdal_raster_overlay.dart';
 import 'package:root_maps/services/kmeta_service.dart';
@@ -30,6 +33,7 @@ void main() {
   late String proj;
 
   setUp(() async {
+    resetOverlayErrorHistory();
     if (config == null) return;
     SharedPreferences.setMockInitialValues({});
     KMetaService.instance.clearCache();
@@ -43,6 +47,7 @@ void main() {
   });
 
   tearDown(() async {
+    resetOverlayErrorHistory();
     if (config == null) return;
     GdalRasterOverlay.configureForTest();
     KMetaService.instance.clearCache();
@@ -69,13 +74,39 @@ void main() {
     expect(await prepareOverlayImages(nodes, web: false), isFalse, reason: 'キャッシュを使い、形も置き場も同じ');
   }, skip: skip);
 
-  test('1 枚が作れなくても他は用意する', () async {
+  test('1 枚が作れなくても他は用意し、失敗したラスタは通知センターに 1 回だけエラーを出す（ファイルが変われば再通知）', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final notifications = container.read(notificationCenterProvider.notifier);
+
     final nodes = await load();
     final broken = nodes.firstWhere((n) => n.name == 'ext_rgb_6674.tif');
-    File(broken.filePath).deleteSync(); // 判定のあとで消えた（同期で消された など）
-    expect(await prepareOverlayImages(nodes, web: false), isTrue);
+    final savedBytes = File(broken.filePath).readAsBytesSync();
+    File(broken.filePath).writeAsBytesSync(const [0, 1, 2, 3]); // 判定後に壊れたファイルへ差し替わった想定
+
+    expect(await prepareOverlayImages(nodes, web: false, notifications: notifications), isTrue);
     expect(overlayDrawableNow(broken, web: false), isFalse);
     expect(overlayDrawableNow(nodes.firstWhere((n) => n.name == 'ext_pal_6674.tif'), web: false), isTrue);
+
+    final list1 = container.read(notificationCenterProvider);
+    expect(list1, hasLength(1));
+    expect(list1.single.level, NotificationLevel.error);
+    expect(list1.single.title, contains('ext_rgb_6674.tif'));
+
+    // 同じ壊れたファイルのまま地図を描き直しても通知を重ねない
+    await prepareOverlayImages(nodes, web: false, notifications: notifications);
+    expect(container.read(notificationCenterProvider), hasLength(1));
+
+    // 正常な中身に戻ったら描画でき、そのあと再び壊れたら改めて通知される
+    File(broken.filePath).writeAsBytesSync(savedBytes);
+    expect(await prepareOverlayImages(nodes, web: false, notifications: notifications), isTrue);
+    expect(overlayDrawableNow(broken, web: false), isTrue);
+    expect(container.read(notificationCenterProvider), hasLength(1));
+
+    File(broken.filePath).deleteSync();
+    broken.cachedPngPath = null;
+    await prepareOverlayImages(nodes, web: false, notifications: notifications);
+    expect(container.read(notificationCenterProvider), hasLength(2));
   }, skip: skip);
 
   test('PNG やアプリの GeoTIFF でない画像はそのまま描ける（web の GeoTIFF も元ファイルを読む）', () {

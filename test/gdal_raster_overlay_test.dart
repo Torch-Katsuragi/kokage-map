@@ -274,6 +274,105 @@ void main() {
       expect(Directory(p.join(tmp.path, 'cache')).listSync().map((e) => p.extension(e.path)).toSet(), {'.png', '.json'},
           reason: '作業用の .tif・.aux.xml は残さない');
     }, skip: skip);
+
+    test('Issue #6: 4 バンド目 Undefined（ExtraSamples 未指定の RGBA）は 4 バンド目をアルファとして 4ch PNG にする', () async {
+      // rasterio で count=4, photometric="RGB"（alpha="YES" なし）で書いた形を作る:
+      // 左上 10x10 の 4 バンド目を 0（透明）、残りを 255（不透明）にする
+      final work = (await Directory(p.join(tmp.path, 'work_undef')).create()).path;
+      final maskAsc = StringBuffer('ncols 40\nnrows 30\nxllcorner -3700\nyllcorner -229800\ncellsize 1\n');
+      for (var y = 0; y < 30; y++) {
+        maskAsc.writeln([for (var x = 0; x < 40; x++) x < 10 && y < 10 ? 0 : 255].join(' '));
+      }
+      File(p.join(work, 'mask.asc')).writeAsStringSync(maskAsc.toString());
+      await gdal.translate(p.join(work, 'mask.asc'), p.join(work, 'mask.tif'), args: const ['-ot', 'Byte']);
+      final rgbSrc = at('ext_rgb_6674.tif').replaceAll('&', '&amp;');
+      final maskSrc = p.join(work, 'mask.tif').replaceAll('&', '&amp;');
+      File(p.join(work, 'rgba_undef.vrt')).writeAsStringSync('''
+<VRTDataset rasterXSize="40" rasterYSize="30">
+  <SRS>EPSG:6674</SRS>
+  <GeoTransform>-3700, 1.0, 0.0, -229770, 0.0, -1.0</GeoTransform>
+  <VRTRasterBand dataType="Byte" band="1"><ColorInterp>Red</ColorInterp>
+    <SimpleSource><SourceFilename relativeToVRT="0">$rgbSrc</SourceFilename><SourceBand>1</SourceBand></SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="2"><ColorInterp>Green</ColorInterp>
+    <SimpleSource><SourceFilename relativeToVRT="0">$rgbSrc</SourceFilename><SourceBand>2</SourceBand></SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="3"><ColorInterp>Blue</ColorInterp>
+    <SimpleSource><SourceFilename relativeToVRT="0">$rgbSrc</SourceFilename><SourceBand>3</SourceBand></SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="4"><ColorInterp>Undefined</ColorInterp>
+    <SimpleSource><SourceFilename relativeToVRT="0">$maskSrc</SourceFilename><SourceBand>1</SourceBand></SimpleSource>
+  </VRTRasterBand>
+</VRTDataset>''');
+      await gdal.translate(
+        p.join(work, 'rgba_undef.vrt'),
+        at('rgba_undef.tif'),
+        args: const ['-co', 'PHOTOMETRIC=RGB', '-co', 'ALPHA=UNSPECIFIED'],
+      );
+
+      final (probe, r, png) = await renderOf('rgba_undef.tif');
+      expect(probe.colorInterpretations, ['Red', 'Green', 'Blue', 'Undefined']);
+      expect(probe.treatLastBandAsAlpha, isTrue);
+      expect(png.numChannels, 4);
+      expect(png.getPixel(2, 2).a, 0, reason: '4 バンド目が 0 の左上は透明になる');
+      final center = png.getPixel(png.width ~/ 2, png.height ~/ 2);
+      expect([center.r, center.g, center.b, center.a], [30, 120, 60, 255]);
+      expectBoundsMatch(probe, r.params);
+    }, skip: skip);
+
+    test('Issue #6: 5 バンド以上（BGR＋近赤外など）や 16bit 4 バンド・Undefined 4 バンドも RGB 3 本を選んで PNG にする', () async {
+      // 1) 5 バンド（Band 1=Blue, Band 2=Green, Band 3=Red, Band 4..5=Undefined）
+      await gdal.translate(
+        at('ext_rgb_6674.tif'),
+        at('multispec_5band.tif'),
+        args: const [
+          '-b', '3', '-b', '2', '-b', '1', '-b', '1', '-b', '2',
+          '-colorinterp_1', 'blue', '-colorinterp_2', 'green', '-colorinterp_3', 'red',
+          '-colorinterp_4', 'undefined', '-colorinterp_5', 'undefined',
+        ],
+      );
+      final (p5, r5, png5) = await renderOf('multispec_5band.tif');
+      expect(p5.colorBands, [3, 2, 1]);
+      expect(p5.treatLastBandAsAlpha, isFalse);
+      expect(png5.numChannels, 4);
+      final px5 = png5.getPixel(png5.width ~/ 2, png5.height ~/ 2);
+      expect([px5.r, px5.g, px5.b, px5.a], [30, 120, 60, 255], reason: 'BGR 順から Red/Green/Blue の順で取り出す');
+      expectBoundsMatch(p5, r5.params);
+
+      // 2) 16bit の 4 バンド RGB + Undefined（衛星画像の RGB + NIR 想定: 4 バンド目を UInt16 アルファ扱いしない）
+      await gdal.translate(
+        at('ext_rgb_6674.tif'),
+        at('rgbi_u16.tif'),
+        args: const [
+          '-ot', 'UInt16', '-scale', '0', '255', '100', '3000',
+          '-b', '1', '-b', '2', '-b', '3', '-b', '1',
+          '-colorinterp_4', 'undefined', '-co', 'PHOTOMETRIC=RGB', '-co', 'ALPHA=UNSPECIFIED',
+        ],
+      );
+      final (pU16, _, pngU16) = await renderOf('rgbi_u16.tif');
+      expect(pU16.treatLastBandAsAlpha, isFalse);
+      expect(pU16.needsStretch, isTrue);
+      expect(pU16.colorBands, [1, 2, 3]);
+      expect(pngU16.numChannels, 4);
+      expect(pngU16.getPixel(pngU16.width ~/ 2, pngU16.height ~/ 2).a, 255,
+          reason: 'NIR の小さい値を 16bit アルファと誤認して透明にしてしまわない');
+
+      // 3) 色解釈の無い 4 バンド（MINISBLACK）も先頭 3 本を選んで 4ch PNG にする
+      await gdal.translate(
+        at('ext_rgb_6674.tif'),
+        at('undef4.tif'),
+        args: const [
+          '-b', '1', '-b', '2', '-b', '3', '-b', '1',
+          '-colorinterp_1', 'undefined', '-colorinterp_2', 'undefined',
+          '-colorinterp_3', 'undefined', '-colorinterp_4', 'undefined',
+          '-co', 'PHOTOMETRIC=MINISBLACK',
+        ],
+      );
+      final (pU4, _, pngU4) = await renderOf('undef4.tif');
+      expect(pU4.treatLastBandAsAlpha, isFalse);
+      expect(pU4.colorBands, [1, 2, 3]);
+      expect(pngU4.numChannels, 4);
+    }, skip: skip);
   });
 
   group('フォルダの読み込み', () {

@@ -26,6 +26,7 @@ import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/layer_order.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/overlay_image_node.dart';
+import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../utils/app_logger.dart';
@@ -141,7 +142,12 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     invalidateLayerCache();
 
     // 表示用の画像を用意し（あれば使う・元が変われば作り直す）、出揃ったオーバーレイを流し直す
-    final changed = await prepareOverlayImages(newOverlayNodes, web: kIsWeb);
+    final notifications = ref.read(notificationCenterProvider.notifier);
+    final changed = await prepareOverlayImages(
+      newOverlayNodes,
+      web: kIsWeb,
+      notifications: notifications,
+    );
     if (run != _featuresRun || !mounted) return;
     final drawable = [for (final n in newOverlayNodes) if (overlayDrawableNow(n, web: kIsWeb)) n];
     if (!changed && drawable.length == overlayImageNodes.length) return;

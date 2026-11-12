@@ -24,12 +24,14 @@ import '../../core/settings_schema.dart';
 import '../../core/terrain/fill_pattern_painter.dart';
 import '../../core/terrain/svg_marker_atlas.dart';
 import '../../i18n/strings.g.dart';
+import '../../models/geometry_type.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/qgis_renderer.dart';
 import '../../models/qgis_symbol.dart';
 import '../../widgets/qgis_renderer_legend.dart';
 import '../../widgets/settings_widgets.dart';
 import 'label_style_defs.dart';
+import 'style_templates.dart';
 import 'symbol_style_defs.dart';
 
 /// QGIS レンダラ種別名を画面用の表示名に変換する
@@ -46,7 +48,7 @@ String qgisRendererLabel(String type) => switch (type) {
     };
 
 /// スタイル画面上部に差し込むカスタムセクション群を構築する
-/// （QGIS 分類レンダラ案内バナー・凡例・View 継承説明・背景地図付きプレビュー）
+/// （QGIS 分類レンダラ案内バナー・凡例・View 継承説明・背景地図付きプレビュー・スタイルテンプレート）
 List<Widget> buildStyleHeaderAndPreviewSections({
   required SettingsStore store,
   required bool isGlobalMode,
@@ -55,6 +57,9 @@ List<Widget> buildStyleHeaderAndPreviewSections({
   required String? qgisRenderer,
   required QgisRenderer? qgisRendererDef,
   String? pointSvgContent,
+  GeometryType? targetGeometryType,
+  bool hasCustomSymbolLayers = false,
+  ValueChanged<StyleTemplate>? onSelectTemplate,
 }) =>
     [
       if (qgisRenderer != null)
@@ -82,6 +87,13 @@ List<Widget> buildStyleHeaderAndPreviewSections({
         targetLayer: targetLayer,
         pointSvgContent: pointSvgContent,
       ),
+      if (!isGlobalMode && qgisRenderer == null && targetGeometryType != null && onSelectTemplate != null)
+        StyleTemplateSection(
+          geometryType: targetGeometryType,
+          store: store,
+          hasCustomSymbolLayers: hasCustomSymbolLayers,
+          onSelect: onSelectTemplate,
+        ),
     ];
 
 /// 背景地図の上に点・線・面・ラベルを重ねて見せる折りたたみプレビューセクション

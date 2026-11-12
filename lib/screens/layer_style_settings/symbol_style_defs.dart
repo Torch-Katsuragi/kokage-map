@@ -82,7 +82,7 @@ final pointShapeDef = StringDef(
     ('triangle', t.styleScreen.pointShapeTriangle),
     ('star', t.styleScreen.pointShapeStar),
     ('cross', t.styleScreen.pointShapeCross),
-    ('x', t.styleScreen.pointShapeX),
+    ('cross2', t.styleScreen.pointShapeX),
   ],
 );
 final pointSizeDef = DoubleDef(
@@ -136,8 +136,8 @@ List<(String, String)> _lineDashOptions() => [
       ('solid', t.styleScreen.lineStyleSolid),
       ('dash', t.styleScreen.lineStyleDash),
       ('dot', t.styleScreen.lineStyleDot),
-      ('dashDot', t.styleScreen.lineStyleDashDot),
-      ('dashDotDot', t.styleScreen.lineStyleDashDotDot),
+      ('dash_dot', t.styleScreen.lineStyleDashDot),
+      ('dash_dot_dot', t.styleScreen.lineStyleDashDotDot),
     ];
 
 // --- Line ---

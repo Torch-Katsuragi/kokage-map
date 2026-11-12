@@ -52,6 +52,7 @@ import '../widgets/settings_widgets.dart';
 import 'layer_style_settings/kmeta_style_sync.dart';
 import 'layer_style_settings/label_style_defs.dart';
 import 'layer_style_settings/style_preview_and_banners.dart';
+import 'layer_style_settings/style_templates.dart';
 import 'layer_style_settings/symbol_style_defs.dart';
 
 export 'layer_style_settings/label_style_defs.dart'
@@ -458,6 +459,27 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     return effective?.symbolLayers?.markers.lastOrNull?.svgContent;
   }
 
+  bool _hasCustomSymbolLayers() {
+    final effective = widget.isViewMode
+        ? (widget.targetView?.style?.mergeWith(_layerStyle) ?? _layerStyle)
+        : _layerStyle;
+    return effective?.symbolLayers != null;
+  }
+
+  Future<void> _applyTemplate(StyleTemplate template) async {
+    await template.applyToStore(layerStyleSettings);
+    // QML 等から読み込んだ複合シンボル（SVG マーカー等）が残っていると優先描画されるため外す
+    if (widget.isViewMode) {
+      if (widget.targetView?.style?.symbolLayers != null) {
+        widget.targetView!.style = widget.targetView!.style!.copyWith(clearSymbolLayers: true);
+      }
+    } else if (_layerStyle?.symbolLayers != null) {
+      _layerStyle = _layerStyle!.copyWith(clearSymbolLayers: true);
+    }
+    if (mounted) setState(() {});
+    _onValueChanged();
+  }
+
   Future<void> _importQmlFile() async {
     final layer = widget.targetLayer;
     final folderPath = widget.folderPath;
@@ -635,6 +657,9 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
           qgisRenderer: _qgisRenderer,
           qgisRendererDef: _qgisRendererDef,
           pointSvgContent: _currentPointSvgContent(),
+          targetGeometryType: _targetGeometryType(),
+          hasCustomSymbolLayers: _hasCustomSymbolLayers(),
+          onSelectTemplate: _applyTemplate,
         ),
       ),
     );

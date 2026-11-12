@@ -622,8 +622,10 @@ GDAL 拡張の件数キャッシュ。こかげマップ が直接 INSERT/DELETE
 - **`.qml` スタイルプリセットの書き出し・読み込み**（`lib/services/qgis/qgs_qml_service.dart`）:
   - 個別レイヤ／View のスタイル設定画面（`LayerStyleSettingsScreen`）右上のメニューから `.qml` の読み込み・書き出しを行える（ジオメトリ型の整合チェック付き）
   - GeoPackage 内の `qgis_projects` / `layer_styles` テーブルおよび横置き `.qml` からの初期スタイル読み取り専用救済（`QgsEmbeddedStyleLoader`。`.gpkg` は 1 バイトも書き換えない）にも対応
+- **ワンタップのスタイルテンプレート**（`lib/screens/layer_style_settings/style_templates.dart`）:
+  - 個別レイヤ／View のスタイル画面（単一シンボル時）のプレビュー直下に、ジオメトリ型ごとの実用プリセット（点 6 種・線 6 種・面 7 種: 白縁取り道路・幹線・破線作業道・一点鎖線境界・枠のみ白縁・斜線／逆斜線／クロス／ドット／格子ハッチ等）をミニプレビュー付きチップで並べ、迷わずワンタップで適用して後から色や太さを微調整できるようにしている（すべて `.qgs` / `.qml` と往復互換）
 
-テストは `test/qgis_style_compat_test.dart`・`test/qgis_svg_and_qml_test.dart`。
+テストは `test/qgis_style_compat_test.dart`・`test/qgis_svg_and_qml_test.dart`・`test/style_templates_test.dart`。
 
 ## 未対応
 

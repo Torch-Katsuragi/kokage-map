@@ -42,7 +42,11 @@ enum LineDashPattern {
     for (final v in values) {
       if (v.id == raw || v.qgisPenStyle == raw) return v;
     }
-    return LineDashPattern.solid;
+    return switch (raw) {
+      'dashDot' => LineDashPattern.dashDot,
+      'dashDotDot' => LineDashPattern.dashDotDot,
+      _ => fromQgisPenStyle(raw),
+    };
   }
 
   static LineDashPattern fromQgisPenStyle(String? raw) {

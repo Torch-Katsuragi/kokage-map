@@ -73,7 +73,7 @@ CSP の出所（足すときは、ここにも書く）:
 | | `'sha256-...'` 8 個 | firebase_core_web が SDK ごとに差し込む**インラインスクリプト**（core / auth / database / app_check × Trusted Types の有無で 2 通り）。下の注意を参照 |
 | | `accounts.google.com/gsi/client` | Google ログイン（google_sign_in_web） |
 | | `*.firebasedatabase.app` | RTDB の long-polling（JSONP）に落ちたとき |
-| | `cdn.jsdelivr.net/npm/zxing-wasm@3.1.3/` | mobile_scanner の web 版（BarcodeDetector の無いブラウザ）。⚠ mobile_scanner を上げたら版を合わせる |
+| | `cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/` | mobile_scanner の web 版（BarcodeDetector の無いブラウザ）。⚠ mobile_scanner を上げたら版を合わせる |
 | | `www.google.com/recaptcha/` `www.gstatic.com/recaptcha/` | App Check（reCAPTCHA Enterprise）。frame-src・connect-src にも対応分あり |
 | connect-src | `https:`（全部） | 利用者の背景地図（任意の XYZ / WMS）があるので絞らない（上の「考え方」）。実際に繋ぐのは、背景地図・DEM のタイル（`cyberjapandata.gsi.go.jp` `s3.amazonaws.com` `tile.openstreetmap.org`、`basemap_provider.dart` `dem_tiles.dart`）、Flutter の代替フォント（`fonts.gstatic.com`）、Drive API・プロフィール画像（`www.googleapis.com` `*.googleusercontent.com`。CanvasKit の画像は fetch で取るので img-src でなく connect-src）、位置共有の匿名サインインと RTDB（`identitytoolkit` `securetoken` `*.firebasedatabase.app`）、App Check（`firebaseappcheck.googleapis.com` `www.google.com/recaptcha/`）、未知の EPSG の proj4 定義（`epsg.io`（手元の表に無い EPSG の定義。メモリにだけ持ち gpkg には書かない）、`gpkg_crs_resolver.dart`）、zxing-wasm（`cdn.jsdelivr.net` `fastly.jsdelivr.net`） |
 | | `wss://*.firebasedatabase.app` | RTDB の WebSocket（名前空間のホストから `s-…` のシャードへ回されることがあるのでワイルドカード） |

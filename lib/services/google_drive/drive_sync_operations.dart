@@ -87,7 +87,7 @@ class DriveSyncOperations {
         await driveService.restoreSessionSilently(userGesture: false);
       }
       final detail = await SyncEngine().checkSyncStatusDetail(localPath);
-      updateNodeSyncStatus(node, detail.status);
+      updateNodeSyncStatus(node, _effectiveStatus(node, detail));
     } catch (e) {
       node.syncStatus = SyncStatus.error;
     }
@@ -174,7 +174,7 @@ class DriveSyncOperations {
 
       if (decisions == null || decisions.isEmpty) {
         final detail = await syncEngine.checkSyncStatusDetail(localPath);
-        updateNodeSyncStatus(node, detail.status);
+        updateNodeSyncStatus(node, _effectiveStatus(node, detail));
         onStateChanged();
         return;
       }
@@ -573,6 +573,21 @@ class DriveSyncOperations {
 
     if (!context.mounted) return false;
     return DriveSignInDialog.show(context);
+  }
+
+  static FolderSyncStatus _effectiveStatus(
+    DriveFolderNode node,
+    FolderSyncStatusDetail detail,
+  ) {
+    final readOnly =
+        node.isReadOnly ||
+        (detail.snapshot != null && !detail.snapshot!.canWriteRemote);
+    if (!readOnly) return detail.status;
+    return switch (detail.status) {
+      FolderSyncStatus.localChanges => FolderSyncStatus.synced,
+      FolderSyncStatus.conflict => FolderSyncStatus.remoteChanges,
+      final other => other,
+    };
   }
 
   /// ノードの同期状態を更新

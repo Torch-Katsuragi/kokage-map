@@ -24,6 +24,7 @@ import '../../core/fs/k_file_system.dart';
 import '../../core/fs/safe_path.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
+import 'drive_api_client.dart';
 import 'drive_dir_store.dart';
 import 'google_drive_service.dart';
 import 'sync_base_store.dart';
@@ -300,42 +301,90 @@ class SyncFileOperations {
     return currentId;
   }
 
-  /// Driveフォルダ配下のファイル一覧とフォルダマップを一括取得
-  /// 1フォルダにつき一覧 1 回（listFiles）でフォルダ/ファイル両方を取得し、サブフォルダは並列にたどる
+  /// ツリー一覧取得時の最大同時リクエスト数（Drive API の per-user 秒間レート上限を踏まないよう制限）
+  static const int maxListConcurrency = 4;
+
+  /// Driveフォルダ配下のファイル一覧とフォルダマップを一括取得。
+  ///
+  /// 階層ごとに最大 [DriveApiClient.maxParentsPerListQuery] フォルダずつ `in parents` を束ね、
+  /// 同時実行数も [maxListConcurrency] に制限してサブフォルダ大量構成でのレート制限を回避する。
   Future<DriveTree> listDriveTree(String rootFolderId) async {
     final folderMap = <String, String>{rootFolderId: ''};
-    final files = await _listDriveFolder(rootFolderId, '', folderMap);
-    return DriveTree(files: files, folderMap: folderMap);
-  }
-
-  /// [folderId] 配下のファイル（直下のもの → サブフォルダの順）。見つけたフォルダは [folderMap] に足す
-  Future<List<DriveFileEntry>> _listDriveFolder(
-    String folderId,
-    String currentPath,
-    Map<String, String> folderMap,
-  ) async {
     final entries = <DriveFileEntry>[];
-    final subFolders = <Future<List<DriveFileEntry>>>[];
-    for (final item in await driveService.listFiles(folderId)) {
-      final name = item.name ?? '';
-      if (name.isEmpty) continue;
-      final path = currentPath.isEmpty ? name : '$currentPath/$name';
-      // 手元のパスにできない名前（`..`・`/` 入りなど）と、点で始まるもの（アプリが手元で使う `.sync`・`.kokage`）は Drive から取らない
-      if (!isSafePathSegment(name) || isHiddenPath(path)) {
-        AppLogger.log('[SyncEngine] Drive の項目を飛ばした（手元に置けない名前）: ${item.id} "$name"');
-        continue;
+    var currentLevel = <({String id, String path})>[
+      (id: rootFolderId, path: ''),
+    ];
+
+    while (currentLevel.isNotEmpty) {
+      final chunks = <List<String>>[];
+      for (
+        var i = 0;
+        i < currentLevel.length;
+        i += DriveApiClient.maxParentsPerListQuery
+      ) {
+        final end =
+            (i + DriveApiClient.maxParentsPerListQuery < currentLevel.length)
+                ? i + DriveApiClient.maxParentsPerListQuery
+                : currentLevel.length;
+        chunks.add([for (var j = i; j < end; j++) currentLevel[j].id]);
       }
-      if (item.mimeType == _folderMime) {
-        folderMap[item.id!] = path;
-        subFolders.add(_listDriveFolder(item.id!, path, folderMap));
-      } else if (matchesSyncPattern(name)) {
-        entries.add(DriveFileEntry(file: item, relativePath: normalizeRelativePath(path)));
+
+      final chunkMaps = List<Map<String, List<gdrive.File>>?>.filled(
+        chunks.length,
+        null,
+      );
+      await runParallel<void>(
+        List.generate(chunks.length, (idx) => () async {
+          final chunk = chunks[idx];
+          if (chunk.length == 1) {
+            final single = chunk.single;
+            chunkMaps[idx] = {single: await driveService.listFiles(single)};
+          } else {
+            chunkMaps[idx] = await driveService.listFilesForParents(chunk);
+          }
+        }),
+        maxConcurrency: maxListConcurrency,
+      );
+
+      final itemsByParent = <String, List<gdrive.File>>{};
+      for (final map in chunkMaps) {
+        if (map != null) itemsByParent.addAll(map);
       }
+
+      final nextLevel = <({String id, String path})>[];
+      for (final folder in currentLevel) {
+        final items = itemsByParent[folder.id] ?? const <gdrive.File>[];
+        for (final item in items) {
+          final name = item.name ?? '';
+          if (name.isEmpty) continue;
+          final path = folder.path.isEmpty ? name : '${folder.path}/$name';
+          // 手元のパスにできない名前（`..`・`/` 入りなど）と、点で始まるもの（アプリが手元で使う `.sync`・`.kokage`）は Drive から取らない
+          if (!isSafePathSegment(name) || isHiddenPath(path)) {
+            AppLogger.log(
+              '[SyncEngine] Drive の項目を飛ばした（手元に置けない名前）: ${item.id} "$name"',
+            );
+            continue;
+          }
+          if (item.mimeType == _folderMime) {
+            final id = item.id;
+            if (id != null && !folderMap.containsKey(id)) {
+              folderMap[id] = path;
+              nextLevel.add((id: id, path: path));
+            }
+          } else if (matchesSyncPattern(name)) {
+            entries.add(
+              DriveFileEntry(
+                file: item,
+                relativePath: normalizeRelativePath(path),
+              ),
+            );
+          }
+        }
+      }
+      currentLevel = nextLevel;
     }
-    for (final sub in await Future.wait(subFolders)) {
-      entries.addAll(sub);
-    }
-    return entries;
+
+    return DriveTree(files: entries, folderMap: folderMap);
   }
 
   // ========== 並列実行 ==========
@@ -348,19 +397,25 @@ class SyncFileOperations {
     final results = <T>[];
     final active = <Future<void>>[];
 
-    for (final task in tasks) {
-      if (active.length >= maxConcurrency) {
-        await Future.any(active);
+    try {
+      for (final task in tasks) {
+        if (active.length >= maxConcurrency) {
+          await Future.any(active);
+        }
+
+        final future = task().then(results.add);
+        active.add(future);
+        future.whenComplete(() => active.remove(future)).ignore();
       }
 
-      final future = task().then(results.add);
-      active.add(future);
-      // ignore: unawaited_futures
-      future.whenComplete(() => active.remove(future));
+      await Future.wait(active);
+      return results;
+    } catch (_) {
+      for (final f in active) {
+        f.ignore();
+      }
+      rethrow;
     }
-
-    await Future.wait(active);
-    return results;
   }
 }
 

@@ -294,7 +294,8 @@ class GpsHistoryRecorder extends ChangeNotifier {
     _consolidationTimer?.cancel();
     _consolidationTimer = null;
 
-    // 残りを確実に反映
+    // 進行中の raw 書き込みを待ってから残りを確実に反映
+    await Future.wait(_writing.toList());
     await _consolidate();
 
     AppLogger.debug('$_logTag: 記録停止');

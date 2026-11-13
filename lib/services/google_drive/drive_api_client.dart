@@ -17,6 +17,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:googleapis/drive/v3.dart' as drive;
@@ -45,20 +46,45 @@ class DriveFileMetadata {
   });
 }
 
+/// Drive Changes API の差分取得結果
+class DriveChangeBatch {
+  final List<drive.Change> changes;
+  final String newStartPageToken;
+  final bool overflowed;
+
+  const DriveChangeBatch({
+    required this.changes,
+    required this.newStartPageToken,
+    this.overflowed = false,
+  });
+}
+
 /// Drive API v3 の CRUD・ページネーション・一時的ネットワーク失敗リトライを担当するクライアント
 class DriveApiClient {
   final drive.DriveApi? Function() _apiProvider;
+  final Future<bool> Function()? onUnauthorized;
 
-  const DriveApiClient(this._apiProvider);
+  const DriveApiClient(
+    this._apiProvider, {
+    this.onUnauthorized,
+  });
 
   static const String folderMime = 'application/vnd.google-apps.folder';
+
+  /// 1 回の `files.list` にまとめる親フォルダ ID の上限（URL 長と Drive 検索式の複雑度上限に対して十分安全な値）
+  static const int maxParentsPerListQuery = 40;
+
+  /// レート制限・5xx 応答に対する最大リトライ回数
+  static const int maxRateLimitRetries = 4;
+
+  static final Random _jitterRandom = Random();
 
   /// 上げたときに返してもらう項目。
   /// 同期の帳簿に Drive 側の時刻を控える（端末の時計と比べない。KMetaSyncFile.remoteModifiedTime）
   static const String _uploadedFields =
       'id, name, modifiedTime, size, md5Checksum, parents';
 
-  /// 通信の一時的な失敗（名前解決の失敗・接続切れ・時間切れ）を 1 回だけ待って取り直すまでの間
+  /// 通信の一時的な失敗やレート制限時の基準待機時間（テストでは Duration.zero に差し替え可能）
   static Duration transientRetryDelay = const Duration(milliseconds: 800);
 
   /// Drive の検索式に入れる文字列リテラル（`'` と `\` を逃がす）。
@@ -83,11 +109,13 @@ class DriveApiClient {
     String q, {
     String? fields,
   }) async {
-    final result = await api.files.list(
-      q: q,
-      $fields: fields,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
+    final result = await retryTransient(
+      () => api.files.list(
+        q: q,
+        $fields: fields,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      ),
     );
     return result.files ?? [];
   }
@@ -121,18 +149,68 @@ class DriveApiClient {
     return out;
   }
 
-  /// 読むだけの呼び出し（一覧・情報取得）を、通信の一時的な失敗なら 1 回だけ取り直す。
+  /// 読むだけの呼び出し（一覧・情報取得）を、通信の一時的な失敗なら 1 回、
+  /// Drive API のレート制限（429 / 403 rateLimitExceeded）や 5xx なら指数バックオフ付きで取り直す。
   ///
-  /// Wi-Fi の切り替わりで名前解決が一瞬落ちる（`Failed host lookup: 'www.googleapis.com'`）ことがある
-  /// （2026-10-12、Android 実機）。書き込みは二重になりうるので使わない。API のエラー（4xx/5xx）はそのまま投げる
+  /// Wi-Fi の切り替わりで名前解決が一瞬落ちることがある（2026-10-12、Android 実機）。
+  /// またサブフォルダが多い共有フォルダの一斉走査で per-user 秒間上限に触れた場合もバックオフで吸収する。
+  /// 権限エラー（403 insufficientFilePermissions）や 404 はリトライせずそのまま投げる。
   static Future<T> retryTransient<T>(Future<T> Function() call) async {
+    var rateLimitAttempt = 0;
+    var retriedNetwork = false;
+    while (true) {
+      try {
+        return await call();
+      } on Object catch (e) {
+        if (isRateLimitOrServerError(e) &&
+            rateLimitAttempt < maxRateLimitRetries) {
+          final baseMs = transientRetryDelay.inMilliseconds * (1 << rateLimitAttempt);
+          final jitterMs =
+              baseMs > 0 ? _jitterRandom.nextInt((baseMs ~/ 4) + 1) : 0;
+          final wait = Duration(milliseconds: baseMs + jitterMs);
+          rateLimitAttempt++;
+          AppLogger.debug(
+            '[GoogleDriveService] レート制限/一時サーバーエラーのため待機して再試行 ($rateLimitAttempt/$maxRateLimitRetries): $e',
+          );
+          if (wait > Duration.zero) {
+            await Future<void>.delayed(wait);
+          }
+          continue;
+        }
+        if (e is! drive.ApiRequestError &&
+            isNetworkError(e) &&
+            !retriedNetwork) {
+          retriedNetwork = true;
+          AppLogger.debug('[GoogleDriveService] 通信の一時的な失敗。1 回だけ取り直す: $e');
+          if (transientRetryDelay > Duration.zero) {
+            await Future<void>.delayed(transientRetryDelay);
+          }
+          continue;
+        }
+        rethrow;
+      }
+    }
+  }
+
+  /// HTTP 401（アクセストークン期限切れ）を受けたときに 1 回だけ [onUnauthorized] でトークンを更新して再実行する
+  Future<T> _runWithAuthRetry<T>(
+    Future<T> Function(drive.DriveApi api) body,
+  ) async {
+    final api = _apiProvider();
+    if (api == null) throw StateError('Drive にサインインしていない');
     try {
-      return await call();
+      return await body(api);
     } on Object catch (e) {
-      if (e is drive.ApiRequestError || !isNetworkError(e)) rethrow;
-      AppLogger.debug('[GoogleDriveService] 通信の一時的な失敗。1 回だけ取り直す: $e');
-      await Future<void>.delayed(transientRetryDelay);
-      return call();
+      final refresh = onUnauthorized;
+      if (isUnauthorizedError(e) && refresh != null) {
+        AppLogger.debug('[GoogleDriveService] 401 応答を検出。トークンを再取得して再試行します');
+        final refreshed = await refresh();
+        final nextApi = refreshed ? _apiProvider() : null;
+        if (nextApi != null) {
+          return await body(nextApi);
+        }
+      }
+      rethrow;
     }
   }
 
@@ -162,16 +240,16 @@ class DriveApiClient {
     );
   }
 
-  /// API を掴んでいれば [body] を呼ぶ。掴んでいなければ、または失敗したら [fallback]（失敗は [what] を添えてログに残す）
+  /// API を掴んでいれば [body] を呼ぶ（401 時は 1 回だけトークン再取得を試す）。
+  /// 掴んでいなければ、または失敗したら [fallback]（失敗は [what] を添えてログに残す）
   Future<T> _call<T>(
     String what,
     T fallback,
     Future<T> Function(drive.DriveApi api) body,
   ) async {
-    final api = _apiProvider();
-    if (api == null) return fallback;
+    if (_apiProvider() == null) return fallback;
     try {
-      return await body(api);
+      return await _runWithAuthRetry(body);
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] $what: $e');
       return fallback;
@@ -210,8 +288,7 @@ class DriveApiClient {
   /// フォルダを確かめる。失敗は「通信できない」「権限が無い」「無い」「その他」に分けて返す（投げない）。
   /// 共有フォルダにもアクセスするため supportsAllDrives=true を設定
   Future<FolderLookup> lookupFolder(String folderId) async {
-    final api = _apiProvider();
-    if (api == null) {
+    if (_apiProvider() == null) {
       return const FolderLookup.failed(
         FolderLookupFailure.other,
         'not signed in',
@@ -219,12 +296,14 @@ class DriveApiClient {
     }
 
     try {
-      final result = await retryTransient(
-        () => api.files.get(
-          folderId,
-          $fields:
-              'id, name, mimeType, md5Checksum, modifiedTime, owners, capabilities',
-          supportsAllDrives: true,
+      final result = await _runWithAuthRetry(
+        (api) => retryTransient(
+          () => api.files.get(
+            folderId,
+            $fields:
+                'id, name, mimeType, md5Checksum, modifiedTime, owners, capabilities',
+            supportsAllDrives: true,
+          ),
         ),
       );
       return FolderLookup.found(result as drive.File);
@@ -260,7 +339,11 @@ class DriveApiClient {
     String parentId,
   ) =>
       _call('アップロードエラー', null, (api) async {
-        final existing = await _findFileByName(fileName, parentId);
+        final existing = (await _list(
+          api,
+          'name = ${queryLiteral(fileName)} and ${inParents(parentId)} and trashed = false',
+        ))
+            .firstOrNull;
         final result = await _put(
           api,
           bytes,
@@ -329,7 +412,7 @@ class DriveApiClient {
   }) =>
       _call('ファイル移動エラー', false, (api) async {
         final removeParent =
-            oldParentId ?? (await getFileMetadata(fileId))?.parents.firstOrNull;
+            oldParentId ?? (await _fetchMetadataWithApi(api, fileId)).parents.firstOrNull;
         // 同じ dir の中の改名なら親は触らない
         final sameParent = removeParent == newParentId;
         await api.files.update(
@@ -343,22 +426,33 @@ class DriveApiClient {
         return true;
       });
 
+  static Future<DriveFileMetadata> _fetchMetadataWithApi(
+    drive.DriveApi api,
+    String fileId,
+  ) async {
+    final file = await retryTransient(
+      () => api.files.get(
+        fileId,
+        $fields: 'id,name,trashed,modifiedTime,parents',
+        supportsAllDrives: true,
+      ),
+    ) as drive.File;
+    return DriveFileMetadata(
+      id: file.id ?? fileId,
+      name: file.name,
+      trashed: file.trashed ?? false,
+      modifiedTime: file.modifiedTime,
+      parents: file.parents ?? [],
+    );
+  }
+
   /// ファイルメタデータを取得。エラー・完全削除（404）なら null
   Future<DriveFileMetadata?> getFileMetadata(String fileId) =>
-      _call('ファイルメタデータ取得エラー', null, (api) async {
-        final file = await api.files.get(
-          fileId,
-          $fields: 'id,name,trashed,modifiedTime,parents',
-          supportsAllDrives: true,
-        ) as drive.File;
-        return DriveFileMetadata(
-          id: file.id ?? fileId,
-          name: file.name,
-          trashed: file.trashed ?? false,
-          modifiedTime: file.modifiedTime,
-          parents: file.parents ?? [],
-        );
-      });
+      _call(
+        'ファイルメタデータ取得エラー',
+        null,
+        (api) => _fetchMetadataWithApi(api, fileId),
+      );
 
   /// ファイルの中身をメモリ上にダウンロードする
   Future<Uint8List?> downloadBytes(
@@ -366,10 +460,12 @@ class DriveApiClient {
     void Function(int chunkBytes)? onChunk,
   }) =>
       _call('ダウンロードエラー', null, (api) async {
-        final response = await api.files.get(
-          fileId,
-          downloadOptions: drive.DownloadOptions.fullMedia,
-          supportsAllDrives: true,
+        final response = await retryTransient(
+          () => api.files.get(
+            fileId,
+            downloadOptions: drive.DownloadOptions.fullMedia,
+            supportsAllDrives: true,
+          ),
         );
         if (response is! drive.Media) {
           AppLogger.debug('[GoogleDriveService] ダウンロード応答が不正');
@@ -392,10 +488,12 @@ class DriveApiClient {
   }) =>
       _call('ダウンロードエラー', false, (api) async {
         onRetryReset?.call();
-        final response = await api.files.get(
-          fileId,
-          downloadOptions: drive.DownloadOptions.fullMedia,
-          supportsAllDrives: true,
+        final response = await retryTransient(
+          () => api.files.get(
+            fileId,
+            downloadOptions: drive.DownloadOptions.fullMedia,
+            supportsAllDrives: true,
+          ),
         );
         if (response is! drive.Media) {
           AppLogger.debug('[GoogleDriveService] ダウンロード応答が不正');
@@ -415,29 +513,114 @@ class DriveApiClient {
         }
       });
 
+  static const String _listItemFields =
+      'files(id, name, mimeType, modifiedTime, size, md5Checksum, parents)';
+
   /// フォルダ直下のファイルとフォルダの一覧（共有フォルダにも届くよう共有ドライブも含める）
   ///
   /// ⚠ 取れなければ投げる（空の一覧を返さない）。以前は失敗を空として返しており、
   /// 同期が取れなかったフォルダの中身を「Drive から消えた」と見て手元を消すおそれがあった
-  Future<List<drive.File>> listFiles(String parentId) async {
-    final api = _apiProvider();
-    if (api == null) throw StateError('Drive にサインインしていない');
-    return listAllPages(
-      api,
-      '${inParents(parentId)} and trashed = false',
-      // md5Checksum: 中身が同じなら落とさない・変更と見ない（同期の帳簿の remoteMd5 と比べる）
-      fields: 'files(id, name, mimeType, modifiedTime, size, md5Checksum, parents)',
-    );
+  Future<List<drive.File>> listFiles(String parentId) => _runWithAuthRetry(
+        (api) => listAllPages(
+          api,
+          '${inParents(parentId)} and trashed = false',
+          // md5Checksum: 中身が同じなら落とさない・変更と見ない（同期の帳簿の remoteMd5 と比べる）
+          fields: _listItemFields,
+        ),
+      );
+
+  /// 複数の親フォルダ直下のファイル・サブフォルダを一括取得し、親フォルダIDごとに振り分けて返す。
+  ///
+  /// サブフォルダが数百〜数千ある共有フォルダで、フォルダごとに `files.list` を投げると
+  /// Drive API の秒間レート制限に引っかかるため、最大 [maxParentsPerListQuery] 件ずつ `or` で束ねる。
+  Future<Map<String, List<drive.File>>> listFilesForParents(
+    List<String> parentIds,
+  ) async {
+    if (parentIds.isEmpty) return const {};
+    final uniqueIds = parentIds.toSet().toList(growable: false);
+    if (uniqueIds.length == 1) {
+      final single = uniqueIds.single;
+      return {single: await listFiles(single)};
+    }
+
+    final result = <String, List<drive.File>>{
+      for (final id in uniqueIds) id: <drive.File>[],
+    };
+    for (var i = 0; i < uniqueIds.length; i += maxParentsPerListQuery) {
+      final end = (i + maxParentsPerListQuery < uniqueIds.length)
+          ? i + maxParentsPerListQuery
+          : uniqueIds.length;
+      final chunk = uniqueIds.sublist(i, end);
+      if (chunk.length == 1) {
+        result[chunk.single]!.addAll(await listFiles(chunk.single));
+        continue;
+      }
+      final clause = chunk.map(inParents).join(' or ');
+      final files = await _runWithAuthRetry(
+        (api) => listAllPages(
+          api,
+          '($clause) and trashed = false',
+          fields: _listItemFields,
+        ),
+      );
+      for (final file in files) {
+        for (final pId in file.parents ?? const <String>[]) {
+          result[pId]?.add(file);
+        }
+      }
+    }
+    return result;
   }
 
-  /// ファイル名でファイルを検索
-  Future<drive.File?> _findFileByName(String name, String parentId) => _call(
-        '同名ファイルの検索エラー',
-        null,
-        (api) async => (await _list(
-          api,
-          'name = ${queryLiteral(name)} and ${inParents(parentId)} and trashed = false',
-        ))
-            .firstOrNull,
-      );
+  // ========== Changes API（差分検知） ==========
+
+  /// Drive Changes API の開始ページトークンを取得する（失敗時は null）
+  Future<String?> getChangesStartPageToken() =>
+      _call('変更開始トークン取得エラー', null, (api) async {
+        final res = await retryTransient(
+          () => api.changes.getStartPageToken(supportsAllDrives: true),
+        );
+        return res.startPageToken;
+      });
+
+  /// [pageToken] 以降の Drive 変更履歴を取得する。
+  /// [maxChanges] 件を超えた場合は `overflowed: true` で打ち切り、呼び出し側で全キャッシュ破棄にフォールバックさせる。
+  Future<DriveChangeBatch?> listChanges(
+    String pageToken, {
+    int maxChanges = 5000,
+  }) =>
+      _call('変更一覧取得エラー', null, (api) async {
+        final out = <drive.Change>[];
+        String? nextToken = pageToken;
+        String? newStartToken;
+        while (nextToken != null && nextToken.isNotEmpty) {
+          final currentToken = nextToken;
+          final page = await retryTransient(
+            () => api.changes.list(
+              currentToken,
+              pageSize: 1000,
+              includeItemsFromAllDrives: true,
+              supportsAllDrives: true,
+              includeRemoved: true,
+              $fields:
+                  'nextPageToken, newStartPageToken, changes(fileId, removed, file(id, name, mimeType, trashed, parents))',
+            ),
+          );
+          out.addAll(page.changes ?? const []);
+          if (out.length > maxChanges) {
+            return const DriveChangeBatch(
+              changes: [],
+              newStartPageToken: '',
+              overflowed: true,
+            );
+          }
+          newStartToken = page.newStartPageToken ?? newStartToken;
+          nextToken = page.nextPageToken;
+        }
+        if (newStartToken == null || newStartToken.isEmpty) return null;
+        return DriveChangeBatch(
+          changes: out,
+          newStartPageToken: newStartToken,
+        );
+      });
 }

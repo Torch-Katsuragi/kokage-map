@@ -149,7 +149,10 @@ class _FakeSyncEngine implements SyncEngine {
   }
 
   @override
-  Future<FolderSyncStatusDetail> checkSyncStatusDetail(String localPath) async {
+  Future<FolderSyncStatusDetail> checkSyncStatusDetail(
+    String localPath, {
+    bool useCache = false,
+  }) async {
     return const FolderSyncStatusDetail(status: FolderSyncStatus.synced);
   }
 

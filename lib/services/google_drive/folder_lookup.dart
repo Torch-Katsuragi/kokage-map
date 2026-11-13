@@ -75,6 +75,7 @@ class FolderLookup {
 /// フォルダ確認の失敗を分ける。API の応答（4xx/5xx）は状態コードで、そうでなければ通信の失敗かどうかで見る
 FolderLookupFailure classifyFolderLookupError(Object error) {
   if (error is drive.DetailedApiRequestError) {
+    if (isRateLimitOrServerError(error)) return FolderLookupFailure.other;
     return switch (error.status) {
       403 => FolderLookupFailure.forbidden,
       404 => FolderLookupFailure.notFound,

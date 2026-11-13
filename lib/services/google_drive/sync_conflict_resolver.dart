@@ -28,6 +28,7 @@ import '../geodiff/geodiff.dart';
 import '../kmeta_service.dart';
 import '../qgis/qgs_meta_store.dart';
 import 'drive_transfer_registry.dart';
+import 'drive_tree_cache.dart';
 import 'google_drive_service.dart';
 import 'gpkg_merger.dart';
 import 'gpkg_schema_aligner.dart';
@@ -213,6 +214,13 @@ class SyncConflictResolver {
         '[SyncEngine] Merge完了: ${run.uploaded} uploaded, '
         '${run.downloaded} downloaded, ${run.deleted} deleted, ${run.moved} moved',
       );
+      if (run.uploaded > 0 ||
+          run.deleted > 0 ||
+          run.moved > 0 ||
+          run.merged > 0 ||
+          run.createdFolders > 0) {
+        DriveTreeCache.instance.invalidate(driveId);
+      }
       if (!managedExternally) {
         registry.endTransfer(
           localPath,

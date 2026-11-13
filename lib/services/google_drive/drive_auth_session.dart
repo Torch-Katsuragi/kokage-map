@@ -61,6 +61,9 @@ class DriveAuthSession {
   /// 認証状態
   final DriveAuthState authState = DriveAuthState();
 
+  /// セッション破棄時（サインアウト・アカウント切替・トークン無効化）のフック
+  void Function()? onSessionDropped;
+
   /// 前回サインインしたメールアドレスを覚えておくキー。
   ///
   /// `login_hint` に渡すためだけに使う。⚠ **トークンを localStorage（SharedPreferences）に置かないこと。**
@@ -596,6 +599,7 @@ class DriveAuthSession {
     _driveApi = null;
     old?.close();
     _webSessionTokens.clear();
+    onSessionDropped?.call();
   }
 
   /// いまの API が実際に使えるか確かめ、死んでいれば取り直す
@@ -617,29 +621,60 @@ class DriveAuthSession {
       AppLogger.debug('[GoogleDriveService] APIが失効している: $e');
       _dropApi();
       if (PlatformCapabilities.isWeb) return restoreWebAuthorization();
-      return refreshToken();
+      return refreshToken(force: true, userGesture: true);
     }
   }
 
   /// トークンをリフレッシュしてDrive APIを再初期化
-  /// トークン期限切れエラー時に呼び出す
-  Future<bool> refreshToken() async {
+  ///
+  /// [force] が true（401 応答を受けた直後など）のときは、同じトークン文字列であっても
+  /// クライアントを作り直す。web で [userGesture] が false（自動同期タイマーなど）のときは
+  /// ポップアップを開かず、有効な API が既にあればそのまま維持する。
+  Future<bool> refreshToken({
+    bool force = false,
+    bool userGesture = false,
+  }) async {
     if (!_isInitialized) return false;
 
     // ⚠ web の復元セッション（無音復元）には GoogleSignInAccount が無く、
-    // 下の native 向けの経路では立て直せない。復元をやり直す。
+    // 下の native 向けの経路では立て直せない。自動同期などクリックの無い経路では
+    // 生きている API を壊さないよう、force でなければそのまま維持する。
     if (PlatformCapabilities.isWeb) {
+      if (!force && _driveApi != null) return true;
       _dropApi();
-      return restoreWebAuthorization();
+      return userGesture
+          ? restoreWebAuthorization()
+          : _restoreWebSessionToken();
     }
 
     try {
-      // アカウントを掴んでいなければ無音復元だけ試す（画面は出さない。
-      // 自動同期などユーザー操作の無い経路から呼ばれるため）
-      if (_currentUser == null) return await restoreSessionSilently();
+      if (force) {
+        _apiToken = null;
+      }
+      // 無音復元で起動したセッションは _currentUser が null のまま _driveApi だけを持つ。
+      // restoreSessionSilently() は isDriveApiAvailable で即 return するため、
+      // 未接続時のみ無音復元を呼び、接続済みなら authorizationClient から直接トークンを取り直す。
+      if (!isDriveApiAvailable && _currentUser == null) {
+        return await (_silentRestoreInFlight ??=
+            _restoreNativeSessionSilently()
+                .whenComplete(() => _silentRestoreInFlight = null));
+      }
 
-      // Drive APIを再初期化（新しいトークンを取得）
-      await _initializeDriveApi(_currentUser!);
+      final authClient =
+          _currentUser?.authorizationClient ??
+          GoogleSignIn.instance.authorizationClient;
+      final authorization = await authClient.authorizationForScopes(scopes);
+      if (authorization == null) {
+        if (force) {
+          _dropApi();
+          authState.setUnauthenticated();
+        }
+        return false;
+      }
+      useToken(
+        authorization.accessToken,
+        () => authorization.authClient(scopes: scopes),
+      );
       AppLogger.debug('[GoogleDriveService] トークンリフレッシュ成功');
       return true;
     } catch (e) {

@@ -225,11 +225,15 @@ class QgsProjectBuilder {
 
   static final _saveTimePatterns = [
     RegExp('saveDateTime="[^"]*"'),
+    RegExp('saveUserFull="[^"]*"'),
     RegExp('(<savedAt[^>]*>)[^<]*(</savedAt>)'),
     RegExp('(<properties[^>]*name="savedAt"[^>]*>)[^<]*(</properties>)'),
+    RegExp('(<app[^>]*>)kokage-map[^<]*(</app>)'),
+    RegExp('(<properties[^>]*name="app"[^>]*>)kokage-map[^<]*(</properties>)'),
   ];
 
-  /// 保存時刻（root の `saveDateTime` と印の `savedAt`）を伏せた本文
+  /// 保存時刻やアプリ版数の印（root の `saveDateTime` / `saveUserFull`、印の `savedAt` / `app`）を伏せた本文。
+  /// アプリのバージョンアップだけで中身の変わらない `.qgs` を書き直して未同期扱いにしない
   static String _withoutSaveTime(String xml) {
     var s = xml;
     for (final re in _saveTimePatterns) {

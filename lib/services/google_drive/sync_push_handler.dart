@@ -24,6 +24,7 @@ import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
 import '../qgis/qgs_auto_refresh.dart';
+import 'drive_tree_cache.dart';
 import 'google_drive_service.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
@@ -118,6 +119,7 @@ class SyncPushHandler {
       AppLogger.debug(
         '[SyncEngine] Push完了: ${uploads.uploaded} uploaded, $deletedCount deleted, ${uploads.skipped} skipped',
       );
+      DriveTreeCache.instance.invalidate(driveFolder);
 
       // 上げようとして 1 つも上がらなかったときだけ失敗（変わっていないものしか無い push は成功。
       // 以前は改名・削除だけの push も失敗扱いで、帳簿を書かずに終わっていた）

@@ -21,28 +21,39 @@ class FakeDriveItem {
     required this.name,
     required this.parentId,
     this.isFolder = false,
+    this.ownedByMe,
+    this.canEdit,
     Uint8List? bytes,
     DateTime? modifiedTime,
-  })  : bytes = bytes ?? Uint8List(0),
-        modifiedTime = modifiedTime ?? DateTime.now();
+  }) : bytes = bytes ?? Uint8List(0),
+       modifiedTime = modifiedTime ?? DateTime.now();
 
   final String id;
   String name;
   String? parentId;
   final bool isFolder;
+  bool? ownedByMe;
+  bool? canEdit;
   Uint8List bytes;
   DateTime modifiedTime;
   bool trashed = false;
 
   drive.File toFile() => drive.File(
-        id: id,
-        name: name,
-        mimeType: isFolder ? _folderMime : 'application/octet-stream',
-        modifiedTime: modifiedTime,
-        size: isFolder ? null : '${bytes.length}',
-        md5Checksum: isFolder || !withMd5 ? null : md5.convert(bytes).toString(),
-        parents: parentId == null ? null : [parentId!],
-      );
+    id: id,
+    name: name,
+    mimeType: isFolder ? _folderMime : 'application/octet-stream',
+    modifiedTime: modifiedTime,
+    size: isFolder ? null : '${bytes.length}',
+    md5Checksum: isFolder || !withMd5 ? null : md5.convert(bytes).toString(),
+    parents: parentId == null ? null : [parentId!],
+    owners: ownedByMe == null ? null : [drive.User(me: ownedByMe)],
+    capabilities: canEdit == null
+        ? null
+        : drive.FileCapabilities(
+            canEdit: canEdit,
+            canAddChildren: canEdit,
+          ),
+  );
 
   /// false にすると md5Checksum を返さない（Google ドキュメントなど指紋の無いもの・古い応答を模す）
   static bool withMd5 = true;
@@ -52,12 +63,43 @@ class FakeGoogleDrive implements GoogleDriveService {
   final Map<String, FakeDriveItem> items = {};
   int _seq = 0;
 
+  /// Changes API 用の変更履歴
+  final List<drive.Change> _changeLog = [];
+
+  /// false にすると getChangesStartPageToken が null を返す（Changes API 非対応の模擬）
+  bool changesSupported = true;
+
+  /// true にすると listChanges が null（取得失敗）を返す
+  bool failListChanges = false;
+
+  /// 一覧取得ごとの人工遅延（並列数制限テスト用）
+  Duration listDelay = Duration.zero;
+
+  /// ダウンロードごとの人工遅延（転送スケジューリング順序テスト用）
+  Duration downloadDelay = Duration.zero;
+
+  int _activeListCalls = 0;
+  int maxConcurrentListCalls = 0;
+
+  /// ダウンロードされたファイル ID の順序記録
+  final List<String> downloadedOrder = [];
+
   /// 呼ばれた回数（どの経路を通ったかの確認用）
   final Map<String, int> calls = {};
 
   void _count(String name) => calls[name] = (calls[name] ?? 0) + 1;
 
   String _newId() => 'fake${++_seq}';
+
+  void _recordChange(FakeDriveItem item) {
+    _changeLog.add(
+      drive.Change(
+        fileId: item.id,
+        removed: item.trashed,
+        file: item.trashed ? null : item.toFile(),
+      ),
+    );
+  }
 
   /// Drive サーバーの時計と端末の時計のずれ（サーバー = 端末 + [serverClockOffset]）。
   /// 負なら端末の時計が進んでいる
@@ -73,9 +115,20 @@ class FakeGoogleDrive implements GoogleDriveService {
   }
 
   /// テスト用: ルート直下にフォルダを作る
-  String createRootFolder(String name) {
+  String createRootFolder(
+    String name, {
+    bool? ownedByMe,
+    bool? canEdit,
+  }) {
     final id = _newId();
-    items[id] = FakeDriveItem(id: id, name: name, parentId: null, isFolder: true);
+    items[id] = FakeDriveItem(
+      id: id,
+      name: name,
+      parentId: null,
+      isFolder: true,
+      ownedByMe: ownedByMe,
+      canEdit: canEdit,
+    );
     return id;
   }
 
@@ -139,7 +192,9 @@ class FakeGoogleDrive implements GoogleDriveService {
     if (error != null) return FolderLookup.fromError(error);
     final f = items[folderId];
     if (f == null || f.trashed) {
-      return FolderLookup.fromError(drive.DetailedApiRequestError(404, 'File not found: $folderId'));
+      return FolderLookup.fromError(
+        drive.DetailedApiRequestError(404, 'File not found: $folderId'),
+      );
     }
     return FolderLookup.found(f.toFile());
   }
@@ -158,49 +213,141 @@ class FakeGoogleDrive implements GoogleDriveService {
   @override
   Future<List<drive.File>> listFiles(String parentId) async {
     _count('listFiles');
-    if (failListFor.contains(parentId)) throw Exception('一覧を取れない: $parentId');
-    return childrenOf(parentId).map((i) => i.toFile()).toList();
+    _activeListCalls++;
+    if (_activeListCalls > maxConcurrentListCalls) {
+      maxConcurrentListCalls = _activeListCalls;
+    }
+    try {
+      if (listDelay > Duration.zero) {
+        await Future<void>.delayed(listDelay);
+      }
+      if (failListFor.contains(parentId)) {
+        throw Exception('一覧を取れない: $parentId');
+      }
+      return childrenOf(parentId).map((i) => i.toFile()).toList();
+    } finally {
+      _activeListCalls--;
+    }
+  }
+
+  @override
+  Future<Map<String, List<drive.File>>> listFilesForParents(
+    List<String> parentIds,
+  ) async {
+    _count('listFilesForParents');
+    _activeListCalls++;
+    if (_activeListCalls > maxConcurrentListCalls) {
+      maxConcurrentListCalls = _activeListCalls;
+    }
+    try {
+      if (listDelay > Duration.zero) {
+        await Future<void>.delayed(listDelay);
+      }
+      final out = <String, List<drive.File>>{};
+      for (final id in parentIds.toSet()) {
+        if (failListFor.contains(id)) {
+          throw Exception('一覧を取れない: $id');
+        }
+        out[id] = childrenOf(id).map((i) => i.toFile()).toList();
+      }
+      return out;
+    } finally {
+      _activeListCalls--;
+    }
+  }
+
+  @override
+  Future<String?> getChangesStartPageToken() async {
+    _count('getChangesStartPageToken');
+    if (!changesSupported) return null;
+    return '${_changeLog.length + 1}';
+  }
+
+  @override
+  Future<DriveChangeBatch?> listChanges(
+    String pageToken, {
+    int maxChanges = 5000,
+  }) async {
+    _count('listChanges');
+    if (!changesSupported || failListChanges) return null;
+    final tokenNum = int.tryParse(pageToken);
+    if (tokenNum == null || tokenNum < 1) return null;
+    final startIdx = (tokenNum - 1).clamp(0, _changeLog.length);
+    final slice = _changeLog.sublist(startIdx);
+    if (slice.length > maxChanges) {
+      return const DriveChangeBatch(
+        changes: [],
+        newStartPageToken: '',
+        overflowed: true,
+      );
+    }
+    return DriveChangeBatch(
+      changes: slice,
+      newStartPageToken: '${_changeLog.length + 1}',
+    );
   }
 
   /// テスト用: この名前のサブフォルダは見つけることも作ることもできない（権限・電波など）
   final Set<String> failFolderNames = {};
 
   @override
-  Future<drive.File?> getOrCreateSubFolder(String parentId, String folderName) async {
+  Future<drive.File?> getOrCreateSubFolder(
+    String parentId,
+    String folderName,
+  ) async {
     _count('getOrCreateSubFolder');
     if (failFolderNames.contains(folderName)) return null;
     final existing = findByName(parentId, folderName);
     if (existing != null && existing.isFolder) return existing.toFile();
     final id = _newId();
-    items[id] = FakeDriveItem(id: id, name: folderName, parentId: parentId, isFolder: true);
-    return items[id]!.toFile();
+    final created = FakeDriveItem(
+      id: id,
+      name: folderName,
+      parentId: parentId,
+      isFolder: true,
+    );
+    items[id] = created;
+    _recordChange(created);
+    return created.toFile();
   }
 
   @override
-  Future<drive.File?> uploadBytes(Uint8List bytes, String fileName, String parentId) async {
+  Future<drive.File?> uploadBytes(
+    Uint8List bytes,
+    String fileName,
+    String parentId, {
+    bool emitChangeEvent = true,
+  }) async {
     _count('uploadBytes');
     final existing = findByName(parentId, fileName);
     if (existing != null && !existing.isFolder) {
       existing
         ..bytes = Uint8List.fromList(bytes)
         ..modifiedTime = _stamp();
+      if (emitChangeEvent) _recordChange(existing);
       return existing.toFile();
     }
     final id = _newId();
-    items[id] = FakeDriveItem(
+    final created = FakeDriveItem(
       id: id,
       name: fileName,
       parentId: parentId,
       bytes: Uint8List.fromList(bytes),
       modifiedTime: _stamp(),
     );
-    return items[id]!.toFile();
+    items[id] = created;
+    if (emitChangeEvent) _recordChange(created);
+    return created.toFile();
   }
 
   @override
   Future<drive.File?> uploadFile(String localPath, String parentId) async {
     _count('uploadFile');
-    return uploadBytes(await File(localPath).readAsBytes(), p.basename(localPath), parentId);
+    return uploadBytes(
+      await File(localPath).readAsBytes(),
+      p.basename(localPath),
+      parentId,
+    );
   }
 
   @override
@@ -217,6 +364,7 @@ class FakeGoogleDrive implements GoogleDriveService {
         ..bytes = bytes
         ..name = p.basename(localPath)
         ..modifiedTime = _stamp();
+      _recordChange(existing);
       return existing.toFile();
     }
     return uploadBytes(bytes, p.basename(localPath), parentId);
@@ -234,9 +382,13 @@ class FakeGoogleDrive implements GoogleDriveService {
   }) async {
     _count('downloadFile');
     onRetryReset?.call();
+    if (downloadDelay > Duration.zero) {
+      await Future<void>.delayed(downloadDelay);
+    }
     if (failDownloadFor.contains(fileId)) return false;
     final f = items[fileId];
     if (f == null || f.isFolder || f.trashed) return false;
+    downloadedOrder.add(fileId);
     await File(localPath).parent.create(recursive: true);
     await File(localPath).writeAsBytes(f.bytes, flush: true);
     onChunk?.call(f.bytes.length);
@@ -249,6 +401,7 @@ class FakeGoogleDrive implements GoogleDriveService {
     final f = items[fileId];
     if (f == null) return false;
     f.trashed = true;
+    _recordChange(f);
     return true;
   }
 
@@ -267,20 +420,32 @@ class FakeGoogleDrive implements GoogleDriveService {
   }
 
   @override
-  Future<bool> moveFile(String fileId, {required String newParentId, String? oldParentId, String? newName}) async {
+  Future<bool> moveFile(
+    String fileId, {
+    required String newParentId,
+    String? oldParentId,
+    String? newName,
+  }) async {
     _count('moveFile');
     final f = items[fileId];
     if (f == null) return false;
     f.parentId = newParentId;
     if (newName != null) f.name = newName;
+    _recordChange(f);
     return true;
   }
 
   /// テスト用: 別の端末が Drive 上のファイルを書き換えたことにする
-  void touch(String fileId, Uint8List bytes) {
-    items[fileId]!
+  void touch(
+    String fileId,
+    Uint8List bytes, {
+    bool emitChangeEvent = true,
+  }) {
+    final item = items[fileId]!;
+    item
       ..bytes = bytes
       ..modifiedTime = _stamp();
+    if (emitChangeEvent) _recordChange(item);
   }
 
   @override

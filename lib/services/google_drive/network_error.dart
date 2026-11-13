@@ -22,6 +22,7 @@ library;
 
 import 'dart:async';
 
+import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 
 /// 通信の失敗そのものを示す語（`toString()` を小文字にして探す）。
@@ -43,9 +44,39 @@ const _networkMarkers = [
   'timed out',
 ];
 
+const _rateLimitMarkers = [
+  'ratelimitexceeded',
+  'userratelimitexceeded',
+  'quotaexceeded',
+  'sharingratelimitexceeded',
+  'toomanyrequests',
+];
+
 /// [error] が通信の失敗（圏外・名前解決の失敗・接続切れ・時間切れ）か
 bool isNetworkError(Object error) {
   if (error is http.ClientException || error is TimeoutException) return true;
   final text = error.toString().toLowerCase();
   return _networkMarkers.any(text.contains);
 }
+
+/// [error] が Drive API の一時的なレート制限（429 / 403 rateLimitExceeded 等）または 5xx サーバーエラーか。
+/// 権限不足（403 insufficientFilePermissions 等）は含めない
+bool isRateLimitOrServerError(Object error) {
+  if (error is! drive.DetailedApiRequestError) return false;
+  final status = error.status;
+  if (status == 429) return true;
+  if (status != null && status >= 500 && status < 600) return true;
+  if (status == 403) {
+    for (final detail in error.errors) {
+      final reason = detail.reason?.toLowerCase() ?? '';
+      if (_rateLimitMarkers.any(reason.contains)) return true;
+    }
+    final msg = (error.message ?? '').toLowerCase();
+    return _rateLimitMarkers.any(msg.contains);
+  }
+  return false;
+}
+
+/// [error] が OAuth アクセストークンの失効・未認証（HTTP 401）か
+bool isUnauthorizedError(Object error) =>
+    error is drive.DetailedApiRequestError && error.status == 401;

@@ -137,6 +137,47 @@ void main() {
       expect(plan.decisions.single.entry.relativePath, 'old_name.qgs');
       expect(plan.decisions.single.choice, MergeChoice.local);
     });
+
+    test('read-only folder never plans local uploads or conflicts and only pulls remote changes', () async {
+      final entries = [
+        const MergeFileEntry(
+          relativePath: 'project.qgs',
+          localChange: MergeChangeType.modified,
+          remoteChange: MergeChangeType.modified,
+          mergeable: false,
+        ),
+        const MergeFileEntry(
+          relativePath: 'local_note.gpkg',
+          localChange: MergeChangeType.added,
+          remoteChange: MergeChangeType.none,
+        ),
+        const MergeFileEntry(
+          relativePath: 'photos/new_remote.jpg',
+          localChange: MergeChangeType.none,
+          remoteChange: MergeChangeType.added,
+        ),
+      ];
+
+      final plan = await AutoSyncService.planAutoMergeDecisions(
+        entries: entries,
+        localPath: '/proj/shared_ro',
+        failedMergeAt: const {},
+        isReadOnly: true,
+        isRenamedProjectFile: (_, _) async => false,
+      );
+
+      expect(plan.hasRealConflict, isFalse);
+      expect(plan.needsTreeRefresh, isTrue);
+      expect(plan.decisions.length, 2);
+      expect(
+        plan.decisions.map((d) => d.entry.relativePath).toList(),
+        ['project.qgs', 'photos/new_remote.jpg'],
+      );
+      expect(
+        plan.decisions.every((d) => d.choice == MergeChoice.remote),
+        isTrue,
+      );
+    });
   });
 
   group('DriveTransferRegistry path helpers & DriveUrlParser', () {

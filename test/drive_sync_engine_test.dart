@@ -348,8 +348,11 @@ void main() {
       detail = await engine.checkSyncStatusDetail(a);
       expect(detail.status, FolderSyncStatus.remoteChanges);
       expect((await engine.pullFolder(a, snapshot: detail.snapshot)).success, isTrue);
-      // 根・sub/・other/・empty/
-      expect((drive.calls['listFiles'], drive.calls['getFolderInfo']), (4, 1));
+      // 根（listFiles 1回）＋ sub/・other/・empty/ の一括取得（listFilesForParents 1回）
+      expect(
+        (drive.calls['listFiles'], drive.calls['listFilesForParents'], drive.calls['getFolderInfo']),
+        (1, 1, 1),
+      );
 
       await tick();
       put('keep.jpg', 30);
@@ -365,7 +368,10 @@ void main() {
       ];
       final r = await engine.executeMerge(a, decisions, snapshot: detail.snapshot);
       expect(r.success, isTrue, reason: r.errorMessage);
-      expect((drive.calls['listFiles'], drive.calls['getFolderInfo']), (4, 1));
+      expect(
+        (drive.calls['listFiles'], drive.calls['listFilesForParents'], drive.calls['getFolderInfo']),
+        (1, 1, 1),
+      );
       expect(local('mod.jpg').readAsBytesSync(), jpg(31));
       expect(drive.fileAt(rootId, 'keep.jpg')!.bytes, jpg(30));
     });

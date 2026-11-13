@@ -164,7 +164,7 @@ class _FakeSyncEngine implements SyncEngine {
   }
 
   @override
-  Future<FolderSyncStatusDetail> checkSyncStatusDetail(String localPath) async {
+  Future<FolderSyncStatusDetail> checkSyncStatusDetail(String localPath, {bool useCache = false}) async {
     final key = DriveTransferRegistry.normalizeKey(localPath);
     return statusByNormalizedPath[key] ??
         const FolderSyncStatusDetail(status: FolderSyncStatus.synced);

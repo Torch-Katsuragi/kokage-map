@@ -25,6 +25,7 @@ import '../../core/fs/k_file_system.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
+import 'drive_tree_cache.dart';
 import 'google_drive_service.dart';
 import 'sync_base_store.dart';
 import 'sync_engine.dart';
@@ -62,13 +63,25 @@ class SyncSnapshot {
 
   Map<String, KMetaSyncFile> get _ledger => meta.sync.files;
 
+  /// リモートの Drive フォルダへ書き込み可能か（読み取り専用指定、または Drive 側の権限が閲覧者のみなら false）
+  bool get canWriteRemote {
+    if (meta.sync.isReadOnly == true) return false;
+    final caps = folderInfo.capabilities;
+    if (caps != null && caps.canEdit == false && caps.canAddChildren != true) {
+      return false;
+    }
+    return true;
+  }
+
   /// 材料を集める。連携していなければ [FolderSyncStatus.notLinked]、Drive のフォルダを取れなければ
-  /// [FolderSyncStatus.error] を failure に返す
+  /// [FolderSyncStatus.error] を failure に返す。
+  /// [useCache] が true（自動同期）のときは [DriveTreeCache] に有効なエントリがあれば再利用し、手元の走査だけ行う。
   static Future<({SyncSnapshot? snapshot, FolderSyncStatus? failure})> take(
     String localPath, {
     required GoogleDriveService driveService,
     required KMetaService kmetaService,
     required SyncFileOperations fileOps,
+    bool useCache = false,
   }) async {
     final meta = await kmetaService.getMeta(localPath);
     final driveId = meta.sync.driveId;
@@ -76,21 +89,34 @@ class SyncSnapshot {
       AppLogger.debug('[SyncSnapshot] driveId が無い: $localPath');
       return (snapshot: null, failure: FolderSyncStatus.notLinked);
     }
-    // フォルダの確認・Drive の一覧・手元の走査は互いに待たない。
-    // どれかが失敗したら投げる（ParallelWaitError のままでは通知が読めないので、最初の失敗を投げ直す）
+
+    final cached = useCache
+        ? DriveTreeCache.instance.get(driveService, driveId)
+        : null;
     final gdrive.File? folderInfo;
     final DriveTree tree;
     final Map<String, DateTime> localFiles;
-    try {
-      (folderInfo, tree, localFiles) = await (
-        driveService.getFolderInfo(driveId),
-        fileOps.listDriveTree(driveId),
-        fileOps.scanLocalFiles(localPath),
-      ).wait;
-    } on ParallelWaitError<Object?, (AsyncError?, AsyncError?, AsyncError?)> catch (e) {
-      final first = e.errors.$1 ?? e.errors.$2 ?? e.errors.$3;
-      if (first == null) rethrow;
-      Error.throwWithStackTrace(first.error, first.stackTrace);
+    if (cached != null) {
+      folderInfo = cached.folderInfo;
+      tree = cached.tree;
+      localFiles = await fileOps.scanLocalFiles(localPath);
+    } else {
+      // フォルダの確認・Drive の一覧・手元の走査は互いに待たない。
+      // どれかが失敗したら投げる（ParallelWaitError のままでは通知が読めないので、最初の失敗を投げ直す）
+      try {
+        (folderInfo, tree, localFiles) = await (
+          driveService.getFolderInfo(driveId),
+          fileOps.listDriveTree(driveId),
+          fileOps.scanLocalFiles(localPath),
+        ).wait;
+      } on ParallelWaitError<Object?, (AsyncError?, AsyncError?, AsyncError?)> catch (e) {
+        final first = e.errors.$1 ?? e.errors.$2 ?? e.errors.$3;
+        if (first == null) rethrow;
+        Error.throwWithStackTrace(first.error, first.stackTrace);
+      }
+      if (folderInfo != null) {
+        DriveTreeCache.instance.put(driveService, driveId, folderInfo, tree);
+      }
     }
     if (folderInfo == null) {
       AppLogger.debug('[SyncSnapshot] Driveのフォルダを取れない: $driveId');

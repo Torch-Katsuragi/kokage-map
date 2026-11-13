@@ -240,11 +240,23 @@ class SyncEngine {
         showOsNotification: showOsNotification,
       );
 
-  Future<({SyncSnapshot? snapshot, FolderSyncStatus? failure})> _take(String localPath) =>
-      SyncSnapshot.take(localPath, driveService: _driveService, kmetaService: _kmetaService, fileOps: _fileOps);
+  Future<({SyncSnapshot? snapshot, FolderSyncStatus? failure})> _take(
+    String localPath, {
+    bool useCache = false,
+  }) =>
+      SyncSnapshot.take(
+        localPath,
+        driveService: _driveService,
+        kmetaService: _kmetaService,
+        fileOps: _fileOps,
+        useCache: useCache,
+      );
 
   /// 同期状態の詳細を取得（ファイルID単位でDriveとローカルを比較）
-  Future<FolderSyncStatusDetail> checkSyncStatusDetail(String localPath) async {
+  Future<FolderSyncStatusDetail> checkSyncStatusDetail(
+    String localPath, {
+    bool useCache = false,
+  }) async {
     if (!_driveService.isDriveApiAvailable) {
       return const FolderSyncStatusDetail(status: FolderSyncStatus.error);
     }
@@ -252,7 +264,7 @@ class SyncEngine {
       // 未完了クローンマーカーがある場合は、手元の途中状態ファイルをローカル変更や競合と誤認しないよう
       // 常にリモート変更（Pull再開待ち）として扱う
       if (await DriveTransferRegistry.instance.hasClonePending(localPath)) {
-        final taken = await _take(localPath);
+        final taken = await _take(localPath, useCache: useCache);
         if (taken.snapshot == null) {
           return FolderSyncStatusDetail(status: taken.failure!);
         }
@@ -262,7 +274,7 @@ class SyncEngine {
           snapshot: taken.snapshot,
         );
       }
-      final taken = await _take(localPath);
+      final taken = await _take(localPath, useCache: useCache);
       final snapshot = taken.snapshot;
       if (snapshot == null) return FolderSyncStatusDetail(status: taken.failure!);
       return await snapshot.toStatusDetail(_fileOps);

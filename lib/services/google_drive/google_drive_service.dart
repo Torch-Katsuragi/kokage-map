@@ -29,10 +29,11 @@ import 'package:http/http.dart' as http;
 import 'drive_api_client.dart';
 import 'drive_auth_session.dart';
 import 'drive_auth_state.dart';
+import 'drive_tree_cache.dart';
 import 'drive_url_parser.dart';
 import 'folder_lookup.dart';
 
-export 'drive_api_client.dart' show DriveFileMetadata;
+export 'drive_api_client.dart' show DriveChangeBatch, DriveFileMetadata;
 
 /// Google Drive連携サービス
 /// シングルトンパターンで実装
@@ -41,7 +42,11 @@ class GoogleDriveService {
   factory GoogleDriveService() => _instance;
 
   GoogleDriveService._internal() {
-    _api = DriveApiClient(() => _auth.driveApi);
+    _auth.onSessionDropped = DriveTreeCache.instance.clear;
+    _api = DriveApiClient(
+      () => _auth.driveApi,
+      onUnauthorized: () => _auth.refreshToken(force: true),
+    );
   }
 
   final DriveAuthSession _auth = DriveAuthSession();
@@ -100,7 +105,11 @@ class GoogleDriveService {
   Future<bool> ensureUsableApi() => _auth.ensureUsableApi();
 
   /// トークンをリフレッシュしてDrive APIを再初期化
-  Future<bool> refreshToken() => _auth.refreshToken();
+  Future<bool> refreshToken({
+    bool force = false,
+    bool userGesture = false,
+  }) =>
+      _auth.refreshToken(force: force, userGesture: userGesture);
 
   // ========== Drive API 操作（DriveApiClient へ委譲） ==========
 
@@ -202,6 +211,23 @@ class GoogleDriveService {
   /// フォルダ直下のファイルとフォルダの一覧（失敗時は例外を投げる）
   Future<List<drive.File>> listFiles(String parentId) =>
       _api.listFiles(parentId);
+
+  /// 複数の親フォルダ直下のファイルとフォルダを一括取得し、親フォルダIDごとに返す
+  Future<Map<String, List<drive.File>>> listFilesForParents(
+    List<String> parentIds,
+  ) =>
+      _api.listFilesForParents(parentIds);
+
+  /// Drive Changes API の開始ページトークンを取得する
+  Future<String?> getChangesStartPageToken() =>
+      _api.getChangesStartPageToken();
+
+  /// Drive Changes API で [pageToken] 以降の変更一覧を取得する
+  Future<DriveChangeBatch?> listChanges(
+    String pageToken, {
+    int maxChanges = 5000,
+  }) =>
+      _api.listChanges(pageToken, maxChanges: maxChanges);
 
   /// フォルダ情報を取得。取れなければ null（理由が要るなら [lookupFolder]）
   Future<drive.File?> getFolderInfo(String folderId) =>

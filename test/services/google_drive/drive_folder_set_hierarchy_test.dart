@@ -111,7 +111,7 @@ class _StubSyncEngine implements SyncEngine {
   }
 
   @override
-  Future<FolderSyncStatusDetail> checkSyncStatusDetail(String localPath) async =>
+  Future<FolderSyncStatusDetail> checkSyncStatusDetail(String localPath, {bool useCache = false}) async =>
       const FolderSyncStatusDetail(status: FolderSyncStatus.synced);
 
   @override

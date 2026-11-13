@@ -33,6 +33,7 @@ import '../projects_home.dart';
 import 'appdata_sync_service.dart';
 import 'drive_folder_set_service.dart';
 import 'drive_transfer_registry.dart';
+import 'drive_tree_cache.dart';
 import 'drive_tree_nodes.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';
@@ -338,7 +339,15 @@ class AutoSyncService {
     }
   }
 
-  Future<void> _syncUniqueDriveFolders(LayerTreeNode root) async {
+  /// スナップショット取得から実際の転送開始までにこの時間を超えていたら、転送直前に状態を取り直す
+  static const Duration _maxSnapshotAge = Duration(minutes: 2);
+
+  Future<void> _syncUniqueDriveFolders(
+    LayerTreeNode root, {
+    SyncEngine? engine,
+    GoogleDriveService? driveService,
+    bool skipRuntimeGuards = false,
+  }) async {
     final folders = DriveTreeNodes.collectDriveFolders(root);
     if (folders.isEmpty) return;
 
@@ -350,14 +359,109 @@ class AutoSyncService {
       final key = DriveTransferRegistry.normalizeKey(localPath);
       nodesByNormPath.putIfAbsent(key, () => <DriveFolderNode>[]).add(node);
     }
+    if (nodesByNormPath.isEmpty) return;
 
     AppLogger.debug(
       '[AutoSync] Found ${nodesByNormPath.length} unique Drive folder(s) (${folders.length} node(s))',
     );
-    final syncEngine = SyncEngine();
+    final drive = driveService ?? GoogleDriveService();
+    final syncEngine = engine ?? SyncEngine(driveService: drive);
+
+    await DriveTreeCache.instance.prepareCycle(drive);
+
+    // 第1パス: 全フォルダの同期状態を素早く判定し、転送不要なフォルダは即座に同期済み表示へ更新する。
+    // 数GB級の写真アーカイブ転送が先頭にあっても、後続の軽量フォルダが長時間エラー表示のまま待たされないようにする。
+    final pendingTransfers = <_PendingFolderSync>[];
 
     for (final group in nodesByNormPath.values) {
-      if (!_isWifi) {
+      if (!skipRuntimeGuards && !_isWifi) {
+        AppLogger.debug('[AutoSync] WiFi lost during status scan, aborting');
+        return;
+      }
+      if (_deferIfForegroundTransferActive(
+        '[AutoSync] Foreground transfer started during scan, deferring remaining',
+      )) {
+        return;
+      }
+
+      final primary = group.first;
+      final localPath = primary.getAbsoluteFilePath();
+      if (localPath == null) continue;
+
+      if (DriveTransferRegistry.instance.isBusy(localPath)) {
+        _setGroupStatus(group, SyncStatus.syncing);
+        onSyncStatusChanged?.call();
+        continue;
+      }
+
+      _setGroupStatus(group, SyncStatus.syncing);
+      onSyncStatusChanged?.call();
+
+      try {
+        final detail = await syncEngine.checkSyncStatusDetail(
+          localPath,
+          useCache: true,
+        );
+        final readOnly = _isReadOnlyFolder(primary, detail.snapshot);
+
+        switch (detail.status) {
+          case FolderSyncStatus.synced:
+            _setGroupStatus(group, SyncStatus.synced);
+            onSyncStatusChanged?.call();
+
+          case FolderSyncStatus.localChanges when readOnly:
+            AppLogger.debug(
+              '[AutoSync] ${primary.name}: read-only folder, ignoring local changes',
+            );
+            _setGroupStatus(group, SyncStatus.synced);
+            onSyncStatusChanged?.call();
+
+          case FolderSyncStatus.localChanges when detail.localDeleted > 0:
+            AppLogger.debug(
+              '[AutoSync] ${primary.name}: local deletions detected, skipping auto-push (manual sync required)',
+            );
+            _setGroupStatus(group, SyncStatus.localChanges);
+            onSyncStatusChanged?.call();
+
+          case FolderSyncStatus.notLinked:
+          case FolderSyncStatus.error:
+            _setGroupStatus(group, SyncStatus.error);
+            onSyncStatusChanged?.call();
+
+          case FolderSyncStatus.localChanges:
+          case FolderSyncStatus.remoteChanges:
+          case FolderSyncStatus.conflict:
+            final estimatedBytes = await estimateTransferBytes(
+              localPath,
+              detail,
+              readOnly: readOnly,
+            );
+            pendingTransfers.add(
+              _PendingFolderSync(
+                group: group,
+                localPath: localPath,
+                detail: detail,
+                scannedAt: DateTime.now(),
+                estimatedBytes: estimatedBytes,
+              ),
+            );
+        }
+      } catch (e) {
+        AppLogger.debug('[AutoSync] ${primary.name}: scan error - $e');
+        _setGroupStatus(group, SyncStatus.error);
+        onSyncStatusChanged?.call();
+      }
+    }
+
+    if (pendingTransfers.isEmpty) return;
+
+    // 第2パス: 推定転送サイズが小さいフォルダから順に同期を実行する
+    pendingTransfers.sort(
+      (a, b) => a.estimatedBytes.compareTo(b.estimatedBytes),
+    );
+
+    for (final item in pendingTransfers) {
+      if (!skipRuntimeGuards && !_isWifi) {
         AppLogger.debug('[AutoSync] WiFi lost mid-sync, aborting');
         break;
       }
@@ -366,17 +470,101 @@ class AutoSyncService {
       )) {
         break;
       }
-      final primary = group.first;
-      for (var i = 1; i < group.length; i++) {
-        group[i].syncStatus = SyncStatus.syncing;
+      if (!skipRuntimeGuards && !await _ensureSilentDriveAuth()) {
+        break;
       }
-      await _syncFolder(syncEngine, primary);
-      for (var i = 1; i < group.length; i++) {
-        group[i].syncStatus = primary.syncStatus;
+
+      if (DriveTransferRegistry.instance.isBusy(item.localPath)) {
+        _setGroupStatus(item.group, SyncStatus.syncing);
+        onSyncStatusChanged?.call();
+        continue;
+      }
+
+      final primary = item.group.first;
+      _setGroupStatus(item.group, SyncStatus.syncing);
+      onSyncStatusChanged?.call();
+
+      try {
+        var detail = item.detail;
+        if (DateTime.now().difference(item.scannedAt) > _maxSnapshotAge) {
+          detail = await syncEngine.checkSyncStatusDetail(
+            item.localPath,
+            useCache: false,
+          );
+        }
+        await _executeFolderDetail(syncEngine, primary, item.localPath, detail);
+      } catch (e) {
+        AppLogger.debug('[AutoSync] ${primary.name}: error - $e');
+        primary.syncStatus = SyncStatus.error;
+      }
+
+      for (var i = 1; i < item.group.length; i++) {
+        item.group[i].syncStatus = primary.syncStatus;
       }
       onSyncStatusChanged?.call();
     }
   }
+
+  static void _setGroupStatus(List<DriveFolderNode> group, SyncStatus status) {
+    for (final node in group) {
+      node.syncStatus = status;
+    }
+  }
+
+  static bool _isReadOnlyFolder(DriveFolderNode node, SyncSnapshot? snapshot) =>
+      node.isReadOnly || (snapshot != null && !snapshot.canWriteRemote);
+
+  /// 対象フォルダで転送が見込まれる概算バイト数（軽量フォルダ優先スケジューリング用）
+  @visibleForTesting
+  static Future<int> estimateTransferBytes(
+    String localPath,
+    FolderSyncStatusDetail detail, {
+    required bool readOnly,
+  }) async {
+    var total = 0;
+    final remoteSizeByPath = <String, int>{
+      if (detail.snapshot != null)
+        for (final entry in detail.snapshot!.drive.files)
+          entry.relativePath: int.tryParse(entry.file.size ?? '') ?? 0,
+    };
+
+    for (final rel in detail.remoteAddedFiles) {
+      if (rel.endsWith('/')) continue;
+      total += remoteSizeByPath[rel] ?? 0;
+    }
+    for (final rel in detail.remoteModifiedFiles) {
+      total += remoteSizeByPath[rel] ?? 0;
+    }
+
+    if (!readOnly) {
+      for (final rel in [
+        ...detail.localAddedFiles,
+        ...detail.localModifiedFiles,
+      ]) {
+        try {
+          final abs = p.joinAll([localPath, ...rel.split('/')]);
+          total += (await fs.length(abs)) ?? 0;
+        } on Object {
+          // 既に移動・削除されている場合は無視
+        }
+      }
+    }
+    return total;
+  }
+
+  /// テスト用: ツリー全体の自動同期（2パス優先度順スケジューリング + キャッシュ連携）
+  @visibleForTesting
+  Future<void> syncAllFoldersForTest({
+    required LayerTreeNode root,
+    required SyncEngine engine,
+    required GoogleDriveService driveService,
+  }) =>
+      _syncUniqueDriveFolders(
+        root,
+        engine: engine,
+        driveService: driveService,
+        skipRuntimeGuards: true,
+      );
 
   /// テスト用: 1 フォルダ分の自動同期
   @visibleForTesting
@@ -400,74 +588,95 @@ class AutoSyncService {
 
     try {
       final detail = await engine.checkSyncStatusDetail(localPath);
-
-      switch (detail.status) {
-        case FolderSyncStatus.synced:
-          node.syncStatus = SyncStatus.synced;
-
-        case FolderSyncStatus.localChanges:
-          // ローカル削除を含む場合は自動pushしない（手動同期を要求）
-          if (detail.localDeleted > 0) {
-            node.syncStatus = SyncStatus.localChanges;
-            AppLogger.debug(
-              '[AutoSync] ${node.name}: local deletions detected, skipping auto-push (manual sync required)',
-            );
-            break;
-          }
-          node.syncStatus = SyncStatus.syncing;
-          onSyncStatusChanged?.call();
-          final result = await engine.pushFolder(
-            localPath,
-            snapshot: detail.snapshot,
-          );
-          node.syncStatus =
-              result.success ? SyncStatus.synced : SyncStatus.error;
-          if (result.success) {
-            AppLogger.debug(
-              '[AutoSync] ${node.name}: pushed ${result.uploadedCount} file(s)',
-            );
-          } else {
-            AppLogger.debug(
-              '[AutoSync] ${node.name}: push failed - ${result.errorMessage}',
-            );
-          }
-
-        case FolderSyncStatus.remoteChanges:
-          node.syncStatus = SyncStatus.syncing;
-          onSyncStatusChanged?.call();
-          final result = await engine.pullFolder(
-            localPath,
-            snapshot: detail.snapshot,
-          );
-          node.syncStatus =
-              result.success ? SyncStatus.synced : SyncStatus.error;
-          if (result.success) {
-            AppLogger.debug(
-              '[AutoSync] ${node.name}: pulled ${result.downloadedCount} file(s) '
-              '(unchanged ${result.skippedCount})',
-            );
-            // 手元が何も変わらなければツリーを読み直さない（読み込み済みレイヤのフィーチャを全部読み直すので重い）
-            if (result.changedLocal) await onTreeRefreshNeeded?.call(node);
-          } else {
-            AppLogger.debug(
-              '[AutoSync] ${node.name}: pull failed - ${result.errorMessage}',
-            );
-          }
-
-        case FolderSyncStatus.conflict:
-          // ファイル単位でconflictを判定し、非conflictは自動マージ
-          await _handleConflict(engine, node, localPath, detail.snapshot);
-
-        case FolderSyncStatus.notLinked:
-        case FolderSyncStatus.error:
-          node.syncStatus = SyncStatus.error;
-      }
+      await _executeFolderDetail(engine, node, localPath, detail);
     } catch (e) {
       AppLogger.debug('[AutoSync] ${node.name}: error - $e');
       node.syncStatus = SyncStatus.error;
     }
 
     onSyncStatusChanged?.call();
+  }
+
+  Future<void> _executeFolderDetail(
+    SyncEngine engine,
+    DriveFolderNode node,
+    String localPath,
+    FolderSyncStatusDetail detail,
+  ) async {
+    final readOnly = _isReadOnlyFolder(node, detail.snapshot);
+
+    switch (detail.status) {
+      case FolderSyncStatus.synced:
+        node.syncStatus = SyncStatus.synced;
+
+      case FolderSyncStatus.localChanges:
+        if (readOnly) {
+          node.syncStatus = SyncStatus.synced;
+          AppLogger.debug(
+            '[AutoSync] ${node.name}: read-only folder, ignoring local changes',
+          );
+          break;
+        }
+        // ローカル削除を含む場合は自動pushしない（手動同期を要求）
+        if (detail.localDeleted > 0) {
+          node.syncStatus = SyncStatus.localChanges;
+          AppLogger.debug(
+            '[AutoSync] ${node.name}: local deletions detected, skipping auto-push (manual sync required)',
+          );
+          break;
+        }
+        node.syncStatus = SyncStatus.syncing;
+        onSyncStatusChanged?.call();
+        final result = await engine.pushFolder(
+          localPath,
+          snapshot: detail.snapshot,
+        );
+        node.syncStatus = result.success ? SyncStatus.synced : SyncStatus.error;
+        if (result.success) {
+          AppLogger.debug(
+            '[AutoSync] ${node.name}: pushed ${result.uploadedCount} file(s)',
+          );
+        } else {
+          AppLogger.debug(
+            '[AutoSync] ${node.name}: push failed - ${result.errorMessage}',
+          );
+        }
+
+      case FolderSyncStatus.remoteChanges:
+        node.syncStatus = SyncStatus.syncing;
+        onSyncStatusChanged?.call();
+        final result = await engine.pullFolder(
+          localPath,
+          snapshot: detail.snapshot,
+        );
+        node.syncStatus = result.success ? SyncStatus.synced : SyncStatus.error;
+        if (result.success) {
+          AppLogger.debug(
+            '[AutoSync] ${node.name}: pulled ${result.downloadedCount} file(s) '
+            '(unchanged ${result.skippedCount})',
+          );
+          // 手元が何も変わらなければツリーを読み直さない（読み込み済みレイヤのフィーチャを全部読み直すので重い）
+          if (result.changedLocal) await onTreeRefreshNeeded?.call(node);
+        } else {
+          AppLogger.debug(
+            '[AutoSync] ${node.name}: pull failed - ${result.errorMessage}',
+          );
+        }
+
+      case FolderSyncStatus.conflict:
+        // ファイル単位でconflictを判定し、非conflictは自動マージ
+        await _handleConflict(
+          engine,
+          node,
+          localPath,
+          detail.snapshot,
+          isReadOnly: readOnly,
+        );
+
+      case FolderSyncStatus.notLinked:
+      case FolderSyncStatus.error:
+        node.syncStatus = SyncStatus.error;
+    }
   }
 
   /// [relativePath] が `.qgs` で、同じ dir にまだ別の `.qgs`（付け替え後の名前）があるか
@@ -486,7 +695,8 @@ class AutoSyncService {
     }
   }
 
-  /// ファイル単位の差分一覧から自動マージ可能な [MergeDecision] と残存衝突有無を計画する
+  /// ファイル単位の差分一覧から自動マージ可能な [MergeDecision] と残存衝突有無を計画する。
+  /// [isReadOnly] が true の場合はローカル変更を Drive へ Push せず、リモート変更のみを取り込む。
   @visibleForTesting
   static Future<({
     List<MergeDecision> decisions,
@@ -496,6 +706,7 @@ class AutoSyncService {
     required List<MergeFileEntry> entries,
     required String localPath,
     required Map<String, DateTime?> failedMergeAt,
+    bool isReadOnly = false,
     Future<bool> Function(String localPath, String relativePath)?
         isRenamedProjectFile,
   }) async {
@@ -503,6 +714,22 @@ class AutoSyncService {
     final autoDecisions = <MergeDecision>[];
     var hasRealConflict = false;
     var needsTreeRefresh = false;
+
+    if (isReadOnly) {
+      for (final entry in entries) {
+        if (entry.remoteChange != MergeChangeType.none) {
+          autoDecisions.add(
+            MergeDecision(entry: entry, choice: MergeChoice.remote),
+          );
+          needsTreeRefresh = true;
+        }
+      }
+      return (
+        decisions: autoDecisions,
+        hasRealConflict: false,
+        needsTreeRefresh: needsTreeRefresh,
+      );
+    }
 
     for (final entry in entries) {
       if (entry.isConflict) {
@@ -557,8 +784,9 @@ class AutoSyncService {
     SyncEngine engine,
     DriveFolderNode node,
     String localPath,
-    SyncSnapshot? snapshot,
-  ) async {
+    SyncSnapshot? snapshot, {
+    bool isReadOnly = false,
+  }) async {
     // 判定に使った材料をそのまま使う（Drive をたどり直さない）。判定できなければ投げる（呼び元でエラーにする）
     final entries = await engine.getMergeEntries(localPath, snapshot: snapshot);
     if (entries.isEmpty) {
@@ -570,6 +798,7 @@ class AutoSyncService {
       entries: entries,
       localPath: localPath,
       failedMergeAt: _failedMergeAt,
+      isReadOnly: isReadOnly,
     );
     var hasRealConflict = plan.hasRealConflict;
 
@@ -675,4 +904,20 @@ class AutoSyncService {
     if (currentRoot == null) return null;
     return DriveTreeNodes.findFolderSetByPath(currentRoot, localPath);
   }
+}
+
+class _PendingFolderSync {
+  final List<DriveFolderNode> group;
+  final String localPath;
+  final FolderSyncStatusDetail detail;
+  final DateTime scannedAt;
+  final int estimatedBytes;
+
+  const _PendingFolderSync({
+    required this.group,
+    required this.localPath,
+    required this.detail,
+    required this.scannedAt,
+    required this.estimatedBytes,
+  });
 }

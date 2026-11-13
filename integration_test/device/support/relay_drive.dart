@@ -67,6 +67,27 @@ class RelayGoogleDrive implements GoogleDriveService {
       ((await relay.call('listFiles', {'parentId': parentId})) as List? ?? const []).map(_file).toList();
 
   @override
+  Future<Map<String, List<drive.File>>> listFilesForParents(
+    List<String> parentIds,
+  ) async {
+    final out = <String, List<drive.File>>{};
+    for (final id in parentIds.toSet()) {
+      out[id] = await listFiles(id);
+    }
+    return out;
+  }
+
+  @override
+  Future<String?> getChangesStartPageToken() async => null;
+
+  @override
+  Future<DriveChangeBatch?> listChanges(
+    String pageToken, {
+    int maxChanges = 5000,
+  }) async =>
+      null;
+
+  @override
   Future<drive.File?> getOrCreateSubFolder(String parentId, String folderName) async =>
       _file(await relay.call('getOrCreateSubFolder', {'parentId': parentId, 'name': folderName}));
 

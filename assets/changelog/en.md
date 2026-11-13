@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.16.0 — 2026/11/13
+
+### New Features
+
+- Multi-layer QGIS symbology (cased lines, hatching fills, dash patterns & SVG markers): Multi-layer symbols authored in QGIS—including white-cased lines, diagonal/cross-hatch polygon fills, dashed/dotted strokes, stacked point markers, and embedded or standard SVG markers—now render directly on the map and round-trip cleanly through `.qgs` files. You can also configure line casings and polygon fill patterns directly in Layer Style Settings
+- 19 one-tap style templates: Added curated style presets in Layer Style Settings for points (6), lines (7), and polygons (6). Apply high-visibility cased lines or hatched area styles over aerial imagery with a single tap, then fine-tune colors and widths as needed
+- QML style file (`.qml`) import & export: Import QGIS `.qml` layer style files onto existing layers or export a layer's style as `.qml` to reuse across layers and QGIS projects
+
+### Improvements & Changes
+
+- Major Google Drive sync reliability & speed improvements for large shared folders: Replaced recursive per-folder listing with multi-parent batched BFS (up to 40 parent folders per query), added exponential backoff retry on Drive API rate limits, automatic token refresh on 401 expiration, and `Changes API` differential tree caching. Auto-sync now runs in two passes—immediately marking unchanged folders as synced in Pass 1 and transferring lightweight folders ahead of multi-gigabyte archives in Pass 2
+- Stronger read-only folder protection: Folders marked read-only or lacking Drive `canEdit` permission never push local edits during auto-sync, and app version updates alone no longer rewrite `.qgs` files
+
+### Bug Fixes
+
+- Fixed an issue where a locally deleted child preset inside a shared folder set (JSON) was not restored on manual "Sync now" when the parent JSON's MD5 had not changed
+- Preserved shared folder sets when deleting a standalone shared folder whose local data was reference-mounted by a set, automatically migrating the data into `.kokage/drive_store`
+- Fixed an issue where visible layers inside newly added child folder sets were not loaded onto the map automatically after background sync
+- Cleaned up unreferenced `.kokage/drive_store` directories when removing child sets or orphaned references
+- Fixed rendering of 4-band GeoTIFFs with `Undefined` alpha channel interpretation and 5+ band rasters, surfacing a notification when raster conversion fails
+- Fixed a race condition where a GPS point arriving right as track recording stopped could wait behind raw database writes before consolidation
+
 ## v0.15.3 — 2026/11/10
 
 ### New Features & Improvements

@@ -80,7 +80,7 @@ void main() {
     expect(find.byType(SvgPicture), findsWidgets);
     // 図の版の本文は画面に文字として出さないが、読み上げでは読める
     // いちばん新しい版（開いている）の 1 行。版を足したら差し替える
-    const line = 'ホーム画面に Google Play ストアへの更新案内ボタンを追加';
+    const line = 'ワンタップで選べるスタイルテンプレート（全19種）を追加';
     expect(find.textContaining(line, findRichText: true), findsNothing);
     expect(find.bySemanticsLabel(RegExp(line)), findsOneWidget);
     // 版ごとに畳む。開いているのはいちばん新しい版だけ

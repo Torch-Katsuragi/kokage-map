@@ -40,8 +40,10 @@ import '../providers/gps_providers.dart';
 import '../providers/notification_providers.dart';
 import '../services/gps_manager_service.dart';
 import '../utils/app_permissions.dart';
+import '../widgets/device_connection_log_section.dart';
 import '../widgets/gps_info_widget.dart';
 import '../widgets/settings_widgets.dart';
+import 'gps_settings/ntrip_settings_section.dart';
 
 /// GPS設定画面
 class GpsSettingsScreen extends ConsumerStatefulWidget {
@@ -479,7 +481,14 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
           // 利用可能なGPSソース一覧
           _buildAvailableSourcesCard(),
 
-          // GPS 測量の足切り
+          // NTRIP 補正データ（RTK 基準局。Bluetooth 外部GNSS対応プラットフォームのみ）
+          if (PlatformCapabilities.supportsBluetoothGnss) const NtripSettingsSection(),
+
+          // 外部機器（GNSS・NTRIP・測距器）の接続・切断ログ
+          if (PlatformCapabilities.supportsBluetoothGnss)
+            const DeviceConnectionLogSection(),
+
+          // GPS 測量の足切り・効果音
           _buildQualityGateCard(),
 
           // 軌跡の記録（記録するのはモバイルだけ）
@@ -623,9 +632,10 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
     );
   }
 
-  /// GPS 測量で条件を満たさない測位を弾く（既定は何もしない）
+  /// GPS 測量で条件を満たさない測位を弾く（既定は何もしない）＋ RTK 解状態変化の効果音
   Widget _buildQualityGateCard() {
     final gate = ref.watch(gnssQualityGateSettingProvider);
+    final rtkSoundEnabled = ref.watch(gnssFixSoundSettingProvider);
     final g = t.gnssQuality.settings;
     void set(GnssQualityGate value) => ref.read(gnssQualityGateSettingProvider.notifier).set(value);
 
@@ -682,6 +692,15 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
             onChanged: gate.isActive ? (v) => set(gate.copyWith(strict: v)) : null,
           ),
         ),
+        if (PlatformCapabilities.supportsBluetoothGnss) ...[
+          const Divider(height: 12),
+          SettingsSwitchTile(
+            title: t.ntrip.rtkSoundTitle,
+            subtitle: t.ntrip.rtkSoundDesc,
+            value: rtkSoundEnabled,
+            onChanged: (v) => ref.read(gnssFixSoundSettingProvider.notifier).set(v),
+          ),
+        ],
       ],
     );
   }

@@ -35,6 +35,9 @@ import '../../../providers/project_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/dem_elevation.dart';
 import '../../../services/google_drive/index.dart';
+import '../../../services/gps_history_recorder.dart';
+import '../../../services/ntrip/ntrip_client_service.dart';
+import '../../../services/official/official_layer_service.dart';
 import '../../../services/qgis/qgs_read_back.dart';
 import '../../../services/qgis/qgs_read_back_notice.dart';
 import '../../../utils/app_logger.dart';
@@ -106,6 +109,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     AppLogger.debug('[Init] projectTree start');
     final rootNode = ref.read(folderTreeProvider);
     if (rootNode != null) {
+      await OfficialLayerService.instance.syncToTree(rootNode);
       try {
         await updateNodeRecursively(rootNode);
       } catch (e) {
@@ -291,15 +295,19 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         unawaited(scanGnssDevicesBackground());
       }
 
-      // GPS位置情報取得を開始（InternalGpsLocationStore経由）
+      // GPS位置情報取得を開始
       await gpsManager.startGps();
+      // 外部GNSSモードで起動した場合でも、端末自身の青丸マーカー・gps_tracks 常時記録用に内蔵LocationStoreを起動しておく
+      if (!locationStore.isActive) {
+        unawaited(locationStore.start().catchError((Object _) {}));
+      }
       // 権限の確認中に地図の画面が閉じたら、ここで止める（案内の provider を読む・購読を張り残すのを避ける）
       if (!mounted) return;
 
       // 初期GPS情報を取得
       updateCurrentGpsInfo();
 
-      // Store.positionStream を購読（マップマーカー・中心移動用）
+      // 端末内蔵GPS（locationStore.positionStream）を購読（外部GNSSマーカーは gnssLocationNotifier が独立描画）
       positionSubscription = locationStore.positionStream.listen(
         (record) {
           final next = LatLng(record.latitude, record.longitude);
@@ -364,8 +372,17 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         fireImmediately: true,
       );
 
-      // positionStream の購読開始（常時記録 + consolidationタイマー）
+      // 端末内蔵GPS（gps_tracks）と外部GNSS（gnss_tracks / gnss_track_details）の両方を常時記録
+      gpsHistoryRecorder.ntripMountpointProvider = () {
+        final ntrip = NtripClientService.instance;
+        return ntrip.status == NtripStatus.streaming
+            ? ntrip.activeConfig.normalizedMountpoint
+            : null;
+      };
       gpsHistoryRecorder.startRecording(locationStore.positionStream);
+      gpsHistoryRecorder.startExternalGnssRecording(
+        gpsManager.externalGnssFixStream,
+      );
 
       // 軌跡更新リスナー登録（未Consolidation分をkGpsTrackソースに表示）
       gpsHistoryRecorder.addListener(_onGpsHistoryUpdate);
@@ -403,6 +420,17 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         layer: tree == null ? null : _findLayerNode(tree, 'gps_tracks'),
         featureId: gpsHistoryRecorder.todayTrackFeatureId,
         line: gpsHistoryRecorder.lastConsolidatedLine,
+        refreshRows: refreshFeatureRows,
+        refreshAll: () async {
+          if (mounted) await updateFeatures();
+        },
+      );
+      await syncConsolidatedTrack(
+        layer: tree == null
+            ? null
+            : _findLayerNode(tree, GpsHistoryRecorder.gnssTracksLayerName),
+        featureId: gpsHistoryRecorder.todayGnssTrackFeatureId,
+        line: gpsHistoryRecorder.lastConsolidatedGnssLine,
         refreshRows: refreshFeatureRows,
         refreshAll: () async {
           if (mounted) await updateFeatures();
@@ -501,6 +529,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     compassSubscription?.cancel();
     headingNotifier.dispose();
     locationNotifier.dispose();
+    gnssLocationNotifier.dispose();
     mapBearingNotifier.dispose();
     cameraTickNotifier.dispose();
   }

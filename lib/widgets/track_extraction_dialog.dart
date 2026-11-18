@@ -169,11 +169,36 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
     return t.track.secondsOnly(s: '${d.inSeconds}');
   }
 
-  /// 選択ポイントからsub_table JSON文字列を構築
+  /// 選択ポイントからsub_table JSON文字列を構築（外部GNSS軌跡のときはRTK品質・DOP・衛星数・NTRIPも残す）
   String _buildSubTableJson() {
+    final hasGnss = _selectedPoints.any((p) => p.sourceType == 'GNSS');
+    if (!hasGnss) {
+      final header = [
+        'timestamp', 'latitude', 'longitude',
+        'altitude', 'accuracy', 'speed', 'bearing', 'source_type',
+      ];
+      final rows = <List<dynamic>>[header];
+      for (final pt in _selectedPoints) {
+        rows.add([
+          pt.timestamp.toIso8601String(),
+          pt.latitude,
+          pt.longitude,
+          pt.altitude,
+          pt.accuracy,
+          pt.speed,
+          pt.bearing,
+          pt.sourceType,
+        ]);
+      }
+      return jsonEncode(rows);
+    }
+
     final header = [
       'timestamp', 'latitude', 'longitude',
-      'altitude', 'accuracy', 'speed', 'bearing', 'source_type',
+      'altitude', 'accuracy', 'accuracy_source',
+      'gps_quality', 'fix_type', 'satellite_count',
+      'hdop', 'pdop', 'vdop',
+      'speed', 'bearing', 'gnss_device', 'ntrip_mountpoint', 'source_type',
     ];
     final rows = <List<dynamic>>[header];
     for (final pt in _selectedPoints) {
@@ -183,8 +208,17 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
         pt.longitude,
         pt.altitude,
         pt.accuracy,
+        pt.accuracySource,
+        pt.gpsQuality,
+        pt.fixType,
+        pt.satelliteCount,
+        pt.hdop,
+        pt.pdop,
+        pt.vdop,
         pt.speed,
         pt.bearing,
+        pt.gnssDevice,
+        pt.ntripMountpoint,
         pt.sourceType,
       ]);
     }

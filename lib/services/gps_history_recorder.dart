@@ -34,10 +34,12 @@ import 'package:path/path.dart' as p;
 
 import '../models/geometry_type.dart';
 import '../models/geopackage/geopackage_file.dart';
+import '../models/gps_info.dart';
 import '../models/gps_position_record.dart';
 import '../models/gps_track.dart';
 import '../models/track_recording_settings.dart';
 import '../utils/app_logger.dart';
+import 'device_connection_log_service.dart';
 
 /// GPS履歴レコーダー（シングルトン、ChangeNotifier）
 ///
@@ -67,6 +69,13 @@ class GpsHistoryRecorder extends ChangeNotifier {
   static const String _detailsTableName = 'gps_track_details';
   static const String _rawLayerPrefix = 'gps_raw_';
 
+  // 外部GNSS常時記録用のテーブル・レイヤ名（同じ gps_history.gpkg 内に同居）
+  static const String gnssTracksLayerName = 'gnss_tracks';
+  static const String gnssDetailsTableName = 'gnss_track_details';
+  static const String connectionEventsTableName = 'device_connection_events';
+  static const String _gnssRawLayerPrefix = 'gnss_raw_';
+  static const String gnssTag = 'GNSS';
+
   // Consolidation間隔（秒）
   static const int _consolidationIntervalSeconds = 20;
 
@@ -76,6 +85,12 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
   /// 届いた測位を軌跡に入れるかの判定（設定は地図ページが [TrackRecordingSettings] を流し込む）
   final TrackPointFilter filter = TrackPointFilter();
+
+  /// 外部GNSS測位の軌跡フィルタ（既定 1秒間隔で高密度に保管）
+  final TrackPointFilter gnssFilter = TrackPointFilter();
+
+  /// 外部GNSS記録時に現在配信中の NTRIP マウントポイント名を付与するプロバイダ（任意）
+  String? Function()? ntripMountpointProvider;
 
   // GeoPackageファイル
   GeoPackageFile? _historyFile;
@@ -106,6 +121,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
   // ストリーム・タイマー
   StreamSubscription<GpsPositionRecord>? _subscription;
+  StreamSubscription<GpsInfo>? _gnssSubscription;
   Timer? _consolidationTimer;
 
   // メモリキャッシュ（未Consolidation分のみ）
@@ -115,9 +131,25 @@ class GpsHistoryRecorder extends ChangeNotifier {
   LatLng? _lastRecordedPosition;
   LatLng? _lastConsolidatedPosition;
 
+  // 外部GNSS用の状態・メモリキャッシュ
+  int? _todayGnssTrackFeatureId;
+  int _gnssSegmentIndex = 1;
+  int _lastGnssConsolidatedIndex = 0;
+  final List<GpsTrackPoint> _pendingGnssDetails = [];
+  final List<int> _pendingGnssRawIds = [];
+  DateTime? _lastGnssRecordedTime;
+  LatLng? _lastGnssRecordedPosition;
+  LatLng? _lastGnssConsolidatedPosition;
+
+  String get _gnssSegmentName =>
+      _gnssSegmentIndex <= 1 ? _currentDateKey! : '$_currentDateKey #$_gnssSegmentIndex';
+
   /// 直近の反映で書いた今日の区間（フィーチャ ID と座標）。地図側はレイヤを読み直さず、この 1 本だけ差し替える
   int? get todayTrackFeatureId => _todayTrackFeatureId;
   List<LatLng>? lastConsolidatedLine;
+
+  int? get todayGnssTrackFeatureId => _todayGnssTrackFeatureId;
+  List<LatLng>? lastConsolidatedGnssLine;
 
   /// Consolidation完了コールバック（レイヤリフレッシュ用）
   VoidCallback? onConsolidated;
@@ -139,6 +171,12 @@ class GpsHistoryRecorder extends ChangeNotifier {
   List<LatLng> get todayPoints => List.unmodifiable([
     ?_lastConsolidatedPosition,
     ..._pendingDetails.map((p) => p.toLatLng()),
+  ]);
+
+  /// 外部GNSSの未Consolidation分のポイント座標リスト（地図常時描画用）
+  List<LatLng> get todayGnssPoints => List.unmodifiable([
+    ?_lastGnssConsolidatedPosition,
+    ..._pendingGnssDetails.map((p) => p.toLatLng()),
   ]);
 
   // ==============================
@@ -193,22 +231,29 @@ class GpsHistoryRecorder extends ChangeNotifier {
         await _rawBufferFile!.createEmptyDatabase();
       }
 
-      // テーブル・レイヤ確保
+      // テーブル・レイヤ確保（内蔵GPS + 外部GNSS + 機器接続イベント）
       await _ensureTracksLayer();
       await _ensureDetailsTable();
+      await _ensureGnssTracksLayer();
+      await _ensureGnssDetailsTable();
+      await _ensureConnectionEventsTable();
 
       _currentDateKey = dateKey(DateTime.now());
       await _ensureRawLayer(_currentDateKey!);
+      await _ensureGnssRawLayer(_currentDateKey!);
 
       // 本日の既存Line → キャッシュ復元
       await _loadTodayFromHistory();
+      await _loadTodayGnssFromHistory();
 
       // Raw未反映分 → 即座にconsolidate
       await _recoverUnconsolidated();
+      await _recoverUnconsolidatedGnss();
 
       // 古いrawデータを削除
       await _cleanupOldRawData();
 
+      DeviceConnectionLogService.instance.addEventSink(_onDeviceConnectionEvent);
       _isInitialized = true;
       AppLogger.debug(
         '$_logTag: 初期化完了 (日付: $_currentDateKey, '
@@ -280,31 +325,57 @@ class GpsHistoryRecorder extends ChangeNotifier {
     _consolidationTimer?.cancel();
     _consolidationTimer = Timer.periodic(
       const Duration(seconds: _consolidationIntervalSeconds),
-      (_) => _consolidate(),
+      (_) => _consolidateAll(),
     );
 
     AppLogger.debug('$_logTag: 記録開始 (consolidation: $_consolidationIntervalSeconds秒間隔)');
   }
 
+  /// 外部GNSS測位ストリームの常時記録を開始（`gnss_tracks` / `gnss_track_details` に詳細保管）
+  void startExternalGnssRecording(Stream<GpsInfo> gnssStream) {
+    _gnssSubscription?.cancel();
+    _gnssSubscription = gnssStream.listen(
+      (info) {
+        final write = _onGnssInfoReceived(info);
+        _writing.add(write);
+        write.whenComplete(() => _writing.remove(write));
+      },
+      onError: (error) {
+        AppLogger.debug('$_logTag: 外部GNSSストリームエラー: $error');
+      },
+    );
+
+    _consolidationTimer ??= Timer.periodic(
+      const Duration(seconds: _consolidationIntervalSeconds),
+      (_) => _consolidateAll(),
+    );
+  }
+
   /// 停止（最終consolidation実行）
   Future<void> stop() async {
+    DeviceConnectionLogService.instance.removeEventSink(_onDeviceConnectionEvent);
     await _subscription?.cancel();
     _subscription = null;
+    await _gnssSubscription?.cancel();
+    _gnssSubscription = null;
 
     _consolidationTimer?.cancel();
     _consolidationTimer = null;
 
     // 進行中の raw 書き込みを待ってから残りを確実に反映
     await Future.wait(_writing.toList());
-    await _consolidate();
+    await _consolidateAll();
 
     AppLogger.debug('$_logTag: 記録停止');
   }
 
   @override
   void dispose() {
+    DeviceConnectionLogService.instance.removeEventSink(_onDeviceConnectionEvent);
     _subscription?.cancel();
     _subscription = null;
+    _gnssSubscription?.cancel();
+    _gnssSubscription = null;
     _consolidationTimer?.cancel();
     _consolidationTimer = null;
     _historyFile?.dispose();
@@ -536,7 +607,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
     AppLogger.debug('$_logTag: 日付変更検出: $_currentDateKey → $newDateKey');
 
     // 残りを確実に反映してから切り替え
-    await _consolidate();
+    await _consolidateAll();
 
     _currentDateKey = newDateKey;
     _todayTrackFeatureId = null;
@@ -548,9 +619,24 @@ class GpsHistoryRecorder extends ChangeNotifier {
     _lastRecordedPosition = null;
     _lastConsolidatedPosition = null;
 
+    _todayGnssTrackFeatureId = null;
+    _gnssSegmentIndex = 1;
+    _lastGnssRecordedTime = null;
+    _lastGnssConsolidatedIndex = 0;
+    _pendingGnssDetails.clear();
+    _pendingGnssRawIds.clear();
+    _lastGnssRecordedPosition = null;
+    _lastGnssConsolidatedPosition = null;
+
     await _ensureRawLayer(newDateKey);
+    await _ensureGnssRawLayer(newDateKey);
 
     notifyListeners();
+  }
+
+  Future<void> _consolidateAll() async {
+    await _consolidate();
+    await _consolidateGnss();
   }
 
   // ==============================
@@ -884,9 +970,14 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
       final layers = await _rawBufferFile!.getLayerNames();
       for (final layer in layers) {
-        if (!layer.startsWith(_rawLayerPrefix)) continue;
-        final dateKey = layer.replaceFirst(_rawLayerPrefix, '');
-        if (dateKey.compareTo(thresholdKey) < 0) {
+        String? dKey;
+        if (layer.startsWith(_rawLayerPrefix)) {
+          dKey = layer.replaceFirst(_rawLayerPrefix, '');
+        } else if (layer.startsWith(_gnssRawLayerPrefix)) {
+          dKey = layer.replaceFirst(_gnssRawLayerPrefix, '');
+        }
+        if (dKey == null) continue;
+        if (dKey.compareTo(thresholdKey) < 0) {
           AppLogger.debug('$_logTag: 古いrawレイヤ削除: $layer');
           await _rawBufferFile!.removeLayer(layer);
         }
@@ -947,6 +1038,12 @@ class GpsHistoryRecorder extends ChangeNotifier {
       }
       await _ensureTracksLayerOn(remoteFile);
       await _ensureDetailsTableOn(remoteFile);
+      await _ensureGnssTracksLayerOn(remoteFile);
+      await _ensureGnssDetailsTableOn(remoteFile);
+      await _ensureConnectionEventsTableOn(remoteFile);
+      await _ensureGnssTracksLayerOn(_historyFile!, backfillDeviceId: _deviceId);
+      await _ensureGnssDetailsTableOn(_historyFile!, backfillDeviceId: _deviceId);
+      await _ensureConnectionEventsTableOn(_historyFile!);
 
       final localIndex = await _collectPastDayBlocks(
         _historyFile!,
@@ -1006,6 +1103,18 @@ class GpsHistoryRecorder extends ChangeNotifier {
         exportedDays++;
         changedRemote = true;
       }
+
+      // 3. 外部GNSS軌跡 (gnss_tracks + gnss_track_details) と接続イベントの過去日双方向統合
+      final gnssMerge = await _mergePastGnssAndEvents(
+        localFile: _historyFile!,
+        remoteFile: remoteFile,
+        todayKey: todayKey,
+        localFallbackDeviceId: _deviceId,
+      );
+      if (gnssMerge.changedLocal) changedLocal = true;
+      if (gnssMerge.changedRemote) changedRemote = true;
+      importedDays += gnssMerge.importedDays;
+      exportedDays += gnssMerge.exportedDays;
 
       if (changedRemote) {
         await GeoPackageFile.prepareForHandOff(remoteGpkgPath);
@@ -1192,6 +1301,22 @@ class GpsHistoryRecorder extends ChangeNotifier {
         }
       }
 
+      if (layers.contains(gnssTracksLayerName)) {
+        final gnssFeatures = await _historyFile!.getFeatures(gnssTracksLayerName);
+        for (final f in gnssFeatures) {
+          final name = f['name']?.toString();
+          if (name == null || name.isEmpty) continue;
+          final rawDev = f['device_id']?.toString() ?? '';
+          final dev = rawDev.isEmpty ? _deviceId : rawDev;
+          if (dev != _deviceId && dev.isNotEmpty) {
+            final tag = dev.length > 4 ? dev.substring(0, 4) : dev;
+            dateKeys.add('$name [$gnssTag:$tag]');
+          } else {
+            dateKeys.add('$name [$gnssTag]');
+          }
+        }
+      }
+
       final sorted = dateKeys.toList()..sort((a, b) => b.compareTo(a));
       return sorted;
     } catch (e) {
@@ -1213,15 +1338,37 @@ class GpsHistoryRecorder extends ChangeNotifier {
   Future<List<GpsTrackPoint>> getPointsForDate(String name) async {
     var cleanName = name;
     String? deviceTag;
+    var isGnss = false;
     final bracketIdx = name.lastIndexOf(' [');
     if (bracketIdx > 0 && name.endsWith(']')) {
-      deviceTag = name.substring(bracketIdx + 2, name.length - 1);
+      final rawTag = name.substring(bracketIdx + 2, name.length - 1);
       cleanName = name.substring(0, bracketIdx);
+      if (rawTag == gnssTag) {
+        isGnss = true;
+      } else if (rawTag.startsWith('$gnssTag:')) {
+        isGnss = true;
+        deviceTag = rawTag.substring(gnssTag.length + 1);
+      } else {
+        deviceTag = rawTag;
+      }
     }
     final dateKey = cleanName.split(' #').first;
     final index = segmentIndexOf(cleanName, dateKey) ?? 1;
-    return segmentOf(await _pointsOfDay(dateKey, deviceTag: deviceTag), index);
+    final dayPoints = isGnss
+        ? await _gnssPointsOfDay(dateKey, deviceTag: deviceTag)
+        : await _pointsOfDay(dateKey, deviceTag: deviceTag);
+    return segmentOf(dayPoints, index);
   }
+
+  /// 指定日付の外部GNSS詳細ポイント列を取得する
+  Future<List<GpsTrackPoint>> getGnssPointsForDate(
+    String dateOrSegmentName,
+  ) =>
+      getPointsForDate(
+        dateOrSegmentName.endsWith(']')
+            ? dateOrSegmentName
+            : '$dateOrSegmentName [$gnssTag]',
+      );
 
   /// [points]（時刻順）を [segmentGap] で区切った [index] 本目（1 始まり）
   @visibleForTesting
@@ -1309,5 +1456,936 @@ class GpsHistoryRecorder extends ChangeNotifier {
         .where((p) =>
             !p.timestamp.isBefore(start) && !p.timestamp.isAfter(end))
         .toList();
+  }
+
+  // ==============================
+  // 外部GNSS常時記録（gnss_tracks / gnss_track_details / gnss_raw_）
+  // ==============================
+
+  String _buildGnssRawLayerName(String dKey) => '$_gnssRawLayerPrefix$dKey';
+
+  Future<void> _onGnssInfoReceived(GpsInfo info) async {
+    if (!_isInitialized || _rawBufferFile == null) return;
+    final lat = info.latitude;
+    final lon = info.longitude;
+    if (lat == null || lon == null || (info.gpsQuality ?? 0) <= 0) return;
+
+    final ts = info.timestamp ?? DateTime.now();
+    final position = LatLng(lat, lon);
+    final gap =
+        _lastGnssRecordedTime == null ? null : ts.difference(_lastGnssRecordedTime!);
+    // Bluetooth SPP バッファ経由では 1.000s 周期の NMEA が ±50〜120ms 前後して届くため、
+    // 150ms のジッター許容を持たせて毎秒エポックの取りこぼしを防ぐ
+    final targetMs = gnssFilter.settings.intervalSeconds * 1000;
+    final effectiveJudgeTime = (_lastGnssRecordedTime != null &&
+            gap != null &&
+            gap.inMilliseconds >= math.max(200, targetMs - 150) &&
+            gap.inMilliseconds < targetMs)
+        ? _lastGnssRecordedTime!.add(Duration(milliseconds: targetMs))
+        : ts;
+    final verdict = gnssFilter.judge(
+      position: position,
+      time: effectiveJudgeTime,
+      accuracy: info.accuracy,
+      lastTime: _lastGnssRecordedTime,
+      lastPosition: _lastGnssRecordedPosition,
+      newSegment: gap != null && gap >= segmentGap,
+    );
+    // 器械点・基準点で三脚やポールに据えて静止観測している間（TruPulse 併用時など）、
+    // RTK FIX で座標がミリ単位まで完全一致（duplicate）しても 1 秒ごとのエポックを欠かさず gnss_track_details に蓄える
+    if (verdict != TrackFixVerdict.accept &&
+        verdict != TrackFixVerdict.duplicate) {
+      return;
+    }
+
+    try {
+      await _checkAndRotateDay();
+      if (_currentDateKey == null) return;
+
+      if (_lastGnssRecordedTime != null) {
+        final g = ts.difference(_lastGnssRecordedTime!);
+        if (g >= segmentGap) await _startNewGnssSegment(g);
+      }
+
+      final rawLayerName = _buildGnssRawLayerName(_currentDateKey!);
+      final ntripMount = ntripMountpointProvider?.call();
+
+      final rawId = await _rawBufferFile!.addPointWithAttributes(
+        rawLayerName,
+        position,
+        {
+          'timestamp': ts.toIso8601String(),
+          'altitude': info.altitude,
+          'accuracy': info.accuracy,
+          'accuracy_source': info.accuracySource,
+          'speed': info.speed,
+          'bearing': info.bearing,
+          'gps_quality': info.gpsQuality,
+          'fix_type': info.fixType,
+          'correction_source': info.correctionSource,
+          'satellite_count': info.satelliteCount,
+          'hdop': info.hdop,
+          'pdop': info.pdop,
+          'vdop': info.vdop,
+          'gnss_device': info.selectedDevice,
+          'ntrip_mountpoint': ntripMount,
+          'raw_gga': info.nmea,
+        },
+      );
+
+      _lastGnssRecordedTime = ts;
+      _lastGnssRecordedPosition = position;
+
+      if (rawId != null) _pendingGnssRawIds.add(rawId);
+
+      _pendingGnssDetails.add(GpsTrackPoint(
+        latitude: lat,
+        longitude: lon,
+        altitude: info.altitude,
+        accuracy: info.accuracy,
+        accuracySource: info.accuracySource,
+        speed: info.speed,
+        bearing: info.bearing,
+        timestamp: ts,
+        sourceType: 'GNSS',
+        gpsQuality: info.gpsQuality,
+        fixType: info.fixType,
+        correctionSource: info.correctionSource,
+        satelliteCount: info.satelliteCount,
+        hdop: info.hdop,
+        pdop: info.pdop,
+        vdop: info.vdop,
+        gnssDevice: info.selectedDevice,
+        ntripMountpoint: ntripMount,
+        rawGga: info.nmea,
+      ));
+
+      if (_pendingGnssDetails.length <= 5 ||
+          _pendingGnssDetails.length % 5 == 0) {
+        notifyListeners();
+      }
+    } catch (e) {
+      AppLogger.debug('$_logTag: 外部GNSS軌跡記録エラー: $e');
+    }
+  }
+
+  Future<void> _ensureGnssRawLayer(String dKey) async {
+    if (_rawBufferFile == null) return;
+    final layerName = _buildGnssRawLayerName(dKey);
+    final existingLayers = await _rawBufferFile!.getLayerNames();
+    if (existingLayers.contains(layerName)) return;
+
+    await _rawBufferFile!.addLayer(layerName, GeometryType.point);
+    await _rawBufferFile!.addAttributeColumns(layerName, {
+      'timestamp': 'TEXT',
+      'altitude': 'REAL',
+      'accuracy': 'REAL',
+      'accuracy_source': 'TEXT',
+      'speed': 'REAL',
+      'bearing': 'REAL',
+      'gps_quality': 'INTEGER',
+      'fix_type': 'TEXT',
+      'correction_source': 'TEXT',
+      'satellite_count': 'INTEGER',
+      'hdop': 'REAL',
+      'pdop': 'REAL',
+      'vdop': 'REAL',
+      'gnss_device': 'TEXT',
+      'ntrip_mountpoint': 'TEXT',
+      'raw_gga': 'TEXT',
+    });
+  }
+
+  Future<void> _ensureGnssTracksLayer() async {
+    if (_historyFile == null) return;
+    await _ensureGnssTracksLayerOn(_historyFile!, backfillDeviceId: _deviceId);
+  }
+
+  static Future<void> _ensureGnssTracksLayerOn(
+    GeoPackageFile file, {
+    String? backfillDeviceId,
+  }) async {
+    final existingLayers = await file.getLayerNames();
+    if (!existingLayers.contains(gnssTracksLayerName)) {
+      AppLogger.debug('$_logTag: gnss_tracks LineLayer 作成');
+      await file.addLayer(gnssTracksLayerName, GeometryType.linestring);
+    }
+
+    final columns = await file.getTableColumns(gnssTracksLayerName);
+    const needed = {
+      'name': 'TEXT',
+      'description': 'TEXT',
+      'device_id': 'TEXT',
+      'gnss_device': 'TEXT',
+    };
+    for (final entry in needed.entries) {
+      if (!columns.contains(entry.key)) {
+        await file.addAttributeColumn(
+          gnssTracksLayerName,
+          entry.key,
+          entry.value,
+        );
+      }
+    }
+    if (backfillDeviceId != null && backfillDeviceId.isNotEmpty) {
+      final db = await file.getDatabase();
+      await db.rawUpdate(
+        'UPDATE $gnssTracksLayerName SET device_id = ? WHERE device_id IS NULL OR device_id = \'\'',
+        [backfillDeviceId],
+      );
+    }
+  }
+
+  Future<void> _ensureGnssDetailsTable() async {
+    if (_historyFile == null) return;
+    await _ensureGnssDetailsTableOn(_historyFile!, backfillDeviceId: _deviceId);
+  }
+
+  static Future<void> _ensureGnssDetailsTableOn(
+    GeoPackageFile file, {
+    String? backfillDeviceId,
+  }) async {
+    try {
+      final db = await file.getDatabase();
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [gnssDetailsTableName],
+      );
+      if (tables.isEmpty) {
+        await db.execute('''
+          CREATE TABLE $gnssDetailsTableName (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            track_date TEXT NOT NULL,
+            point_index INTEGER NOT NULL,
+            timestamp TEXT NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            altitude REAL,
+            accuracy REAL,
+            accuracy_source TEXT,
+            speed REAL,
+            bearing REAL,
+            gps_quality INTEGER,
+            fix_type TEXT,
+            correction_source TEXT,
+            satellite_count INTEGER,
+            hdop REAL,
+            pdop REAL,
+            vdop REAL,
+            gnss_device TEXT,
+            ntrip_mountpoint TEXT,
+            raw_gga TEXT,
+            source_type TEXT DEFAULT 'GNSS',
+            device_id TEXT
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX idx_gnss_track_details_date '
+          'ON $gnssDetailsTableName(track_date)',
+        );
+        await db.execute(
+          'CREATE INDEX idx_gnss_track_details_date_idx '
+          'ON $gnssDetailsTableName(track_date, point_index)',
+        );
+      }
+      if (backfillDeviceId != null && backfillDeviceId.isNotEmpty) {
+        await db.rawUpdate(
+          'UPDATE $gnssDetailsTableName SET device_id = ? WHERE device_id IS NULL OR device_id = \'\'',
+          [backfillDeviceId],
+        );
+      }
+    } catch (e) {
+      AppLogger.debug('$_logTag: gnss_track_details テーブル作成エラー: $e');
+    }
+  }
+
+  Future<void> _startNewGnssSegment(Duration gap) async {
+    await _consolidateGnss();
+    _gnssSegmentIndex++;
+    _todayGnssTrackFeatureId = null;
+    _lastGnssConsolidatedPosition = null;
+    AppLogger.debug('$_logTag: 外部GNSS ${gap.inMinutes} 分空いたので新しい区間 #$_gnssSegmentIndex');
+    notifyListeners();
+  }
+
+  bool _isConsolidatingGnss = false;
+
+  Future<void> _consolidateGnss() async {
+    if (_isConsolidatingGnss ||
+        _historyFile == null ||
+        _pendingGnssDetails.isEmpty ||
+        _currentDateKey == null) {
+      return;
+    }
+
+    _isConsolidatingGnss = true;
+    try {
+      final detailsToWrite = List<GpsTrackPoint>.from(_pendingGnssDetails);
+      final rawIdsToDelete = List<int>.from(_pendingGnssRawIds);
+      _pendingGnssDetails.clear();
+      _pendingGnssRawIds.clear();
+
+      final currentLine = await _readCurrentGnssLine();
+      // SQLite の gnss_track_details には静止中の毎秒エポックを全件残しつつ、
+      // 地図描画・QGIS 用の LineString ジオメトリには連続重複頂点（duplicate nodes）を入れない
+      for (final p in detailsToWrite) {
+        final coord = p.toLatLng();
+        if (currentLine.isEmpty || currentLine.last != coord) {
+          currentLine.add(coord);
+        }
+      }
+
+      final db = await _historyFile!.getDatabase();
+      final devLabel =
+          detailsToWrite.map((p) => p.gnssDevice).whereType<String>().lastOrNull ?? '';
+
+      if (currentLine.length >= 2) {
+        if (_todayGnssTrackFeatureId == null) {
+          _todayGnssTrackFeatureId = await _historyFile!.addLine(
+            gnssTracksLayerName,
+            currentLine,
+            name: _gnssSegmentName,
+            description: devLabel,
+          );
+          if (_todayGnssTrackFeatureId != null) {
+            await db.update(
+              gnssTracksLayerName,
+              {
+                if (_deviceId.isNotEmpty) 'device_id': _deviceId,
+                if (devLabel.isNotEmpty) 'gnss_device': devLabel,
+              },
+              where: 'fid = ?',
+              whereArgs: [_todayGnssTrackFeatureId],
+            );
+          }
+        } else {
+          try {
+            await _historyFile!.updateLine(
+              gnssTracksLayerName,
+              _todayGnssTrackFeatureId!,
+              currentLine,
+              name: _gnssSegmentName,
+              description: devLabel,
+            );
+          } catch (_) {
+            _todayGnssTrackFeatureId = await _historyFile!.addLine(
+              gnssTracksLayerName,
+              currentLine,
+              name: _gnssSegmentName,
+              description: devLabel,
+            );
+            if (_todayGnssTrackFeatureId != null && _deviceId.isNotEmpty) {
+              await db.update(
+                gnssTracksLayerName,
+                {'device_id': _deviceId, 'gnss_device': devLabel},
+                where: 'fid = ?',
+                whereArgs: [_todayGnssTrackFeatureId],
+              );
+            }
+          }
+        }
+      }
+
+      await db.transaction((txn) async {
+        for (final pt in detailsToWrite) {
+          await txn.insert(gnssDetailsTableName, {
+            'track_date': _currentDateKey,
+            'point_index': _lastGnssConsolidatedIndex,
+            'timestamp': pt.timestamp.toIso8601String(),
+            'latitude': pt.latitude,
+            'longitude': pt.longitude,
+            'altitude': pt.altitude,
+            'accuracy': pt.accuracy,
+            'accuracy_source': pt.accuracySource,
+            'speed': pt.speed,
+            'bearing': pt.bearing,
+            'gps_quality': pt.gpsQuality,
+            'fix_type': pt.fixType,
+            'correction_source': pt.correctionSource,
+            'satellite_count': pt.satelliteCount,
+            'hdop': pt.hdop,
+            'pdop': pt.pdop,
+            'vdop': pt.vdop,
+            'gnss_device': pt.gnssDevice,
+            'ntrip_mountpoint': pt.ntripMountpoint,
+            'raw_gga': pt.rawGga,
+            'source_type': 'GNSS',
+            'device_id': _deviceId,
+          });
+          _lastGnssConsolidatedIndex++;
+        }
+      });
+
+      if (rawIdsToDelete.isNotEmpty && _rawBufferFile != null) {
+        try {
+          final rawDb = await _rawBufferFile!.getDatabase();
+          final rawLayerName = _buildGnssRawLayerName(_currentDateKey!);
+          final placeholders = List.filled(rawIdsToDelete.length, '?').join(',');
+          await rawDb.rawDelete(
+            'DELETE FROM "$rawLayerName" WHERE rowid IN ($placeholders)',
+            rawIdsToDelete,
+          );
+        } catch (e) {
+          AppLogger.debug('$_logTag: GNSS Raw Buffer削除エラー: $e');
+        }
+      }
+
+      if (currentLine.isNotEmpty) {
+        _lastGnssConsolidatedPosition = currentLine.last;
+      }
+      lastConsolidatedGnssLine = currentLine;
+
+      onConsolidated?.call();
+    } catch (e) {
+      AppLogger.debug('$_logTag: GNSS Consolidationエラー: $e');
+    } finally {
+      _isConsolidatingGnss = false;
+    }
+  }
+
+  Future<List<LatLng>> _readCurrentGnssLine() async {
+    if (_historyFile == null || _todayGnssTrackFeatureId == null) return [];
+    try {
+      final detail = await _historyFile!.getFeature(
+        gnssTracksLayerName,
+        _todayGnssTrackFeatureId!,
+      );
+      if (detail == null || detail[featureGeometryKey] == null) {
+        _todayGnssTrackFeatureId = null;
+        return [];
+      }
+      return _lineCoords(detail[featureGeometryKey]);
+    } catch (_) {
+      _todayGnssTrackFeatureId = null;
+      return [];
+    }
+  }
+
+  Future<void> _loadTodayGnssFromHistory() async {
+    if (_historyFile == null || _currentDateKey == null) return;
+    try {
+      final existingLayers = await _historyFile!.getLayerNames();
+      if (!existingLayers.contains(gnssTracksLayerName)) return;
+
+      final features = await _historyFile!.getFeatures(gnssTracksLayerName);
+      int? latestId;
+      var latestIndex = 0;
+      for (final feature in features) {
+        if (!_isOwnDevice(feature['device_id'])) continue;
+        final index = segmentIndexOf(
+          feature['name']?.toString(),
+          _currentDateKey!,
+        );
+        if (index == null || index <= latestIndex) continue;
+        final id = feature[featureIdKey];
+        if (id == null) continue;
+        latestIndex = index;
+        latestId = id is int ? id : int.tryParse(id.toString()) ?? 0;
+      }
+      if (latestId != null) {
+        _todayGnssTrackFeatureId = latestId;
+        _gnssSegmentIndex = latestIndex;
+        final detail = await _historyFile!.getFeature(
+          gnssTracksLayerName,
+          latestId,
+        );
+        if (detail != null) {
+          final coords = _lineCoords(detail[featureGeometryKey]);
+          _lastGnssRecordedPosition = coords.lastOrNull ?? _lastGnssRecordedPosition;
+          _lastGnssConsolidatedPosition = coords.lastOrNull;
+          lastConsolidatedGnssLine = coords;
+        }
+      }
+
+      final db = await _historyFile!.getDatabase();
+      final countResult = await db.rawQuery(
+        'SELECT COUNT(*) as cnt, MAX(timestamp) as last_ts FROM $gnssDetailsTableName '
+        'WHERE track_date = ? AND (device_id IS NULL OR device_id = \'\' OR device_id = ?)',
+        [_currentDateKey, _deviceId],
+      );
+      _lastGnssConsolidatedIndex = (countResult.first['cnt'] as int?) ?? 0;
+      final lastTs = countResult.first['last_ts']?.toString();
+      if (lastTs != null) _lastGnssRecordedTime = DateTime.tryParse(lastTs);
+    } catch (e) {
+      AppLogger.debug('$_logTag: GNSS History復元エラー: $e');
+    }
+  }
+
+  Future<void> _recoverUnconsolidatedGnss() async {
+    if (_rawBufferFile == null || _currentDateKey == null) return;
+    try {
+      final rawLayerName = _buildGnssRawLayerName(_currentDateKey!);
+      final existingLayers = await _rawBufferFile!.getLayerNames();
+      if (!existingLayers.contains(rawLayerName)) return;
+
+      final consolidatedUntil = _lastGnssRecordedTime;
+      final rawFeatures = await _rawBufferFile!.getFeatures(rawLayerName);
+      if (rawFeatures.isEmpty) return;
+
+      var recovered = 0;
+      for (final feature in rawFeatures) {
+        final id = feature[featureIdKey];
+        if (id == null) continue;
+        final featureId = id is int ? id : int.tryParse(id.toString()) ?? 0;
+        final detail = await _rawBufferFile!.getFeature(rawLayerName, featureId);
+        if (detail == null || detail[featureGeometryKey] == null) continue;
+
+        final geom = detail[featureGeometryKey];
+        LatLng? latLng;
+        if (geom is List && geom.isNotEmpty && geom.first is LatLng) {
+          latLng = geom.first as LatLng;
+        }
+        if (latLng == null) continue;
+
+        final point = _gnssTrackPointFromRow(detail, latLng);
+        if (consolidatedUntil != null && !point.timestamp.isAfter(consolidatedUntil)) {
+          continue;
+        }
+        _pendingGnssDetails.add(point);
+        _pendingGnssRawIds.add(featureId);
+        recovered++;
+      }
+
+      if (recovered > 0) {
+        final lastTs = _pendingGnssDetails.last.timestamp;
+        if (_lastGnssRecordedTime == null || lastTs.isAfter(_lastGnssRecordedTime!)) {
+          _lastGnssRecordedTime = lastTs;
+        }
+        await _consolidateGnss();
+      }
+    } catch (e) {
+      AppLogger.debug('$_logTag: GNSS未反映復元エラー: $e');
+    }
+  }
+
+  static GpsTrackPoint _gnssTrackPointFromRow(
+    Map<String, dynamic> row,
+    LatLng position,
+  ) =>
+      GpsTrackPoint(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        altitude: (row['altitude'] as num?)?.toDouble(),
+        accuracy: (row['accuracy'] as num?)?.toDouble(),
+        accuracySource: row['accuracy_source']?.toString(),
+        speed: (row['speed'] as num?)?.toDouble(),
+        bearing: (row['bearing'] as num?)?.toDouble(),
+        timestamp:
+            DateTime.tryParse(row['timestamp']?.toString() ?? '') ?? DateTime.now(),
+        sourceType: 'GNSS',
+        gpsQuality: (row['gps_quality'] as num?)?.toInt(),
+        fixType: row['fix_type']?.toString(),
+        correctionSource: row['correction_source']?.toString(),
+        satelliteCount: (row['satellite_count'] as num?)?.toInt(),
+        hdop: (row['hdop'] as num?)?.toDouble(),
+        pdop: (row['pdop'] as num?)?.toDouble(),
+        vdop: (row['vdop'] as num?)?.toDouble(),
+        gnssDevice: row['gnss_device']?.toString(),
+        ntripMountpoint: row['ntrip_mountpoint']?.toString(),
+        rawGga: row['raw_gga']?.toString(),
+      );
+
+  Future<List<GpsTrackPoint>> _gnssPointsOfDay(
+    String dKey, {
+    String? deviceTag,
+  }) async {
+    if (_historyFile == null) return [];
+    try {
+      final db = await _historyFile!.getDatabase();
+      String? targetDeviceId;
+      if (deviceTag != null && deviceTag.isNotEmpty) {
+        final devRows = await db.rawQuery(
+          'SELECT DISTINCT device_id FROM $gnssDetailsTableName WHERE track_date = ? AND device_id LIKE ?',
+          [dKey, '$deviceTag%'],
+        );
+        targetDeviceId = devRows.firstOrNull?['device_id']?.toString();
+      } else {
+        targetDeviceId = _deviceId;
+      }
+
+      final List<Map<String, Object?>> rows;
+      if (targetDeviceId == null || targetDeviceId == _deviceId) {
+        rows = await db.query(
+          gnssDetailsTableName,
+          where:
+              'track_date = ? AND (device_id IS NULL OR device_id = \'\' OR device_id = ?)',
+          whereArgs: [dKey, _deviceId],
+          orderBy: 'point_index ASC',
+        );
+      } else {
+        rows = await db.query(
+          gnssDetailsTableName,
+          where: 'track_date = ? AND device_id = ?',
+          whereArgs: [dKey, targetDeviceId],
+          orderBy: 'point_index ASC',
+        );
+      }
+
+      return [
+        for (final row in rows)
+          _gnssTrackPointFromRow(
+            row,
+            LatLng(
+              (row['latitude'] as num).toDouble(),
+              (row['longitude'] as num).toDouble(),
+            ),
+          ),
+      ];
+    } catch (e) {
+      AppLogger.debug('$_logTag: gnss_track_details クエリエラー: $e');
+      return [];
+    }
+  }
+
+  // ==============================
+  // 機器接続・切断イベントの構造化記録（AIエージェント協働解析用）
+  // ==============================
+
+  Future<void> _ensureConnectionEventsTable() async {
+    if (_historyFile == null) return;
+    await _ensureConnectionEventsTableOn(_historyFile!);
+  }
+
+  static Future<void> _ensureConnectionEventsTableOn(GeoPackageFile file) async {
+    try {
+      final db = await file.getDatabase();
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [connectionEventsTableName],
+      );
+      if (tables.isEmpty) {
+        await db.execute('''
+          CREATE TABLE $connectionEventsTableName (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            category TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            device_name TEXT NOT NULL,
+            device_address TEXT,
+            detail TEXT,
+            device_id TEXT
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX idx_device_conn_events_ts '
+          'ON $connectionEventsTableName(timestamp)',
+        );
+      }
+    } catch (e) {
+      AppLogger.debug('$_logTag: $connectionEventsTableName テーブル作成エラー: $e');
+    }
+  }
+
+  static Future<({bool changedLocal, bool changedRemote, int importedDays, int exportedDays})>
+      _mergePastGnssAndEvents({
+    required GeoPackageFile localFile,
+    required GeoPackageFile remoteFile,
+    required String todayKey,
+    required String localFallbackDeviceId,
+  }) async {
+    var changedLocal = false;
+    var changedRemote = false;
+    var importedDays = 0;
+    var exportedDays = 0;
+
+    final localGnss = await _collectPastGnssBlocks(
+      localFile,
+      todayKey,
+      fallbackDeviceId: localFallbackDeviceId,
+    );
+    final remoteGnss = await _collectPastGnssBlocks(
+      remoteFile,
+      todayKey,
+      fallbackDeviceId: '',
+    );
+    final importedKeys = <({String deviceId, String dateKey})>{};
+
+    for (final entry in remoteGnss.stats.entries) {
+      final key = entry.key;
+      final remoteStat = entry.value;
+      final localStat = localGnss.stats[key];
+      final shouldImport = localStat == null ||
+          (key.deviceId != localFallbackDeviceId &&
+              _isNewerBlock(remoteStat, localStat));
+      if (!shouldImport) continue;
+
+      await _copyGnssDayBlock(
+        from: remoteFile,
+        to: localFile,
+        deviceId: key.deviceId,
+        dateKey: key.dateKey,
+        fromFallbackDeviceId: '',
+        fromFids: remoteGnss.fidsByBlock[key] ?? const [],
+        toFids: localGnss.fidsByBlock[key] ?? const [],
+      );
+      importedKeys.add(key);
+      importedDays++;
+      changedLocal = true;
+    }
+
+    for (final entry in localGnss.stats.entries) {
+      final key = entry.key;
+      if (importedKeys.contains(key)) continue;
+      final localStat = entry.value;
+      final remoteStat = remoteGnss.stats[key];
+      final shouldExport =
+          remoteStat == null || _isNewerBlock(localStat, remoteStat);
+      if (!shouldExport) continue;
+
+      await _copyGnssDayBlock(
+        from: localFile,
+        to: remoteFile,
+        deviceId: key.deviceId,
+        dateKey: key.dateKey,
+        fromFallbackDeviceId: localFallbackDeviceId,
+        fromFids: localGnss.fidsByBlock[key] ?? const [],
+        toFids: remoteGnss.fidsByBlock[key] ?? const [],
+      );
+      exportedDays++;
+      changedRemote = true;
+    }
+
+    // 過去日の device_connection_events を双方向にマージ（重複キーで冪等追加）
+    final todayIsoPrefix = todayKey.replaceAll('_', '-');
+    if (await _copyMissingPastConnectionEvents(
+      from: remoteFile,
+      to: localFile,
+      todayIsoPrefix: todayIsoPrefix,
+      fallbackDeviceId: '',
+    )) {
+      changedLocal = true;
+    }
+    if (await _copyMissingPastConnectionEvents(
+      from: localFile,
+      to: remoteFile,
+      todayIsoPrefix: todayIsoPrefix,
+      fallbackDeviceId: localFallbackDeviceId,
+    )) {
+      changedRemote = true;
+    }
+
+    return (
+      changedLocal: changedLocal,
+      changedRemote: changedRemote,
+      importedDays: importedDays,
+      exportedDays: exportedDays,
+    );
+  }
+
+  static Future<({
+    Map<({String deviceId, String dateKey}), ({int featureCount, int detailCount})> stats,
+    Map<({String deviceId, String dateKey}), List<int>> fidsByBlock,
+  })> _collectPastGnssBlocks(
+    GeoPackageFile file,
+    String todayKey, {
+    required String fallbackDeviceId,
+  }) async {
+    final stats = <({String deviceId, String dateKey}), ({int featureCount, int detailCount})>{};
+    final fidsByBlock = <({String deviceId, String dateKey}), List<int>>{};
+    final layers = await file.getLayerNames();
+    if (layers.contains(gnssTracksLayerName)) {
+      final features = await file.getFeatures(gnssTracksLayerName);
+      for (final f in features) {
+        final name = f['name']?.toString();
+        if (name == null || name.isEmpty) continue;
+        final dKey = _baseDateOfFeatureName(name);
+        if (!_isPastDateKey(dKey, todayKey)) continue;
+        final rawDev = f['device_id']?.toString() ?? '';
+        final dev = rawDev.isEmpty ? fallbackDeviceId : rawDev;
+        if (dev.isEmpty) continue;
+        final k = (deviceId: dev, dateKey: dKey);
+        final prev = stats[k] ?? (featureCount: 0, detailCount: 0);
+        stats[k] = (featureCount: prev.featureCount + 1, detailCount: prev.detailCount);
+        final id = f[featureIdKey];
+        final fid = id is int ? id : int.tryParse(id?.toString() ?? '');
+        if (fid != null) {
+          (fidsByBlock[k] ??= <int>[]).add(fid);
+        }
+      }
+    }
+
+    final db = await file.getDatabase();
+    final rows = await db.rawQuery(
+      'SELECT device_id, track_date, COUNT(*) as cnt FROM $gnssDetailsTableName '
+      'WHERE track_date < ? GROUP BY device_id, track_date',
+      [todayKey],
+    );
+    for (final r in rows) {
+      final dKey = r['track_date']?.toString() ?? '';
+      if (!_isPastDateKey(dKey, todayKey)) continue;
+      final rawDev = r['device_id']?.toString() ?? '';
+      final dev = rawDev.isEmpty ? fallbackDeviceId : rawDev;
+      if (dev.isEmpty) continue;
+      final cnt = (r['cnt'] as int?) ?? 0;
+      final k = (deviceId: dev, dateKey: dKey);
+      final prev = stats[k] ?? (featureCount: 0, detailCount: 0);
+      stats[k] = (featureCount: prev.featureCount, detailCount: prev.detailCount + cnt);
+    }
+    return (stats: stats, fidsByBlock: fidsByBlock);
+  }
+
+  static Future<void> _copyGnssDayBlock({
+    required GeoPackageFile from,
+    required GeoPackageFile to,
+    required String deviceId,
+    required String dateKey,
+    required String fromFallbackDeviceId,
+    required List<int> fromFids,
+    required List<int> toFids,
+  }) async {
+    for (final fid in toFids) {
+      await to.removeFeature(gnssTracksLayerName, fid);
+    }
+    final toDb = await to.getDatabase();
+    for (final fid in fromFids) {
+      final detail = await from.getFeature(gnssTracksLayerName, fid);
+      if (detail == null) continue;
+      final coords = _lineCoords(detail[featureGeometryKey]);
+      if (coords.length < 2) continue;
+      final name = detail['name']?.toString() ?? dateKey;
+      final desc = detail['description']?.toString() ?? '';
+      final gnssDev = detail['gnss_device']?.toString() ?? desc;
+      final newFid = await to.addLine(
+        gnssTracksLayerName,
+        coords,
+        name: name,
+        description: desc,
+      );
+      if (newFid != null) {
+        await toDb.update(
+          gnssTracksLayerName,
+          {'device_id': deviceId, 'gnss_device': gnssDev},
+          where: 'fid = ?',
+          whereArgs: [newFid],
+        );
+      }
+    }
+
+    final fromDb = await from.getDatabase();
+    final detailRows = await fromDb.query(
+      gnssDetailsTableName,
+      where:
+          'track_date = ? AND (device_id = ? OR (? = ? AND (device_id IS NULL OR device_id = \'\')))',
+      whereArgs: [dateKey, deviceId, deviceId, fromFallbackDeviceId],
+      orderBy: 'point_index ASC',
+    );
+    await toDb.transaction((txn) async {
+      await txn.delete(
+        gnssDetailsTableName,
+        where: 'track_date = ? AND device_id = ?',
+        whereArgs: [dateKey, deviceId],
+      );
+      final batch = txn.batch();
+      for (final row in detailRows) {
+        batch.insert(gnssDetailsTableName, {
+          'track_date': dateKey,
+          'point_index': row['point_index'],
+          'timestamp': row['timestamp'],
+          'latitude': row['latitude'],
+          'longitude': row['longitude'],
+          'altitude': row['altitude'],
+          'accuracy': row['accuracy'],
+          'accuracy_source': row['accuracy_source'],
+          'speed': row['speed'],
+          'bearing': row['bearing'],
+          'gps_quality': row['gps_quality'],
+          'fix_type': row['fix_type'],
+          'correction_source': row['correction_source'],
+          'satellite_count': row['satellite_count'],
+          'hdop': row['hdop'],
+          'pdop': row['pdop'],
+          'vdop': row['vdop'],
+          'gnss_device': row['gnss_device'],
+          'ntrip_mountpoint': row['ntrip_mountpoint'],
+          'raw_gga': row['raw_gga'],
+          'source_type': row['source_type'] ?? 'GNSS',
+          'device_id': deviceId,
+        });
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
+  static Future<bool> _copyMissingPastConnectionEvents({
+    required GeoPackageFile from,
+    required GeoPackageFile to,
+    required String todayIsoPrefix,
+    required String fallbackDeviceId,
+  }) async {
+    final fromDb = await from.getDatabase();
+    final toDb = await to.getDatabase();
+    final srcRows = await fromDb.query(
+      connectionEventsTableName,
+      where: 'substr(timestamp, 1, 10) < ?',
+      whereArgs: [todayIsoPrefix],
+      orderBy: 'timestamp ASC',
+    );
+    if (srcRows.isEmpty) return false;
+
+    final dstRows = await toDb.query(
+      connectionEventsTableName,
+      where: 'substr(timestamp, 1, 10) < ?',
+      whereArgs: [todayIsoPrefix],
+    );
+    String sig(Map<String, Object?> r, String fb) {
+      final rawDev = r['device_id']?.toString() ?? '';
+      final dev = rawDev.isEmpty ? fb : rawDev;
+      return '$dev|${r['timestamp']}|${r['category']}|${r['event_type']}|${r['device_name']}';
+    }
+
+    final existing = {for (final r in dstRows) sig(r, '')};
+    final toInsert = <Map<String, Object?>>[];
+    for (final r in srcRows) {
+      final rawDev = r['device_id']?.toString() ?? '';
+      final dev = rawDev.isEmpty ? fallbackDeviceId : rawDev;
+      final key = '$dev|${r['timestamp']}|${r['category']}|${r['event_type']}|${r['device_name']}';
+      if (existing.add(key)) {
+        toInsert.add({
+          'timestamp': r['timestamp'],
+          'category': r['category'],
+          'event_type': r['event_type'],
+          'device_name': r['device_name'],
+          'device_address': r['device_address'],
+          'detail': r['detail'],
+          'device_id': dev,
+        });
+      }
+    }
+    if (toInsert.isEmpty) return false;
+
+    await toDb.transaction((txn) async {
+      final batch = txn.batch();
+      for (final row in toInsert) {
+        batch.insert(connectionEventsTableName, row);
+      }
+      await batch.commit(noResult: true);
+    });
+    return true;
+  }
+
+  void _onDeviceConnectionEvent(DeviceConnectionEvent ev) {
+    if (!_isInitialized || _historyFile == null) return;
+    final write = _insertConnectionEvent(ev);
+    _writing.add(write);
+    write.whenComplete(() => _writing.remove(write));
+  }
+
+  Future<void> _insertConnectionEvent(DeviceConnectionEvent ev) async {
+    final file = _historyFile;
+    if (file == null) return;
+    try {
+      final db = await file.getDatabase();
+      await db.insert(connectionEventsTableName, {
+        'timestamp': ev.timestamp.toIso8601String(),
+        'category': ev.category.name,
+        'event_type': ev.type.name,
+        'device_name': ev.deviceName,
+        'device_address': ev.deviceAddress,
+        'detail': ev.detail,
+        'device_id': _deviceId,
+      });
+    } catch (e) {
+      AppLogger.debug('$_logTag: 接続イベントのGPKG書き込みエラー: $e');
+    }
   }
 }

@@ -32,6 +32,15 @@ abstract class ExternalDeviceService extends ChangeNotifier {
   /// 接続処理中かどうか
   bool get isConnecting;
 
+  /// 電波断後にバックグラウンドで自動再接続を試みているか
+  bool get isReconnecting => false;
+
+  /// 自動再接続の上限に達して待機（電源OFF想定・電波送出ゼロ）している記憶済み機器があるか
+  bool get hasStandbyDevice => false;
+
+  /// 待機中の記憶済み機器へ手動で1回再接続する
+  Future<void> reconnectStandby() async {}
+
   /// ペアリング済みの互換デバイスを列挙
   Future<List<BluetoothDevice>> scanDevices();
 

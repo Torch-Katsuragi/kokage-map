@@ -33,6 +33,7 @@ import 'package:latlong2/latlong.dart';
 import '../../i18n/strings.g.dart';
 import '../../interfaces/map_state_interface.dart';
 import '../../models/app_notification.dart';
+import '../../models/map_style_group.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../providers/notification_providers.dart';
@@ -68,7 +69,7 @@ class TruPulseTool extends DeviceTool {
   final Ref _ref;
   final TruPulseService _service;
   StreamSubscription<TruPulseMeasurement>? _measurementSub;
-  final AudioPlayer _player = AudioPlayer();
+  AudioPlayer? _player;
   VoidCallback? _dismissMenu;
   ProviderSubscription<LayerNode?>? _selectedLayerSub;
 
@@ -88,8 +89,19 @@ class TruPulseTool extends DeviceTool {
   void _notifyUI() => notifyListeners();
 
   PointFeatureNode? _station;
+  PointFeatureNode? _lastBacksightedPoint;
   LatLng? get stationPosition => _station?.point;
   PointFeatureNode? get station => _station;
+
+  /// ステータスパネルから直ちに「後視をやり直す」操作ができる対象の点
+  /// （振り返りなら現在の `_station`、戻り後視なら直前に後視した `_lastBacksightedPoint`）
+  PointFeatureNode? get undoableBacksightPoint {
+    if (TraverseRecorder.canUndoBacksight(_station)) return _station;
+    if (TraverseRecorder.canUndoBacksight(_lastBacksightedPoint)) {
+      return _lastBacksightedPoint;
+    }
+    return null;
+  }
 
   @visibleForTesting
   set debugStation(PointFeatureNode? stn) => _station = stn;
@@ -110,6 +122,7 @@ class TruPulseTool extends DeviceTool {
   void onActivate() {
     _panTool.onActivate();
     _measurementSub = _service.measurementStream.listen(_onMeasurement);
+    _service.addListener(_onServiceConnectionChanged);
     _selectedLayerSub = _ref.listen(selectedLayerNodeProvider, (_, _) {
       _notifyUI();
     });
@@ -121,12 +134,25 @@ class TruPulseTool extends DeviceTool {
     _panTool.onDeactivate();
     _measurementSub?.cancel();
     _measurementSub = null;
+    _service.removeListener(_onServiceConnectionChanged);
     _selectedLayerSub?.close();
     _selectedLayerSub = null;
     _mapState = null;
     _dismissMenu?.call();
     _dismissMenu = null;
     AppLogger.debug('[TruPulseTool] deactivated');
+  }
+
+  bool _lastConnected = false;
+  bool _lastReconnecting = false;
+
+  void _onServiceConnectionChanged() {
+    if (_service.isConnected != _lastConnected ||
+        _service.isReconnecting != _lastReconnecting) {
+      _lastConnected = _service.isConnected;
+      _lastReconnecting = _service.isReconnecting;
+      _notifyUI();
+    }
   }
 
   // =========================================================
@@ -136,8 +162,9 @@ class TruPulseTool extends DeviceTool {
   Future<void> _playSound(String assetPath) async {
     _lastPlayedAsset = assetPath;
     try {
-      await _player.setPlaybackRate(1.0);
-      await _player.play(AssetSource(assetPath));
+      final player = _player ??= AudioPlayer();
+      await player.setPlaybackRate(1.0);
+      await player.play(AssetSource(assetPath));
     } catch (e) {
       AppLogger.debug('[TruPulseTool] Sound playback failed ($assetPath): $e');
     }
@@ -208,6 +235,9 @@ class TruPulseTool extends DeviceTool {
 
       // 戻りの後視では器械点が1つ手前へ移る（ハイライトもそちらへ）
       _station = shot.station;
+      if (shot.kind != TraverseShotKind.forward) {
+        _lastBacksightedPoint = shot.point;
+      }
       _ref.read(featureRefreshTriggerProvider.notifier).trigger();
       _mapState?.refreshFeatures();
       _notifyUI();
@@ -310,10 +340,39 @@ class TruPulseTool extends DeviceTool {
     }
   }
 
+  /// 指定した測点の「後視補正」だけを取り消して元の前視のみの状態へ戻し、
+  /// 器械点をその測点に合わせてすぐ後視を撃ち直せるようにする
+  Future<bool> undoBacksightOf(PointFeatureNode target) async {
+    if (refuseReadOnlyEditBy(_ref.read, target)) return false;
+    final ok = await TraverseRecorder.undoBacksight(
+      target,
+      trueAz: trueAzimuth,
+    );
+    if (!ok) return false;
+
+    _station = target;
+    if (_lastBacksightedPoint == target) {
+      _lastBacksightedPoint = null;
+    }
+    final layer = target.parent;
+    if (_ref.read(selectedLayerNodeProvider) != layer) {
+      _ref.read(selectedLayerNodeProvider.notifier).select(layer);
+    }
+    _ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    _mapState?.refreshFeatures();
+    _notifyUI();
+    _ref.read(notificationCenterProvider.notifier).add(
+          title: t.trupulse.panel.backsightUndone,
+          level: NotificationLevel.info,
+        );
+    return true;
+  }
+
   void _showPointMenu(BuildContext context, Offset center, PointFeatureNode target) {
     // 基準点・削除などはどれも書き込むので、読み取り専用レイヤの点ではメニューを出さない
     if (refuseReadOnlyEditBy(_ref.read, target)) return;
     final dependents = _findDependents(target);
+    final canUndoBs = TraverseRecorder.canUndoBacksight(target);
 
     _dismissMenu = showRadialMenu(
       context: context,
@@ -333,6 +392,13 @@ class TruPulseTool extends DeviceTool {
             _notifyUI();
           },
         ),
+        if (canUndoBs)
+          RadialAction(
+            icon: Icons.undo,
+            label: t.trupulse.menu.undoBacksight,
+            color: Colors.amber.shade100,
+            onTap: () => unawaited(undoBacksightOf(target)),
+          ),
         RadialAction(
           icon: Icons.delete,
           label: t.common.delete,
@@ -516,6 +582,11 @@ class TruPulseTool extends DeviceTool {
           coords.toGeographic(),
           child.point.toGeographic(),
         ]),
+        properties: {
+          kStyleProp: TraverseRecorder.isBacksighted(child)
+              ? 'confirmed'
+              : 'provisional',
+        },
       ));
     }
     return lines;

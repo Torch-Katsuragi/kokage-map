@@ -111,6 +111,7 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
       _world.setHighPrecision(hp);
       _TerrainMapLayerState._tileImages.clear();
       unawaited(widget.baseMapService.clearCache(providerId: BaseMapProvider.contourOverlay.cacheId));
+      unawaited(widget.baseMapService.clearCache(providerId: BaseMapProvider.csReliefOverlay.cacheId));
     }
     _scenes.clear();
     _scheduleRefresh();
@@ -245,8 +246,10 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
   _TileScene _sceneFor(TerrainTile tile, TerrainMesh mesh, int step) {
     final g = widget.scene.features;
     final track = widget.gpsTrack();
+    final gnssTrack = widget.gnssTrack?.call() ?? const <LatLng>[];
     final session = ref.read(partySessionProvider);
     final loc = widget.location.value;
+    final gnssMarker = widget.gnssLocation?.value;
     final cacheKey = (tile.key, step, tile.borderMask, tile.sourceZoom);
     final staticKey = <Object?>[
       g.polylines, g.polygons, g.markers, g.selectedPolylines, g.selectedPolygons, g.selectedMarkers, g.images, g.selectedImages,
@@ -260,14 +263,31 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     ];
     final overlayFrameKey = [for (final n in selectedOverlays) '${n.filePath}@${n.cornerCoordinates}'].join(';');
     final deviceLines = tool is DeviceTool ? tool.overlayLines() : const <geo.Feature<geo.LineString>>[];
+    final deviceLinesKey = deviceLines.isEmpty
+        ? ''
+        : [for (final f in deviceLines) '${f.properties[kStyleProp]}@${f.geometry}'].join(';');
     final deviceStation = tool is DeviceTool ? tool.overlayStation : null;
     final headingDeg = widget.heading?.value;
     final headingKey = headingDeg == null ? null : (headingDeg / 5).round();
     final pins = ref.read(roomPinsProvider).pins;
+    final selectedOfficial = [
+      for (final f in ref.read(selectedFeaturesProvider).whereType<OfficialFeatureNode>())
+        if (f.geometry != null) f,
+    ];
+    final visibleOfficialVectorSpecs = [
+      for (final n in OfficialLayerService.instance.visibleNodesIn(ref.read(folderTreeProvider)))
+        if (n.spec.kind == OfficialLayerKind.vectorTile) n.spec,
+    ];
+    final officialKey = [
+      if (visibleOfficialVectorSpecs.isNotEmpty) OfficialLayerService.instance.revision,
+      for (final s in visibleOfficialVectorSpecs) s.id,
+      for (final f in selectedOfficial) '${f.spec.id}:${f.hitId}',
+    ].join('|');
     final dynamicKey = <Object?>[
-      track.length, session, pins, loc, drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview,
+      track.length, gnssTrack.length, session, pins, loc, gnssMarker,
+      drawing.drawingLine.length, drawing.drawingPolygon.length, drawing.pointPreview,
       overlayFrameKey, tool is OverlayTransformTool ? tool.rotationHandlePosition : null,
-      deviceLines.length, deviceStation, headingKey, tool.name, _styleSignature(),
+      deviceLinesKey, deviceStation, headingKey, tool.name, _styleSignature(), officialKey,
     ];
     final key = <Object?>[...staticKey, ...dynamicKey];
     final cached = _scenes[cacheKey];
@@ -334,8 +354,13 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     var dyn = _dynamicScenes[cacheKey];
     if (dyn == null || !_sameKey(dyn.key, dynamicKey)) {
       dyn = _buildDynamic(dynamicKey, track, session, pins, loc, dem, builder, clip,
+          tileKey: tile.key,
+          gnssTrack: gnssTrack,
+          gnssMarker: gnssMarker,
           selectedOverlays: selectedOverlays, tool: tool, deviceLines: deviceLines, deviceStation: deviceStation,
-          headingDeg: headingDeg);
+          headingDeg: headingDeg,
+          visibleOfficialSpecs: visibleOfficialVectorSpecs,
+          selectedOfficial: selectedOfficial);
       _dynamicScenes[cacheKey] = dyn;
     }
     // 静的な線・面はそのまま（リストと束の同一性を保つ → 描画側の投影キャッシュが効く）。動的な方は別に持つ
@@ -556,6 +581,11 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
     DemGrid dem,
     _SceneBuilderFor builder,
     Rect clip, {
+    required TileKey tileKey,
+    List<LatLng> gnssTrack = const [],
+    GnssMapMarker? gnssMarker,
+    List<OfficialLayerSpec> visibleOfficialSpecs = const [],
+    List<OfficialFeatureNode> selectedOfficial = const [],
     List<OverlayImageNode> selectedOverlays = const [],
     MapTool? tool,
     List<geo.Feature<geo.LineString>> deviceLines = const [],
@@ -594,6 +624,31 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
         builder(const {}, gpsStyle, '__no_label__').build(
           lines: [
             _lineFeature(track),
+          ],
+          clipRect: clip,
+        ),
+      );
+    }
+    // 1.2 今日の外部 GNSS 軌跡（紫・高精度。gnss_tracks レイヤにスタイル設定があればそれに合わせる）
+    if (gnssTrack.length >= 2) {
+      final gnssGroup = widget.scene.styleGroups
+          .where((g) => g.key.contains('|gps_history.gpkg/gnss_tracks/'))
+          .firstOrNull;
+      final gnssStyle = gnssGroup != null
+          ? _styleFromGroup(gnssGroup)
+          : const TerrainFeatureStyle(
+              lineColor: Color(0xCC6A1B9A),
+              lineWidth: 3.2,
+              fillColor: Color(0x00000000),
+              outlineColor: Color(0x00000000),
+              outlineWidth: 0,
+              pointColor: Color(0xFF6A1B9A),
+              pointSize: 4,
+            );
+      add(
+        builder(const {}, gnssStyle, '__no_label__').build(
+          lines: [
+            _lineFeature(gnssTrack),
           ],
           clipRect: clip,
         ),
@@ -647,6 +702,21 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
       if (at(loc) case final o?) {
         // 半透明: 不透明だと真下の点や短い線を隠す（2026-09-01 実機で確認）
         points.add(TerrainPoint(x: o.dx, y: o.dy, color: Colors.blue.withValues(alpha: 0.55), sizePx: 9, headingDeg: headingDeg));
+      }
+    }
+    // 3.2 外部GNSS受信機のライブ位置（白い外輪＋解状態カラーのターゲットリング。ツール選択を問わず常時描画）
+    if (gnssMarker != null) {
+      if (at(gnssMarker.position) case final o?) {
+        final fixColor = switch (gnssMarker.gpsQuality) {
+          4 => const Color(0xFF00C853), // RTK FIX: 鮮やかなエメラルドグリーン
+          5 => const Color(0xFF00ACC1), // RTK FLOAT: シアン
+          2 || 3 || 9 => const Color(0xFF7B1FA2), // DGPS / SBAS: パープル
+          _ => const Color(0xFFFB8C00), // 単独GPS: オレンジ
+        };
+        points
+          ..add(TerrainPoint(x: o.dx, y: o.dy, color: Colors.white.withValues(alpha: 0.92), sizePx: 14))
+          ..add(TerrainPoint(x: o.dx, y: o.dy, color: fixColor.withValues(alpha: 0.88), sizePx: 9.5))
+          ..add(TerrainPoint(x: o.dx, y: o.dy, color: Colors.white, sizePx: 3.5));
       }
     }
     // 4. 描画中の線・面・点（ペン）。2D の描画プレビューと同じ赤
@@ -755,17 +825,118 @@ mixin _TerrainScenes on ConsumerState<TerrainMapLayer> {
         if (at(handle) case final o?) points.add(TerrainPoint(x: o.dx, y: o.dy, color: Colors.blue, sizePx: 10));
       }
     }
-    // 6. 外部機器ツール（TruPulse）: 基準点 → 計測点の線（赤）と基準点
+    // 6. 外部機器ツール（TruPulse）: 基準点 → 計測点の線（後視確定＝赤実線、後視待ち未確定＝半透明アンバー）と基準点
     if (deviceLines.isNotEmpty || deviceStation != null) {
-      const deviceStyle = TerrainFeatureStyle(
-        lineColor: Colors.red, lineWidth: 2, fillColor: Color(0x00000000),
-        outlineColor: Colors.red, outlineWidth: 0, pointColor: Colors.red, pointSize: 8,
+      const confirmedStyle = TerrainFeatureStyle(
+        lineColor: Color(0xFFE53935), lineWidth: 2.4, fillColor: Color(0x00000000),
+        outlineColor: Color(0xFFE53935), outlineWidth: 0, pointColor: Color(0xFFE53935), pointSize: 8,
+      );
+      const provisionalStyle = TerrainFeatureStyle(
+        lineColor: Color(0xAAFF9800), lineWidth: 1.7, fillColor: Color(0x00000000),
+        outlineColor: Color(0xAAFF9800), outlineWidth: 0, pointColor: Color(0xFFFF9800), pointSize: 7,
       );
       if (deviceLines.isNotEmpty) {
-        add(builder(const {}, deviceStyle, '__no_label__').build(lines: deviceLines, clipRect: clip));
+        add(
+          builder(
+            const {
+              'confirmed': confirmedStyle,
+              'provisional': provisionalStyle,
+            },
+            confirmedStyle,
+            '__no_label__',
+          ).build(lines: deviceLines, clipRect: clip),
+        );
       }
       if (deviceStation != null) {
         if (at(deviceStation) case final o?) points.add(TerrainPoint(x: o.dx, y: o.dy, color: Colors.orange, sizePx: 12));
+      }
+    }
+    // 7. `System`（`sys`）の公式ベクトルレイヤ（林班界・国有林/民有林など）と選択ハイライト
+    if (visibleOfficialSpecs.isNotEmpty) {
+      const nationalStyle = TerrainFeatureStyle(
+        lineColor: Color(0xDD1B5E20),
+        lineWidth: 1.8,
+        fillColor: Colors.transparent,
+        outlineColor: Color(0xDD1B5E20),
+        outlineWidth: 1.8,
+        pointColor: Color(0xFF1B5E20),
+        pointSize: 5,
+        labelTextStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF1B5E20)),
+        labelHaloColor: Colors.white,
+        labelHaloEnabled: true,
+        labelHaloSize: 1.5,
+      );
+      const privateStyle = TerrainFeatureStyle(
+        lineColor: Color(0xCC558B2F),
+        lineWidth: 1.3,
+        fillColor: Colors.transparent,
+        outlineColor: Color(0xCC558B2F),
+        outlineWidth: 1.3,
+        pointColor: Color(0xFF558B2F),
+        pointSize: 5,
+        labelTextStyle: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500, color: Color(0xFF33691E)),
+        labelHaloColor: Colors.white,
+        labelHaloEnabled: true,
+        labelHaloSize: 1.4,
+      );
+      const officialStyles = {
+        'rinya_national': nationalStyle,
+        'rinya_private': privateStyle,
+      };
+      for (final spec in visibleOfficialSpecs) {
+        final fs = OfficialLayerService.instance.featuresForTileSync(
+          spec,
+          tileKey.z,
+          tileKey.x,
+          tileKey.y,
+        );
+        if (fs.isEmpty) continue;
+        final polys = <geo.Feature<geo.Geometry>>[];
+        final lns = <geo.Feature<geo.Geometry>>[];
+        final pts = <geo.Feature<geo.Point>>[];
+        for (final f in fs) {
+          final g = f.geometry;
+          if (g is geo.Polygon || g is geo.MultiPolygon) {
+            polys.add(f);
+          } else if (g is geo.LineString || g is geo.MultiLineString) {
+            lns.add(f);
+          } else if (g is geo.Point) {
+            pts.add(geo.Feature<geo.Point>(id: f.id, geometry: g, properties: f.properties));
+          } else if (g is geo.MultiPoint) {
+            for (final pt in g.points) {
+              pts.add(geo.Feature<geo.Point>(id: f.id, geometry: pt, properties: f.properties));
+            }
+          }
+        }
+        final showLabels = tileKey.z >= 13;
+        final b = TerrainSceneBuilder(
+          mesh: builder(officialStyles, privateStyle, showLabels ? kOfficialLabelProp : '__no_label__').mesh,
+          stylesByKey: officialStyles,
+          defaultStyle: privateStyle,
+          styleKeyProp: kOfficialStyleKeyProp,
+          labelProp: showLabels ? kOfficialLabelProp : '__no_label__',
+          labelTextStyle: privateStyle.labelTextStyle!,
+          polygonClipCells: 8,
+        );
+        add(b.build(polygons: polys, lines: lns, points: pts, clipRect: clip));
+      }
+    }
+    if (selectedOfficial.isNotEmpty) {
+      final selStyle = _selectedStyle(_defaultStyle());
+      final selPolys = <geo.Feature<geo.Geometry>>[];
+      final selLines = <geo.Feature<geo.Geometry>>[];
+      for (final f in selectedOfficial) {
+        final g = f.geometry;
+        if (g == null) continue;
+        final gf = geo.Feature<geo.Geometry>(geometry: g);
+        if (g is geo.Polygon || g is geo.MultiPolygon) {
+          selPolys.add(gf);
+        } else if (g is geo.LineString || g is geo.MultiLineString) {
+          selLines.add(gf);
+        }
+      }
+      if (selPolys.isNotEmpty || selLines.isNotEmpty) {
+        add(builder(const {}, selStyle, '__no_label__').build(polygons: selPolys, lines: selLines, clipRect: clip));
       }
     }
     return _TileScene(key: key, lines: lines, polygons: polygons, points: points, labels: labels);

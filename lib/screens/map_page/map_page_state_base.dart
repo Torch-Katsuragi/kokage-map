@@ -56,16 +56,20 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// そのたびに地図ページ全体を組み立て直さない（2026-10-06）
   final ValueNotifier<LatLng?> locationNotifier = ValueNotifier<LatLng?>(null);
 
+  /// 外部GNSS受信機のライブ位置（接続中・Fix有効時のみ非null。端末内蔵GPSとは独立して地図上に常時描画）
+  final ValueNotifier<GnssMapMarker?> gnssLocationNotifier =
+      ValueNotifier<GnssMapMarker?>(null);
+
   /// 現在位置（[locationNotifier] の値）
   LatLng? get currentLocation => locationNotifier.value;
 
   /// 現在位置の詳細パネルが開いているか（開いている間だけ、位置・GPS 情報の変化でページを組み立て直す）
   bool get showsCurrentLocationDetail => ref.read(selectedFeaturesProvider).contains(currentLocationNode);
 
-  /// 現在位置マーカーの擬似フィーチャ。値は地図側のフィールドをその都度読む
+  /// 現在位置マーカーの擬似フィーチャ。外部GNSS有効時は外部GNSSの座標を優先して指す
   @override
   late final CurrentLocationNode currentLocationNode = CurrentLocationNode(
-    locationOf: () => currentLocation,
+    locationOf: () => gnssLocationNotifier.value?.position ?? currentLocation,
     gpsInfoOf: () => currentGpsInfo,
     headingNotifier: headingNotifier,
   );

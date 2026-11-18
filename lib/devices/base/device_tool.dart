@@ -32,8 +32,9 @@ abstract class DeviceTool extends MapTool {
   /// このツールが使用する機器サービス
   ExternalDeviceService get service;
 
-  /// ツールが利用可能か（機器が接続されているか）
-  bool get isAvailable => service.isConnected;
+  /// ツールが利用可能か（機器が接続中・自動再接続中・またはスリープ待機中でワンタップ復帰可能）
+  bool get isAvailable =>
+      service.isConnected || service.isReconnecting || service.hasStandbyDevice;
 
   /// 地図面に載せるオーバーレイ（描画系に依らない形）: 基準点 → 計測点の線と基準点。
   /// 地形（`TerrainMapLayer`）が持ち上げて描く

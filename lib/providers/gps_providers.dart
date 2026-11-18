@@ -19,24 +19,96 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/gnss_quality.dart';
+import '../models/ntrip_config.dart';
 import '../models/track_recording_settings.dart';
 
 part 'gps_providers.g.dart';
 
 @Riverpod(keepAlive: true)
 class PreferredGpsSourceType extends _$PreferredGpsSourceType {
+  static const _key = 'preferred_gps_source_type';
+
   @override
   String? build() => null;
 
-  void set(String? value) => state = value;
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      state = prefs.getString(_key);
+    } catch (_) {
+      state = null;
+    }
+  }
+
+  Future<void> set(String? value) async {
+    state = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (value == null) {
+        await prefs.remove(_key);
+      } else {
+        await prefs.setString(_key, value);
+      }
+    } catch (_) {}
+  }
 }
 
 @Riverpod(keepAlive: true)
 class SelectedGnssDeviceAddress extends _$SelectedGnssDeviceAddress {
+  static const _key = 'selected_gnss_device_address';
+
   @override
   String? build() => null;
 
-  void set(String? value) => state = value;
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      state = prefs.getString(_key);
+    } catch (_) {
+      state = null;
+    }
+  }
+
+  Future<void> set(String? value) async {
+    state = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (value == null) {
+        await prefs.remove(_key);
+      } else {
+        await prefs.setString(_key, value);
+      }
+    } catch (_) {}
+  }
+}
+
+@Riverpod(keepAlive: true)
+class SelectedGnssDeviceName extends _$SelectedGnssDeviceName {
+  static const _key = 'selected_gnss_device_name';
+
+  @override
+  String? build() => null;
+
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      state = prefs.getString(_key);
+    } catch (_) {
+      state = null;
+    }
+  }
+
+  Future<void> set(String? value) async {
+    state = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (value == null) {
+        await prefs.remove(_key);
+      } else {
+        await prefs.setString(_key, value);
+      }
+    } catch (_) {}
+  }
 }
 
 /// GPS 測量の足切りの条件（設定 → GPS・測位）。既定は何もしない。SharedPreferences に JSON で永続化
@@ -83,6 +155,57 @@ class TrackRecordingSetting extends _$TrackRecordingSetting {
   }
 
   Future<void> set(TrackRecordingSettings value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(value.toJson()));
+  }
+}
+
+/// 外部GNSS使用時に RTK FIX 取得／喪失の効果音を鳴らすか（既定 ON）
+@Riverpod(keepAlive: true)
+class GnssFixSoundSetting extends _$GnssFixSoundSetting {
+  static const _key = 'gnss_fix_sound_enabled';
+
+  @override
+  bool build() => true;
+
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      state = prefs.getBool(_key) ?? true;
+    } catch (_) {
+      state = true;
+    }
+  }
+
+  Future<void> set(bool value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_key, value);
+  }
+}
+
+/// 内蔵 NTRIP クライアントの接続設定（端末ローカル SharedPreferences に永続化）
+@Riverpod(keepAlive: true)
+class NtripConfigSetting extends _$NtripConfigSetting {
+  static const _key = 'ntrip_config';
+
+  @override
+  NtripConfig build() => NtripConfig.defaults;
+
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key);
+      if (raw != null && raw.isNotEmpty) {
+        state = NtripConfig.fromJson(jsonDecode(raw) as Map);
+      }
+    } catch (_) {
+      state = NtripConfig.defaults;
+    }
+  }
+
+  Future<void> set(NtripConfig value) async {
     state = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(value.toJson()));

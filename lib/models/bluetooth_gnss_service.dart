@@ -24,6 +24,7 @@ import 'package:root_maps/utils/app_logger.dart';
 
 import '../devices/base/serial_line_buffer.dart';
 import '../i18n/strings.g.dart';
+import '../services/bluetooth_connection_coordinator.dart';
 
 /// Bluetooth GNSS接続サービス
 ///
@@ -37,6 +38,9 @@ class BluetoothGnssService extends ChangeNotifier {
   BluetoothConnection? _connection;
   bool _isConnecting = false;
   bool _isConnected = false;
+
+  /// 電波切れなど予期せぬストリーム終了時のコールバック（手動 disconnect では呼ばれない）
+  void Function(String reason)? onUnexpectedDisconnect;
 
   // データ受信関連
   StreamSubscription<Uint8List>? _dataSubscription;
@@ -79,6 +83,12 @@ class BluetoothGnssService extends ChangeNotifier {
   static const int _maxNmeaBufferSize = 20;
   final List<String> _nmeaBuffer = [];
 
+  @visibleForTesting
+  bool recordDebugRtcm = false;
+
+  @visibleForTesting
+  final List<Uint8List> debugSentRtcm = [];
+
   DateTime? _lastNotificationTime;
 
   // 接続前の位置情報の許可確認に使う
@@ -86,6 +96,7 @@ class BluetoothGnssService extends ChangeNotifier {
 
   // Getters
   bool get isConnected => _isConnected;
+  bool get isConnecting => _isConnecting;
   double? get latitude => _latitude;
   double? get longitude => _longitude;
   double? get altitude => _altitude;
@@ -244,8 +255,12 @@ class BluetoothGnssService extends ChangeNotifier {
       // 位置情報の許可を確認
       await _ensureLocationPermission();
 
-      // Bluetooth接続（SSP対応）
-      _connection = await BluetoothConnection.toAddress(device.address);
+      // Bluetooth接続（SSP対応・複数機器同時ハンドシェイク衝突防止）
+      _connection =
+          await BluetoothConnectionCoordinator.instance.runSerializedConnect(
+        'GNSS:${device.address}',
+        () => BluetoothConnection.toAddress(device.address),
+      );
       _isConnected = true;
       _isConnecting = false;
 
@@ -265,7 +280,8 @@ class BluetoothGnssService extends ChangeNotifier {
   }
 
   /// 接続を切断
-  Future<void> disconnect() async {
+  Future<void> disconnect({bool unexpected = false, String? reason}) async {
+    final wasConnected = _isConnected;
     try {
       AppLogger.debug('$_logTag: 接続を切断中...');
 
@@ -277,13 +293,36 @@ class BluetoothGnssService extends ChangeNotifier {
       await _connection?.close();
       _connection = null;
 
-      // 状態リセット
+      // 状態リセット（切断後に古い RTK 固定解や座標が残らないようにする）
       _isConnected = false;
       _isConnecting = false;
+      _latitude = null;
+      _longitude = null;
+      _altitude = null;
+      _accuracy = null;
+      _speed = null;
+      _bearing = null;
+      _timestamp = null;
+      _satelliteCount = null;
+      _hdop = null;
+      _pdop = null;
+      _vdop = null;
+      _gpsQuality = null;
+      _usedSatellites.clear();
+      _sbasInView.clear();
+      _detectedSbasSystem = null;
+      _sbasPrn = null;
+      _dgpsStationId = null;
+      _gstLatSigma = null;
+      _gstLonSigma = null;
+      _gstAt = null;
       _lines.clear();
 
       AppLogger.debug('$_logTag: 接続を切断しました');
       notifyListeners();
+      if (unexpected && wasConnected) {
+        onUnexpectedDisconnect?.call(reason ?? 'stream_closed');
+      }
     } catch (e) {
       AppLogger.debug('$_logTag: 切断エラー: $e');
     }
@@ -319,16 +358,29 @@ class BluetoothGnssService extends ChangeNotifier {
       _onDataReceived,
       onError: (error) {
         AppLogger.debug('$_logTag: データ受信エラー: $error');
-        disconnect();
+        unawaited(disconnect(unexpected: true, reason: '$error'));
       },
       onDone: () {
         AppLogger.debug('$_logTag: データストリーム終了');
-        disconnect();
+        unawaited(disconnect(unexpected: true, reason: 'stream_closed'));
       },
     );
 
     AppLogger.debug('$_logTag: データ受信を開始しました');
   }
+
+  /// テスト用: 接続完了状態を模擬する
+  @visibleForTesting
+  void debugSetConnected(bool connected) {
+    _isConnected = connected;
+    _isConnecting = false;
+    notifyListeners();
+  }
+
+  /// テスト用: 電波断による予期せぬ切断を発生させる
+  @visibleForTesting
+  Future<void> debugSimulateUnexpectedDisconnect([String reason = 'link_loss']) =>
+      disconnect(unexpected: true, reason: reason);
 
   /// 受信したことにする（テスト用。接続せずに NMEA の解析を確かめる）
   @visibleForTesting
@@ -412,6 +464,11 @@ class BluetoothGnssService extends ChangeNotifier {
       _dgpsStationId = stationId;
     }
 
+    if (quality == 0 || _latitude == null || _longitude == null) {
+      // 未測位（No Fix）の間も衛星数や品質番号の変化は 500ms 間隔で画面へ知らせる
+      _notifyThrottled();
+      return;
+    }
     _onFix();
   }
 
@@ -443,8 +500,12 @@ class BluetoothGnssService extends ChangeNotifier {
   /// 位置が更新された（GGA・RMC 共通）。重複通知を防ぐため通知は 500ms に 1 回まで
   void _onFix() {
     if (_latitude == null || _longitude == null) return;
+    _timestamp = DateTime.now();
+    _notifyThrottled();
+  }
+
+  void _notifyThrottled() {
     final now = DateTime.now();
-    _timestamp = now;
     if (_lastNotificationTime == null ||
         now.difference(_lastNotificationTime!).inMilliseconds >= 500) {
       _lastNotificationTime = now;
@@ -559,6 +620,38 @@ class BluetoothGnssService extends ChangeNotifier {
   /// 現在のNMEAバッファを文字列として取得
   String getNmeaBufferAsString() {
     return _nmeaBuffer.join('\n');
+  }
+
+  /// 直近の有効な `$GPGGA` / `$GNGGA` 文（NTRIP VRS アップリンク用。無ければ null）
+  String? get latestGgaSentence {
+    for (var i = _nmeaBuffer.length - 1; i >= 0; i--) {
+      final line = _nmeaBuffer[i].trim();
+      if (_isGpOrGn(line, 'GGA')) {
+        final parts = line.split(',');
+        if (parts.length >= 10 && parts[2].isNotEmpty && parts[4].isNotEmpty) {
+          return line;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// NTRIP 等から受信した RTCM 補正バイト列を外部 GNSS 受信機へ転送する
+  bool sendRtcm(Uint8List data) {
+    if (data.isEmpty) return false;
+    if (recordDebugRtcm) {
+      debugSentRtcm.add(Uint8List.fromList(data));
+      return true;
+    }
+    final conn = _connection;
+    if (!_isConnected || conn == null) return false;
+    try {
+      conn.output.add(data);
+      return true;
+    } catch (e) {
+      AppLogger.debug('$_logTag: RTCM 送信エラー: $e');
+      return false;
+    }
   }
 
   @override

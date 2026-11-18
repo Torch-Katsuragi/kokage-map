@@ -21,6 +21,9 @@ import 'dart:convert';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../i18n/strings.g.dart';
+import '../../models/app_notification.dart';
+import '../../providers/notification_providers.dart';
 import '../../services/survey/traverse_recorder.dart';
 import 'trupulse_service.dart';
 import 'trupulse_tool.dart';
@@ -30,7 +33,19 @@ part 'trupulse_providers.g.dart';
 /// TruPulseServiceのシングルトンインスタンス
 @Riverpod(keepAlive: true)
 TruPulseService trupulseService(Ref ref) {
-  final service = TruPulseService();
+  final service = TruPulseService()
+    ..onUnexpectedDisconnect = (name) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.devices.disconnectedAlert(name: name),
+            level: NotificationLevel.warning,
+          );
+    }
+    ..onReconnected = (name) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.devices.reconnectedAlert(name: name),
+            level: NotificationLevel.success,
+          );
+    };
   // コンテナ破棄時（テスト・ホットリスタート）に接続とストリームを閉じる
   ref.onDispose(service.dispose);
   return service;

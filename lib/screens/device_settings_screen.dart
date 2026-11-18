@@ -28,8 +28,10 @@ import '../devices/trupulse/trupulse_providers.dart';
 import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
+import '../services/gps_manager_service.dart';
 import '../utils/app_logger.dart';
 import '../utils/app_permissions.dart';
+import '../widgets/device_connection_log_section.dart';
 import '../widgets/settings_widgets.dart';
 
 class DeviceSettingsScreen extends ConsumerStatefulWidget {
@@ -46,6 +48,30 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
   bool _isScanning = false;
 
   late final List<ExternalDeviceService> _services;
+  final GpsManagerService _gpsManager = GpsManagerService();
+
+  static const List<String> _gnssKeywords = [
+    'GNSS',
+    'GPS',
+    'RTK',
+    'DROGGER',
+    'DG-PRO',
+    'RZS',
+    'RWP',
+    'GARMIN',
+    'GLO',
+    'UBLOX',
+    'ZED',
+    'BAD ELF',
+    'TRIMBLE',
+    'TOPCON',
+    'SOKKIA',
+    'LEICA',
+    'SEPTENTRIO',
+    'EMLID',
+    'REACH',
+    'QSTARZ',
+  ];
 
   @override
   void initState() {
@@ -54,6 +80,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
     for (final s in _services) {
       s.addListener(_onServiceChanged);
     }
+    _gpsManager.addListener(_onServiceChanged);
     _scan();
   }
 
@@ -62,6 +89,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
     for (final s in _services) {
       s.removeListener(_onServiceChanged);
     }
+    _gpsManager.removeListener(_onServiceChanged);
     super.dispose();
   }
 
@@ -117,6 +145,52 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
     return null;
   }
 
+  bool _looksLikeGnssDevice(BluetoothDevice device) {
+    if (_matchingService(device) != null) return false;
+    final name = device.name?.toUpperCase() ?? '';
+    return _gnssKeywords.any(name.contains);
+  }
+
+  bool _isConnectedAsExternalGnss(BluetoothDevice device) =>
+      _gpsManager.currentSource == GpsSourceType.external &&
+      _gpsManager.selectedGnssDevice?.address == device.address &&
+      _gpsManager.isExternalConnected;
+
+  bool _isConnectingAsExternalGnss(BluetoothDevice device) =>
+      _gpsManager.currentSource == GpsSourceType.external &&
+      _gpsManager.selectedGnssDevice?.address == device.address &&
+      _gpsManager.isExternalConnecting;
+
+  Future<void> _connectExternalGnss(BluetoothDevice device) async {
+    AppLogger.debug(
+      '[DeviceSettings] connecting ${device.name}(${device.address}) as External GNSS',
+    );
+    try {
+      await _gpsManager.switchGpsSource(GpsSourceType.external, device);
+      if (!mounted) return;
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.gps.switchedTo(name: device.name ?? t.gps.externalGnssName),
+            level: NotificationLevel.success,
+          );
+    } catch (e) {
+      AppLogger.debug('[DeviceSettings] GNSS connection failed: $e');
+      _showMessage(t.devices.connectionFailed(error: e.toString()));
+    }
+  }
+
+  Future<void> _disconnectExternalGnss() async {
+    try {
+      await _gpsManager.switchGpsSource(GpsSourceType.internal);
+      if (!mounted) return;
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.gps.switchedTo(name: GpsSourceType.internal.displayName),
+            level: NotificationLevel.info,
+          );
+    } catch (e) {
+      _showMessage(t.gps.switchError(error: e.toString()));
+    }
+  }
+
   Future<void> _connect(
       ExternalDeviceService service, BluetoothDevice device) async {
     AppLogger.debug(
@@ -137,7 +211,11 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
     final connectedServices =
         _services.where((s) => s.isConnected).toList();
     final connectingServices =
-        _services.where((s) => s.isConnecting).toList();
+        _services.where((s) => s.isConnecting || s.isReconnecting).toList();
+    final gnssConnected = _gpsManager.isExternalConnected;
+    final gnssConnecting =
+        _gpsManager.isExternalConnecting || _gpsManager.isExternalReconnecting;
+    final gnssDeviceName = _gpsManager.selectedGnssDevice?.name ?? t.gps.externalGnssName;
 
     return SettingsScaffold(
       title: t.devices.title,
@@ -156,12 +234,37 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
       body: SettingsBody(
         sections: [
           // Connected devices
-          if (connectedServices.isNotEmpty || connectingServices.isNotEmpty)
+          if (connectedServices.isNotEmpty ||
+              connectingServices.isNotEmpty ||
+              gnssConnected ||
+              gnssConnecting)
             SettingsSection(
               title: t.devices.connected,
               icon: Icons.bluetooth_connected,
               iconColor: Colors.blue,
               children: [
+                if (gnssConnected || gnssConnecting)
+                  ListTile(
+                    leading: Icon(
+                      Icons.satellite_alt,
+                      color: gnssConnected ? Colors.blue : Colors.orange,
+                    ),
+                    title: Text('$gnssDeviceName (${t.gps.externalGnssName})'),
+                    subtitle: Text(
+                      _gpsManager.isExternalReconnecting
+                          ? t.devices.reconnecting
+                          : (gnssConnecting ? t.devices.connecting : t.devices.connected),
+                    ),
+                    trailing: (gnssConnected || _gpsManager.isExternalReconnecting)
+                        ? TextButton(
+                            onPressed: _disconnectExternalGnss,
+                            child: Text(t.devices.disconnect),
+                          )
+                        : const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                  ),
                 for (final s in [...connectingServices, ...connectedServices])
                   ListTile(
                     leading: Icon(
@@ -169,10 +272,10 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
                       color: s.isConnected ? Colors.blue : Colors.orange,
                     ),
                     title: Text(s.deviceTypeName),
-                    subtitle: Text(s.isConnecting
-                        ? t.devices.connecting
-                        : t.devices.connected),
-                    trailing: s.isConnected
+                    subtitle: Text(s.isReconnecting
+                        ? t.devices.reconnecting
+                        : (s.isConnecting ? t.devices.connecting : t.devices.connected)),
+                    trailing: (s.isConnected || s.isReconnecting)
                         ? TextButton(
                             onPressed: s.disconnect,
                             child: Text(t.devices.disconnect),
@@ -205,14 +308,21 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
                       _DeviceTile(
                         device: device,
                         service: _matchingService(device),
+                        looksLikeGnss: _looksLikeGnssDevice(device),
+                        isGnssConnected: _isConnectedAsExternalGnss(device),
+                        isGnssConnecting: _isConnectingAsExternalGnss(device),
                         allServices: _services,
                         onConnect: (svc) => _connect(svc, device),
+                        onConnectGnss: () => _connectExternalGnss(device),
                       ),
                   ],
           ),
 
           // Backsight tolerance settings
           const TruPulseBacksightToleranceSection(),
+
+          // Persistent connection / disconnection event log
+          const DeviceConnectionLogSection(),
 
           // Help
           SettingsSection(
@@ -238,37 +348,50 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
 class _DeviceTile extends StatelessWidget {
   final BluetoothDevice device;
   final ExternalDeviceService? service;
+  final bool looksLikeGnss;
+  final bool isGnssConnected;
+  final bool isGnssConnecting;
   final List<ExternalDeviceService> allServices;
   final void Function(ExternalDeviceService) onConnect;
+  final VoidCallback onConnectGnss;
 
   const _DeviceTile({
     required this.device,
     required this.service,
+    this.looksLikeGnss = false,
+    this.isGnssConnected = false,
+    this.isGnssConnecting = false,
     required this.allServices,
     required this.onConnect,
+    required this.onConnectGnss,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isConnected = service?.isConnected ?? false;
-    final isConnecting = service?.isConnecting ?? false;
-    final isCompatible = service != null;
+    final isConnected = (service?.isConnected ?? false) || isGnssConnected;
+    final isConnecting = (service?.isConnecting ?? false) || isGnssConnecting;
+    final compatibleType = service?.deviceTypeName ?? (looksLikeGnss ? t.gps.externalGnssName : null);
+    final connectedType = isGnssConnected ? t.gps.externalGnssName : service?.deviceTypeName;
 
     return ListTile(
       leading: Icon(
-        isCompatible ? Icons.sensors : Icons.bluetooth,
+        looksLikeGnss || isGnssConnected
+            ? Icons.satellite_alt
+            : service != null
+                ? Icons.sensors
+                : Icons.bluetooth,
         color: isConnected
             ? Colors.blue
-            : isCompatible
+            : compatibleType != null
                 ? Colors.green
                 : Colors.grey,
       ),
       title: Text(device.name ?? t.common.unknown),
       subtitle: Text(
-        isConnected
-            ? t.devices.connectedType(type: service!.deviceTypeName)
-            : isCompatible
-                ? t.devices.compatible(type: service!.deviceTypeName)
+        isConnected && connectedType != null
+            ? t.devices.connectedType(type: connectedType)
+            : compatibleType != null
+                ? t.devices.compatible(type: compatibleType)
                 : device.address,
       ),
       trailing: isConnected
@@ -277,29 +400,40 @@ class _DeviceTile extends StatelessWidget {
               ? const SizedBox.square(
                   dimension: 16,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : isCompatible
+              : service != null
                   ? TextButton(
                       onPressed: () => onConnect(service!),
                       child: Text(t.devices.connect),
                     )
-                  : _buildManualConnectMenu(context),
+                  : looksLikeGnss
+                      ? TextButton(
+                          onPressed: onConnectGnss,
+                          child: Text(t.devices.connect),
+                        )
+                      : _buildManualConnectMenu(context),
     );
   }
 
-  Widget? _buildManualConnectMenu(BuildContext context) {
-    if (allServices.isEmpty) return null;
-    if (allServices.length == 1) {
-      return TextButton(
-        onPressed: () => onConnect(allServices.first),
-        child: Text(t.devices.tryConnect, style: const TextStyle(fontSize: 12)),
-      );
-    }
-    return PopupMenuButton<ExternalDeviceService>(
+  Widget _buildManualConnectMenu(BuildContext context) {
+    return PopupMenuButton<Object>(
       itemBuilder: (_) => [
+        PopupMenuItem<Object>(
+          value: 'gnss',
+          child: Text(t.devices.connectAs(type: t.gps.externalGnssName)),
+        ),
         for (final s in allServices)
-          PopupMenuItem(value: s, child: Text(t.devices.connectAs(type: s.deviceTypeName))),
+          PopupMenuItem<Object>(
+            value: s,
+            child: Text(t.devices.connectAs(type: s.deviceTypeName)),
+          ),
       ],
-      onSelected: onConnect,
+      onSelected: (target) {
+        if (target == 'gnss') {
+          onConnectGnss();
+        } else if (target is ExternalDeviceService) {
+          onConnect(target);
+        }
+      },
       child: Text(t.devices.tryConnect, style: const TextStyle(fontSize: 12, color: Colors.blue)),
     );
   }

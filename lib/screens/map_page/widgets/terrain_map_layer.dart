@@ -30,7 +30,9 @@ import 'package:latlong2/latlong.dart';
 import '../../../core/fs/k_file_system.dart';
 import '../../../core/map_layout.dart';
 import '../../../core/map_surface_handle.dart';
+import '../../../core/official/official_data_catalog.dart';
 import '../../../core/terrain/contour_tiles.dart';
+import '../../../core/terrain/cs_relief_tiles.dart';
 import '../../../core/terrain/dem_grid.dart';
 import '../../../core/terrain/dem_tiles.dart';
 import '../../../core/terrain/feature_bake_ledger.dart';
@@ -51,8 +53,10 @@ import '../../../i18n/strings.g.dart';
 import '../../../interfaces/map_state_interface.dart';
 import '../../../interfaces/scene_sink.dart';
 import '../../../models/basemap_provider.dart';
+import '../../../models/gps_info.dart';
 import '../../../models/map_style_group.dart';
 import '../../../models/nodes/external_overlay_image_node.dart';
+import '../../../models/nodes/official_layer_node.dart';
 import '../../../models/nodes/overlay_image_node.dart';
 import '../../../models/party/party_room.dart';
 import '../../../models/qgis_symbol.dart';
@@ -63,6 +67,7 @@ import '../../../providers/tool_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/basemap_service.dart';
 import '../../../services/dem_elevation.dart';
+import '../../../services/official/official_layer_service.dart';
 import '../../../services/party/room_pin_store.dart';
 import '../../../tools/gps_tool.dart';
 import '../../../tools/map_tool.dart';
@@ -100,6 +105,8 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
     required this.scene,
     required this.location,
     required this.gpsTrack,
+    this.gnssLocation,
+    this.gnssTrack,
     required this.controller,
     required this.onSurfaceChanged,
     required this.mapBearingNotifier,
@@ -117,8 +124,14 @@ class TerrainMapLayer extends ConsumerStatefulWidget {
   /// 現在位置。変わったら描き直す（ページは組み立て直さない）
   final ValueListenable<LatLng?> location;
 
+  /// 外部GNSS受信機のライブ位置（接続中・Fix有効時のみ非null）
+  final ValueListenable<GnssMapMarker?>? gnssLocation;
+
   /// 今日の GPS 軌跡（未 Consolidation 分。Consolidation 済みはレイヤ経由で届く）
   final List<LatLng> Function() gpsTrack;
+
+  /// 今日の外部GNSS軌跡（未 Consolidation 分。Consolidation 済みは `gnss_tracks` レイヤ経由で届く）
+  final List<LatLng> Function()? gnssTrack;
 
   /// 端末の向き（度）。現在位置の扇（2D のコンパス扇と同じ）
   final ValueListenable<double?>? heading;
@@ -189,18 +202,63 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     return layers.isNotEmpty ? layers.first.$1 : null;
   }
 
-  /// 背景地図レイヤの署名（変わったらテクスチャを貼り直す）: 各層の id・不透明度・合成モード
-  String _textureLayersKey() =>
-      [for (final (p, l) in widget.baseMapService.activeLayers) '${p.id}:${l.opacity}:${l.blend.name}'].join(',');
+  /// `System`（`sys`）で有効かつ可視なラスタ型公式レイヤ（産総研シームレス地質図など）
+  List<BaseMapProvider> _activeOfficialRasterProviders() {
+    final activeIds = {for (final (p, _) in widget.baseMapService.activeLayers) p.id};
+    final out = <BaseMapProvider>[];
+    for (final node in OfficialLayerService.instance.visibleNodesIn(ref.read(folderTreeProvider))) {
+      final pid = node.spec.rasterProviderId;
+      if (node.spec.kind == OfficialLayerKind.rasterWithPointApi &&
+          pid != null &&
+          !activeIds.contains(pid)) {
+        if (BaseMapProvider.getProviderById(pid) case final p?) out.add(p);
+      }
+    }
+    return out;
+  }
+
+  /// 背景地図レイヤの署名（変わったらテクスチャを貼り直す）: 各層の id・不透明度・合成モード＋公式ラスタ層
+  String _textureLayersKey() => [
+        for (final (p, l) in widget.baseMapService.activeLayers) '${p.id}:${l.opacity}:${l.blend.name}',
+        for (final p in _activeOfficialRasterProviders()) 'official:${p.id}',
+      ].join(',');
   String _textureKey = '';
 
-  /// テクスチャに合成する層（設定の背景地図レイヤ、下から上へ。等高線もその 1 つで、生成プロバイダのタイルは
-  /// キャッシュに無ければ [_renderContourTile] が作る）
+  /// テクスチャに合成する層（設定の背景地図レイヤ、下から上へ。等高線・CS立体図も生成プロバイダとして含まれる）
   List<TextureLayer> _layerFetchers() {
     final svc = widget.baseMapService;
     return [
       for (final (p, l) in svc.activeLayers) ((z, x, y) => svc.getTile(p, z, x, y), l.opacity / 100, l.blend.mode),
+      for (final p in _activeOfficialRasterProviders())
+        ((z, x, y) => svc.getTile(p, z, x, y), 0.62, BlendMode.multiply),
     ];
+  }
+
+  /// CS立体図タイルを作る（`cs_relief_tiles.dart`）。等高線と同じく 1 段下の DEM タイルから生成する
+  Future<Uint8List?> _renderCsReliefTile(int z, int x, int y) async {
+    final zDem = math.min(z - 1, _world.maxZoomForTile(z, x, y));
+    final k = z - zDem;
+    if (zDem < _world.minZoom || k < 1 || k > 4) return null;
+    final key = TileKey(zDem, x >> k, y >> k);
+    final dem = await _world.demFor(key);
+    if (dem == null || !mounted) return null;
+    final cells = WebMercator.tileSize >> k;
+    final mask = (1 << k) - 1;
+    final args = CsReliefTileArgs(
+      heights: dem.heights,
+      cols: dem.cols,
+      rows: dem.rows,
+      cellSize: dem.cellSize,
+      col0: (x & mask) * cells,
+      row0: WebMercator.tileSize - ((y & mask) + 1) * cells,
+      cells: cells,
+    );
+    return TerrainWorker.instance.run(renderCsReliefTilePng, args);
+  }
+
+  void _onOfficialLayersChanged() {
+    _onBasemapChanged();
+    _scheduleRefresh();
   }
 
   /// 等高線タイルを作る（`contour_tiles.dart`）。テクスチャの段 z の 1 段下の DEM タイルの、該当する 1/4 を描く。
@@ -304,6 +362,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _attribution = _osmAttribution();
     widget.baseMapService.addListener(_onBasemapChanged);
     widget.baseMapService.registerTileGenerator(BaseMapProvider.contourOverlay.id, _renderContourTile);
+    widget.baseMapService.registerTileGenerator(BaseMapProvider.csReliefOverlay.id, _renderCsReliefTile);
+    OfficialLayerService.instance.addListener(_onOfficialLayersChanged);
     final hp = TerrainAppearance.highPrecision;
     _world = TerrainWorld(
       demSources: DemTileSource.cascadeFor(highPrecision: hp),
@@ -350,6 +410,7 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     SvgMarkerCache.instance.revision.addListener(_onSvgAtlasRevision);
     widget.heading?.addListener(_onHeading);
     widget.location.addListener(_scheduleRefresh);
+    widget.gnssLocation?.addListener(_scheduleRefresh);
     // 描きかけの線・面・点（ペン・GPS 測量）。地図ページは組み直さないのでここで聞く
     GlobalDrawingState.instance.addListener(_scheduleRefresh);
     widget.onSurfaceChanged(this);
@@ -453,11 +514,14 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     _listenedDevice?.removeListener(_scheduleRefresh);
     widget.baseMapService.removeListener(_onBasemapChanged);
     widget.baseMapService.unregisterTileGenerator(BaseMapProvider.contourOverlay.id, _renderContourTile);
+    widget.baseMapService.unregisterTileGenerator(BaseMapProvider.csReliefOverlay.id, _renderCsReliefTile);
+    OfficialLayerService.instance.removeListener(_onOfficialLayersChanged);
     _anim.dispose();
     _disposeBakes();
     _stopDrive();
     widget.heading?.removeListener(_onHeading);
     widget.location.removeListener(_scheduleRefresh);
+    widget.gnssLocation?.removeListener(_scheduleRefresh);
     GlobalDrawingState.instance.removeListener(_scheduleRefresh);
     widget.scene.revision.removeListener(_onSceneRevision);
     TerrainAppearance.revision.removeListener(_onAppearanceChanged);
@@ -844,6 +908,8 @@ class _TerrainMapLayerState extends ConsumerState<TerrainMapLayer>
     ref.listen(partySessionProvider, (_, _) => _scheduleRefresh());
     ref.listen(roomPinsProvider, (_, _) => _scheduleRefresh());
     ref.listen(currentToolProvider, (_, next) => _onToolChanged(next.name));
+    ref.listen(featureRefreshTriggerProvider, (_, _) => _onOfficialLayersChanged());
+    ref.listen(selectedFeaturesProvider, (_, _) => _scheduleRefresh());
     // チュートリアル: 章に入るたびに 2D・北が上に戻す（1 章で 3D にすると、次の章も斜めの眺めで始まっていた）
     ref.listen(tutorialProvider, (prev, s) {
       if (s == null || s.menu || s.index != 0) return;

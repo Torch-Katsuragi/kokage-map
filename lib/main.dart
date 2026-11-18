@@ -41,10 +41,12 @@ import 'providers/drawing_provider.dart';
 import 'providers/gps_providers.dart';
 import 'providers/notification_providers.dart';
 import 'providers/project_providers.dart';
+import 'providers/role_preset_providers.dart';
 import 'providers/selection_providers.dart';
 import 'providers/service_providers.dart';
 import 'providers/ui_state_providers.dart';
 import 'screens/home_screen.dart';
+import 'services/device_connection_log_service.dart';
 import 'services/google_drive/index.dart';
 import 'services/internal_gps_location_store.dart';
 import 'services/kmeta_service.dart';
@@ -274,9 +276,17 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     // UIスケールを早期に読み込み
     await ref.read(uiScaleLevelProvider.notifier).load();
     await ref.read(mapLayoutPresetSettingProvider.notifier).load();
+    await ref.read(rolePresetSettingProvider.notifier).load();
+    await ref.read(uiVisibilitySettingProvider.notifier).load();
+    await ref.read(preferredGpsSourceTypeProvider.notifier).load();
+    await ref.read(selectedGnssDeviceAddressProvider.notifier).load();
+    await ref.read(selectedGnssDeviceNameProvider.notifier).load();
     await ref.read(gnssQualityGateSettingProvider.notifier).load();
+    await ref.read(gnssFixSoundSettingProvider.notifier).load();
+    await ref.read(ntripConfigSettingProvider.notifier).load();
     await ref.read(trackRecordingSettingProvider.notifier).load();
     await ref.read(backsightToleranceSettingProvider.notifier).load();
+    await DeviceConnectionLogService.instance.load();
 
     // シングルトンサービスにRefを注入（プロバイダ初回読み込みでsetRef()が呼ばれる）
     ref.read(drawingStateProvider);
@@ -287,6 +297,9 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
         AppLogger.debug('[Root Maps] GPS管理サービス初期化完了（待機状態）');
       } catch (e) {
         AppLogger.debug('[Root Maps] GPS管理サービス初期化エラー: $e');
+      }
+      if (PlatformCapabilities.supportsBluetoothGnss) {
+        unawaited(ref.read(trupulseServiceProvider).restorePreviousConnection());
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) async {

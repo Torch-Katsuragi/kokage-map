@@ -256,9 +256,15 @@ target = Distance().offset(station, HD, AZ)
 | `survey_az` / `survey_inc` / `survey_hd` / `survey_sd` / `survey_vd` | 採った値（平均）に置き換える |
 | `survey_fs_az` / `survey_fs_inc` / `survey_fs_hd` / `survey_fs_sd` / `survey_fs_timestamp` | 前視の生の値（置き換える前の `survey_*`） |
 | `survey_bs_az` / `survey_bs_inc` / `survey_bs_hd` / `survey_bs_sd` / `survey_bs_timestamp` | 後視の生の値（測った向きのまま。方位角は前視の逆向き、傾斜角は符号が逆） |
-| `survey_backsight` | `true`（後視補正済みの印） |
+| `survey_backsight` | `true`（後視補正済みの印）／前視のみの未確定状態では `false` |
 
 方位角はどれも本体の値（磁北基準）。真北への補正は置くときに足す（`survey_az` と同じ）。`survey_fs_*`・`survey_bs_*` の無い `survey_backsight=true` の点は、生の値を残す前に後視した点で、そのまま扱う。
+
+### 後視のやり直し（後視のみの取り消し）と未確定測線の保護
+
+- **後視をやり直す**: 許容誤差を超えた警告（`backsight_warning.wav`）が出たときや目標を撃ち違えたときは、ステータスパネルまたは測点の放射メニューから **「後視をやり直す」**（`TraverseRecorder.undoBacksight`）を実行すると、退避されていた `survey_fs_*` から元の前視のみの座標・属性へ巻き戻され（下流チェーンも平行移動で追従）、1つ前の器械点へ歩かずにその場で後視だけを撃ち直せる。
+- **未確定（後視なし）測定の保護**: 前視1回のみの点は `survey_backsight = 'false'`（未確定）として半透明アンバー色でオーバーレイ描画され、ライン／ポリゴン変換ダイアログ（`SurveyConversionDialog`）では既定で確定測線から除外される（放射観測などで意図的に含める場合のみスイッチで切り替え可能）。
+- **電波瞬断からの自動復帰とオートパワーオフ時の省電力待機**: 測量中に Bluetooth SPP が一時切断されても `TruPulseTool` と器械点（`STN`）を維持したままバックグラウンドで最大 5 回（約 71 秒間）自動再接続を試みる。本体の無操作オートパワーオフや手動電源 OFF で応答がない場合は自動的に電波発信ゼロの待機モードへ移行してバッテリーと 2.4GHz 帯域の消費を止め、電源再投入後に `TruPulseStatusPanel` の「再接続」を 1 タップするだけで即座に測量へ戻れる。
 
 ### オーバーレイ表示
 

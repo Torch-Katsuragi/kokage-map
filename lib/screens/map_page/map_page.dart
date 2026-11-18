@@ -27,6 +27,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/launch_request.dart';
 import '../../core/map_layout.dart';
+import '../../core/role_preset.dart';
 import '../../devices/base/device_tool.dart';
 import '../../editing/edit_overlay.dart';
 import '../../editing/edit_panel.dart';
@@ -42,6 +43,7 @@ import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/overlay_image_node.dart';
 import '../../providers/notification_providers.dart';
 import '../../providers/project_providers.dart';
+import '../../providers/role_preset_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
 import '../../providers/ui_state_providers.dart';
@@ -276,6 +278,20 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   @override
   void updateCurrentGpsInfo() {
     final info = gpsManager.currentInfo;
+    final extMarker = gpsManager.currentExternalMarker;
+    if (gnssLocationNotifier.value != extMarker) {
+      gnssLocationNotifier.value = extMarker;
+      if (extMarker != null && !movedToCurrentLocationOnce) {
+        movedToCurrentLocationOnce = true;
+        unawaited(
+          jumpTo(
+            extMarker.position,
+            zoom: MapJumpMixin.defaultJumpZoom,
+            animate: false,
+          ),
+        );
+      }
+    }
     final before = currentGpsInfo;
     // 表示に関わる値が同じなら組み立て直さない（フォアグラウンドサービスは同じ位置を毎秒送り直してくるので、
     // そのたびに地図ページ全体を組み立て直していた。2026-10-06）
@@ -446,6 +462,13 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       }
     });
 
+    // 用途プリセット等で属性テーブルボタンが非表示にされたら、開いている属性テーブルも閉じる
+    ref.listen<UiVisibilityConfig>(uiVisibilitySettingProvider, (prev, next) {
+      if (!next.showAttributeTableButton && showAttributeTable && ref.read(tutorialProvider) == null) {
+        _closeAttributeTable();
+      }
+    });
+
     // チュートリアル: 章に入るたびに決まった配置へ戻す（前の章で開いた設定や一覧が残っていると案内がずれる）
     ref.listen(tutorialProvider, (prev, s) {
       if (s != null && !s.menu && (prev == null || prev.index != s.index || prev.chapter != s.chapter) && s.step.clearSelection) {
@@ -473,11 +496,14 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   }
 
   AppBar _buildAppBar({required bool editing}) {
+    final uiConfig = ref.watch(uiVisibilitySettingProvider);
+    final inTutorial = ref.watch(tutorialProvider) != null;
     return AppBar(
       title: Text(p.basename(ref.watch(projectRootDirProvider) ?? t.common.appName)),
       actions: buildMapAppBarActions(
         showAttributeTable: showAttributeTable,
         drawerOpen: drawerOpen,
+        showAttributeTableAction: inTutorial || uiConfig.showAttributeTableButton,
         onAttributeTableToggle: () {
           // 編集中は属性も編集のパネルで書き換える（表を開くと編集のパネルが隠れる）
           if (editing) return;
@@ -524,6 +550,17 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           right: layout.toolbarLeft ? 0 : 44,
           child: _buildMapSurface(currentTool, editing: editing),
         ),
+        // GPS測量ツールのステータスパネル（コンパスツールと同様に右下表示。外部GNSS接続時は外部GNSS状態を表示）
+        if (!editing && currentTool is GpsTool)
+          GpsStatusPanel(
+            tool: currentTool,
+            toolbarLeft: layout.toolbarLeft,
+            rightInset: drawerOpen &&
+                    layout.toolbarLeft &&
+                    MediaQuery.sizeOf(context).width - _effectiveDrawerWidth >= 340
+                ? _effectiveDrawerWidth
+                : 0,
+          ),
         // Layer Drawer Panel（右サイド — 属性テーブルとは独立）
         if (drawerOpen) _buildLayerDrawerPanel(),
         // 情報カード。置き場所は配置プリセット（浮かせる／右パネル。下パネルは Column 側）
@@ -588,7 +625,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
               baseMapService: baseMapService,
               scene: scene,
               location: locationNotifier,
+              gnssLocation: gnssLocationNotifier,
               gpsTrack: () => gpsHistoryRecorder.todayPoints,
+              gnssTrack: () => gpsHistoryRecorder.todayGnssPoints,
               controller: mapController,
               onSurfaceChanged: _onSurfaceChanged,
               mapBearingNotifier: mapBearingNotifier,

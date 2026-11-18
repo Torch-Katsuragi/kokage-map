@@ -142,6 +142,9 @@ class TraversePoint {
   final double inc;
   final LatLng stationPosition;
 
+  /// 後視補正が完了して確定しているか（false = 前視のみの未確定測定）
+  final bool isBacksighted;
+
   const TraversePoint({
     required this.node,
     required this.position,
@@ -151,6 +154,7 @@ class TraversePoint {
     required this.sd,
     required this.inc,
     required this.stationPosition,
+    this.isBacksighted = false,
   });
 }
 
@@ -163,6 +167,21 @@ class TraverseChain {
   final List<TraversePoint> points;
 
   const TraverseChain({required this.origin, required this.points});
+
+  /// 後視未完了（未確定）の点数
+  int get unconfirmedCount => points.where((p) => !p.isBacksighted).length;
+
+  /// 後視確定済みの点数
+  int get confirmedCount => points.where((p) => p.isBacksighted).length;
+
+  /// 未確定の片道測定を含むか
+  bool get hasUnconfirmedPoints => unconfirmedCount > 0;
+
+  /// 起点から連続して後視確定している測線のみを切り出したチェーン
+  TraverseChain confirmedPrefix() => TraverseChain(
+        origin: origin,
+        points: points.takeWhile((p) => p.isBacksighted).toList(),
+      );
 
   /// 総路線長（メートル）
   double get totalDistance {
@@ -194,14 +213,19 @@ class TraverseChain {
 class SurveyChainResolver {
   /// レイヤ内の測量チェーンをすべて解決する
   ///
-  /// 複数の独立したチェーンが存在する場合、それぞれを返す。
-  static List<TraverseChain> resolveAll(PointLayerNode layer) {
+  /// [confirmedOnly] が true の場合、後視補正が完了（`survey_backsight = 'true'`）している
+  /// 測線だけでチェーンを構築し、後視のない1回測定は確定測線に含めない。
+  static List<TraverseChain> resolveAll(
+    PointLayerNode layer, {
+    bool confirmedOnly = false,
+  }) {
     final surveyPoints = <PointFeatureNode>[];
     final nonSurveyPoints = <PointFeatureNode>[];
 
     for (final child in layer.children) {
       if (child is! PointFeatureNode) continue;
       if (_hasSurveyData(child)) {
+        if (confirmedOnly && !_isPointBacksighted(child)) continue;
         surveyPoints.add(child);
       } else {
         nonSurveyPoints.add(child);
@@ -265,17 +289,20 @@ class SurveyChainResolver {
       final deps = dependentsOf[current];
       if (deps == null || deps.isEmpty) break;
 
-      // timestamp順でソート（同一stationから複数射った場合）
+      // 同一stationから複数射った場合（例: 瞬断で後視できなかった未確定点と、撮り直した確定点）、
+      // 後視確定済みの点を優先し、同じ状態なら timestamp 順で選ぶ
       final unvisited = deps.where((d) => !visited.contains(d)).toList();
       if (unvisited.isEmpty) break;
 
       unvisited.sort((a, b) {
+        final bsA = _isPointBacksighted(a) ? 0 : 1;
+        final bsB = _isPointBacksighted(b) ? 0 : 1;
+        if (bsA != bsB) return bsA.compareTo(bsB);
         final tA = a.properties['survey_timestamp'] as String? ?? '';
         final tB = b.properties['survey_timestamp'] as String? ?? '';
         return tA.compareTo(tB);
       });
 
-      // 最も古い（最初に計測された）ものをチェーンに追加
       final next = unvisited.first;
       visited.add(next);
 
@@ -292,6 +319,7 @@ class SurveyChainResolver {
         sd: surveyNumber(props['survey_sd']),
         inc: surveyNumber(props['survey_inc']),
         stationPosition: stnCoords,
+        isBacksighted: _isPointBacksighted(next),
       ));
 
       current = next;
@@ -303,6 +331,11 @@ class SurveyChainResolver {
   static bool _hasSurveyData(PointFeatureNode node) {
     final props = node.properties;
     return props.containsKey('survey_az') && props.containsKey('survey_hd');
+  }
+
+  static bool _isPointBacksighted(PointFeatureNode node) {
+    final v = node.properties['survey_backsight'];
+    return v == true || v == 'true' || v == 1 || v == '1';
   }
 
   static LatLng? _parseStnCoords(dynamic value) => SurveyStation.parse(value);

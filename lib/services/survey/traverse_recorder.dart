@@ -275,8 +275,66 @@ class TraverseRecorder {
       'survey_vd': m.vd,
       'survey_stn': SurveyStation.encode(stnPos),
       'survey_timestamp': m.timestamp.toIso8601String(),
+      // 後視前は未確定（provisional）として明示記録する
+      'survey_backsight': 'false',
     });
     return TraverseShot(kind: TraverseShotKind.forward, point: newPoint, station: newPoint);
+  }
+
+  /// 後視の生の値（`survey_fs_*`）が残っていて、後視だけを取り消して前視のみの状態へ戻せるか
+  static bool canUndoBacksight(PointFeatureNode? p) {
+    if (p == null || p.isDisposed || !isBacksighted(p)) return false;
+    final props = p.properties;
+    return props['survey_fs_az'] != null &&
+        props['survey_fs_hd'] != null &&
+        SurveyStation.parse(props['survey_stn']) != null;
+  }
+
+  /// [leg] に適用済みの後視補正を取り消し、退避されていた前視（`survey_fs_*`）のみの状態と座標へ戻す。
+  /// [leg] より先のチェーン（`downstreamOf(leg)`）も同じ差だけ平行移動して整合を保つ。
+  static Future<bool> undoBacksight(
+    PointFeatureNode leg, {
+    required TrueAzimuthFn trueAz,
+  }) async {
+    if (!canUndoBacksight(leg)) return false;
+    final props = leg.properties;
+    final from = SurveyStation.parse(props['survey_stn']);
+    if (from == null) return false;
+
+    final fsAz = surveyNumber(props['survey_fs_az']);
+    final fsInc = surveyNumber(props['survey_fs_inc']);
+    final fsHd = surveyNumber(props['survey_fs_hd']);
+    final fsSd = surveyNumber(props['survey_fs_sd']);
+    final fsVd = fsHd * math.tan(fsInc * math.pi / 180);
+    final fsTs = props['survey_fs_timestamp']?.toString() ?? '';
+
+    final restoredPos = const Distance().offset(from, fsHd, trueAz(fsAz, from));
+    final downstream = SurveyStation.downstreamOf(leg);
+    final dLat = restoredPos.latitude - leg.point.latitude;
+    final dLon = restoredPos.longitude - leg.point.longitude;
+
+    await leg.setAttributeValues({
+      'survey_az': fsAz,
+      'survey_inc': fsInc,
+      'survey_hd': fsHd,
+      'survey_sd': fsSd,
+      'survey_vd': fsVd,
+      if (fsTs.isNotEmpty) 'survey_timestamp': fsTs,
+      'survey_backsight': 'false',
+      'survey_fs_az': null,
+      'survey_fs_inc': null,
+      'survey_fs_hd': null,
+      'survey_fs_sd': null,
+      'survey_fs_timestamp': null,
+      'survey_bs_az': null,
+      'survey_bs_inc': null,
+      'survey_bs_hd': null,
+      'survey_bs_sd': null,
+      'survey_bs_timestamp': null,
+    });
+    await leg.updateLocation(restoredPos);
+    await SurveyStation.translate(downstream, dLat, dLon);
+    return true;
   }
 
   /// 後視として試す測線。器械点がまだ後視されていなければ器械点自身の測線（振り返り）、

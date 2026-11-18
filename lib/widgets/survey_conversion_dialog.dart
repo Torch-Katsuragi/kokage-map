@@ -69,6 +69,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
   AdjustmentMethod _method = AdjustmentMethod.none;
   bool _useDeclination = true;
   bool _useHeightCorrection = false;
+  bool _includeUnconfirmed = false;
   final _declinationCtrl = TextEditingController(text: '0.0');
   final _instrumentHeightCtrl = TextEditingController(text: '0.0');
   final _targetHeightCtrl = TextEditingController(text: '0.0');
@@ -110,10 +111,23 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
     return t.surveyConversion.unknownType;
   }
 
+  TraverseChain _effectiveChainFor(TraverseChain raw) {
+    if (_includeUnconfirmed || !raw.hasUnconfirmedPoints) return raw;
+    final confirmedAll = SurveyChainResolver.resolveAll(
+      widget.sourceLayer,
+      confirmedOnly: true,
+    );
+    final matched =
+        confirmedAll.where((c) => c.origin == raw.origin).firstOrNull;
+    return matched ?? raw.confirmedPrefix();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final effectiveChain = _effectiveChainFor(_selectedChain);
+    final canConvert = effectiveChain.points.isNotEmpty;
     final preview = TraverseAdjuster.previewClosure(
-      _selectedChain,
+      effectiveChain,
       declination: _declination,
     );
     final typeLabel = _layerTypeLabel(_selectedLayer);
@@ -160,11 +174,66 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
 
               // チェーン情報
               _ClosureInfoCard(
-                chain: _selectedChain,
+                chain: effectiveChain,
                 closureError: preview.error,
                 totalDistance: preview.distance,
                 closureRatioN: preview.ratioN,
               ),
+              if (_selectedChain.hasUnconfirmedPoints) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.amber.shade400),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            size: 16,
+                            color: Colors.amber.shade900,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              t.surveyConversion.unconfirmedWarning(
+                                count: '${_selectedChain.unconfirmedCount}',
+                              ),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (!canConvert) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          t.surveyConversion.noConfirmedPoints,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.red.shade800,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _OptionSwitch(
+                  title: t.surveyConversion.includeUnconfirmed,
+                  description: t.surveyConversion.includeUnconfirmedDesc,
+                  value: _includeUnconfirmed,
+                  onChanged: (v) => setState(() => _includeUnconfirmed = v),
+                ),
+              ],
               const SizedBox(height: 16),
 
               // 変換先レイヤー
@@ -279,7 +348,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
           child: Text(t.common.cancel),
         ),
         ElevatedButton.icon(
-          onPressed: _convert,
+          onPressed: canConvert ? _convert : null,
           icon: Icon(_selectedLayer is PolygonLayerNode ? Icons.pentagon_outlined : Icons.show_chart),
           label: Text(t.surveyConversion.convertTo(type: typeLabel)),
         ),
@@ -302,12 +371,14 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
 
   /// 選んだ内容を返して閉じる
   void _convert() {
+    final effectiveChain = _effectiveChainFor(_selectedChain);
+    if (effectiveChain.isEmpty) return;
     final name = _nameCtrl.text.trim();
     Navigator.pop(
       context,
       SurveyConversionResult(
         targetLayer: _selectedLayer,
-        chain: _selectedChain,
+        chain: effectiveChain,
         options: TraverseAdjustmentOptions(
           method: _closePath ? _method : AdjustmentMethod.none,
           declination: _declination,

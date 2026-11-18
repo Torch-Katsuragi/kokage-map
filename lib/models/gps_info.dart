@@ -54,6 +54,10 @@ class GpsInfo {
     this.isInitialized = false,
     this.isSurveyMode = false,
     this.usesForegroundService = false,
+    this.isExternalConnected = false,
+    this.isExternalConnecting = false,
+    this.isExternalReconnecting = false,
+    this.isFallbackInternal = false,
     this.satelliteCount,
     this.hdop,
     this.pdop,
@@ -84,6 +88,14 @@ class GpsInfo {
   final bool isInitialized;
   final bool isSurveyMode;
   final bool usesForegroundService;
+  final bool isExternalConnected;
+  final bool isExternalConnecting;
+
+  /// 外部 GNSS の切断後、バックグラウンドで自動再接続を試みているか
+  final bool isExternalReconnecting;
+
+  /// 外部 GNSS の切断中、ユーザーの明示操作で端末内蔵 GPS へ一時切替しているか
+  final bool isFallbackInternal;
 
   final int? satelliteCount;
   final double? hdop;
@@ -104,7 +116,13 @@ class GpsInfo {
   /// 測れている位置。測れていなければ [fallback]（地図の現在位置など、最後に分かった位置）
   LatLng? positionOr(LatLng? fallback) => isActive ? LatLng(latitude!, longitude!) : fallback;
 
-  bool get isExternal => sourceType == GpsSourceType.external;
+  bool get isExternal => sourceType == GpsSourceType.external && !isFallbackInternal;
+
+  /// 記録用の測位ソース識別子（`external` / `internal_fallback` / `internal`）
+  String get gpsSourceCode {
+    if (isFallbackInternal) return 'internal_fallback';
+    return sourceType == GpsSourceType.external ? 'external' : 'internal';
+  }
 
   /// 表示に関わる値が同じか（時刻と NMEA は見ない）
   bool sameDisplayAs(GpsInfo other) =>
@@ -123,12 +141,18 @@ class GpsInfo {
       gpsQuality == other.gpsQuality &&
       fixType == other.fixType &&
       correctionSource == other.correctionSource &&
+      isExternalConnected == other.isExternalConnected &&
+      isExternalConnecting == other.isExternalConnecting &&
+      isExternalReconnecting == other.isExternalReconnecting &&
+      isFallbackInternal == other.isFallbackInternal &&
       isSurveyMode == other.isSurveyMode;
 
   /// 測量の記録に書く形（以前の `getCurrentGpsInfo()` と同じキー）
   Map<String, dynamic> toMap() => {
-    'sourceType': sourceType.sourceCode,
-    'sourceName': sourceName,
+    'sourceType': isFallbackInternal ? GpsSourceType.internal.sourceCode : sourceType.sourceCode,
+    'sourceName': isFallbackInternal ? GpsSourceType.internal.displayName : sourceName,
+    'gpsSource': gpsSourceCode,
+    'isFallbackInternal': isFallbackInternal,
     'selectedDevice': selectedDevice,
     'latitude': latitude,
     'longitude': longitude,
@@ -166,7 +190,7 @@ class GpsSurveySample {
   final GpsInfo info;
   final DateTime collectedAt;
 
-  /// 測量の記録（`usedGpsData`）に書く形。外部 GNSS の値は入っているものだけ書く
+  /// 測量の記録（`usedGpsData`）に書く形。外部 GNSS やフォールバックの値は該当するときだけ書く
   Map<String, dynamic> toMap() => {
     'latitude': info.latitude,
     'longitude': info.longitude,
@@ -175,10 +199,13 @@ class GpsSurveySample {
     'speed': info.speed,
     'bearing': info.bearing,
     'timestamp': info.timestamp?.toIso8601String(),
-    'sourceType': info.sourceType.sourceCode,
-    'sourceName': info.sourceName,
+    'sourceType': info.isFallbackInternal ? GpsSourceType.internal.sourceCode : info.sourceType.sourceCode,
+    'sourceName': info.isFallbackInternal ? GpsSourceType.internal.displayName : info.sourceName,
     'selectedDevice': info.selectedDevice,
     'collectedAt': collectedAt.toIso8601String(),
+    if (info.isFallbackInternal || info.sourceType == GpsSourceType.external)
+      'gpsSource': info.gpsSourceCode,
+    if (info.isFallbackInternal) 'isFallbackInternal': true,
     'accuracySource': ?info.accuracySource,
     'satelliteCount': ?info.satelliteCount,
     'hdop': ?info.hdop,
@@ -189,4 +216,28 @@ class GpsSurveySample {
     'correctionSource': ?info.correctionSource,
     'nmea': ?info.nmea,
   };
+}
+
+/// 地図面（[TerrainMapLayer]）に常時描画する外部GNSSライブ位置マーカー情報
+@immutable
+class GnssMapMarker {
+  const GnssMapMarker({
+    required this.position,
+    this.gpsQuality,
+    this.deviceName,
+  });
+
+  final LatLng position;
+  final int? gpsQuality;
+  final String? deviceName;
+
+  @override
+  bool operator ==(Object other) =>
+      other is GnssMapMarker &&
+      other.position == position &&
+      other.gpsQuality == gpsQuality &&
+      other.deviceName == deviceName;
+
+  @override
+  int get hashCode => Object.hash(position, gpsQuality, deviceName);
 }

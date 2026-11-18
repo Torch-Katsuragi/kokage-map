@@ -15,11 +15,14 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // lib/tools/gps_tool.dart
 // GPS関連機能を扱うツール（GPS測量機能対応）
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:root_maps/utils/app_logger.dart';
 
+import '../core/platform_capabilities.dart';
 import '../i18n/strings.g.dart';
 import '../interfaces/map_state_interface.dart';
 import '../models/gnss_quality.dart';
@@ -107,6 +110,9 @@ class GpsTool extends MapTool with PanDelegation {
   final List<Map<String, dynamic>> _longPressGpsData = [];
   DateTime? _longPressStartTime;
 
+  /// 長押しGPS測量中か
+  bool get isLongPressing => _isLongPressing;
+
   /// 長押し中に集めた点の数（増えると通知する）
   int get longPressGpsCount =>
       _isLongPressing ? _gpsManager.continuousSurveyCount : _longPressGpsData.length;
@@ -143,6 +149,9 @@ class GpsTool extends MapTool with PanDelegation {
   void _initializeGpsFeatures() {
     // GPS測量データの初期化（GlobalDrawingStateを使用）
     drawingState.clearAll();
+    if (PlatformCapabilities.supportsGpsLocation && !_gpsManager.isGpsActive) {
+      unawaited(_gpsManager.startGps().catchError((Object _) {}));
+    }
     AppLogger.debug('[GpsTool] GPS測量機能を初期化しました');
   }
 
@@ -171,6 +180,7 @@ class GpsTool extends MapTool with PanDelegation {
     _longPressStartTime = DateTime.now();
     _longPressGpsData.clear();
     _liveRejected = 0;
+    notifyListeners();
 
     // GPS測量専用開始
     _gpsManager.startGpsSurveyWithWait().then((_) {
@@ -190,6 +200,7 @@ class GpsTool extends MapTool with PanDelegation {
 
     // GPS Manager Service の連続測量を停止
     _gpsManager.stopContinuousSurvey();
+    notifyListeners();
 
     // 最終的なデータを取得
     final finalData = _gpsManager.getContinuousSurveyData();
@@ -318,6 +329,8 @@ class GpsTool extends MapTool with PanDelegation {
         'timestamp': gpsInfo['timestamp'],
         'sourceType': gpsInfo['sourceType'],
         'sourceName': gpsInfo['sourceName'],
+        'gpsSource': gpsInfo['gpsSource'],
+        'isFallbackInternal': gpsInfo['isFallbackInternal'],
         'selectedDevice': gpsInfo['selectedDevice'],
         'collectedAt': DateTime.now().toIso8601String(),
         // 拡張属性（外部GNSS用）
@@ -327,6 +340,7 @@ class GpsTool extends MapTool with PanDelegation {
         'satelliteCount': gpsInfo['satelliteCount'],
         'gpsQuality': gpsInfo['gpsQuality'],
         'fixType': gpsInfo['fixType'],
+        'correctionSource': gpsInfo['correctionSource'],
         'nmea': gpsInfo['nmea'],
       };
       AppLogger.debug('[GpsTool] 単発測量 singleGpsData: $singleGpsData');
@@ -392,6 +406,8 @@ class GpsTool extends MapTool with PanDelegation {
     'speed': 'speed',
     'bearing': 'bearing',
     'sourceType': 'source_type',
+    'gpsSource': 'gps_source',
+    'selectedDevice': 'gnss_device',
     // 拡張属性（外部GNSS用）
     'hdop': 'hdop',
     'satelliteCount': 'satellite_count',
@@ -401,8 +417,17 @@ class GpsTool extends MapTool with PanDelegation {
 
   Map<String, dynamic> _gpsAttributes(Map<String, dynamic> gps) => {
     for (final MapEntry(:key, :value) in _gpsAttributeColumns.entries)
-      value: gps[key],
+      value: key == 'gpsSource'
+          ? (valueFromGpsSource(gps))
+          : gps[key],
   };
+
+  static String valueFromGpsSource(Map<String, dynamic> gps) {
+    final explicit = gps['gpsSource'] as String?;
+    if (explicit != null && explicit.isNotEmpty) return explicit;
+    if (gps['isFallbackInternal'] == true) return 'internal_fallback';
+    return gps['sourceType'] == 'GNSS' ? 'external' : 'internal';
+  }
 
   /// GPS 測量の点を作り、属性を個別カラムに書いて GPS 測量を止める。
   /// 値が null の属性は書かない。測量の記録 [surveyRecord] は線・面の頂点と同じ形でメタデータの列に残す
@@ -510,8 +535,13 @@ class GpsTool extends MapTool with PanDelegation {
                 1000.0
             : 0.0;
 
+    final firstSample = rawGpsDataList.firstOrNull;
     final result = {
       'pointNumber': _getNextPointNumber(),
+      'gps_source': firstSample?['gpsSource'] ?? 'internal',
+      'is_fallback_internal': firstSample?['isFallbackInternal'] ?? false,
+      if (firstSample?['selectedDevice'] != null)
+        'gnss_device': firstSample!['selectedDevice'],
       'calculatedPosition': {
         'latitude': averagedResult['latitude'],
         'longitude': averagedResult['longitude'],

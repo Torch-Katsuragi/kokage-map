@@ -44,6 +44,17 @@ tags: [technical, gps, architecture]
 - 外部GNSS機器を直接使用可能
 - ユーザーの手動操作で位置を記録
 - フォアグラウンドサービス不要
+- ツールバーで GPS ツールを選んでいる間は、コンパスツール（TruPulse）のステータスパネルと同様に画面右下（左利き配置では左下、線・面の確定ボタン表示中はその上）に `GpsStatusPanel` を常時表示する:
+  - 内蔵 GPS 使用時: 受信状態バッジ・記録先レイヤ・現在座標・水平精度・標高・測点数（または方位）を表示
+  - 外部 GNSS 接続時: 機器名と測位状態バッジ（`RTK FIX` / `RTK FLOAT` / `DGPS` / `SBAS` / `GPS` / `No Fix` / `接続中` / `未接続`）・精度（GST 標準偏差または HDOP 推定）・衛星数・HDOP・補正情報、NTRIP 受信状態、および `GnssQualityGate`（足切り条件）のリアルタイム充足警告を表示
+  - パネルをタップすると `GpsSettingsScreen` が開き、ソース切替や詳細確認にすぐ移れる（`設定 → 外部機器` からも Bluetooth 外部 GNSS として接続・切断可能）
+- **RTK 解状態変化の効果音**（`GnssFixSoundSetting`、既定 ON）:
+  - 外部 GNSS 使用中、`RTK FIX`（GGA 品質 `4`）に入った瞬間に上昇チャイム（`assets/sounds/gnss_rtk_fixed.wav`）、`RTK FIX` から `FLOAT` 以下または切断へ落ちた瞬間に下降アラート（`assets/sounds/gnss_rtk_lost.wav`）を再生する（樹冠下での連続チャタリングを防ぐ 1.5 秒のクールダウン付き）。
+- **内蔵 NTRIP クライアント**（`lib/services/ntrip/`、Android/モバイル専用・Web は条件付き import スタブ）:
+  - 善意の基準局（`rtk2go.com:2101` 等）や自治体・民間の NTRIP v1 / v2 キャスターへ生 TCP / TLS ソケットで接続し、`ICY 200 OK` および `HTTP/1.x 200 OK`（`Transfer-Encoding: chunked` 展開対応）の両方を受け付ける。
+  - 受信した RTCM3 バイト列は遅延ゼロで `BluetoothGnssService.sendRtcm`（Bluetooth SPP `output`）へ転送しつつ、`Rtcm3StreamInspector`（`0xD3` プリアンブル + 10bit 長 + CRC-24Q 検証）で有効フレーム数とメッセージ番号（`1005` 基準局座標、`1077`/`1087`/`1097`/`1117` MSM 等）を集計表示する。
+  - `SOURCETABLE` の `STR;` レコードをパースし、現在位置が分かっているときは最寄り基準局からの距離（km）順にマウントポイントを並べて選択できる。
+  - VRS や最寄り自動選択ストリーム向けに NMEA `$GPGGA` アップリンク定期送信に対応。認証エラー（401）やマウントポイント不一致（`SOURCETABLE 200 OK` 返却）では自動リトライを即時停止し、一時的な回線断のみ 10s → 20s → 40s → 60s の指数バックオフで再接続して RTK2go / SNIP キャスターの IP バンを防ぐ。
 
 ### GPS追跡機能
 
@@ -96,7 +107,28 @@ tags: [technical, gps, architecture]
 - `source_type`カラムの値: `GPS`（内蔵GPS）または`GNSS`（外部GNSS）
 - フォアグラウンドサービスのログ: 常に内蔵GPSのみを使用
 - メインisolateのログ: 外部GNSS使用時のデータ取得状況
-- 属性テーブルでの確認: 外部GNSS使用時は`source_type = 'GNSS'`になっているか
+- 属性テーブルでの確認: 外部GNSS使用時は`source_type = 'GNSS'`かつ`gps_source = 'external'`、切断時の一時フォールバック使用時は`gps_source = 'internal_fallback'`、通常内蔵GPS時は`gps_source = 'internal'`になっているか
+
+## Bluetooth 機器の切断耐性・自動再接続・接続ログ（Issue #7）
+
+- **無断フォールバックの禁止**: 外部 GNSS が電波断などで切断された際は警告音（`gnss_rtk_lost.wav`）と通知センターへのエラー通知を出し、無断で端末内蔵 GPS へは切り替えない（切断中は誤って数 m 精度の点を記録しないようブロックする）。
+- **明示的な一時切替と自動復帰**: `GpsStatusPanel` の「内蔵GPSへ一時切替して続行」を明示的に選んだ場合のみ内蔵 GPS で記録を再開し、記録された点には属性 `gps_source = 'internal_fallback'` と `gnss_device` を残す。バックグラウンドでの自動再接続が成功した時点で自動的に外部 GNSS へ復帰する。
+- **再起動時の全機器自動再接続**: `PreferredGpsSourceType`・`SelectedGnssDeviceAddress`・`TruPulseService` の前回接続アドレスを `SharedPreferences` に永続化し、アプリ再起動時に外部 GNSS と測距器の両方へ自動でつなぎ直す。
+- **手動電源OFF・無操作オートパワーオフに対する有界自動再接続と待機モード（省電力・2.4GHz帯域保護）**:
+  - Bluetooth Classic（SPP / RFCOMM）では、相手機器の手動電源OFF（および TruPulse 360R 本体の無操作オートパワーオフ）と電波圏外によるリンク断はいずれも L2CAP Supervision Timeout によるストリーム終了として届くため、プロトコル上は区別できない。
+  - 無制限に `BluetoothConnection.toAddress()` を回し続けると、1回の試行ごとに約 5.12 秒間の高出力 Bluetooth Page Scan が走り、スマホのバッテリーを急速に消費するだけでなく、2.4GHz 帯の ACL タイムスロットを奪って同時接続中のもう一方の Bluetooth 機器（外部GNSSと測距器の併用時など）のパケ詰まり・切断を誘発する。
+  - そのため自動再接続は **最大 5 回（`3s → 6s → 12s → 20s → 30s`、合計約 71 秒）** で打ち切り、数十秒以内の電波瞬断は手放しで自動復帰させつつ、電源OFF時は約 1 分強で電波発信ゼロの **待機（Standby）モード** へ移行する（スマホ本体の Bluetooth が OFF の場合は即座に停止）。
+  - 待機モード中も測距器ツールや器械点（`STN`）は解除されず、機器の電源を入れ直した際は画面右下の `GpsStatusPanel`（「外部GNSSへ再接続」）または `TruPulseStatusPanel`（「再接続」）から 1 タップで即座に再接続できる。
+- **複数 Bluetooth SPP 機器（外部GNSS ＋ 測距器/TS）の同時接続安定化**:
+  - `third_party/flutter_bluetooth_serial` のネイティブ実装を改修し、相手側切断・接続失敗時の `BluetoothSocket.close()` 漏れ（RFCOMM チャネル枯渇）、`AsyncTask.SERIAL_EXECUTOR` による接続中スレッド直列ロック（片方の再接続中に他方の RTCM 送信等が止まる問題）、非スレッドセーフな `SparseArray` の競合、スキャン中でないときの無条件 `cancelDiscovery()`、および Dart 側の 111ms 常時ポーリングをすべて解消。
+  - さらに `BluetoothConnectionCoordinator`（`lib/services/bluetooth_connection_coordinator.dart`）により、起動時や同時瞬断時に 2 台分の `BluetoothSocket.connect()`（Page Scan + SDP + RFCOMM ネゴシエーション）が同時に走って 2.4GHz ベースバンドが衝突しないよう発信ハンドシェイクを直列化・安定化待機（600ms）させる。
+- **永続接続・切断ログ**: `DeviceConnectionLogService`（`lib/services/device_connection_log_service.dart`）がリリースビルドでも外部 GNSS・測距器・NTRIP の接続／切断／自動再接続／一時フォールバックの時刻を永続記録し、「外部機器」および「GPS・測位」設定画面から閲覧・コピーできる。
+- **外部 GNSS の地図上常時マーカー表示と詳細軌跡（`gnss_tracks`）保管**:
+  - 外部 GNSS 接続中は GPS 測量ツールを選んでいない通常閲覧・作図・コンパス測量中でも、NMEA ストリームから届く外部 GNSS のライブ位置を端末内蔵 GPS（青丸＋方位扇）とは別の **白い外輪＋解状態カラー（RTK FIX=緑 / FLOAT=シアン / DGPS=紫 / GPS=橙）のターゲットリング** として `TerrainMapLayer` 上にリアルタイム表示する（切断・No Fix 時は即時消去）。
+  - 同時に `GpsHistoryRecorder` が `Global/gps_history.gpkg` 内に端末内蔵の `gps_tracks` と並べて **`gnss_tracks`（LineString）＋ `gnss_track_details`**（`gps_quality`, `fix_type`, `accuracy`, `accuracy_source`, `satellite_count`, `hdop`, `pdop`, `vdop`, `gnss_device`, `ntrip_mountpoint`, `raw_gga` を毎秒保持、クラッシュ耐性 Raw バッファ `gnss_raw_YYYY_MM_DD` 付き）を常時保管する。三脚・ポール据え置きによる静止観測中（TruPulse 360R との同時併用時など）に RTK FIX 座標がミリ単位で完全一致しても、また Bluetooth SPP のバッファ到着ジッター（±150ms）があっても、`gnss_track_details` には毎秒全エポックを欠かさず蓄積し、地図・QGIS 用の `gnss_tracks` LineString 側のみ連続重複頂点を除去する。「軌跡から抽出」ダイアログからも `YYYY/MM/DD [GNSS]` として全 GNSS テレメトリ付きの `sub_table` 込みでライン抽出できる。
+- **AI エージェント協働を前提とした単一 GeoPackage 構造化アーカイブ**:
+  - アプリ内に複雑な事後解析 UI（時刻指定の静止点自動抽出など）を肥大化させず、こかげマップ自身は「現場で確実に・欠損なくオープン標準の SQLite（GeoPackage）へ構造化記録する」役割に徹し、事後解析・外れ値除去・静止点同定・調書作成は PC 側の AI エージェントと協働する設計方針をとる。
+  - `Global/gps_history.gpkg` 1 ファイルの中に `gps_tracks` / `gps_track_details`（内蔵GPS）、`gnss_tracks` / `gnss_track_details`（外部GNSS全テレメトリ・生GGA）、および **`device_connection_events`**（機器接続・切断・再接続上限停止・一時フォールバックのミリ秒時刻イベント）をすべて同居させ、`AppData/kmap` の端末間統合でも過去日分を自動同期するため、AI エージェントは `gps_history.gpkg` と案件 `.gpkg` を SQLite として開くだけで現場の全時系列を突合できる。
 
 ## GNSS の品質の記録と足切り
 

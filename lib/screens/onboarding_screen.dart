@@ -18,11 +18,14 @@
 // Google Play Prominent Disclosure準拠
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/platform_capabilities.dart';
+import '../core/role_preset.dart';
 import '../i18n/strings.g.dart';
+import '../providers/role_preset_providers.dart';
 import '../utils/app_logger.dart';
 import '../utils/app_permissions.dart';
 
@@ -31,12 +34,13 @@ const kOnboardingCompletedKey = 'onboarding_completed';
 
 /// 初回起動オンボーディング画面
 ///
-/// 4ページ構成のPageView:
+/// 5ページ構成のPageView:
 /// 1. ウェルカム（説明のみ）
 /// 2. ストレージ権限
 /// 3. 位置情報権限（Prominent Disclosure）
-/// 4. Bluetooth権限（オプション）+ 完了
-class OnboardingScreen extends StatefulWidget {
+/// 4. Bluetooth権限（オプション）
+/// 5. 主な用途プリセット選択 + 完了
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   /// オンボーディングが必要かどうかを判定
@@ -49,18 +53,22 @@ class OnboardingScreen extends StatefulWidget {
   }
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-  static const _totalPages = 4;
+  static const _totalPages = 5;
 
   // 権限状態
   bool _storageGranted = false;
   bool _locationGranted = false;
   bool _bluetoothGranted = false;
+
+  // 初回セットアップで選ぶ用途プリセット（既定は標準）
+  RolePreset _selectedPreset = RolePreset.standard;
+  bool _isApplyingPreset = false;
 
   // ローディング状態
   bool _isRequestingPermission = false;
@@ -157,7 +165,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         (granted) => _locationGranted = granted,
       );
 
-  /// Bluetooth権限をリクエスト（最後のページなので許可されても留まる）
+  /// Bluetooth権限をリクエスト（許可されたら用途選択ページへ進む）
   Future<void> _requestBluetoothPermission() => _requestPermission(
         'Bluetooth',
         () async {
@@ -166,17 +174,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           return granted;
         },
         (granted) => _bluetoothGranted = granted,
-        advanceOnGrant: false,
       );
 
-  /// オンボーディング完了処理
+  /// オンボーディング完了処理（選択された用途プリセットを適用して閉じる）
   Future<void> _completeOnboarding() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(kOnboardingCompletedKey, true);
-    AppLogger.debug('[Onboarding] Onboarding completed');
+    if (_isApplyingPreset) return;
+    setState(() => _isApplyingPreset = true);
+    try {
+      await ref.read(rolePresetSettingProvider.notifier).apply(_selectedPreset);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(kOnboardingCompletedKey, true);
+      AppLogger.debug('[Onboarding] Onboarding completed (preset=${_selectedPreset.code})');
 
-    if (mounted) {
-      Navigator.of(context).pop(true);
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } finally {
+      if (mounted) setState(() => _isApplyingPreset = false);
     }
   }
 
@@ -224,6 +238,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     _buildStoragePage(),
                     _buildLocationPage(),
                     _buildBluetoothPage(),
+                    _buildRolePresetPage(),
                   ],
                 ),
               ),
@@ -347,7 +362,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
 
   // ================================================================
-  // ページ4: Bluetooth権限 + 完了
+  // ページ4: Bluetooth権限
   // ================================================================
   Widget _buildBluetoothPage() {
     return _OnboardingPage(
@@ -369,20 +384,129 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               const SizedBox(height: 12),
             ],
-            if (_bluetoothGranted) _buildGrantedBadge(),
-            const SizedBox(height: 16),
-            // 「はじめる」ボタン（常に表示）
+            if (_bluetoothGranted) ...[
+              _buildGrantedBadge(),
+              const SizedBox(height: 16),
+            ],
             _buildPrimaryButton(
-              label: _bluetoothGranted
-                  ? t.onboarding.getStarted
-                  : t.onboarding.bluetoothSkip,
-              icon: _bluetoothGranted
-                  ? Icons.rocket_launch_rounded
-                  : Icons.skip_next_rounded,
+              label: _bluetoothGranted ? t.onboarding.next : t.onboarding.bluetoothSkip,
+              icon: _bluetoothGranted ? Icons.arrow_forward_rounded : Icons.skip_next_rounded,
+              onPressed: _goToNextPage,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ================================================================
+  // ページ5: 主な用途プリセット選択 + 完了
+  // ================================================================
+  Widget _buildRolePresetPage() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        children: [
+          const SizedBox(height: 16),
+          Text(
+            t.onboarding.rolePresetTitle,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: -0.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            t.onboarding.rolePresetDesc,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white.withValues(alpha: 0.8),
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          for (final preset in RolePreset.values) ...[
+            _buildOnboardingPresetCard(preset),
+            const SizedBox(height: 10),
+          ],
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildPrimaryButton(
+              label: t.onboarding.getStarted,
+              icon: Icons.rocket_launch_rounded,
               onPressed: _completeOnboarding,
-              color: _bluetoothGranted
-                  ? const Color(0xFF66BB6A)
-                  : null,
+              isLoading: _isApplyingPreset,
+              color: const Color(0xFF66BB6A),
+            ),
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOnboardingPresetCard(RolePreset preset) {
+    final isSelected = preset == _selectedPreset;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => setState(() => _selectedPreset = preset),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.white.withValues(alpha: 0.16)
+              : Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF4FC3F7) : Colors.white.withValues(alpha: 0.18),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: preset.color.withValues(alpha: 0.35),
+              ),
+              child: Icon(preset.icon, color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    preset.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    preset.description,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.78),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+              color: isSelected ? const Color(0xFF4FC3F7) : Colors.white.withValues(alpha: 0.4),
             ),
           ],
         ),

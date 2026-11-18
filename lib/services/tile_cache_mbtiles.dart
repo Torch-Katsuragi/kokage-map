@@ -34,6 +34,9 @@ class TileCacheMBTiles {
   /// これより小さいタイルは壊れているとみなす（保存しない・読んだら消す）
   static const int minTileBytes = 100;
 
+  /// 公式ベクトルタイル（`.pbf`）のキャッシュか（小さな1ポリゴンタイルでも正当なデータになりうる）
+  static bool isVectorCacheId(String providerId) => providerId.startsWith('official_');
+
   /// 壊れていない（小さすぎない）タイルか
   static bool isPlausibleTile(Uint8List data) => data.length >= minTileBytes;
 
@@ -126,8 +129,8 @@ class TileCacheMBTiles {
     ''');
 
     // メタデータ登録（MBTiles仕様必須項目）
-    const metadata = {
-      'format': 'png',
+    final metadata = {
+      'format': isVectorCacheId(providerId) ? 'pbf' : 'png',
       'type': 'overlay',
       'bounds': '-180,-85.051129,180,85.051129',
       'minzoom': '0',
@@ -243,8 +246,9 @@ class TileCacheMBTiles {
       if (results.isEmpty) return null;
 
       final data = results.first['tile_data'] as Uint8List;
-      // データサイズチェック（破損検出）
-      if (!isPlausibleTile(data)) {
+      // データサイズチェック（破損検出。ベクトルタイルは数バイトでも有効な MVT になりうる）
+      final minBytes = isVectorCacheId(providerId) ? 1 : minTileBytes;
+      if (data.length < minBytes) {
         await db.delete('tiles', where: _whereTile, whereArgs: [z, x, tileRow]);
         AppLogger.debug('[TILE-CACHE] 🗑️ Deleted corrupted tile (too small)');
         return null;
@@ -336,7 +340,8 @@ class TileCacheMBTiles {
         for (final providerId in _existing.toList()) {
           final db = await _db(providerId);
           total += Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tiles')) ?? 0;
-          final n = await db.delete('tiles', where: 'length(tile_data) < ?', whereArgs: [minTileBytes]);
+          final minBytes = isVectorCacheId(providerId) ? 1 : minTileBytes;
+          final n = await db.delete('tiles', where: 'length(tile_data) < ?', whereArgs: [minBytes]);
           if (n > 0) {
             removed += n;
             await db.rawQuery('VACUUM');

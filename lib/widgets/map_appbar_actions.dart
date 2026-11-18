@@ -26,22 +26,24 @@ List<Widget> buildMapAppBarActions({
   required bool drawerOpen,
   required VoidCallback onAttributeTableToggle,
   required VoidCallback onDrawerToggle,
+  bool showAttributeTableAction = true,
   /// レイヤ一覧ボタンの左に挟むもの（≡ メニューなど）。
   /// レイヤ一覧は一番よく押すので、親指に近い右端に置く
   List<Widget> beforeLayerButton = const [],
 }) {
   return [
     const NotificationBell(),
-    // 属性テーブルボタン
-    IconButton(
-      key: TutorialTargets.tableButton,
-      icon: Icon(
-        Icons.table_view,
-        color: showAttributeTable ? Colors.blue : null,
+    // 属性テーブルボタン（用途プリセットで引き算されているときは非表示、チュートリアル中は表示）
+    if (showAttributeTableAction)
+      IconButton(
+        key: TutorialTargets.tableButton,
+        icon: Icon(
+          Icons.table_view,
+          color: showAttributeTable ? Colors.blue : null,
+        ),
+        tooltip: showAttributeTable ? t.attributeTable.closeTable : t.attributeTable.openTable,
+        onPressed: onAttributeTableToggle,
       ),
-      tooltip: showAttributeTable ? t.attributeTable.closeTable : t.attributeTable.openTable,
-      onPressed: onAttributeTableToggle,
-    ),
     ...beforeLayerButton,
     // レイヤードロワーボタン（右端）
     IconButton(

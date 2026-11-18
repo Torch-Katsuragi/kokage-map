@@ -20,6 +20,7 @@ tags: [index, navigation]
 | [[features/project-management]] | プロジェクト・GeoPackage管理（フォルダ構造、メタデータ） |
 | [[features/google-drive]] | Google Drive連携（同期、共有） |
 | [[features/ui-ux]] | UI/UXの方向性（ツールバー、レイヤーパネル、ジェスチャー） |
+| [[technical/role-presets]] | 用途プリセットとUI引き算の設計（猟師・林業・測量・土木・標準、オフライン選択取得） |
 | [[features/geometry-types]] | レイヤジオメトリタイプ仕様（OGC Simple Features準拠） |
 
 ---
@@ -34,6 +35,7 @@ tags: [index, navigation]
 | [[technical/project-format-design]] | プロジェクト形式の設計（View / .qgs / 共有単位） |
 | [[technical/gdal]] | GDAL（Android の libgdal.so と web の WASM、使いどころ） |
 | [[technical/external-formats]] | gpkg 以外の形式（読み取り専用レイヤ・gpkg への変換・ラスタのオーバーレイ） |
+| [[technical/official-data]] | 公式オープンデータ連携と微地形表現（System レイヤ・MVT・PMTiles・CS立体図） |
 | [[technical/import-export]] | レイヤの書き出し（GDAL） |
 
 ### 地図の描画・3D

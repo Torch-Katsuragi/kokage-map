@@ -22,6 +22,7 @@ import '../i18n/strings.g.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../providers/device_tool_providers.dart';
 import '../providers/notification_providers.dart';
+import '../providers/role_preset_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import '../tools/map_tool.dart';
@@ -49,6 +50,9 @@ class MapToolbar extends ConsumerWidget {
     final currentTool = ref.watch(currentToolProvider);
     final deviceTools = ref.watch(connectedDeviceToolsProvider);
     final selectedFeatures = ref.watch(selectedFeaturesProvider);
+    final uiConfig = ref.watch(uiVisibilitySettingProvider);
+    // チュートリアル実行中は案内先ボタンが消えないよう全ツールを表示する
+    final inTutorial = ref.watch(tutorialProvider) != null;
     final hasOverlaySelected = selectedFeatures.any(
       (n) => n is OverlayImageNode,
     );
@@ -68,13 +72,14 @@ class MapToolbar extends ConsumerWidget {
             children: [
               const SizedBox(height: 8),
               // 固定ツール。ペンは 3D 中だと TerrainMapLayer が真上に寄せて 1 本指を描画に渡す（真上ロック）
-              for (final (key, icon, tooltip, name, toolOf)
-                  in <(Key?, IconData, String, String, MapTool Function())>[
+              for (final (key, icon, tooltip, name, visible, toolOf)
+                  in <(Key?, IconData, String, String, bool, MapTool Function())>[
                     (
                       null,
                       Icons.pan_tool_alt,
                       t.map.toolbar.pan,
                       'Pan',
+                      true,
                       () => ref.read(panToolProvider),
                     ),
                     (
@@ -82,6 +87,7 @@ class MapToolbar extends ConsumerWidget {
                       Icons.edit,
                       t.map.toolbar.pen,
                       'Pen',
+                      inTutorial || uiConfig.showPenTool,
                       () => ref.read(penToolProvider),
                     ),
                     (
@@ -89,6 +95,7 @@ class MapToolbar extends ConsumerWidget {
                       Icons.select_all,
                       t.map.toolbar.select,
                       'Select',
+                      true,
                       () => ref.read(selectToolProvider),
                     ),
                     (
@@ -96,6 +103,7 @@ class MapToolbar extends ConsumerWidget {
                       Icons.gps_fixed,
                       t.map.toolbar.gpsTool,
                       'GPS',
+                      inTutorial || uiConfig.showGpsTool,
                       () => ref.read(gpsToolProvider),
                     ),
                     // 計測（距離・面積。地物は作らない）
@@ -104,21 +112,23 @@ class MapToolbar extends ConsumerWidget {
                       Icons.straighten,
                       t.map.toolbar.measure,
                       'Measure',
+                      inTutorial || uiConfig.showMeasureTool,
                       () => ref.read(measureToolProvider),
                     ),
-                  ]) ...[
-                const SizedBox(height: 8),
-                _ToolButton(
-                  key: key,
-                  icon: icon,
-                  tooltip: tooltip,
-                  isSelected: currentTool.name == name,
-                  onPressed: () {
-                    ref.read(currentToolProvider.notifier).set(toolOf());
-                    onToolChanged();
-                  },
-                ),
-              ],
+                  ])
+                if (visible) ...[
+                  const SizedBox(height: 8),
+                  _ToolButton(
+                    key: key,
+                    icon: icon,
+                    tooltip: tooltip,
+                    isSelected: currentTool.name == name,
+                    onPressed: () {
+                      ref.read(currentToolProvider.notifier).set(toolOf());
+                      onToolChanged();
+                    },
+                  ),
+                ],
               // OverlayImageNode選択中のみ表示
               if (hasOverlaySelected) ...[
                 const SizedBox(height: 8),

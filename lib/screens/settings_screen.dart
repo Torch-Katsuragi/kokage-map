@@ -17,9 +17,11 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/platform_capabilities.dart';
 import '../i18n/strings.g.dart';
+import '../providers/role_preset_providers.dart';
 import '../tutorial/tutorial.dart';
 import 'basemap_settings_screen.dart';
 import 'device_settings_screen.dart';
@@ -90,7 +92,7 @@ extension SettingsCategoryExt on SettingsCategory {
 /// レスポンシブ対応:
 /// - 横幅が狭い場合: カテゴリーリストのみ表示 -> 遷移
 /// - 横幅が広い場合: 左にカテゴリーリスト、右に詳細画面 (Split View)
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   final SettingsCategory initialCategory;
 
   const SettingsScreen({
@@ -99,16 +101,25 @@ class SettingsScreen extends StatefulWidget {
   });
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late SettingsCategory _selectedCategory;
+  bool _expandedAllCategories = false;
+
+  static const Set<SettingsCategory> _advancedCategories = {
+    SettingsCategory.devices,
+    SettingsCategory.layerStyle,
+  };
 
   @override
   void initState() {
     super.initState();
     _selectedCategory = widget.initialCategory;
+    if (_advancedCategories.contains(widget.initialCategory)) {
+      _expandedAllCategories = true;
+    }
   }
 
   @override
@@ -122,11 +133,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  List<SettingsCategory> get _visibleCategories => SettingsCategory.values
+  List<SettingsCategory> get _platformCategories => SettingsCategory.values
       .where((c) =>
           (c != SettingsCategory.sync && c != SettingsCategory.devices) ||
           _isMobile)
       .toList();
+
+  bool get _shouldFoldAdvanced {
+    if (_expandedAllCategories) return false;
+    if (ref.watch(tutorialProvider) != null) return false;
+    return !ref.watch(uiVisibilitySettingProvider).showAdvancedSettings;
+  }
+
+  List<SettingsCategory> get _visibleCategories {
+    final all = _platformCategories;
+    if (!_shouldFoldAdvanced) return all;
+    return [
+      for (final c in all)
+        if (!_advancedCategories.contains(c) || c == _selectedCategory) c,
+    ];
+  }
+
+  int get _foldedCategoryCount => _platformCategories.length - _visibleCategories.length;
 
   static bool get _isMobile => PlatformCapabilities.isMobile;
 
@@ -137,30 +165,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _ => null,
       };
 
+  Widget _buildExpandCategoriesTile() {
+    final count = _foldedCategoryCount;
+    if (count <= 0) return const SizedBox.shrink();
+    return ListTile(
+      leading: const Icon(Icons.expand_more, color: Colors.teal),
+      title: Text(
+        t.rolePreset.showAllSettingsCategories(count: count),
+        style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.w600),
+      ),
+      onTap: () => setState(() => _expandedAllCategories = true),
+    );
+  }
+
   /// 狭い画面（スマホ等）用レイアウト
   Widget _buildNarrowLayout() {
+    final categories = _visibleCategories;
     return Scaffold(
       appBar: AppBar(
         title: Text(t.settings.title),
       ),
       body: ListView(
-        children: _visibleCategories.map((category) {
-          return ListTile(
-            key: _tutorialKey(category),
-            leading: Icon(category.icon, color: Colors.blueGrey),
-            title: Text(category.title),
-            subtitle: Text(category.description, maxLines: 1, overflow: TextOverflow.ellipsis),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => _buildSettingsContent(category, isEmbedded: false),
-                ),
-              );
-            },
-          );
-        }).toList(),
+        children: [
+          ...categories.map((category) {
+            return ListTile(
+              key: _tutorialKey(category),
+              leading: Icon(category.icon, color: Colors.blueGrey),
+              title: Text(category.title),
+              subtitle: Text(category.description, maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => _buildSettingsContent(category, isEmbedded: false),
+                  ),
+                );
+              },
+            );
+          }),
+          _buildExpandCategoriesTile(),
+        ],
       ),
     );
   }
@@ -168,6 +213,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// 広い画面（タブレット・PC等）用レイアウト
   Widget _buildWideLayout() {
     final scheme = Theme.of(context).colorScheme;
+    final categories = _visibleCategories;
     return Scaffold(
       body: Row(
         children: [
@@ -186,38 +232,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    children: _visibleCategories.map((category) {
-                      final isSelected = category == _selectedCategory;
-                      return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: isSelected
-                            ? BoxDecoration(
-                                color: scheme.primaryContainer,
-                                borderRadius: BorderRadius.circular(8),
-                              )
-                            : null,
-                        child: ListTile(
-                          key: _tutorialKey(category),
-                          leading: Icon(
-                            category.icon,
-                            color: isSelected ? scheme.onPrimaryContainer : Colors.blueGrey,
-                          ),
-                          title: Text(
-                            category.title,
-                            style: TextStyle(
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              color: isSelected ? scheme.onPrimaryContainer : null,
+                    children: [
+                      ...categories.map((category) {
+                        final isSelected = category == _selectedCategory;
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: isSelected
+                              ? BoxDecoration(
+                                  color: scheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(8),
+                                )
+                              : null,
+                          child: ListTile(
+                            key: _tutorialKey(category),
+                            leading: Icon(
+                              category.icon,
+                              color: isSelected ? scheme.onPrimaryContainer : Colors.blueGrey,
+                            ),
+                            title: Text(
+                              category.title,
+                              style: TextStyle(
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: isSelected ? scheme.onPrimaryContainer : null,
+                              ),
+                            ),
+                            onTap: () {
+                              setState(() => _selectedCategory = category);
+                            },
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          onTap: () {
-                            setState(() => _selectedCategory = category);
-                          },
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                        );
+                      }),
+                      _buildExpandCategoriesTile(),
+                    ],
                   ),
                 ),
               ],

@@ -34,6 +34,7 @@ import '../../providers/notification_providers.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../services/global_folder_locator.dart';
+import '../../services/official/official_layer_service.dart';
 import '../../services/projects_home.dart';
 import '../../utils/folder_utils.dart';
 import '../settings_screen.dart' show kGlobalFolderCustomPathKey;
@@ -191,7 +192,8 @@ Future<void> initializeGlobalFolder(
   // web にはその概念が無い（path_provider が未対応）。
   // web でプロジェクトを開いたときは黙って飛ばす。
   if (!PlatformCapabilities.hasLocalFileSystem) {
-    AppLogger.debug('[HomeScreen] GlobalFolder: skipped (web)');
+    await OfficialLayerService.instance.syncToTree(ref.read(folderTreeProvider));
+    AppLogger.debug('[HomeScreen] GlobalFolder: skipped (web), SysNode synced');
     return;
   }
   void notify(String title, NotificationLevel level, {String? detail}) {
@@ -229,6 +231,7 @@ Future<void> initializeGlobalFolder(
         visible: true,
       );
       SysNode.attachGlobalFolder(rootNode, globalFolderNode);
+      await OfficialLayerService.instance.syncToTree(rootNode);
       AppLogger.debug('[HomeScreen] グローバルフォルダを「System」の下に追加');
     }
   } catch (e) {

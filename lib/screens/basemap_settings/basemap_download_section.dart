@@ -22,10 +22,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../core/official/official_data_catalog.dart';
+import '../../core/role_preset.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../models/basemap_provider.dart';
+import '../../models/nodes/official_layer_node.dart';
 import '../../services/basemap_service.dart';
+import '../../services/official/official_layer_service.dart';
 import '../../widgets/settings_widgets.dart';
 
 /// 一括ダウンロードセクション
@@ -61,13 +65,20 @@ Future<void> showBasemapDownloadFlow(
   required BaseMapService service,
   required LatLng center,
   required double? currentMapZoom,
+  RolePreset activePreset = RolePreset.standard,
+  OfficialLayerService? officialLayerService,
   required void Function(String title, NotificationLevel level) notify,
   required VoidCallback onDownloadFinished,
 }) async {
-  // 見えているレイヤ全部を落とす。OSM は一括ダウンロード禁止（タイル利用ポリシー: prefetchはブロック対象）なので除く
+  // 見えているレイヤ全部を候補に出す。OSM は一括ダウンロード禁止（タイル利用ポリシー: prefetchはブロック対象）なので除く
   final providers = service.downloadableProviders;
+  final officialService = officialLayerService ?? OfficialLayerService.instance;
+  final officialVectorSpecs = [
+    for (final spec in officialService.enabledSpecs)
+      if (spec.kind == OfficialLayerKind.vectorTile && officialService.isLayerVisible(spec.id)) spec,
+  ];
   final hasOsm = service.activeLayers.any((e) => e.$1.type == BaseMapType.openStreetMap);
-  if (providers.isEmpty) {
+  if (providers.isEmpty && officialVectorSpecs.isEmpty) {
     notify(t.basemap.download.osmNotAllowed, NotificationLevel.warning);
     return;
   }
@@ -75,18 +86,32 @@ Future<void> showBasemapDownloadFlow(
     notify(t.basemap.download.osmSkipped, NotificationLevel.info);
   }
 
-  // 段の範囲はプロバイダの和（等高線の z19 は地理院の切り出しになるので 18 で止める）
-  final zMinAll = providers.map((p) => p.minZoom).reduce(math.min);
-  final zMaxAll = math.min(18, providers.map((p) => p.maxZoom).reduce(math.max));
+  // 段の範囲はプロバイダと公式ベクトルデータの和（等高線の z19 は地理院の切り出しになるので 18 で止める）
+  final minZoomCandidates = [
+    for (final p in providers) p.minZoom,
+    for (final s in officialVectorSpecs) s.minDisplayZoom,
+  ];
+  final maxZoomCandidates = [
+    for (final p in providers) p.maxZoom,
+    for (final s in officialVectorSpecs)
+      s.vectorSources.fold<int>(16, (m, src) => math.max(m, src.maxZoom)),
+  ];
+  final zMinAll = minZoomCandidates.reduce(math.min);
+  final zMaxAll = math.min(18, maxZoomCandidates.reduce(math.max));
 
-  // 初期ズーム範囲: 現在のズームレベル前後
+  // 用途プリセットの推奨上限ズームと初期半径を初期値に使う（手動でスライダー変更可能）
+  final dlRecipe = activePreset.recipe.download;
+  final recommendedMaxZ = math.min(zMaxAll, dlRecipe.recommendedMaxZoom).clamp(zMinAll, zMaxAll);
   final currentZoom = currentMapZoom ?? 15.0;
-  double minZoom = (currentZoom - 2).clamp(zMinAll.toDouble(), zMaxAll.toDouble());
-  final double maxZoom = (currentZoom + 2).clamp(zMinAll.toDouble(), zMaxAll.toDouble());
+  double minZoom = (currentZoom - 2).clamp(zMinAll.toDouble(), recommendedMaxZ.toDouble());
+  final double maxZoom = math.min(currentZoom + 2, recommendedMaxZ.toDouble()).clamp(
+        zMinAll.toDouble(),
+        zMaxAll.toDouble(),
+      );
   if (minZoom > maxZoom) minZoom = maxZoom;
 
   final RangeValues zoomRange = RangeValues(minZoom, maxZoom);
-  const double radius = 1000; // 1km
+  final double radius = dlRecipe.defaultRadiusMeters;
 
   await showDialog<void>(
     context: context,
@@ -94,12 +119,15 @@ Future<void> showBasemapDownloadFlow(
     builder: (dialogContext) => BasemapDownloadSettingsDialog(
       center: center,
       providers: providers,
+      officialSpecs: officialVectorSpecs,
+      activePreset: activePreset,
+      officialService: officialService,
       zoomMin: zMinAll,
       zoomMax: zMaxAll,
       initialRadius: radius,
       initialZoomRange: zoomRange,
       baseMapService: service,
-      onStartDownload: (r, zMin, zMax) {
+      onStartDownload: (r, zMin, zMax, selectedProviders, extraTasks) {
         Navigator.pop(dialogContext);
         if (!context.mounted) return;
         unawaited(
@@ -111,6 +139,8 @@ Future<void> showBasemapDownloadFlow(
               radius: r,
               minZoom: zMin,
               maxZoom: zMax,
+              selectedProviders: selectedProviders,
+              extraPrefetchTasks: extraTasks,
               baseMapService: service,
             ),
           ).then((_) => onDownloadFinished()),
@@ -124,17 +154,29 @@ Future<void> showBasemapDownloadFlow(
 class BasemapDownloadSettingsDialog extends StatefulWidget {
   final LatLng center;
   final List<BaseMapProvider> providers;
+  final List<OfficialLayerSpec> officialSpecs;
+  final RolePreset activePreset;
+  final OfficialLayerService? officialService;
   final int zoomMin;
   final int zoomMax;
   final double initialRadius;
   final RangeValues initialZoomRange;
   final BaseMapService baseMapService;
-  final void Function(double radius, int minZoom, int maxZoom) onStartDownload;
+  final void Function(
+    double radius,
+    int minZoom,
+    int maxZoom,
+    List<BaseMapProvider> selectedProviders,
+    List<Future<bool?> Function()> extraPrefetchTasks,
+  ) onStartDownload;
 
   const BasemapDownloadSettingsDialog({
     super.key,
     required this.center,
     required this.providers,
+    this.officialSpecs = const [],
+    this.activePreset = RolePreset.standard,
+    this.officialService,
     required this.zoomMin,
     required this.zoomMax,
     required this.initialRadius,
@@ -150,17 +192,50 @@ class BasemapDownloadSettingsDialog extends StatefulWidget {
 class _BasemapDownloadSettingsDialogState extends State<BasemapDownloadSettingsDialog> {
   late double _radius = widget.initialRadius;
   late RangeValues _zoomRange = widget.initialZoomRange;
+  late final Set<String> _selectedProviderIds = {
+    for (final p in widget.providers) p.id,
+  };
+  late final Set<String> _selectedOfficialIds = {
+    if (widget.activePreset.recipe.download.includeOfficialVectorsByDefault || widget.providers.isEmpty)
+      for (final s in widget.officialSpecs) s.id,
+  };
   late int _estimatedTiles = _estimateTiles();
 
-  /// いまの範囲・段で落とすタイル数（全レイヤ分）
+  OfficialLayerService get _officialService => widget.officialService ?? OfficialLayerService.instance;
+
+  List<BaseMapProvider> get _selectedProviders => [
+        for (final p in widget.providers)
+          if (_selectedProviderIds.contains(p.id)) p,
+      ];
+
+  List<OfficialLayerSpec> get _selectedOfficialSpecs => [
+        for (final s in widget.officialSpecs)
+          if (_selectedOfficialIds.contains(s.id)) s,
+      ];
+
+  /// いまの範囲・段・チェック選択で落とす総タイル数（背景地図＋公式ベクトルデータ）
   int _estimateTiles() {
+    final zMin = _zoomRange.start.round();
+    final zMax = _zoomRange.end.round();
     final result = widget.baseMapService.estimateDownloadSize(
       center: widget.center,
       radiusMeters: _radius,
-      minZoom: _zoomRange.start.round(),
-      maxZoom: _zoomRange.end.round(),
+      minZoom: zMin,
+      maxZoom: zMax,
     );
-    return (result['totalTiles'] ?? 0) * widget.providers.length;
+    var total = (result['totalTiles'] ?? 0) * _selectedProviderIds.length;
+    for (final spec in _selectedOfficialSpecs) {
+      total += _officialService
+          .tilesForArea(
+            spec,
+            center: widget.center,
+            radiusMeters: _radius,
+            minZoom: zMin,
+            maxZoom: zMax,
+          )
+          .length;
+    }
+    return total;
   }
 
   void _update({double? radius, RangeValues? zoomRange}) {
@@ -171,8 +246,28 @@ class _BasemapDownloadSettingsDialogState extends State<BasemapDownloadSettingsD
     });
   }
 
+  List<Future<bool?> Function()> _buildExtraTasks(int zMin, int zMax) {
+    final service = _officialService;
+    return [
+      for (final spec in _selectedOfficialSpecs)
+        for (final tile in service.tilesForArea(
+          spec,
+          center: widget.center,
+          radiusMeters: _radius,
+          minZoom: zMin,
+          maxZoom: zMax,
+        ))
+          () => service.prefetchVectorTile(spec, tile.z, tile.x, tile.y),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hasAnySelected = _selectedProviderIds.isNotEmpty || _selectedOfficialIds.isNotEmpty;
+    final selectedNames = [
+      for (final p in _selectedProviders) p.name,
+      for (final s in _selectedOfficialSpecs) OfficialLayerNode.displayNameOf(s),
+    ];
     return AlertDialog(
       title: Text(t.basemap.download.settingsTitle),
       content: SingleChildScrollView(
@@ -180,7 +275,13 @@ class _BasemapDownloadSettingsDialogState extends State<BasemapDownloadSettingsD
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(t.basemapExtra.mapName(name: widget.providers.map((p) => p.name).join(' + '))),
+            if (selectedNames.isNotEmpty)
+              Text(t.basemapExtra.mapName(name: selectedNames.join(' + ')))
+            else
+              Text(
+                t.basemap.download.selectAtLeastOne,
+                style: const TextStyle(color: Colors.red, fontSize: 13),
+              ),
             const SizedBox(height: 4),
             Text(
               t.basemapExtra.center(
@@ -188,6 +289,55 @@ class _BasemapDownloadSettingsDialogState extends State<BasemapDownloadSettingsD
                 lng: widget.center.longitude.toStringAsFixed(4),
               ),
             ),
+            if (widget.providers.length + widget.officialSpecs.length > 1 ||
+                widget.officialSpecs.isNotEmpty) ...[
+              const Divider(),
+              Text(t.basemap.download.targetLayers, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              for (final p in widget.providers)
+                CheckboxListTile(
+                  value: _selectedProviderIds.contains(p.id),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(p.name, style: const TextStyle(fontSize: 14)),
+                  onChanged: (checked) {
+                    setState(() {
+                      if (checked ?? false) {
+                        _selectedProviderIds.add(p.id);
+                      } else {
+                        _selectedProviderIds.remove(p.id);
+                      }
+                      _estimatedTiles = _estimateTiles();
+                    });
+                  },
+                ),
+              for (final s in widget.officialSpecs)
+                CheckboxListTile(
+                  value: _selectedOfficialIds.contains(s.id),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(OfficialLayerNode.displayNameOf(s), style: const TextStyle(fontSize: 14)),
+                  subtitle: Text(
+                    t.basemap.download.officialVectorTag(
+                      min: s.minDisplayZoom,
+                      max: s.vectorSources.fold<int>(16, (m, src) => math.max(m, src.maxZoom)),
+                    ),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  onChanged: (checked) {
+                    setState(() {
+                      if (checked ?? false) {
+                        _selectedOfficialIds.add(s.id);
+                      } else {
+                        _selectedOfficialIds.remove(s.id);
+                      }
+                      _estimatedTiles = _estimateTiles();
+                    });
+                  },
+                ),
+            ],
             const Divider(),
             Text(t.basemap.download.range, style: const TextStyle(fontWeight: FontWeight.bold)),
             Row(
@@ -206,18 +356,30 @@ class _BasemapDownloadSettingsDialogState extends State<BasemapDownloadSettingsD
               ],
             ),
             Text(t.basemap.download.zoomRange, style: const TextStyle(fontWeight: FontWeight.bold)),
-            RangeSlider(
-              values: _zoomRange,
-              min: widget.zoomMin.toDouble(),
-              max: widget.zoomMax.toDouble(),
-              divisions: widget.zoomMax - widget.zoomMin,
-              labels: RangeLabels(
-                _zoomRange.start.round().toString(),
-                _zoomRange.end.round().toString(),
+            if (widget.zoomMax > widget.zoomMin)
+              RangeSlider(
+                values: _zoomRange,
+                min: widget.zoomMin.toDouble(),
+                max: widget.zoomMax.toDouble(),
+                divisions: widget.zoomMax - widget.zoomMin,
+                labels: RangeLabels(
+                  _zoomRange.start.round().toString(),
+                  _zoomRange.end.round().toString(),
+                ),
+                onChanged: (values) => _update(zoomRange: values),
               ),
-              onChanged: (values) => _update(zoomRange: values),
-            ),
             Center(child: Text('${_zoomRange.start.round()} 〜 ${_zoomRange.end.round()}')),
+            if (widget.activePreset != RolePreset.standard)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  t.basemap.download.presetZoomHint(
+                    preset: widget.activePreset.title,
+                    zoom: widget.activePreset.recipe.download.recommendedMaxZoom,
+                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                ),
+              ),
             const Divider(),
             const SizedBox(height: 8),
             Row(
@@ -251,12 +413,18 @@ class _BasemapDownloadSettingsDialogState extends State<BasemapDownloadSettingsD
           child: Text(t.common.cancel),
         ),
         ElevatedButton(
-          onPressed: _estimatedTiles > 0 && _estimatedTiles < 5000
-              ? () => widget.onStartDownload(
+          onPressed: hasAnySelected && _estimatedTiles > 0 && _estimatedTiles < 5000
+              ? () {
+                  final zMin = _zoomRange.start.round();
+                  final zMax = _zoomRange.end.round();
+                  widget.onStartDownload(
                     _radius,
-                    _zoomRange.start.round(),
-                    _zoomRange.end.round(),
-                  )
+                    zMin,
+                    zMax,
+                    _selectedProviders,
+                    _buildExtraTasks(zMin, zMax),
+                  );
+                }
               : null,
           style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
           child: Text(t.basemap.download.startDownload, style: const TextStyle(color: Colors.white)),
@@ -272,6 +440,8 @@ class BasemapDownloadProgressDialog extends StatefulWidget {
   final double radius;
   final int minZoom;
   final int maxZoom;
+  final List<BaseMapProvider>? selectedProviders;
+  final List<Future<bool?> Function()> extraPrefetchTasks;
   final BaseMapService baseMapService;
 
   const BasemapDownloadProgressDialog({
@@ -280,6 +450,8 @@ class BasemapDownloadProgressDialog extends StatefulWidget {
     required this.radius,
     required this.minZoom,
     required this.maxZoom,
+    this.selectedProviders,
+    this.extraPrefetchTasks = const [],
     required this.baseMapService,
   });
 
@@ -305,6 +477,8 @@ class _BasemapDownloadProgressDialogState extends State<BasemapDownloadProgressD
       radiusMeters: widget.radius,
       minZoom: widget.minZoom,
       maxZoom: widget.maxZoom,
+      providers: widget.selectedProviders,
+      extraPrefetchTasks: widget.extraPrefetchTasks,
     );
 
     stream.listen((status) {

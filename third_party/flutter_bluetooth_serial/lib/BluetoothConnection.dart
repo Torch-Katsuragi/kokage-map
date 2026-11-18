@@ -100,19 +100,16 @@ class _BluetoothStreamSink<Uint8List> extends StreamSink<Uint8List> {
   /// Chain of features, the variable represents last of the futures.
   Future<void> _chainedFutures = Future.value(/* Empty future :F */);
 
+  /// Completes when `close()` is called (avoids 111ms busy-polling timer per connection).
+  final Completer<void> _doneCompleter = Completer<void>();
+
   late Future<dynamic> _doneFuture;
 
   /// Exception to be returend from `done` Future, passed from `add` function or related.
   dynamic exception;
 
   _BluetoothStreamSink(this._id) {
-    // `_doneFuture` must be initialized here because `close` must return the same future.
-    // If it would be in `done` get body, it would result in creating new futures every call.
-    _doneFuture = Future(() async {
-      // @TODO ? is there any better way to do it? xD this below is weird af
-      while (this.isConnected) {
-        await Future.delayed(Duration(milliseconds: 111));
-      }
+    _doneFuture = _doneCompleter.future.then((_) {
       if (this.exception != null) {
         throw this.exception;
       }
@@ -173,6 +170,9 @@ class _BluetoothStreamSink<Uint8List> extends StreamSink<Uint8List> {
   @override
   Future close() {
     isConnected = false;
+    if (!_doneCompleter.isCompleted) {
+      _doneCompleter.complete();
+    }
     return this.done;
   }
 

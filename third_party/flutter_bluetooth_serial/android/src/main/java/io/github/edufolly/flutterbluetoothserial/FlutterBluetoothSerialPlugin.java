@@ -16,9 +16,9 @@ import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
-import android.util.SparseArray;
-import android.os.AsyncTask;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -27,6 +27,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.net.NetworkInterface;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
@@ -69,11 +73,17 @@ public class FlutterBluetoothSerialPlugin implements FlutterPlugin, ActivityAwar
     private final BroadcastReceiver discoveryReceiver;
 
     // Connections
-    /// Contains all active connections. Maps ID of the connection with plugin data channels. 
-    private final SparseArray<BluetoothConnectionWrapper> connections = new SparseArray<>(2);
+    /// Thread-safe map of all active connections (ConcurrentHashMap avoids SparseArray data races across UI and I/O threads).
+    private final ConcurrentHashMap<Integer, BluetoothConnectionWrapper> connections = new ConcurrentHashMap<>();
 
-    /// Last ID given to any connection, used to avoid duplicate IDs 
-    private int lastConnectionId = 0;
+    /// Dedicated thread pool for blocking RFCOMM connect / disconnect operations (replaces single-queue AsyncTask.SERIAL_EXECUTOR).
+    private final ExecutorService connectExecutor = Executors.newCachedThreadPool();
+
+    /// Main thread handler so callbacks do not depend on a non-null Activity instance.
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    /// Last ID given to any connection, used to avoid duplicate IDs
+    private final AtomicInteger lastConnectionId = new AtomicInteger(0);
     private Activity activity;
     private BinaryMessenger messenger;
     private Context activeContext;
@@ -92,15 +102,15 @@ public class FlutterBluetoothSerialPlugin implements FlutterPlugin, ActivityAwar
                 final String action = intent.getAction();
                 switch (action) {
                     case BluetoothAdapter.ACTION_STATE_CHANGED:
-                        // Disconnect all connections
-                        int size = connections.size();
-                        for (int i = 0; i < size; i++) {
-                            BluetoothConnection connection = connections.valueAt(i);
-                            connection.disconnect();
+                        final int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothDevice.ERROR);
+                        if (state == BluetoothAdapter.STATE_OFF || state == BluetoothAdapter.STATE_TURNING_OFF) {
+                            for (BluetoothConnectionWrapper connection : connections.values()) {
+                                connection.disposeConnection();
+                            }
+                            connections.clear();
                         }
-                        connections.clear();
 
-                        stateSink.success(intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothDevice.ERROR));
+                        stateSink.success(state);
                         break;
                 }
             }
@@ -490,6 +500,10 @@ public class FlutterBluetoothSerialPlugin implements FlutterPlugin, ActivityAwar
 
         protected EventChannel readChannel;
 
+        /// Per-connection single-thread write queue so writes to Device A stay strictly ordered
+        /// while never waiting behind Device B's blocking RFCOMM `connect()` or `write()`.
+        private final ExecutorService writeExecutor = Executors.newSingleThreadExecutor();
+
         private final BluetoothConnectionWrapper self = this;
 
         public BluetoothConnectionWrapper(int id, BluetoothAdapter adapter) {
@@ -497,8 +511,6 @@ public class FlutterBluetoothSerialPlugin implements FlutterPlugin, ActivityAwar
             this.id = id;
 
             readChannel = new EventChannel(messenger, PLUGIN_NAMESPACE + "/read/" + id);
-            // If canceled by local, disconnects - in other case, by remote, does nothing
-            // True dispose
             StreamHandler readStreamHandler = new StreamHandler() {
                 @Override
                 public void onListen(Object o, EventSink eventSink) {
@@ -507,14 +519,13 @@ public class FlutterBluetoothSerialPlugin implements FlutterPlugin, ActivityAwar
 
                 @Override
                 public void onCancel(Object o) {
-                    // If canceled by local, disconnects - in other case, by remote, does nothing
-                    self.disconnect();
-
-                    // True dispose
-                    AsyncTask.execute(() -> {
-                        readChannel.setStreamHandler(null);
-                        connections.remove(id);
-
+                    readSink = null;
+                    connections.remove(id);
+                    writeExecutor.shutdownNow();
+                    // `setStreamHandler(null)` must run on the UI thread; blocking `disconnect()` runs off UI thread.
+                    mainHandler.post(() -> readChannel.setStreamHandler(null));
+                    connectExecutor.execute(() -> {
+                        self.disconnect();
                         Log.d(TAG, "Disconnected (id: " + id + ")");
                     });
                 }
@@ -522,9 +533,30 @@ public class FlutterBluetoothSerialPlugin implements FlutterPlugin, ActivityAwar
             readChannel.setStreamHandler(readStreamHandler);
         }
 
+        public void enqueueWrite(byte[] bytes, Result result) {
+            try {
+                writeExecutor.execute(() -> {
+                    try {
+                        self.write(bytes);
+                        mainHandler.post(() -> result.success(null));
+                    } catch (Exception ex) {
+                        mainHandler.post(() -> result.error("write_error", ex.getMessage(), exceptionToString(ex)));
+                    }
+                });
+            } catch (Exception rejectedEx) {
+                result.error("write_error", "connection is closing", exceptionToString(rejectedEx));
+            }
+        }
+
+        public void disposeConnection() {
+            writeExecutor.shutdownNow();
+            connectExecutor.execute(self::disconnect);
+            mainHandler.post(() -> readChannel.setStreamHandler(null));
+        }
+
         @Override
         protected void onRead(byte[] buffer) {
-            activity.runOnUiThread(() -> {
+            mainHandler.post(() -> {
                 if (readSink != null) {
                     readSink.success(buffer);
                 }
@@ -533,7 +565,9 @@ public class FlutterBluetoothSerialPlugin implements FlutterPlugin, ActivityAwar
 
         @Override
         protected void onDisconnected(boolean byRemote) {
-            activity.runOnUiThread(() -> {
+            writeExecutor.shutdownNow();
+            connections.remove(id);
+            mainHandler.post(() -> {
                 if (byRemote) {
                     Log.d(TAG, "onDisconnected by remote (id: " + id + ")");
                     if (readSink != null) {
@@ -996,19 +1030,20 @@ public class FlutterBluetoothSerialPlugin implements FlutterPlugin, ActivityAwar
                         break;
                     }
 
-                    int id = ++lastConnectionId;
+                    int id = lastConnectionId.incrementAndGet();
                     BluetoothConnectionWrapper connection = new BluetoothConnectionWrapper(id, bluetoothAdapter);
                     connections.put(id, connection);
 
                     Log.d(TAG, "Connecting to " + address + " (id: " + id + ")");
 
-                    AsyncTask.execute(() -> {
+                    connectExecutor.execute(() -> {
                         try {
                             connection.connect(address);
-                            activity.runOnUiThread(() -> result.success(id));
+                            mainHandler.post(() -> result.success(id));
                         } catch (Exception ex) {
-                            activity.runOnUiThread(() -> result.error("connect_error", ex.getMessage(), exceptionToString(ex)));
                             connections.remove(id);
+                            connection.disposeConnection();
+                            mainHandler.post(() -> result.error("connect_error", ex.getMessage(), exceptionToString(ex)));
                         }
                     });
                     break;
@@ -1028,7 +1063,7 @@ public class FlutterBluetoothSerialPlugin implements FlutterPlugin, ActivityAwar
                         break;
                     }
 
-                    BluetoothConnection connection = connections.get(id);
+                    BluetoothConnectionWrapper connection = connections.get(id);
                     if (connection == null) {
                         result.error("invalid_argument", "there is no connection with provided id", null);
                         break;
@@ -1036,24 +1071,10 @@ public class FlutterBluetoothSerialPlugin implements FlutterPlugin, ActivityAwar
 
                     if (call.hasArgument("string")) {
                         String string = call.argument("string");
-                        AsyncTask.execute(() -> {
-                            try {
-                                connection.write(string.getBytes());
-                                activity.runOnUiThread(() -> result.success(null));
-                            } catch (Exception ex) {
-                                activity.runOnUiThread(() -> result.error("write_error", ex.getMessage(), exceptionToString(ex)));
-                            }
-                        });
+                        connection.enqueueWrite(string.getBytes(), result);
                     } else if (call.hasArgument("bytes")) {
                         byte[] bytes = call.argument("bytes");
-                        AsyncTask.execute(() -> {
-                            try {
-                                connection.write(bytes);
-                                activity.runOnUiThread(() -> result.success(null));
-                            } catch (Exception ex) {
-                                activity.runOnUiThread(() -> result.error("write_error", ex.getMessage(), exceptionToString(ex)));
-                            }
-                        });
+                        connection.enqueueWrite(bytes, result);
                     } else {
                         result.error("invalid_argument", "there must be 'string' or 'bytes' argument", null);
                     }

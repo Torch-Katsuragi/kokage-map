@@ -1,7 +1,10 @@
-// こかげマップの手元コピー（pub.dev の flutter_bluetooth_serial 0.4.0 の android/build.gradle を差し替え）。
-// 元は buildscript に AGP 4.1 と jcenter() を書いていて Gradle 9 / AGP 9 では評価すら通らない。
-// AGP はルートの settings.gradle.kts が読み込むものを使い、リポジトリは mavenCentral に寄せた。
-// Java/Dart のソースは元のまま。上流には出さない（AI が人間のコミュニティに投稿しない方針）。
+// こかげマップの手元コピー（pub.dev の flutter_bluetooth_serial 0.4.0 を基に改修）。
+// 1) build.gradle: AGP 4.1 + jcenter() を撤去し Gradle 9 / compileSdk 35 / Java 17 に対応。
+// 2) 2台同時接続（外部GNSS + 測距器/TS）安定化パッチ（2026-11-17）:
+//    - 相手側切断・接続失敗時に BluetoothSocket.close() が呼ばれず RFCOMM チャネルがリークする不具合を修正
+//    - AsyncTask.execute()（単一直列 SERIAL_EXECUTOR）による他機器 write フリーズを廃止し、接続プール＋機器別 write キューへ分離
+//    - 非スレッドセーフな SparseArray を ConcurrentHashMap へ置換、不要な毎回 cancelDiscovery() と 111ms ポーリングを撤去
+// 上流には出さない（AI が人間のコミュニティに投稿しない方針）。
 group 'io.github.edufolly.flutterbluetoothserial'
 version '1.0-SNAPSHOT'
 

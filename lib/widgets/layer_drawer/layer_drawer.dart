@@ -41,6 +41,7 @@ import '../../models/nodes/global_folder_node.dart';
 import '../../models/nodes/image_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
+import '../../models/nodes/official_layer_node.dart';
 import '../../models/nodes/sys_node.dart';
 import '../../models/nodes/table_node.dart';
 import '../../presentation/node_presenter.dart';
@@ -66,6 +67,7 @@ import 'move_target_dialog.dart';
 import 'sync_merge_dialog.dart';
 import 'tiles/folder_tile.dart';
 import 'tiles/geopackage_tile.dart';
+import 'tiles/official_layer_tile.dart';
 import 'tiles/photo_tile.dart';
 import 'tiles/table_tile.dart';
 
@@ -299,6 +301,14 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     final canAddHere = widget.currentNode is FolderNode &&
         widget.currentNode is! DriveFolderSetNode &&
         widget.currentNode!.getAbsoluteFilePath() != null;
+    final isSys = widget.currentNode is SysNode;
+    final rootNode = () {
+      var n = widget.currentNode!;
+      while (n.parent != null) {
+        n = n.parent!;
+      }
+      return n;
+    }();
     final titleBar = LayerDrawerTitleBar(
       title: NodePresenter.getDisplayName(widget.currentNode!),
       currentNode: widget.currentNode!,
@@ -315,6 +325,9 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
                     onChanged: ref.refreshMap,
                   ),
               }
+          : null,
+      onAddOfficialData: isSys
+          ? () => showAddOfficialLayerSheet(context, ref, rootNode: rootNode)
           : null,
       onBack: parent != null ? () => widget.onDirChanged(parent) : null,
       onSearch: widget.onFeatureFound == null
@@ -351,8 +364,24 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
               ),
               child: ListView.builder(
                 controller: widget.scrollController,
-                itemCount: widget.currentNode!.children.length,
-                itemBuilder: (_, i) => _buildNodeTile(widget.currentNode!.children[i]),
+                itemCount: widget.currentNode!.children.length + (isSys ? 1 : 0),
+                itemBuilder: (_, i) {
+                  if (isSys && i == widget.currentNode!.children.length) {
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                      child: OutlinedButton.icon(
+                        onPressed: () => showAddOfficialLayerSheet(
+                          context,
+                          ref,
+                          rootNode: rootNode,
+                        ),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: Text(t.officialLayer.addButton),
+                      ),
+                    );
+                  }
+                  return _buildNodeTile(widget.currentNode!.children[i], rootNode);
+                },
               ),
             ),
           ),
@@ -361,7 +390,10 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     );
   }
 
-  Widget _buildNodeTile(LayerTreeNode node) {
+  Widget _buildNodeTile(LayerTreeNode node, LayerTreeNode rootNode) {
+    if (node is OfficialLayerNode) {
+      return OfficialLayerTile(node: node, rootNode: rootNode);
+    }
     if (node is FolderNode) {
       // 「この端末」とグローバルフォルダ本体は、名前変更・削除・ドラッグの対象にしない
       final fixed = node is SysNode || node is GlobalFolderNode;

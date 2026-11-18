@@ -29,6 +29,7 @@ import '../models/app_notification.dart';
 import '../models/basemap_layer.dart';
 import '../models/basemap_provider.dart';
 import '../providers/notification_providers.dart';
+import '../providers/role_preset_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/basemap_service.dart';
 import '../tutorial/tutorial.dart';
@@ -282,6 +283,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         service: _baseMapService,
         center: _mapCenter,
         currentMapZoom: _mapZoom,
+        activePreset: ref.read(rolePresetSettingProvider),
         notify: _notify,
         onDownloadFinished: _loadCacheInfo,
       );

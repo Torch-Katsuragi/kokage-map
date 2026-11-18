@@ -26,6 +26,7 @@ import '../models/nodes/drive_folder_set_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/layer_tree_node.dart';
+import '../models/nodes/official_layer_node.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../models/nodes/sys_node.dart';
 
@@ -70,6 +71,8 @@ class NodePresenter {
   static IconData getIcon(LayerTreeNode node) {
     // 「System」は端末のアイコン
     if (node is SysNode) return Icons.smartphone;
+    if (node is OfficialLayerNode) return node.spec.icon;
+    if (node is OfficialFeatureNode) return node.spec.icon;
 
     // Drive連携フォルダはクラウドフォルダアイコン
     if (node is DriveFolderSetNode) return Icons.folder_copy;
@@ -125,6 +128,8 @@ class NodePresenter {
     }
 
     // 端末側（sys とグローバル配下）は青色で差別化
+    if (node is OfficialLayerNode) return node.spec.accentColor;
+    if (node is OfficialFeatureNode) return node.spec.accentColor;
     if (node is SysNode || node.isGlobalNode) {
       return Colors.blue.shade700;
     }
@@ -250,6 +255,8 @@ class NodePresenter {
   static String getDisplayName(LayerTreeNode node) {
     // sys の name は内部の鍵（`<sys>`）。表示は i18n
     if (node is SysNode) return t.layerDrawer.sysFolder;
+    if (node is OfficialLayerNode) return OfficialLayerNode.displayNameOf(node.spec);
+    if (node is OfficialFeatureNode) return node.title;
     // プロジェクトのルートの name は内部の 'Home'。表示は開いているフォルダの名前（パスの無い仮ルートは Home のまま）
     if (node.parent == null) {
       final path = node.getAbsoluteFilePath();

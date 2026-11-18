@@ -28,6 +28,7 @@ import '../models/nodes/current_location_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
 import '../models/nodes/layer_tree_node.dart';
+import '../models/nodes/official_layer_node.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../models/qgis_form.dart';
 import '../presentation/attribute_display.dart';
@@ -57,6 +58,14 @@ class FeatureDetailPanel extends ConsumerWidget {
     // 現在位置（擬似フィーチャ）
     if (feature is CurrentLocationNode) {
       return _buildCurrentLocation(context, ref, feature as CurrentLocationNode);
+    }
+
+    if (feature is OfficialFeatureNode) {
+      return _OfficialFeatureCard(
+        node: feature as OfficialFeatureNode,
+        onOpenInTree: onOpenInTree,
+        googleMapsButton: _googleMapsButton,
+      );
     }
 
     // OverlayImageNode用の詳細パネル（ImageNodeより先にチェック）
@@ -568,6 +577,176 @@ class _AttributeRowsState extends State<_AttributeRows> {
               ),
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// 公式オープンデータ（林班・国有林・地質図など）の読み取り専用詳細カード
+class _OfficialFeatureCard extends ConsumerStatefulWidget {
+  const _OfficialFeatureCard({
+    required this.node,
+    required this.googleMapsButton,
+    this.onOpenInTree,
+  });
+
+  final OfficialFeatureNode node;
+  final void Function(LayerTreeNode target)? onOpenInTree;
+  final Widget Function(WidgetRef ref, double lat, double lng) googleMapsButton;
+
+  @override
+  ConsumerState<_OfficialFeatureCard> createState() => _OfficialFeatureCardState();
+}
+
+class _OfficialFeatureCardState extends ConsumerState<_OfficialFeatureCard> {
+  Map<String, String>? _loadedAttrs;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _kickLoad();
+  }
+
+  @override
+  void didUpdateWidget(_OfficialFeatureCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.node != widget.node) {
+      _loadedAttrs = null;
+      _loading = false;
+      _kickLoad();
+    }
+  }
+
+  void _kickLoad() {
+    final loader = widget.node.lazyAttributesLoader;
+    if (loader == null || widget.node.attributes.isNotEmpty) return;
+    _loading = true;
+    final target = widget.node;
+    loader().then((res) {
+      if (!mounted || widget.node != target) return;
+      setState(() {
+        _loading = false;
+        _loadedAttrs = res ?? const {};
+      });
+    }, onError: (Object _) {
+      if (!mounted || widget.node != target) return;
+      setState(() {
+        _loading = false;
+        _loadedAttrs = const {};
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final node = widget.node;
+    final attrs = node.attributes.isNotEmpty ? node.attributes : (_loadedAttrs ?? const {});
+    final parts = node.silhouetteParts;
+    final double? areaM2 = parts.isNotEmpty && parts.first.length >= 3
+        ? Geodesic.polygonArea(parts)
+        : null;
+
+    return InfoPanelCard(
+      title: node.title,
+      onClose: () => ref.read(selectedFeaturesProvider.notifier).clear(),
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: node.spec.accentColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: node.spec.accentColor.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(node.spec.icon, size: 16, color: node.spec.accentColor),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  t.officialLayer.readOnlyNote,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: node.spec.accentColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (areaM2 != null && areaM2 > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: FeatureDetailPanel._labelRow(
+              t.featureDetail.areaLabel,
+              Geodesic.formatArea(areaM2),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: FeatureDetailPanel._labelRow(
+            t.featureDetail.coordLabel,
+            '${node.tapPoint.latitude.toStringAsFixed(6)}, ${node.tapPoint.longitude.toStringAsFixed(6)}',
+            style: FeatureDetailPanel._small,
+          ),
+        ),
+        if (_loading)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(t.officialLayer.loadingAttributes, style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+          )
+        else if (attrs.isEmpty && node.lazyAttributesLoader != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              t.officialLayer.noDataAtPoint,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          )
+        else
+          for (final entry in attrs.entries)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: FeatureDetailPanel._labelRow('${entry.key}: ', entry.value),
+            ),
+        const SizedBox(height: 6),
+        FeatureDetailPanel._labelRow(
+          t.officialLayer.sourceLabel,
+          node.spec.attribution,
+          style: FeatureDetailPanel._small,
+        ),
+        const SizedBox(height: 10),
+        widget.googleMapsButton(ref, node.tapPoint.latitude, node.tapPoint.longitude),
+        if (widget.onOpenInTree != null && node.parent != null) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => widget.onOpenInTree!(node.parent!),
+              icon: const Icon(Icons.account_tree_outlined, size: 16),
+              label: Text(t.featureDetail.openInTree),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade50,
+                foregroundColor: Colors.blue.shade700,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

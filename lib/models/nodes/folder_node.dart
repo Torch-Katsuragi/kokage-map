@@ -38,6 +38,7 @@ import 'global_folder_node.dart';
 import 'image_node.dart';
 import 'layer_order.dart';
 import 'layer_tree_node.dart';
+import 'official_layer_node.dart';
 import 'sys_node.dart';
 
 /// フォルダノード
@@ -172,10 +173,13 @@ class FolderNode extends LayerTreeNode {
   Future<List<LayerTreeNode>> loadImageNodes(List<KFileEntry> entries) =>
       ImageNode.loadNodes(this, entries: entries);
 
-  /// ファイルシステムに無くても外さない子。sys・グローバル構造ノードはファイルシステム外にある
+  /// ファイルシステムに無くても外さない子。sys・グローバル構造ノード・公式データノードはファイルシステム外にある
   @protected
   bool keepsChild(LayerTreeNode child) =>
-      child is SysNode || child is GlobalFolderNode || child is GlobalSubFolderNode;
+      child is SysNode ||
+      child is GlobalFolderNode ||
+      child is GlobalSubFolderNode ||
+      child is OfficialLayerNode;
 
   /// メタデータから状態を読み込み（サブクラスから呼び出し可能）
   Future<void> loadMetaState() async {

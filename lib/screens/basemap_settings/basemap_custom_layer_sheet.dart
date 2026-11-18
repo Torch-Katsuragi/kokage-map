@@ -111,11 +111,13 @@ Future<void> showAddBasemapLayerSheet(
     );
     return;
   }
-  // 等高線のように「重ねる前提」の地図は乗算で足す（白地に線だけなので、通常でもほぼ同じ）
+  // 等高線・地質図のように「重ねる前提」の地図は乗算で足す（CS立体図は不透明な立体表現図なので通常で足す）
+  final isOverlay = picked.id == 'contours' || picked.id == 'gsj_geology_v2';
   await editLayers(
     () => service.addLayer(
       picked.id,
-      blend: picked.type == BaseMapType.generated ? BaseMapBlend.multiply : BaseMapBlend.normal,
+      blend: isOverlay ? BaseMapBlend.multiply : BaseMapBlend.normal,
+      opacity: picked.id == 'gsj_geology_v2' ? 65 : 100,
     ),
   );
   onBuiltInOrExistingLayerAdded(picked.id);

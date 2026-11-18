@@ -26,9 +26,11 @@ import '../interfaces/map_state_interface.dart';
 import '../models/nodes/current_location_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/layer_tree_node.dart';
+import '../models/nodes/official_layer_node.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../services/official/official_layer_service.dart';
 import '../utils/feature_calc_utils.dart';
 import 'map_tool.dart';
 import 'pan_tool.dart';
@@ -90,7 +92,12 @@ class SelectTool extends MapTool with PanDelegation {
   /// 優先度: -1=現在位置・写真の印（[tapOffset] があるときだけ画面座標で見る）, 0=Point+Image, 1=Line, 2=Polygon（同グループ内は距離順）
   ///
   /// 消しゴム（PenTool）も同じ当たり判定を使う
-  static List<LayerTreeNode> candidatesAt(LatLng tapLatLng, IMapState mapState, {Offset? tapOffset}) {
+  static List<LayerTreeNode> candidatesAt(
+    LatLng tapLatLng,
+    IMapState mapState, {
+    Offset? tapOffset,
+    LayerTreeNode? rootTree,
+  }) {
     final selectRange = selectRangeFor(mapState);
     final candidates = <({int priority, double distance, LayerTreeNode node})>[];
 
@@ -169,6 +176,22 @@ class SelectTool extends MapTool with PanDelegation {
       }
     }
 
+    if (rootTree != null) {
+      double zoom = 15.0;
+      try {
+        zoom = mapState.mapController.camera.zoom;
+      } catch (_) {}
+      final officialHits = OfficialLayerService.instance.hitTest(
+        tapLatLng,
+        rootTree,
+        zoom: zoom,
+        selectRangeMeters: selectRange,
+      );
+      for (var i = 0; i < officialHits.length; i++) {
+        candidates.add((priority: 3, distance: i.toDouble(), node: officialHits[i]));
+      }
+    }
+
     candidates.sort((a, b) {
       final cmp = a.priority.compareTo(b.priority);
       return cmp != 0 ? cmp : a.distance.compareTo(b.distance);
@@ -198,12 +221,17 @@ class SelectTool extends MapTool with PanDelegation {
       return;
     }
 
-    final candidates = candidatesAt(tapLatLng, mapState, tapOffset: details.localPosition);
+    final candidates = candidatesAt(
+      tapLatLng,
+      mapState,
+      tapOffset: details.localPosition,
+      rootTree: _ref.read(folderTreeProvider),
+    );
 
     // 左下ボタンが有効なら複数選択モード: レイヤをまたいで足し引きする
     if (_ref.read(isFabActiveProvider)) {
       // 現在位置は集合に入れない（消せないし集計もできない）
-      final node = candidates.where((c) => c is! CurrentLocationNode).firstOrNull;
+      final node = candidates.where((c) => c is! CurrentLocationNode && c is! OfficialFeatureNode).firstOrNull;
       if (node == null) return;
       _ref.read(selectedFeaturesProvider.notifier).toggle(node);
       if (node is FeatureNode) {

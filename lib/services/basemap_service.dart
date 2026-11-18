@@ -32,6 +32,7 @@ import 'package:root_maps/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../core/official/official_data_catalog.dart' show RegionalRasterSource;
 import '../core/platform_capabilities.dart';
 import '../core/terrain/terrain_worker.dart';
 import '../i18n/strings.g.dart';
@@ -598,6 +599,16 @@ class BaseMapService extends ChangeNotifier {
   Future<Uint8List?> _getCachedTile(String cacheId, int z, int x, int y) async =>
       _tileCacheDb?.getTile(providerId: cacheId, z: z, x: x, y: y);
 
+  /// 公式ベクトルタイル（`official_<id>`）など外部サービス向けの生タイルキャッシュ読み書き口
+  Future<Uint8List?> getCachedRawTile(String cacheId, int z, int x, int y) =>
+      _getCachedTile(cacheId, z, x, y);
+
+  Future<void> cacheRawTile(String cacheId, int z, int x, int y, Uint8List data) =>
+      _cacheTile(cacheId, z, x, y, data);
+
+  /// オフラインモードまたは通信断クールダウン中か
+  bool get shouldSkipNetwork => _isOfflineMode || _inUnreachableCooldown;
+
   /// 進行中の要求。同じ鍵の要求が重なったら 1 本にまとめる
   final Map<String, Future<Uint8List?>> _inflight = {};
 
@@ -634,6 +645,38 @@ class BaseMapService extends ChangeNotifier {
   Future<Uint8List?> _fetchTileShared(BaseMapProvider provider, int z, int x, int y) =>
       _coalesce('fetch:${provider.cacheId}/$z/$x/$y', () => _fetchTile(provider, z, x, y));
 
+  /// 地域カスケード型の航空写真タイル（[RegionalRasterSource.highResOrthoCascade]）を優先順に取得する。
+  /// 404（整備範囲外）のときは即座に次の候補へ移り、最初に有効な画像タイルを返したソースを採用する。
+  @visibleForTesting
+  static Future<({Uint8List? bytes, bool networkFailed})> fetchCascadedRasterTile(
+    http.Client client,
+    List<RegionalRasterSource> cascade,
+    int z,
+    int x,
+    int y, {
+    Map<String, String> headers = const {},
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    var anyAttempted = false;
+    var anyHttpReply = false;
+    for (final src in cascade) {
+      if (!src.coversTile(z, x, y)) continue;
+      anyAttempted = true;
+      try {
+        final url = BaseMapProvider.expandTileUrl(src.urlTemplate, z, x, y);
+        final res = await client.get(Uri.parse(url), headers: headers).timeout(timeout);
+        anyHttpReply = true;
+        if (res.statusCode == 200 && TileCacheMBTiles.isPlausibleTile(res.bodyBytes)) {
+          return (bytes: res.bodyBytes, networkFailed: false);
+        }
+        // 404 や非対応応答は次のフォールバック候補へ進む
+      } catch (_) {
+        // 個別サーバの一時障害でも次の候補（地理院タイル等）を試す
+      }
+    }
+    return (bytes: null, networkFailed: anyAttempted && !anyHttpReply);
+  }
+
   /// キャッシュ → ネット（フォールバックなし）。
   ///
   /// [attempt] は何回目の試行から始めるか。HTTP のエラー（404 以外）は 2 回目まで、通信の例外は 1 回目まで間を置いて取り直す
@@ -647,6 +690,33 @@ class BaseMapService extends ChangeNotifier {
     int attempt = 0,
     bool checkCache = true,
   }) async {
+    if (provider.type == BaseMapType.orthoCascade) {
+      if (checkCache) {
+        final cached = await _getCachedTile(provider.cacheId, z, x, y);
+        if (cached != null) return cached;
+      }
+      if (_isOfflineMode || _inUnreachableCooldown) return null;
+      final timeout = Duration(seconds: _reachable && _isNetworkAvailable ? 8 : 3);
+      final res = await fetchCascadedRasterTile(
+        _http,
+        RegionalRasterSource.highResOrthoCascade,
+        z,
+        x,
+        y,
+        headers: _tileHeaders,
+        timeout: timeout,
+      );
+      if (res.networkFailed) {
+        _noteFetchFailure();
+        return _getCachedTile(provider.cacheId, z, x, y);
+      }
+      _noteFetchSuccess();
+      if (res.bytes != null) {
+        await _cacheTile(provider.cacheId, z, x, y, res.bytes!);
+      }
+      return res.bytes;
+    }
+
     for (var first = true;; first = false, attempt++) {
       final sw = Stopwatch()..start();
       if (checkCache || !first) {
@@ -735,7 +805,7 @@ class BaseMapService extends ChangeNotifier {
     int z,
     int x,
     int y, {
-    int maxFallbackLevels = 5,
+    int maxFallbackLevels = 6,
   }) async {
     for (var level = 1; level <= maxFallbackLevels; level++) {
       final ancestorZ = z - level;
@@ -903,13 +973,15 @@ class BaseMapService extends ChangeNotifier {
 
   /// エリア一括ダウンロード実行 (並列処理対応)
   ///
-  /// [providers] を省くと [downloadableProviders]（見えているレイヤ全部）。タイル数は 枚数 × プロバイダ数
+  /// [providers] を省くと [downloadableProviders]（見えているレイヤ全部）。
+  /// [extraPrefetchTasks] には公式ベクトルタイルの事前取得など（戻り値 `true`=取得, `false`=スキップ, `null`=エラー）を渡せる。
   Stream<Map<String, dynamic>> downloadArea({
     required LatLng center,
     required double radiusMeters,
     required int minZoom,
     required int maxZoom,
     List<BaseMapProvider>? providers,
+    List<Future<bool?> Function()> extraPrefetchTasks = const [],
   }) async* {
     if (_isDownloading) {
       yield {'status': 'error', 'message': t.services.downloadInProgress};
@@ -928,7 +1000,16 @@ class BaseMapService extends ChangeNotifier {
     ];
 
     final targets = providers ?? downloadableProviders;
-    final queue = [for (final p in targets) for (final t in tiles) (p, t)];
+    final queue = <Future<_DownloadResult> Function()>[
+      for (final p in targets)
+        for (final t in tiles) () => _downloadTile(p, t.z, t.x, t.y),
+      for (final task in extraPrefetchTasks)
+        () async => switch (await task()) {
+              true => _DownloadResult.downloaded,
+              false => _DownloadResult.skipped,
+              null => _DownloadResult.error,
+            },
+    ];
     final totalTiles = queue.length;
     var next = 0;
     var processedTiles = 0;
@@ -954,9 +1035,9 @@ class BaseMapService extends ChangeNotifier {
 
         // キューから取り出して並列実行数までタスクを追加
         while (activeFutures.length < maxConcurrentDownloads && next < queue.length) {
-          final (provider, tile) = queue[next++];
+          final runTask = queue[next++];
           late final Future<void> future;
-          future = _downloadTile(provider, tile.z, tile.x, tile.y).then((result) {
+          future = runTask().then((result) {
             processedTiles++;
             switch (result) {
               case _DownloadResult.downloaded:

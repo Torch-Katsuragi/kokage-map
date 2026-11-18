@@ -20,6 +20,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/terrain/contour_tiles.dart' show ContourTiles;
+import '../core/terrain/cs_relief_tiles.dart' show CsReliefTiles;
 
 /// タイル取得時の User-Agent（Android/iOS のみ。webはブラウザが付ける）。
 ///
@@ -43,9 +44,11 @@ enum BaseMapType {
   gsiStandard,
   gsiPale,
   gsiPhoto,
+  orthoCascade,
   gsiRelief,
   gsiRedRelief,
   gsiBlank,
+  gsjGeology,
 
   /// 利用者が足した XYZ タイル（任意の URL。設定画面か `.qgs` の読み戻しで足す。端末の prefs に持つ）
   custom,
@@ -224,6 +227,12 @@ class BaseMapProvider {
   /// 等高線（生成プロバイダ）。生成器の登録先
   static BaseMapProvider get contourOverlay => availableProviders.firstWhere((p) => p.id == 'contours');
 
+  /// CS立体図（生成プロバイダ）。生成器の登録先
+  static BaseMapProvider get csReliefOverlay => availableProviders.firstWhere((p) => p.id == 'cs_relief');
+
+  /// 産総研 20万分の1 日本シームレス地質図 V2
+  static BaseMapProvider get gsjGeologyOverlay => availableProviders.firstWhere((p) => p.id == 'gsj_geology_v2');
+
   /// 利用可能な背景地図プロバイダーのリスト
   static const List<BaseMapProvider> availableProviders = [
     // OpenStreetMap
@@ -277,6 +286,19 @@ class BaseMapProvider {
       icon: Icons.satellite_alt,
     ),
 
+    // 地域別高精細オルソ優先＋地理院写真フォールバック
+    BaseMapProvider(
+      id: 'ortho_cascade',
+      name: '航空写真（高精細優先）',
+      description: '地域別の高精細オルソ（PLATEAU等）を優先し、未整備域は地理院写真で補完',
+      urlTemplate:
+          'https://tile.plateauview.mlit.go.jp/tiles/plateau-ortho-2024/{z}/{x}/{y}.png',
+      maxZoom: 19,
+      attribution: '国土交通省 Project PLATEAU・国土地理院',
+      type: BaseMapType.orthoCascade,
+      icon: Icons.camera_outdoor_outlined,
+    ),
+
     // 国土地理院地図 - 色別標高図
     BaseMapProvider(
       id: 'gsi_relief',
@@ -328,6 +350,31 @@ class BaseMapProvider {
       attribution: '',
       type: BaseMapType.generated,
       icon: Icons.stacked_line_chart,
+    ),
+    // CS立体図（標高タイルからアプリ内で作る。`cs_relief_tiles.dart`）
+    BaseMapProvider(
+      id: 'cs_relief',
+      cacheId: 'cs_relief_v${CsReliefTiles.version}',
+      name: 'CS立体図',
+      description: '標高タイルから作る微地形表現図（尾根＝暖色・谷＝寒色）',
+      urlTemplate: '',
+      minZoom: 9,
+      maxZoom: 19,
+      attribution: '',
+      type: BaseMapType.generated,
+      icon: Icons.terrain_outlined,
+    ),
+    // 産総研 20万分の1 日本シームレス地質図 V2（URL は z/y/x の順）
+    BaseMapProvider(
+      id: 'gsj_geology_v2',
+      name: 'シームレス地質図 V2',
+      description: '産総研 20万分の1 日本シームレス地質図 V2（乗算で重ねて使う）',
+      urlTemplate: 'https://gbank.gsj.jp/seamless/v2/api/1.3.1/tiles/{z}/{y}/{x}.png',
+      minZoom: 2,
+      maxZoom: 13,
+      attribution: '産総研 地質調査総合センター',
+      type: BaseMapType.gsjGeology,
+      icon: Icons.layers_outlined,
     ),
   ];
 

@@ -22,6 +22,7 @@ import '../../core/terrain/dem_tiles.dart' show DemTileSource;
 import '../../core/terrain/terrain_appearance.dart';
 import '../../i18n/strings.g.dart';
 import '../../services/basemap_service.dart';
+import '../../services/official/official_layer_service.dart';
 import '../../widgets/settings_widgets.dart';
 
 /// 出典セクション（地図面に出すのをやめてここにまとめた。OSM だけは地図面にも出す）
@@ -35,6 +36,7 @@ class BasemapSourcesSection extends StatelessWidget {
     final basemaps = {
       for (final (p, _) in service.activeLayers)
         if (p.attribution.isNotEmpty) p.attribution else if (p.isCustom) p.name,
+      for (final spec in OfficialLayerService.instance.enabledSpecs) spec.attribution,
     };
     final dems = {
       for (final s in DemTileSource.cascadeFor(highPrecision: TerrainAppearance.highPrecision)) s.attribution,

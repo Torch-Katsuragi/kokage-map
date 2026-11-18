@@ -46,6 +46,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
   final String title;
   final LayerTreeNode currentNode;
   final void Function(AddAction action)? onAdd;
+  final void Function()? onAddOfficialData;
   final void Function()? onBack;
 
   /// 虫眼鏡（見えているレイヤの属性を探す）。null なら出さない
@@ -64,6 +65,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
     required this.title,
     required this.currentNode,
     this.onAdd,
+    this.onAddOfficialData,
     this.onBack,
     this.onSearch,
     this.onNavigate,
@@ -150,6 +152,20 @@ class LayerDrawerTitleBar extends StatelessWidget {
             if (currentNode is DriveFolderNode && onCloudAction != null)
               const SizedBox(width: 8),
             _buildAddButton(),
+          ] else if (currentNode is SysNode && onAddOfficialData != null) ...[
+            Tooltip(
+              message: t.officialLayer.addButton,
+              child: InkWell(
+                onTap: onAddOfficialData,
+                borderRadius: const BorderRadius.all(Radius.circular(8)),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: _buttonDecoration,
+                  child: const Icon(Icons.add, color: Colors.black, size: 22),
+                ),
+              ),
+            ),
           ],
         ],
       ),

@@ -28,6 +28,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
+import '../models/nodes/official_layer_node.dart';
 
 class FeatureSilhouette extends StatelessWidget {
   const FeatureSilhouette({super.key, required this.feature}) : parts = null, closed = false;
@@ -75,6 +76,9 @@ class FeatureSilhouette extends StatelessWidget {
       closed = false;
     } else if (f is PolygonFeatureNode) {
       parts = f.polygon;
+      closed = true;
+    } else if (f is OfficialFeatureNode) {
+      parts = f.silhouetteParts;
       closed = true;
     } else {
       return const SizedBox.shrink();

@@ -25,7 +25,7 @@ import 'layer_tree_node.dart';
 /// 「System」（sys）
 ///
 /// - ツリーのルート直下に 1 つだけ置く。**実体ディレクトリは無い**
-/// - 子は `global`（[GlobalFolderNode]）だけ。将来 `view`（端末の写真など読み取り専用）が入る
+/// - 子は `global`（[GlobalFolderNode]）と、利用者が追加した公式データレイヤ（`OfficialLayerNode`）
 /// - プロジェクトの Drive 同期・`.qgs` の対象外。リネーム・削除・ドラッグ・Drive 連携もしない
 ///
 /// > [!NOTE] FolderNode を継承している理由

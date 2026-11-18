@@ -100,4 +100,21 @@ void main() {
     expect(acc(6), 5.0); // 推測航法
     expect(acc(0), 50.0);
   });
+
+  test('No Fix（座標空・quality=0）の GGA でも衛星数と品質を通知し、disconnect でクリアする', () async {
+    final s = BluetoothGnssService();
+    var notified = 0;
+    s.addListener(() => notified++);
+
+    _feed(s, '\$GNGGA,123519,,,,,0,04,99.99,,,,,,*58\r\n');
+    expect(s.latitude, isNull);
+    expect(s.gpsQuality, 0);
+    expect(s.satelliteCount, 4);
+    expect(s.fixTypeString, 'No Fix');
+    expect(notified, 1);
+
+    await s.disconnect();
+    expect(s.gpsQuality, isNull);
+    expect(s.satelliteCount, isNull);
+  });
 }

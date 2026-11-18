@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.16.1 — 2026/11/18
+
+### New Features
+
+- Official open spatial datasets, CS relief map & high-res ortho cascade: Added an "Add official data" action under `System` in the layer tree supporting Forestry Agency forest compartments (MVT vector tiles distinguishing national vs. private/communal forests) and AIST GSJ Seamless Geological Map of Japan V2 (with tap-to-query age and lithology). Also added a "High-Res Aerial Photo" cascade (PLATEAU Ortho → GSI seamless photo) and an on-device nationwide "CS Relief Map" generated from 3D elevation data
+- 5 role presets, UI subtraction & selective offline download: Added five field presets (Standard, Hunter, Forestry, Surveyor, and Civil Engineering/Hazard) in Onboarding and Settings → General. Presets configure base maps, official datasets, 3D terrain precision, and GNSS quality thresholds in one tap while hiding unused toolbar buttons to prevent accidental glove taps (individually customizable). Bulk Map Download now lets you pick specific base map layers and official vector tiles to cache offline
+- GPS survey status panel, built-in NTRIP client & RTK audio cues: Selecting the GPS tool now shows a live status card at the bottom-right (bottom-left in left-handed layout) that adapts between Internal GPS and External GNSS (RTK FIX/FLOAT, GST accuracy, satellites, HDOP, and quality gate warnings). Added a built-in NTRIP v1/v2 client (RTK2go preset, distance-sorted sourcetable browser, periodic VRS GGA uplink, and RTCM3 frame inspection) plus audio cues when entering or losing RTK FIX
+- Always-on External GNSS live map marker & 1-second `gnss_tracks` telemetry archive: While External GNSS is connected, its live position renders on the map as a fix-colored target ring regardless of the active tool, while `Global/gps_history.gpkg` continuously archives every 1-second GNSS epoch (including stationary tripod epochs, DOP, GST sigma, NTRIP mountpoint, and raw GGA) alongside `device_connection_events` (synced across devices via `AppData/kmap`)
+- Backsight-only undo & unconfirmed leg protection in TruPulse survey: Added an "Undo backsight" action on the status panel and point radial menu so you can re-shoot a backsight in place without walking back to the previous station, and excluded unconfirmed single-shot points by default during line/polygon conversion
+
+### Bug Fixes & Stability
+
+- Bluetooth survey device disconnect alerts, no silent fallback & battery-safe standby (Issue #7): External GNSS disconnections now trigger an audio alert and notification without silently falling back to Internal GPS (explicit temporary fallback tags points with `internal_fallback` and auto-resumes when GNSS returns). Both External GNSS and TruPulse auto-reconnect on app launch, cap background retries at 5 attempts (~71 s) before entering zero-radio standby when powered off, and offer 1-tap reconnect from the status panel
+- Stabilized dual simultaneous Bluetooth SPP connections (External GNSS + TruPulse 360R): Fixed native `BluetoothSocket` RFCOMM port leaks, single-queue `AsyncTask` write stalls, thread-unsafe connection map races, and overlapping 2.4GHz Page Scan handshakes
+
 ## v0.16.0 — 2026/11/13
 
 ### New Features

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.16.2 — 2026/11/19
+
+### Improvements & Changes
+
+- Accidental back-navigation guard & leave confirmation on the Map Screen: Disabled returning to the Home Screen via the Android system Back button or edge-swipe gesture during field work (system Back still closes open radial menus and cancels active feature edits). Returning to the Home Screen is now limited to the top-left `←` button, which also prompts for confirmation whenever unconfirmed drawing vertices, an active GPS long-press survey, or an active TruPulse station is present
+
+### Bug Fixes
+
+- Fixed the map turning solid grey while zooming with a GeoTIFF selected or at high zoom with TruPulse survey legs: Migrated dynamic lines and polygons onto the per-tile GPU part cache and replaced upstream `flutter_gpu` `HostBuffer` with a custom `DeviceBuffer` ring allocator to prevent 64 KB boundary write failures during pinch-zoom gestures and high-zoom terrain rendering
+
 ## v0.16.1 — 2026/11/18
 
 ### New Features

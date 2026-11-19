@@ -143,6 +143,28 @@ class TruPulseTool extends DeviceTool {
     AppLogger.debug('[TruPulseTool] deactivated');
   }
 
+  @override
+  bool onBackPressed() {
+    final dismiss = _dismissMenu;
+    if (dismiss == null) return false;
+    _dismissMenu = null;
+    dismiss();
+    return true;
+  }
+
+  @override
+  String? leaveMapConfirmMessage() =>
+      (_station != null && !_station!.isDisposed)
+          ? t.map.leaveConfirm.trupulseStation
+          : null;
+
+  @override
+  void onLeaveMapConfirmed() {
+    _station = null;
+    _lastBacksightedPoint = null;
+    _notifyUI();
+  }
+
   bool _lastConnected = false;
   bool _lastReconnecting = false;
 
@@ -374,9 +396,15 @@ class TruPulseTool extends DeviceTool {
     final dependents = _findDependents(target);
     final canUndoBs = TraverseRecorder.canUndoBacksight(target);
 
-    _dismissMenu = showRadialMenu(
+    late final VoidCallback dismiss;
+    dismiss = showRadialMenu(
       context: context,
       center: center,
+      onDismissed: () {
+        if (identical(_dismissMenu, dismiss)) {
+          _dismissMenu = null;
+        }
+      },
       actions: [
         RadialAction(
           icon: Icons.my_location,
@@ -427,6 +455,7 @@ class TruPulseTool extends DeviceTool {
         ),
       ],
     );
+    _dismissMenu = dismiss;
   }
 
   // =========================================================

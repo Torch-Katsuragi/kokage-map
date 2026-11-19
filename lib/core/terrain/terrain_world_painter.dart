@@ -419,14 +419,21 @@ class TerrainWorldPainter extends CustomPainter {
 
   /// 地形・面・線は GPU（深度バッファ。タイルの順も帯も要らない）。結果の画像を敷く
   void _paintGpuImage(Canvas canvas, Size size, TerrainGpuWorldRenderer gpu) {
-    final image = gpu.render(
-      camera,
-      size,
-      tiles,
-      pixelRatio: pixelRatio,
-      heightRange: heightRange,
-      centerHeight: _centerHeight,
-    );
+    final ui.Image? image;
+    try {
+      image = gpu.render(
+        camera,
+        size,
+        tiles,
+        pixelRatio: pixelRatio,
+        heightRange: heightRange,
+        centerHeight: _centerHeight,
+      );
+    } catch (e, st) {
+      gpu.lastError = 'render: $e';
+      debugPrint('[3D] gpu render error: $e\n$st');
+      return;
+    }
     if (image == null) return;
     canvas.drawImageRect(
       image,

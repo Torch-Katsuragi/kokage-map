@@ -171,13 +171,15 @@ class TerrainGpuWorldRenderer {
       tb.lastUsed = nowMs;
       final tex = _textureFor(t.textureKey, t.texture, t.previousTextureKey);
       final polys = t.polygons.isEmpty ? null : _partsFor(_polygons, t.polygons, nowMs, _packPolygons);
+      final dynPolys = t.dynamicPolygons.isEmpty ? null : _partsFor(_polygons, t.dynamicPolygons, nowMs, _packPolygons);
       final lines = t.lines.isEmpty ? null : _partsFor(_lines, t.lines, nowMs, _packLines);
+      final dynLines = t.dynamicLines.isEmpty ? null : _partsFor(_lines, t.dynamicLines, nowMs, _packLines);
       final dem = t.mesh.dem;
       final points = t.points.isEmpty
           ? null
           : _partsFor(_points, t.points, nowMs, (list, from) => _packPoints(list, from, (x, y) => dem.elevationAt(x + dem.originX, y + dem.originY)));
       final segments = t.segmentSets.isEmpty ? null : _partsFor(_segments, t.segmentSets, nowMs, _packSegments);
-      entries.add(_TileEntry(t, tb, tex, polys, lines, points, segments));
+      entries.add(_TileEntry(t, tb, tex, polys, dynPolys, lines, dynLines, points, segments));
     }
     if (entries.isEmpty) return null;
 
@@ -294,24 +296,14 @@ class TerrainGpuWorldRenderer {
     gl.useProgram(_polygon.program);
     gl.uniform4f(_polygon.uniform('u_params'), params.$1, params.$2, params.$3, params.$4);
     for (final e in entries) {
-      if (e.polygons == null && e.tile.dynamicPolygons.isEmpty) continue;
+      if (e.polygons == null && e.dynPolygons == null) continue;
       gl.uniformMatrix4fv(_polygon.uniform('u_mvp'), false, e.polygonMvp!.toJS);
-      final parts = e.polygons;
-      if (parts != null) {
+      for (final parts in [e.polygons, e.dynPolygons]) {
+        if (parts == null) continue;
         for (final p in parts.parts) {
           gl.bindBuffer(_G.ARRAY_BUFFER, p.vertices);
           _polygon.attribs(gl, GpuPolygonGeometry.strideInBytes, [('position', 3, 0), ('color', 4, 12)]);
           gl.drawArrays(_G.TRIANGLES, 0, p.count);
-          draws++;
-        }
-      }
-      if (e.tile.dynamicPolygons.isNotEmpty) {
-        final packed = GpuPolygonGeometry.packPolygons(e.tile.dynamicPolygons);
-        if (packed.isNotEmpty) {
-          final buf = _upload(gl, _G.ARRAY_BUFFER, packed.toJS, dynamic: true);
-          _polygon.attribs(gl, GpuPolygonGeometry.strideInBytes, [('position', 3, 0), ('color', 4, 12)]);
-          gl.drawArrays(_G.TRIANGLES, 0, GpuPolygonGeometry.vertexCountOf(packed));
-          gl.deleteBuffer(buf);
           draws++;
         }
       }
@@ -333,27 +325,15 @@ class TerrainGpuWorldRenderer {
       ('dash', 4, 60),
     ];
     for (final e in entries) {
-      if (e.lines == null && e.segments == null && e.tile.dynamicLines.isEmpty) continue;
+      if (e.lines == null && e.segments == null && e.dynLines == null) continue;
       gl.uniformMatrix4fv(_line.uniform('u_mvp'), false, e.lineMvp!.toJS);
-      for (final parts in [e.segments, e.lines]) {
+      for (final parts in [e.segments, e.lines, e.dynLines]) {
         if (parts == null) continue;
         for (final p in parts.parts) {
           gl.bindBuffer(_G.ARRAY_BUFFER, p.vertices);
           _line.attribs(gl, GpuLineGeometry.strideInBytes, lineAttribs);
           gl.bindBuffer(_G.ELEMENT_ARRAY_BUFFER, p.indices);
           gl.drawElements(_G.TRIANGLES, p.count, _G.UNSIGNED_INT, 0);
-          draws++;
-        }
-      }
-      if (e.tile.dynamicLines.isNotEmpty) {
-        final g = GpuLineGeometry.pack(polylines: e.tile.dynamicLines);
-        if (!g.isEmpty) {
-          final vb = _upload(gl, _G.ARRAY_BUFFER, g.vertices.toJS, dynamic: true);
-          final ib = _upload(gl, _G.ELEMENT_ARRAY_BUFFER, g.indices.toJS, dynamic: true);
-          _line.attribs(gl, GpuLineGeometry.strideInBytes, lineAttribs);
-          gl.drawElements(_G.TRIANGLES, g.indexCount, _G.UNSIGNED_INT, 0);
-          gl.deleteBuffer(vb);
-          gl.deleteBuffer(ib);
           draws++;
         }
       }
@@ -687,12 +667,24 @@ class _PartBuffers {
 }
 
 class _TileEntry {
-  _TileEntry(this.tile, this.terrain, this.texture, this.polygons, this.lines, this.points, this.segments);
+  _TileEntry(
+    this.tile,
+    this.terrain,
+    this.texture,
+    this.polygons,
+    this.dynPolygons,
+    this.lines,
+    this.dynLines,
+    this.points,
+    this.segments,
+  );
   final TerrainTileDrawable tile;
   final _TerrainBuffers terrain;
   final web.WebGLTexture texture;
   final GpuParts<_PartBuffers>? polygons;
+  final GpuParts<_PartBuffers>? dynPolygons;
   final GpuParts<_PartBuffers>? lines;
+  final GpuParts<_PartBuffers>? dynLines;
   final GpuParts<_PartBuffers>? points;
   final GpuParts<_PartBuffers>? segments;
   Float32List? terrainMvp;

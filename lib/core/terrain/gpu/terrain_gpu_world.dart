@@ -38,8 +38,8 @@ import 'part_cache.dart';
 /// スパイク `TerrainGpuRenderer` を「タイルの世界」に広げたもの。
 /// - 地形: タイルのビルダー（[TerrainMeshBuilder]）ごとに頂点・インデックスをデバイスバッファに一度だけ上げる。
 ///   毎フレーム変えるのはタイルごとの mvp（カメラ中心基準の正射影 × タイル原点の平行移動）だけ
-/// - 面・線: タイルの静的シーンのリストごとに、育ったぶんだけ足す（1 回の追加 = 1 バッファ）。育ち切ったら 1 本に畳む
-/// - 動的なもの（軌跡・向き・描画中）は毎フレーム host buffer に流す（少ない）
+/// - 面・線（静的・動的とも）: シーンのリストの同一性をキーに [GpuPartCache] でデバイスバッファへ一度だけ上げる
+///   （上流 `flutter_gpu.HostBuffer` はブロック境界を跨ぐ書き込みで例外になる不具合があるため使わない）
 /// - 深度バッファがあるので painter's algorithm（帯・象限走査・pitch 上限）は要らない。
 ///   面と線は深度を書かず、少し手前に寄せて地形との z-fight を避ける
 /// - 点とラベルは Canvas 側（[TerrainWorldPainter]）のまま。ヒットテスト・投影も Dart 側のまま
@@ -48,7 +48,7 @@ import 'part_cache.dart';
 /// 設計は docs/technical/terrain-3d.md「flutter_gpu を TerrainWorld に」
 class TerrainGpuWorldRenderer {
   TerrainGpuWorldRenderer._(this._terrainPipeline, this._polygonPipeline, this._linePipeline, this._pointPipeline)
-      : _hostBuffer = gpu.gpuContext.createHostBuffer(blockLengthInBytes: 64 * 1024);
+      : _uniformBuffer = _UniformRingBuffer(alignment: gpu.gpuContext.minimumUniformByteAlignment);
 
   static const shaderBundleAsset = 'build/shaderbundles/terrain.shaderbundle';
 
@@ -151,7 +151,7 @@ class TerrainGpuWorldRenderer {
   final gpu.RenderPipeline _polygonPipeline;
   final gpu.RenderPipeline _linePipeline;
   final gpu.RenderPipeline _pointPipeline;
-  final gpu.HostBuffer _hostBuffer;
+  final _UniformRingBuffer _uniformBuffer;
 
   /// 描画先の色テクスチャ（画面サイズ）。3 枚を順に使う。
   /// ⚠ `GpuImageSurface` は使わない。Flutter から参照されている描画先は使い回さず足す作りで、フレームごとの参照
@@ -227,11 +227,6 @@ class TerrainGpuWorldRenderer {
 
   static const _sweepMs = 3000;
   int _lastSweep = 0;
-
-  /// 動く部分（軌跡・描きかけの線など）を詰めた結果。動的シーンは変わったときだけ作り直されるので、リストの同一性で覚える
-  /// （以前は毎フレーム・タイルごとに詰め直していた）
-  final Expando<Float32List> _dynPolys = Expando('gpu.dynPolys');
-  final Expando<GpuLineGeometry> _dynLines = Expando('gpu.dynLines');
 
   /// テクスチャを別経路で上げ終えたとき（描き直しの合図）
   VoidCallback? onTextureReady;
@@ -331,13 +326,15 @@ class TerrainGpuWorldRenderer {
       tb.lastUsed = nowMs;
       final tex = _textureFor(t.textureKey, t.texture);
       final polys = t.polygons.isEmpty ? null : _partsFor(_polygons, t.polygons, nowMs, _packPolygons);
+      final dynPolys = t.dynamicPolygons.isEmpty ? null : _partsFor(_polygons, t.dynamicPolygons, nowMs, _packPolygons);
       final lines = t.lines.isEmpty ? null : _partsFor(_lines, t.lines, nowMs, _packLines);
+      final dynLines = t.dynamicLines.isEmpty ? null : _partsFor(_lines, t.dynamicLines, nowMs, _packLines);
       final dem = t.mesh.dem;
       final points = t.points.isEmpty
           ? null
           : _partsFor(_points, t.points, nowMs, (list, from) => _packPoints(list, from, (x, y) => dem.elevationAt(x + dem.originX, y + dem.originY)));
       final segments = t.segmentSets.isEmpty ? null : _partsFor(_segments, t.segmentSets, nowMs, _packSegments);
-      entries.add(_TileEntry(t, tb, tex, polys, lines, points, segments));
+      entries.add(_TileEntry(t, tb, tex, polys, dynPolys, lines, dynLines, points, segments));
     }
     if (entries.isEmpty) return null;
 
@@ -363,8 +360,8 @@ class TerrainGpuWorldRenderer {
       ],
     );
 
-    // 3. タイルごとの mvp（原点の平行移動を畳む: M × T は 4 列目に M の 1・2 列 × 移動量を足すだけ）を host buffer に並べる
-    _hostBuffer.reset();
+    // 3. タイルごとの mvp（原点の平行移動を畳む: M × T は 4 列目に M の 1・2 列 × 移動量を足すだけ）を uniform リングバッファに並べる
+    _uniformBuffer.reset();
     for (final e in entries) {
       final ox = e.tile.originX - camera.centerX;
       final oy = e.tile.originY - camera.centerY;
@@ -373,19 +370,19 @@ class TerrainGpuWorldRenderer {
       tm[13] += m[1] * ox + m[5] * oy;
       tm[14] += m[2] * ox + m[6] * oy;
       tm[15] += m[3] * ox + m[7] * oy;
-      e.terrainInfo = _hostBuffer.emplace(ByteData.view(Float32List.fromList(tm).buffer));
+      e.terrainInfo = _uniformBuffer.emplace(ByteData.view(Float32List.fromList(tm).buffer));
       // 面と線は地形と同じ高さにあるので、少し手前に寄せて z-fight を避ける。
       // 面の頂点は細かい DEM で持ち上げ、地形は step で間引いているので、そのぶん（セル幅の半分）は食い違う。
       // 透視ではクリップ z を定数ぶんずらす（w で割られるので近いほど効く。スパイクと同じ）
       final dem = e.tile.mesh.dem;
       final biasMeters = 2 + dem.cellSize * e.tile.mesh.step * 0.5;
       final bias = persp ? 0.0005 * camera.eyeDistance : kz * biasMeters;
-      if (e.polygons != null || e.tile.dynamicPolygons.isNotEmpty) {
+      if (e.polygons != null || e.dynPolygons != null) {
         tm[14] -= bias;
-        e.polygonInfo = _hostBuffer.emplace(ByteData.view(Float32List.fromList(tm).buffer));
+        e.polygonInfo = _uniformBuffer.emplace(ByteData.view(Float32List.fromList(tm).buffer));
         tm[14] += bias;
       }
-      if (e.lines != null || e.points != null || e.tile.dynamicLines.isNotEmpty) {
+      if (e.lines != null || e.segments != null || e.dynLines != null || e.points != null) {
         final li = _lineInfo;
         li.setAll(0, tm);
         li[14] -= bias * 1.5;
@@ -393,7 +390,7 @@ class TerrainGpuWorldRenderer {
         li[17] = h.toDouble();
         li[18] = pixelRatio;
         li[19] = 0;
-        e.lineInfo = _hostBuffer.emplace(ByteData.view(Float32List.fromList(li).buffer));
+        e.lineInfo = _uniformBuffer.emplace(ByteData.view(Float32List.fromList(li).buffer));
       }
     }
 
@@ -424,7 +421,7 @@ class TerrainGpuWorldRenderer {
     final shadeInfoSlot = _terrainPipeline.fragmentShader.getUniformSlot('ShadeInfo');
     // 陰影の重ね方（TerrainShading.blend）と靄（透視のときだけ。視点距離 × 1.5 〜 4 で空色に溶かす）
     final eyeDist = persp ? camera.eyeDistance : 0.0;
-    final shadeInfo = _hostBuffer.emplace(
+    final shadeInfo = _uniformBuffer.emplace(
       ByteData.view(Float32List.fromList([
         TerrainShading.blend == TerrainShadeBlend.overlay ? 1 : 0,
         eyeDist * TerrainCamera.fogStartFactor,
@@ -441,7 +438,7 @@ class TerrainGpuWorldRenderer {
       if (e.terrain.minZ < zMin) zMin = e.terrain.minZ;
       if (e.terrain.maxZ > zMax) zMax = e.terrain.maxZ;
     }
-    final colorInfo = _hostBuffer.emplace(
+    final colorInfo = _uniformBuffer.emplace(
       ByteData.view(Float32List.fromList([
         TerrainAppearance.colored ? TerrainAppearance.colorMode.index.toDouble() : 0,
         TerrainAppearance.colorStrength,
@@ -484,20 +481,11 @@ class TerrainGpuWorldRenderer {
       if (info == null) continue;
       pass.bindUniform(polygonInfoSlot, info);
       pass.bindUniform(polygonShadeSlot, shadeInfo);
-      final parts = e.polygons;
-      if (parts != null) {
+      for (final parts in [e.polygons, e.dynPolygons]) {
+        if (parts == null) continue;
         for (final p in parts.parts) {
           pass.bindVertexBuffer(gpu.BufferView(p.vertices, offsetInBytes: 0, lengthInBytes: p.vertices.sizeInBytes));
           pass.draw(p.count);
-          draws++;
-        }
-      }
-      if (e.tile.dynamicPolygons.isNotEmpty) {
-        final dp = e.tile.dynamicPolygons;
-        final packed = _dynPolys[dp] ??= GpuPolygonGeometry.packPolygons(dp);
-        if (packed.isNotEmpty) {
-          pass.bindVertexBuffer(_hostBuffer.emplace(ByteData.view(packed.buffer)));
-          pass.draw(GpuPolygonGeometry.vertexCountOf(packed));
           draws++;
         }
       }
@@ -516,23 +504,13 @@ class TerrainGpuWorldRenderer {
       if (info == null) continue;
       pass.bindUniform(lineInfoSlot, info);
       pass.bindUniform(lineShadeSlot, shadeInfo);
-      // 等高線などの線分の束は線の前（面の上、線の下）
-      for (final parts in [e.segments, e.lines]) {
+      // 等高線などの線分の束 → 静的な線 → 動的な線（軌跡・オーバーレイ枠・TruPulse測線など）
+      for (final parts in [e.segments, e.lines, e.dynLines]) {
         if (parts == null) continue;
         for (final p in parts.parts) {
           pass.bindVertexBuffer(gpu.BufferView(p.vertices, offsetInBytes: 0, lengthInBytes: p.vertices.sizeInBytes));
           pass.bindIndexBuffer(gpu.BufferView(p.indices!, offsetInBytes: 0, lengthInBytes: p.indices!.sizeInBytes), gpu.IndexType.int32);
           pass.drawIndexed(p.count);
-          draws++;
-        }
-      }
-      if (e.tile.dynamicLines.isNotEmpty) {
-        final dl = e.tile.dynamicLines;
-        final g = _dynLines[dl] ??= GpuLineGeometry.pack(polylines: dl);
-        if (!g.isEmpty) {
-          pass.bindVertexBuffer(_hostBuffer.emplace(ByteData.view(g.vertices.buffer)));
-          pass.bindIndexBuffer(_hostBuffer.emplace(ByteData.view(g.indices.buffer)), gpu.IndexType.int32);
-          pass.drawIndexed(g.indexCount);
           draws++;
         }
       }
@@ -558,6 +536,7 @@ class TerrainGpuWorldRenderer {
         draws++;
       }
     }
+    _uniformBuffer.flush();
     commandBuffer.submit();
     sw.stop();
     lastEncode = sw.elapsed - lastUpload;
@@ -743,10 +722,61 @@ class TerrainGpuWorldRenderer {
     for (final c in [_polygons, _lines, _points, _segments]) {
       c.clear();
     }
+    _uniformBuffer.clear();
     _targets.clear();
     _depth = null;
     _msaaColor = null;
     _white = null;
+  }
+}
+
+/// [BumpRingPlanner] に基づく自前の uniform リングバッファ。
+///
+/// 上流 `package:flutter_gpu` の `HostBuffer` はブロック末尾を跨ぐ書き込みで例外になるため、
+/// [gpu.DeviceBuffer] のブロックリストを [BumpRingPlanner] で安全に管理し、submit 前に flush する。
+class _UniformRingBuffer {
+  _UniformRingBuffer({required int alignment})
+      : _planner = BumpRingPlanner(alignment: alignment),
+        _blocks = List.generate(4, (_) => <gpu.DeviceBuffer>[]);
+
+  final BumpRingPlanner _planner;
+  final List<List<gpu.DeviceBuffer>> _blocks;
+
+  void reset() => _planner.reset();
+
+  gpu.BufferView emplace(ByteData bytes) {
+    final alloc = _planner.allocate(bytes.lengthInBytes);
+    final frameBlocks = _blocks[alloc.frame];
+    if (alloc.newBlockSize != null) {
+      final buf = gpu.gpuContext.createDeviceBuffer(gpu.StorageMode.hostVisible, alloc.newBlockSize!);
+      if (alloc.blockIndex >= frameBlocks.length) {
+        frameBlocks.add(buf);
+      } else {
+        frameBlocks[alloc.blockIndex] = buf;
+      }
+    }
+    final buf = frameBlocks[alloc.blockIndex];
+    if (!buf.overwrite(bytes, destinationOffsetInBytes: alloc.offsetInBytes)) {
+      throw StateError(
+        'UniformRingBuffer overwrite failed: offset=${alloc.offsetInBytes}, '
+        'length=${bytes.lengthInBytes}, blockSize=${buf.sizeInBytes}',
+      );
+    }
+    return gpu.BufferView(buf, offsetInBytes: alloc.offsetInBytes, lengthInBytes: bytes.lengthInBytes);
+  }
+
+  void flush() {
+    final frameBlocks = _blocks[_planner.currentFrame];
+    for (final (blockIndex, usedBytes) in _planner.activeBlocks()) {
+      frameBlocks[blockIndex].flush(offsetInBytes: 0, lengthInBytes: usedBytes);
+    }
+  }
+
+  void clear() {
+    _planner.clear();
+    for (final list in _blocks) {
+      list.clear();
+    }
   }
 }
 
@@ -777,13 +807,25 @@ class _PartBuffers {
 }
 
 class _TileEntry {
-  _TileEntry(this.tile, this.terrain, this.texture, this.polygons, this.lines, this.points, this.segments);
+  _TileEntry(
+    this.tile,
+    this.terrain,
+    this.texture,
+    this.polygons,
+    this.dynPolygons,
+    this.lines,
+    this.dynLines,
+    this.points,
+    this.segments,
+  );
 
   final TerrainTileDrawable tile;
   final _TerrainBuffers terrain;
   final gpu.Texture texture;
   final GpuParts<_PartBuffers>? polygons;
+  final GpuParts<_PartBuffers>? dynPolygons;
   final GpuParts<_PartBuffers>? lines;
+  final GpuParts<_PartBuffers>? dynLines;
   final GpuParts<_PartBuffers>? points;
   final GpuParts<_PartBuffers>? segments;
   gpu.BufferView? terrainInfo;

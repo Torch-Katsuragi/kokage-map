@@ -50,6 +50,7 @@ VoidCallback showRadialMenu({
   required List<RadialAction> actions,
   double radius = 60,
   double buttonSize = 48,
+  VoidCallback? onDismissed,
 }) {
   late OverlayEntry entry;
   var removed = false;
@@ -60,6 +61,7 @@ VoidCallback showRadialMenu({
     entry
       ..remove()
       ..dispose();
+    onDismissed?.call();
   }
 
   entry = OverlayEntry(

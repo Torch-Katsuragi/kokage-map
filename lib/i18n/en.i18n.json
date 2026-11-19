@@ -764,6 +764,13 @@
   "map": {
     "reload": "Reload project from disk",
     "reloaded": "Project reloaded",
+    "leaveConfirm": {
+      "unconfirmedDrawing": "You have unconfirmed survey or drawing data. Discard it and return to the Home screen?",
+      "gpsSurvey": "GPS survey recording is in progress. Stop and return to the Home screen?",
+      "trupulseStation": "A station is set for TruPulse surveying. Return to the Home screen?",
+      "stay": "Stay on map",
+      "leave": "Return to Home"
+    },
     "drawing": {
       "undo": "Undo",
       "cancel": "Cancel",

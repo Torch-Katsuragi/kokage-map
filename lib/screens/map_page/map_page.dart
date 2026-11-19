@@ -401,12 +401,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     final editing = editAttrsTab != null;
     final layout = MapLayout.resolve(ref.watch(mapLayoutPresetSettingProvider), MediaQuery.of(context).size);
 
-    // 編集中の ← （と端末の戻る）はホームへ戻らず編集をやめる（つい押してしまうので）
-    return PopScope(
-      canPop: !editing,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) cancelEdit(context, ref);
-      },
+    // 測量中の誤操作を防ぐため、端末の戻るボタン・戻るジェスチャではホーム画面へ戻さない（左上の ← 限定）
+    return MapPagePopScope(
+      editing: editing,
       child: KeyboardShortcutWrapper(
         mapState: this,
         child: Scaffold(
@@ -499,6 +496,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     final uiConfig = ref.watch(uiVisibilitySettingProvider);
     final inTutorial = ref.watch(tutorialProvider) != null;
     return AppBar(
+      leading: MapPagePopScope.buildLeading(context, ref, editing: editing),
       title: Text(p.basename(ref.watch(projectRootDirProvider) ?? t.common.appName)),
       actions: buildMapAppBarActions(
         showAttributeTable: showAttributeTable,
@@ -1024,6 +1022,84 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
               .add(title: t.editor.addFeatureWip, level: NotificationLevel.info);
         },
       ),
+    );
+  }
+}
+
+/// 地図画面の「戻る」制御。
+///
+/// 端末の戻るボタン・戻るジェスチャではホーム画面へ戻さず（測量中の誤操作防止）、
+/// ツールの一時メニュー（放射状メニュー等）が開いていればそれを閉じ、地物の編集中であれば編集をやめる。
+/// ホーム画面へ戻れるのは AppBar 左上の ← ボタン（[buildLeading]）に限定する。
+@visibleForTesting
+class MapPagePopScope extends ConsumerWidget {
+  const MapPagePopScope({super.key, required this.editing, required this.child});
+
+  final bool editing;
+  final Widget child;
+
+  /// AppBar 左上の ← ボタン（前のルートがあるときだけ出す）
+  static Widget? buildLeading(BuildContext context, WidgetRef ref, {required bool editing}) {
+    if (!(ModalRoute.of(context)?.impliesAppBarDismissal ?? false)) return null;
+    return BackButton(
+      onPressed: () => unawaited(_onLeadingBackPressed(context, ref, editing: editing)),
+    );
+  }
+
+  static Future<void> _onLeadingBackPressed(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool editing,
+  }) async {
+    final tool = ref.read(currentToolProvider);
+    tool.onBackPressed();
+    if (editing) {
+      await cancelEdit(context, ref);
+      return;
+    }
+    final drawing = GlobalDrawingState.instance;
+    final hasUnconfirmedDrawing = drawing.isDrawing || drawing.pointPreview != null;
+    final confirmMessage = hasUnconfirmedDrawing
+        ? t.map.leaveConfirm.unconfirmedDrawing
+        : tool.leaveMapConfirmMessage();
+    if (confirmMessage != null) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          content: Text(confirmMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(t.map.leaveConfirm.stay),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(t.map.leaveConfirm.leave),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !context.mounted) return;
+      tool.onLeaveMapConfirmed();
+      if (hasUnconfirmedDrawing) {
+        drawing.clearAll();
+      }
+    }
+    if (context.mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (ref.read(currentToolProvider).onBackPressed()) return;
+        if (editing) cancelEdit(context, ref);
+      },
+      child: child,
     );
   }
 }

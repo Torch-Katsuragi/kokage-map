@@ -68,4 +68,13 @@ abstract class MapTool extends ChangeNotifier {
 
   /// 指を離したら捨てる
   void clearPointerBuffer() {}
+
+  /// 端末の戻るボタンが押されたとき。ツールが一時表示しているUI（放射状メニュー等）を閉じたら true
+  bool onBackPressed() => false;
+
+  /// 左上の ← ボタンで地図画面を抜ける前に確認ダイアログを出す場合の文言（null なら確認なしで戻る）
+  String? leaveMapConfirmMessage() => null;
+
+  /// 確認ダイアログで「ホームへ戻る」が選ばれたときの後始末
+  void onLeaveMapConfirmed() {}
 }

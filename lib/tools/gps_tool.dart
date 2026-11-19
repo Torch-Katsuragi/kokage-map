@@ -130,6 +130,18 @@ class GpsTool extends MapTool with PanDelegation {
   @override
   void onDeactivate() => _cleanupGpsFeatures();
 
+  @override
+  String? leaveMapConfirmMessage() =>
+      _isLongPressing ? t.map.leaveConfirm.gpsSurvey : null;
+
+  @override
+  void onLeaveMapConfirmed() {
+    if (_isLongPressing) {
+      _cleanupGpsFeatures();
+      unawaited(_gpsManager.stopGpsSurvey());
+    }
+  }
+
   // 地図の操作はてのひらツールと同じ（タップは選択）
   @override
   void onTap(TapUpDetails details, IMapState mapState) => panTool.onTap(details, mapState);

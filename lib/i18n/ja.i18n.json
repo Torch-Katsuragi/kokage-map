@@ -764,6 +764,13 @@
   "map": {
     "reload": "プロジェクトを読み直す",
     "reloaded": "プロジェクトを読み直しました",
+    "leaveConfirm": {
+      "unconfirmedDrawing": "未確定の測量・作図データがあります。破棄してホーム画面へ戻りますか？",
+      "gpsSurvey": "GPS測量の記録中です。中断してホーム画面へ戻りますか？",
+      "trupulseStation": "器械点を設定して測量中です。ホーム画面へ戻りますか？",
+      "stay": "地図に留まる",
+      "leave": "ホームへ戻る"
+    },
     "drawing": {
       "undo": "ひとつ戻す",
       "cancel": "やめる",
